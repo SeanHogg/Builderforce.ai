@@ -12,12 +12,9 @@ import { BrainDock } from './BrainDock';
  * so a running turn looked stalled out there.
  */
 
-vi.mock('next-intl', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('next-intl')>()),
-  useTranslations: (await import('@/test/realCatalogTranslations')).realCatalogTranslator(
-    (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
-  ),
-}));
+vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')).realCatalogIntlMock(
+  (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
+));
 
 vi.mock('@xyflow/react', async () => {
   const React = await import('react');

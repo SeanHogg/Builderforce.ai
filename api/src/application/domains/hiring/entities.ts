@@ -6,6 +6,7 @@
  * list; the rest are their satellites and are reached through them.
  */
 import {
+  candidateDemographics,
   candidateInteractions,
   candidateResumes,
   cohortRetention,
@@ -38,6 +39,17 @@ export const HIRING_ENTITIES = defineDomainEntities('hiring', [
   entity(placements, { kind: 'placement', registers: true }),
   candidateResumes,
   candidateInteractions,
+  /**
+   * NOT reachable through the generic entity reader.
+   *
+   * `candidate_demographics` holds self-identified EEO data, which is collected for
+   * statutory reporting and is unlawful to use in an assessment. The generic reader is
+   * how any seat browses any registered entity, so registering it readable would put a
+   * protected characteristic one click from the shortlist that must not consider it.
+   * Aggregate reporting reads it through a named service that returns counts without
+   * identifiers; nothing reads it row-by-row beside a candidate. See migration 0460.
+   */
+  entity(candidateDemographics, { restricted: true }),
   jobPipelineEntries,
   interviewKits,
   interviewKitStages,

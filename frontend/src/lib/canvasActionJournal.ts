@@ -68,6 +68,17 @@ export interface CanvasJournal {
    */
   begin: (kind: CanvasActionKind, label: string, detail?: string) => (result?: { ok?: boolean; detail?: string }) => void;
   entries: () => CanvasAction[];
+  /**
+   * Adopt a journal recovered from storage.
+   *
+   * A journal that dies on reload cannot explain the reload — and "it did this, then
+   * I refreshed, and now it's broken" is the single most common shape of a real bug
+   * report. The restored entries keep their original sequence numbers, and `seq`
+   * continues past the highest, so an ordering comparison across the boundary still
+   * holds. Replaces rather than merges: two histories interleaved by timestamp would
+   * read as one session that did things twice.
+   */
+  restore: (actions: readonly CanvasAction[]) => void;
   clear: () => void;
 }
 
@@ -114,7 +125,12 @@ export function createCanvasJournal(now: () => number = () => Date.now()): Canva
     };
   };
 
-  return { record, begin, entries: () => [...entries], clear: () => { entries = []; seq = 0; } };
+  const restore: CanvasJournal['restore'] = (actions) => {
+    entries = actions.slice(-JOURNAL_LIMIT).map((action) => ({ ...action }));
+    seq = entries.reduce((highest, action) => Math.max(highest, action.seq), 0);
+  };
+
+  return { record, begin, entries: () => [...entries], restore, clear: () => { entries = []; seq = 0; } };
 }
 
 interface GraphShape {

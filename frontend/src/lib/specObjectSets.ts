@@ -1,0 +1,31 @@
+/**
+ * Every spec vocabulary, imported for its registration side effect.
+ *
+ * ── THE DEFECT THIS CLOSES ───────────────────────────────────────────────────────
+ * `specObjects.ts` holds the registry and CANNOT import the sets — the sets import
+ * `registerSpecObjectSet` from it, so the dependency only runs one way. Each set
+ * therefore registers itself when its module is first evaluated, which makes
+ * "is this kind spec'd?" depend on whether anybody happened to import that module yet.
+ *
+ * In the running app the answer was yes, by accident: `CreationNode` imports
+ * `creationObjectRegistry`, which imports all five sets, so every consumer downstream of
+ * the canvas tree saw a full registry. `SpecObjectBody` imported on its own saw an EMPTY
+ * one and rendered null for every kind — which is how a component with forty-seven
+ * working object bodies had fifteen failing unit tests and a passing app.
+ *
+ * An accident of import order is not a dependency. This is the one module that knows the
+ * full list, so a consumer that needs the registry populated imports THIS rather than
+ * guessing which set happens to pull in the others.
+ *
+ * Adding a vocabulary is adding a line here. A set that registers itself and is never
+ * listed works in whichever surface imports it directly and silently renders nothing
+ * everywhere else — which is exactly the failure above.
+ */
+
+import './founderObjects';
+import './academicObjects';
+import './hiringObjects';
+import './peopleObjects';
+import './sharedCanvasObjects';
+
+export {};

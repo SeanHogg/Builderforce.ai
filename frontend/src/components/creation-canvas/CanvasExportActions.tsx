@@ -42,6 +42,11 @@ const AVAILABILITY: Partial<Record<CanvasExportAction, (data: CreationNodeData) 
   svg: hasCanvasDrawing,
   pptx: (data) => canvasSlides(data).length > 0,
   pdf: canPrintCanvasObject,
+  // A plan always offers its spec (it gathers its cases at export time, which this
+  // per-object predicate cannot see); a case offers one once it has steps or source.
+  spec: (data) => data.kind === 'testPlan'
+    || (Array.isArray(data.steps) && data.steps.length > 0)
+    || (typeof data.spec === 'string' && data.spec.trim().length > 0),
 };
 
 /**
@@ -79,6 +84,7 @@ const EXPORT_ICON: Readonly<Record<CanvasExportAction, string>> = {
   pptx: '▥',
   svg: '◇',
   json: '{}',
+  spec: '✓',
   diagram: '◈',
   scorm: '◉',
 };

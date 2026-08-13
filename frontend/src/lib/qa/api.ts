@@ -94,7 +94,34 @@ export function seedCrawl(routes: string[], projectId: number | null, name?: str
   });
 }
 
-export function generateTest(flowId: string): Promise<{ test: QaTest; usedModel: string }> {
+/**
+ * Register one authored scenario as a flow.
+ *
+ * This is the canvas's door into the QA library: a `testCase` on a board is exactly
+ * a flow — a name, a start route and ordered steps — so publishing one is a POST
+ * rather than a second storage model. `POST /flows` upserts on a slug derived from
+ * the name + steps, so re-publishing an edited case updates it instead of filling
+ * the library with near-duplicates.
+ */
+export function createFlow(data: {
+  name: string;
+  steps: unknown[];
+  startRoute?: string;
+  description?: string;
+  projectId?: number;
+  personaRole?: string;
+}): Promise<{ flow: QaFlow }> {
+  return apiRequest('/api/qa/flows', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(data) });
+}
+
+/**
+ * Generate (or regenerate) the Playwright spec for a flow.
+ *
+ * The response carries the stored row, so `spec` comes back with it — the canvas
+ * shows the persona-aware spec the LIBRARY holds rather than re-lowering its own and
+ * hoping the two agree.
+ */
+export function generateTest(flowId: string): Promise<{ test: QaTest & { spec?: string }; usedModel: string }> {
   return apiRequest('/api/qa/generate', {
     method: 'POST',
     headers: JSON_HEADERS,

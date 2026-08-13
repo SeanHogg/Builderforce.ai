@@ -42,6 +42,11 @@ export const CONNECTOR_CATEGORIES = [
   'support',
   'storage',
   'data',
+  // Job boards, ATS feeds and HRMS systems. Its own category rather than `marketing`
+  // (which is where an outbound-publishing connector would otherwise land) because the
+  // Recruiter seat browses this catalog by category, and "publish a requisition" and
+  // "publish a campaign" are done by different people for different reasons.
+  'hiring',
   'other',
 ] as const;
 export type ConnectorCategory = (typeof CONNECTOR_CATEGORIES)[number];

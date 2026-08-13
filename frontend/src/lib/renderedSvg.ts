@@ -18,6 +18,7 @@
 /** The properties that carry a diagram's appearance. A whole computed style is
  * ~340 declarations per node, which would balloon the file and drag inherited
  * document defaults into a standalone drawing. */
+import { canvasStrokes, strokesSvg } from './canvasDrawing';
 import { creativePreviewImageUrl } from './creationDeliverables';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
@@ -115,6 +116,17 @@ function creativePreviewSvg(data: CreationNodeData): string | null {
  */
 export function canvasObjectSvg(data: CreationNodeData, nodeId: string): string | null {
   if (data.kind === 'diagram') return serializeRenderedSvg(renderedNodeSvg(nodeId));
+  // A hand-made drawing IS vector data — it does not need to be read back off
+  // the DOM or decoded from a generator's preview. It was serialized from its
+  // strokes here rather than from the rendered node so that a sketch drawn in a
+  // theme colour exports with the colour it was drawn in.
+  if (data.kind === 'drawing') {
+    return strokesSvg(
+      canvasStrokes(data),
+      typeof data.drawingWidth === 'number' ? data.drawingWidth : 640,
+      typeof data.drawingHeight === 'number' ? data.drawingHeight : 420,
+    );
+  }
   return creativePreviewSvg(data);
 }
 
@@ -123,5 +135,9 @@ export function canvasObjectSvg(data: CreationNodeData, nodeId: string): string 
  * diagram that has resolved its source will render one. */
 export function hasCanvasDrawing(data: CreationNodeData): boolean {
   if (data.kind === 'diagram') return true;
+  // A drawing with marks on it can always be taken away. This asked for a
+  // generator preview URL, which a hand-drawn sketch never has — so the SVG
+  // download was hidden on the one object kind that is nothing BUT a drawing.
+  if (data.kind === 'drawing') return canvasStrokes(data).length > 0;
   return !!creativePreviewImageUrl(data)?.startsWith('data:image/svg+xml');
 }

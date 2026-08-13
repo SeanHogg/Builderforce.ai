@@ -3,12 +3,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { CreationNodeData } from './types';
 
-vi.mock('next-intl', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('next-intl')>()),
-  useTranslations: (await import('@/test/realCatalogTranslations')).realCatalogTranslator(
-    (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
-  ),
-}));
+vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')).realCatalogIntlMock(
+  (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
+));
 
 const fetchUrl = vi.fn();
 vi.mock('@/lib/builderforceApi', async (importOriginal) => ({

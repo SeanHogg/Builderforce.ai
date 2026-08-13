@@ -4,7 +4,7 @@ import { Icon } from '@/components/ui/Icon';
 import { use } from 'react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
 import { getPostBySlug } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
@@ -243,7 +243,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
               <BlogCover title={post.title} tags={post.tags} slug={post.slug} />
 
               <div className="bpost-content">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>
                   {post.content}
                 </ReactMarkdown>
               </div>

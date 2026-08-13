@@ -54,6 +54,8 @@ import { createAgentOpsRoutes }    from './presentation/routes/agentOpsRoutes';
 import { createProductRoutes }     from './presentation/routes/productRoutes';
 import { createAgileRoutes }       from './presentation/routes/agileRoutes';
 import { createMeetingRoutes }     from './presentation/routes/meetingRoutes';
+import { createCandidateBookingRoutes } from './presentation/routes/candidateBookingRoutes';
+import { createHiringRoutes }      from './presentation/routes/hiringRoutes';
 import { createCalendarRoutes }    from './presentation/routes/calendarRoutes';
 import { createRoiRoutes }         from './presentation/routes/roiRoutes';
 import { createPmoRoutes }         from './presentation/routes/pmoRoutes';
@@ -146,6 +148,7 @@ import { createRepoAnalysisRoutes } from './presentation/routes/repoAnalysisRout
 import { createStudioVoiceCloneRoutes } from './presentation/routes/studioVoiceCloneRoutes';
 import { createIntegrationRoutes }  from './presentation/routes/integrationRoutes';
 import { createIntegrationCatalogRoutes } from './presentation/routes/integrationCatalogRoutes';
+import { createDataSourceRoutes }  from './presentation/routes/dataSourceRoutes';
 import { createConnectorRoutes }    from './presentation/routes/connectorRoutes';
 import { createContributorRoutes }  from './presentation/routes/contributorRoutes';
 import { runRepoActivitySweep }      from './application/contributors/runRepoActivitySweep';
@@ -182,6 +185,7 @@ import { createGitHubActionsRoutes }   from './presentation/routes/githubActions
 import { createDeployRoutes }          from './presentation/routes/deployRoutes';
 import { createGitLabWebhookRoutes }   from './presentation/routes/gitlabWebhookRoutes';
 import { createBitbucketWebhookRoutes } from './presentation/routes/bitbucketWebhookRoutes';
+import { createLtiRoutes } from './presentation/routes/ltiRoutes';
 import { createCostForecastRoutes }    from './presentation/routes/costForecastRoutes';
 import { createDashboardRoutes }       from './presentation/routes/dashboardRoutes';
 import { createConsumptionRoutes }     from './presentation/routes/consumptionRoutes';
@@ -497,6 +501,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/messages', createMessageRoutes(db));
   app.route('/api/engagements', createEngagementRoutes(db));
   app.route('/api/activity', createActivityRoutes(db));
+  // LTI 1.3: the LMS-facing half of the teaching vocabulary — a signed launch, the
+  // roster coming in through NRPS and marks going back through AGS. Unauthenticated
+  // by design: every endpoint authenticates the PLATFORM cryptographically rather
+  // than carrying a Builderforce session, which is what an LMS launch is.
+  app.route('/api/lti', createLtiRoutes());
 
   // Anonymous guest routes must precede the generic `/api/:domain/...` router
   // below. That router installs auth middleware at its mount root, so registering
@@ -519,6 +528,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/timecards', createTimecardRoutes());
   // Two-sided marketplace: job postings + proposals (bidding) and the in-app feed.
   app.route('/api/jobs', createJobRoutes());
+  // The Recruiter seat: funnel conversion, candidate self-schedule links, lawful basis
+  // and retention, and aggregate diversity reporting.
+  app.route('/api/hiring', createHiringRoutes(db));
   app.route('/api/notifications', createNotificationRoutes());
 
   // Email language + consent. The /unsubscribe leg is intentionally PUBLIC (no
@@ -583,6 +595,13 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // behind authMiddleware renders as a broken box in every inbox — so it is
   // public and addressed only by the asset's unguessable token.
   app.route('/api/campaign-assets', createMarketingAssetRoutes(db));
+
+  // Candidate self-scheduling. Opened by a CANDIDATE, who has no account and should not
+  // be asked to make one to pick an interview time — the requirement that kept interview
+  // scheduling a manual email thread while a correct availability solver sat unused with
+  // one internal consumer. The only credential is the unguessable token in the path, and
+  // it resolves to exactly one interview's offered slots.
+  app.route('/api/booking', createCandidateBookingRoutes(db));
 
   // Public Developer API (Bearer <developer_api_key> for read-only; tenant JWT for key management)
   app.route('/api/v1', createPublicApiRoutes(db));
@@ -750,6 +769,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // authenticated router below.
   app.route('/api/integrations/catalog', createIntegrationCatalogRoutes());
   app.route('/api/integrations',    createIntegrationRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));
+  // The canvas's read-only view of the SAME connected warehouses — list, schema,
+  // and one bounded SELECT. Same credential store, same encryption secret.
+  app.route('/api/data-sources',    createDataSourceRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));
   app.route('/api/connectors',      createConnectorRoutes(db));
   app.route('/api/contributors',    createContributorRoutes(db));
   app.route('/api/dev-teams',       createDevTeamRoutes(db));

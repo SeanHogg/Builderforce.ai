@@ -10,12 +10,9 @@ import type { ProjectEvermindContributions, ProjectEvermindHead } from '@/lib/pr
 import { createLocalCreationSession } from '@/lib/creationSessions';
 import { buildBrowserCreativeArtifact } from '@/lib/creationDeliverables';
 
-vi.mock('next-intl', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('next-intl')>()),
-  useTranslations: (await import('@/test/realCatalogTranslations')).realCatalogTranslator(
-    (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
-  ),
-}));
+vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')).realCatalogIntlMock(
+  (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
+));
 
 vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => vi.fn(async () => true) }));
 
@@ -640,7 +637,11 @@ describe('CreationCanvas', () => {
     expect(screen.getAllByText('Evermind').length).toBeGreaterThan(1);
     expect(screen.getAllByText('Investigate customer friction.').length).toBeGreaterThan(1);
     expect(screen.getByText('High autonomy')).toBeInTheDocument();
-    expect(screen.getByText('Research')).toBeInTheDocument();
+    // Scoped to the agent card's own pill row. "Research" is ALSO a `CreationObjectGroup`,
+    // so once a spec vocabulary registered a kind into that group the object palette
+    // started rendering it as a heading too — and a bare `getByText` began matching both.
+    // The assertion is about the tool that was just added, so it says so.
+    expect(screen.getByText('Research', { selector: 'span' })).toBeInTheDocument();
   });
 
   it('visualizes an agent collaborator avatar, thinking state, and latest response', () => {
@@ -1338,11 +1339,33 @@ describe('CreationCanvas', () => {
     const purpose = screen.getByText('Architecture review');
     expect(purpose.closest('article')).toHaveStyle({ background: '#123456', borderColor: '#abcdef' });
 
+    // A placed drawing has no marks on it yet, so restyling has nothing to
+    // recolour — the controls exist and the card says how many strokes it holds.
+    // (The pen's own colour and width are chosen in the drawing toolbar, before
+    // the stroke, which is what `renders the pen tray` below covers.)
     fireEvent.click(screen.getByRole('button', { name: 'Drawing' }));
     fireEvent.change(screen.getByLabelText('Stroke color'), { target: { value: '#ff0000' } });
     fireEvent.change(screen.getByLabelText('Stroke width'), { target: { value: '9' } });
-    expect(screen.getByText('9 px')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Sketch' })).toHaveStyle({ color: '#ff0000' });
+    expect(screen.getByText('0 stroke(s)')).toBeInTheDocument();
+  });
+
+  it('puts the pen, its colour and its width in reach before the stroke, not after it', () => {
+    render(<CreationCanvas sessionId="pen-tray-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+    const tray = screen.getByRole('toolbar', { name: 'Drawing tools' });
+    for (const tool of ['Pen', 'Highlighter', 'Line', 'Box', 'Circle', 'Text', 'Eraser']) {
+      expect(within(tray).getByRole('button', { name: tool })).toBeInTheDocument();
+    }
+    expect(within(tray).getByRole('button', { name: 'Pen' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(tray).getByRole('button', { name: 'Highlighter' }));
+    expect(within(tray).getByRole('button', { name: 'Highlighter' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(tray).getByLabelText('Colour')).toBeInTheDocument();
+    expect(within(tray).getByLabelText('Width')).toBeInTheDocument();
+    // The choice is remembered, so marking up a board is not twenty trips here.
+    expect(JSON.parse(window.localStorage.getItem('builderforce.canvas.drawing')!)).toMatchObject({ tool: 'highlighter' });
+    fireEvent.click(within(tray).getByRole('button', { name: 'Stop drawing' }));
+    expect(screen.queryByRole('toolbar', { name: 'Drawing tools' })).not.toBeInTheDocument();
   });
 
   it('keeps the session header focused and moves object commands into contextual controls', () => {

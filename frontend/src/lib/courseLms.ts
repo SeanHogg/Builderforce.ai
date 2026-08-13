@@ -1,3 +1,5 @@
+import { practiceProgress, type CanvasPracticeAttempt, type CanvasPracticeQuestion } from './canvasPractice';
+
 export const COURSE_SCHEMA = 'https://builderforce.ai/schemas/course/v1' as const;
 export const COURSE_EXPORT_STANDARDS = ['SCORM 2004 4th Edition', 'xAPI 1.0.3'] as const;
 
@@ -22,6 +24,10 @@ export type CanvasCourse = {
   schema: typeof COURSE_SCHEMA;
   version: string;
   language: string;
+  /** What this course is ABOUT, in the learner's words. A course object is
+   * created empty and carrying only this, which is what makes "Course" a thing
+   * you can point at photosynthesis rather than a fixed curriculum. */
+  subject: string;
   audience: string;
   description: string;
   estimatedMinutes: number;
@@ -92,17 +98,40 @@ export function buildLlmCourse(): CanvasCourse {
     schema: COURSE_SCHEMA, version: '1.0.0', language: 'en-US', audience: 'Software and ML practitioners',
     description: 'A hands-on path from model requirements and governed data through tokenization, training, evaluation, packaging, and operations.',
     estimatedMinutes: modules.flatMap((item) => item.lessons).reduce((sum, item) => sum + item.durationMinutes, 0),
+    subject: 'How large language models are built',
     passingScore: 80, modules, completedLessonIds: [],
   };
 }
 
+/**
+ * A course that knows only its subject.
+ *
+ * This is what dragging "Course" onto the board makes. It used to make
+ * {@link buildLlmCourse} — every course object on the platform, on any subject,
+ * arrived as the same five modules about tokenizers and red-teaming, and a
+ * learner studying photosynthesis had to delete someone else's curriculum before
+ * they could start. The worked LLM course is still exactly that: a worked
+ * example, reachable from the LLM Builder Academy template that advertises it.
+ */
+export function emptyCourse(subject = ''): CanvasCourse {
+  return {
+    schema: COURSE_SCHEMA, version: '1.0.0', language: 'en-US', subject,
+    audience: '', description: '', estimatedMinutes: 0, passingScore: 80,
+    modules: [], completedLessonIds: [],
+  };
+}
+
 export function courseFromNode(data: Readonly<Record<string, unknown>>): CanvasCourse {
-  const fallback = buildLlmCourse();
+  const base = emptyCourse();
   const candidate = data.course && typeof data.course === 'object' && !Array.isArray(data.course) ? data.course as Partial<CanvasCourse> : {};
   return {
-    ...fallback, ...candidate, schema: COURSE_SCHEMA,
-    modules: Array.isArray(candidate.modules) && candidate.modules.length ? candidate.modules.slice(0, 30) as CourseModule[] : fallback.modules,
+    ...base, ...candidate, schema: COURSE_SCHEMA,
+    // An empty module list is a REAL state — a course waiting for its subject to
+    // be written. Substituting the LLM course here (which is what used to happen)
+    // is how a blank course object came to teach machine learning.
+    modules: Array.isArray(candidate.modules) ? candidate.modules.slice(0, 30) as CourseModule[] : [],
     completedLessonIds: Array.isArray(candidate.completedLessonIds) ? candidate.completedLessonIds.filter((id): id is string => typeof id === 'string').slice(0, 500) : [],
+    subject: typeof candidate.subject === 'string' ? candidate.subject.slice(0, 300) : base.subject,
   };
 }
 
@@ -110,6 +139,44 @@ export function courseProgress(course: CanvasCourse): { completed: number; total
   const ids = new Set(course.modules.flatMap((module) => module.lessons.map((item) => item.id)));
   const completed = new Set(course.completedLessonIds.filter((id) => ids.has(id))).size;
   return { completed, total: ids.size, percent: ids.size ? Math.round(completed / ids.size * 100) : 0 };
+}
+
+/**
+ * The course's knowledge checks, as practice questions.
+ *
+ * A module assessment and a Practice question are the same thing wearing two
+ * shapes, so they are graded, recorded and scored by the ONE model in
+ * `canvasPractice` rather than by a second implementation living in the course
+ * card. The question id is the module id, which is what lets an attempt made
+ * today still point at the right module after the course is edited.
+ */
+export function courseAssessmentQuestions(course: CanvasCourse): CanvasPracticeQuestion[] {
+  return course.modules.flatMap((module) => module.assessment?.question
+    ? [{
+      id: module.id,
+      prompt: module.assessment.question,
+      choices: module.assessment.choices,
+      answerIndex: module.assessment.answer,
+      ...(module.assessment.explanation ? { explanation: module.assessment.explanation } : {}),
+    }]
+    : []);
+}
+
+/**
+ * Knowledge-check score, and whether it clears the course's own passing mark.
+ *
+ * Attempts are passed in rather than read off the course because they live on
+ * the OBJECT, not inside the authored course document: the course body is
+ * model-writable (a teacher agent rewrites modules), and a learner's record of
+ * what they actually answered must not be rewritable by the thing being studied.
+ */
+export function courseScore(course: CanvasCourse, attempts: readonly CanvasPracticeAttempt[]): { answered: number; total: number; percent: number; passed: boolean } {
+  const questions = courseAssessmentQuestions(course);
+  const progress = practiceProgress(questions, attempts);
+  // Mastery (a correct streak), not "ever got it right once" — the same bar the
+  // Practice object uses, so a course score means what a practice score means.
+  const percent = progress.percent;
+  return { answered: progress.answered, total: progress.total, percent, passed: progress.total > 0 && percent >= course.passingScore };
 }
 
 const xml = (value: string) => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&apos;');

@@ -15,7 +15,7 @@
 import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
 import { TenantAiService } from '../llm/tenantProxy';
 import type { Env } from '../../env';
-import type { QaStep } from './qaTypes';
+import { playwrightSpec, type QaStep } from './qaTypes';
 
 export interface GenerateInput {
   name: string;
@@ -128,35 +128,23 @@ export function validateSpec(spec: string): SpecValidation {
   return { ok: true };
 }
 
-/** Deterministic template — always produces a valid, runnable smoke spec. */
+/**
+ * Deterministic template — always produces a valid, runnable smoke spec.
+ *
+ * The lowering itself lives in the shared contract (`playwrightSpec`), because the
+ * Creation Canvas generates the SAME spec for the same steps and a second template
+ * here would mean a board and its QA library disagreeing about what a plan compiles
+ * to. This wrapper keeps the name every existing caller uses and supplies the one
+ * thing that is server-specific: the default start route when a flow has no `goto`.
+ */
 export function fallbackSpec(input: GenerateInput): string {
-  const title = input.name.replace(/'/g, "\\'");
-  const lines: string[] = [];
-  lines.push(`import { test, expect } from '@playwright/test';`);
-  lines.push('');
-  lines.push(`// Auto-generated smoke test (deterministic fallback) for: ${input.slug}`);
-  lines.push(`test('${title}', async ({ page }) => {`);
-  let emitted = false;
-  for (const step of input.steps) {
-    if (step.action === 'goto' && step.route) {
-      const route = step.route.replace(/'/g, "\\'");
-      lines.push(`  await page.goto('${route}');`);
-      lines.push(`  await expect(page).not.toHaveURL(/\\/login/);`);
-      lines.push(`  await expect(page.getByText(/something went wrong|application error/i)).toHaveCount(0);`);
-      lines.push(`  await expect(page.locator('body')).toBeVisible();`);
-      emitted = true;
-    } else if (step.action === 'click' && step.selector) {
-      lines.push(`  await page.locator(${JSON.stringify(step.selector)}).first().click().catch((error) => console.error('[generated-qa] optional click failed', { error }));`);
-    }
-  }
-  if (!emitted) {
-    const route = (input.startRoute ?? '/dashboard').replace(/'/g, "\\'");
-    lines.push(`  await page.goto('${route}');`);
-    lines.push(`  await expect(page.locator('body')).toBeVisible();`);
-  }
-  lines.push('});');
-  lines.push('');
-  return lines.join('\n');
+  return playwrightSpec({
+    name: input.name,
+    slug: input.slug,
+    description: input.description ?? null,
+    startRoute: input.startRoute ?? '/dashboard',
+    steps: input.steps,
+  });
 }
 
 export class QaGeneratorService extends TenantAiService {

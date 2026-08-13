@@ -94,3 +94,35 @@ export function realCatalogTranslator(messages: Messages) {
     return translator;
   };
 }
+
+/**
+ * The WHOLE `next-intl` module override for a real-catalog test.
+ *
+ * Twelve test files were each writing `{ ...(await importOriginal()), useTranslations: realCatalogTranslator(en) }`
+ * by hand. Spreading the real module leaves every OTHER next-intl hook real, and
+ * a real hook throws outside a provider — so the moment a component anywhere in
+ * the rendered tree called `useLocale()` (a read-aloud control on the node
+ * header), 152 tests across nine files failed at once with "No intl context
+ * found", none of which had anything to do with what they were testing.
+ *
+ * The global mock in `src/test/setup.ts` already covers the whole surface; these
+ * files only differ in wanting REAL catalog copy instead of key passthrough. So
+ * this returns the same complete override with only `useTranslations` swapped —
+ * one place to fix the next time next-intl grows a hook.
+ */
+export async function realCatalogIntlMock(messages: Messages) {
+  const actual = await import('next-intl');
+  return {
+    ...actual,
+    useTranslations: realCatalogTranslator(messages),
+    useLocale: () => 'en',
+    useMessages: () => messages,
+    useFormatter: () => ({
+      dateTime: (value: unknown) => String(value),
+      number: (value: unknown) => String(value),
+      relativeTime: (value: unknown) => String(value),
+      list: (value: unknown) => String(value),
+    }),
+    NextIntlClientProvider: ({ children }: { children: unknown }) => children,
+  };
+}

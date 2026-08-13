@@ -15,8 +15,25 @@ import {
 } from './toolTypes';
 
 const TIER_NAME = ['Low', 'Low', 'Medium', 'High', 'Elite'];
-const tierName = (t: number): string => TIER_NAME[Math.max(1, Math.min(5, Math.round(t))) - 1]!;
-const money = (n: number): string => `$${Math.round(n).toLocaleString('en-US')}`;
+/**
+ * A 1–5 tier as the industry names it, and a whole-dollar amount.
+ *
+ * Exported because the DATA-DRIVEN half of a tool must label its score exactly as
+ * the self-assessment half does — a board showing "Elite" from real deployments
+ * beside "High" from the same numbers typed in would be the tool disagreeing with
+ * itself. `toolDataProviders` imports both rather than restating them.
+ */
+export const tierName = (t: number): string => TIER_NAME[Math.max(1, Math.min(5, Math.round(t))) - 1]!;
+/**
+ * Whole dollars from $100 up, cents below it. The estimators here deal in
+ * annual payroll and three-year build-vs-buy totals, where cents are noise; the
+ * attributed-spend provider deals in real per-ticket cost, where a run that
+ * actually cost $4.37 must not be reported as `$4`. One formatter with a
+ * threshold rather than two that disagree about the same number. `en-US` is
+ * pinned because a tool report is generated server-side with no viewer locale.
+ */
+export const money = (n: number): string =>
+  n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: Math.abs(n) >= 100 ? 0 : 2 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DORA Quick-Check (calculator)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationObjectAiContext, creationObjectDefinition, creationObjectMutableFields, emptyShellProblem, sanitizeCreationObjectPatch } from './creationObjectRegistry';
-import { CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
+import { CREATION_CONNECTION_KINDS, CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
 
 describe('creation object registry', () => {
   it('has one unique definition for every palette object', () => {
@@ -20,7 +20,10 @@ describe('creation object registry', () => {
       expect(definition.actions).toEqual(expect.arrayContaining(['inspect', 'edit']));
       expect(definition.mutableFields).toEqual(creationObjectMutableFields(definition.kind));
       expect(definition.mutableFields).toEqual(expect.arrayContaining(['title', 'subtitle', 'status', 'content']));
-      expect(definition.allowedConnections.length).toBe(6);
+      // Derived, not counted: a connection kind added to the contract is a kind
+      // every object may use, and hard-coding the number made adding one a test
+      // failure in a file that has nothing to do with connections.
+      expect(definition.allowedConnections.length).toBe(CREATION_CONNECTION_KINDS.length);
       expect(definition.contextAdapter({ ...data, secret: 'must-not-leak' })).not.toHaveProperty('secret');
       expect(definition.previewAdapter(data)).toMatchObject({ kind: definition.kind, title: data.title });
     }

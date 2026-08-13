@@ -31,8 +31,16 @@ function underPrefix(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
-/** Full-screen routes that render their own UI with no shell chrome. */
-const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/'];
+/**
+ * Full-screen routes that render their own UI with no shell chrome.
+ *
+ * `/book` is a CANDIDATE picking an interview time. They have no account, they are not a
+ * prospect, and they did not come to evaluate the product — so neither the operator shell
+ * nor the marketing chrome is honest here. A nav bar inviting them to "start building"
+ * beside the interview they are booking is the surface equivalent of an ad in a waiting
+ * room. The page is its own thing, and that is the whole reason this list exists.
+ */
+const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/', '/book'];
 
 /**
  * The framed cross-origin surface — the VS Code webview and third-party hosts.

@@ -2,29 +2,31 @@
  * Agentic QA — shared types across capture, flow aggregation, generation, and
  * run reporting. Kept dependency-free so both the route layer and the services
  * import from one place.
+ *
+ * ── WHERE THE GRAMMAR LIVES ──────────────────────────────────────────────────
+ * The STEP grammar, the finding vocabulary, the slug/hash identity helpers and the
+ * deterministic Playwright generator now live in
+ * `packages/creation-canvas-contract/src/qa.ts` and are re-exported here.
+ *
+ * They moved because the Creation Canvas needs the same grammar and cannot import
+ * from this package: a board authors steps, lowers them to a spec, and files a
+ * finding, and a second structurally-identical `QaStep` on that side would drift
+ * exactly the way the canvas tool lists drifted from the gateway's. This file keeps
+ * what is genuinely storage-shaped — flows, runs, heat zones, credentials — and
+ * re-exports the shared half so no existing importer changes.
  */
 
-/** A single normalized step in a flow. The generator turns these into Playwright
- *  calls; the capture client and the aggregator emit them. */
-export interface QaStep {
-  /** goto: navigate to `route`. click: click `selector`. fill: type into
-   *  `selector`. expect: assert `assertion` (or that `selector` is visible).
-   *  press: keyboard `value`. waitFor: wait for `selector`. */
-  action: 'goto' | 'click' | 'fill' | 'expect' | 'press' | 'waitFor';
-  /** Stable selector — Playwright getByTestId / getByRole / css. */
-  selector?: string;
-  /** Route pathname (goto). */
-  route?: string;
-  /** Synthetic, safe value for fills (never real captured input) or key for press. */
-  value?: string;
-  /** Human-readable assertion for expect steps, e.g. "dashboard heading visible". */
-  assertion?: string;
-  /** Accessible label / trimmed text, for prompt readability + run-step labelling. */
-  label?: string;
-  /** Interaction heat of the zone this step targets (Agentic Tester plans only) —
-   *  carried through so a finding surfaced here inherits the zone's importance. */
-  heat?: number;
-}
+export {
+  QA_STEP_ACTIONS, MAX_QA_STEPS, isQaStepAction, normalizeQaSteps,
+  QA_FINDING_TYPES, QA_SEVERITIES, isQaFindingType, isQaSeverity, severityRank, defaultFindingSeverity,
+  toSlug, shortHash, findingFingerprint,
+  playwrightSpec, qaLocatorExpression, parseQaSelector, routesFromHtml, smokeStepsForRoute,
+} from '@builderforce/creation-canvas-contract';
+export type {
+  QaStep, QaStepAction, QaFindingType, QaFindingSeverity, QaSelector, QaSpecInput,
+} from '@builderforce/creation-canvas-contract';
+
+import type { QaStep, QaFindingType, QaFindingSeverity } from '@builderforce/creation-canvas-contract';
 
 /** A flow as stored in qa_flows (steps serialized to JSON in the column). */
 export interface QaFlow {
@@ -64,27 +66,6 @@ export interface QaRunReport {
     errorMessage?: string;
     screenshotKey?: string;
   }>;
-}
-
-/** Stable slug from an arbitrary string (lowercase kebab, ascii-only). */
-export function toSlug(input: string, fallback = 'flow'): string {
-  const s = input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-  return s || fallback;
-}
-
-/** Deterministic short hash (FNV-1a, base36) — used to make flow slugs stable
- *  across re-aggregation without a crypto dependency or random ids. */
-export function shortHash(input: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(36);
 }
 
 /**
@@ -135,10 +116,6 @@ export interface QaHeatZone {
   score: number;
 }
 
-/** Finding types the harness captures while exploring. */
-export type QaFindingType = 'console' | 'pageerror' | 'network' | 'assertion' | 'crash' | 'navigation';
-export type QaFindingSeverity = 'low' | 'medium' | 'high' | 'critical';
-
 /** One captured runtime error the harness posts back for an exploration. */
 export interface QaFindingReport {
   type: QaFindingType;
@@ -162,22 +139,6 @@ export interface QaExplorationOutcome {
   runKey?: string;
   summary?: string;
   errorMessage?: string;
-}
-
-/** Map a finding type + zone heat into a default severity. Network/page errors on
- *  a hot zone are worse than a console warning on a cold one. The harness may
- *  override, but this gives a sensible server-side default + keeps the UI honest. */
-export function defaultFindingSeverity(type: QaFindingType, heat: number): QaFindingSeverity {
-  if (type === 'crash') return 'critical';
-  if (type === 'pageerror' || type === 'navigation') return heat >= 20 ? 'critical' : 'high';
-  if (type === 'network') return heat >= 20 ? 'high' : 'medium';
-  if (type === 'assertion') return heat >= 20 ? 'high' : 'medium';
-  return heat >= 50 ? 'medium' : 'low'; // console
-}
-
-/** Deterministic dedupe fingerprint for a finding within one exploration. */
-export function findingFingerprint(f: { type: string; route?: string | null; selector?: string | null; message: string }): string {
-  return shortHash(`${f.type}|${f.route ?? ''}|${f.selector ?? ''}|${f.message.slice(0, 200)}`);
 }
 
 /**

@@ -1,5 +1,5 @@
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
 
 export interface DocumentMarkdownProps {
   /** Document body (Markdown / GFM). */
@@ -21,7 +21,7 @@ export interface DocumentMarkdownProps {
 export function DocumentMarkdown({ content, className }: DocumentMarkdownProps) {
   return (
     <div className={className ? `markdown-body ${className}` : 'markdown-body'}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{content}</ReactMarkdown>
     </div>
   );
 }

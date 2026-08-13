@@ -30,7 +30,7 @@
 
 import { and, desc, eq, gte, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { salesContacts, salesReferrals, users } from '../../infrastructure/database/schema';
+import { salesAssociateSettings, salesContacts, salesReferrals, users } from '../../infrastructure/database/schema';
 
 export const SALES_REPORT_WINDOWS = ['week', 'month', 'quarter', 'ytd', 'all'] as const;
 export type SalesReportWindow = (typeof SALES_REPORT_WINDOWS)[number];
@@ -106,6 +106,26 @@ export interface SalesFunnelStage {
   count: number;
 }
 
+/**
+ * The number, and how close it is.
+ *
+ * A report without a quota answers "what happened" and cannot answer "will I hit
+ * it", which is the question a revenue leader actually opens a report to ask.
+ * `sales_associate_settings.revenue_goal_cents` has existed since 0401 and
+ * nothing read it — the goal was collectable and never compared to anything.
+ *
+ * `goalCents` 0 means "no goal set", NOT "a goal of zero", so attainment is null
+ * rather than infinity — a divide-by-zero rendered as ∞% is worse than a blank.
+ */
+export interface SalesQuota {
+  goalCents: number;
+  attainedCents: number;
+  /** Attained ÷ goal as a percentage, or null when no goal is set. */
+  attainmentPercent: number | null;
+  /** The window `attainedCents` is measured over. */
+  window: SalesReportWindow;
+}
+
 export interface SalesReport {
   generatedAtISO: string;
   /** Null for the aggregate view; set when filtered to one associate. */
@@ -116,6 +136,18 @@ export interface SalesReport {
   stalledContacts: number;
   /** Empty for a rep's own report — there is nobody else in it. */
   associates: SalesAssociateLine[];
+  /** The revenue goal for the period, and progress against it. */
+  quota: SalesQuota;
+}
+
+/** Attainment against a goal. Pure, so the divide-by-zero rule is testable. */
+export function quotaFor(goalCents: number, attainedCents: number, window: SalesReportWindow): SalesQuota {
+  return {
+    goalCents,
+    attainedCents,
+    attainmentPercent: goalCents > 0 ? Math.round((attainedCents / goalCents) * 1000) / 10 : null,
+    window,
+  };
 }
 
 /** A lead nobody has touched in this many days is stalled. Two weeks is the
@@ -189,10 +221,14 @@ export function leaderboard(
 export async function buildSalesReport(
   db: Db,
   tenantId: number,
-  options: { associateUserId?: string | null; now?: Date } = {},
+  options: { associateUserId?: string | null; now?: Date; quotaWindow?: SalesReportWindow } = {},
 ): Promise<SalesReport> {
   const now = options.now ?? new Date();
   const associateUserId = options.associateUserId ?? null;
+  // Month is the period a revenue goal is set and reviewed in. Defaulting to
+  // 'all' would make attainment meaningless — every goal is eventually met if
+  // you wait long enough.
+  const quotaWindow: SalesReportWindow = options.quotaWindow ?? 'month';
 
   // The aggregate view is "every associate IN THIS WORKSPACE" — a referral is a
   // workspace's fact about its own programme, so even the superadmin roll-up is
@@ -204,7 +240,7 @@ export async function buildSalesReport(
 
   const stalledBefore = new Date(now.getTime() - STALLED_CONTACT_DAYS * MS_PER_DAY);
 
-  const [referralRows, contactRows, peopleRows] = await Promise.all([
+  const [referralRows, contactRows, peopleRows, goalRows] = await Promise.all([
     db.select({
       associateUserId: salesReferrals.associateUserId,
       attributionType: salesReferrals.attributionType,
@@ -226,6 +262,13 @@ export async function buildSalesReport(
       ? Promise.resolve([] as Array<{ id: string; name: string | null; email: string }>)
       : db.select({ id: users.id, name: users.displayName, email: users.email })
         .from(users).where(eq(users.accountType, 'sales')),
+    // The goal: ONE associate's when filtered, every associate's summed for the
+    // aggregate — a programme quota IS the sum of its people's, so there is no
+    // second place to store it and nothing to keep in sync.
+    associateUserId
+      ? db.select({ goalCents: salesAssociateSettings.revenueGoalCents }).from(salesAssociateSettings)
+        .where(eq(salesAssociateSettings.ownerUserId, associateUserId))
+      : db.select({ goalCents: salesAssociateSettings.revenueGoalCents }).from(salesAssociateSettings),
   ]);
 
   const facts: ReferralFact[] = referralRows.map((row) => ({
@@ -249,13 +292,20 @@ export async function buildSalesReport(
 
   const people = new Map(peopleRows.map((row) => [row.id, { name: row.name, email: row.email }]));
 
+  const windows = allWindows(facts, now);
+  // Attainment is measured in ATTRIBUTED REVENUE, not commission: a quota is what
+  // the business booked through this person, and commission is their share of it.
+  const attained = windows.find((row) => row.window === quotaWindow)?.revenueCents ?? 0;
+  const goalCents = goalRows.reduce((sum, row) => sum + (row.goalCents ?? 0), 0);
+
   return {
     generatedAtISO: now.toISOString(),
     associateUserId,
-    windows: allWindows(facts, now),
+    windows,
     funnel: [...funnelCounts.entries()].map(([stage, count]) => ({ stage, count })),
     stalledContacts: stalled,
     associates: associateUserId ? [] : leaderboard(facts, people),
+    quota: quotaFor(goalCents, attained, quotaWindow),
   };
 }
 

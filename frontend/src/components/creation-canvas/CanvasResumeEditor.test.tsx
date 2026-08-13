@@ -6,12 +6,9 @@ import { importResumeSource } from '@/lib/resumeImportApi';
 
 vi.mock('@/lib/resumeImportApi', () => ({ importResumeSource: vi.fn() }));
 
-vi.mock('next-intl', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('next-intl')>()),
-  useTranslations: (await import('@/test/realCatalogTranslations')).realCatalogTranslator(
-    (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
-  ),
-}));
+vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')).realCatalogIntlMock(
+  (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
+));
 
 describe('CanvasResumeEditor', () => {
   it('reviews file metadata before structuring and preserves the protected source reference', async () => {

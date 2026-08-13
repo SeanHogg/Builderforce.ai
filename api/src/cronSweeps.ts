@@ -63,6 +63,7 @@ import { buildScheduledReport } from './presentation/routes/reportRoutes';
 import { runPrReconciliationSweep } from './application/reconciliation/runPrReconciliationSweep';
 import { cronSweepEnabled } from './application/runtime/cronControls';
 import { runStakeholderDigestSweep, runStakeholderReminderSweep } from './application/stakeholderAlignment/StakeholderMapService';
+import { runFinanceRollup } from './application/finance/financeRollup';
 
 /**
  * `null` from a sweep's `run` = nothing worth a log line. Preserved verbatim from
@@ -91,6 +92,21 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       const r = await projectRegistry(env);
       return `registered=${r.registered} facts=${r.facts}${r.skipped.length ? ` skipped=${r.skipped.length}` : ''}`;
+    },
+  },
+  {
+    key: 'finance-rollup',
+    cadence: 'daily',
+    // Runs AFTER `object-registry` for a reason: runway is computed from the burn,
+    // revenue and cash facts written earlier in the same pass, so an ordering swap would
+    // leave runway one day behind its own inputs.
+    description:
+      'Compute burn, revenue, MRR, cash and runway into metric_facts — the WRITER for the '
+      + '`finance.*` keys that burnRateService, DOMAIN_MANIFEST and the canvas `liveMetric` '
+      + 'binding all read and that nothing populated.',
+    run: async ({ env }) => {
+      const r = await runFinanceRollup(buildDatabase(env));
+      return r.facts > 0 ? `facts=${r.facts}${r.skipped.length ? ` skipped=${r.skipped.length}` : ''}` : null;
     },
   },
   {
@@ -422,7 +438,10 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     description: 'Generate + email every due report schedule, advancing its next run.',
     run: async ({ env }) => {
       const r = await runDueReports(env, (db, s, now) =>
-        buildScheduledReport(db, s.reportType, s.tenantId, s.segmentId ?? '', now),
+        buildScheduledReport(db, s.reportType, s.tenantId, s.segmentId ?? '', now, {
+          subjectKind: s.subjectKind ?? null,
+          subjectRef: s.subjectRef ?? null,
+        }),
       );
       return r.processed > 0 ? `processed=${r.processed}` : null;
     },

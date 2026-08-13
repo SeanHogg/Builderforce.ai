@@ -34,12 +34,9 @@ import AppFooter from './AppFooter';
 
 // The global setup mock returns the KEY, which is exactly what this file needs
 // to distinguish from a real label — so it reads the real catalog instead.
-vi.mock('next-intl', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('next-intl')>()),
-  useTranslations: (await import('@/test/realCatalogTranslations')).realCatalogTranslator(
-    (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
-  ),
-}));
+vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')).realCatalogIntlMock(
+  (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
+));
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/' }));
 vi.mock('./HeaderCartButton', () => ({ HeaderCartButton: () => null }));

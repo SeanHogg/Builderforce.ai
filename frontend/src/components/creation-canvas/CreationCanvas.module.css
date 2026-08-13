@@ -769,6 +769,97 @@
 .roadmap { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }.roadmap > div { display:grid; gap:6px; min-height:76px; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fbfdff; }.roadmap b { color:var(--canvas-accent); font-size:9px; text-transform:uppercase; }.roadmap span { padding:5px; border-left:2px solid #7b61e8; border-radius:var(--radius-sm); background:#f5f2ff; font-size:8px; }
 .mockupGrid { display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:5px; height:72px; }.mockupGrid i { display:block; border:1px solid #ccd9e9; border-radius:var(--radius-sm); background:linear-gradient(155deg,#edf4ff 0 45%,#3978f6 46% 55%,#fff 56%); }.mockupGrid i:nth-child(2){background:linear-gradient(155deg,#f7efff 0 45%,#7b5be7 46% 55%,#fff 56%)}.mockupGrid i:nth-child(3){background:linear-gradient(155deg,#eafaf5 0 45%,#22ad81 46% 55%,#fff 56%)}
 .featureGrid { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }.featureGrid span { display:flex; align-items:center; gap:5px; padding:7px 5px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:#fbfdff; font-size:7px; }.featureGrid b { width:17px; height:17px; display:grid; place-items:center; flex:none; border-radius:var(--radius-sm); color:var(--text-on-accent); background:var(--canvas-accent); font-size:8px; }
+/* ── FOUNDER OBJECTS ─────────────────────────────────────────────────────────
+   One stylesheet for all seventeen kinds, matching the one component that renders
+   them. Every colour comes from the canvas object palette declared at the top of
+   this file, which defines BOTH themes in one place — so these cards are correct
+   in dark mode without a second block here, and adding a founder kind needs no
+   CSS at all.
+
+   The tables scroll inside their own container rather than widening the card: a
+   cap table or an objections list is arbitrarily wide, and a node that grows to
+   fit its widest row drags the whole board's layout with it. */
+.founderBody { display:grid; gap:9px; }
+
+.founderStatRow { display:grid; grid-template-columns:repeat(auto-fit,minmax(84px,1fr)); gap:6px; }
+.founderStat { display:grid; gap:2px; min-width:0; padding:6px 7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); }
+.founderStat small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderStat b { overflow:hidden; color:var(--canvas-ink); font-size:11px; font-variant-numeric:tabular-nums; text-overflow:ellipsis; white-space:nowrap; }
+
+.founderText { display:grid; gap:3px; margin:0; color:var(--canvas-ink-soft); font-size:9px; line-height:1.5; }
+.founderText small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+
+.founderChips { display:grid; gap:4px; }
+.founderChips small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderChips div { display:flex; flex-wrap:wrap; gap:4px; }
+.founderChips span { padding:3px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-ink-soft); font-size:8px; }
+
+.founderList { display:grid; gap:4px; }
+.founderList small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderList ul { display:grid; gap:4px; margin:0; padding:0; list-style:none; }
+.founderList li { display:grid; gap:2px; padding:5px 7px; border-left:2px solid var(--canvas-accent); border-radius:var(--radius-sm); background:var(--canvas-panel); }
+.founderList b { color:var(--canvas-ink); font-size:9px; }
+.founderList span { color:var(--canvas-ink-soft); font-size:8px; line-height:1.45; }
+
+.founderTableWrap { display:grid; gap:4px; min-width:0; }
+.founderTableWrap small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderTableScroll { overflow-x:auto; max-width:100%; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); }
+.founderTable { width:100%; border-collapse:collapse; font-size:8px; }
+.founderTable th { position:sticky; top:0; padding:5px 6px; background:var(--canvas-panel); color:var(--canvas-muted); font-weight:700; letter-spacing:.03em; text-align:left; text-transform:uppercase; white-space:nowrap; }
+.founderTable td { padding:5px 6px; border-top:1px solid var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-ink); vertical-align:top; }
+
+.founderMeter { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:6px; }
+.founderMeter small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderMeter b { color:var(--canvas-ink); font-size:10px; font-variant-numeric:tabular-nums; }
+.founderMeterTrack { overflow:hidden; height:5px; border-radius:var(--radius-full); background:color-mix(in srgb, var(--canvas-line) 70%, transparent); }
+.founderMeterTrack i { display:block; height:100%; border-radius:var(--radius-full); background:var(--canvas-accent); }
+/* Tone is carried by the fill, and never by colour ALONE — the number sits beside
+   the bar and is what a colour-blind reader actually reads. */
+.founderMeter[data-tone='good'] .founderMeterTrack i { background:var(--success, #169566); }
+.founderMeter[data-tone='watch'] .founderMeterTrack i { background:var(--warning, #b7791f); }
+.founderMeter[data-tone='risk'] .founderMeterTrack i { background:var(--error, #d64545); }
+
+/* A `bars` distribution. Scaled to the LARGEST bar rather than to the total, so a
+   two-option split and a ten-option split read as the same kind of result — see the
+   note on `barValues`. The count sits beside every bar for the same reason the meter's
+   number does: length alone is not readable, and colour alone is not accessible. */
+.founderBars { display:grid; gap:4px; }
+.founderBars small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderBars ul { display:grid; gap:3px; margin:0; padding:0; list-style:none; }
+/* minmax(0,1fr) on the track, not 1fr: a long label must not be able to push the bar
+   past the card and start the board scrolling sideways. */
+.founderBars li { display:grid; grid-template-columns:minmax(0,4.5rem) minmax(0,1fr) auto; align-items:center; gap:5px; }
+.founderBars li span { overflow:hidden; color:var(--canvas-ink); font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
+.founderBars li i { display:block; min-width:2px; height:5px; border-radius:var(--radius-full); background:var(--canvas-accent); }
+.founderBars li b { color:var(--canvas-ink); font-size:9px; font-variant-numeric:tabular-nums; }
+
+.founderVerdict { display:grid; gap:3px; padding:7px 8px; border-left:3px solid var(--canvas-accent); border-radius:var(--radius-sm); background:color-mix(in srgb, var(--canvas-accent) 8%, var(--canvas-panel)); }
+.founderVerdict small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.founderVerdict strong { color:var(--canvas-ink); font-size:10px; line-height:1.45; }
+
+.founderEmpty { display:grid; gap:4px; padding:10px; border:1px dashed var(--canvas-line); border-radius:var(--radius-md); }
+.founderEmpty p { margin:0; color:var(--canvas-ink); font-size:9px; }
+.founderEmpty span { color:var(--canvas-muted); font-size:8px; }
+
+/* The founder cards that carry a table need room for it; the rest stay at the
+   default card width. `.wideNode` already handles the flexible sizing, so this is
+   only the resting width. */
+.node_competitor,.node_customerSegment,.node_gtmPlan,.node_battlecard,.node_decision,
+.node_objective,.node_pricing,.node_capTable,.node_fundingRound,.node_investorUpdate,
+.node_dataRoom,.node_contract,.node_experiment { width:430px; }
+.node_company,.node_interview { width:330px; }
+.node_liveMetric,.node_trigger { width:250px; }
+
+/* Narrow viewports: a 430px card overflows a 360px phone, and the stat grid has to
+   collapse before the card does. */
+@media (max-width:520px) {
+  .node_competitor,.node_customerSegment,.node_gtmPlan,.node_battlecard,.node_decision,
+  .node_objective,.node_pricing,.node_capTable,.node_fundingRound,.node_investorUpdate,
+  .node_dataRoom,.node_contract,.node_experiment,
+  .node_company,.node_interview { width:min(430px, calc(100vw - 48px)); }
+  .founderStatRow { grid-template-columns:repeat(auto-fit,minmax(72px,1fr)); }
+}
+
 .node_project,.node_mockup,.node_task { width:290px; }.node_roadmap,.node_featureSummary { width:500px; }
 .node_image,.node_animation,.node_podcast,.node_comic,.node_game,.node_cad,.node_model3d,.node_resume,.node_template { width:360px; }
 .node_resume { width:700px; }
@@ -1276,18 +1367,25 @@
   border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font-size:17px; line-height:1; cursor:pointer;
 }
 .filesPanel header button:hover,.filesPanel header button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
-.filesControls { display:grid; gap:6px; padding:8px 10px; border-bottom:1px solid var(--canvas-line); }
-.filesSearch {
+/* Search + chip filters for ANY canvas side panel (see CanvasPanelFilters.tsx).
+   Named for the role, not for the Files library that happened to grow it first —
+   the outline renders the same control, and two copies of it would drift. */
+.panelControls { display:grid; gap:6px; padding:8px 10px; border-bottom:1px solid var(--canvas-line); }
+.panelSearch {
   width:100%; box-sizing:border-box; padding:5px 8px;
   border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
   background:var(--canvas-panel-muted); color:var(--canvas-ink); font:inherit; font-size:11px;
 }
-.filesFilters { display:flex; flex-wrap:wrap; gap:4px; }
-.filesFilters button {
-  padding:2px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-full);
+.panelSearch::placeholder { color:var(--canvas-muted); }
+.panelSearch:focus-visible { outline:2px solid var(--canvas-accent-ink); outline-offset:-1px; }
+.panelFilters { display:flex; flex-wrap:wrap; gap:4px; }
+.panelFilters button {
+  /* 24px keeps the chip tappable at a phone width without breaking the 11px scale. */
+  min-height:24px; padding:2px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-full);
   background:transparent; color:var(--canvas-muted); font-size:10px; cursor:pointer;
 }
-.filesFilters button[aria-pressed='true'] { border-color:var(--canvas-accent-ink); background:var(--canvas-hover); color:var(--canvas-ink); }
+.panelFilters button:hover,.panelFilters button:focus-visible { color:var(--canvas-ink); outline:none; border-color:var(--canvas-accent-ink); }
+.panelFilters button[aria-pressed='true'] { border-color:var(--canvas-accent-ink); background:var(--canvas-hover); color:var(--canvas-ink); }
 .filesEmpty { margin:0; padding:14px 12px; color:var(--canvas-ink-soft); font-size:11px; line-height:1.5; }
 
 /* ── Connected cloud storage ─────────────────────────────────────────────────
@@ -1439,6 +1537,7 @@
 .canvasOutline span { display:block; font-size:11px; }
 .canvasOutline ul { padding-left:14px; }
 .canvasOutlineEmpty { margin:0; padding:12px 10px; font-size:11px; }
+.canvasOutlineCount { margin:0; padding:7px 10px 0; color:var(--canvas-ink-soft); font-size:10px; }
 
 /* ONE Brain surface, in three placements. Docked it parks on the left OR the right
    — never both — and the board reserves exactly its width (see --brain-dock-left/
@@ -1688,7 +1787,13 @@
 .pipelineStageHead,
 .pipelineLaneHead,
 .pipelineCard,
-.taskPrdSummary {
+.taskPrdSummary,
+/* The founder surfaces. They already read the palette directly, so this is
+   belt-and-braces for the three that sit on a tinted or dashed ground. */
+.founderStat,
+.founderList li,
+.founderTableScroll,
+.founderEmpty {
   border-color:var(--canvas-line);
   background:var(--canvas-panel);
   color:var(--canvas-ink);
@@ -1920,6 +2025,24 @@
 .dataGridScroll .miniTable > span[data-tone='warning'] { background:var(--tone-warning-bg); color:var(--tone-warning-ink); }
 .dataGridScroll .miniTable > span[data-tone='danger'] { background:var(--tone-danger-bg); color:var(--tone-danger-ink); }
 .dataGridScroll .miniTable > span[data-tone='info'] { background:var(--tone-info-bg); color:var(--tone-info-ink); }
+/* A failed formula, reported on the card. Canonical `--danger-*` tokens only — they
+   are declared in both themes, so this reads in light and dark without a second rule. */
+.dataGridFormulaErrors {
+  margin: 4px 0 0;
+  padding: 4px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+}
+/* A computed cell is read-only, and says so before someone tries to type in it. */
+.miniTable span[data-computed='true'] {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary, #1a1a1a);
+  background: var(--surface-2, rgba(127, 127, 127, 0.06));
+}
 .dataGridTones { display:flex; flex-wrap:wrap; gap:5px; }
 .dataGridTones span {
   display:inline-flex; align-items:center; gap:4px;
@@ -2310,3 +2433,381 @@
 
 /* A kanban needs the room a 290px card does not have. */
 .node_salesPipeline { width:980px; }
+
+/* ── Data architecture ──────────────────────────────────────────────────────
+   ERD, data source, contract, quality, metric definition and lineage.
+
+   Every colour is a canvas or tone token, both of which `.canvasShell` declares
+   for light AND dark above — so there is not one literal hex in this block and
+   no card can read correctly in one theme only. Widths are fluid (minmax /
+   percentage / clamp) and the wide surfaces scroll inside themselves rather than
+   pushing the card past the viewport on a narrow screen. */
+
+.dataVerdict {
+  display:grid; gap:2px;
+  padding:6px 8px; border-radius:var(--radius-sm);
+  border-left:2px solid var(--tone-info-mark);
+  background:var(--tone-info-bg);
+}
+.dataVerdict strong { color:var(--canvas-ink); font-size:9px; font-weight:700; line-height:1.35; }
+.dataVerdict span { color:var(--canvas-muted); font-size:8px; line-height:1.35; }
+.dataVerdict[data-tone='success'] { border-left-color:var(--tone-success-mark); background:var(--tone-success-bg); }
+.dataVerdict[data-tone='warning'] { border-left-color:var(--tone-warning-mark); background:var(--tone-warning-bg); }
+.dataVerdict[data-tone='danger']  { border-left-color:var(--tone-danger-mark);  background:var(--tone-danger-bg); }
+
+.dataEmpty {
+  display:grid; gap:4px; align-content:center;
+  min-height:80px; padding:12px;
+  border:1px dashed var(--canvas-line); border-radius:var(--radius-sm);
+  text-align:center;
+}
+.dataEmpty strong { color:var(--canvas-ink); font-size:9px; font-weight:700; }
+.dataEmpty span { color:var(--canvas-muted); font-size:8px; line-height:1.4; }
+
+.dataNote { margin:0; color:var(--canvas-muted); font-size:8px; line-height:1.45; }
+.dataFooter { color:var(--canvas-muted); font-size:8px; }
+.dataSql {
+  margin:0; max-height:96px; overflow:auto;
+  padding:7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink);
+  font-family:var(--font-mono); font-size:8px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere;
+}
+
+/* Issue / violation lists — ONE shape for the ERD validator, the contract
+   evaluator and the lineage staleness report, because all three make the same
+   statement: which thing, and what is wrong with it. */
+.dataIssueList { display:grid; gap:0; margin:0; padding:0; list-style:none; }
+.dataIssueList li {
+  display:grid; grid-template-columns:minmax(60px,32%) 1fr; gap:8px; align-items:baseline;
+  padding:5px 7px; border-left:2px solid var(--canvas-line);
+}
+.dataIssueList li[data-severity='error']   { border-left-color:var(--tone-danger-mark); }
+.dataIssueList li[data-severity='warning'] { border-left-color:var(--tone-warning-mark); }
+.dataIssueList li[data-severity='info']    { border-left-color:var(--tone-info-mark); }
+.dataIssueList b { color:var(--canvas-ink); font-size:8px; font-weight:700; overflow-wrap:anywhere; }
+.dataIssueList span { color:var(--canvas-muted); font-size:8px; line-height:1.4; }
+
+/* ERD — positioned HTML entity cards over an SVG relationship underlay. */
+.erdBody { display:grid; gap:7px; min-height:0; }
+.erdCanvas {
+  overflow:auto; max-height:420px;
+  padding:10px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted);
+}
+.erdStage { position:relative; min-width:100%; }
+.erdLines { position:absolute; inset:0; overflow:visible; pointer-events:none; }
+.erdLine { fill:none; stroke:var(--canvas-accent); stroke-width:1.2; opacity:.6; }
+.erdLineEnd { fill:var(--canvas-accent); opacity:.8; }
+.erdEntity {
+  position:absolute;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel); box-shadow:0 1px 3px var(--canvas-shadow);
+  overflow:hidden;
+}
+.erdEntity > header {
+  padding:5px 7px;
+  background:var(--canvas-widget-header); color:var(--canvas-ink);
+  font-size:9px; font-weight:750; letter-spacing:.02em;
+  border-bottom:1px solid var(--canvas-line);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.erdEntity ul { display:grid; gap:0; margin:0; padding:0; list-style:none; }
+.erdEntity li {
+  display:flex; align-items:baseline; gap:5px;
+  padding:2px 7px;
+  font-size:8px; line-height:1.5;
+}
+.erdEntity li[data-key='pk'] { background:var(--tone-info-bg); }
+.erdEntity li b { flex:1 1 auto; color:var(--canvas-ink); font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.erdEntity li span { flex:none; color:var(--canvas-muted); font-size:7px; }
+.erdEntity li i {
+  flex:none; padding:0 3px; border-radius:var(--radius-full);
+  font-style:normal; font-size:7px; font-weight:750; letter-spacing:.04em;
+}
+.erdEntity li i[data-mark='pk']  { background:var(--tone-info-bg);    color:var(--tone-info-ink); }
+.erdEntity li i[data-mark='fk']  { background:var(--tone-success-bg); color:var(--tone-success-ink); }
+.erdEntity li i[data-mark='pii'] { background:var(--tone-danger-bg);  color:var(--tone-danger-ink); }
+.erdEntity li[data-more='true'] b { color:var(--canvas-muted); font-weight:600; font-style:italic; }
+
+/* Data source */
+.dataSourceBody { display:grid; gap:7px; min-height:0; }
+.dataTableList {
+  display:grid; gap:0; margin:0; padding:0; list-style:none;
+  max-height:180px; overflow:auto;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+}
+.dataTableList li {
+  display:flex; align-items:baseline; justify-content:space-between; gap:8px;
+  padding:4px 7px; border-bottom:1px solid var(--canvas-line);
+}
+.dataTableList li:last-child { border-bottom:0; }
+.dataTableList b { color:var(--canvas-ink); font-size:8px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dataTableList span { flex:none; color:var(--canvas-muted); font-size:8px; }
+.dataTableList li[data-more='true'] b { color:var(--canvas-muted); font-style:italic; font-weight:600; }
+
+/* Contract */
+.dataContractBody { display:grid; gap:7px; min-height:0; }
+.dataColumnList {
+  display:grid; gap:0; margin:0; padding:0; list-style:none;
+  max-height:220px; overflow:auto;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+}
+.dataColumnList li {
+  display:grid; grid-template-columns:minmax(0,1.4fr) auto minmax(0,1fr) auto; gap:6px; align-items:baseline;
+  padding:4px 7px; border-bottom:1px solid var(--canvas-line);
+}
+.dataColumnList li:last-child { border-bottom:0; }
+.dataColumnList b { color:var(--canvas-ink); font-size:8px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dataColumnList span { color:var(--canvas-muted); font-size:7px; font-family:var(--font-mono); }
+.dataColumnList em { color:var(--canvas-muted); font-size:7px; font-style:normal; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dataColumnList i[data-mark='pii'] {
+  padding:0 4px; border-radius:var(--radius-full);
+  background:var(--tone-danger-bg); color:var(--tone-danger-ink);
+  font-style:normal; font-size:7px; font-weight:700;
+}
+.dataColumnList li[data-more='true'] b { color:var(--canvas-muted); font-style:italic; font-weight:600; }
+
+/* Quality */
+.dataQualityBody { display:grid; gap:7px; min-height:0; }
+.dataCheckList {
+  display:grid; gap:0; margin:0; padding:0; list-style:none;
+  max-height:240px; overflow:auto;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+}
+.dataCheckList li {
+  display:grid; grid-template-columns:auto minmax(0,1.2fr) minmax(0,1fr); gap:6px; align-items:baseline;
+  padding:4px 7px; border-bottom:1px solid var(--canvas-line);
+}
+.dataCheckList li:last-child { border-bottom:0; }
+.dataCheckList i {
+  width:6px; height:6px; border-radius:50%;
+  background:var(--canvas-line); align-self:center;
+}
+.dataCheckList li[data-status='pass'] i { background:var(--tone-success-mark); }
+.dataCheckList li[data-status='warn'] i { background:var(--tone-warning-mark); }
+.dataCheckList li[data-status='fail'] i { background:var(--tone-danger-mark); }
+.dataCheckList b { color:var(--canvas-ink); font-size:8px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dataCheckList span { color:var(--canvas-muted); font-size:8px; line-height:1.4; }
+.dataCheckList em {
+  grid-column:2 / -1;
+  color:var(--tone-danger-ink); font-size:7px; font-style:normal; font-family:var(--font-mono);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.dataCheckList li[data-more='true'] b { color:var(--canvas-muted); font-style:italic; font-weight:600; }
+/* A skipped case is neither pass nor fail: it did not run, and colouring it red
+   teaches everyone to ignore red. */
+.dataCheckList li[data-status='skip'] i { background:var(--canvas-muted); }
+
+/* QA — plan, case, run, defect, page audit.
+   Every one reuses .dataVerdict / .dataCheckList / .dataIssueList above, so a red
+   suite and a red run are the same red. Only the shapes those lists do NOT have
+   (a step list, a spec preview, an expected/actual pair) are declared here, and all
+   colour comes from the canvas palette + tone tokens the board declares for BOTH
+   themes. Widths are fluid so a card reflows rather than overflowing at 360px. */
+.qaPlanBody, .qaCaseBody, .qaRunBody, .qaDefectBody, .qaAuditBody { display:grid; gap:7px; min-height:0; }
+.qaPlanMeta { display:flex; flex-wrap:wrap; gap:6px 14px; }
+.qaPlanMeta span { display:grid; gap:1px; min-width:0; }
+.qaPlanMeta small { color:var(--canvas-muted); font-size:7px; text-transform:uppercase; letter-spacing:.04em; }
+.qaPlanMeta b { color:var(--canvas-ink); font-size:9px; font-weight:700; overflow-wrap:anywhere; }
+.qaRouteList {
+  display:flex; flex-wrap:wrap; gap:3px; margin:0; padding:0; list-style:none;
+}
+.qaRouteList li {
+  padding:1px 5px; border:1px solid var(--canvas-line); border-radius:var(--radius-full);
+  color:var(--canvas-muted); font-size:7px; font-family:var(--font-mono);
+}
+.qaRouteList li[data-more='true'] { border-style:dashed; font-style:italic; }
+.qaStepList {
+  display:grid; gap:0; margin:0; padding:0; list-style:none;
+  max-height:210px; overflow:auto;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  counter-reset:qastep;
+}
+.qaStepList li {
+  display:grid; grid-template-columns:minmax(52px,auto) minmax(0,1fr); gap:4px 7px; align-items:baseline;
+  padding:3px 7px; border-bottom:1px solid var(--canvas-line);
+}
+.qaStepList li:last-child { border-bottom:0; }
+.qaStepList b {
+  color:var(--canvas-accent); font-size:7px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.04em;
+}
+.qaStepList span { color:var(--canvas-ink); font-size:8px; font-family:var(--font-mono); overflow-wrap:anywhere; }
+.qaStepList em { grid-column:2 / -1; color:var(--canvas-muted); font-size:7px; font-style:normal; line-height:1.4; }
+.qaStepList li[data-more='true'] b { color:var(--canvas-muted); font-style:italic; letter-spacing:0; text-transform:none; }
+.qaSpec {
+  margin:0; padding:6px 8px; max-height:220px; overflow:auto;
+  background:var(--canvas-panel); border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  color:var(--canvas-ink); font-family:var(--font-mono); font-size:7px; line-height:1.5;
+  white-space:pre; tab-size:2;
+}
+.qaExpectation {
+  display:grid; grid-template-columns:minmax(58px,auto) minmax(0,1fr); gap:2px 8px; margin:0;
+}
+.qaExpectation dt { color:var(--canvas-muted); font-size:7px; text-transform:uppercase; letter-spacing:.04em; }
+.qaExpectation dd { margin:0; color:var(--canvas-ink); font-size:8px; line-height:1.4; overflow-wrap:anywhere; }
+.qaJournalList { display:grid; gap:0; margin:0; padding:0; list-style:none; border-top:1px solid var(--canvas-line); }
+.qaJournalList li {
+  display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:6px; align-items:baseline;
+  padding:2px 0; border-left:2px solid var(--canvas-line); padding-left:6px;
+}
+.qaJournalList li[data-ok='false'] { border-left-color:var(--tone-danger-mark); }
+.qaJournalList b { color:var(--canvas-ink); font-size:7px; font-weight:650; font-family:var(--font-mono); overflow-wrap:anywhere; }
+.qaJournalList span { color:var(--canvas-muted); font-size:7px; line-height:1.4; overflow-wrap:anywhere; }
+
+/* Metric definition */
+.metricDefinitionBody { display:grid; gap:7px; min-height:0; }
+.metricValueRow { display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.metricValueRow strong { color:var(--canvas-ink); font-size:clamp(16px,5vw,22px); font-weight:760; line-height:1.1; }
+.metricValueRow span { color:var(--canvas-muted); font-size:8px; }
+
+/* Lineage */
+.lineageBody { display:grid; gap:7px; min-height:0; }
+.lineageFlow {
+  display:grid; gap:0; margin:0; padding:0; list-style:none;
+  max-height:220px; overflow:auto;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+}
+.lineageFlow li {
+  display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:6px; align-items:center;
+  padding:4px 7px; border-bottom:1px solid var(--canvas-line);
+}
+.lineageFlow li:last-child { border-bottom:0; }
+.lineageFlow b {
+  color:var(--canvas-ink); font-size:8px; font-weight:650;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.lineageFlow b[data-role='source'] { color:var(--canvas-accent-ink); }
+.lineageFlow b[data-stale='true'] { color:var(--tone-warning-ink); }
+.lineageFlow span {
+  padding:1px 5px; border-radius:var(--radius-full);
+  background:var(--canvas-panel-muted); color:var(--canvas-muted);
+  font-size:7px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; white-space:nowrap;
+}
+.lineageFlow li[data-more='true'] { grid-template-columns:1fr; }
+.lineageFlow li[data-more='true'] b { color:var(--canvas-muted); font-style:italic; font-weight:600; }
+
+/* A model needs room to be read. On a phone it is the same card, scrolled —
+   never a fixed width that pushes the board past the viewport. */
+.node_erd { width:760px; }
+.node_lineage, .node_dataQuality, .node_dataContract, .node_datasource { width:420px; }
+@media (max-width:760px) {
+  .node_erd,
+  .node_lineage,
+  .node_dataQuality,
+  .node_dataContract,
+  .node_datasource { width:100%; max-width:92vw; }
+  .erdCanvas { max-height:300px; }
+  .dataIssueList li { grid-template-columns:1fr; gap:2px; }
+  .dataColumnList li { grid-template-columns:minmax(0,1fr) auto; }
+  .dataColumnList em { grid-column:1 / -1; }
+  .lineageFlow li { grid-template-columns:1fr; gap:2px; }
+}
+
+/* ── Practice: the study loop, on the card ─────────────────────────────────
+   Used by the Practice object AND by a Course module's knowledge check, which
+   is why the runner styles stand alone rather than nesting under either.
+   Every colour is a token, so both themes are covered by one declaration. */
+.practiceShell{display:grid;gap:12px;min-width:420px;max-width:100%;color:var(--text-primary)}
+.practiceModes{display:flex;gap:6px;flex-wrap:wrap}
+.practiceModes button{padding:6px 12px;min-height:34px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-secondary);font-size:12px}
+.practiceModes button[aria-pressed="true"]{border-color:var(--coral-bright);color:var(--text-primary);background:var(--bg-elevated)}
+.practiceRunner{display:grid;gap:10px}
+.practiceScore{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--text-secondary)}
+.practiceScore b{color:var(--text-primary)}
+.practiceScore span[data-weak]{color:var(--error-text)}
+.practiceBar{flex:1 1 120px;min-width:90px;height:6px;border-radius:var(--radius-full);background:var(--border-subtle);overflow:hidden}
+.practiceBar i{display:block;height:100%;background:var(--coral-bright)}
+.practicePrompt{font-size:14px;font-weight:600;color:var(--text-primary);margin:0}
+.practiceChoices{display:grid;gap:6px}
+.practiceChoices button{display:flex;gap:8px;align-items:flex-start;width:100%;text-align:left;padding:9px 10px;min-height:38px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-primary);font-size:13px}
+.practiceChoices button span{font-weight:800;color:var(--coral-bright)}
+.practiceChoices button[data-selected]{border-color:var(--coral-bright)}
+.practiceChoices button[data-correct]{border-color:var(--success-text);background:var(--bg-elevated)}
+.practiceChoices button:disabled{opacity:.85}
+.practiceCard{display:grid;gap:8px;padding:12px;border:1px dashed var(--border);border-radius:var(--radius-lg);background:var(--bg-elevated)}
+.practiceAnswer{margin:0;font-size:14px;color:var(--text-primary)}
+.practiceReveal{padding:9px 12px;min-height:38px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-primary)}
+.practiceFeedback{margin:0;padding:9px 10px;border-radius:var(--radius-md);font-size:13px;background:var(--bg-elevated);color:var(--text-secondary);border:1px solid var(--border)}
+.practiceFeedback b{color:var(--error-text)}
+.practiceFeedback[data-correct] b{color:var(--success-text)}
+.practiceHint{margin:0;font-size:12px;color:var(--text-secondary)}
+.practiceActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.practiceActions button{padding:7px 12px;min-height:34px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-primary);font-size:12px}
+.practiceActions small{color:var(--text-secondary);font-size:11px}
+.practiceEmpty,.practiceStudyList{margin:0;font-size:12px;color:var(--text-secondary)}
+.courseEmpty{display:grid;gap:8px;min-width:320px;max-width:100%;padding:14px;border:1px dashed var(--border);border-radius:var(--radius-lg);background:var(--bg-elevated);color:var(--text-primary)}
+.courseEmpty input{width:100%;padding:9px 10px;min-height:38px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-primary)}
+.courseEmpty p{margin:0;font-size:12px;color:var(--text-secondary)}
+@media(max-width:760px){.practiceShell{min-width:0}}
+.readAloudButton{display:inline-flex;gap:6px;align-items:center;align-self:flex-start;padding:6px 10px;min-height:32px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);color:var(--text-secondary);font-size:12px}
+.learningControl{display:grid;gap:8px;padding-top:12px;border-top:1px solid var(--border-subtle)}
+.practiceEditor{display:grid;gap:6px;padding:10px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-elevated)}
+.practiceEditor button{justify-self:start;padding:5px 10px;min-height:30px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-secondary);font-size:11px}
+
+/* A masked cell reads as data that is deliberately withheld, not as missing data:
+   the same ink at reduced emphasis, in the mono face the mask characters belong to. */
+.dataGridScroll .miniTable > span[data-masked='true'] {
+  color:var(--canvas-muted); font-family:var(--font-mono); letter-spacing:.02em;
+}
+/* ── The pen tray ──────────────────────────────────────────────────────────
+   Visible only while a tool is held. Wraps on a phone rather than pushing the
+   board sideways, and every target clears 34px so it is usable with a finger. */
+.drawingToolbar{position:absolute;left:50%;transform:translateX(-50%);bottom:96px;z-index:9;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:min(92vw,760px);padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);box-shadow:0 12px 32px rgba(0,0,0,.22)}
+.drawingToolbar button{display:inline-flex;gap:5px;align-items:center;padding:6px 9px;min-height:34px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--bg-elevated);color:var(--text-secondary);font-size:12px}
+.drawingToolbar button[aria-pressed="true"]{border-color:var(--coral-bright);color:var(--text-primary)}
+.drawingToolbar button span{font-size:13px;line-height:1}
+.drawingColor,.drawingWidth{display:inline-flex;gap:6px;align-items:center;font-size:11px;color:var(--text-secondary)}
+.drawingColor input{width:34px;height:30px;padding:0;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)}
+.drawingWidth input{width:90px}
+.drawingDone{margin-left:auto}
+.drawingTexts{display:grid;gap:4px;margin-top:6px}
+.drawingTexts input{width:100%;padding:5px 8px;min-height:30px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-primary);font-size:12px}
+/* An annotation is a mark ON something, so its own card gets out of the way. */
+.card:has([data-annotation]){background:transparent;border-color:transparent;box-shadow:none}
+.card:has([data-annotation]) .nodeHeader{display:none}
+@media(max-width:760px){.drawingToolbar{bottom:120px;gap:4px;padding:6px}.drawingToolbar button b{display:none}.drawingWidth input{width:64px}}
+
+/* ── Spec-object render styles: matrix, bars, math, reference ──────────────────
+   Added for the academic vocabulary and available to every registered spec set.
+   All colour comes from the canvas palette variables, so both themes are covered
+   by construction; the two wide styles scroll inside their own container rather
+   than widening the node, which is what keeps a fourteen-column gradebook from
+   pushing a card off the board on a narrow viewport. */
+.specMatrix { width:100%; border-collapse:collapse; font-size:8px; }
+.specMatrix th { padding:5px 6px; background:var(--canvas-panel); color:var(--canvas-muted); font-weight:700; letter-spacing:.03em; text-align:left; text-transform:uppercase; }
+.specMatrix thead th { position:sticky; top:0; white-space:nowrap; }
+/* The row header is the criterion or the learner — it stays readable while the
+   value columns scroll, which is the whole reason a grid is not a plain table. */
+.specMatrix tbody th { position:sticky; left:0; z-index:1; min-width:96px; max-width:150px; border-top:1px solid var(--canvas-line); color:var(--canvas-ink); text-transform:none; }
+.specMatrix td { min-width:88px; max-width:190px; padding:5px 6px; border-top:1px solid var(--canvas-line); border-left:1px solid var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-ink); vertical-align:top; }
+
+.specBars { display:grid; gap:4px; min-width:0; }
+.specBars small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.specBars ul { display:grid; gap:3px; margin:0; padding:0; list-style:none; }
+.specBars li { display:grid; grid-template-columns:minmax(48px,28%) 1fr auto; align-items:center; gap:6px; font-size:8px; }
+.specBars li > span { overflow:hidden; color:var(--canvas-ink); text-overflow:ellipsis; white-space:nowrap; }
+.specBars li > i { display:block; min-width:2px; height:6px; border-radius:var(--radius-full); background:var(--canvas-accent); }
+.specBars li > b { color:var(--canvas-muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+.specMath { display:grid; gap:4px; min-width:0; }
+.specMath small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+/* MathML scales with the surrounding font, so the size is set here rather than
+   inside the generated markup — an equation must read at card size and at the
+   larger size a frame or present mode gives it. */
+.specMathRender { overflow-x:auto; max-width:100%; padding:6px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:13px; }
+.specMathRender math { color:inherit; }
+
+.specReference { display:grid; gap:4px; min-width:0; }
+.specReference small { color:var(--canvas-muted); font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+/* Hanging indent: the author-date styles are read by scanning the left edge for a
+   family name, which a wrapped second line destroys unless it is indented. */
+.specReference ol { display:grid; gap:5px; margin:0; padding:0; list-style:none; }
+.specReference li { padding-left:14px; color:var(--canvas-ink); font-size:8px; line-height:1.5; text-indent:-14px; overflow-wrap:anywhere; }
+.specReferenceMarker { margin-right:4px; color:var(--canvas-muted); font-variant-numeric:tabular-nums; }
+
+@media(max-width:760px){
+  .specMatrix tbody th { min-width:80px; }
+  .specMatrix td { min-width:72px; }
+  .specBars li { grid-template-columns:minmax(40px,34%) 1fr auto; }
+}

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';
+import { CanvasPanelFilters } from './CanvasPanelFilters';
 import { formatBytes, type CanvasFile, type CanvasFileCategory } from '@/lib/canvasDocuments';
 
 const CATEGORY_ICON: Readonly<Record<CanvasFileCategory, string>> = {
@@ -46,23 +47,18 @@ export function CanvasFilesPanel({
         <small>{t('count', { count: files.length })}</small>
         <button type="button" aria-label={t('close')} title={t('close')} onClick={onClose}>×</button>
       </header>
-      {files.length > 0 && <div className={styles.filesControls}>
-        <input
-          className={styles.filesSearch}
-          value={search}
-          aria-label={t('search')}
-          placeholder={t('search')}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-        <div className={styles.filesFilters} role="group" aria-label={t('filterByType')}>
-          {available.map((category) => <button
-            key={category}
-            type="button"
-            aria-pressed={filter === category}
-            onClick={() => setFilter(category)}
-          >{category === 'all' ? t('filterAll') : t(`category_${category}` as 'category_document')}</button>)}
-        </div>
-      </div>}
+      {files.length > 0 && <CanvasPanelFilters
+        search={search}
+        onSearchChange={setSearch}
+        searchLabel={t('search')}
+        filterGroupLabel={t('filterByType')}
+        filter={filter}
+        onFilterChange={(value) => setFilter(value as CanvasFileCategory | 'all')}
+        chips={available.map((category) => ({
+          value: category,
+          label: category === 'all' ? t('filterAll') : t(`category_${category}` as 'category_document'),
+        }))}
+      />}
       {files.length === 0
         ? <p className={styles.filesEmpty}>{t('empty')}</p>
         : visible.length === 0

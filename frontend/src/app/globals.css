@@ -5151,3 +5151,34 @@ select.input option {
 @media (max-width: 560px) {
   .mp-publish { margin-left: 0; width: 100%; justify-content: center; }
 }
+
+/* ============================================================
+   Mathematics (KaTeX) — themed and responsive
+   Rendered by the one markdown pipeline (lib/markdownPipeline.ts), so these
+   rules cover every surface that renders prose: chat, documents, blog, and
+   every canvas card.
+   ============================================================ */
+
+.katex {
+  /* KaTeX ships an absolute colour; equations must read as the text around
+     them in BOTH themes, which is what `currentColor` gives us. */
+  color: inherit;
+  font-size: 1.05em;
+}
+
+.katex-display {
+  /* A long equation must scroll inside its own box — never widen the page.
+     Vertical hidden because the horizontal scroller would otherwise add a
+     phantom vertical bar around tall fractions. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0 6px;
+  max-width: 100%;
+}
+
+.katex-error {
+  color: var(--error-text);
+  background: var(--error-bg, transparent);
+  border-radius: 4px;
+  padding: 0 2px;
+}

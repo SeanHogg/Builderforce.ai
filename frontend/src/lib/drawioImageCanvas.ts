@@ -49,12 +49,3 @@ export function appendImageToDrawioCanvas(source: string, asset: DrawioImageAsse
   const cell = imageCell(asset, `image-${nextId}`, right ? right + GAP : 40, 40);
   return source.replace(/<\/root>/i, `${cell}</root>`);
 }
-
-export function drawingDataUrl(points: Array<{ x: number; y: number }>, width: number, height: number, stroke: string, strokeWidth: number): string | null {
-  if (points.length < 2) return null;
-  const safeWidth = safeDimension(width, DEFAULT_WIDTH);
-  const safeHeight = safeDimension(height, DEFAULT_HEIGHT);
-  const path = points.map((point, index) => `${index ? 'L' : 'M'}${Number(point.x) || 0} ${Number(point.y) || 0}`).join(' ');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${safeWidth}" height="${safeHeight}" viewBox="0 0 ${safeWidth} ${safeHeight}"><path d="${xmlAttribute(path)}" fill="none" stroke="${xmlAttribute(stroke)}" stroke-width="${Math.max(1, Math.min(strokeWidth, 24))}" stroke-linecap="round" stroke-linejoin="round" /></svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-}

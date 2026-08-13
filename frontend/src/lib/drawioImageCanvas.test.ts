@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendImageToDrawioCanvas, createDrawioImageCanvas, drawingDataUrl } from './drawioImageCanvas';
+import { appendImageToDrawioCanvas, createDrawioImageCanvas } from './drawioImageCanvas';
 
 const first = { name: 'architecture & notes.png', dataUrl: 'data:image/png;base64,AAAA', width: 800, height: 500 };
 
@@ -19,9 +19,4 @@ describe('draw.io image canvases', () => {
     expect(xml).toContain('data:image/jpeg;base64,BBBB');
   });
 
-  it('turns freehand points into an embeddable SVG', () => {
-    const url = drawingDataUrl([{ x: 1, y: 2 }, { x: 20, y: 30 }], 100, 80, '#123456', 4);
-    expect(url).toMatch(/^data:image\/svg\+xml/);
-    expect(decodeURIComponent(url!)).toContain('M1 2 L20 30');
-  });
 });

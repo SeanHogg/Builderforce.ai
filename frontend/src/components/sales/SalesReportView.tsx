@@ -113,6 +113,40 @@ export function SalesReportView({ report, window = 'month', onWindowChange, onSe
         </div>
       </section>
 
+      {/* 1b — will we hit the number? The one question the tiles above cannot
+          answer, because a total with no target is a fact with no verdict.
+          Self-hiding: no goal set means there is nothing to be measured against,
+          and drawing an empty meter would invent a target of zero. */}
+      {report.quota.goalCents > 0 && (
+        <section style={cardStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'baseline' }}>
+            <p style={{ ...captionStyle, margin: 0 }}>{t('quotaTitle', { window: t(`window.${report.quota.window}`) })}</p>
+            <span style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)' }}>
+              {money(report.quota.attainedCents)} / {money(report.quota.goalCents)}
+            </span>
+          </div>
+          <div
+            role="meter"
+            aria-valuenow={report.quota.attainmentPercent ?? 0}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={t('quotaTitle', { window: t(`window.${report.quota.window}`) })}
+            style={{ marginTop: 10, height: 10, borderRadius: 'var(--radius-full)', background: 'var(--surface-sunken)', overflow: 'hidden' }}
+          >
+            <div style={{
+              // Capped at 100% so 240% attainment does not overflow the track —
+              // the figure beside it still tells the whole truth.
+              width: `${Math.min(100, report.quota.attainmentPercent ?? 0)}%`,
+              height: '100%',
+              background: (report.quota.attainmentPercent ?? 0) >= 100 ? 'var(--success)' : 'var(--coral-bright)',
+            }} />
+          </div>
+          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '8px 0 0' }}>
+            {t('quotaAttainment', { percent: report.quota.attainmentPercent ?? 0 })}
+          </p>
+        </section>
+      )}
+
       {/* 2 — will we win next? */}
       <section style={cardStyle}>
         <p style={captionStyle}>{t('funnelTitle')}</p>

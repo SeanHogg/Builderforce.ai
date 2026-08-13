@@ -62,12 +62,18 @@ import {
 } from '@/lib/guestRoomApi';
 import { GuestAiUnavailableError, runCreationCanvasAi, type CanvasAiCompletion } from '@/lib/creationCanvasAi';
 import { canvasTranscriptForModel } from '@/lib/canvasTranscript';
+import { approvalGuidance, evaluateGate, readProvenance, type ApprovalMode } from '@/lib/canvasApprovalGate';
+import { sheetFormulaGuidance } from '@/lib/canvasSheet';
+import { FORMULA_FUNCTIONS } from '@/lib/canvasFormula';
 import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ProjectEvermindPanel } from '@/components/builder/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/builder/EvermindValidationContext';
 import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
+import { hiringApi } from '@/lib/hiringApi';
+import { screenCandidates } from '@/lib/canvasResumeScreening';
+import { resumeDocumentFromJson } from '@/lib/canvasResume';
 import { guestLimitRefusal, type GuestLimitRefusal } from '@/lib/guestLimit';
 import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
 import { ApiRequestError } from '@/lib/apiClient';
@@ -83,7 +89,7 @@ import { isSocialNetworkName, socialCampaignNodeData, socialFeedPatch, socialPos
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { appendCanvasVideoSource, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CanvasVideoSource, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
+import { appendCanvasVideoSource, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, findingFingerprint, normalizeQaSteps, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
 import { getStoredTenantToken } from '@/lib/auth';
 import { claimLocalDraft } from '@/lib/pendingWork';
 import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
@@ -91,12 +97,48 @@ import { OfficeExportUnavailableError, exportCsv, exportDocx, exportPptx, export
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import {
   MAX_MATERIALIZED_ROWS, MAX_TABULAR_COLUMNS, TABULAR_AGGREGATE_OPERATORS, TABULAR_FILTER_OPERATORS,
+  TABULAR_TIME_GRAINS, TABULAR_WINDOW_OPERATORS,
   profileTabular, queryTabular, tabularFromObject,
   type TabularHighlightRule, type TabularQuery, type TabularSource,
 } from '@/lib/canvasTabularData';
+import {
+  DATA_MODEL_CARDINALITIES,
+  DATA_MODEL_TYPES,
+  SQL_DIALECTS,
+  dataModelFromIntrospection,
+  dataModelFromTabular,
+  dataModelSummary,
+  entityKey,
+  normalizeDataModel,
+  readDataModel,
+  validateDataModel,
+  type DataModel,
+  type SqlDialect,
+} from '@/lib/canvasDataModel';
+import { dataModelDdl, dataModelMermaid } from '@/lib/canvasDataModelDdl';
+import {
+  DATA_CLASSIFICATIONS, PII_CATEGORIES,
+  classificationSummary, classifyTabular, contractVerdict, evaluateDataContract, inferDataContract,
+  normalizeClassifications, normalizeDataContract,
+} from '@/lib/canvasDataGovernance';
+import {
+  DATA_QUALITY_CHECK_KINDS, checksFromContract, dataQualityVerdict, normalizeDataQualityChecks,
+  referenceSources, runDataQualityChecks, suggestDataQualityChecks,
+} from '@/lib/canvasDataQuality';
+import {
+  METRIC_DIRECTIONS, METRIC_FORMATS,
+  computeMetric, computeMetricSeries, formatMetricValue, normalizeMetricDefinition,
+} from '@/lib/canvasMetrics';
+import { TABULAR_JOIN_TYPES, joinTabular, suggestJoinKeys, type TabularJoinKey } from '@/lib/canvasTabularJoin';
+import { buildLineageGraph, columnImpact, impactOf, lineagePatch, staleDerivatives, upstreamOf } from '@/lib/canvasLineage';
+import { dataSourceApi, resolveDataSource, type DataSourceSummary } from '@/lib/dataSourceApi';
 import { detectGeoColumns, mapObjectFields, mapPointsFromRows } from '@/lib/canvasGeo';
+import { analyzeCompetitorGeography, competitorSitesFrom } from '@/lib/competitorGeo';
+import { evaluateTrigger } from '@/lib/canvasTriggers';
 import { useCoarsePointer } from '@/lib/useCoarsePointer';
 import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
+import { canvasStrokes, drawingPatch, DRAWING_TOOLS, eraseStrokes, strokesSvg, type CanvasDrawingTool, type CanvasStroke } from '@/lib/canvasDrawing';
+import { DEFAULT_DRAWING_PREFERENCES, readDrawingPreferences, writeDrawingPreferences, type DrawingPreferences } from './drawingPreferences';
 import { useComposerSpace } from './useComposerSpace';
 import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
 import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
@@ -104,9 +146,10 @@ import { activeResumeRevision, initializeResumeFromPatch, preserveResumeSourceFo
 import { renderedCanvasResume, resumeHtmlFile } from '@/lib/canvasResumeRenderer';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
+import { readStoredJournal, writeStoredJournal } from '@/lib/canvasJournalStore';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { Icon } from '@/components/ui/Icon';
-import { appendImageToDrawioCanvas, createDrawioImageCanvas, drawingDataUrl, type DrawioImageAsset } from '@/lib/drawioImageCanvas';
+import { appendImageToDrawioCanvas, createDrawioImageCanvas, type DrawioImageAsset } from '@/lib/drawioImageCanvas';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
 import { VoiceOutput } from '@/components/builder/VoiceOutput';
 import { useVoiceStudio } from '@/lib/voiceStudio';
@@ -137,8 +180,17 @@ import {
 import { markdownHtmlDocument, printCanvasObject } from '@/lib/printDocument';
 import { canvasObjectSvg } from '@/lib/renderedSvg';
 import { CanvasExportActions, canvasExportActionsFor } from './CanvasExportActions';
+import { CourseSubjectControl, PracticeAuthoring, ReadingLevelControl } from './LearningControls';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { canvasProjectId, canvasProjectNodes, connectedCanvasProjectNode } from '@/lib/canvasProjectRef';
+import {
+  buildTestPlan, coverageReport, defectFromResult, normalizeExitCriteria, planGateVerdict,
+  readTestCases, readTestResults, relowerCase, releaseEvidence, routesFromHtml, summarizeRun,
+  testTargetUrl, type BuildPlanInput, type GateEvidence,
+} from '@/lib/canvasQa';
+import { auditPageHtml } from '@/lib/canvasPageAudit';
+import { generateFixture } from '@/lib/canvasTestData';
+import * as qaApi from '@/lib/qa/api';
 import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, isWebPageKind, normalizeWebPageUrl, webPageHost, webPageViewport } from '@/lib/canvasWebPage';
 import { deleteIdeProject, listIdeProjects } from '@/lib/api';
@@ -239,6 +291,12 @@ const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly stri
   image: ['generate', 'preview', 'export', 'convert-to-drawio'], drawing: ['convert-to-drawio'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
   comic: ['generate', 'preview', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'export'], model3d: ['generate', 'preview', 'export'],
   resume: ['generate', 'preview', 'export'], template: ['browse', 'apply'],
+  // The QA objects. `gate` recomputes the plan's verdict from the runs, defects and
+  // audits on the board; `export` writes the .spec.ts (a plan writes its whole suite
+  // as one file). Nothing else is advertised, because nothing else is connected —
+  // running a suite is `canvas_publish_tests`, and a kind that advertised `run` here
+  // would produce the honest-but-useless "no delivery adapter" answer forever.
+  testPlan: ['gate', 'export'], testCase: ['export'], testRun: ['export'], defect: ['export'],
 };
 const WEBSITE_SECTION_SCHEMA = {
   type: 'object', required: ['id', 'kind'], additionalProperties: false,
@@ -279,7 +337,8 @@ export function canInvokeCreationObjectAction(kind: CreationObjectKind, action: 
   return action === 'inspect' || action === 'edit' || CONNECTED_CANVAS_ACTIONS[kind]?.includes(action) === true;
 }
 const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
-  Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', Pitch: '◈', People: '●', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
+  Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', Quality: '⛉', Teaching: '◈', Research: '⌕',
+  Pitch: '◈', People: '●', Hiring: '◐', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
 };
 export type ProposedCanvasChange =
   | { id: string; type: 'object.add'; label: string; node: CreationFlowNode }
@@ -356,6 +415,130 @@ export async function persistCanonicalProjectPrd(
 
 function newNode(kind: CreationObjectKind, position: { x: number; y: number }): CreationFlowNode {
   return { id: crypto.randomUUID(), type: 'creation', position, data: createDefaultCreationData(kind) };
+}
+
+/**
+ * The evidence a test plan's gate is judged on, gathered from the board.
+ *
+ * ONE collector, two readers: the `gate` action (which writes the verdict onto the
+ * plan) and the JSON export (which hands the same verdict to the release-audit CLI).
+ * Two collectors would be two definitions of "an open defect", and the CLI would
+ * eventually certify something the board was calling red.
+ *
+ * Runs and audits must be CONNECTED to the plan — evidence for one release is not
+ * evidence for another. Defects are the whole board's, because a defect found
+ * anywhere still blocks the thing it was found in.
+ */
+function releaseGateEvidence(
+  plan: CreationFlowNode,
+  nodes: readonly CreationFlowNode[],
+  edges: readonly Edge[],
+): GateEvidence {
+  const connected = new Set(edges.filter((edge) => edge.source === plan.id).map((edge) => edge.target));
+  return {
+    runs: nodes
+      .filter((node) => node.data.kind === 'testRun' && connected.has(node.id))
+      .map((node) => ({ ...summarizeRun(readTestResults(node.data.results)), finishedAt: String(node.data.finishedAt ?? '') }))
+      .sort((a, b) => b.finishedAt.localeCompare(a.finishedAt)),
+    defects: nodes
+      .filter((node) => node.data.kind === 'defect')
+      .map((node) => ({
+        severity: QA_SEVERITIES.includes(node.data.severity as QaFindingSeverity) ? node.data.severity as QaFindingSeverity : 'medium',
+        status: String(node.data.status ?? 'open'),
+      })),
+    audits: nodes
+      .filter((node) => node.data.kind === 'diagnostics' && connected.has(node.id) && Array.isArray(node.data.auditFindings))
+      .map((node) => ({ passed: node.data.auditPassed === true })),
+    signOffs: (Array.isArray(plan.data.signOffs) ? plan.data.signOffs : []).flatMap((entry) => {
+      const record = entry as { owner?: unknown; approvedAt?: unknown };
+      return typeof record?.owner === 'string' && typeof record.approvedAt === 'string'
+        ? [{ owner: record.owner, approvedAt: record.approvedAt }]
+        : [];
+    }),
+  };
+}
+
+/**
+ * The Playwright source a QA object exports as.
+ *
+ * A `testCase` is its own spec. A `testPlan` is every case connected to it, joined
+ * into ONE file with a single import — because a suite is taken away as a file, not
+ * as one download per card, and because N files each re-importing `@playwright/test`
+ * is not what a person would have written.
+ *
+ * Re-lowered from `steps` rather than trusting the stored `spec` when the two could
+ * disagree: `relowerCase` is the single generator, so an edited step list cannot
+ * export yesterday's assertions.
+ */
+function canvasSpecSource(
+  target: CreationFlowNode,
+  nodes: readonly CreationFlowNode[],
+  edges: readonly Edge[],
+): string | null {
+  const specOf = (node: CreationFlowNode): string | null => {
+    const [restored] = readTestCases([{
+      title: node.data.title,
+      steps: node.data.steps,
+      route: node.data.route,
+      spec: node.data.spec,
+      priority: node.data.priority,
+    }]);
+    if (!restored) return null;
+    // A stored spec that came back from the QA library (persona-aware, possibly
+    // model-written) wins; otherwise the deterministic lowering of the steps.
+    return restored.steps.length ? relowerCase(restored).spec : restored.spec;
+  };
+
+  if (target.data.kind === 'testCase') return specOf(target);
+  if (target.data.kind !== 'testPlan') return null;
+
+  const memberIds = new Set(edges.filter((edge) => edge.source === target.id).map((edge) => edge.target));
+  const cases = nodes.filter((node) => node.data.kind === 'testCase' && memberIds.has(node.id));
+  const specs = cases.map(specOf).filter((spec): spec is string => !!spec);
+  if (!specs.length) return null;
+  const bodies = specs.map((spec) => spec.split('\n').filter((line) => !line.startsWith('import ')).join('\n').trim());
+  return [`import { test, expect } from '@playwright/test';`, '', ...bodies].join('\n') + '\n';
+}
+
+/**
+ * Restyle every mark on a drawing at once.
+ *
+ * Geometry is deliberately untouched: the strokes are already relative to their
+ * own card, so re-normalizing them here would move the card by a pixel every
+ * time somebody dragged the colour slider. `stroke` / `strokeWidth` are kept in
+ * step on the object because they are what a pre-strokes client reads.
+ */
+function restyleDrawing(data: CreationNodeData, style: { stroke?: string; strokeWidth?: number }): Partial<CreationNodeData> {
+  const strokes = canvasStrokes(data).map((stroke) => ({ ...stroke, ...style }));
+  return { strokes, ...style } as Partial<CreationNodeData>;
+}
+
+/** One glyph per tool, so the tray is scannable without reading it. The label
+ *  stays beside it — an icon-only pen tray is a memory test. */
+const DRAWING_TOOL_GLYPH: Readonly<Record<CanvasDrawingTool, string>> = {
+  pen: '✎', highlighter: '▬', line: '╱', rect: '▭', ellipse: '◯', text: 'T', eraser: '⌫',
+};
+/** `<input type="color">` cannot show a CSS variable, and the default stroke IS
+ *  one (so a sketch reads correctly in both themes). The swatch falls back to the
+ *  hex of that variable until the user picks a colour of their own. */
+const DRAWING_FALLBACK_HEX = '#4d9eff';
+
+/**
+ * The object a point lands on, topmost first.
+ *
+ * What makes a stroke an annotation rather than a stray sketch: the mark belongs
+ * to whatever is under the pen when it goes down. Later nodes render above
+ * earlier ones, so the list is walked backwards — the card a person can see is
+ * the card they think they are drawing on.
+ */
+function topmostNodeAt(nodes: readonly CreationFlowNode[], point: { x: number; y: number }): CreationFlowNode | null {
+  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+    const node = nodes[index]!;
+    if (node.hidden) continue;
+    const { width, height } = canvasNodeDimensions(node);
+    if (point.x >= node.position.x && point.x <= node.position.x + width && point.y >= node.position.y && point.y <= node.position.y + height) return node;
+  }
+  return null;
 }
 
 /** Social-campaign fields the SERVER owns — see `syncSocialCampaign`. Editing one on
@@ -456,16 +639,14 @@ function drawioAssetFromNode(node: CreationFlowNode): DrawioImageAsset | null {
       ...(typeof data.imageHeight === 'number' ? { height: data.imageHeight } : {}),
     };
   }
-  if (data.kind !== 'drawing' || !Array.isArray(data.points)) return null;
-  const points = data.points.flatMap((point) => {
-    if (!point || typeof point !== 'object') return [];
-    const { x, y } = point as { x?: unknown; y?: unknown };
-    return typeof x === 'number' && typeof y === 'number' ? [{ x, y }] : [];
-  });
+  if (data.kind !== 'drawing') return null;
+  // Every stroke, not just the first path: a sketch converted to draw.io used to
+  // arrive with one line on it because the exporter only knew about `points`.
+  const strokes = canvasStrokes(data);
   const width = typeof data.drawingWidth === 'number' ? data.drawingWidth : 640;
   const height = typeof data.drawingHeight === 'number' ? data.drawingHeight : 420;
-  const url = drawingDataUrl(points, width, height, typeof data.stroke === 'string' ? data.stroke : 'var(--indigo-bright)', typeof data.strokeWidth === 'number' ? data.strokeWidth : 3);
-  return url ? { name: `${data.title}.svg`, dataUrl: url, width, height } : null;
+  const svg = strokesSvg(strokes, width, height);
+  return svg ? { name: `${data.title}.svg`, dataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, width, height } : null;
 }
 
 const SEED = {
@@ -677,6 +858,55 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * of observing the board would change what is being observed.
    */
   const journal = useRef(createCanvasJournal());
+  /**
+   * The tail of the journal, in the shape a defect carries it.
+   *
+   * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────
+   * The journal already recorded exactly what a bug report needs — ordered actions
+   * with durations, failures, and the ones that started and never finished — and it
+   * lived only in this ref, capped at 240 entries and gone on reload. So by the time
+   * anyone filed the report, the three steps that explain it no longer existed
+   * anywhere. Attaching it to the defect is what makes "it did this a moment ago" a
+   * reproducible claim rather than a memory.
+   *
+   * The FAILURES and the stalls are hoisted to the front: a twenty-row list where the
+   * one red row is in the middle gets skimmed past, and that row is the report.
+   */
+  /**
+   * Keep the journal across a reload, and flush it before the tab goes away.
+   *
+   * Hydrate once per session id; flush on a slow interval and on `pagehide` (which
+   * fires for a reload, a navigation and a bfcache eviction, where `unload` does
+   * not). Writing on every recorded action would put a storage write in the path of
+   * every tool call, and the whole point of the journal is that observing the board
+   * does not change it.
+   */
+  useEffect(() => {
+    const stored = readStoredJournal(sessionId);
+    if (stored.length) journal.current.restore(stored);
+    const flush = () => writeStoredJournal(sessionId, journal.current.entries());
+    const timer = window.setInterval(flush, 15_000);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, [sessionId]);
+
+  const recentJournalEvidence = useCallback((limit = 12) => {
+    const entries = journal.current.entries();
+    const notable = entries.filter((entry) => entry.ok === false || entry.durationMs == null);
+    const recent = entries.slice(-limit);
+    return [...notable, ...recent.filter((entry) => !notable.includes(entry))]
+      .slice(0, limit)
+      .map((entry) => ({
+        at: entry.at, kind: entry.kind, label: entry.label,
+        ...(entry.detail ? { detail: entry.detail.slice(0, 300) } : {}),
+        ...(entry.ok != null ? { ok: entry.ok } : {}),
+        ...(entry.durationMs != null ? { durationMs: entry.durationMs } : {}),
+      }));
+  }, []);
   /** Effective inference facts accumulated by this mounted Creation Session.
    * Kept out of render state: observing completions must not remount the board. */
   const brainRuntime = useRef<{ completions: CanvasAiCompletion[]; disabledModels: string[] }>({
@@ -702,7 +932,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (liveSession) liveSession.setPresentMode(next);
     else setLocalPresentMode(next);
   }, [liveSession]);
-  const [drawingMode, setDrawingMode] = useState(false);
+  /** The pen currently in hand — `null` means the pointer pans and selects.
+   *  Colour, width and the last tool persist, because marking up a board is
+   *  twenty strokes in a row and choosing the pen twenty times is not a tool. */
+  const [drawing, setDrawing] = useState<DrawingPreferences | null>(null);
+  const drawingMode = drawing !== null;
   // Pan is the default in both pointer worlds, so a board behaves on first touch the way
   // it always has on first click. The toggle exists because a one-finger drag can only
   // do one of the two things — see `canvasPointerMode.ts`.
@@ -1735,10 +1969,25 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // simply wrong, and every artifact derived from it — "… visualization",
       // the map, the chart — inherits that wrong name.
       const placeholder = createDefaultCreationData('dataset').title;
+      // Two facts are stamped at import because neither can be recovered later.
+      // `fetchedAt` is what makes staleness computable at all — a dataset with no
+      // timestamp is a snapshot of unknown age, and every chart built on it
+      // inherits that silence. The PII scan runs here rather than on demand
+      // because a restricted column must be masked from the FIRST render, not
+      // from whenever someone remembers to ask.
+      const source: TabularSource = { columns, rows };
+      const classifications = classifyTabular(source, profileTabular(source));
+      const governance = classificationSummary(classifications);
       setNodes((current) => current.map((node) => (node.id === selectedId
-        ? { ...node, data: { ...node.data, ...fields, ...(node.data.title === placeholder ? { title: file.name } : {}) } }
+        ? { ...node, data: {
+          ...node.data, ...fields,
+          classifications, fetchedAt: new Date().toISOString(), sourceUri: file.name,
+          ...(node.data.title === placeholder ? { title: file.name } : {}),
+        } }
         : node)));
-      setNotice(t('datasetImported', { name: file.name, rows: rows.length.toLocaleString(), columns: columns.length }));
+      setNotice(governance.piiColumns
+        ? t('datasetImportedWithPii', { name: file.name, rows: rows.length.toLocaleString(), columns: columns.length, pii: governance.piiColumns })
+        : t('datasetImported', { name: file.name, rows: rows.length.toLocaleString(), columns: columns.length }));
     } catch (error) {
       setNotice(error instanceof Error ? error.message : t('datasetImportFailed'));
     }
@@ -2051,6 +2300,31 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // `[]` back to React from that subscription can create an update-depth loop
   // on a newly hydrated local Session. Keep the subscriber stable and preserve
   // state identity when the semantic selection did not change.
+  /**
+   * Node changes, plus the annotations that have to come along.
+   *
+   * A mark drawn ON a card is a separate node (only `data` survives the graph
+   * round trip, so React Flow's own parenting cannot be used — see the note
+   * where `annotatesId` is written). Without this, dragging a document left its
+   * highlighting behind on the board, which is worse than not being able to
+   * highlight it at all. The delta is taken from the position change itself, so
+   * one drag moves the pair by exactly the same amount.
+   */
+  const onCanvasNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
+    const moves = changes.flatMap((change) => change.type === 'position' && change.position ? [{ id: change.id, position: change.position }] : []);
+    if (!moves.length) { onNodesChange(changes); return; }
+    const followers = moves.flatMap((move) => {
+      const source = nodes.find((node) => node.id === move.id);
+      if (!source) return [];
+      const dx = move.position.x - source.position.x;
+      const dy = move.position.y - source.position.y;
+      if (!dx && !dy) return [];
+      return nodes
+        .filter((node) => node.data.kind === 'drawing' && node.data.annotatesId === move.id)
+        .map((node) => ({ id: node.id, type: 'position' as const, position: { x: node.position.x + dx, y: node.position.y + dy } }));
+    });
+    onNodesChange(followers.length ? [...changes, ...followers] : changes);
+  }, [nodes, onNodesChange]);
   const onSelectionChange = useCallback(({ nodes: chosen }: { nodes: CreationFlowNode[] }) => {
     const ids = chosen.map((node) => node.id);
     setSelectedIds((current) => current.length === ids.length && current.every((id, index) => id === ids[index]) ? current : ids);
@@ -2068,21 +2342,90 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (drawingMode && drawingPoints.current.length) drawingPoints.current.push(point);
   }, [drawingMode, persistence]);
   const onCanvasPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!drawingMode || !canEdit || !flowRef.current || !(event.target as HTMLElement).classList.contains('react-flow__pane')) return;
+    // A stroke may START ANYWHERE, including on top of a card — that is what
+    // makes annotation possible. While a tool is held the canvas is a drawing
+    // surface, and the cards under it are things to mark up rather than things
+    // to drag. (Dragging and connecting are disabled for the same reason.)
+    if (!drawingMode || !canEdit || !flowRef.current) return;
     drawingPoints.current = [flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY })];
     event.currentTarget.setPointerCapture(event.pointerId);
   }, [canEdit, drawingMode]);
+  /**
+   * Commit the stroke.
+   *
+   * Where it LANDS is the whole difference between a drawing tool and a sketch
+   * pad: a stroke over an existing drawing joins that drawing, a stroke over any
+   * other object becomes an annotation that rides on it, and a stroke over empty
+   * board starts a new sketch. All three go through `drawingPatch`, so the marks,
+   * the card's size and its position stay in step however the drawing grew.
+   */
   const onCanvasPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!drawingMode || drawingPoints.current.length < 2) return;
-    const points = drawingPoints.current.splice(0);
-    const xs = points.map((point) => point.x); const ys = points.map((point) => point.y);
-    const minX = Math.min(...xs); const minY = Math.min(...ys); const width = Math.max(40, Math.max(...xs) - minX); const height = Math.max(40, Math.max(...ys) - minY);
-    const node = newNode('drawing', { x: minX - 8, y: minY - 8 });
-    node.style = { width: width + 16, height: height + 58 };
-    node.data = { ...node.data, title: 'Canvas sketch', points: points.map((point) => ({ x: point.x - minX + 8, y: point.y - minY + 8 })), drawingWidth: width + 16, drawingHeight: height + 16, stroke: 'var(--indigo-bright)', strokeWidth: 3 };
-    setNodes((current) => [...current, node]); setSelectedId(node.id); setDrawingMode(false); setNotice(t('noticeSketchAdded'));
+    if (!drawingMode) return;
+    const path = drawingPoints.current.splice(0);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-  }, [drawingMode, setNodes]);
+    const start = path[0];
+    if (!start) return;
+    const tool = drawing.tool;
+    // Freehand and shapes need a drag; text and the eraser act on a tap.
+    if (tool !== 'text' && tool !== 'eraser' && path.length < 2) return;
+
+    if (tool === 'eraser') {
+      const radius = Math.max(8, drawing.width * 3);
+      let erased = 0;
+      setNodes((current) => current.flatMap((node) => {
+        if (node.data.kind !== 'drawing') return [node];
+        const absolute = canvasStrokes(node.data).map((stroke) => ({ ...stroke, points: stroke.points.map((item) => ({ x: item.x + node.position.x, y: item.y + node.position.y })) }));
+        const kept = eraseStrokes(absolute, path, radius);
+        if (kept.length === absolute.length) return [node];
+        erased += absolute.length - kept.length;
+        // A drawing with nothing left on it is not an empty card, it is gone.
+        if (!kept.length) return [];
+        const patch = drawingPatch(kept);
+        return [{ ...node, position: { x: Number(patch.drawingOriginX ?? node.position.x), y: Number(patch.drawingOriginY ?? node.position.y) }, style: { width: Number(patch.drawingWidth), height: Number(patch.drawingHeight) + 44 }, data: { ...node.data, ...patch } }];
+      }));
+      if (erased) setNotice(t('noticeStrokesErased', { count: erased }));
+      return;
+    }
+
+    const stroke: CanvasStroke = {
+      tool,
+      points: tool === 'text' ? [start] : tool === 'pen' || tool === 'highlighter' ? path : [start, path[path.length - 1]!],
+      stroke: drawing.color,
+      strokeWidth: drawing.width,
+      ...(tool === 'text' ? { text: '' } : {}),
+    };
+
+    // The object under the first point decides where the stroke goes.
+    const target = topmostNodeAt(nodes, start);
+    if (target?.data.kind === 'drawing') {
+      setNodes((current) => current.map((node) => {
+        if (node.id !== target.id) return node;
+        const absolute = canvasStrokes(node.data).map((item) => ({ ...item, points: item.points.map((position) => ({ x: position.x + node.position.x, y: position.y + node.position.y })) }));
+        const patch = drawingPatch([...absolute, stroke]);
+        return { ...node, position: { x: Number(patch.drawingOriginX), y: Number(patch.drawingOriginY) }, style: { width: Number(patch.drawingWidth), height: Number(patch.drawingHeight) + 44 }, data: { ...node.data, ...patch } };
+      }));
+      setSelectedId(target.id);
+      return;
+    }
+
+    const patch = drawingPatch([stroke]);
+    const node = newNode('drawing', { x: Number(patch.drawingOriginX), y: Number(patch.drawingOriginY) });
+    node.style = { width: Number(patch.drawingWidth), height: Number(patch.drawingHeight) + (target ? 8 : 44) };
+    node.data = {
+      ...node.data,
+      title: target ? t('annotationTitle', { title: target.data.title }) : t('sketchTitle'),
+      ...patch,
+      // An annotation names what it is ON. `annotatesId` is node DATA rather
+      // than React Flow's `parentId` because only `data` survives the graph
+      // round trip (see creationGraphFromSnapshot) — a parent id would be
+      // silently dropped on save and the mark would come back detached.
+      ...(target ? { annotatesId: target.id, status: '' } : {}),
+    };
+    if (target) node.zIndex = 6;
+    setNodes((current) => [...current, node]);
+    setSelectedId(node.id);
+    setNotice(target ? t('noticeAnnotationAdded', { title: target.data.title }) : t('noticeSketchAdded'));
+  }, [drawing, drawingMode, nodes, setNodes, t]);
   const onViewportChange = useCallback((_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) => {
     viewportRef.current = viewport;
     if (persistence !== 'local' || !hydrated.current) return;
@@ -2915,6 +3258,33 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!fileDragDepth.current) setFileDragging(false);
   }, []);
 
+  /**
+   * Resolve "the dataset this action runs against", once.
+   *
+   * Five data tools ask the same question — classify, contract, quality, metric,
+   * and the model inferrer — and each was a candidate to re-derive the candidate
+   * list, the ambiguity error and the empty-rows error slightly differently. It
+   * reads STAGED objects too, so a dataset proposed earlier in the same turn can
+   * be classified in the next tool call rather than being reported as absent.
+   */
+  const resolveTabularTarget = useCallback((objectId?: string) => {
+    const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+    const candidates = [...nodes, ...staged].filter((node) =>
+      ['dataset', 'table', 'spreadsheet', 'datasource'].includes(node.data.kind)
+      && Array.isArray(node.data.rows) && node.data.rows.length > 0);
+    const node = objectId ? candidates.find((candidate) => candidate.id === objectId) : candidates.length === 1 ? candidates[0] : undefined;
+    if (!node) {
+      return {
+        error: candidates.length
+          ? `Specify which dataset. Tabular objects on this canvas: ${candidates.map((candidate) => `${candidate.id} (${candidate.data.title})`).join(', ')}`
+          : 'No dataset with imported rows is on this canvas. Attach a CSV, TSV, or JSON file, or read one from a connected data source with canvas_query_data_source.',
+      } as const;
+    }
+    const source = tabularFromObject(node.data as Record<string, unknown>);
+    if (!source.columns.length) return { error: `${node.data.title} has no columns yet.` } as const;
+    return { node, source } as const;
+  }, [nodes]);
+
   const canvasActions = useMemo<BrainAction[]>(() => ([{
     name: 'canvas_prepare_executive_use_case',
     description: 'Prepare one of the 48 migrated executive use cases for execution on this Canvas. Call this first when the prompt contains a legacy dotted use-case id. It returns the exact operation, completion condition, permitted existing Canvas outputs, and live evidence from the already-owning Builderforce domains. It never creates schema or mutates canonical domain data.',
@@ -3020,6 +3390,482 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!descriptor.readable) return { error: `Entity '${entity}' is intentionally not available through the generic tenant reader.`, domain, summary, entity: descriptor, items, metrics };
       const page = await getEntityRows(domain, entity, { limit });
       return { domain, summary, entity: descriptor, rows: page.rows, total: page.total, items, metrics };
+    },
+  }, {
+    // ── The founder objects ──────────────────────────────────────────────────
+    //
+    // "Use my existing business details" only means something if the details are
+    // reachable. This writes the investor seat's `companies` row onto a `company`
+    // object so the rest of the analysis is authored against the real business
+    // rather than against whatever the user retyped into the prompt.
+    //
+    // It is a WRITE-TO-BOARD layered on the read `canvas_read_domain` already
+    // performs — the relationship `canvas_add_diagnostic` has to `GET /api/tools`
+    // — not a second way to read a tenant's company.
+    name: 'canvas_sync_company_profile',
+    description: 'Put the signed-in tenant\'s own business details on the canvas as a `company` object. Call this FIRST whenever the user says "my business", "our company", "my existing business details", or asks for analysis grounded in who they are. Creates the object when absent and refreshes it when present. If the tenant has no company record the result says so — author a `company` object with canvas_add_object from what the user tells you instead of inventing one.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'Existing company object to refresh. Omit to create one.' },
+        x: { type: 'number' }, y: { type: 'number' },
+      },
+    },
+    mutates: () => true,
+    run: async (raw: unknown) => {
+      if (persistence !== 'server') {
+        return { error: 'Reading your saved business details needs a signed-in Creation Canvas session. Ask the user for the company name, sector, stage and markets served, then author a `company` object with canvas_add_object — do not invent them.' };
+      }
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; x?: number; y?: number };
+      const page = await getEntityRows('investor', 'companies', { limit: 25 });
+      // The tenant's OWN business is the portfolio-flagged row if one is marked, else the
+      // only row. Several unflagged rows is genuinely ambiguous — a CRM's worth of
+      // companies is the normal state of that table — so it asks rather than guessing,
+      // because picking a customer's company as "your business" poisons every downstream
+      // object in the analysis.
+      const rows = page.rows as Array<Record<string, unknown>>;
+      if (!rows.length) {
+        return { companyFound: false, reason: 'no-company-record', instruction: 'This tenant has no company record. Ask the user for their business details and author a `company` object with canvas_add_object. Never invent them.' };
+      }
+      const owned = rows.filter((row) => row.isPortfolio !== true);
+      const candidates = owned.length ? owned : rows;
+      const row = candidates.length === 1 ? candidates[0] : null;
+      if (!row) {
+        return {
+          companyFound: false, reason: 'ambiguous',
+          companies: candidates.slice(0, 20).map((candidate) => ({ id: candidate.id, name: candidate.name })),
+          instruction: 'Several companies are on this tenant. Ask the user which one is their own business before authoring anything against it.',
+        };
+      }
+      const fields: Record<string, unknown> = {
+        title: String(row.name ?? 'Company'),
+        status: String(row.stage ?? 'Active'),
+        ...(row.name ? { legalName: String(row.name) } : {}),
+        ...(row.sector ? { sector: String(row.sector) } : {}),
+        ...(row.stage ? { stage: String(row.stage) } : {}),
+        ...(row.website ? { website: String(row.website) } : {}),
+        ...(row.headcount != null ? { headcount: String(row.headcount) } : {}),
+        ...(row.arr != null ? { arr: `${row.arr}${row.currency ? ` ${row.currency}` : ''}` } : {}),
+        ...(row.country ? { geography: [String(row.country)] } : {}),
+        summary: `Synced from the investor seat's company record on ${new Date().toISOString().slice(0, 10)}.`,
+      };
+      const patch = sanitizeCreationObjectPatch('company', fields);
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const existing = args.objectId
+        ? [...nodes, ...stagedNodes].find((node) => node.id === args.objectId)
+        : [...nodes, ...stagedNodes].find((node) => node.data.kind === 'company');
+      if (existing) {
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('founderCompanySynced', { title: String(fields.title) }), objectId: existing.id, patch });
+        return { ok: true, proposed: true, companyFound: true, object: { id: existing.id, kind: 'company', title: fields.title, updated: true } };
+      }
+      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const node = newNode('company', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, isNarrow, 'company'));
+      node.data = { ...node.data, ...patch } as CreationNodeData;
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('founderCompanySynced', { title: String(fields.title) }), node });
+      return { ok: true, proposed: true, companyFound: true, object: { id: node.id, kind: 'company', title: fields.title } };
+    },
+  }, {
+    // Turns the competitor objects on the board into a real geographic analysis: a
+    // `map` object built through the SAME `mapObjectFields` every other plot uses,
+    // plus the density and coverage-gap tables that are the actual deliverable.
+    name: 'canvas_map_competitors',
+    description: 'Plot every `competitor` object on this canvas onto a map and analyse the geography: competitor density by metro, and the metros in the market with NO competitor presence. Call this after researching competitors and writing their `locations` (each with lat/lng from builtin_geo_geocode). Returns the coverage gaps — the white space — which is the part of a geographic market analysis a founder is actually buying. Competitors whose locations have no coordinates are named in the result so you can say which rival is missing geography rather than quietly plotting fewer.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        market: { type: 'string', description: 'The market being analysed, e.g. "Florida". Drives which reference metros coverage gaps are measured against.' },
+        title: { type: 'string', description: 'Title for the map object.' },
+        coverageRadiusMiles: { type: 'number', minimum: 1, maximum: 500, description: 'How close a competitor site must be to count as covering a metro. Defaults to 40.' },
+        x: { type: 'number' }, y: { type: 'number' },
+      },
+      required: ['market'],
+    },
+    mutates: () => true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { market?: string; title?: string; coverageRadiusMiles?: number; x?: number; y?: number };
+      const market = typeof args.market === 'string' ? args.market.trim() : '';
+      if (!market) return { error: 'Pass the market being analysed, e.g. "Florida".' };
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const competitorNodes = [...nodes, ...stagedNodes].filter((node) => node.data.kind === 'competitor');
+      if (!competitorNodes.length) {
+        return { error: 'No competitor objects are on this canvas yet. Research the market with builtin_web_search, resolve each site with builtin_geo_geocode, then create one `competitor` object per rival with canvas_add_object before mapping.' };
+      }
+      const analysis = analyzeCompetitorGeography({
+        sites: competitorNodes.flatMap((node) => competitorSitesFrom(node.data.title, node.data.locations)),
+        allCompetitors: competitorNodes.map((node) => node.data.title),
+        market,
+        ...(typeof args.coverageRadiusMiles === 'number' ? { coverageRadiusMiles: args.coverageRadiusMiles } : {}),
+      });
+      if (!analysis.points.length) {
+        return {
+          error: `None of the ${competitorNodes.length} competitor object(s) on this canvas has a location with usable lat/lng. Resolve each competitor's city with builtin_geo_geocode and write the coordinates back with canvas_update_object into locations: [{name, city, region, lat, lng}], then call this again.`,
+          unmappedCompetitors: analysis.unmappedCompetitors,
+        };
+      }
+      const title = typeof args.title === 'string' && args.title.trim() ? args.title.trim().slice(0, 160) : `${market} competitor landscape`;
+      const gapSummary = analysis.marketKnown
+        ? analysis.gaps.length
+          ? `${analysis.gaps.length} metro(s) with no competitor within the coverage radius: ${analysis.gaps.slice(0, 5).map((gap) => gap.metro).join(', ')}.`
+          : 'Every reference metro in this market has a competitor inside the coverage radius.'
+        : `No reference metros are known for "${market}", so competitor density is clustered by stated city and no coverage gaps are computed.`;
+      const fields = mapObjectFields({
+        title,
+        status: t('founderCompetitorMapStatus', { count: analysis.points.length }),
+        summary: `${analysis.mappedCompetitors.length} competitor(s) plotted across ${analysis.clusters.length} area(s). ${gapSummary}`,
+        points: analysis.points,
+        columns: { latitude: 'lat', longitude: 'lng', label: 'competitor', value: null },
+        sourceDatasetId: '',
+        ...(analysis.region ? { region: analysis.region } : {}),
+        regionName: market,
+      });
+      const patch = sanitizeCreationObjectPatch('map', fields);
+      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const node = newNode('map', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, isNarrow, 'map'));
+      node.data = { ...node.data, ...patch } as CreationNodeData;
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('founderCompetitorMapProposal', { title }), node });
+      return {
+        ok: true, proposed: true,
+        object: { id: node.id, kind: 'map', title },
+        market,
+        marketKnown: analysis.marketKnown,
+        clusters: analysis.clusters,
+        coverageGaps: analysis.gaps,
+        mappedCompetitors: analysis.mappedCompetitors,
+        unmappedCompetitors: analysis.unmappedCompetitors,
+        instruction: 'Report the coverage gaps as the finding. Where a gap exists, say which competitor is nearest and how far, so the user can judge whether it is genuinely uncontested or merely underserved. Never describe an unmapped competitor as absent from a region — it has no coordinates, which is not the same thing.',
+      };
+    },
+  }, {
+    // The LIVE half. See the `liveMetric` note in the contract.
+    name: 'canvas_refresh_live_metric',
+    description: 'Re-read the domain metric a `liveMetric` object is bound to, and write the current value, trend and series onto it. Use this instead of authoring a number by hand whenever the board already carries a bound metric — a runway, burn, pipeline or lead figure typed into a card is wrong the next morning and cannot be asked again. Available metric keys come from the domain manifest; bind with the `binding` field, e.g. "finance.runway_months".',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'The liveMetric object to refresh. Omit when exactly one is on the board.' },
+        binding: { type: 'string', description: 'Override or set the binding, e.g. "finance.runway_months", "revenue.pipeline", "growth.leads".' },
+        days: { type: 'number', minimum: 1, maximum: 365, description: 'Lookback window for the series. Defaults to 30.' },
+      },
+    },
+    mutates: () => true,
+    run: async (raw: unknown) => {
+      if (persistence !== 'server') return { error: 'Live metrics read tenant domain data, which needs a signed-in, saved Creation Canvas session.' };
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; binding?: string; days?: number };
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const candidates = [...nodes, ...stagedNodes].filter((node) => node.data.kind === 'liveMetric');
+      const target = args.objectId ? candidates.find((node) => node.id === args.objectId) : candidates.length === 1 ? candidates[0] : undefined;
+      if (!target) {
+        return { error: candidates.length
+          ? `Specify which live metric to refresh. On this canvas: ${candidates.map((node) => `${node.id} (${node.data.title})`).join(', ')}`
+          : 'No liveMetric object is on this canvas. Create one with canvas_add_object and set its `binding` to a domain metric key.' };
+      }
+      const binding = (typeof args.binding === 'string' && args.binding.trim() ? args.binding : String(target.data.binding ?? '')).trim();
+      const [domainPart] = binding.split('.');
+      if (!binding || !domainPart || !isDomain(domainPart)) {
+        return { error: `"${binding || '(unset)'}" is not a bound domain metric. Use "<domain>.<metric>" where domain is one of: ${DOMAINS.join(', ')}. Read the available metric keys for a domain with canvas_read_domain.` };
+      }
+      const days = Math.max(1, Math.min(365, Math.floor(Number(args.days) || 30)));
+      const series = await getDomainMetrics(domainPart, days);
+      const match = series.find((entry) => entry.metric === binding);
+      if (!match) {
+        return {
+          error: `The ${domainPart} domain does not report "${binding}" over the last ${days} days. Metrics it does report: ${series.map((entry) => entry.metric).join(', ') || '(none yet)'}.`,
+          availableMetrics: series.map((entry) => entry.metric),
+        };
+      }
+      const points = match.points.slice(-90);
+      const latest = points.at(-1) ?? null;
+      if (!latest) {
+        return { error: `"${binding}" has no observations in the last ${days} days, so there is no value to write. Say so rather than reporting a zero.` };
+      }
+      const first = points[0];
+      const delta = points.length > 1 ? latest.value - first.value : null;
+      const fields: Record<string, unknown> = {
+        status: t('founderMetricLive'),
+        value: latest.value.toLocaleString(),
+        binding,
+        ...(match.unit ? { unit: match.unit } : {}),
+        ...(delta != null ? { trend: `${delta >= 0 ? '+' : ''}${delta.toLocaleString()} vs ${days}d ago` } : {}),
+        series: points.map((point) => ({ at: point.at, value: point.value })),
+        fetchedAt: new Date().toISOString(),
+      };
+      const patch = sanitizeCreationObjectPatch('liveMetric', fields);
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('founderMetricRefreshed', { title: target.data.title }), objectId: target.id, patch });
+      return {
+        ok: true, proposed: true,
+        object: { id: target.id, kind: 'liveMetric', title: target.data.title },
+        binding, value: latest.value, unit: match.unit, observedAt: latest.at, pointCount: points.length,
+        instruction: 'This value was read from the tenant\'s own domain data just now. Report it with its as-of instant. If a trigger on this board watches this metric, call canvas_evaluate_triggers so a breach is reported in the same turn.',
+      };
+    },
+  }, {
+    // ── The recruiter's funnel ─────────────────────────────────────────────────
+    // Ranks the resume objects ALREADY on this board against a posting on this board,
+    // in the browser. No network call and no account: the deterministic analyzer the
+    // resume builder already uses, composed N:1 — which is the half a recruiter needs
+    // and the 1:1 version could not express.
+    name: 'canvas_screen_resumes',
+    description: 'Rank every `resume` object on this canvas against a `jobPosting` on this canvas, and write the ranking onto a `shortlist` object. Use this whenever the user asks who to interview, who the strongest candidates are, or to screen a pile of CVs — never rank them by reading the resumes yourself, because the result must be reproducible and defensible. Scores four declared signals (keyword coverage, whether matched terms appear in a dated role, demonstrated years against the stated level, and how recently the skills were used) and returns the evidence and the gaps for every candidate. It reads no demographic or personal attribute and adds nothing a resume does not state.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        postingObjectId: { type: 'string', description: 'The jobPosting to rank against. Omit when exactly one is on the board.' },
+        shortlistObjectId: { type: 'string', description: 'An existing shortlist to write into. Omit to create one.' },
+        resumeObjectIds: { type: 'array', items: { type: 'string' }, description: 'Restrict the screen to these resume objects. Omit to screen every resume on the board.' },
+        level: { type: 'string', description: 'Override the seniority read from the posting, e.g. "senior", "staff", "graduate".' },
+      },
+    },
+    mutates: () => true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { postingObjectId?: string; shortlistObjectId?: string; resumeObjectIds?: string[]; level?: string };
+      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...staged];
+
+      const postings = all.filter((node) => node.data.kind === 'jobPosting');
+      const posting = args.postingObjectId ? postings.find((node) => node.id === args.postingObjectId) : postings.length === 1 ? postings[0] : undefined;
+      if (!posting) {
+        return { error: postings.length
+          ? `Specify which posting to rank against. On this canvas: ${postings.map((node) => `${node.id} (${node.data.title})`).join(', ')}`
+          : 'No jobPosting object is on this canvas. Create one with canvas_add_object first — a ranking with no posting behind it is an opinion.' };
+      }
+
+      const wanted = new Set(args.resumeObjectIds ?? []);
+      const resumes = all.filter((node) => node.data.kind === 'resume' && (wanted.size === 0 || wanted.has(node.id)));
+      if (!resumes.length) {
+        return { error: 'No resume objects are on this canvas to screen. Add them first — this ranks what is on the board, and never invents a candidate.' };
+      }
+
+      // The posting's own fields ARE the job description. Reading them rather than asking
+      // the model to restate them is what keeps the ranking reproducible: the same board
+      // screened twice must produce the same order.
+      const jobDescription = [
+        posting.data.title, posting.data.summary, posting.data.level, posting.data.location,
+        ...(Array.isArray(posting.data.mustHaves) ? posting.data.mustHaves : []),
+        ...(Array.isArray(posting.data.niceToHaves) ? posting.data.niceToHaves : []),
+        ...(Array.isArray(posting.data.responsibilities)
+          ? (posting.data.responsibilities as Array<Record<string, unknown>>).map((item) => `${item?.title ?? ''} ${item?.detail ?? ''}`)
+          : []),
+      ].filter(Boolean).join('\n');
+      if (jobDescription.trim().length < 40) {
+        return { error: 'That posting has no requirements to screen against. Author its mustHaves, niceToHaves and responsibilities first — screening against an empty posting ranks nobody honestly.' };
+      }
+
+      const candidates = resumes.flatMap((node) => {
+        const document = resumeDocumentFromJson(node.data.resumeDocument);
+        return document ? [{ ref: node.id, name: String(node.data.title || node.id), document }] : [];
+      });
+      if (!candidates.length) {
+        return { error: 'None of those resume objects carries a parsed resume document yet, so there is nothing to score.' };
+      }
+
+      const level = typeof args.level === 'string' && args.level.trim() ? args.level : String(posting.data.level ?? '');
+      const report = screenCandidates(candidates, { jobDescription, ...(level ? { level } : {}) });
+
+      const fields = {
+        status: t('hiringShortlistRanked', { count: report.ranked.length }),
+        postingRef: posting.id,
+        method: report.method,
+        ranked: report.ranked.map((entry) => ({
+          rank: entry.rank,
+          candidate: entry.candidate,
+          score: entry.score,
+          evidence: entry.evidence.join(', '),
+          gaps: entry.gaps.join(', '),
+        })),
+        knockouts: report.knockouts,
+        reviewedCount: report.reviewedCount,
+      };
+      const patch = sanitizeCreationObjectPatch('shortlist', fields);
+
+      const shortlists = all.filter((node) => node.data.kind === 'shortlist');
+      const target = args.shortlistObjectId ? shortlists.find((node) => node.id === args.shortlistObjectId) : undefined;
+      if (target) {
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('hiringShortlistUpdated', { title: target.data.title }), objectId: target.id, patch });
+      } else {
+        const node = newNode('shortlist', { x: 320, y: 320 });
+        node.data = { ...node.data, ...patch, title: t('hiringShortlistFor', { title: String(posting.data.title || '') }) };
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('hiringShortlistCreated'), node });
+      }
+
+      return {
+        ok: true, proposed: true,
+        reviewedCount: report.reviewedCount,
+        ranked: report.ranked.map((entry) => ({ rank: entry.rank, candidate: entry.candidate, score: entry.score, signals: entry.signals })),
+        instruction: 'Report the top of this ranking and the reason each one is there, using the evidence and gaps on the shortlist. This is a READING ORDER, not a decision: never say a candidate was rejected, and never restate a score without the gap that goes with it.',
+      };
+    },
+  }, {
+    // The measurement half of every other hiring object. One `funnel` kind, bound to a
+    // domain by VALUE — see SHARED_OBJECT_KINDS for why this is not `hiringFunnel`.
+    name: 'canvas_measure_funnel',
+    description: 'Read real stage conversion, time-in-stage and source-of-hire from the tenant own pipeline data, and write it onto a `funnel` object. Use this whenever the user asks where candidates are being lost, how long hiring takes, which source actually converts, or to measure any funnel — never author these numbers by hand. Returns the bottleneck stage with the number behind it.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'The funnel object to write into. Omit to create one.' },
+        funnelDomain: { type: 'string', enum: ['hiring'], description: 'Which funnel to measure. Only `hiring` reports live counts today; the kind is domain-neutral so the others bind without a new object.' },
+        pipelineRef: { type: 'string', description: 'Restrict to one pipeline. Omit to measure every pipeline in the tenant.' },
+        days: { type: 'number', minimum: 1, maximum: 365, description: 'Lookback window. Defaults to 90.' },
+      },
+    },
+    mutates: () => true,
+    run: async (raw: unknown) => {
+      if (persistence !== 'server') return { error: 'A funnel reads tenant pipeline data, which needs a signed-in, saved Creation Canvas session.' };
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; funnelDomain?: string; pipelineRef?: string; days?: number };
+      const report = await hiringApi.funnel({
+        ...(args.pipelineRef ? { pipelineRef: args.pipelineRef } : {}),
+        ...(args.days ? { days: Math.max(1, Math.min(365, Math.floor(args.days))) } : {}),
+      });
+      if (!report.stages.length) {
+        return { error: 'No pipeline movement in that window, so there is no funnel to draw. Say that rather than writing a card of zeroes.' };
+      }
+      const fields = {
+        status: t('hiringFunnelMeasured'),
+        funnelDomain: 'hiring',
+        stages: report.stages,
+        sourceBreakdown: report.sourceBreakdown,
+        totalEntered: report.totalEntered,
+        totalConverted: report.totalConverted,
+        overallConversion: report.overallConversion,
+        medianCycleDays: report.medianCycleDays,
+        dateRange: report.dateRange,
+        ...(report.bottleneck ? { bottleneck: report.bottleneck } : {}),
+        fetchedAt: report.fetchedAt,
+      };
+      const patch = sanitizeCreationObjectPatch('funnel', fields);
+      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const existing = [...nodes, ...staged].filter((node) => node.data.kind === 'funnel');
+      const target = args.objectId ? existing.find((node) => node.id === args.objectId) : existing.length === 1 ? existing[0] : undefined;
+      if (target) {
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('hiringFunnelUpdated', { title: target.data.title }), objectId: target.id, patch });
+      } else {
+        const node = newNode('funnel', { x: 320, y: 520 });
+        node.data = { ...node.data, ...patch, title: t('hiringFunnelTitle') };
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('hiringFunnelCreated'), node });
+      }
+      return {
+        ok: true, proposed: true,
+        bottleneck: report.bottleneck, overallConversion: report.overallConversion,
+        medianCycleDays: report.medianCycleDays, dateRange: report.dateRange,
+        instruction: 'Lead with the bottleneck stage and the number of people lost there, not with the totals. These counts were read from the tenant own pipeline just now — report them with the window they cover.',
+      };
+    },
+  }, {
+    // The candidate-facing half of a solver that already existed and had exactly one
+    // internal consumer. This is what removes the largest time sink in the role.
+    name: 'canvas_offer_interview_slots',
+    description: 'Propose interview times that clear every interviewer calendar and mint a link the CANDIDATE can use to book one themselves, writing it onto an `interviewLoop` object. Use this whenever the user asks to schedule, arrange or set up an interview — never propose times by reading calendars yourself, and never write a bookingUrl by hand, because an authored URL does not resolve. The interview must already exist in the hiring domain and its stage must name its interviewers.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        interviewId: { type: 'number', description: 'The hiring-domain interview to schedule. Find candidates for it with canvas_read_domain on the hiring domain, entity "interviews".' },
+        objectId: { type: 'string', description: 'The interviewLoop object to write the link onto. Omit when exactly one is on the board.' },
+        durationMinutes: { type: 'number', minimum: 5, maximum: 480, description: 'Slot length. Defaults to 45.' },
+        candidateTimezone: { type: 'string', description: 'IANA zone of the CANDIDATE, e.g. "Europe/Berlin". Ask for it rather than assuming your own — an offer of 9am in one zone is 3am in another.' },
+        count: { type: 'number', minimum: 1, maximum: 20, description: 'How many slots to offer. Defaults to 8.' },
+      },
+      required: ['interviewId'],
+    },
+    mutates: () => true,
+    run: async (raw: unknown) => {
+      if (persistence !== 'server') return { error: 'Offering interview times reads real calendars, which needs a signed-in, saved Creation Canvas session.' };
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { interviewId?: number; objectId?: string; durationMinutes?: number; candidateTimezone?: string; count?: number };
+      const interviewId = Math.floor(Number(args.interviewId));
+      if (!Number.isInteger(interviewId) || interviewId <= 0) return { error: 'Name the interview to schedule by its id.' };
+
+      const result = await hiringApi.offerSlots(interviewId, {
+        ...(args.durationMinutes ? { durationMinutes: Math.max(5, Math.min(480, Math.floor(args.durationMinutes))) } : {}),
+        ...(args.candidateTimezone ? { candidateTimezone: args.candidateTimezone } : {}),
+        ...(args.count ? { count: Math.max(1, Math.min(20, Math.floor(args.count))) } : {}),
+      });
+      if ('error' in result) return { error: result.error };
+
+      const bookingUrl = `${window.location.origin}/book/${result.token}`;
+      const fields = {
+        status: t('hiringLoopOffered', { count: result.slots.length }),
+        bookingUrl,
+        bookingExpiresAt: result.expiresAt,
+        ...(args.candidateTimezone ? { candidateTimezone: args.candidateTimezone } : {}),
+      };
+      const patch = sanitizeCreationObjectPatch('interviewLoop', fields);
+      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const loops = [...nodes, ...staged].filter((node) => node.data.kind === 'interviewLoop');
+      const target = args.objectId ? loops.find((node) => node.id === args.objectId) : loops.length === 1 ? loops[0] : undefined;
+      if (target) {
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('hiringLoopUpdated', { title: target.data.title }), objectId: target.id, patch });
+      } else {
+        const node = newNode('interviewLoop', { x: 620, y: 320 });
+        node.data = { ...node.data, ...patch, title: t('hiringLoopTitle') };
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('hiringLoopCreated'), node });
+      }
+      return {
+        ok: true, proposed: true,
+        slotCount: result.slots.length, expiresAt: result.expiresAt, bookingUrl,
+        instruction: 'Give the user the booking link to send, and say how many slots it offers and when it expires. The link is shown ONCE — it cannot be recovered from the board later, so if they lose it, offer slots again.',
+      };
+    },
+  }, {
+    // What makes the board speak first.
+    name: 'canvas_evaluate_triggers',
+    description: 'Evaluate every `trigger` object on this canvas against the `liveMetric` it watches, and mark each armed, breached or unbound. Call this after refreshing a metric, and whenever the user asks what needs their attention. A trigger whose metric has no value is reported unbound rather than healthy — silence about an unevaluated threshold is the failure this prevents.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: { objectId: { type: 'string', description: 'Evaluate one trigger. Omit to evaluate all of them.' } },
+    },
+    mutates: () => true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string };
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const board = [...nodes, ...stagedNodes];
+      const triggers = board.filter((node) => node.data.kind === 'trigger' && (!args.objectId || node.id === args.objectId));
+      if (!triggers.length) return { error: args.objectId ? 'That object is not a trigger on this canvas.' : 'No trigger objects are on this canvas.' };
+      const metrics = board.filter((node) => node.data.kind === 'liveMetric');
+      const evaluatedAt = new Date().toISOString();
+      const results = triggers.map((trigger) => {
+        const watches = String(trigger.data.watches ?? '').trim().toLowerCase();
+        const metric = metrics.find((node) => node.data.title.trim().toLowerCase() === watches)
+          ?? metrics.find((node) => watches && node.data.title.trim().toLowerCase().includes(watches));
+        const series = Array.isArray(metric?.data.series) ? metric.data.series as Array<Record<string, unknown>> : [];
+        const evaluation = evaluateTrigger({
+          comparator: trigger.data.comparator,
+          threshold: trigger.data.threshold,
+          state: trigger.data.state,
+          metricValue: metric?.data.value,
+          previousValue: series.length > 1 ? series[series.length - 2]?.value : undefined,
+          metricFound: !!metric,
+        });
+        const patch = sanitizeCreationObjectPatch('trigger', {
+          state: evaluation.state,
+          lastEvaluatedAt: evaluatedAt,
+          status: t(`founderTriggerState_${evaluation.state}`),
+        });
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('founderTriggerEvaluated', { title: trigger.data.title }), objectId: trigger.id, patch });
+        return {
+          id: trigger.id, title: trigger.data.title,
+          watches: trigger.data.watches ?? null, metricTitle: metric?.data.title ?? null,
+          state: evaluation.state, reason: evaluation.reason, observed: evaluation.observed,
+          threshold: trigger.data.threshold ?? null, comparator: trigger.data.comparator ?? null,
+          thenDo: Array.isArray(trigger.data.thenDo) ? trigger.data.thenDo : [],
+        };
+      });
+      const breached = results.filter((result) => result.state === 'breached');
+      const unbound = results.filter((result) => result.state === 'unbound');
+      return {
+        ok: true, proposed: true, evaluatedAt, results,
+        breachedCount: breached.length, unboundCount: unbound.length,
+        instruction: breached.length
+          ? 'Lead your reply with the breached triggers and the action each one names in `thenDo`. Do not bury them under the ones that are fine.'
+          : unbound.length
+            ? 'Say which triggers could NOT be evaluated and why — an unbound trigger is not a healthy one, and reporting "all clear" over it is the failure this tool exists to prevent.'
+            : 'Confirm that every trigger was evaluated and none breached, naming the metrics checked.',
+      };
     },
   }, {
     name: 'canvas_read_snapshot',
@@ -3185,8 +4031,31 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             then: { type: 'string' }, otherwise: { type: 'string' },
           } },
         },
-        groupBy: { type: 'string', description: 'Column or derived column to group by. Returns one row per distinct value with real counts.' },
+        timeGrain: {
+          type: 'object', required: ['column', 'grain'], additionalProperties: false,
+          description: 'Bucket a date column to a calendar grain BEFORE grouping. This is how "by month" / "by week" questions are answered — never bucket dates by hand.',
+          properties: { column: { type: 'string' }, grain: { type: 'string', enum: [...TABULAR_TIME_GRAINS] }, as: { type: 'string', description: 'Output column name. Defaults to <column>_<grain>.' } },
+        },
+        groupBy: {
+          description: 'Column(s) to group by — a string, or an array of up to 4 for a composite breakdown such as ["month","region"]. Returns one row per combination with real counts.',
+          anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' }, maxItems: 4 }],
+        },
         aggregate: { type: 'array', items: { type: 'object', required: ['op'], additionalProperties: false, properties: { op: { type: 'string', enum: [...TABULAR_AGGREGATE_OPERATORS] }, column: { type: 'string' }, label: { type: 'string' } } } },
+        having: {
+          type: 'array', description: 'Conditions applied to the GROUPED rows after aggregation, e.g. keep only groups whose count exceeds 10. Filter the rows with `filter`; filter the groups with this.',
+          items: { type: 'object', required: ['column'], additionalProperties: false, properties: { column: { type: 'string' }, op: { type: 'string', enum: [...TABULAR_FILTER_OPERATORS] }, value: {} } },
+        },
+        window: {
+          type: 'array',
+          description: 'Row-relative calculations over the sorted result: running totals, rank within a segment, share of the whole, and period-over-period movement. Use these instead of computing a trend by hand.',
+          items: { type: 'object', required: ['op'], additionalProperties: false, properties: {
+            op: { type: 'string', enum: [...TABULAR_WINDOW_OPERATORS] },
+            column: { type: 'string', description: 'Numeric column the calculation reads. Defaults to the first aggregate.' },
+            partitionBy: { description: 'Restart per distinct value of these columns.', anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] },
+            as: { type: 'string' },
+            periods: { type: 'number', description: 'Look-back length for movingAverage, lag, delta and percentChange. Defaults to 3 for movingAverage and 1 otherwise.' },
+          } },
+        },
         sort: { type: 'object', additionalProperties: false, properties: { column: { type: 'string' }, direction: { type: 'string', enum: ['asc', 'desc'] } } },
         limit: { type: 'number' },
         materializeAs: { type: 'string', enum: ['none', 'table', 'chart', 'dashboard', 'kpi', 'map'], description: 'Build a canvas object populated with the real query result. Use "table" for a row-level breakdown, "chart" or "dashboard" for a grouped visualization, and "map" to plot rows geographically — "map" requires latitude and longitude columns, which geo.geocode can add to a dataset of place names.' },
@@ -3252,7 +4121,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const highlightRules = Array.isArray(args.highlight)
         ? args.highlight.filter((rule) => rule?.column && rule.tone).slice(0, 20)
         : [];
-      const valueKey = result.columns.find((column) => column !== args.groupBy) ?? 'count';
+      // `groupBy` is one column OR several (a composite "by month by region" breakdown).
+      // Normalized once here because three places below read it, and each of them was
+      // written against the single-column shape: `column !== args.groupBy` is never true
+      // for an array, so the value column resolved to the FIRST grouping key and every
+      // composite breakdown charted its own labels as its values.
+      const groupByColumns = (Array.isArray(args.groupBy) ? args.groupBy : args.groupBy ? [args.groupBy] : []).filter((column): column is string => typeof column === 'string');
+      const groupByLabel = groupByColumns.join(' · ');
+      const valueKey = result.columns.find((column) => !groupByColumns.includes(column)) ?? 'count';
+      // The TRANSFORM travels with the artifact. Recording only WHICH dataset a
+      // chart came from — and not HOW — is why a chart could never be recomputed
+      // when its source moved, why nothing knew it had gone stale, and why "what
+      // breaks if I drop this column" had no answer. See lib/canvasLineage.
+      const provenance = lineagePatch([target.id], {
+        engine: 'tabular',
+        query: args as TabularQuery,
+        rowsIn: result.totalRows,
+        rowsOut: result.returnedRows,
+      }, { columns: result.columns });
       const fields: Record<string, unknown> = materializeAs === 'table'
         ? {
           title, columns: result.columns, rows: result.rows.slice(0, MAX_MATERIALIZED_ROWS), rowCount: result.matchedRows,
@@ -3286,15 +4172,30 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             : {
             title, status: 'Live',
             chartTitle: title,
-            ...(args.groupBy ? { xAxisLabel: args.groupBy } : {}),
+            ...(groupByLabel ? { xAxisLabel: groupByLabel } : {}),
             yAxisLabel: valueKey,
-            chartLabels: (result.groups ?? result.rows).map((row, index) => String((row as Record<string, unknown>).key ?? (args.groupBy ? (row as Record<string, unknown>)[args.groupBy] : '') ?? `Row ${index + 1}`)),
+            // A composite breakdown has no single label column, so the label is every
+            // grouping key joined — which is also what `result.groups[].key` already
+            // holds when the query grouped, hence the preference order.
+            chartLabels: (result.groups ?? result.rows).map((row, index) => {
+              const record = row as Record<string, unknown>;
+              if (record.key != null) return String(record.key);
+              const composite = groupByColumns.map((column) => record[column]).filter((value) => value != null).join(' · ');
+              return composite || `Row ${index + 1}`;
+            }),
             chartValues: (result.groups ?? result.rows).map((row) => Number((row as Record<string, unknown>)[valueKey] ?? (row as { count?: number }).count ?? 0)),
-            kpis: Object.entries(result.aggregates ?? {}).slice(0, 4).map(([label, value]) => ({ label, value: value.toLocaleString() })),
+            // A null aggregate means "not computable over these rows" — a median
+            // of an empty column. Dropping the chip is right; printing "null"
+            // beside three real numbers reads as a value that was measured.
+            kpis: Object.entries(result.aggregates ?? {})
+              .flatMap(([label, value]) => value == null ? [] : [{ label, value: value.toLocaleString() }])
+              .slice(0, 4),
             summary: `Computed from ${result.totalRows.toLocaleString()} rows in ${target.data.title}.`,
             sourceDatasetId: target.id,
           };
-      const patch = sanitizeCreationObjectPatch(kind, fields);
+      // Spread AFTER the branch so every materialized kind carries it — the map
+      // builder is shared with the inspector and must not have to know about it.
+      const patch = sanitizeCreationObjectPatch(kind, { ...fields, ...provenance });
       if (existing) {
         proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update ${kind} “${title}”`, objectId: existing.id, patch });
         return { ...payload, proposed: true, materialized: { id: existing.id, kind, title, updated: true } };
@@ -3306,6 +4207,831 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add ${kind} “${title}”`, node });
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect ${target.data.title} to ${title}`, edge: { id: crypto.randomUUID(), source: target.id, target: node.id, type: 'smoothstep', animated: true, label: 'computed from', data: { connectionKind: 'data' } } });
       return { ...payload, proposed: true, materialized: { id: node.id, kind, title, created: true } };
+    },
+  }, {
+    /**
+     * "Create me an ERD" — the headline of IDEA → REAL for data.
+     *
+     * A dedicated tool rather than `canvas_add_object` with hand-authored fields,
+     * for the same reason `canvas_add_inbox` is: what comes back must be REAL. The
+     * model authors entities and relationships; this validates them, resolves every
+     * many-to-many into a junction table, and generates executable DDL — so the
+     * answer to "create me an ERD" is a diagram AND the statements that build it,
+     * not a picture someone still has to translate by hand.
+     */
+    name: 'canvas_create_data_model',
+    description: 'Author a REAL entity-relationship model on the canvas: entities, attributes, keys, and relationships. Use this for any request to design, draw, model or diagram a database, schema, data model or ERD — never canvas_add_object with kind "diagram", which produces a picture that cannot be validated or executed. The result is validated (missing keys, dangling foreign keys, repeating groups, unresolved many-to-many) and lowered to executable DDL in the chosen dialect. Set sourceDatasetId instead of authoring entities to infer the model from a dataset already on the board.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        title: { type: 'string', description: 'Name of the model, e.g. "Order management schema".' },
+        dialect: { type: 'string', enum: [...SQL_DIALECTS], description: 'SQL dialect the DDL is generated for. Defaults to postgres.' },
+        objectId: { type: 'string', description: 'Amend the ERD object with this id instead of creating one. Read it with canvas_read_object first and send the WHOLE model — entities omitted here are removed.' },
+        sourceDatasetId: { type: 'string', description: 'Infer a single entity from this dataset/table object instead of authoring entities. Column types, nullability, keys and PII tags come from the real rows.' },
+        notes: { type: 'string', description: 'Design notes: assumptions, out-of-scope areas, open questions.' },
+        entities: {
+          type: 'array',
+          description: 'The tables. Give every entity a primary key — an entity without one is reported as an error.',
+          items: {
+            type: 'object', required: ['name', 'attributes'], additionalProperties: false,
+            properties: {
+              name: { type: 'string', description: 'snake_case table name, e.g. "order_line".' },
+              description: { type: 'string' },
+              primaryKey: { type: 'array', items: { type: 'string' }, description: 'Composite key. For a single-column key set primaryKey:true on the attribute instead.' },
+              attributes: {
+                type: 'array',
+                items: {
+                  type: 'object', required: ['name', 'type'], additionalProperties: false,
+                  properties: {
+                    name: { type: 'string' },
+                    type: { type: 'string', enum: [...DATA_MODEL_TYPES] },
+                    nullable: { type: 'boolean', description: 'Omit for NOT NULL. Modelling defaults to required.' },
+                    primaryKey: { type: 'boolean' },
+                    unique: { type: 'boolean' },
+                    description: { type: 'string' },
+                    unit: { type: 'string', description: 'Physical unit — "USD", "ms", "kg".' },
+                    enumValues: { type: 'array', items: { type: 'string' } },
+                    defaultValue: { type: 'string' },
+                    classification: { type: 'string', enum: [...DATA_CLASSIFICATIONS] },
+                    pii: { type: 'string', enum: [...PII_CATEGORIES], description: 'Tag personal data here — it is carried into the DDL as a column comment and shown on the diagram.' },
+                    references: {
+                      type: 'object', required: ['entity', 'attribute'], additionalProperties: false,
+                      description: 'Foreign key target. Declaring it here creates the relationship; you need not also list it in relationships.',
+                      properties: { entity: { type: 'string' }, attribute: { type: 'string' } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        relationships: {
+          type: 'array',
+          description: 'Relationships not already expressed as attribute foreign keys. A many-to-many is resolved into a junction table automatically before DDL is generated.',
+          items: {
+            type: 'object', required: ['from', 'to', 'cardinality'], additionalProperties: false,
+            properties: {
+              name: { type: 'string' },
+              from: { type: 'object', required: ['entity'], additionalProperties: false, properties: { entity: { type: 'string' }, attributes: { type: 'array', items: { type: 'string' } } } },
+              to: { type: 'object', required: ['entity'], additionalProperties: false, properties: { entity: { type: 'string' }, attributes: { type: 'array', items: { type: 'string' } } } },
+              cardinality: { type: 'string', enum: [...DATA_MODEL_CARDINALITIES] },
+              optional: { type: 'boolean' },
+              description: { type: 'string' },
+            },
+          },
+        },
+        x: { type: 'number' }, y: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as {
+        title?: string; dialect?: string; objectId?: string; sourceDatasetId?: string; notes?: string;
+        entities?: unknown; relationships?: unknown; x?: number; y?: number;
+      };
+      const dialect = (SQL_DIALECTS as readonly string[]).includes(String(args.dialect)) ? args.dialect as SqlDialect : 'postgres';
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...stagedNodes];
+
+      // Two ways in. Inferring from real rows is not a lesser path: types,
+      // nullability and the natural key come from what is ACTUALLY there, which
+      // is more truthful than the same model authored from the column names.
+      let model: DataModel;
+      let inferredFrom: { id: string; title: string } | null = null;
+      if (args.sourceDatasetId) {
+        const dataset = all.find((node) => node.id === args.sourceDatasetId);
+        if (!dataset) return { error: `No object with id "${args.sourceDatasetId}" is on this canvas.` };
+        const source = tabularFromObject(dataset.data as Record<string, unknown>);
+        if (!source.columns.length) return { error: `${dataset.data.title} has no columns to model.` };
+        const classifications = normalizeClassifications(dataset.data.classifications).length
+          ? normalizeClassifications(dataset.data.classifications)
+          : classifyTabular(source, profileTabular(source));
+        model = dataModelFromTabular(String(args.title || dataset.data.title), profileTabular(source), source.rows.length, classifications);
+        inferredFrom = { id: dataset.id, title: String(dataset.data.title) };
+      } else {
+        model = normalizeDataModel({ entities: args.entities, relationships: args.relationships, dialect, origin: 'authored', notes: args.notes });
+      }
+      if (!model.entities.length) {
+        return { error: 'A data model needs at least one entity with at least one attribute. Author `entities`, or set `sourceDatasetId` to infer one from a dataset on the board.' };
+      }
+      model = { ...model, dialect };
+
+      const issues = validateDataModel(model);
+      const summary = dataModelSummary(model, issues);
+      const ddl = dataModelDdl(model, dialect);
+      const title = String(args.title || 'Data model').trim().slice(0, 160) || 'Data model';
+      const fields = {
+        title, dataModel: model, dialect, ddl, mermaid: dataModelMermaid(model), issues,
+        ...(args.notes ? { notes: String(args.notes).slice(0, 2_000) } : {}),
+        ...(inferredFrom ? { sourceObjectId: inferredFrom.id, ...lineagePatch([inferredFrom.id], { engine: 'import' }) } : {}),
+        status: summary.errors ? `${summary.errors} to resolve` : `${summary.entities} entities · ${summary.relationships} relationships`,
+        summary: `${summary.entities} entities, ${summary.attributes} attributes, ${summary.relationships} relationships. ${summary.keyed} of ${summary.entities} keyed.`,
+      };
+      const patch = sanitizeCreationObjectPatch('erd', fields);
+
+      const existing = args.objectId ? all.find((node) => node.id === args.objectId && node.data.kind === 'erd') : undefined;
+      if (args.objectId && !existing) return { error: `No ERD object with id "${args.objectId}" is on this canvas.` };
+
+      const payload = {
+        ok: true, proposed: true, dialect,
+        model: { entities: model.entities.map((entity) => ({ name: entity.name, attributes: entity.attributes.length, key: entityKey(entity) })), relationships: summary.relationships },
+        issues, ddl,
+        ...(inferredFrom ? { inferredFrom } : {}),
+      };
+      if (existing) {
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update data model “${title}”`, objectId: existing.id, patch });
+        return { ...payload, object: { id: existing.id, kind: 'erd', title, updated: true } };
+      }
+      const anchor = inferredFrom ? all.find((node) => node.id === inferredFrom.id) : undefined;
+      const node = newNode('erd', nextCanvasObjectPosition(all, anchor ? { x: anchor.position.x + 460, y: anchor.position.y } : args, typeof window !== 'undefined' && window.innerWidth <= 760, 'erd'));
+      node.data = { ...node.data, ...patch };
+      node.style = { width: 760, height: 560 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Create data model “${title}”`, node });
+      if (anchor) {
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Model ${anchor.data.title}`, edge: { id: crypto.randomUUID(), source: anchor.id, target: node.id, type: 'smoothstep', animated: true, label: 'modelled as', data: { connectionKind: 'data' } } });
+      }
+      return { ...payload, object: { id: node.id, kind: 'erd', title, created: true } };
+    },
+  }, {
+    /** The model IS the source; DDL and Mermaid are renderings of it. Putting the
+     *  DDL on the board as a `code` object is what makes it copyable and runnable
+     *  rather than something buried in a tool result. */
+    name: 'canvas_export_data_model',
+    description: 'Generate executable DDL or a Mermaid erDiagram from a data model already on the canvas, and optionally put the DDL on the board as a Code object. Use this when asked for the SQL, the CREATE TABLE statements, the migration, or a portable diagram of a model that already exists.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'The ERD object. Omit when the canvas holds exactly one.' },
+        format: { type: 'string', enum: ['ddl', 'mermaid'], description: 'Defaults to ddl.' },
+        dialect: { type: 'string', enum: [...SQL_DIALECTS], description: 'Overrides the model\'s own dialect for this export.' },
+        materialize: { type: 'boolean', description: 'Put the result on the board as a Code object connected to the model.' },
+      },
+    },
+    mutates: (raw: unknown) => (raw as { materialize?: unknown })?.materialize === true,
+    run: (raw: unknown) => {
+      const args = raw as { objectId?: string; format?: string; dialect?: string; materialize?: boolean };
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...stagedNodes];
+      const models = all.filter((node) => node.data.kind === 'erd');
+      const target = args.objectId ? models.find((node) => node.id === args.objectId) : models.length === 1 ? models[0] : undefined;
+      if (!target) {
+        return { error: models.length ? `Say which model: ${models.map((node) => `${node.id} (${node.data.title})`).join(', ')}` : 'There is no data model on this canvas yet. Create one with canvas_create_data_model.' };
+      }
+      const model = readDataModel(target.data as Record<string, unknown>);
+      if (!model.entities.length) return { error: `${target.data.title} has no entities yet.` };
+      const dialect = (SQL_DIALECTS as readonly string[]).includes(String(args.dialect)) ? args.dialect as SqlDialect : (model.dialect ?? 'postgres');
+      const format = args.format === 'mermaid' ? 'mermaid' : 'ddl';
+      const output = format === 'mermaid' ? dataModelMermaid(model) : dataModelDdl(model, dialect);
+      const issues = validateDataModel(model);
+      const payload = { ok: true, format, dialect, output, issues: issues.filter((issue) => issue.severity === 'error') };
+      if (!args.materialize) return payload;
+      if (!canEdit) return { ...payload, error: 'The current session role cannot edit this canvas' };
+      const title = `${target.data.title} ${format === 'mermaid' ? 'diagram source' : `DDL (${dialect})`}`;
+      const node = newNode('code', nextCanvasObjectPosition(all, { x: target.position.x + 800, y: target.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760, 'code'));
+      node.data = { ...node.data, ...sanitizeCreationObjectPatch('code', {
+        title, code: output, language: format === 'mermaid' ? 'mermaid' : 'sql',
+        status: format === 'mermaid' ? 'Diagram source' : `${model.entities.length} tables`,
+        ...lineagePatch([target.id], { engine: 'tabular' }),
+      }) };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Export ${title}`, node });
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Generated from ${target.data.title}`, edge: { id: crypto.randomUUID(), source: target.id, target: node.id, type: 'smoothstep', animated: true, label: 'generates', data: { connectionKind: 'data' } } });
+      return { ...payload, proposed: true, object: { id: node.id, kind: 'code', title } };
+    },
+  }, {
+    /**
+     * The `data` edge, finally given meaning.
+     *
+     * Two datasets sharing a key could sit side by side with a line drawn between
+     * them and still not be relatable, because the query engine took exactly one
+     * source. A join is what makes a board of datasets a data model rather than a
+     * pile of spreadsheets — and the fan-out and unmatched counts are returned
+     * because a join that silently multiplied its rows is how a confidently wrong
+     * total gets charted.
+     */
+    name: 'canvas_join_datasets',
+    description: 'Relate TWO tabular objects on the canvas on a shared key, producing a Table with the combined columns. Use this whenever a question spans two datasets ("which customers from the CRM export have open tickets"). Omit `on` to have the join keys detected from matching column names and overlapping values. Reports unmatched rows and row fan-out, which are what decide whether the join is trustworthy.',
+    parameters: {
+      type: 'object', required: ['leftId', 'rightId'], additionalProperties: false,
+      properties: {
+        leftId: { type: 'string', description: 'Object id of the left (driving) dataset.' },
+        rightId: { type: 'string', description: 'Object id of the right (looked-up) dataset.' },
+        type: { type: 'string', enum: [...TABULAR_JOIN_TYPES], description: 'inner keeps only matched rows; left keeps every left row. Defaults to inner.' },
+        on: {
+          type: 'array', description: 'Join keys. Omit to detect them.',
+          items: { type: 'object', required: ['left', 'right'], additionalProperties: false, properties: { left: { type: 'string' }, right: { type: 'string' } } },
+        },
+        select: { type: 'array', items: { type: 'string' }, description: 'Columns to keep. Omit for every column of both sides.' },
+        rightAlias: { type: 'string', description: 'Prefix for right-hand columns whose names collide. Defaults to "right".' },
+        title: { type: 'string' },
+        limit: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { leftId?: string; rightId?: string; type?: string; on?: TabularJoinKey[]; select?: string[]; rightAlias?: string; title?: string; limit?: number };
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...stagedNodes];
+      const left = all.find((node) => node.id === args.leftId);
+      const right = all.find((node) => node.id === args.rightId);
+      if (!left || !right) return { error: 'Both leftId and rightId must be objects on this canvas.' };
+      if (left.id === right.id) return { error: 'A dataset cannot be joined to itself here.' };
+      const leftSource = tabularFromObject(left.data as Record<string, unknown>);
+      const rightSource = tabularFromObject(right.data as Record<string, unknown>);
+      if (!leftSource.rows.length || !rightSource.rows.length) return { error: 'Both objects need imported rows before they can be joined.' };
+
+      const keys = args.on?.length ? args.on : suggestJoinKeys(leftSource, rightSource);
+      if (!keys.length) {
+        return { error: `No shared key was found between ${left.data.title} (${leftSource.columns.join(', ')}) and ${right.data.title} (${rightSource.columns.join(', ')}). Name the columns explicitly with \`on\`.` };
+      }
+      const spec = { on: keys, ...(args.type ? { type: args.type as typeof TABULAR_JOIN_TYPES[number] } : {}), ...(args.rightAlias ? { rightAlias: args.rightAlias } : {}), ...(args.select ? { select: args.select } : {}), ...(args.limit ? { limit: args.limit } : {}) };
+      const result = joinTabular(leftSource, rightSource, spec);
+      if (result.unknownColumns.length) {
+        return { error: `Unknown join column(s): ${result.unknownColumns.join(', ')}. Left has ${leftSource.columns.join(', ')}; right has ${rightSource.columns.join(', ')}.` };
+      }
+      if (!result.rows.length) {
+        return { error: `No rows matched on ${keys.map((key) => `${key.left} = ${key.right}`).join(' and ')}. ${leftSource.rows.length} left rows and ${rightSource.rows.length} right rows were compared. Check the key, or use type "left" to keep unmatched rows.` };
+      }
+
+      const title = (args.title || `${left.data.title} × ${right.data.title}`).trim().slice(0, 160);
+      const node = newNode('table', nextCanvasObjectPosition(all, { x: Math.max(left.position.x, right.position.x) + 460, y: left.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760, 'table'));
+      node.data = { ...node.data, ...sanitizeCreationObjectPatch('table', {
+        title, columns: result.columns, rows: result.rows.slice(0, MAX_MATERIALIZED_ROWS), rowCount: result.rowCount,
+        sampleRows: result.rows.slice(0, 8),
+        status: `${result.rowCount.toLocaleString()} joined rows`,
+        summary: `${result.type} join on ${keys.map((key) => `${key.left} = ${key.right}`).join(', ')}. ${result.matchedLeft.toLocaleString()} of ${leftSource.rows.length.toLocaleString()} left rows matched; ${result.unmatchedLeft.toLocaleString()} did not.`,
+        ...lineagePatch([left.id, right.id], { engine: 'join', join: spec, rowsIn: leftSource.rows.length + rightSource.rows.length, rowsOut: result.rowCount }, { columns: result.columns }),
+      }) };
+      node.style = { width: 720, height: 460 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Join “${title}”`, node });
+      for (const parent of [left, right]) {
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Join input ${parent.data.title}`, edge: { id: crypto.randomUUID(), source: parent.id, target: node.id, type: 'smoothstep', animated: true, label: 'joined', data: { connectionKind: 'data' } } });
+      }
+      return {
+        ok: true, proposed: true,
+        object: { id: node.id, kind: 'table', title },
+        joinedOn: keys, type: result.type, keysDetected: !args.on?.length,
+        rows: result.rowCount, columns: result.columns,
+        matchedLeft: result.matchedLeft, unmatchedLeft: result.unmatchedLeft, unmatchedRight: result.unmatchedRight,
+        // Surfaced deliberately: a one-to-many join inflates row counts, and any
+        // SUM taken over the result afterwards will be wrong by that factor.
+        fanOut: result.fanOut, renamedColumns: result.collisions, truncated: result.truncated,
+        sample: result.rows.slice(0, 10),
+      };
+    },
+  }, {
+    name: 'canvas_classify_dataset',
+    description: 'Scan a dataset on the canvas for personal and sensitive data, tagging each column with a PII category and a sensitivity classification. Use this before sharing a board, before building anything from an uploaded customer file, or whenever asked what personal data a dataset holds. Detection reads names AND values; columns tagged as credentials, financial, government id or health are masked wherever they render and export.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'The dataset/table object. Omit when the canvas holds exactly one with rows.' },
+        overrides: {
+          type: 'array', description: 'Confirm or correct the detection for specific columns. Use this to record a human decision rather than re-running detection.',
+          items: { type: 'object', required: ['column'], additionalProperties: false, properties: {
+            column: { type: 'string' },
+            pii: { type: 'string', enum: [...PII_CATEGORIES] },
+            classification: { type: 'string', enum: [...DATA_CLASSIFICATIONS] },
+            masked: { type: 'boolean' },
+          } },
+        },
+      },
+    },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; overrides?: Array<{ column: string; pii?: string; classification?: string; masked?: boolean }> };
+      const target = resolveTabularTarget(args.objectId);
+      if ('error' in target) return target;
+      const { node: dataset, source } = target;
+
+      const detected = classifyTabular(source, profileTabular(source));
+      const overrides = normalizeClassifications(args.overrides ?? []);
+      const byColumn = new Map(detected.map((item) => [item.column, item]));
+      for (const override of overrides) {
+        const base = byColumn.get(override.column);
+        if (base) byColumn.set(override.column, { ...base, ...override, confidence: 'high', reason: 'value-match' });
+      }
+      const classifications = [...byColumn.values()];
+      const summary = classificationSummary(classifications);
+      const patch = sanitizeCreationObjectPatch(dataset.data.kind, {
+        classifications,
+        status: summary.piiColumns ? `${summary.piiColumns} personal columns` : 'No personal data found',
+        summary: summary.piiColumns
+          ? `${summary.piiColumns} of ${summary.total} columns hold personal data (${summary.categories.join(', ')}); ${summary.maskedColumns} are masked on render and export.`
+          : `No personal data detected across ${summary.total} columns.`,
+      });
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Classify ${dataset.data.title}`, objectId: dataset.id, patch });
+      return {
+        ok: true, proposed: true, objectId: dataset.id,
+        classifications: classifications.filter((item) => item.pii !== 'none'),
+        summary,
+        // Stated so the model does not then quote a masked value as if it were real.
+        maskedColumns: classifications.filter((item) => item.masked).map((item) => item.column),
+      };
+    },
+  }, {
+    name: 'canvas_set_data_contract',
+    description: 'Declare what a dataset is ALLOWED to be — required columns, types, uniqueness, units, allowed values, ranges, a primary key, row-count bounds and a freshness SLA — and evaluate the current rows against it. Use this to lock a dataset\'s shape so a later re-import that drifts is caught instead of quietly changing every chart built on it. Omit `contract` to infer one from what the data currently is.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'The dataset/table object. Omit when the canvas holds exactly one with rows.' },
+        materialize: { type: 'boolean', description: 'Also put the contract on the board as its own object. Defaults to true.' },
+        contract: {
+          type: 'object', required: ['columns'], additionalProperties: false,
+          properties: {
+            columns: {
+              type: 'array',
+              items: { type: 'object', required: ['name', 'type'], additionalProperties: false, properties: {
+                name: { type: 'string' },
+                type: { type: 'string', enum: ['number', 'boolean', 'date', 'text', 'empty'] },
+                required: { type: 'boolean' }, unique: { type: 'boolean' },
+                description: { type: 'string' },
+                unit: { type: 'string', description: 'Physical unit. Two charts cannot be compared without it.' },
+                allowedValues: { type: 'array', items: { type: 'string' } },
+                min: { type: 'number' }, max: { type: 'number' },
+                classification: { type: 'string', enum: [...DATA_CLASSIFICATIONS] },
+                pii: { type: 'string', enum: [...PII_CATEGORIES] },
+              } },
+            },
+            primaryKey: { type: 'array', items: { type: 'string' } },
+            rowCountMin: { type: 'number' }, rowCountMax: { type: 'number' },
+            freshnessHours: { type: 'number', description: 'Maximum age before the data is stale.' },
+          },
+        },
+      },
+    },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; contract?: unknown; materialize?: boolean };
+      const target = resolveTabularTarget(args.objectId);
+      if ('error' in target) return target;
+      const { node: dataset, source } = target;
+
+      const classifications = normalizeClassifications(dataset.data.classifications);
+      const contract = normalizeDataContract(args.contract)
+        ?? inferDataContract(source, profileTabular(source), classifications.length ? classifications : classifyTabular(source, profileTabular(source)));
+      const fetchedAt = typeof dataset.data.fetchedAt === 'string' ? dataset.data.fetchedAt : null;
+      const violations = evaluateDataContract(source, contract, { fetchedAt });
+      const verdict = contractVerdict(violations);
+      const declaredAt = new Date().toISOString();
+      const stored = { ...contract, declaredAt };
+
+      proposalBuffer.current.push({
+        id: crypto.randomUUID(), type: 'object.update', label: `Declare contract for ${dataset.data.title}`, objectId: dataset.id,
+        patch: sanitizeCreationObjectPatch(dataset.data.kind, { dataContract: stored, violations }),
+      });
+
+      const payload = {
+        ok: true, proposed: true, objectId: dataset.id,
+        inferred: !args.contract, verdict, violations,
+        contract: { columns: contract.columns.length, primaryKey: contract.primaryKey ?? [], freshnessHours: contract.freshnessHours ?? null },
+      };
+      if (args.materialize === false) return payload;
+
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...stagedNodes];
+      const title = `${dataset.data.title} contract`;
+      const existing = all.find((node) => node.data.kind === 'dataContract' && node.data.sourceDatasetId === dataset.id);
+      const fields = sanitizeCreationObjectPatch('dataContract', {
+        title, dataContract: stored, violations, verdict, sourceDatasetId: dataset.id,
+        status: verdict === 'pass' ? 'Honoured' : verdict === 'fail' ? `${violations.filter((violation) => violation.severity === 'error').length} breaches` : `${violations.length} warnings`,
+        summary: `${contract.columns.length} declared columns over ${source.rows.length.toLocaleString()} rows.`,
+        ...(fetchedAt ? { fetchedAt } : {}),
+      });
+      if (existing) {
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update contract “${title}”`, objectId: existing.id, patch: fields });
+        return { ...payload, object: { id: existing.id, kind: 'dataContract', title, updated: true } };
+      }
+      const node = newNode('dataContract', nextCanvasObjectPosition(all, { x: dataset.position.x + 460, y: dataset.position.y + 300 }, typeof window !== 'undefined' && window.innerWidth <= 760, 'dataContract'));
+      node.data = { ...node.data, ...fields };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add contract “${title}”`, node });
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Governs ${dataset.data.title}`, edge: { id: crypto.randomUUID(), source: node.id, target: dataset.id, type: 'smoothstep', label: 'governs', data: { connectionKind: 'reference' } } });
+      return { ...payload, object: { id: node.id, kind: 'dataContract', title, created: true } };
+    },
+  }, {
+    /** A contract IS a set of checks — `checksFromContract` derives them rather than
+     *  asking anyone to restate "customer_id must be unique" in a second place. */
+    name: 'canvas_run_data_quality',
+    description: 'Build and run data quality checks against a dataset on the canvas — not-null, uniqueness, row-count bounds, numeric ranges, allowed values, regex, freshness, and referential integrity across two objects. Use this to assert that data is fit to use before building on it, or to explain WHY a dataset looks wrong. If the dataset already has a declared contract, its rules are included automatically.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'The dataset/table object. Omit when the canvas holds exactly one with rows.' },
+        materialize: { type: 'boolean', description: 'Put the suite and its results on the board. Defaults to true.' },
+        checks: {
+          type: 'array',
+          description: 'Checks to run IN ADDITION to any derived from the dataset\'s contract. Omit entirely to run the contract\'s checks plus a conservative suggested suite.',
+          items: { type: 'object', required: ['kind'], additionalProperties: false, properties: {
+            kind: { type: 'string', enum: [...DATA_QUALITY_CHECK_KINDS] },
+            column: { type: 'string' },
+            min: { type: 'number' }, max: { type: 'number' },
+            values: { type: 'array', items: { type: 'string' } },
+            pattern: { type: 'string' },
+            hours: { type: 'number', description: 'Freshness SLA in hours.' },
+            referenceObjectId: { type: 'string', description: 'For referentialIntegrity: the canvas object holding the parent rows.' },
+            referenceColumn: { type: 'string', description: 'For referentialIntegrity: the parent column values must exist in.' },
+            tolerance: { type: 'number', description: 'Share of rows (0–1) allowed to fail before the check does.' },
+            severity: { type: 'string', enum: ['error', 'warning'] },
+          } },
+        },
+      },
+    },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; checks?: unknown; materialize?: boolean };
+      const target = resolveTabularTarget(args.objectId);
+      if ('error' in target) return target;
+      const { node: dataset, source } = target;
+
+      const contract = normalizeDataContract(dataset.data.dataContract);
+      const authored = normalizeDataQualityChecks(args.checks);
+      const derived = contract ? checksFromContract(contract) : [];
+      // Deduplicated by id so a rule declared in a contract and repeated by the
+      // model is one check, not two identical rows in the report.
+      const byId = new Map([...derived, ...(authored.length ? authored : derived.length ? [] : suggestDataQualityChecks(source))].map((check) => [check.id, check]));
+      const checks = [...byId.values()];
+      if (!checks.length) return { error: `${dataset.data.title} has nothing to check yet. Declare a contract with canvas_set_data_contract, or pass checks explicitly.` };
+
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...stagedNodes];
+      const references = referenceSources(
+        all.filter((node) => ['dataset', 'table', 'spreadsheet', 'datasource'].includes(node.data.kind)).map((node) => ({ id: node.id, data: node.data as Record<string, unknown> })),
+        (data) => tabularFromObject(data),
+      );
+      const results = runDataQualityChecks(source, checks, {
+        fetchedAt: typeof dataset.data.fetchedAt === 'string' ? dataset.data.fetchedAt : null,
+        references,
+      });
+      const verdict = dataQualityVerdict(results);
+      const lastRunAt = new Date().toISOString();
+
+      const payload = { ok: true, proposed: true, objectId: dataset.id, verdict, results };
+      if (args.materialize === false) return payload;
+
+      const title = `${dataset.data.title} quality`;
+      const existing = all.find((node) => node.data.kind === 'dataQuality' && node.data.sourceDatasetId === dataset.id);
+      const fields = sanitizeCreationObjectPatch('dataQuality', {
+        title, checks, results, verdict: verdict.status, score: verdict.score, sourceDatasetId: dataset.id, lastRunAt,
+        status: verdict.status === 'pass' ? `${verdict.passed} passing` : `${verdict.failed} failing`,
+        summary: `${verdict.passed} passed, ${verdict.warned} warned, ${verdict.failed} failed, ${verdict.skipped} skipped over ${source.rows.length.toLocaleString()} rows.`,
+      });
+      if (existing) {
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Re-run quality on ${dataset.data.title}`, objectId: existing.id, patch: fields });
+        return { ...payload, object: { id: existing.id, kind: 'dataQuality', title, updated: true } };
+      }
+      const node = newNode('dataQuality', nextCanvasObjectPosition(all, { x: dataset.position.x + 920, y: dataset.position.y + 300 }, typeof window !== 'undefined' && window.innerWidth <= 760, 'dataQuality'));
+      node.data = { ...node.data, ...fields };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add quality checks “${title}”`, node });
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Checks ${dataset.data.title}`, edge: { id: crypto.randomUUID(), source: node.id, target: dataset.id, type: 'smoothstep', label: 'checks', data: { connectionKind: 'reference' } } });
+      return { ...payload, object: { id: node.id, kind: 'dataQuality', title, created: true } };
+    },
+  }, {
+    /** The semantic layer. Two tiles labelled "MRR" that disagree is the defect;
+     *  ONE definition that both evaluate is the fix. */
+    name: 'canvas_define_metric',
+    description: 'Define a metric ONCE — its source, formula, filters, breakdown, unit, format and target — so every KPI, chart and report that quotes it computes the same number. Use this whenever a number will be referred to by name ("MRR", "win rate", "average handling time") rather than asked for once. Optionally materialize the current value as a KPI or the breakdown as a chart, both bound to this definition.',
+    parameters: {
+      type: 'object', required: ['name', 'aggregate'], additionalProperties: false,
+      properties: {
+        name: { type: 'string', description: 'The metric\'s name, as people say it: "Monthly recurring revenue".' },
+        description: { type: 'string', description: 'What it counts and, importantly, what it excludes.' },
+        sourceObjectId: { type: 'string', description: 'The dataset/table it is computed from. Omit when the canvas holds exactly one with rows.' },
+        aggregate: {
+          type: 'object', required: ['op'], additionalProperties: false,
+          properties: { op: { type: 'string', enum: [...TABULAR_AGGREGATE_OPERATORS] }, column: { type: 'string' }, label: { type: 'string' } },
+        },
+        filter: {
+          type: 'array', description: 'Rows the metric counts. THIS is the part that makes two definitions of the same word disagree, so state it.',
+          items: { type: 'object', required: ['column'], additionalProperties: false, properties: { column: { type: 'string' }, op: { type: 'string', enum: [...TABULAR_FILTER_OPERATORS] }, value: {} } },
+        },
+        dimension: { type: 'string', description: 'Breakdown column for the series form.' },
+        timeGrain: { type: 'object', required: ['column', 'grain'], additionalProperties: false, properties: { column: { type: 'string' }, grain: { type: 'string', enum: [...TABULAR_TIME_GRAINS] } } },
+        unit: { type: 'string', description: 'Currency code for format "currency" (e.g. USD), otherwise a free unit.' },
+        format: { type: 'string', enum: [...METRIC_FORMATS] },
+        decimals: { type: 'number' },
+        target: { type: 'number' },
+        direction: { type: 'string', enum: [...METRIC_DIRECTIONS], description: 'Which way is good. "down" for churn or cost — it inverts how attainment is read.' },
+        materializeAs: { type: 'string', enum: ['none', 'kpi', 'chart'], description: 'Also put the current value on the board, bound to this definition.' },
+      },
+    },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as Record<string, unknown> & { sourceObjectId?: string; materializeAs?: string };
+      const target = resolveTabularTarget(args.sourceObjectId);
+      if ('error' in target) return target;
+      const { node: dataset, source } = target;
+
+      const definition = normalizeMetricDefinition({ ...args, sourceObjectId: dataset.id });
+      if (!definition) return { error: 'A metric needs a name and an aggregate.' };
+      const unknown = [definition.aggregate.column, definition.dimension, definition.timeGrain?.column, ...(definition.filter ?? []).map((filter) => filter.column)]
+        .filter((column): column is string => !!column)
+        .filter((column) => !source.columns.includes(column));
+      if (unknown.length) {
+        return { error: `Unknown column(s): ${[...new Set(unknown)].join(', ')}. ${dataset.data.title} has: ${source.columns.join(', ')}` };
+      }
+
+      const value = computeMetric(source, definition);
+      const series = computeMetricSeries(source, definition);
+      const producedAt = new Date().toISOString();
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...stagedNodes];
+
+      const metricFields = sanitizeCreationObjectPatch('metric', {
+        title: definition.name, definition, sourceObjectId: dataset.id,
+        value: value.value, ...(series ? { series: series.labels.map((label, index) => ({ at: label, value: series.values[index] ?? 0 })) } : {}),
+        status: formatMetricValue(value.value, definition),
+        summary: `${definition.aggregate.op}${definition.aggregate.column ? ` of ${definition.aggregate.column}` : ''} over ${value.matchedRows.toLocaleString()} of ${value.totalRows.toLocaleString()} rows in ${dataset.data.title}.`,
+        ...lineagePatch([dataset.id], { engine: 'metric', query: { aggregate: [definition.aggregate], ...(definition.filter ? { filter: definition.filter } : {}) }, rowsIn: value.totalRows, rowsOut: 1 }, { producedAt }),
+      });
+      const existing = all.find((node) => node.data.kind === 'metric' && normalizeMetricDefinition(node.data.definition)?.id === definition.id);
+      let metricId: string;
+      if (existing) {
+        metricId = existing.id;
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update metric “${definition.name}”`, objectId: existing.id, patch: metricFields });
+      } else {
+        const node = newNode('metric', nextCanvasObjectPosition(all, { x: dataset.position.x + 460, y: dataset.position.y - 260 }, typeof window !== 'undefined' && window.innerWidth <= 760, 'metric'));
+        node.data = { ...node.data, ...metricFields };
+        metricId = node.id;
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Define metric “${definition.name}”`, node });
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Computed from ${dataset.data.title}`, edge: { id: crypto.randomUUID(), source: dataset.id, target: node.id, type: 'smoothstep', animated: true, label: 'defines', data: { connectionKind: 'data' } } });
+      }
+
+      const payload = {
+        ok: true, proposed: true,
+        metric: { id: definition.id, objectId: metricId, name: definition.name },
+        value: value.value, formatted: formatMetricValue(value.value, definition),
+        matchedRows: value.matchedRows, totalRows: value.totalRows,
+        ...(value.attainment != null ? { target: value.target, attainment: value.attainment, status: value.status } : {}),
+        ...(series ? { series } : {}),
+        computedFromEveryRow: true,
+      };
+      const materializeAs = args.materializeAs === 'kpi' || args.materializeAs === 'chart' ? args.materializeAs : null;
+      if (!materializeAs) return payload;
+      if (materializeAs === 'chart' && !series) {
+        return { ...payload, error: 'A chart needs a breakdown. Set `dimension` or `timeGrain` on the metric first.' };
+      }
+
+      // The artifact stores `metricId`, not a literal — which is what makes the
+      // definition load-bearing rather than decorative.
+      const artifact = newNode(materializeAs, nextCanvasObjectPosition([...all, ...proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : [])], { x: dataset.position.x + 920, y: dataset.position.y - 260 }, typeof window !== 'undefined' && window.innerWidth <= 760, materializeAs));
+      artifact.data = { ...artifact.data, ...sanitizeCreationObjectPatch(materializeAs, materializeAs === 'kpi'
+        ? {
+          title: definition.name, value: formatMetricValue(value.value, definition),
+          ...(definition.target != null ? { target: formatMetricValue(definition.target, definition) } : {}),
+          ...(definition.unit ? { unit: definition.unit } : {}),
+          metricId: definition.id, sourceDatasetId: dataset.id, status: 'Live',
+          summary: `Defined by “${definition.name}” · computed from ${value.totalRows.toLocaleString()} rows.`,
+          ...lineagePatch([dataset.id], { engine: 'metric' }, { producedAt }),
+        }
+        : {
+          title: definition.name, chartTitle: definition.name, status: 'Live',
+          xAxisLabel: series!.dimension, yAxisLabel: definition.aggregate.column ?? definition.aggregate.op,
+          chartLabels: series!.labels, chartValues: series!.values,
+          metricId: definition.id, sourceDatasetId: dataset.id,
+          summary: `Defined by “${definition.name}” · computed from ${value.totalRows.toLocaleString()} rows.`,
+          ...lineagePatch([dataset.id], { engine: 'metric' }, { producedAt }),
+        }) };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add ${materializeAs} “${definition.name}”`, node: artifact });
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Quotes ${definition.name}`, edge: { id: crypto.randomUUID(), source: metricId, target: artifact.id, type: 'smoothstep', animated: true, label: 'quotes', data: { connectionKind: 'data' } } });
+      return { ...payload, materialized: { id: artifact.id, kind: materializeAs, title: definition.name } };
+    },
+  }, {
+    name: 'canvas_trace_lineage',
+    description: 'Map where the numbers on this canvas came from: which artifact was computed from which source, by what transform, and which artifacts are now STALE because their source was re-read after they were built. Pass `column` with `objectId` to answer "what breaks if I change this column". Use this before renaming or dropping a column, or when a chart and its dataset disagree.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'Focus on one object: its upstream sources and everything computed from it.' },
+        column: { type: 'string', description: 'With objectId: report only the artifacts that read this column.' },
+        materialize: { type: 'boolean', description: 'Put the lineage map on the board as its own object.' },
+      },
+    },
+    mutates: (raw: unknown) => (raw as { materialize?: unknown })?.materialize === true,
+    run: (raw: unknown) => {
+      const args = raw as { objectId?: string; column?: string; materialize?: boolean };
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...stagedNodes];
+      const objects = all.map((node) => ({ id: node.id, kind: node.data.kind, title: String(node.data.title), data: node.data as Record<string, unknown> }));
+      const graph = buildLineageGraph(objects);
+      const stale = staleDerivatives(objects);
+
+      if (args.objectId && args.column) {
+        const impacts = columnImpact(objects, args.objectId, args.column);
+        return {
+          ok: true, objectId: args.objectId, column: args.column,
+          impacted: impacts,
+          // An empty result is a real, useful answer here — it means the column can
+          // be changed without breaking anything on this board.
+          safeToChange: impacts.length === 0,
+        };
+      }
+
+      const focused = args.objectId
+        ? { downstream: impactOf(graph, args.objectId), upstream: upstreamOf(graph, args.objectId) }
+        : null;
+      const payload = {
+        ok: true,
+        objects: graph.nodes,
+        links: graph.edges,
+        stale,
+        ...(focused ? { focus: { objectId: args.objectId, ...focused } } : {}),
+      };
+      if (!args.materialize) return payload;
+      if (!canEdit) return { ...payload, error: 'The current session role cannot edit this canvas' };
+      if (!graph.nodes.length) return { ...payload, error: 'Nothing on this canvas records where it came from yet. Build a chart or table from a dataset first.' };
+
+      const title = 'Data lineage';
+      const existing = all.find((node) => node.data.kind === 'lineage');
+      const fields = sanitizeCreationObjectPatch('lineage', {
+        title, lineageNodes: graph.nodes, lineageEdges: graph.edges, staleDerivatives: stale,
+        ...(args.objectId ? { focusObjectId: args.objectId } : {}),
+        status: stale.length ? `${stale.length} stale` : `${graph.nodes.length} tracked`,
+        summary: `${graph.nodes.length} objects linked by ${graph.edges.length} transforms. ${stale.length} artifact${stale.length === 1 ? '' : 's'} predate their source.`,
+      });
+      if (existing) {
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: 'Refresh lineage', objectId: existing.id, patch: fields });
+        return { ...payload, proposed: true, object: { id: existing.id, kind: 'lineage', title, updated: true } };
+      }
+      const node = newNode('lineage', nextCanvasObjectPosition(all, {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'lineage'));
+      node.data = { ...node.data, ...fields };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: 'Trace lineage', node });
+      return { ...payload, proposed: true, object: { id: node.id, kind: 'lineage', title, created: true } };
+    },
+  }, {
+    name: 'canvas_list_data_sources',
+    description: 'List the live databases and warehouses this workspace has connected — Postgres/Neon, ClickHouse, BigQuery and others — and what each can do here. Call this before canvas_add_data_source or canvas_query_data_source when the user has not named one.',
+    parameters: { type: 'object', additionalProperties: false, properties: {} },
+    run: async () => {
+      const { sources } = await dataSourceApi.list().catch(() => ({ sources: [] as DataSourceSummary[] }));
+      if (!sources.length) {
+        return { sources: [], error: 'No data source is connected to this workspace. Connect one in Integrations, or attach a CSV to work with a file instead.' };
+      }
+      return { sources };
+    },
+  }, {
+    /**
+     * REAL → model: reverse-engineer a live database.
+     *
+     * The other direction of "create me an ERD". Everything on a canvas used to
+     * arrive by file upload; this reads the actual schema — tables, columns,
+     * nullability, primary keys and foreign keys — so a model of production is
+     * the truth rather than someone's recollection of it.
+     */
+    name: 'canvas_add_data_source',
+    description: 'Put a connected database or warehouse on the canvas as a LIVE source, reading its real schema. Use this when asked to look at, explore, document, diagram or model an actual database. Set buildModel to also produce a validated ERD of the real schema — this is how "draw the ERD for our production database" is answered truthfully rather than from guesswork.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        sourceId: { type: 'string', description: 'Connection id from canvas_list_data_sources. Omit when exactly one is connected.' },
+        name: { type: 'string', description: 'Connection name, as an alternative to sourceId.' },
+        dataset: { type: 'string', description: 'BigQuery only: the dataset whose schema to read. Required there, ignored elsewhere.' },
+        buildModel: { type: 'boolean', description: 'Also create a validated ERD object from the real schema.' },
+        title: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { sourceId?: string; name?: string; dataset?: string; buildModel?: boolean; title?: string; x?: number; y?: number };
+      const { sources } = await dataSourceApi.list().catch(() => ({ sources: [] as DataSourceSummary[] }));
+      const resolved = resolveDataSource(sources, { id: args.sourceId ?? null, name: args.name ?? null });
+      if (!resolved.ok) return { error: `${resolved.error} Connect one in Integrations.` };
+      const source = resolved.source;
+      if (!source.canIntrospect) {
+        return { error: `${source.providerLabel} cannot have its schema read from here${source.note ? ` — ${source.note}` : '.'}` };
+      }
+
+      let schema: Awaited<ReturnType<typeof dataSourceApi.schema>>;
+      try {
+        schema = await dataSourceApi.schema(source.id, args.dataset);
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'That data source could not be read.' };
+      }
+      if (!schema.tables.length) return { error: `${source.name} reported no tables${args.dataset ? ` in dataset "${args.dataset}"` : ''}.` };
+
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...stagedNodes];
+      const fetchedAt = new Date().toISOString();
+      const title = (args.title || source.name).trim().slice(0, 160);
+      const node = newNode('datasource', nextCanvasObjectPosition(all, args, typeof window !== 'undefined' && window.innerWidth <= 760, 'datasource'));
+      node.data = { ...node.data, ...sanitizeCreationObjectPatch('datasource', {
+        title, tables: schema.tables, relationships: schema.relationships, scanned: schema.scanned,
+        status: `${schema.tables.length} tables`,
+        summary: `${schema.tables.length} tables and ${schema.relationships.length} foreign keys in ${schema.scanned.join(', ') || source.providerLabel}.`,
+        fetchedAt,
+      }), connectionId: source.id, provider: source.provider, providerLabel: source.providerLabel };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add data source “${title}”`, node });
+
+      const payload = {
+        ok: true, proposed: true,
+        object: { id: node.id, kind: 'datasource', title },
+        provider: source.providerLabel,
+        tables: schema.tables.map((table) => ({ name: table.name, columns: table.columns.length })),
+        relationships: schema.relationships.length,
+        scanned: schema.scanned,
+      };
+      if (!args.buildModel) return payload;
+
+      const model = dataModelFromIntrospection(schema.tables, schema.relationships);
+      const issues = validateDataModel(model);
+      const summary = dataModelSummary(model, issues);
+      const modelTitle = `${title} schema`;
+      const modelNode = newNode('erd', nextCanvasObjectPosition([...all, node], { x: node.position.x + 460, y: node.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760, 'erd'));
+      modelNode.data = { ...modelNode.data, ...sanitizeCreationObjectPatch('erd', {
+        title: modelTitle, dataModel: model, dialect: 'postgres', ddl: dataModelDdl(model, 'postgres'), mermaid: dataModelMermaid(model), issues,
+        status: `${summary.entities} entities`,
+        summary: `Reverse-engineered from ${source.providerLabel}: ${summary.entities} entities, ${summary.relationships} relationships.`,
+        ...lineagePatch([node.id], { engine: 'import' }, { producedAt: fetchedAt }),
+      }) };
+      modelNode.style = { width: 760, height: 560 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Model “${modelTitle}”`, node: modelNode });
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Schema of ${title}`, edge: { id: crypto.randomUUID(), source: node.id, target: modelNode.id, type: 'smoothstep', animated: true, label: 'schema of', data: { connectionKind: 'data' } } });
+      return { ...payload, model: { id: modelNode.id, kind: 'erd', title: modelTitle, entities: summary.entities, issues } };
+    },
+  }, {
+    name: 'canvas_query_data_source',
+    description: 'Run ONE read-only SQL query against a connected database and put the real result on the canvas as a Table, Chart, KPI or Dataset. Use this for any question about live data rather than an uploaded file. Only SELECT (and WITH … SELECT) is accepted — a canvas data source cannot write. Materializing as "dataset" is the right choice when further analysis will follow, because every later canvas_query_dataset call then runs over the returned rows without another round trip.',
+    parameters: {
+      type: 'object', required: ['sql'], additionalProperties: false,
+      properties: {
+        sourceId: { type: 'string', description: 'Connection id from canvas_list_data_sources. Omit when exactly one is connected.' },
+        name: { type: 'string', description: 'Connection name, as an alternative to sourceId.' },
+        sql: { type: 'string', description: 'A single SELECT statement. A LIMIT is added when you omit one.' },
+        limit: { type: 'number', description: 'Row ceiling, up to 500.' },
+        materializeAs: { type: 'string', enum: ['none', 'dataset', 'table', 'chart', 'kpi'], description: 'Defaults to table.' },
+        title: { type: 'string' },
+      },
+    },
+    mutates: (raw: unknown) => (raw as { materializeAs?: unknown })?.materializeAs !== 'none',
+    run: async (raw: unknown) => {
+      const args = raw as { sourceId?: string; name?: string; sql?: string; limit?: number; materializeAs?: string; title?: string };
+      const { sources } = await dataSourceApi.list().catch(() => ({ sources: [] as DataSourceSummary[] }));
+      const resolved = resolveDataSource(sources, { id: args.sourceId ?? null, name: args.name ?? null });
+      if (!resolved.ok) return { error: `${resolved.error} Connect one in Integrations.` };
+      if (!resolved.source.canQuery) return { error: `${resolved.source.providerLabel} does not accept SQL from a canvas.` };
+
+      let result: Awaited<ReturnType<typeof dataSourceApi.query>>;
+      try {
+        result = await dataSourceApi.query(resolved.source.id, String(args.sql ?? ''), args.limit);
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'That query could not be run.' };
+      }
+      const payload = {
+        ok: true, source: result.source, sql: result.sql,
+        columns: result.columns, rows: result.rows.slice(0, 20),
+        rowCount: result.rowCount, truncated: result.truncated,
+        readFromLiveSource: true,
+      };
+      const materializeAs = ['dataset', 'table', 'chart', 'kpi'].includes(String(args.materializeAs ?? 'table'))
+        ? String(args.materializeAs ?? 'table') as 'dataset' | 'table' | 'chart' | 'kpi'
+        : null;
+      if (!materializeAs) return payload;
+      if (!canEdit) return { ...payload, error: 'The current session role cannot edit this canvas' };
+      if (!result.rows.length) return { ...payload, error: 'That query returned no rows, so nothing was added to the canvas.' };
+
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...stagedNodes];
+      const fetchedAt = new Date().toISOString();
+      const title = (args.title || `${result.source.name} query`).trim().slice(0, 160);
+      const bound = all.find((node) => node.data.kind === 'datasource' && node.data.connectionId === result.source.id);
+      const provenance = lineagePatch(bound ? [bound.id] : [], { engine: 'sql', sql: result.sql, rowsOut: result.rowCount }, { columns: result.columns, producedAt: fetchedAt });
+      const numeric = result.columns.find((column) => result.rows.some((row) => typeof row[column] === 'number'));
+
+      const fields: Record<string, unknown> = materializeAs === 'chart'
+        ? {
+          title, chartTitle: title, status: 'Live',
+          xAxisLabel: result.columns[0] ?? '', yAxisLabel: numeric ?? '',
+          chartLabels: result.rows.map((row) => String(row[result.columns[0] ?? ''] ?? '')),
+          chartValues: result.rows.map((row) => Number(row[numeric ?? ''] ?? 0)),
+          summary: `${result.rowCount.toLocaleString()} rows from ${result.source.name}.`,
+        }
+        : materializeAs === 'kpi'
+          ? {
+            title, value: String(Object.values(result.rows[0] ?? {})[0] ?? ''), status: 'Live',
+            summary: `Read from ${result.source.name}.`,
+          }
+          : {
+            title, columns: result.columns, rows: result.rows, rowCount: result.rowCount,
+            sampleRows: result.rows.slice(0, 8),
+            status: `${result.rowCount.toLocaleString()} rows`,
+            summary: `${result.rowCount.toLocaleString()} rows from ${result.source.name}.`,
+            ...(materializeAs === 'dataset' ? { profile: profileTabular({ columns: result.columns, rows: result.rows }) } : {}),
+          };
+
+      const node = newNode(materializeAs, nextCanvasObjectPosition(all, bound ? { x: bound.position.x + 460, y: bound.position.y + 300 } : {}, typeof window !== 'undefined' && window.innerWidth <= 760, materializeAs));
+      node.data = { ...node.data, ...sanitizeCreationObjectPatch(materializeAs, { ...fields, ...provenance, fetchedAt }) };
+      if (materializeAs === 'table' || materializeAs === 'dataset') node.style = { width: 720, height: 460 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add ${materializeAs} “${title}”`, node });
+      if (bound) {
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Queried ${bound.data.title}`, edge: { id: crypto.randomUUID(), source: bound.id, target: node.id, type: 'smoothstep', animated: true, label: 'query', data: { connectionKind: 'data' } } });
+      }
+      return { ...payload, proposed: true, materialized: { id: node.id, kind: materializeAs, title } };
     },
   }, {
     /**
@@ -3900,7 +5626,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     },
   }, {
     name: 'canvas_add_object',
-    description: `Create a fully authored visual object. For an actual image, NEVER use this tool; use canvas_add_image so pixels are found or generated and attached immediately. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot. Never send placeholder or schema-probe fields. For kind="course", author the curriculum in the FIRST call as fields.course = ${COURSE_AUTHORING_CONTRACT}. Never author rows or chart values by hand from an imported dataset — use canvas_query_dataset so the artifact holds real computed values.`,
+    description: `Create a fully authored visual object. For an actual image, NEVER use this tool; use canvas_add_image so pixels are found or generated and attached immediately. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot. Never send placeholder or schema-probe fields. For kind="course", author the curriculum in the FIRST call as fields.course = ${COURSE_AUTHORING_CONTRACT}. Never author rows or chart values by hand from an imported dataset — use canvas_query_dataset so the artifact holds real computed values. For kind="spreadsheet", a derived column is a FORMULA and never a column of typed numbers: ${sheetFormulaGuidance(FORMULA_FUNCTIONS)} ${approvalGuidance()}`,
     parameters: {
       type: 'object', required: ['kind'], additionalProperties: false,
       properties: {
@@ -4075,8 +5801,29 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         };
       }
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      // ── The approval gate ────────────────────────────────────────────────────
+      //
+      // Two reviews found the same hole from opposite sides: outbound acts (send,
+      // publish, share) were direct-fire with no reviewer, and attested acts (approve a
+      // budget, authorise a bill, issue an invoice) had no record of who stood behind
+      // the figure. Both are "an act that needs authority before it takes effect", so
+      // both go through ONE gate rather than two — see `canvasApprovalGate.ts`.
+      //
+      // Evaluated HERE, at the single seam every model-invoked action passes through,
+      // rather than per kind: a gate a caller can forget to consult is not a gate.
+      const gate = evaluateGate({
+        kind: target.data.kind,
+        action: args.action,
+        ...(typeof target.data.approvalMode === 'string' ? { mode: target.data.approvalMode as ApprovalMode } : {}),
+        // The model is acting, so it is the actor. It is deliberately NOT allowed to
+        // satisfy its own `required` gate — an approval an agent granted to an agent is
+        // not review, it is a second copy of the same judgement.
+        actor: { kind: 'brain', ref: 'brain', name: 'Brain' },
+        provenance: readProvenance(target.data as Record<string, unknown>),
+      });
+      if (!gate.allowed) return { error: gate.message, objectId: target.id, action: args.action, awaitingApproval: true };
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.action', label: `${args.action} ${target.data.title}`, objectId: target.id, action: args.action });
-      return { ok: true, proposed: true, objectId: target.id, action: args.action };
+      return { ok: true, proposed: true, objectId: target.id, action: args.action, approval: gate.reason };
     },
   }, {
     name: 'canvas_connect_objects',
@@ -4128,8 +5875,471 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // made "connect my email" fail silently: the model planned around
     // `canvas_add_inbox`, the gateway deleted it before dispatch, and the turn ended
     // with prose and zero tool calls. Both sides read ONE contract.
+  }, {
+    /**
+     * "I'm trying to create automation tests, can you create them for my website."
+     *
+     * The whole answer, in one call and with no account: a plan bound to the target,
+     * one runnable case per route, the generated Playwright source on each, and the
+     * membership edges that make them a suite. Route discovery is deterministic —
+     * pass the page HTML from a web fetch and the same links produce the same plan.
+     */
+    name: 'canvas_create_test_plan',
+    description: 'Create automation tests for a website. Builds a test plan bound to a target URL plus one runnable Playwright test case per route, each with real spec source the user can download and run. Use this for any request to write, generate or set up tests, e2e tests, automated QA or regression checks for a site. Pass `html` from a fetched page to discover the routes automatically, or pass `routes` when the user named them. Pass `scenarios` for journeys the user described in words ("a visitor requests a quote") — those become cases with their own steps.',
+    parameters: {
+      type: 'object', required: ['targetUrl'], additionalProperties: false,
+      properties: {
+        targetUrl: { type: 'string', description: 'The site under test — "acme.com" or "https://acme.com/app".' },
+        name: { type: 'string', description: 'What the plan is called. Defaults to the target.' },
+        routes: { type: 'array', items: { type: 'string' }, description: 'Absolute paths to cover, e.g. ["/", "/pricing"]. "/" is always included.' },
+        html: { type: 'string', description: 'HTML of the fetched target page. Same-site page links become routes; assets, /api and auth pages are excluded.' },
+        scenarios: {
+          type: 'array',
+          description: 'Named journeys with their own steps. A scenario with no steps becomes a smoke case for its route.',
+          items: {
+            type: 'object', required: ['title'], additionalProperties: false,
+            properties: {
+              title: { type: 'string' },
+              intent: { type: 'string', description: 'What this case proves.' },
+              route: { type: 'string' },
+              priority: { type: 'string', enum: ['critical', 'high', 'normal'] },
+              steps: {
+                type: 'array',
+                items: {
+                  type: 'object', required: ['action'], additionalProperties: false,
+                  properties: {
+                    action: { type: 'string', enum: [...QA_STEP_ACTIONS] },
+                    route: { type: 'string', description: 'For goto: the path to navigate to.' },
+                    selector: { type: 'string', description: 'Resilient first: "testid=submit", "role=button[name=Save]", "label=Email", "text=Thanks", or a CSS selector.' },
+                    value: { type: 'string', description: 'For fill: a synthetic value. For press: the key.' },
+                    assertion: { type: 'string', description: 'For expect: what is being proven, in one phrase.' },
+                  },
+                },
+              },
+            },
+          },
+        },
+        exitCriteria: {
+          type: 'object', additionalProperties: false,
+          description: 'The release gate this plan is read as. Omit unless the user asked for one.',
+          properties: {
+            minPassRate: { type: 'number', description: 'Percentage of cases that must pass, 0-100.' },
+            maxOpenDefects: { type: 'number' },
+            maxSevereDefects: { type: 'number' },
+            requireAccessibility: { type: 'boolean' },
+            signOffs: { type: 'array', items: { type: 'string' } },
+          },
+        },
+      },
+    },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { targetUrl?: string; name?: string; routes?: string[]; html?: string; scenarios?: BuildPlanInput['scenarios']; exitCriteria?: unknown };
+      const target = typeof args.targetUrl === 'string' ? testTargetUrl(args.targetUrl) : null;
+      if (!target) return { error: 'Pass the site under test as a URL or host, e.g. "acme.com".' };
+      const discovered = typeof args.html === 'string' && args.html ? routesFromHtml(args.html, target) : [];
+      const built = buildTestPlan({
+        name: typeof args.name === 'string' && args.name.trim() ? args.name.trim().slice(0, 120) : target,
+        targetUrl: target,
+        routes: [...(args.routes ?? []), ...discovered],
+        ...(args.scenarios ? { scenarios: args.scenarios } : {}),
+        exitCriteria: normalizeExitCriteria(args.exitCriteria),
+      });
+      if (!built.cases.length) return { error: 'Nothing to test — pass routes, page html, or at least one scenario.' };
+
+      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const staged = () => proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const planNode = newNode('testPlan', nextCanvasObjectPosition([...nodes, ...staged()], {}, isNarrow, 'testPlan'));
+      planNode.data = {
+        ...planNode.data,
+        ...sanitizeCreationObjectPatch('testPlan', {
+          title: built.plan.title, targetUrl: built.plan.targetUrl, routes: built.plan.routes,
+          exitCriteria: built.plan.exitCriteria, summary: built.plan.summary, planSlug: built.plan.slug,
+          status: built.plan.status,
+        }),
+        caseCount: built.cases.length,
+      };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add test plan “${built.plan.title}”`, node: planNode });
+
+      for (const [index, testCase] of built.cases.entries()) {
+        const caseNode = newNode('testCase', nextCanvasObjectPosition(
+          [...nodes, ...staged()],
+          { x: planNode.position.x + 520, y: planNode.position.y + index * 260 },
+          isNarrow, 'testCase',
+        ));
+        caseNode.data = {
+          ...caseNode.data,
+          ...sanitizeCreationObjectPatch('testCase', {
+            title: testCase.title, steps: testCase.steps, spec: testCase.spec, priority: testCase.priority,
+            caseId: testCase.id, targetUrl: built.plan.targetUrl, status: 'Not run',
+            ...(testCase.route ? { route: testCase.route } : {}),
+            ...(testCase.intent ? { intent: testCase.intent } : {}),
+          }),
+        };
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add test case “${testCase.title}”`, node: caseNode });
+        proposalBuffer.current.push({
+          id: crypto.randomUUID(), type: 'connection.add', label: `Case of ${built.plan.title}`,
+          edge: { id: crypto.randomUUID(), source: planNode.id, target: caseNode.id, type: 'smoothstep', label: 'covers', data: { connectionKind: 'membership' } },
+        });
+      }
+
+      return {
+        ok: true, proposed: true,
+        object: { id: planNode.id, kind: 'testPlan', title: built.plan.title, created: true },
+        targetUrl: built.plan.targetUrl,
+        routes: built.plan.routes,
+        cases: built.cases.map((testCase) => ({ id: testCase.id, title: testCase.title, steps: testCase.steps.length, priority: testCase.priority })),
+        // The model must tell the user what it actually made, and what it did not:
+        // these run against the site, they are not connected to CI by this call.
+        note: 'Each case carries runnable Playwright source. The user can download the .spec.ts files from the case cards. Connecting them to a CI pipeline is a separate step.',
+      };
+    },
+  }, {
+    /**
+     * Coverage. Computed over `verifies` edges ONLY — see the connection kind's note
+     * in the contract for why a `reference` edge must not count.
+     */
+    name: 'canvas_test_coverage',
+    description: 'Report what on this canvas is proven by a test and what is not. Reads the "verifies" connections between test cases/plans and the work they cover, and names the requirements, tasks and builds with no test at all, plus any test case that verifies nothing. Use this to answer "what is untested", "what breaks if this fails", or before a release. Connect a case to what it proves with canvas_connect_objects using kind "verifies".',
+    parameters: { type: 'object', additionalProperties: false, properties: {} },
+    run: () => {
+      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...staged];
+      const stagedEdges = proposalBuffer.current.flatMap((change) => change.type === 'connection.add' ? [change.edge] : []);
+      const report = coverageReport(
+        all.map((node) => ({ id: node.id, kind: node.data.kind, title: node.data.title })),
+        [...edges, ...stagedEdges].map((edge) => ({
+          source: edge.source, target: edge.target,
+          connectionKind: typeof (edge.data as { connectionKind?: unknown } | undefined)?.connectionKind === 'string'
+            ? String((edge.data as { connectionKind?: unknown }).connectionKind) : undefined,
+        })),
+      );
+      return { ok: true, ...report };
+    },
+  }, {
+    /**
+     * The defect object, with the journal attached.
+     *
+     * `journal` is the canvas action record — what the person was actually DOING —
+     * and attaching it here is the reason it is persisted at all: a bug report whose
+     * repro is "it did this three steps ago" is unactionable, and by the time anyone
+     * files one the steps are gone.
+     */
+    name: 'canvas_record_defect',
+    description: 'File a defect on the canvas: what was expected, what happened, how to see it again, and how bad it is. Use this whenever the user reports something broken, or a test case fails. Pass caseObjectId to inherit that case\'s steps as the repro. The recent canvas action journal is attached automatically so the report carries what was actually being done.',
+    parameters: {
+      type: 'object', required: ['title', 'expected', 'actual'], additionalProperties: false,
+      properties: {
+        title: { type: 'string', description: 'The defect in one line, as a symptom rather than a guess at the cause.' },
+        expected: { type: 'string' },
+        actual: { type: 'string' },
+        severity: { type: 'string', enum: [...QA_SEVERITIES] },
+        defectType: { type: 'string', enum: [...QA_FINDING_TYPES] },
+        route: { type: 'string' },
+        targetUrl: { type: 'string' },
+        caseObjectId: { type: 'string', description: 'A testCase object on this canvas whose steps reproduce it.' },
+        reproSteps: {
+          type: 'array', description: 'Repro steps, when no case covers it.',
+          items: {
+            type: 'object', required: ['action'], additionalProperties: false,
+            properties: {
+              action: { type: 'string', enum: [...QA_STEP_ACTIONS] },
+              route: { type: 'string' }, selector: { type: 'string' }, value: { type: 'string' }, assertion: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as {
+        title?: string; expected?: string; actual?: string; severity?: QaFindingSeverity;
+        defectType?: QaFindingType; route?: string; targetUrl?: string; caseObjectId?: string; reproSteps?: unknown;
+      };
+      const title = typeof args.title === 'string' ? args.title.trim().slice(0, 160) : '';
+      const expected = typeof args.expected === 'string' ? args.expected.trim().slice(0, 2_000) : '';
+      const actual = typeof args.actual === 'string' ? args.actual.trim().slice(0, 2_000) : '';
+      if (!title || !expected || !actual) return { error: 'A defect needs a title, what was expected, and what actually happened.' };
+
+      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...staged];
+      const source = args.caseObjectId ? all.find((node) => node.id === args.caseObjectId && node.data.kind === 'testCase') : undefined;
+      const steps = normalizeQaSteps(args.reproSteps ?? source?.data.steps ?? []);
+      const severity = QA_SEVERITIES.includes(args.severity as QaFindingSeverity) ? args.severity as QaFindingSeverity : 'medium';
+      const defectType = QA_FINDING_TYPES.includes(args.defectType as QaFindingType) ? args.defectType as QaFindingType : 'assertion';
+      const route = typeof args.route === 'string' ? args.route.slice(0, 200) : String(source?.data.route ?? '');
+      const targetUrl = typeof args.targetUrl === 'string' ? args.targetUrl.slice(0, 400) : String(source?.data.targetUrl ?? '');
+
+      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const node = newNode('defect', nextCanvasObjectPosition(
+        all,
+        source ? { x: source.position.x + 520, y: source.position.y + 120 } : {},
+        isNarrow, 'defect',
+      ));
+      node.data = {
+        ...node.data,
+        ...sanitizeCreationObjectPatch('defect', {
+          title, expected, actual, severity, defectType, reproSteps: steps,
+          ...(route ? { route } : {}), ...(targetUrl ? { targetUrl } : {}),
+          ...(source ? { caseId: String(source.data.caseId ?? source.id) } : {}),
+          fingerprint: findingFingerprint({ type: defectType, route: route || null, selector: null, message: actual }),
+          journal: recentJournalEvidence(),
+          status: 'open',
+        }),
+      };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `File defect “${title}”`, node });
+      if (source) {
+        proposalBuffer.current.push({
+          id: crypto.randomUUID(), type: 'connection.add', label: `Found by ${source.data.title}`,
+          edge: { id: crypto.randomUUID(), source: source.id, target: node.id, type: 'smoothstep', label: 'found', data: { connectionKind: 'reference' } },
+        });
+      }
+      return { ok: true, proposed: true, object: { id: node.id, kind: 'defect', title, created: true }, severity, reproSteps: steps.length };
+    },
+  }, {
+    /**
+     * The accessibility / performance verdict, on the board beside the thing being
+     * built. Static by construction — see `lib/canvasPageAudit` for what that can and
+     * cannot decide, which the summary states rather than implies.
+     */
+    name: 'canvas_audit_page',
+    description: 'Audit a web page for accessibility (WCAG 2.2) and performance from its HTML, and put the scored verdict on the canvas. Fetch the page first, then pass its html here. Checks language, title, image alt text, link and button names, form labels, heading order, zoom blocking, frame titles, focus order, landmarks, render-blocking scripts, image dimensions and page weight. It reads source, so it cannot judge colour contrast or anything that only exists after scripts run — the result says so.',
+    parameters: {
+      type: 'object', required: ['html', 'url'], additionalProperties: false,
+      properties: {
+        html: { type: 'string', description: 'The fetched page HTML.' },
+        url: { type: 'string', description: 'The page that HTML came from.' },
+      },
+    },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { html?: string; url?: string };
+      const html = typeof args.html === 'string' ? args.html : '';
+      const url = typeof args.url === 'string' ? args.url.trim().slice(0, 400) : '';
+      if (html.trim().length < 40) return { error: 'Pass the fetched page HTML — fetch the page first, then audit it.' };
+      const audit = auditPageHtml(html, url);
+
+      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const node = newNode('diagnostics', nextCanvasObjectPosition([...nodes, ...staged], {}, isNarrow, 'diagnostics'));
+      const failed = audit.findings.filter((item) => item.count > 0);
+      node.data = {
+        ...node.data,
+        ...sanitizeCreationObjectPatch('diagnostics', {
+          title: `Accessibility & performance — ${url || 'page'}`,
+          auditFindings: audit.findings, auditScore: audit.score, auditPassed: audit.passed, auditTarget: url,
+          status: audit.passed ? `${audit.score}/100` : `${failed.length} issue(s)`,
+          summary: `${failed.length} of ${audit.findings.length} checks failed (${audit.counts.accessibility} accessibility, ${audit.counts.performance} performance). Static source audit: contrast and script-rendered state are not covered.`,
+        }),
+      };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Audit ${url || 'page'}`, node });
+      return {
+        ok: true, proposed: true,
+        object: { id: node.id, kind: 'diagnostics', title: String(node.data.title), created: true },
+        score: audit.score, passed: audit.passed, counts: audit.counts,
+        failed: failed.map((item) => ({ rule: item.rule, category: item.category, severity: item.severity, count: item.count, wcag: item.wcag })),
+      };
+    },
+  }, {
+    /**
+     * Test data. The generator's own fill value is the literal `qa-probe`, which
+     * exercises no validation rule any product has — this produces the rows that do.
+     */
+    name: 'canvas_generate_test_data',
+    description: 'Generate test data from a declared data contract: a valid control group, the exact boundary values (min, max, first/last allowed, longest string), and the rows that must be REJECTED (empty required fields, out-of-range numbers, wrong types, disallowed values, duplicate keys) plus the string shapes naive validation breaks on. Each row is labelled with the edge it exercises. Use this before testing a form, an import or an API. Pass objectId to read the contract already declared on a dataset.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'A dataset/table object carrying a declared contract. Omit when the canvas holds exactly one.' },
+        validRows: { type: 'number', description: 'Size of the valid control group. Default 5.' },
+        includeHostileStrings: { type: 'boolean', description: 'Add quotes, markup, unicode, over-length and traversal strings to every free-text column. Default true.' },
+        includeBoundary: { type: 'boolean' },
+        includeInvalid: { type: 'boolean' },
+      },
+    },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; validRows?: number; includeHostileStrings?: boolean; includeBoundary?: boolean; includeInvalid?: boolean };
+      const target = resolveTabularTarget(args.objectId);
+      if ('error' in target) return target;
+      const { node: dataset } = target;
+      const contract = normalizeDataContract(dataset.data.dataContract);
+      if (!contract?.columns.length) {
+        return { error: `${dataset.data.title} has no declared contract to generate against. Declare one with canvas_set_data_contract first — the contract is what says which values are valid, so it is also what says which are not.` };
+      }
+      const fixture = generateFixture(contract, {
+        validRows: Number(args.validRows) || 5,
+        includeHostileStrings: args.includeHostileStrings !== false,
+        ...(args.includeBoundary === false ? { includeBoundary: false } : {}),
+        ...(args.includeInvalid === false ? { includeInvalid: false } : {}),
+      });
+
+      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const node = newNode('dataset', nextCanvasObjectPosition(
+        [...nodes, ...staged],
+        { x: dataset.position.x + 460, y: dataset.position.y + 320 },
+        isNarrow, 'dataset',
+      ));
+      node.data = {
+        ...node.data,
+        ...sanitizeCreationObjectPatch('dataset', {
+          title: `${dataset.data.title} fixtures`,
+          columns: fixture.columns, rows: fixture.rows, rowCount: fixture.rows.length,
+          fixtureCases: fixture.cases.map((item) => ({ kind: item.kind, rule: item.rule, ...(item.column ? { column: item.column } : {}) })),
+          status: `${fixture.rows.length} rows`,
+          summary: `${fixture.counts.valid} valid, ${fixture.counts.boundary} boundary, ${fixture.counts.invalid} must-reject rows generated from the declared contract.`,
+        }),
+      };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Generate fixtures for ${dataset.data.title}`, node });
+      proposalBuffer.current.push({
+        id: crypto.randomUUID(), type: 'connection.add', label: `Fixtures for ${dataset.data.title}`,
+        edge: { id: crypto.randomUUID(), source: dataset.id, target: node.id, type: 'smoothstep', label: 'fixtures', data: { connectionKind: 'data' } },
+      });
+      return { ok: true, proposed: true, object: { id: node.id, kind: 'dataset', title: String(node.data.title), created: true }, counts: fixture.counts };
+    },
+  }, {
+    /**
+     * The tenant half: publish the board's cases into the QA library, and read the
+     * runs back.
+     *
+     * GUEST-GATED rather than absent. A guest asking to "hook these up to CI" must be
+     * told the real reason — an account — instead of being handed a model that was
+     * never given the tool and therefore improvises a limitation the product does not
+     * have. See the guest-gated set in the contract.
+     */
+    name: 'canvas_publish_tests',
+    description: 'Publish this canvas\'s test cases to the workspace QA library so they can run on a schedule and in CI, and read the latest run results back onto the board. Each case becomes a stored flow with a persona-aware generated spec; any failures come back as defect objects. Use this after canvas_create_test_plan when the user wants the tests to actually run rather than only exist.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        planObjectId: { type: 'string', description: 'The testPlan to publish. Omit when the canvas holds exactly one.' },
+        projectId: { type: 'number', description: 'Canonical project to file the tests under. Omit to use the project on this canvas.' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      if (!getStoredTenantToken()) {
+        requireAccount('qa', t('gateQaTitle'), t('gateQaBody'));
+        return accountGateResult('canvas_publish_tests', CANVAS_QA_ACCOUNT_GATE);
+      }
+      const args = raw as { planObjectId?: string; projectId?: number };
+      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...staged];
+      const plans = all.filter((node) => node.data.kind === 'testPlan');
+      const plan = args.planObjectId ? plans.find((node) => node.id === args.planObjectId) : plans.length === 1 ? plans[0] : undefined;
+      if (!plan) return { error: plans.length ? 'Name the testPlan to publish with planObjectId.' : 'There is no test plan on this canvas yet — create one first.' };
+
+      const stagedEdges = proposalBuffer.current.flatMap((change) => change.type === 'connection.add' ? [change.edge] : []);
+      const memberIds = new Set([...edges, ...stagedEdges].filter((edge) => edge.source === plan.id).map((edge) => edge.target));
+      const cases = all.filter((node) => node.data.kind === 'testCase' && (memberIds.has(node.id) || memberIds.size === 0));
+      if (!cases.length) return { error: 'That plan has no test cases connected to it.' };
+
+      const projectNode = all.find((node) => node.data.kind === 'project' && canvasProjectId(node.data) != null);
+      const projectId = Number.isInteger(args.projectId) ? Number(args.projectId) : projectNode ? canvasProjectId(projectNode.data) ?? undefined : undefined;
+      const targetUrl = String(plan.data.targetUrl ?? '');
+
+      const published: Array<{ objectId: string; testId: string; title: string; model: string }> = [];
+      const failures: Array<{ title: string; reason: string }> = [];
+      for (const testCase of cases.slice(0, 25)) {
+        const steps = normalizeQaSteps(testCase.data.steps);
+        if (!steps.length) { failures.push({ title: String(testCase.data.title), reason: 'no steps' }); continue; }
+        try {
+          const { flow } = await qaApi.createFlow({
+            name: String(testCase.data.title).slice(0, 160),
+            steps,
+            ...(typeof testCase.data.route === 'string' && testCase.data.route ? { startRoute: testCase.data.route } : {}),
+            ...(typeof testCase.data.intent === 'string' && testCase.data.intent ? { description: testCase.data.intent } : {}),
+            ...(projectId != null ? { projectId } : {}),
+          });
+          const generated = await qaApi.generateTest(flow.id);
+          published.push({ objectId: testCase.id, testId: generated.test.id, title: String(testCase.data.title), model: generated.usedModel });
+          proposalBuffer.current.push({
+            id: crypto.randomUUID(), type: 'object.update', label: `Publish ${testCase.data.title}`, objectId: testCase.id,
+            patch: sanitizeCreationObjectPatch('testCase', {
+              caseId: generated.test.id, status: 'Published',
+              ...(generated.test.spec ? { spec: generated.test.spec } : {}),
+            }),
+          });
+        } catch (error) {
+          failures.push({ title: String(testCase.data.title), reason: error instanceof Error ? error.message : 'publish failed' });
+        }
+      }
+      if (!published.length) return { error: `No case could be published: ${failures.map((failure) => `${failure.title} (${failure.reason})`).join('; ')}` };
+
+      // Pull the other direction: whatever CI has already reported for these tests.
+      const byTestId = new Map(published.map((entry) => [entry.testId, entry]));
+      const runs = await qaApi.fetchRuns(projectId ?? null).then(({ runs: rows }) => rows.filter((run) => run.testId && byTestId.has(run.testId))).catch(() => []);
+      const results = runs.slice(0, 50).map((run) => ({
+        caseId: run.testId ?? '',
+        title: run.testName ?? byTestId.get(run.testId ?? '')?.title ?? '',
+        status: run.status === 'passed' ? 'passed' as const : run.status === 'skipped' ? 'skipped' as const : run.status === 'error' ? 'error' as const : 'failed' as const,
+        ...(run.durationMs != null ? { durationMs: run.durationMs } : {}),
+        ...(run.errorMessage ? { errorMessage: run.errorMessage } : {}),
+      }));
+
+      const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const runNode = newNode('testRun', nextCanvasObjectPosition(
+        [...all, ...proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : [])],
+        { x: plan.position.x, y: plan.position.y + 340 },
+        isNarrow, 'testRun',
+      ));
+      const summary = summarizeRun(results);
+      runNode.data = {
+        ...runNode.data,
+        ...sanitizeCreationObjectPatch('testRun', {
+          title: `${plan.data.title} — library`,
+          results, targetUrl, planObjectId: plan.id,
+          status: results.length ? `${summary.passRate}% passing` : `${published.length} published`,
+          summary: results.length
+            ? `${summary.passed} passed, ${summary.failed} failed, ${summary.errored} errored across ${results.length} reported run(s).`
+            : `${published.length} case(s) published to the QA library. No CI run has reported against them yet.`,
+        }),
+      };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add test run for ${plan.data.title}`, node: runNode });
+      proposalBuffer.current.push({
+        id: crypto.randomUUID(), type: 'connection.add', label: `Run of ${plan.data.title}`,
+        edge: { id: crypto.randomUUID(), source: plan.id, target: runNode.id, type: 'smoothstep', label: 'run', data: { connectionKind: 'delivery' } },
+      });
+
+      // Every failure becomes a defect, fingerprinted the same way an Agentic Tester
+      // finding is — so the same break reported twice is one defect.
+      for (const [index, result] of results.filter((item) => item.status === 'failed' || item.status === 'error').slice(0, 10).entries()) {
+        const defectNode = newNode('defect', nextCanvasObjectPosition(
+          [...all, ...proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : [])],
+          { x: runNode.position.x + 520, y: runNode.position.y + index * 240 },
+          isNarrow, 'defect',
+        ));
+        defectNode.data = {
+          ...defectNode.data,
+          ...sanitizeCreationObjectPatch('defect', {
+            ...defectFromResult(result, { targetUrl, caseTitle: result.title }),
+            journal: recentJournalEvidence(),
+          }),
+        };
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `File defect “${result.title}”`, node: defectNode });
+        proposalBuffer.current.push({
+          id: crypto.randomUUID(), type: 'connection.add', label: `Found by ${plan.data.title}`,
+          edge: { id: crypto.randomUUID(), source: runNode.id, target: defectNode.id, type: 'smoothstep', label: 'found', data: { connectionKind: 'reference' } },
+        });
+      }
+
+      return {
+        ok: true, proposed: true,
+        object: { id: runNode.id, kind: 'testRun', title: String(runNode.data.title), created: true },
+        published: published.map((entry) => ({ title: entry.title, testId: entry.testId, generator: entry.model })),
+        ...(failures.length ? { failures } : {}),
+        reportedRuns: results.length,
+        ...(projectId == null ? { note: 'Published without a project. Add a project object to the canvas to file these under it, which is what gives them a run target and a persona.' } : {}),
+      };
+    },
   }].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [canEdit, convertObjectToDrawio, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId]);
+  [canEdit, convertObjectToDrawio, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -5160,7 +7370,28 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // document, a slide per page for a deck, the drawing for anything drawn.
         if (!printCanvasObject(target.data, canvasObjectSvg(target.data, nodeId))) throw new Error(t('printUnavailable'));
       }
-      if (action === 'json') downloadJson({ kind: target.data.kind, title: target.data.title, data: target.data }, fileName);
+      if (action === 'spec') {
+        // The runnable file the whole "write me tests" request was for. A plan
+        // exports every case connected to it as ONE spec file, because that is how
+        // someone actually takes a suite away — not one download per card.
+        const source = canvasSpecSource(target, nodes, edges);
+        if (!source) throw new Error(t('noGeneratedSpec'));
+        downloadText(source, fileName, EXPORT_MIME.spec);
+      }
+      if (action === 'json') {
+        // A test plan's JSON is its RELEASE EVIDENCE, not a dump of its node data —
+        // the exact shape `qa-e2e/src/canvas-release-audit.ts` audits. That is what
+        // turns the gate from "whatever someone typed into a file" into the runs and
+        // defects that are actually on the board. Every other kind exports itself.
+        const evidence = target.data.kind === 'testPlan'
+          ? releaseEvidence(
+            { title: target.data.title, targetUrl: String(target.data.targetUrl ?? ''), exitCriteria: normalizeExitCriteria(target.data.exitCriteria) },
+            releaseGateEvidence(target, nodes, edges),
+            new Date().toISOString(),
+          )
+          : { kind: target.data.kind, title: target.data.title, data: target.data };
+        downloadJson(evidence, fileName);
+      }
       if (action === 'scorm') downloadBlob(new Blob([buildScormPackage(courseFromNode(target.data), target.data.title)], { type: EXPORT_MIME.scorm }), fileName);
 
       const delivered: CreationDeliverable = {
@@ -5206,6 +7437,40 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (target) void exportArtifact(file.nodeId, defaultExportAction(target.data.kind)).then(setNotice);
   }, [exportArtifact, nodes, t]);
 
+  /**
+   * Evaluate a test plan's exit criteria against the evidence ON THE BOARD.
+   *
+   * ── WHY THIS IS DERIVED AND NEVER AUTHORED ───────────────────────────────────
+   * The Creation Canvas release gate was a hand-edited `canvas-release-evidence.json`
+   * whose only real validation was that the `REPLACE_` placeholder had been deleted —
+   * so it certified whatever someone typed. The same criteria are worth gating on;
+   * what was wrong was where the numbers came from.
+   *
+   * So `gateVerdict` is absent from `MUTABLE_FIELDS.testPlan` (a model that could
+   * write its own verdict could report a release green that nothing ran), and this is
+   * its only writer. The evidence itself comes from `releaseGateEvidence`, which the
+   * JSON export also reads — one definition of "an open defect", two consumers.
+   */
+  const evaluateReleaseGate = useCallback((planId: string) => {
+    const plan = nodes.find((node) => node.id === planId && node.data.kind === 'testPlan');
+    if (!plan) return;
+    const evidence = releaseGateEvidence(plan, nodes, edges);
+    const connected = new Set(edges.filter((edge) => edge.source === plan.id).map((edge) => edge.target));
+    const verdict = planGateVerdict(normalizeExitCriteria(plan.data.exitCriteria), evidence);
+    setNodes((current) => current.map((node) => node.id === plan.id
+      ? {
+        ...node,
+        data: {
+          ...node.data,
+          gateVerdict: verdict,
+          passRate: evidence.runs[0]?.passRate ?? null,
+          caseCount: nodes.filter((candidate) => candidate.data.kind === 'testCase' && connected.has(candidate.id)).length,
+        },
+      }
+      : node));
+    setNotice(t('noticeGateEvaluated', { score: verdict.score }));
+  }, [edges, nodes, setNodes, t]);
+
   useEffect(() => {
     const pending = pendingBrainActions[0];
     if (!pending) return;
@@ -5233,6 +7498,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else if (target.data.kind === 'standup' && pending.action === 'start') startStandup();
     else if (target.data.kind === 'evermind' && pending.action === 'train') openEvermindTraining();
     else if (target.data.kind === 'evermind' && pending.action === 'evaluate') evaluateEvermind(target.id);
+    else if (target.data.kind === 'testPlan' && pending.action === 'gate') evaluateReleaseGate(target.id);
     else if (pending.action === 'export') void exportArtifact(target.id, defaultExportAction(target.data.kind)).then(setNotice);
     else if (target.data.kind === 'slides' && pending.action === 'present') setPresentMode(true);
     else if (target.data.kind === 'evermind' && pending.action === 'publish') {
@@ -5243,7 +7509,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('noticeNoDeliveryAdapter', { action: pending.action, kind: creationObjectDefinition(target.data.kind).label }));
     }
     finish();
-  }, [compareProjects, compileWorkflow, deliverMockup, evaluateEvermind, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
+  }, [compareProjects, compileWorkflow, deliverMockup, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
@@ -5664,7 +7930,23 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }} />
   </div>;
 
-  const composer = !presentMode && <div ref={composerDockRef} className={styles.composerDock} data-tour="creation-brain-dock">
+  /**
+   * `data-testid` on the composer, the board, the palette and every node.
+   *
+   * ── WHY THESE EXIST ──────────────────────────────────────────────────────────
+   * The canvas shipped with ZERO test ids, so `qa-e2e/tests/creation-canvas.spec.ts`
+   * selected by accessible name — `/session title/i`, `/ask brain/i`. Two silent
+   * consequences: the suite could not run in any of the four non-English locales the
+   * product ships, and a copy edit turned it red with no behaviour change (which had
+   * already happened for "Create free account" vs "Create a free account"). The
+   * Agentic Tester has the same problem one layer down: `QaHeatZone.selector` wants a
+   * stable selector for an element-level hot zone, and the product's most important
+   * surface offered none.
+   *
+   * They are additive: every aria-label stays, because a test id is for a test and an
+   * accessible name is for a person.
+   */
+  const composer = !presentMode && <div ref={composerDockRef} data-testid="canvas-composer" className={styles.composerDock} data-tour="creation-brain-dock">
     <div className={styles.composerUtilities}>
       {/* Keep the settled receipt mounted after the run. Token consumption used
           to disappear at the exact moment the answer arrived because this whole
@@ -5738,7 +8020,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       data-fullscreen={fullscreen ? 'true' : 'false'}
     >
       <div className={styles.sessionBar}>
-        <div className={styles.titleBlock}><span className={styles.spark}><Icon source="✦" size="1em" /></span><input aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
+        <div className={styles.titleBlock}><span className={styles.spark}><Icon source="✦" size="1em" /></span><input data-testid="canvas-session-title" aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
         <div className={styles.sessionActions}>
           <TwilioCanvasSetup active={canvasUsesTwilio} />
           <div className={styles.collaborators} aria-label={t('activeCollaborators')} data-tour="creation-collaborators">
@@ -5782,7 +8064,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
             <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden><Icon source="▦" size="1em" /></span>{t('templates')}</button>
             <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="◌" size="1em" /></span>{t('conversation')}</button>
-            <button aria-pressed={drawingMode} onClick={() => { setDrawingMode((value) => !value); setMoreOpen(false); }}><span aria-hidden>⌁</span>{drawingMode ? t('stopDrawing') : t('draw')}</button>
+            <button aria-pressed={drawingMode} onClick={() => { setDrawing((current) => current ? null : readDrawingPreferences()); setMoreOpen(false); }}><span aria-hidden>⌁</span>{drawingMode ? t('stopDrawing') : t('draw')}</button>
             <button onClick={() => { setPresentMode((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="▶" size="1em" /></span>{presentMode ? t('exitPresentation') : t('present')}</button>
             <span className={styles.moreMenuHeading}>{t('sessionTools')}</span>
             <button onClick={() => { openHistory(); setMoreOpen(false); }}><span aria-hidden>↶</span>{t('history')}</button>
@@ -5901,6 +8183,28 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             {canEdit && <small>{t('dropFilesHint')}</small>}
           </div>
         </div>}
+        {/* The pen tray. It exists only while drawing is on, and every choice on
+            it is made BEFORE the stroke — which is the difference between a
+            drawing tool and a colour picker you find afterwards in a side panel. */}
+        {drawing && <div className={styles.drawingToolbar} role="toolbar" aria-label={t('drawing.toolbar')}>
+          {DRAWING_TOOLS.map((tool) => <button
+            key={tool}
+            type="button"
+            aria-pressed={drawing.tool === tool}
+            title={t(`drawing.tool.${tool}` as 'drawing.tool.pen')}
+            onClick={() => setDrawing((current) => { const next = { ...(current ?? DEFAULT_DRAWING_PREFERENCES), tool }; writeDrawingPreferences(next); return next; })}
+          ><span aria-hidden>{DRAWING_TOOL_GLYPH[tool]}</span><b>{t(`drawing.tool.${tool}` as 'drawing.tool.pen')}</b></button>)}
+          <label className={styles.drawingColor}>{t('drawing.color')}<input
+            type="color"
+            value={drawing.color.startsWith('#') ? drawing.color : DRAWING_FALLBACK_HEX}
+            onChange={(event) => setDrawing((current) => { const next = { ...(current ?? DEFAULT_DRAWING_PREFERENCES), color: event.target.value }; writeDrawingPreferences(next); return next; })}
+          /></label>
+          <label className={styles.drawingWidth}>{t('drawing.width')}<input
+            type="range" min="1" max="12" value={drawing.width}
+            onChange={(event) => setDrawing((current) => { const next = { ...(current ?? DEFAULT_DRAWING_PREFERENCES), width: Number(event.target.value) }; writeDrawingPreferences(next); return next; })}
+          /></label>
+          <button type="button" className={styles.drawingDone} onClick={() => setDrawing(null)}>{t('stopDrawing')}</button>
+        </div>}
         {!presentMode && effectiveSelectedIds.length > 0 && <div className={styles.selectionToolbar} aria-label={t('selectionActions')}>
           <span>{t('selectedCount', { count: effectiveSelectedIds.length })}</span>
           <button onClick={focusSelection}>{t('focus')}</button>
@@ -5917,7 +8221,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           nodes={renderedNodes}
           edges={edges}
           nodeTypes={canvasNodeTypes}
-          onNodesChange={onNodesChange}
+          onNodesChange={onCanvasNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={onNodeClick}
@@ -6053,9 +8357,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         />}
 
         {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label={t('toggleObjectPalette')}>{paletteOpen ? '‹' : '+'}</button>}
-        {!presentMode && paletteOpen && <aside id="canvas-object-palette" className={styles.palette}>
+        {!presentMode && paletteOpen && <aside id="canvas-object-palette" data-testid="canvas-palette" className={styles.palette}>
           <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label={t('closePalette')}>×</button></div>
-          <div className={styles.paletteSearchWrap}><span aria-hidden><Icon source="⌕" size="1em" /></span><input ref={paletteSearchRef} className={styles.search} aria-label={t('searchEverything')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
+          <div className={styles.paletteSearchWrap}><span aria-hidden><Icon source="⌕" size="1em" /></span><input ref={paletteSearchRef} data-testid="canvas-palette-search" className={styles.search} aria-label={t('searchEverything')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
           <div className={styles.paletteSections}>{CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${t(`group.${item.group}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
             const collapsed = !paletteSearch.trim() && collapsedPaletteGroups.has(group.group);
             const regionId = `canvas-palette-${group.group.toLowerCase()}`;
@@ -6067,12 +8371,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               <button type="button" className={styles.paletteSectionToggle} aria-expanded={!collapsed} aria-controls={regionId} aria-label={t(collapsed ? 'expandPaletteGroup' : 'collapsePaletteGroup', { group: t(`group.${group.group}`) })} onClick={() => setCollapsedPaletteGroups((current) => { const next = new Set(current); if (next.has(group.group)) next.delete(group.group); else next.add(group.group); return next; })}>
                 <span className={styles.paletteGroupIcon} aria-hidden><Icon source={PALETTE_GROUP_ICONS[group.group]} size={18} /></span><strong>{t(`group.${group.group}`)}</strong><small>{group.items.length}</small><span className={styles.paletteChevron} aria-hidden><Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={15} /></span>
               </button>
-              {!collapsed && <div id={regionId} className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={t(`object.${item.kind}`)} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span><Icon source={item.icon} size={20} /></span>{t(`object.${item.kind}`)}</button>)}</div>}
+              {!collapsed && <div id={regionId} className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} data-testid={`canvas-palette-${item.kind}`} aria-label={t(`object.${item.kind}`)} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span><Icon source={item.icon} size={20} /></span>{t(`object.${item.kind}`)}</button>)}</div>}
             </section>;
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(selectedNode.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDrawio={(diagramId) => { const result = convertObjectToDrawio(selectedNode.id, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'drawioAddedStatus' : 'drawioCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} />}
+        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(selectedNode.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDrawio={(diagramId) => { const result = convertObjectToDrawio(selectedNode.id, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'drawioAddedStatus' : 'drawioCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} />}
 
         {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
           <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>
@@ -6244,7 +8548,11 @@ function GuidedTourInspector({ node, nodes, onChange }: { node: CreationFlowNode
   </section>;
 }
 
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onEditWorkflow, onBuildWorkflow, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDrawio, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDrawio: (diagramId?: string) => string; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onEditWorkflow, onBuildWorkflow, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDrawio, onExportArtifact, onAskBrain }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDrawio: (diagramId?: string) => string; onExportArtifact: (action: CanvasExportAction) => Promise<string>;
+  /** The ONE route from the inspector back to Brain. Learning controls compose
+   *  their own request text (see LearningControls.tsx) rather than each adding a
+   *  callback to a panel that already takes forty. */
+  onAskBrain: (request: string) => void }) {
   const t = useTranslations('creationCanvas');
   const kind = node.data.kind;
   const onWebsiteChange = (patch: Partial<CreationNodeData>) => onChange(patchWebsiteHero(node.data, patch));
@@ -6527,7 +8835,24 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
           {kind === 'game' && typeof node.data.outputUrl === 'string' && <button type="button" onClick={onShipGame}>{t('game.shipAction')}</button>}</div>
       </>}
       {kind === 'frame' && <><label>{t('purpose')}<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : t('arrangeObjectsHere')} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>{t('fillColor')}<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : AUTHORED_FRAME_FILL} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>{t('borderColor')}<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : AUTHORED_FRAME_BORDER} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>{t('saveReusableFrame')}</button></>}
-      {kind === 'drawing' && <><label>{t('strokeColor')}<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : AUTHORED_DRAWING_STROKE} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>{t('strokeWidth')}<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>{t('drawingHint')}</p></>}
+      {/* The pen is chosen BEFORE the stroke now (see the drawing toolbar), so
+          what is left for the inspector is the thing that can only be done
+          afterwards: restyling marks that already exist. These used to write
+          `stroke` / `strokeWidth` on the OBJECT, which each stroke now carries
+          for itself — leaving two controls that changed a field nothing read. */}
+      {kind === 'drawing' && <>
+        <label>{t('strokeColor')}<input
+          type="color"
+          value={canvasStrokes(node.data)[0]?.stroke.startsWith('#') ? canvasStrokes(node.data)[0]!.stroke : AUTHORED_DRAWING_STROKE}
+          onChange={(event) => onChange(restyleDrawing(node.data, { stroke: event.target.value }))}
+        /></label>
+        <label>{t('strokeWidth')}<input
+          type="range" min="1" max="12"
+          value={canvasStrokes(node.data)[0]?.strokeWidth ?? 3}
+          onChange={(event) => onChange(restyleDrawing(node.data, { strokeWidth: Number(event.target.value) }))}
+        /></label>
+        <p className={styles.inspectorHint}>{t('drawingHint')}</p>
+      </>}
       {DOCUMENT_EDITOR_KINDS.has(kind) && <label>{kind === 'slides' ? t('deckOutline') : t('documentBody')}<textarea
         rows={12}
         aria-label={kind === 'slides' ? t('deckOutline') : t('documentBody')}
@@ -6559,6 +8884,15 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
           shown, so a grounded research document was indistinguishable from an
           invented one. The list decides its own visibility (null when empty), so
           one mount covers every kind and cannot drift from the field. */}
+      {/* Learning controls. Each decides its own visibility from the object —
+          the reading-level rewrite appears on anything whose body is prose (read
+          off the registry, not a list here), and the two authoring panels on the
+          kind that owns them. */}
+      {tab === 'details' && <>
+        <ReadingLevelControl data={node.data} editable={editable} onAskBrain={onAskBrain} />
+        <CourseSubjectControl data={node.data} editable={editable} onChange={onChange} onAskBrain={onAskBrain} />
+        <PracticeAuthoring data={node.data} editable={editable} onChange={onChange} onAskBrain={onAskBrain} />
+      </>}
       {tab === 'details' && <SourceList sources={node.data.sources} />}
       {tab === 'details' && canvasExportActionsFor(node.data).length > 0 && <section aria-label={t('copyAndDownload')} style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontSize: 12 }}>{t('copyAndDownload')}</strong>

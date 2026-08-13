@@ -3,6 +3,11 @@ import { Suspense } from 'react';
 import { JetBrains_Mono } from 'next/font/google';
 import { LocaleProvider } from './LocaleProvider';
 import './globals.css';
+// KaTeX's own stylesheet. Loaded once, at the root, because mathematics can
+// appear in any markdown on the platform (see lib/markdownPipeline.ts) and an
+// un-styled `.katex` tree renders as a column of stacked fragments rather than
+// an equation. The theme rules that adapt it live in globals.css.
+import 'katex/dist/katex.min.css';
 import { AuthProvider } from '@/lib/AuthContext';
 import { CartProvider } from '@/lib/CartContext';
 import { MessageHubProvider } from '@/components/messages/MessageHubContext';

@@ -47,6 +47,7 @@ import {
   bigserial,
   boolean,
   customType,
+  date,
   index,
   integer,
   jsonb,
@@ -579,11 +580,34 @@ export const partyRoles = pgTable('party_roles', {
   endedAt:   timestamp('ended_at'),
   /** Role-specific payload, typed rather than null-padded across the union. */
   attrs:     jsonb('attrs'),
+  /** ── Lawful basis and the retention clock (0460) ──────────────────────────
+   *  Consent is a fact about a PERSON HOLDING A ROLE, not about an application: a
+   *  candidate with four applications has one lawful basis, and putting it on
+   *  `job_applications` would repeat it four times and let the copies disagree.
+   *  This table already carries exactly one row per (tenant, kind, ref, role) with
+   *  a unique index proving it, so it is where the fact belongs — and the same
+   *  columns then carry the EMPLOYEE clock, which is the same two facts with the
+   *  rule reversed.
+   *
+   *  'consent' | 'legitimate-interest' | 'contract' | 'legal-obligation'.
+   *  Nullable with NO default on purpose: an unknown basis must read as unknown,
+   *  and defaulting to 'consent' would assert that somebody agreed to something. */
+  consentBasis:   varchar('consent_basis', { length: 32 }),
+  consentAt:      timestamp('consent_at'),
+  /** 'erase-by' (a rejected candidate's MAXIMUM retention) | 'retain-until' (an
+   *  employment record's statutory MINIMUM). One pair of columns, both clocks. */
+  retentionBasis: varchar('retention_basis', { length: 16 }),
+  retentionDate:  date('retention_date'),
+  /** Stamped by the erasure path so a re-import cannot resurrect somebody who
+   *  exercised their right to be forgotten — the argument `data_suppression_list`
+   *  already makes for marketing, applied to the role rather than the address. */
+  erasedAt:       timestamp('erased_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_party_roles_role').on(t.tenantId, t.partyKind, t.partyRef, t.role),
   index('idx_party_roles_role').on(t.tenantId, t.role, t.status),
+  index('idx_party_roles_retention').on(t.tenantId, t.retentionDate),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -1260,6 +1284,9 @@ export const activityEventTypeEnum = pgEnum('activity_event_type', [
 
 export const reportTypeEnum = pgEnum('report_type', [
   'standup', 'code_review', 'project_status', 'executive_summary', 'portfolio_rollup',
+  /** A canvas frame, rendered and delivered on a cadence (mig 0461). The first
+   *  report type that is ABOUT something — see `report_schedules.subject_ref`. */
+  'board_pack',
 ]);
 
 

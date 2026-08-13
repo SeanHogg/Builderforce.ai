@@ -25,6 +25,17 @@ export interface ScheduleRowForGen {
   reportType: string;
   tenantId: number;
   segmentId: string | null;
+  /**
+   * What this schedule is ABOUT, for the report types that need a subject (mig 0461).
+   *
+   * The five original types are computed from the tenant and carry neither. A
+   * `board_pack` is about ONE canvas frame, so the reference has to reach the
+   * generator — without it the dispatcher could fire a board pack and the generator
+   * would have no way to know which board, and would deliver whichever frame it found
+   * first. Optional so every existing caller and test compiles unchanged.
+   */
+  subjectKind?: string | null;
+  subjectRef?: string | null;
 }
 
 /** Injected generator: schedule → email-ready report (null = unsupported type). */
@@ -76,7 +87,11 @@ export async function runDueReports(env: Env, generate: ScheduledReportGenerator
     try {
       const recipients = parseRecipients(s.recipients);
       if (recipients.length > 0) {
-        const built = await generate(db, { reportType: s.reportType, tenantId: s.tenantId, segmentId: s.segmentId }, now);
+        const built = await generate(
+          db,
+          { reportType: s.reportType, tenantId: s.tenantId, segmentId: s.segmentId, subjectKind: s.subjectKind, subjectRef: s.subjectRef },
+          now,
+        );
         if (built) {
           // TRANSACTIONAL: someone configured this schedule, and it stops by
           // deleting the schedule rather than by unsubscribing. Per-recipient

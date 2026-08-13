@@ -1,7 +1,7 @@
 'use client';
 
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
 import type { Components } from 'react-markdown';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -167,11 +167,11 @@ export function ChatMessageContent({
         <details key={`${segment.kind}-${index}`} style={{ margin: '6px 0 10px', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>
           <summary style={{ cursor: 'pointer', userSelect: 'none', fontStyle: 'italic' }}>Thought</summary>
           <div style={{ margin: '6px 0 0 12px', paddingLeft: 10, borderLeft: '2px solid var(--border-subtle)' }}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{segment.content}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS} components={components}>{segment.content}</ReactMarkdown>
           </div>
         </details>
       ) : (
-        <ReactMarkdown key={`${segment.kind}-${index}`} remarkPlugins={[remarkGfm]} components={components}>
+        <ReactMarkdown key={`${segment.kind}-${index}`} remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS} components={components}>
           {segment.content}
         </ReactMarkdown>
       ))}

@@ -89,9 +89,14 @@ describe('queryTabular', () => {
       }],
       groupBy: 'Status',
     });
+    // Each grouping column is its OWN field alongside `key`. That is what makes a
+    // composite breakdown ("by month by region") re-chartable and re-groupable
+    // rather than only readable as one joined label; for a single grouping column
+    // it simply repeats `key`. Consumers read `key`, `count` and the aggregate,
+    // so the extra field is additive.
     expect(result.groups).toEqual([
-      { key: 'Success', count: 3 },
-      { key: 'Failure', count: 2 },
+      { key: 'Success', Status: 'Success', count: 3 },
+      { key: 'Failure', Status: 'Failure', count: 2 },
     ]);
     expect(result.totalRows).toBe(5);
     expect(result.matchedRows).toBe(5);

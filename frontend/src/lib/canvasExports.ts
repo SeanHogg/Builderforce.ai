@@ -17,10 +17,14 @@
 
 import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
 
-export type CanvasExportAction = 'copy' | 'markdown' | 'html' | 'csv' | 'xlsx' | 'docx' | 'pdf' | 'pptx' | 'svg' | 'json' | 'diagram' | 'scorm';
+export type CanvasExportAction = 'copy' | 'markdown' | 'html' | 'csv' | 'xlsx' | 'docx' | 'pdf' | 'pptx' | 'svg' | 'json' | 'diagram' | 'scorm' | 'spec';
 
 export const EXPORT_MIME: Readonly<Record<CanvasExportAction, string>> = {
   copy: 'text/plain', markdown: 'text/markdown', html: 'text/html', csv: 'text/csv', json: 'application/json',
+  // A generated test leaves as the file a test runner takes. Nothing else in this
+  // table would do: a `.md` of a Playwright spec is a description of a test, and the
+  // whole promise of "create automation tests for my site" is the runnable file.
+  spec: 'text/typescript',
   diagram: 'application/vnd.jgraph.mxfile',
   svg: 'image/svg+xml',
   pdf: 'application/pdf',
@@ -33,6 +37,9 @@ export const EXPORT_MIME: Readonly<Record<CanvasExportAction, string>> = {
 /** The file extension each action produces. `copy` writes no file. */
 export const EXPORT_EXTENSION: Readonly<Record<Exclude<CanvasExportAction, 'copy' | 'diagram'>, string>> = {
   markdown: 'md', html: 'html', csv: 'csv', xlsx: 'xlsx', docx: 'docx', pdf: 'pdf', pptx: 'pptx', svg: 'svg', json: 'json', scorm: 'zip',
+  // `<name>.spec.ts` is the filename Playwright's default `testMatch` picks up, so a
+  // downloaded case lands in a repo already discoverable rather than needing a rename.
+  spec: 'spec.ts',
 };
 
 /** Exports that are rendered by `/api/exports` rather than written in the
@@ -82,6 +89,15 @@ const EXPORT_ACTIONS: Partial<Record<CreationObjectKind, readonly CanvasExportAc
   pitchQa: ['docx', 'pdf', 'markdown', 'copy'],
   pitchApplication: ['docx', 'pdf', 'markdown', 'copy'],
   course: ['scorm', 'json'],
+  // The QA objects. A case leaves as its spec FIRST — that is the artifact the
+  // request was for — and a plan leaves as every one of its cases concatenated, so
+  // "give me the tests for my site" is one download.
+  testCase: ['spec', 'json', 'copy'],
+  testPlan: ['spec', 'json'],
+  testRun: ['json', 'csv'],
+  // A defect is handed to whoever fixes it: as a document to paste into a tracker,
+  // or as JSON when the tracker takes it directly.
+  defect: ['markdown', 'json', 'copy'],
 };
 
 const NO_ACTIONS: readonly CanvasExportAction[] = [];

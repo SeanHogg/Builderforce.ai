@@ -44,6 +44,15 @@ export type SalesAssociateLine = {
   lastSignupAtISO: string | null;
 };
 
+/** The number, and how close it is. `attainmentPercent` is null when no goal is
+ *  set — a blank reads as "unset", where 0% reads as "failing". */
+export type SalesQuota = {
+  goalCents: number;
+  attainedCents: number;
+  attainmentPercent: number | null;
+  window: SalesReportWindow;
+};
+
 export type SalesReport = {
   generatedAtISO: string;
   associateUserId: string | null;
@@ -51,6 +60,7 @@ export type SalesReport = {
   funnel: Array<{ stage: string; count: number }>;
   stalledContacts: number;
   associates: SalesAssociateLine[];
+  quota: SalesQuota;
 };
 
 export type SalesLead = {

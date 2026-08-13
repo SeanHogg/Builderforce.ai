@@ -32,9 +32,10 @@ import { loadProjectTeamMembers } from '../../application/metrics/assigneeRecomm
 import { findActiveCeremonyForMeeting } from '../../application/ceremony/ceremonyMeeting';
 import { recordCeremonyPresence } from '../../application/ceremony/concludeCeremony';
 import { BrainService } from '../../application/brain/BrainService';
+import { normalizeWindows, suggestSlots } from '../../application/calendar/availabilitySolver';
 import {
-  suggestSlots, normalizeWindows, type Availability, type BusyInterval,
-} from '../../application/calendar/availabilitySolver';
+  loadDeclaredAvailability, loadMeetingBusy,
+} from '../../application/calendar/attendeeAvailability';
 import { applyMediaPrivacyMode } from '../../domain/meetings/mediaPrivacy';
 
 import { iceServers } from '../../application/meetings/iceServers';
@@ -458,43 +459,15 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
   // ── Availability windows (bookable working hours) ─────────────────────────────
   const DEFAULT_TZ = 'UTC';
 
-  /** Load availability for a set of user refs (missing = "available anytime"). */
-  async function loadAvailability(tenantId: number, refs: string[]): Promise<Availability[]> {
-    if (refs.length === 0) return [];
-    const rows = await db.select().from(userAvailability).where(and(
-      eq(userAvailability.tenantId, tenantId), inArray(userAvailability.userId, refs),
-    ));
-    const byUser = new Map(rows.map((r) => [r.userId, r]));
-    return refs.map((userId) => {
-      const row = byUser.get(userId);
-      return { userId, timezone: row?.timezone ?? DEFAULT_TZ, windows: normalizeWindows(row?.windows) };
-    });
-  }
+  /** Load availability for a set of user refs (missing = "available anytime").
+   *  The composition lives in `application/calendar/attendeeAvailability.ts` because
+   *  candidate self-scheduling needs the identical read, and two copies of "is this
+   *  person free" drift the first time one learns about a new busy source. */
+  const loadAvailability = (tenantId: number, refs: string[]) => loadDeclaredAvailability(db, tenantId, refs);
 
   /** Busy intervals (epoch-ms) for each ref from scheduled/live meetings in a window. */
-  async function loadBusy(tenantId: number, refs: string[], fromMs: number, toMs: number): Promise<Map<string, BusyInterval[]>> {
-    const out = new Map<string, BusyInterval[]>();
-    if (refs.length === 0) return out;
-    const rows = await db
-      .select({ ref: meetingAttendees.memberRef, scheduledAt: meetings.scheduledAt, duration: meetings.durationMinutes })
-      .from(meetingAttendees)
-      .innerJoin(meetings, eq(meetings.id, meetingAttendees.meetingId))
-      .where(and(
-        eq(meetings.tenantId, tenantId),
-        inArray(meetingAttendees.memberRef, refs),
-        inArray(meetings.status, ['scheduled', 'live']),
-        gte(meetings.scheduledAt, new Date(fromMs)),
-        lte(meetings.scheduledAt, new Date(toMs)),
-      ));
-    for (const row of rows) {
-      if (!row.scheduledAt) continue;
-      const start = row.scheduledAt.getTime();
-      const list = out.get(row.ref) ?? [];
-      list.push({ start, end: start + (row.duration ?? 30) * 60_000 });
-      out.set(row.ref, list);
-    }
-    return out;
-  }
+  const loadBusy = (tenantId: number, refs: string[], fromMs: number, toMs: number) =>
+    loadMeetingBusy(db, tenantId, refs, fromMs, toMs);
 
   // GET /availability/me — my declared windows + timezone.
   r.get('/availability/me', async (c) => {

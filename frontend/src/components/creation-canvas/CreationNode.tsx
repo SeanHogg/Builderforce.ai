@@ -5,7 +5,7 @@ import { Handle, NodeResizer, Position, useStore, type Node, type NodeProps } fr
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
 import { Avatar, evermindLearnedStatus, evermindNextAction } from '@seanhogg/builderforce-brain-ui';
 import type { CreationNodeData } from './types';
 import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL } from './authoredColors';
@@ -16,6 +16,9 @@ import { BrainSurfaceActions, BrainSurfaceBody } from './BrainDock';
 import { useBrainSurface } from './brainSurfaceContext';
 import { Icon } from '@/components/ui/Icon';
 import { highlightToneFor, profileTabular, tabularFromObject, workbookSheets, type TabularCell, type TabularHighlightRule } from '@/lib/canvasTabularData';
+import { recalculateSheet } from '@/lib/canvasSheet';
+import { columnLetters } from '@/lib/canvasFormula';
+import { maskCell, maskPlan, normalizeClassifications } from '@/lib/canvasDataGovernance';
 import { outlinePaths, projectMap, sanitizeGeoBounds, sanitizeMapPoints } from '@/lib/canvasGeo';
 import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
 import { GAME_FRAME_SANDBOX, gameDocumentFrom } from '@/lib/gameTargets';
@@ -24,6 +27,15 @@ import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, WEB_PAGE_KINDS } from '@/lib/canvasWebPage';
 import { dashboardWidgetsPatch, readDashboardWidgets } from '@/lib/canvasDashboard';
 import { PIPELINE_MAX_CARDS_PER_CELL, cardsAt, readPipelineModel, stageTotals } from '@/lib/canvasSalesPipeline';
+import {
+  DataContractBody,
+  DataQualityBody,
+  DataSourceBody,
+  ErdBody,
+  LineageBody,
+  MetricDefinitionBody,
+} from './DataArchitectureViews';
+import { DefectBody, PageAuditFindings, TestCaseBody, TestPlanBody, TestRunBody } from './QaObjectViews';
 import { CanvasWebPage } from './CanvasWebPage';
 import { DashboardWidgetGrid } from './DashboardWidgetView';
 import { DashboardStructuredEditor } from './DashboardStructuredEditor';
@@ -40,16 +52,45 @@ import { DocumentEditor } from './DocumentEditor';
 import { CanvasExportActions } from './CanvasExportActions';
 import { drawioLabelLines, drawioShapePolygon, parseDrawioXml, resolveDrawioXml, type DrawioGraph } from '@/lib/drawioDiagram';
 import { MermaidDiagram } from '@/components/MermaidDiagram';
-import { COURSE_EXPORT_STANDARDS, courseFromNode, courseProgress } from '@/lib/courseLms';
+import { COURSE_EXPORT_STANDARDS, courseAssessmentQuestions, courseFromNode, courseProgress, courseScore } from '@/lib/courseLms';
+import { practiceAttempts, practiceMode, practiceQuestions, practiceProgress, recordPracticeAttempt } from '@/lib/canvasPractice';
+import { canvasStrokes, HIGHLIGHTER_OPACITY, HIGHLIGHTER_WIDTH_FACTOR, strokePathD, strokeRect } from '@/lib/canvasDrawing';
+import { PracticeRunner } from './PracticeRunner';
+import { ReadAloud } from '@/components/ReadAloud';
+import { canvasProseText } from '@/lib/canvasProse';
 import ToolRunner from '@/components/tools/ToolRunner';
 import type { ToolResult } from '@/lib/tools';
 import { canvasTourDesignFromNode } from '@/lib/onboarding/canvasTourDesign';
 import { websitePagesFrom, websiteThemeFrom, type WebsiteSection } from './websiteWysiwyg';
 import { CanvasVideoEditor } from './CanvasVideoEditor';
 import { CanvasResumeEditor } from './CanvasResumeEditor';
+import { SpecObjectBody } from './SpecObjectBody';
+import { allSpecObjectSpecs } from '@/lib/specObjects';
+// Importing a vocabulary registers it with the spec primitive, which is what makes its
+// kinds resolvable here — and in the palette, the AI contract and the empty-shell rule —
+// without a second list of them anywhere.
+import '@/lib/academicObjects';
 import type { CanvasResumeShare } from '@/lib/builderforceApi';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
+
+/**
+ * Spec kinds whose body renders a table or a grid, and therefore needs the wide card.
+ *
+ * Derived from every registered vocabulary rather than from the founder set alone, so a
+ * kind that gains a `rows` or `matrix` field gains the width in the same edit. `matrix`
+ * is included for the reason it exists: a rubric's levels and a gradebook's assessments
+ * are COLUMNS, and those are the widest bodies on the board.
+ */
+const SPEC_WIDE_KINDS: ReadonlySet<string> = new Set(
+  allSpecObjectSpecs()
+    .filter((spec) => spec.fields.some((field) => field.render === 'rows' || field.render === 'matrix'))
+    .map((spec) => spec.kind),
+);
+
+/** Every spec-declared kind — one entry in the `specialized` set below, so none of them
+ *  renders its own body AND the generic fallback underneath it. */
+const SPEC_KINDS: readonly string[] = allSpecObjectSpecs().map((spec) => spec.kind);
 
 type CanvasChatMessage = { role: string; content: string; createdAt?: string };
 
@@ -83,10 +124,11 @@ function AuthoredContent({ data, fallback }: { data: CreationNodeData; fallback:
 function CourseBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
   const t = useTranslations('creationCanvas.course');
   const course = courseFromNode(data);
+  const attempts = practiceAttempts(data.attempts);
   const [activeId, setActiveId] = useState(course.modules[0]?.id ?? '');
-  const [answers, setAnswers] = useState<Record<string, number>>({});
   const active = course.modules.find((module) => module.id === activeId) ?? course.modules[0];
   const progress = courseProgress(course);
+  const score = courseScore(course, attempts);
   const completed = new Set(course.completedLessonIds);
   const toggleLesson = (lessonId: string) => {
     if (!onEdit) return;
@@ -94,12 +136,30 @@ function CourseBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch:
     if (next.has(lessonId)) next.delete(lessonId); else next.add(lessonId);
     onEdit({ course: { ...course, completedLessonIds: [...next] }, status: next.size === progress.total ? t('completed') : t('inProgress') });
   };
-  if (!active) return <p>{t('empty')}</p>;
+  /**
+   * A course with no modules is a course waiting for its SUBJECT — the state
+   * every new course object now starts in. It used to be impossible to reach,
+   * because an empty course silently became the shipped LLM curriculum; the
+   * price of that was every learner on every other subject starting by deleting
+   * six modules about tokenizers.
+   */
+  if (!active) return <div className={`${styles.courseEmpty} nodrag nowheel`} onClick={(event) => event.stopPropagation()}>
+    <strong>{t('subjectTitle')}</strong>
+    <input
+      value={course.subject}
+      disabled={!onEdit}
+      placeholder={t('subjectPlaceholder')}
+      aria-label={t('subjectTitle')}
+      onChange={(event) => onEdit?.({ course: { ...course, subject: event.target.value }, status: event.target.value.trim() ? t('subjectReady') : t('subjectPending') })}
+    />
+    <p>{t('subjectHint')}</p>
+  </div>;
   return <div className={`${styles.courseShell} nodrag nowheel`}>
     <div className={styles.courseSummary}>
       <div><b>{t('progress', { percent: progress.percent })}</b><span>{t('lessonCount', { completed: progress.completed, total: progress.total })}</span></div>
       <div className={styles.courseProgress} role="progressbar" aria-label={t('progressLabel')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent}><i style={{ width: `${progress.percent}%` }} /></div>
-      <small>{t('duration', { minutes: course.estimatedMinutes })} · {COURSE_EXPORT_STANDARDS.join(' · ')}</small>
+      {/* The knowledge-check score, which now survives closing the card. */}
+      <small>{t('duration', { minutes: course.estimatedMinutes })} · {t('checkScore', { percent: score.percent, answered: score.answered, total: score.total })}{score.passed ? ` · ${t('passed', { score: course.passingScore })}` : ''} · {COURSE_EXPORT_STANDARDS.join(' · ')}</small>
     </div>
     <div className={styles.courseWorkspace}>
       <nav aria-label={t('modules')}>
@@ -114,13 +174,57 @@ function CourseBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch:
           <summary><span>{completed.has(item.id) ? '✓' : '○'}</span><b>{item.title}</b><small>{t('minutes', { count: item.durationMinutes })}</small></summary>
           <div className={styles.courseLesson}><strong>{t('objective')}</strong><p>{item.objective}</p><p>{item.content}</p><strong>{t('practice')}</strong><p>{item.activity}</p><button type="button" disabled={!onEdit} onClick={(event) => { event.stopPropagation(); toggleLesson(item.id); }}>{completed.has(item.id) ? t('markIncomplete') : t('markComplete')}</button></div>
         </details>)}
+        {/* The knowledge check is a one-question practice set, run by the SAME
+            component the Practice object uses — so the answer is graded once,
+            recorded once, and is still there tomorrow. It used to live in
+            `useState`, which is why a course could never tell you your score. */}
         <div className={styles.courseQuiz}>
-          <strong>{t('knowledgeCheck')}</strong><p>{active.assessment.question}</p>
-          {active.assessment.choices.map((choice, index) => <button key={choice} type="button" data-selected={answers[active.id] === index || undefined} onClick={(event) => { event.stopPropagation(); setAnswers((current) => ({ ...current, [active.id]: index })); }}><span>{String.fromCharCode(65 + index)}</span>{choice}</button>)}
-          {answers[active.id] != null && <p role="status" data-correct={answers[active.id] === active.assessment.answer || undefined}><b>{answers[active.id] === active.assessment.answer ? t('correct') : t('tryAgain')}</b> {active.assessment.explanation}</p>}
+          <strong>{t('knowledgeCheck')}</strong>
+          <PracticeRunner
+            questions={courseAssessmentQuestions(course).filter((question) => question.id === active.id)}
+            attempts={attempts}
+            editable={!!onEdit}
+            compact
+            onRecord={(attempt) => onEdit?.({ attempts: recordPracticeAttempt(attempts, attempt) })}
+          />
         </div>
       </section>
     </div>
+  </div>;
+}
+
+/**
+ * The Practice object — a set of questions and the record of answering them.
+ *
+ * The card IS the study session (the inspector only authors), because the point
+ * of practice on a canvas is that it sits next to the notes it came from and can
+ * be done in the ten seconds a person actually has. Mode is a value, not a second
+ * object kind: a flashcard and a multiple-choice question are the same question
+ * asked two ways, and both are graded and recorded by the same model.
+ */
+function PracticeBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
+  const t = useTranslations('creationCanvas.practice');
+  const questions = practiceQuestions(data.questions);
+  const attempts = practiceAttempts(data.attempts);
+  const mode = practiceMode(data.practiceMode);
+  const progress = practiceProgress(questions, attempts);
+  return <div className={styles.practiceShell}>
+    {questions.length > 1 && <div className={`${styles.practiceModes} nodrag`} role="group" aria-label={t('modeLabel')}>
+      <button type="button" aria-pressed={mode === 'quiz'} disabled={!onEdit} onClick={(event) => { event.stopPropagation(); onEdit?.({ practiceMode: 'quiz' }); }}>{t('modeQuiz')}</button>
+      <button type="button" aria-pressed={mode === 'flashcards'} disabled={!onEdit} onClick={(event) => { event.stopPropagation(); onEdit?.({ practiceMode: 'flashcards' }); }}>{t('modeFlashcards')}</button>
+    </div>}
+    <PracticeRunner
+      questions={questions}
+      attempts={attempts}
+      mode={mode}
+      editable={!!onEdit}
+      onRecord={(attempt) => onEdit?.({
+        attempts: recordPracticeAttempt(attempts, attempt),
+        status: t('statusStudied', { mastered: practiceProgress(questions, recordPracticeAttempt(attempts, attempt)).mastered, total: questions.length }),
+      })}
+      {...(onEdit && attempts.length ? { onReset: () => onEdit({ attempts: [], status: t('statusReset') }) } : {})}
+    />
+    {progress.weak > 0 && <p className={styles.practiceStudyList}>{t('studyList', { count: progress.weak })}</p>}
   </div>;
 }
 
@@ -729,14 +833,14 @@ function WorkflowBody({ data }: { data: CreationNodeData }) {
 
 function WebsiteSectionBody({ section, accent }: { section: WebsiteSection; accent: string }) {
   if (section.kind === 'hero') return <section className={styles.wysiwygHero}>
-    <div>{section.eyebrow && <small>{section.eyebrow}</small>}<h3>{section.heading}</h3>{section.body && <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.body}</ReactMarkdown>}<span>{section.cta && <button style={{ background: accent }}>{section.cta}</button>}{section.secondaryCta && <button className={styles.wysiwygSecondary}>{section.secondaryCta}</button>}</span></div>
+    <div>{section.eyebrow && <small>{section.eyebrow}</small>}<h3>{section.heading}</h3>{section.body && <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{section.body}</ReactMarkdown>}<span>{section.cta && <button style={{ background: accent }}>{section.cta}</button>}{section.secondaryCta && <button className={styles.wysiwygSecondary}>{section.secondaryCta}</button>}</span></div>
     <div className={styles.wysiwygArt} style={{ color: accent }}><i /><i /><i /></div>
   </section>;
   if (section.kind === 'features') return <section className={styles.wysiwygSection}><h4>{section.heading}</h4>{section.body && <p>{section.body}</p>}<div className={styles.wysiwygFeatures}>{section.items?.map((item, index) => <article key={`${item.title}-${index}`}><i style={{ color: accent }}>{String(index + 1).padStart(2, '0')}</i><strong>{item.title}</strong><p>{item.body}</p></article>)}</div></section>;
   if (section.kind === 'stats') return <section className={styles.wysiwygStats}>{section.items?.map((item, index) => <span key={`${item.label}-${index}`}><strong style={{ color: accent }}>{item.value}</strong><small>{item.label}</small></span>)}</section>;
   if (section.kind === 'testimonial') return <section className={styles.wysiwygQuote}><blockquote>“{section.quote || section.body}”</blockquote>{section.author && <cite>{section.author}</cite>}</section>;
   if (section.kind === 'cta') return <section className={styles.wysiwygCta} style={{ background: accent }}><h4>{section.heading}</h4>{section.body && <p>{section.body}</p>}{section.cta && <button>{section.cta}</button>}</section>;
-  return <section className={styles.wysiwygSection}><h4>{section.heading}</h4>{section.body && <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.body}</ReactMarkdown>}</section>;
+  return <section className={styles.wysiwygSection}><h4>{section.heading}</h4>{section.body && <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{section.body}</ReactMarkdown>}</section>;
 }
 
 function WebsiteBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
@@ -754,7 +858,7 @@ function WebsiteBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch
     const cta = typeof data.websiteCta === 'string' ? data.websiteCta : t('websiteCta');
     return <div className={styles.websitePreview} data-viewport={viewport} data-theme="minimal">
       <div className={styles.siteNav}><strong>{data.title}</strong><span /> </div>
-      <section className={styles.wysiwygHero}><div><h3>{headline}</h3>{description && <ReactMarkdown remarkPlugins={[remarkGfm]}>{description}</ReactMarkdown>}<span><button style={{ background: accent }}>{cta}</button></span></div></section>
+      <section className={styles.wysiwygHero}><div><h3>{headline}</h3>{description && <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{description}</ReactMarkdown>}<span><button style={{ background: accent }}>{cta}</button></span></div></section>
     </div>;
   }
   return (
@@ -938,7 +1042,31 @@ function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patc
   // A card re-renders on selection, drag, and every neighbouring edit. Normalizing
   // an imported workbook's rows is O(rows × columns) per sheet, so doing it inline
   // would re-walk a 50,000-row import on each of those renders.
-  const source = useMemo(() => tabularFromObject(data as Record<string, unknown>), [data]);
+  const stored = useMemo(() => tabularFromObject(data as Record<string, unknown>), [data]);
+  /**
+   * THE RECALCULATION.
+   *
+   * `formulas` was a declared mutable field with no reader anywhere in the frontend, so
+   * a sheet could store `=SUM(C1:C12)` and render that literal string. Everything below
+   * this line reads `source`, so a formula cell now shows its VALUE — and a broken one
+   * shows `#REF!`/`#CYCLE!` rather than a stale literal that looks like a real number.
+   *
+   * Memoized on the same dependency the normalization above uses: recalculation is
+   * O(cells) with a topological sort, and a card re-renders on selection, drag and every
+   * neighbouring edit.
+   */
+  const recalc = useMemo(
+    () => (data.formulas ? recalculateSheet({ columns: stored.columns, rows: stored.rows, formulas: data.formulas }) : null),
+    [stored, data.formulas],
+  );
+  const source = recalc ? { columns: stored.columns, rows: recalc.rows } : stored;
+  // A computed cell is NOT editable: typing over it would replace the formula's output
+  // with a literal and silently break every cell downstream of it — the sheet would keep
+  // rendering a number, and it would stop being the number the formula says.
+  const computedCells = useMemo(
+    () => new Set(recalc ? Object.keys(recalc.cells) : []),
+    [recalc],
+  );
   const editable = !!onEdit && Array.isArray(data.rows) && (data.kind === 'spreadsheet' || data.kind === 'table');
   const [draft, setDraft] = useState<{ row: number; column: string; value: string } | null>(null);
   const sheets = useMemo(() => workbookSheets(data as Record<string, unknown>), [data]);
@@ -998,6 +1126,13 @@ function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patc
     : [];
   if (!source.columns.length && !source.rows.length && !editable) return <AuthoredContent data={data} fallback={t('dataFallback')} />;
   const columns = source.columns.slice(0, DATA_GRID_VISIBLE_COLUMNS);
+  // Restricted columns are masked HERE, on the render path, not by rewriting the
+  // stored rows: the analysis must still run over the real values (a masked join
+  // key matches nothing), while a card on a shared board must never paint a card
+  // number or a national id in the clear. `maskCell` preserves the shape a
+  // reviewer needs — the domain of an email, the last four of a card — because a
+  // column of identical dots says nothing about whether the data is right.
+  const masking = maskPlan(normalizeClassifications(data.classifications));
   const rows = source.rows.slice(0, DATA_GRID_VISIBLE_ROWS);
   const totalRows = typeof data.rowCount === 'number' ? data.rowCount : source.rows.length;
   const toneCounts = highlightRules.length
@@ -1026,6 +1161,12 @@ function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patc
     {!!Object.keys(toneCounts).length && <div className={styles.dataGridTones}>
       {Object.entries(toneCounts).map(([tone, count]) => <span key={tone} data-tone={tone}><i />{t(`tone_${tone}` as 'tone_success')}<b>{count.toLocaleString()}</b></span>)}
     </div>}
+    {/* A formula that failed is reported on the card rather than only inside the cell:
+        one `#REF!` in a 500-row sheet is invisible, and every total downstream of it is
+        wrong by exactly that cell. */}
+    {!!recalc?.errors.length && <p className={styles.dataGridFormulaErrors} role="status">
+      {t('formulaErrors', { count: recalc.errors.length, first: `${recalc.errors[0].ref} ${recalc.errors[0].text}` })}
+    </p>}
     <div className={`${styles.dataGridScroll} nowheel nodrag`} role="region" aria-label={data.title} tabIndex={0}>
       <div className={styles.miniTable} data-editable={editable ? 'true' : undefined} style={{ gridTemplateColumns: `repeat(${Math.max(1, columns.length)}, minmax(84px, 1fr))` }}>
         {columns.map((column) => <b key={column}>
@@ -1038,12 +1179,20 @@ function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patc
         {rows.flatMap((row, rowIndex) => {
           const tone = highlightToneFor(row, highlightRules);
           return columns.map((column) => {
-            const value = String(row[column] ?? '');
-            return <span key={`${rowIndex}-${column}`} data-tone={tone ?? undefined}>
-              {editable && draft?.row === rowIndex && draft.column === column
+            const pii = masking.get(column);
+            const value = String((pii ? maskCell(row[column], pii) : row[column]) ?? '');
+            // A COMPUTED cell is not editable either, and for a sharper reason than a
+            // masked one: typing over it replaces the formula's output with a literal,
+            // the cell keeps rendering a number, and it silently stops being the number
+            // the formula says — while everything downstream still computes from it.
+            const computed = computedCells.has(`${columnLetters(source.columns.indexOf(column))}${rowIndex + 1}`);
+            return <span key={`${rowIndex}-${column}`} data-tone={tone ?? undefined} data-masked={pii ? 'true' : undefined} data-computed={computed ? 'true' : undefined}>
+              {/* A masked cell is NOT editable: the visible text IS the mask, so
+                  committing it would overwrite the real value with dots. */}
+              {editable && !pii && !computed && draft?.row === rowIndex && draft.column === column
                 ? <input {...editorProps(rowIndex, column)} />
-                : editable
-                  ? <button type="button" className={styles.dataGridCellButton} onClick={() => setDraft({ row: rowIndex, column, value })}>{value || ' '}</button>
+                : editable && !pii && !computed
+                  ? <button type="button" className={styles.dataGridCellButton} onClick={() => setDraft({ row: rowIndex, column, value })}>{value || ' '}</button>
                   : value}
             </span>;
           });
@@ -1126,7 +1275,7 @@ function DocumentBody({ data, onEdit }: {
     {actions}
     <div className={`${styles.documentSheet} nowheel nodrag`} role="region" aria-label={data.title} tabIndex={0}>
       <div className={styles.documentPage} data-paginated={paginated ? 'true' : undefined}>
-        <div className={styles.documentMarkdown}><ReactMarkdown remarkPlugins={[remarkGfm]}>{pages[page] ?? document.markdown}</ReactMarkdown></div>
+        <div className={styles.documentMarkdown}><ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{pages[page] ?? document.markdown}</ReactMarkdown></div>
         {paginated && <span className={styles.documentPageNumber} aria-hidden>{page + 1}</span>}
       </div>
     </div>
@@ -1437,6 +1586,8 @@ function DiagnosticsBody({ data }: { data: CreationNodeData }) {
 
   return <div className={styles.canvasDiagnosticsBody}>
     {data.qualityScore != null && <ProjectQualitySummary data={data} />}
+    {/* Decides its own visibility — null when this diagnostic carries no page audit. */}
+    <PageAuditFindings data={data} />
     <div className={styles.diagnosticOverview}>
       <span><small>{t('checks')}</small><b>{diagnostics.length}</b></span>
       <span><small>{t('issues')}</small><b>{issueCount}</b></span>
@@ -1754,19 +1905,52 @@ function StandupBody({ data }: { data: CreationNodeData }) {
   </div>;
 }
 
-function DrawingBody({ data }: { data: CreationNodeData }) {
+/**
+ * A drawing: every stroke that was made on it, in the tool that made it.
+ *
+ * It renders as live SVG rather than an image because the marks are data now —
+ * a highlighter is a wide translucent pen, a shape is a shape, and a text
+ * annotation is text that can still be corrected without redrawing it.
+ */
+function DrawingBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
   const t = useTranslations('creationCanvas.node');
-  const points = Array.isArray(data.points)
-    ? data.points.filter((point): point is { x: number; y: number } => !!point && typeof point === 'object' && typeof (point as { x?: unknown }).x === 'number' && typeof (point as { y?: unknown }).y === 'number')
-    : [];
-  const path = points.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`).join(' ');
-  const stroke = String(data.stroke || 'var(--indigo-bright)');
-  const strokeWidth = Number(data.strokeWidth) || 3;
-  return <div className={styles.drawingBody}>
-    <div className={styles.widgetContext}><span><small>{t('stroke')}</small><b><i className={styles.strokeSwatch} style={{ background: stroke }} />{t('strokePx', { width: strokeWidth })}</b></span></div>
-    <svg className={styles.drawingSurface} style={{ color: stroke }} viewBox={`0 0 ${Number(data.drawingWidth) || 240} ${Number(data.drawingHeight) || 120}`} role="img" aria-label={data.title} preserveAspectRatio="none">
-      {path ? <path d={path} fill="none" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" /> : <text x="12" y="28" fill="currentColor">{t('drawHint')}</text>}
+  const strokes = canvasStrokes(data);
+  const width = Number(data.drawingWidth) || 240;
+  const height = Number(data.drawingHeight) || 120;
+  const annotating = typeof data.annotatesId === 'string' && data.annotatesId.length > 0;
+  const texts = strokes.map((stroke, index) => ({ stroke, index })).filter((entry) => entry.stroke.tool === 'text');
+  const editText = (index: number, text: string) => onEdit?.({ strokes: strokes.map((stroke, at) => at === index ? { ...stroke, text } : stroke) } as Partial<CreationNodeData>);
+
+  return <div className={styles.drawingBody} data-annotation={annotating || undefined}>
+    {!annotating && <div className={styles.widgetContext}><span><small>{t('stroke')}</small><b>{t('strokeCount', { count: strokes.length })}</b></span></div>}
+    <svg className={styles.drawingSurface} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={data.title} preserveAspectRatio="xMidYMid meet">
+      {strokes.length ? strokes.map((stroke, index) => {
+        const key = `${stroke.tool}-${index}`;
+        const common = {
+          stroke: stroke.stroke,
+          strokeWidth: stroke.tool === 'highlighter' ? stroke.strokeWidth * HIGHLIGHTER_WIDTH_FACTOR : stroke.strokeWidth,
+          strokeLinecap: 'round' as const,
+          strokeLinejoin: 'round' as const,
+          fill: 'none',
+          ...(stroke.tool === 'highlighter' ? { opacity: HIGHLIGHTER_OPACITY } : {}),
+        };
+        if (stroke.tool === 'text') return <text key={key} x={stroke.points[0]!.x} y={stroke.points[0]!.y} fill={stroke.stroke} fontSize={Math.max(12, stroke.strokeWidth * 5)}>{stroke.text || ''}</text>;
+        if (stroke.tool === 'rect') { const box = strokeRect(stroke); return <rect key={key} x={box.x} y={box.y} width={box.width} height={box.height} {...common} />; }
+        if (stroke.tool === 'ellipse') { const box = strokeRect(stroke); return <ellipse key={key} cx={box.x + box.width / 2} cy={box.y + box.height / 2} rx={box.width / 2} ry={box.height / 2} {...common} />; }
+        return <path key={key} d={strokePathD(stroke)} {...common} />;
+      }) : <text x="12" y="28" fill="currentColor">{t('drawHint')}</text>}
     </svg>
+    {/* Text annotations are corrected here rather than by redrawing them. The
+        row exists only when there is text AND the board is editable. */}
+    {!!texts.length && onEdit && <div className={`${styles.drawingTexts} nodrag nowheel`} onClick={(event) => event.stopPropagation()}>
+      {texts.map((entry) => <input
+        key={`text-${entry.index}`}
+        value={entry.stroke.text || ''}
+        aria-label={t('annotationText')}
+        placeholder={t('annotationPlaceholder')}
+        onChange={(event) => editText(entry.index, event.target.value)}
+      />)}
+    </div>}
   </div>;
 }
 
@@ -2073,19 +2257,34 @@ function useAuthoredNodeSize(id: string): { width?: number; height?: number } {
 export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const isWide = ['workflow', 'website', 'prototype', 'guidedTour', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
+    // A model, a lineage flow and a check suite are all read across, not down.
+    'erd', 'lineage', 'dataQuality', 'dataContract', 'datasource',
+    // A step list beside a generated spec, and a per-case result table, are read
+    // across the same way a check suite is.
+    'testPlan', 'testCase', 'testRun', 'defect',
     // A game is played in its own body, so it needs the width a game needs.
-    'game', 'resume'].includes(data.kind) || WEB_PAGE_KINDS.has(data.kind);
+    'game', 'resume'].includes(data.kind)
+    || WEB_PAGE_KINDS.has(data.kind)
+    // Every founder object that declares a `rows` field renders a table, and a table in
+    // a 240px card is unreadable. Derived from the spec rather than listed, so a kind
+    // that gains a table gains the width with it.
+    || SPEC_WIDE_KINDS.has(data.kind);
   // Every kind with a body of its own. A kind missing from here renders its own
   // body AND the generic fallback underneath it — which is what all nine
   // creative kinds did: a studio tile followed by a second, redundant block
   // repeating the same authored text. They are folded in from the one set that
   // already lists them, so a new creative kind cannot reintroduce the same bug.
-  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','game','resume','socialFeed','socialPost','socialCampaign', ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
+  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','practice','game','resume','socialFeed','socialPost','socialCampaign','erd','datasource','dataContract','dataQuality','metric','lineage','testPlan','testCase','testRun','defect', ...SPEC_KINDS, ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
   const authoredSize = useAuthoredNodeSize(id);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || AUTHORED_FRAME_FILL), borderColor: String(data.frameBorder || AUTHORED_FRAME_BORDER) } : undefined;
   const cardStyle = { ...frameStyle, ...authoredSize };
+  // `data-testid` is per KIND, not per instance: a test asks for "the testCase card",
+  // and an id built from the node's uuid would change every run. The instance is
+  // addressed by `data-node-id` when a test needs a specific one, and both are what
+  // `QaHeatZone.selector` finally has to key an element-level hot zone on — see the
+  // seam note in CreationCanvas.
   return (
-    <article style={cardStyle} data-viewport={data.viewport} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
+    <article style={cardStyle} data-testid={`canvas-node-${data.kind}`} data-node-id={id} data-node-kind={data.kind} data-viewport={data.viewport} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <NodeResizer isVisible={selected} minWidth={240} minHeight={130} lineClassName={styles.resizeLine} handleClassName={styles.resizeHandle} />
       <Handle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>
@@ -2131,6 +2330,16 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'diagram' && <DiagramBody data={data} />}
         {data.kind === 'file' && <FileBody data={data} />}
         {data.kind === 'kpi' && <KpiBody data={data} />}
+        {data.kind === 'erd' && <ErdBody data={data} />}
+        {data.kind === 'datasource' && <DataSourceBody data={data} />}
+        {data.kind === 'dataContract' && <DataContractBody data={data} />}
+        {data.kind === 'dataQuality' && <DataQualityBody data={data} />}
+        {data.kind === 'metric' && <MetricDefinitionBody data={data} />}
+        {data.kind === 'lineage' && <LineageBody data={data} />}
+        {data.kind === 'testPlan' && <TestPlanBody data={data} />}
+        {data.kind === 'testCase' && <TestCaseBody data={data} />}
+        {data.kind === 'testRun' && <TestRunBody data={data} />}
+        {data.kind === 'defect' && <DefectBody data={data} />}
         {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><AuthoredContent data={data} fallback={t('voiceFallback')} /></>}
         {data.kind === 'video' && <CanvasVideoEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} />}
         {data.kind === 'resume' && <CanvasResumeEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} {...(onResumeTailor ? { onTailor: (prompt) => onResumeTailor(id, prompt) } : {})} {...(onResumeDetach ? { onDetach: (patch) => onResumeDetach(id, patch) } : {})} {...(onResumeShare && onResumeSharesList && onResumeShareRevoke ? { shareActions: { create: (kind: 'view' | 'embed') => onResumeShare(id, kind), list: () => onResumeSharesList(id), revoke: (shareId: string) => onResumeShareRevoke(id, shareId) } } : {})} />}
@@ -2152,21 +2361,30 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'featureSummary' && <div className={styles.featureGrid}>{(Array.isArray(data.items) && data.items.length ? data.items.map((item) => typeof item === 'string' ? item : String((item as Record<string, unknown>)?.title || (item as Record<string, unknown>)?.name || t('feature'))).slice(0, 20) : ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration']).map((feature, index) => <span key={`${feature}-${index}`}><b>{index + 1}</b>{feature}</span>)}</div>}
         {data.kind === 'evermind' && <EvermindBody data={data} />}
         {data.kind === 'course' && <CourseBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
+        {data.kind === 'practice' && <PracticeBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
         {data.kind === 'projectComparison' && <ProjectComparisonBody data={data} />}
         {data.kind === 'pitch' && <PitchBody data={data} />}
         {data.kind === 'pitchScorecard' && <PitchScorecardBody data={data} />}
         {data.kind === 'pitchQa' && <PitchQaBody data={data} />}
         {data.kind === 'pitchApplication' && <PitchApplicationBody data={data} />}
         {data.kind === 'standup' && <StandupBody data={data} />}
-        {data.kind === 'drawing' && <DrawingBody data={data} />}
+        {data.kind === 'drawing' && <DrawingBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
         {data.kind === 'frame' && <div className={styles.frameBody}><strong>{String(data.framePurpose || t('arrangeObjects'))}</strong><p>{data.subtitle || t('frameFallback')}</p></div>}
         {data.kind === 'release' && <ReleaseBody data={data} onOpen={() => onOpenDetails?.(id, 'delivery')} />}
+        {/* All seventeen founder kinds, from the one spec that declares their fields.
+            See SpecObjectBody for why this is one branch and not forty-seven. */}
+        <SpecObjectBody data={data} />
         {!specialized.has(data.kind) && <><AuthoredContent data={data} fallback={t('objectReady', { label: creationObjectDefinition(data.kind).label })} /><div className={styles.pills}><span>{data.status || t('canvasObject')}</span><span>{t('liveSessionContext')}</span></div></>}
         {/* Every artifact leaves the board from the same place, in its own
             native formats. The row renders nothing for an object that is not a
             file — an agent, a frame, a timer — so it is safe to place once here
             rather than threaded into each body that happens to produce one. */}
         {onExport && <CanvasExportActions data={data} onExport={(action) => onExport(id, action)} />}
+        {/* Listening to a card is placed exactly where taking it away is, and for
+            the same reason: it belongs to any object that HAS words, so it is
+            mounted once rather than threaded into each body. The control renders
+            nothing when there is no prose to read. */}
+        <ReadAloud text={canvasProseText(data)} className={styles.readAloudButton} />
       </div>
       <Handle type="source" position={Position.Right} className={styles.handle} />
     </article>

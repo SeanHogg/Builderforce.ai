@@ -1,12 +1,39 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
-import { CREATION_CONNECTION_KINDS, emptyCanvasVideoTimeline, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
+import { CREATION_CONNECTION_KINDS, emptyCanvasVideoTimeline, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CreationConnectionKind, type FounderObjectKind, type HiringObjectKind, type PeopleObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
+import { FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS, founderMutableFields } from '@/lib/founderObjects';
+// Importing the vocabulary registers it (see `specObjects.ts`), which is what makes the
+// academic kinds resolvable everywhere else without a second list of them here.
+import { ACADEMIC_OBJECT_SPECS } from '@/lib/academicObjects';
+// The recruiter's funnel, and the cross-domain kinds that belong to no single family.
+// Importing them registers their vocabularies for exactly the reason the academic
+// import above does.
+import { HIRING_OBJECT_SPECS } from '@/lib/hiringObjects';
+// HR operations and the `form` collection primitive. Hiring and people operations are two
+// vocabularies with two owning agents (Recruiter, HR) — see `people.ts` — so they register
+// separately for the same reason the academic and founder sets do.
+import { PEOPLE_OBJECT_SPECS } from '@/lib/peopleObjects';
+import { SHARED_OBJECT_SPECS } from '@/lib/sharedCanvasObjects';
+import { specBookkeepingFields, specFieldNames } from '@/lib/specObjects';
+import {
+  ACADEMIC_MUTABLE_FIELDS, ACADEMIC_REGISTRY, FOUNDER_MUTABLE_FIELDS, FOUNDER_REGISTRY,
+  HIRING_MUTABLE_FIELDS, HIRING_REGISTRY, PEOPLE_MUTABLE_FIELDS, PEOPLE_REGISTRY,
+  SHARED_MUTABLE_FIELDS, SHARED_REGISTRY, SPEC_ACTIONS,
+} from './specDerivedRegistry';
+import {
+  DATA_ARCHITECTURE_FIELD_NAMES, DATA_ARCHITECTURE_SPECS, dataArchitectureMutableFields, dataArchitectureSeed,
+  type DataArchitectureKind,
+} from '@/lib/dataArchitectureObjects';
 import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
 import { DEFAULT_MODALITY } from '@/lib/modality';
 import { DEFAULT_PITCH_COMPETITION_ID } from '@/lib/pitchCompetition';
-import { buildLlmCourse, COURSE_EXPORT_STANDARDS } from '@/lib/courseLms';
+import { COURSE_EXPORT_STANDARDS, emptyCourse } from '@/lib/courseLms';
 import { defaultCanvasTourDesign } from '@/lib/onboarding/canvasTourDesign';
 
-export type CreationObjectGroup = 'Build' | 'Data' | 'Knowledge' | 'Insights' | 'Work' | 'Pitch' | 'People' | 'Agents' | 'Models' | 'Collaborate' | 'Integrations';
+// The union moved to `types.ts` so the derivation layer can be typed without importing
+// the registry it feeds. Re-exported here because every existing consumer imports it
+// from this module, and one canonical declaration with one import path is the point.
+export type { CreationObjectGroup } from './types';
+import type { CreationObjectGroup } from './types';
 
 export interface CreationObjectDefinition {
   kind: CreationObjectKind;
@@ -35,7 +62,11 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'website', label: 'Website', icon: '◎', group: 'Build', createData: () => ({ kind: 'website', title: 'Website concept', status: 'Draft' }) },
   { kind: 'build', label: 'Builder', icon: '▶', group: 'Build', createData: () => ({ kind: 'build', title: 'New build', status: 'Choose a type', modality: DEFAULT_MODALITY }) },
   { kind: 'chat', label: 'Chat', icon: '●', group: 'Build', createData: () => ({ kind: 'chat', title: 'Brain' }) },
-  { kind: 'dataset', label: 'Dataset', icon: '▤', group: 'Build', createData: () => ({ kind: 'dataset', title: 'Imported dataset.csv' }) },
+  // Data, not Build. Every object derived from a dataset — table, chart, map,
+  // KPI — has always lived in the Data group; the one true ingestion object was
+  // the only thing missing from the palette a data question starts in.
+  { kind: 'dataset', label: 'Dataset', icon: '▤', group: 'Data', createData: () => ({ kind: 'dataset', title: 'Imported dataset.csv' }) },
+  // The semantic layer: the DEFINITION of a number, which a `liveMetric` reading
   { kind: 'table', label: 'Table', icon: '▦', group: 'Data', createData: () => ({ kind: 'table', title: 'Data table', status: 'Draft' }) },
   { kind: 'spreadsheet', label: 'Spreadsheet', icon: '▤', group: 'Data', createData: () => ({ kind: 'spreadsheet', title: 'Untitled spreadsheet', status: 'Draft' }) },
   { kind: 'chart', label: 'Chart', icon: '▥', group: 'Data', createData: () => ({ kind: 'chart', title: 'Data visualization', status: 'Connect a dataset' }) },
@@ -64,7 +95,29 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'terminal', label: 'Terminal output', icon: '>_', group: 'Build', createData: () => ({ kind: 'terminal', title: 'Terminal output', status: 'Review for secrets' }) },
   { kind: 'service', label: 'Local service', icon: '◎', group: 'Build', createData: () => ({ kind: 'service', title: 'Local service', status: 'Preview from VS Code' }) },
   { kind: 'llm', label: 'LLM', icon: '◉', group: 'Models', createData: () => ({ kind: 'llm', title: 'Language model', status: 'Blueprint', model: 'gpt-4o' }) },
-  { kind: 'course', label: 'Course', icon: '▰', group: 'Knowledge', createData: () => ({ kind: 'course', title: 'Build an LLM', status: 'Ready to learn', subtitle: 'A hands-on, standards-based learning path.', course: buildLlmCourse(), exportStandards: COURSE_EXPORT_STANDARDS }) },
+  // A course knows its SUBJECT, and Brain writes the rest. It used to be created
+  // as `buildLlmCourse()` — so every course object on the platform, whatever it
+  // was dragged out for, arrived as the same five modules about tokenizers and
+  // red-teaming and had to be deleted before anyone could study anything else.
+  // The worked LLM course is still shipped, as what it always was: the example
+  // behind the "LLM Builder Academy" template that advertises it.
+  { kind: 'course', label: 'Course', icon: '▰', group: 'Knowledge', createData: () => ({ kind: 'course', title: 'New course', status: 'Choose a subject', subtitle: 'Name what you want to learn — Brain writes the lessons, the practice and the knowledge checks.', course: emptyCourse(), exportStandards: COURSE_EXPORT_STANDARDS }) },
+  // Practice is the half of learning the canvas could not do: answer, find out,
+  // try again, and have the board remember which ones you keep missing. The
+  // attempt record lives on the object and is deliberately absent from
+  // MUTABLE_FIELDS below — see lib/canvasPractice.ts.
+  { kind: 'practice', label: 'Practice', icon: '◐', group: 'Knowledge', createData: () => ({ kind: 'practice', title: 'Practice set', status: 'Add questions', practiceMode: 'quiz', questions: [], attempts: [] }) },
+  // ── Quality ──────────────────────────────────────────────────────────────
+  // A plan is the INTENT and the gate; the cases are their own objects, joined to
+  // it by membership, so one case can be edited, run and pointed at the thing it
+  // verifies without the plan being rewritten. `status` says what the plan holds,
+  // never that it passed — a gate that reports before it has evidence is the
+  // failure mode `planGateVerdict` returns `pending` for.
+  { kind: 'testPlan', label: 'Test plan', icon: '⛉', group: 'Quality', createData: () => ({ kind: 'testPlan', title: 'Test plan', status: 'Name a target', targetUrl: '', routes: [], exitCriteria: {}, signOffs: [] }) },
+  { kind: 'testCase', label: 'Test case', icon: '✓', group: 'Quality', createData: () => ({ kind: 'testCase', title: 'Test case', status: 'Not run', steps: [], spec: '', priority: 'normal' }) },
+  // Empty on purpose (see SHELL_IS_LEGITIMATE): a run is written BY a run.
+  { kind: 'testRun', label: 'Test run', icon: '▷', group: 'Quality', createData: () => ({ kind: 'testRun', title: 'Test run', status: 'Not started', results: [] }) },
+  { kind: 'defect', label: 'Defect', icon: '⚑', group: 'Quality', createData: () => ({ kind: 'defect', title: 'Defect', status: 'open', severity: 'medium', defectType: 'assertion', expected: '', actual: '', reproSteps: [] }) },
   { kind: 'project', label: 'Project', icon: '▦', group: 'Work', createData: () => ({ kind: 'project', title: 'BuilderForce launch', status: 'Not linked', subtitle: 'Search for a canonical project in the inspector.' }) },
   { kind: 'salesPipeline', label: 'Sales pipeline', icon: '↗', group: 'Work', createData: () => ({ kind: 'salesPipeline', title: 'Sales pipeline', status: 'Live', stages: ['new', 'contacted', 'qualified', 'meeting', 'proposal', 'won'] }) },
   { kind: 'salesCampaign', label: 'Sales campaign', icon: '◎', group: 'Work', createData: () => ({ kind: 'salesCampaign', title: 'New campaign', status: 'Draft' }) },
@@ -137,6 +190,24 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'evermind', label: 'Evermind', icon: '🧠', group: 'Models', createData: () => ({ kind: 'evermind', title: 'Untitled Evermind', status: 'Blueprint', subtitle: 'Create, teach, tune, evaluate, and publish a self-learning model on this canvas.', evermindVersion: 0, contributions: 0 }) },
 ] as const satisfies readonly BaseCreationObjectDefinition[];
 
+/**
+ * The five spec vocabularies are lowered in `specDerivedRegistry.ts`.
+ *
+ * They used to be five near-identical `.map()` blocks here — same eleven lines, differing
+ * only in which label map they read — which is both the duplication the DRY rule forbids
+ * and what pushed this file past the 800-line ratchet. A vocabulary now costs one line
+ * there and one spread below.
+ */
+/** The data-architecture kinds, DERIVED from `dataArchitectureObjects.ts` for the
+ *  same reason the founder kinds are — see the FOUNDER_REGISTRY note above. */
+const DATA_ARCHITECTURE_REGISTRY = DATA_ARCHITECTURE_SPECS.map((spec) => ({
+  kind: spec.kind,
+  label: spec.label,
+  icon: spec.icon,
+  group: 'Data' as const,
+  createData: (): CreationNodeData => dataArchitectureSeed(spec),
+})) satisfies readonly BaseCreationObjectDefinition[];
+
 const CAPABILITIES: Partial<Record<CreationObjectKind, string>> = {
   evermind: 'evermind', mcp: 'integrations', agent: 'agents', llm: 'models', voice: 'voice', video: 'video',
 };
@@ -146,7 +217,13 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   // happen inside the Builder surface it mounts, so they are not advertised here as
   // separate canvas-side actions that nothing implements.
   build: ['open'],
-  dataset: ['import', 'profile', 'visualize', 'plot'], chart: ['refresh', 'drill'], dashboard: ['refresh', 'drill'], map: ['refresh', 'drill'],
+  // `classify` tags PII, `contract` declares the shape, `model` infers an ERD
+  // from what was uploaded, and `refresh` re-runs the import against its origin.
+  dataset: ['import', 'profile', 'visualize', 'plot', 'classify', 'contract', 'model', 'refresh'],
+  chart: ['refresh', 'drill'], dashboard: ['refresh', 'drill'], map: ['refresh', 'drill'],
+  // The data-architecture objects come from the same spec that declares their
+  // fields, so a kind cannot advertise an action its body has no affordance for.
+  ...Object.fromEntries(DATA_ARCHITECTURE_SPECS.map((spec) => [spec.kind, spec.actions])),
   project: ['expand', 'compare'], task: ['assign', 'deliver'], agent: ['inspect', 'configure', 'assign'],
   evermind: ['teach', 'train', 'evaluate', 'publish'], voice: ['record', 'play'], video: ['generate', 'capture', 'edit', 'preview', 'export'], mcp: ['authenticate', 'execute'],
   image: ['generate', 'preview', 'export', 'convert-to-drawio'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
@@ -166,10 +243,28 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   socialFeed: ['refresh', 'filter', 'pin', 'connect'], socialPost: ['open', 'reshare'],
   socialCampaign: ['draft', 'schedule', 'publish'],
   course: ['learn', 'export'],
+  // `practice` is the study loop itself; `reset` clears the attempt record so a
+  // set can be studied again from cold before an exam.
+  practice: ['practice', 'reset'],
   guidedTour: ['preview'],
+  // `gate` evaluates the exit criteria against whatever evidence is on the board;
+  // `export` writes the .spec.ts out (a plan writes its whole suite as one file).
+  //
+  // Deliberately NOT advertising `run`: the canvas has no browser to drive, and
+  // `CONNECTED_CANVAS_ACTIONS` would answer every call with "no delivery adapter".
+  // Running a published suite is `canvas_publish_tests` plus the CI harness, which is
+  // a different surface — and an action a body cannot honour is the exact defect the
+  // note above this map exists to prevent.
+  testPlan: ['gate', 'export'],
+  testCase: ['export'],
+  testRun: ['export'],
+  defect: ['export'],
+  // Every spec vocabulary's actions, from the one declaration that also gives each
+  // kind its fields — so a kind cannot advertise an action its body cannot perform.
+  ...SPEC_ACTIONS,
 };
 
-const MUTABLE_FIELDS = {
+const BASE_MUTABLE_FIELDS = {
   // `steps` is the authored spec the compiler lowers into a real definition —
   // each step may carry connector/action/input, a prompt, or an agent role. See
   // api/src/domain/canvasWorkflowSpec.ts for the shape it compiles to. Brain
@@ -184,18 +279,27 @@ const MUTABLE_FIELDS = {
   // legacy persistence name retained until that data contract is migrated.
   build: ['content', 'modality', 'template', 'ideProjectId', 'storageProjectId', 'storageProjectPublicId', 'containerProjectId', 'fileCount', 'previewUrl', 'subdomain', 'url', 'siteUrl', 'pathUrl'],
   chat: ['content', 'aiResponse', 'messages', 'trace'],
-  dataset: ['content', 'columns', 'rows', 'sampleRows', 'rowCount', 'profile', 'summary', 'fileName', 'mimeType'],
-  table: ['content', 'columns', 'rows', 'rowCount', 'sampleRows', 'highlightRules', 'summary', 'sourceDatasetId', 'sources'],
+  // `classifications`, `dataContract` and `lineage` are governance state Brain
+  // MAY author: a PII tag it proposes is only useful if it can be written back.
+  // `fetchedAt` is what makes staleness computable rather than guessed.
+  // `fixtureCases` labels each generated row with the edge it exercises, so a failing
+  // fixture can say WHICH boundary broke rather than "row 14".
+  dataset: ['content', 'columns', 'rows', 'sampleRows', 'rowCount', 'profile', 'summary', 'fileName', 'mimeType', 'classifications', 'dataContract', 'violations', 'fetchedAt', 'lineage', 'producedAt', 'sourceUri', 'fixtureCases'],
+  table: ['content', 'columns', 'rows', 'rowCount', 'sampleRows', 'highlightRules', 'summary', 'sourceDatasetId', 'sources', 'classifications', 'lineage', 'producedAt', 'fetchedAt'],
   spreadsheet: ['content', 'columns', 'rows', 'formulas', 'rowCount', 'highlightRules', 'summary'],
   // `widgets` is the dashboard's own model (see lib/canvasDashboard): an ordered list
   // where the chart kind is a VALUE, so a dashboard can hold any number of charts of
   // any type. `kpis` / `chartLabels` / `chartValues` remain the flat wire format the
   // model and canvas_query_dataset author in, and are folded into widgets on read.
-  chart: ['content', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues', 'kpis', 'widgets', 'sources', 'summary', 'sourceDatasetId'],
-  map: ['content', 'mapPoints', 'mapTitle', 'mapValueLabel', 'mapRegion', 'mapRegionName', 'mapOutline', 'mapAttribution', 'sources', 'summary', 'sourceDatasetId'],
-  kpi: ['content', 'value', 'target', 'unit', 'trend', 'sources', 'summary', 'sourceDatasetId'],
-  dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'widgets', 'sources', 'fetchedAt', 'dateRange', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'summary', 'sourceDatasetId'],
-  report: ['content', 'markdown', 'chartLabels', 'chartValues', 'widgets', 'sources'],
+  // `lineage`/`producedAt` are on every derived artifact for one reason: a chart
+  // that records WHICH dataset it came from but not HOW can never be recomputed,
+  // and can never say it has gone stale because its source moved. The transform
+  // travels with the artifact — see lib/canvasLineage.
+  chart: ['content', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues', 'kpis', 'widgets', 'sources', 'summary', 'sourceDatasetId', 'lineage', 'producedAt', 'metricId'],
+  map: ['content', 'mapPoints', 'mapTitle', 'mapValueLabel', 'mapRegion', 'mapRegionName', 'mapOutline', 'mapAttribution', 'sources', 'summary', 'sourceDatasetId', 'lineage', 'producedAt'],
+  kpi: ['content', 'value', 'target', 'unit', 'trend', 'sources', 'summary', 'sourceDatasetId', 'lineage', 'producedAt', 'metricId'],
+  dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'widgets', 'sources', 'fetchedAt', 'dateRange', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'summary', 'sourceDatasetId', 'lineage', 'producedAt'],
+  report: ['content', 'markdown', 'chartLabels', 'chartValues', 'widgets', 'sources', 'lineage', 'producedAt'],
   evaluation: ['content', 'criteria', 'verdict', 'gaps', 'recommendations', 'sources', 'testResults', 'passRate', 'runCount', 'lastRunAt'],
   projectComparison: ['content', 'projects', 'sources', 'fetchedAt', 'recommendations'],
   roadmap: ['content', 'items', 'milestones', 'sources'],
@@ -205,11 +309,19 @@ const MUTABLE_FIELDS = {
   browser: ['content', 'url', 'viewport', 'pageTitle'],
   repository: ['content', 'url', 'branch'],
   selection: ['content', 'code', 'language', 'path', 'range'],
-  diagnostics: ['content', 'diagnostics', 'findings', 'checks', 'items', 'severity', 'result', 'results', 'summary', 'verdict', 'nextSteps', 'recommendations', 'actions', 'remediation', 'path', 'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount'],
+  // `auditFindings` is the accessibility/performance verdict of a fetched page. It
+  // lands on `diagnostics` rather than on a kind of its own because that is exactly
+  // what a diagnostic IS here — scored findings plus next steps — and a second
+  // "audit" kind would be a per-feature copy of a shape that already exists.
+  diagnostics: ['content', 'diagnostics', 'findings', 'checks', 'items', 'severity', 'result', 'results', 'summary', 'verdict', 'nextSteps', 'recommendations', 'actions', 'remediation', 'path', 'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount', 'auditFindings', 'auditScore', 'auditPassed', 'auditTarget'],
   terminal: ['content', 'exitCode'],
   service: ['content', 'url', 'port', 'viewport', 'pageTitle'],
   llm: ['content', 'model', 'instructions', 'parameters'],
   course: ['content', 'course', 'exportStandards'],
+  // `attempts` is absent on purpose: it is the learner's record of what they
+  // actually answered, and a model that could write it could report mastery
+  // nobody demonstrated. Only the practice card appends to it.
+  practice: ['content', 'practiceMode', 'questions', 'sourceObjectId', 'summary'],
   guidedTour: ['content', 'tour'],
   project: ['content', 'projectLens', 'sources', 'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount', 'diagnostics', 'recommendations', 'qualityUpdatedAt'],
   salesPipeline: ['content', 'ownerUserId', 'stages', 'pipelineCounts', 'recommendations', 'sources'],
@@ -243,11 +355,20 @@ const MUTABLE_FIELDS = {
   pitchApplication: ['content', 'competitionId', 'answers', 'eligibility', 'category', 'sources', 'summary'],
   staff: ['content', 'role', 'focus', 'accent'],
   team: ['content', 'participants', 'summary'],
-  role: ['content', 'role', 'responsibilities'],
+  // A role had an ORG representation and no COST one, so the board could draw the
+  // headcount that consumes most of a budget and could never total it. `loadedCost` is
+  // salary plus employer taxes, benefits and equipment — the number a plan actually
+  // spends — and `startAt` is what stops a plan overstating the year by counting a
+  // month-11 hire as twelve months of cost. These are the SAME facts `headcountPlan`
+  // rolls up, held once on the role rather than copied into the plan.
+  role: ['content', 'role', 'responsibilities', 'currency', 'salary', 'loadedCost', 'startAt', 'level', 'team', 'headcountStatus'],
   standup: ['content', 'participants', 'summary'],
   agent: ['content', 'model', 'personality', 'instructions', 'tools', 'autonomy', 'testPrompt', 'testExpected', 'testResponse', 'testStatus', 'testHistory'],
   voice: ['content', 'transcript', 'voiceId', 'audioUrl'],
-  video: ['content', 'prompt', 'videoUrl', 'duration', 'modelSlug', 'maxFrames', 'frameCount', 'videoWidth', 'videoHeight', 'generatedFrames', 'mediaKind', 'capabilityId', 'videoTimeline', 'videoSources', 'selectedVideoClipId', 'renderedVideoUrl', 'renderedVideoStorageKey', 'renderedVideoMimeType', 'youtubeVideoId', 'youtubeUrl', 'youtubePrivacyStatus'],
+  video: ['content', 'prompt', 'videoUrl', 'duration', 'modelSlug', 'maxFrames', 'frameCount', 'videoWidth', 'videoHeight', 'generatedFrames', 'mediaKind', 'capabilityId', 'videoTimeline', 'videoSources', 'selectedVideoClipId', 'renderedVideoUrl', 'renderedVideoStorageKey', 'renderedVideoMimeType', 'youtubeVideoId', 'youtubeUrl', 'youtubePrivacyStatus',
+    // A video with no captions cannot lawfully be distributed to a class (WCAG 1.2.2),
+    // and until this field existed the board had nowhere to record that they exist.
+    'captionsUrl'],
   image: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
   animation: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'duration', 'mcpServer', 'mcpTool', 'mcpArguments'],
   podcast: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'duration', 'transcript', 'mcpServer', 'mcpTool', 'mcpArguments'],
@@ -269,9 +390,71 @@ const MUTABLE_FIELDS = {
   timer: ['content', 'duration', 'remaining', 'running'],
   mcp: ['content', 'toolName', 'operation', 'arguments'],
   evermind: ['content', 'model', 'instructions', 'teacherModel', 'inferenceEnabled', 'evermindVersion', 'evermindSeeded', 'contributions', 'pendingContributions', 'recentLearnings', 'trainingLoss', 'learningMode', 'lastLearnedAt', 'quarantinedAt', 'quarantineReason', 'evalPoint', 'stages', 'sources'],
-} as const satisfies Record<CreationObjectKind, readonly string[]>;
+  // ── The QA objects ─────────────────────────────────────────────────────────
+  // `gateVerdict`, `passRate` and `lastRunAt` are absent from the authorable list on
+  // purpose, and it is the same rule `practice.attempts` follows: a model that could
+  // write its own gate verdict could report a release as green that nothing ran. Those
+  // are written by `planGateVerdict` from the runs on the board, never by a patch.
+  testPlan: ['content', 'targetUrl', 'routes', 'exitCriteria', 'summary', 'sources', 'planSlug'],
+  // `spec` IS authorable — a person may paste a spec they already have — but every
+  // canvas path that changes `steps` re-lowers it through `relowerCase`, so the two
+  // cannot drift while the board owns the case.
+  testCase: ['content', 'targetUrl', 'route', 'steps', 'spec', 'priority', 'intent', 'caseId', 'summary', 'sources'],
+  testRun: ['content', 'targetUrl', 'results', 'browser', 'commitSha', 'startedAt', 'finishedAt', 'summary', 'explorationId', 'planObjectId'],
+  defect: ['content', 'severity', 'defectType', 'route', 'targetUrl', 'expected', 'actual', 'reproSteps', 'fingerprint', 'caseId', 'evidenceUrl', 'assignee', 'resolution', 'summary', 'journal'],
+  // Every spec-driven vocabulary is excluded here because its mutable fields are DERIVED
+  // from its one declaration rather than retyped — that derivation is the whole point of
+  // `specObjects.ts`. The exclusion list grows by one name per vocabulary, and the
+  // annotation still fails to compile for any kind that is in neither half.
+} as const satisfies Record<
+  Exclude<
+    CreationObjectKind,
+    // The data-architecture kinds belong here for the same reason as the rest: their
+    // mutable fields are DERIVED from `DATA_ARCHITECTURE_SPECS` and spread in below.
+    // Their omission made this annotation demand six entries the object above is not
+    // supposed to carry, so the exhaustiveness check it exists to perform could not
+    // compile at all — a guard that fails for every kind protects none of them.
+    FounderObjectKind | AcademicObjectKind | HiringObjectKind | PeopleObjectKind | SharedObjectKind | DataArchitectureKind
+  >,
+  readonly string[]
+>;
 
-const COMMON_MUTABLE_FIELDS = ['title', 'subtitle', 'status', 'deliverables'] as const;
+/** The annotation is the exhaustiveness check: a kind added to the contract and to
+ *  neither half below fails to compile here rather than rendering as an empty card. */
+const MUTABLE_FIELDS: Record<CreationObjectKind, readonly string[]> = {
+  ...BASE_MUTABLE_FIELDS,
+  ...FOUNDER_MUTABLE_FIELDS,
+  ...ACADEMIC_MUTABLE_FIELDS,
+  ...HIRING_MUTABLE_FIELDS,
+  ...PEOPLE_MUTABLE_FIELDS,
+  ...SHARED_MUTABLE_FIELDS,
+  // Cast to the named kind union rather than left as an index signature: an
+  // index-signature map satisfies ANY key, so spreading one silently switched the
+  // exhaustiveness annotation below off for these six kinds.
+  ...(Object.fromEntries(
+    DATA_ARCHITECTURE_SPECS.map((spec) => [spec.kind, dataArchitectureMutableFields(spec.kind)]),
+  ) as Record<DataArchitectureKind, readonly string[]>),
+};
+
+/**
+ * `altText` is COMMON, on every kind, for the same reason `title` is.
+ *
+ * ── THE GAP THIS CLOSES ──────────────────────────────────────────────────────────
+ * The canvas can generate an image, a comic, an animation, a 3D model, a chart and a
+ * map, and not one of them had a field for a text alternative. That is not a missing
+ * nicety: an artifact distributed to enrolled students without one fails WCAG 1.1.1,
+ * and a university that publishes it has broken the law. The accessibility audit
+ * (`lib/academic/accessibility.ts`) is what reports it — and an audit that reports a
+ * problem the data model gives you no way to fix would be worse than none.
+ *
+ * Universal rather than listed per kind, because "does this object need a text
+ * alternative" is a question about the RENDERED artifact, not about the kind: a `note`
+ * holding an ASCII diagram needs one and a `chart` with a written summary does not.
+ * The audit decides; the field is always available. It sits with the identity fields
+ * so `NON_SUBSTANTIVE_FIELDS` picks it up — an image whose only authored field is its
+ * own alt text is still an empty shell.
+ */
+const COMMON_MUTABLE_FIELDS = ['title', 'subtitle', 'status', 'deliverables', 'altText'] as const;
 const SENSITIVE_MUTATION_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 
 /**
@@ -323,12 +506,31 @@ const SHELL_IS_LEGITIMATE: ReadonlySet<CreationObjectKind> = new Set<CreationObj
   // A social feed and a pinned post are READ from connected accounts, exactly as an
   // inbox is — their content arrives from the network, never from an authored patch.
   'socialFeed', 'socialPost',
+  // A run is written BY a run. An empty one is the honest state of a suite that has
+  // been dispatched and has not reported yet — the one case where a shell is the
+  // truth rather than work handed back to the user.
+  'testRun',
 ]);
 
 /** Identity and bookkeeping — present on an empty object, so authoring one of these
  *  is not evidence that anything was actually written. */
 const NON_SUBSTANTIVE_FIELDS: ReadonlySet<string> = new Set<string>([
   ...COMMON_MUTABLE_FIELDS, 'sources', 'fetchedAt', 'sourceDatasetId',
+  // A practice set whose only authored field is its MODE is still an empty
+  // shell — the questions are the work.
+  'practiceMode',
+  // The founder half of the same idea, declared with the fields it describes.
+  ...FOUNDER_BOOKKEEPING_FIELDS,
+  /**
+   * Every spec field flagged `bookkeeping` or `derived`, across every registered
+   * vocabulary.
+   *
+   * `derived` matters most here: a `submission` whose only populated fields are the
+   * `integrity` ledger and a `lateBy` the board computed was NOT authored by anybody,
+   * and must still count as the empty shell it is. Without this, the canvas writing its
+   * own evidence onto a card would be mistaken for a learner handing work in.
+   */
+  ...specBookkeepingFields(),
 ]);
 
 /** The fields that, for this kind, carry the actual work. */
@@ -388,131 +590,26 @@ export function sanitizeCreationObjectPatch(kind: CreationObjectKind, value: unk
  * intentionally absent. Structured evidence is retained so comparisons,
  * evaluations, roadmaps, and charts can be grounded rather than title-only.
  */
-const CONTEXT_FIELDS = [
-  'kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus',
-  'fetchedAt', 'dateRange', 'projectLens', 'columns', 'rowCount', 'sampleRows', 'profile', 'highlightRules', 'sourceDatasetId',
-  'fileName', 'mimeType', 'fileSize', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues', 'widgets',
-  // `mapOutline` is deliberately absent: a boundary polygon is thousands of coordinate
-  // pairs, and the snapshot is the model's context budget. Brain needs to know WHAT is
-  // plotted, not the shape of the coastline behind it.
-  'mapPoints', 'mapTitle', 'mapValueLabel', 'mapRegion', 'mapRegionName', 'mapAttribution',
-  'projects', 'sources', 'items', 'summary', 'participants', 'evermindVersion',
-  'contributions', 'inferenceEnabled', 'teacherModel', 'viewport', 'content', 'markdown',
-  'steps', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteTheme', 'activeWebsitePageId', 'pages', 'kpis', 'verdict',
-  'modality', 'template', 'ideProjectId', 'storageProjectId', 'fileCount', 'previewUrl',
-  'gaps', 'recommendations', 'milestones', 'code', 'language', 'path', 'url', 'branch',
-  'diagnostics', 'findings', 'checks', 'results', 'result', 'nextSteps', 'actions', 'remediation',
-  'mediaKind', 'capabilityId', 'provider', 'templateId', 'templateCategory', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'duration', 'pages', 'units', 'mcpServer', 'mcpTool', 'resumeFamily',
-  'diagramFormat',
-  // A framed page is opaque to everything else on the board; the title and text
-  // the panel read off it are what let Brain reason about the page a user is
-  // looking at rather than only knowing its address.
-  'pageTitle', 'frameable',
-  'instructions', 'parameters', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey',
-  'criteria', 'testPrompt', 'testExpected', 'testResponse', 'testStatus', 'testResults', 'passRate', 'runCount', 'lastRunAt',
-  'prdTitle', 'prdStatus', 'prdSummary', 'prdCount', 'requirements',
-  'userStories', 'responsibilities', 'tools', 'autonomy', 'transcript', 'stages',
-  'approvalMode', 'runTarget', 'deliveryProjectRef', 'deliveryProjectName', 'mockupAgentRef', 'mockupAgentName',
-  'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount', 'qualityUpdatedAt',
-  'ownerUserId', 'contactId', 'campaignId', 'email', 'company', 'market', 'stage', 'lastTouchAt',
-  'pipelineCounts', 'subject', 'sent', 'replies', 'scheduledAt', 'segments', 'channels',
-  'outreachTarget', 'contactsTarget', 'meetingsTarget', 'progress', 'durationMinutes', 'attendees', 'meetingUrl',
-  'revenueGoalCents', 'referralLink', 'salesLink',
-  // A pitch object's substance IS its arrays — Brain cannot strengthen a weak
-  // criterion or tighten an over-length answer it was never shown.
-  'competitionId', 'beats', 'questions', 'answers', 'eligibility', 'category',
-  // A mailbox object's substance IS the messages and the filter that produced
-  // them — Brain cannot triage an inbox, or say why a message matters, from a
-  // title alone. `bodyText` is already excerpt-length by the time it gets here
-  // (the service truncates on read) and `safeContextValue` caps it again.
-  'connectionId', 'accountEmail', 'provider', 'filter', 'messages', 'unreadCount', 'fetchedAt',
-  'messageId', 'from', 'fromName', 'to', 'receivedAt', 'bodyText', 'unread', 'hasAttachments', 'webUrl',
-  // Campaign counters are what "how did that send do?" is answered from; the
-  // body is deliberately absent — it is KB of table markup, and the model edits
-  // it through the template tools rather than reading it out of the snapshot.
-  'audienceId', 'audienceName', 'transport', 'recipients', 'failed', 'opened', 'clicked', 'blockers',
-  'mergeFields', 'assetId', 'logoUrl',
-  // A social object's substance IS the posts and their engagement — Brain cannot say
-  // which message worked, or write the next one, from a title alone. `posts` carries
-  // the compact projection (no media bytes), and `safeContextValue` caps it again.
-  'posts', 'accounts', 'networks', 'engagement', 'topPost', 'postCount',
-  'network', 'accountName', 'authorName', 'text', 'permalink', 'publishedAt', 'metrics',
-  'body', 'linkUrl', 'mediaUrls', 'variants', 'targets', 'publishedCount', 'failedCount',
-  'course', 'exportStandards', 'tour',
-] as const;
-const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
-const DEFAULT_CONTEXT_ARRAY_LIMIT = 25;
 /**
- * Per-field array budgets. A wide operational export must not have the column
- * a user is asking about silently truncated away, while row samples stay small
- * because Brain reads real numbers through canvas_query_dataset instead of
- * counting sampled rows by hand.
- */
-const CONTEXT_ARRAY_LIMITS: Readonly<Partial<Record<string, number>>> = {
-  columns: MAX_TABULAR_COLUMNS,
-  profile: MAX_TABULAR_COLUMNS,
-  highlightRules: 20,
-  sampleRows: 8,
-  // Enough for Brain to name what is on the map and answer "which one is highest"
-  // without carrying every coordinate of a 500-point plot into the prompt.
-  mapPoints: 12,
-  resumeFamily: 10,
-};
-const DEFAULT_CONTEXT_DEPTH_LIMIT = 3;
-/**
- * Per-field nesting budgets, for the same reason {@link CONTEXT_ARRAY_LIMITS}
- * exists: three levels is the right default for the snapshot, and wrong for the
- * one field that is legitimately deeper.
+ * The AI-context layer — `CONTEXT_FIELDS`, its per-field budgets and
+ * `creationObjectAiContext` — lives in `creationObjectContext.ts`.
  *
- * A `course` nests `course → modules[] → module → lessons[] → lesson`, so at the
- * default the lesson objects were dropped and Brain was handed a course whose
- * modules had titles and nothing else. That is fatal to the thing a Course is
- * FOR: a teacher agent asked to work through the material one step at a time,
- * check understanding, and mark progress could not read a single lesson or
- * assessment off the board, so it re-invented the curriculum instead of teaching
- * the one the learner was looking at.
+ * A different question from this module's ("what exists, what may be written"), with
+ * different safety properties, and 300 lines of it. Re-exported so every existing
+ * consumer keeps its import path.
  */
-const CONTEXT_DEPTH_LIMITS: Readonly<Partial<Record<string, number>>> = {
-  course: 5,
-  tour: 5,
-  resumeFamily: 6,
-};
+export { creationObjectAiContext } from './creationObjectContext';
+import { creationObjectAiContext } from './creationObjectContext';
 
-function safeContextValue(
-  value: unknown,
-  depth = 0,
-  arrayLimit = DEFAULT_CONTEXT_ARRAY_LIMIT,
-  depthLimit = DEFAULT_CONTEXT_DEPTH_LIMIT,
-): unknown {
-  if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
-  if (typeof value === 'string') return value.slice(0, 2_000);
-  if (depth >= depthLimit) return undefined;
-  // Nested arrays keep the DEFAULT budget rather than inheriting the top-level
-  // field's — a wide `columns` list does not license 64 nested rows underneath it.
-  if (Array.isArray(value)) return value.slice(0, arrayLimit).map((item) => safeContextValue(item, depth + 1, DEFAULT_CONTEXT_ARRAY_LIMIT, depthLimit)).filter((item) => item !== undefined);
-  if (typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, MAX_TABULAR_COLUMNS).flatMap(([key, item]) => {
-      if (SENSITIVE_CONTEXT_KEY.test(key)) return [];
-      const safe = safeContextValue(item, depth + 1, DEFAULT_CONTEXT_ARRAY_LIMIT, depthLimit);
-      return safe === undefined ? [] : [[key, safe]];
-    }));
-  }
-  return undefined;
-}
-
-export function creationObjectAiContext(data: CreationNodeData): Record<string, unknown> {
-  return Object.fromEntries(CONTEXT_FIELDS.flatMap((field) => {
-    const value = safeContextValue(
-      data[field],
-      0,
-      CONTEXT_ARRAY_LIMITS[field] ?? DEFAULT_CONTEXT_ARRAY_LIMIT,
-      CONTEXT_DEPTH_LIMITS[field] ?? DEFAULT_CONTEXT_DEPTH_LIMIT,
-    );
-    return value === undefined ? [] : [[field, value]];
-  }));
-}
-
-export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = BASE_CREATION_OBJECT_REGISTRY.map((definition) => ({
+export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
+  ...BASE_CREATION_OBJECT_REGISTRY,
+  ...FOUNDER_REGISTRY,
+  ...ACADEMIC_REGISTRY,
+  ...HIRING_REGISTRY,
+  ...PEOPLE_REGISTRY,
+  ...SHARED_REGISTRY,
+  ...DATA_ARCHITECTURE_REGISTRY,
+].map((definition) => ({
   ...definition,
   ...(CAPABILITIES[definition.kind] ? { capability: CAPABILITIES[definition.kind] } : {}),
   renderer: 'creation' as const,
@@ -540,5 +637,14 @@ export function availableCreationObjects(capabilities: ReadonlySet<string>): rea
   return CREATION_OBJECT_REGISTRY.filter((definition) => !definition.capability || capabilities.has(definition.capability));
 }
 
-export const CREATION_PALETTE_GROUPS = (['Build', 'Data', 'Knowledge', 'Insights', 'Work', 'Pitch', 'People', 'Agents', 'Models', 'Collaborate', 'Integrations'] as const)
+/**
+ * Palette order. The annotation is the point: a group added to `CreationObjectGroup` and
+ * forgotten here would hide every one of its kinds from the palette — the object would
+ * exist, be authorable by Brain, and be unreachable by a person — so the list is required
+ * to be exhaustive rather than merely correct on the day it was written.
+ */
+export const CREATION_PALETTE_GROUPS = ([
+  'Build', 'Data', 'Knowledge', 'Insights', 'Work', 'Quality', 'Teaching', 'Research',
+  'Pitch', 'People', 'Hiring', 'Agents', 'Models', 'Collaborate', 'Integrations',
+] as const satisfies readonly CreationObjectGroup[])
   .map((group) => ({ group, items: CREATION_OBJECT_REGISTRY.filter((definition) => definition.group === group) }));

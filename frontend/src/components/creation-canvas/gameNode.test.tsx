@@ -6,12 +6,9 @@ import { GAME_FRAME_SANDBOX, gameDocumentFrom, gamePayloadFrom } from '@/lib/gam
 import { controlLabels, gameAccent, gamePosterSvg, readGameControls } from '@/lib/gamePoster';
 import { buildBrowserCreativeArtifact } from '@/lib/creationDeliverables';
 
-vi.mock('next-intl', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('next-intl')>()),
-  useTranslations: (await import('@/test/realCatalogTranslations')).realCatalogTranslator(
-    (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
-  ),
-}));
+vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')).realCatalogIntlMock(
+  (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
+));
 
 const { CreationNode } = await import('./CreationNode');
 

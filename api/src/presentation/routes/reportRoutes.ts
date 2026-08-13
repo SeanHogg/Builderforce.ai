@@ -39,6 +39,7 @@ import { notSystemTask } from '../../application/task/taskScope';
 import { computePortfolioRollup } from '../../application/pmo/portfolioRollup';
 import { buildExecutiveSummary } from '../../application/reports/executiveSummary';
 import { generateProjectStatusReport } from '../../application/reports/projectStatusReport';
+import { buildBoardPackReport } from '../../application/finance/boardPackReport';
 import { TenantRole } from '../../domain/shared/types';
 import { DONE_CLASS_STATUSES } from '../../domain/shared/doneClass';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
@@ -582,6 +583,9 @@ export async function buildScheduledReport(
   tenantId: number,
   segmentId: string,
   now: Date,
+  /** What the schedule is ABOUT, for the types that need a subject (mig 0461). The
+   *  five computed types ignore it; a `board_pack` cannot be built without it. */
+  subject?: { subjectKind: string | null; subjectRef: string | null },
 ): Promise<{ subject: string; report: Record<string, unknown> } | null> {
   switch (reportType) {
     case 'standup':
@@ -594,6 +598,12 @@ export async function buildScheduledReport(
       return { subject: '[Builderforce] Portfolio (PMO) rollup', report: await generatePortfolioReport(db, tenantId, segmentId) };
     case 'project_status':
       return { subject: '[Builderforce] Project status digest', report: await generateProjectStatusReport(db, tenantId, segmentId) as unknown as Record<string, unknown> };
+    case 'board_pack':
+      // The first report type that is ABOUT something. Returns null for a frame that
+      // has been deleted or emptied, which the dispatcher treats as "nothing to send"
+      // while still advancing the watermark — so a board someone removed stops mailing
+      // the investors rather than mailing them a blank page every month.
+      return buildBoardPackReport(db, tenantId, subject?.subjectKind ?? null, subject?.subjectRef ?? null, now);
     default:
       return null;
   }

@@ -1781,7 +1781,10 @@ export const tasksApi = {
     taskType?: 'task' | 'epic';
     /** Create already nested under an Epic. */
     parentTaskId?: number | null;
+    startDate?: string | null;
     dueDate?: string | null;
+    /** Story-point estimate (0246) — the leaf source for derived sprint velocity. */
+    storyPoints?: number | null;
   }): Promise<Task> =>
     request<Task>('/api/tasks', {
       method: 'POST',
@@ -1806,7 +1809,19 @@ export const tasksApi = {
       parentTaskId: number | null;
       /** Schedule into / out of a sprint (planning "drag onto sprint"). null = unscheduled. */
       sprintId: string | null;
+      /**
+       * The scheduling triple. All three columns and the PATCH route have always
+       * accepted these; only this client type omitted `startDate` and
+       * `storyPoints`, so a typed caller could set a due date but neither a start
+       * nor an estimate. That is why no surface outside the board sync could
+       * schedule work: the Planning Spine Gantt needs a start, and derived sprint
+       * velocity (EMP-4) reads `storyPoints` as its leaf source, so an unestimated
+       * ticket silently contributes nothing to velocity.
+       */
+      startDate: string | null;
       dueDate: string | null;
+      /** Story-point estimate (0246). null clears it back to unestimated. */
+      storyPoints: number | null;
       /** Pin the business value 0–100 (or null to clear). Setting it server-side
        *  marks the source 'manual'. */
       businessValue: number | null;

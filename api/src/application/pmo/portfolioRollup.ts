@@ -21,6 +21,7 @@
  */
 
 import { and, eq, gte, inArray, or, sql } from 'drizzle-orm';
+import { analyzeDependencies } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   deploymentEvents,
@@ -104,53 +105,23 @@ export interface DependencyAnalysis {
 /**
  * Over a set of initiatives + blocker→blocked edges, compute who-blocks-whom and
  * the critical path (longest chain of still-incomplete initiatives). Done/archived
- * initiatives are treated as resolved and drop out of the path. DAG longest-path
- * via memoised DFS; a back-edge among incomplete nodes flags `cycleDetected`.
+ * initiatives are treated as resolved and drop out of the path.
+ *
+ * This is now a thin INITIATIVE-SHAPED ADAPTER over {@link analyzeDependencies},
+ * which owns the DFS. The math used to live here and was about to be written a
+ * second time for the Creation Canvas, whose `blocks` edges ask the identical
+ * question one altitude down — so the graph moved to the shared contract package
+ * and takes its status vocabulary as a predicate. Initiatives weigh 1 apiece,
+ * which is what this function always did, so the answer is unchanged; the canvas
+ * passes estimated hours instead.
  */
 export function computeDependencyAnalysis(inits: DepInitiative[], edges: DepEdge[]): DependencyAnalysis {
-  const byId = new Map(inits.map((i) => [i.id, i]));
-  const out = new Map<string, string[]>();
-  const blockedBy: Record<string, string[]> = {};
-  for (const i of inits) { out.set(i.id, []); blockedBy[i.id] = []; }
-  for (const e of edges) {
-    const adj = out.get(e.fromInitiativeId);
-    if (adj && byId.has(e.toInitiativeId)) {
-      adj.push(e.toInitiativeId);
-      const blockers = blockedBy[e.toInitiativeId] ?? [];
-      blockers.push(e.fromInitiativeId);
-      blockedBy[e.toInitiativeId] = blockers;
-    }
-  }
-
-  const WHITE = 0, GRAY = 1, BLACK = 2;
-  const color = new Map<string, number>();
-  const best = new Map<string, string[]>();
-  let cycle = false;
-
-  const dfs = (id: string): string[] => {
-    if (!isIncompleteStatus(byId.get(id)?.status)) return [];
-    const c = color.get(id) ?? WHITE;
-    if (c === GRAY) { cycle = true; return []; }
-    if (c === BLACK) return best.get(id) ?? [id];
-    color.set(id, GRAY);
-    let longest: string[] = [];
-    for (const nxt of out.get(id) ?? []) {
-      const chain = dfs(nxt);
-      if (chain.length > longest.length) longest = chain;
-    }
-    color.set(id, BLACK);
-    const result = [id, ...longest];
-    best.set(id, result);
-    return result;
-  };
-
-  let criticalPath: string[] = [];
-  for (const i of inits) {
-    if (!isIncompleteStatus(i.status)) continue;
-    const chain = dfs(i.id);
-    if (chain.length > criticalPath.length) criticalPath = chain;
-  }
-  return { blockedBy, criticalPath, cycleDetected: cycle };
+  const { blockedBy, criticalPath, cycleDetected } = analyzeDependencies(
+    inits.map((i) => ({ id: i.id, status: i.status })),
+    edges.map((e) => ({ fromId: e.fromInitiativeId, toId: e.toInitiativeId })),
+    isIncompleteStatus,
+  );
+  return { blockedBy, criticalPath, cycleDetected };
 }
 
 // ── Pure org-rollup fold (unit-tested) ───────────────────────────────────────

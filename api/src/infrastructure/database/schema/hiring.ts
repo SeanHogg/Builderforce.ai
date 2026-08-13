@@ -112,6 +112,12 @@ export const jobPipelineEntries = pgTable('job_pipeline_entries', {
   candidateRef:  varchar('candidate_ref', { length: 64 }).notNull(),
   pipelineRef:   varchar('pipeline_ref', { length: 64 }).notNull(),
   stage:         varchar('stage', { length: 48 }).notNull(),
+  /** Where this candidate came from, stamped from the application when the entry
+   *  is created and never updated. Denormalised deliberately and with a single
+   *  writer: source-of-hire conversion is the report a recruiter is measured on,
+   *  and joining back to the application per stage transition is exactly the
+   *  fan-out this column exists to avoid. (0460) */
+  source:        varchar('source', { length: 48 }),
   position:      integer('position').notNull().default(0),
   enteredAt:     timestamp('entered_at').notNull().defaultNow(),
   exitedAt:      timestamp('exited_at'),
@@ -151,6 +157,12 @@ export const interviewKitStages = pgTable('interview_kit_stages', {
   durationMin: integer('duration_min'),
   /** The scorecard is a `question_sets` row; this is only the pointer. */
   scorecardId: uuid('scorecard_id'),
+  /** Who runs this stage, as member refs. An ordered list read only with the stage
+   *  and never queried independently, which is the stated bar for holding a thin list
+   *  as an array rather than a join table. Required by candidate self-scheduling: it is
+   *  the panel whose calendars a proposed slot must clear, and taking it from the
+   *  request instead would let a caller book against an empty panel. (0460) */
+  interviewerRefs: jsonb('interviewer_refs').notNull().default('[]'),
   guidance:   text('guidance'),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
@@ -177,11 +189,62 @@ export const interviews = pgTable('interviews', {
   meetingUrl:    text('meeting_url'),
   recordingId:   uuid('recording_id'),
   overallScore:  numeric('overall_score', { precision: 5, scale: 2 }),
+  /** ── Candidate self-scheduling (0460) ────────────────────────────────────
+   *  The solver, free/busy merge and calendar sync already existed and were wired
+   *  to internal meetings only; these four columns are the EXTERNAL half. The
+   *  token itself is a `share_links` row — a booking link is a scoped external
+   *  link, and reusing the primitive means expiry, revocation and use-counting
+   *  are already built. */
+  bookingShareId:    uuid('booking_share_id'),
+  /** IANA zone. Required before a slot is proposed: 9am in the recruiter's zone
+   *  is 3am in the candidate's, and the solver is timezone-correct only when it is
+   *  told which timezone to be correct about. */
+  candidateTimezone: varchar('candidate_timezone', { length: 64 }),
+  /** The slots OFFERED, as [{startISO, endISO}]. Stored rather than recomputed:
+   *  the offer is a promise, and "that time is no longer available" after the
+   *  candidate clicked is the worst moment in a candidate experience. Availability
+   *  is re-checked at booking AGAINST this list, not instead of it. */
+  offeredSlots:      jsonb('offered_slots').notNull().default('[]'),
+  bookedAt:          timestamp('booked_at'),
+  /** `status` already carries 'no_show'; this is WHEN, which is what a no-show
+   *  rate is computed from. */
+  noShowAt:          timestamp('no_show_at'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_interviews_schedule').on(t.tenantId, t.status, t.scheduledAt),
   index('idx_interviews_candidate').on(t.tenantId, t.candidateRef),
+]);
+
+/**
+ * Self-identified EEO / diversity responses, SEGREGATED from everything that
+ * evaluates a candidate.
+ *
+ * The separation is the requirement, not a modelling preference: this data is
+ * collected because statutory reporting demands it and is unlawful to use in an
+ * assessment, and both rules cannot hold for a column sitting in
+ * `party_roles.attrs` beside the fit score. A separate table can be granted
+ * separately, joined deliberately, aggregated without identifiers and dropped on
+ * its own clock. The canvas marks the matching field `restricted`, which is what
+ * keeps it out of the model that ranks the shortlist. See migration 0460.
+ */
+export const candidateDemographics = pgTable('candidate_demographics', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  candidateRef: varchar('candidate_ref', { length: 64 }).notNull(),
+  /** Set by whichever regulator the tenant reports to, so a lookup with a fixed
+   *  order would be wrong: 'gender' | 'ethnicity' | 'disability' | 'veteran' | … */
+  category:     varchar('category', { length: 48 }).notNull(),
+  response:     varchar('response', { length: 160 }).notNull(),
+  /** 'self' | 'imported' | 'observed'. Anything but 'self' is a compliance defect —
+   *  observed demographics are not self-identification, and recording which it was
+   *  is what makes that auditable rather than assumed. */
+  source:       varchar('source', { length: 16 }).notNull().default('self'),
+  collectedAt:  timestamp('collected_at').notNull().defaultNow(),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_candidate_demographics').on(t.tenantId, t.candidateRef, t.category),
+  index('idx_candidate_demographics_candidate').on(t.tenantId, t.candidateRef),
 ]);
 
 /** A reusable bank of interview questions, grouped for a role. The asked

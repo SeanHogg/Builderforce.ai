@@ -136,6 +136,21 @@ export type EntitySpec = {
    * whose scope is narrower than a tenant rather than wider.
    */
   global?: boolean;
+  /**
+   * NEVER reachable through the generic reader, whatever its tenant scoping says.
+   *
+   * The opposite of `global`, and needed for the same reason that one is opt-in: being
+   * tenant-scoped is what makes a table readable BY DEFAULT, and a small number of
+   * tables are correctly tenant-scoped and still must not be browsable.
+   * `candidate_demographics` is the case that forced it — self-identified EEO data,
+   * collected because statutory reporting requires it and unlawful to use in an
+   * assessment, so putting it one click from the shortlist in the entity browser is the
+   * disclosure the segregation exists to prevent (migration 0460).
+   *
+   * A restricted entity is still registered and still typed; it is read only by a named
+   * service that knows what it may return — counts without identifiers, in that case.
+   */
+  restricted?: boolean;
   /** Stated only when it must override the reflected pick. */
   title?: string;
   /** Deterministic ordering for composite-key tables with no timestamp. */
@@ -264,8 +279,11 @@ export function defineDomainEntities(
        * "which tenant's edit wins" has no answer, so a tenant's surface may read
        * it and never write it.
        */
-      writable: spec.readOnly !== true && primaryKey !== null && tenantKey !== null,
-      readable: tenantKey !== null || spec.global === true,
+      writable: spec.readOnly !== true && primaryKey !== null && tenantKey !== null && spec.restricted !== true,
+      // `restricted` wins over everything: being correctly tenant-scoped is what makes a
+      // table readable by default, and that default is wrong for the few tables whose
+      // whole purpose is to be segregated. See `EntitySpec.restricted`.
+      readable: spec.restricted !== true && (tenantKey !== null || spec.global === true),
       registers: spec.registers === true,
       redacted,
     };

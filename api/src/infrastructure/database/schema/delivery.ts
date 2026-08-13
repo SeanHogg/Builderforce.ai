@@ -1954,6 +1954,12 @@ export const reportSchedules = pgTable('report_schedules', {
   isEnabled:    boolean('is_enabled').notNull().default(true),
   /** Attached tabular artifact format for the delivered report (EMP-20, mig 0318). */
   exportFormat: varchar('export_format', { length: 8 }).notNull().default('csv'), // csv | html
+  /** What this schedule is ABOUT, when its report type needs a subject (mig 0461).
+   *  'canvas_frame' for a board pack; null for the five computed types, which are
+   *  about the tenant. Opaque and resolved by the generator rather than joined —
+   *  a typed FK here would be the polymorphic-FK violation the guard exists to catch. */
+  subjectKind:  varchar('subject_kind', { length: 32 }),
+  subjectRef:   varchar('subject_ref', { length: 160 }),
   lastRunAt:    timestamp('last_run_at'),
   nextRunAt:    timestamp('next_run_at'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),

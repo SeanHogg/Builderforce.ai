@@ -200,4 +200,103 @@ export const CREATION_TEMPLATES: readonly CreationTemplate[] = [
     ],
     connections: [{ source: 1, target: 2, label: 'models' }, { source: 0, target: 3, label: 'evaluates' }, { source: 2, target: 3, label: 'evaluates' }],
   },
+  {
+    id: 'assessment-cycle', name: 'Assessment cycle', category: 'Marketplace template',
+    description: 'Run a piece of assessment end to end: a cohort, a brief, the rubric it is marked against, one submission per learner, and the gradebook that aggregates them.',
+    objects: [
+      {
+        kind: 'cohort', title: 'PHYS2041 · Semester 2', x: 0, y: 0,
+        data: {
+          status: 'Import a roster', courseCode: 'PHYS2041', term: '2026 Semester 2', deliveryMode: 'hybrid',
+          instructors: ['Module lead', 'Tutor'],
+          summary: 'Import the roster from a CSV or a connected LMS — every submission and mark joins on the learner ref it carries.',
+        },
+      },
+      {
+        kind: 'assignment', title: 'Assignment 1 · Literature critique', x: 520, y: 0,
+        data: {
+          status: 'Draft brief', weight: 30, maxMarks: 100, attemptsAllowed: 1,
+          // `open` is the default everywhere and is wrong for anything summative; the
+          // template ships the deliberate choice rather than the inherited one.
+          assessmentMode: 'closed',
+          latePolicy: '5% per day, zero after 5 days',
+          brief: 'Critique one paper from the reading list: state its claim, assess whether the evidence supports it, and identify the strongest objection.',
+          deliverables: [{ title: 'Critique', detail: '1,500 words, PDF' }, { title: 'Reference list', detail: 'APA, on the board' }],
+        },
+      },
+      {
+        kind: 'rubric', title: 'Critique rubric', x: 1040, y: 0,
+        data: {
+          status: 'Add descriptors', totalMarks: 100,
+          levels: ['Fail', 'Pass', 'Credit', 'Distinction'],
+          moderationRule: 'Double-blind mark every fail and every distinction; a gap over 10 marks goes to a third marker.',
+          criteria: {
+            columns: ['Fail', 'Pass', 'Credit', 'Distinction'],
+            rows: [
+              { label: 'Claim identified', weight: 2, cells: ['No claim stated', 'Claim stated', 'Claim stated precisely', 'Claim stated and situated in the literature'] },
+              { label: 'Evidence assessed', weight: 3, cells: ['Assertion only', 'Some evidence cited', 'Evidence weighed', 'Evidence weighed against alternatives'] },
+              { label: 'Objection', weight: 3, cells: ['None', 'An objection', 'The strongest objection', 'The strongest objection, answered'] },
+              { label: 'Referencing', weight: 2, cells: ['Absent', 'Present, inconsistent', 'Consistent', 'Consistent and complete'] },
+            ],
+          },
+        },
+      },
+      {
+        kind: 'submission', title: 'Submission · one per learner', x: 520, y: 400,
+        data: {
+          status: 'Not submitted',
+          artifacts: [{ title: 'Distribute to the cohort', detail: 'Creates one of these per enrolled learner, each with its own owner and authorship record.' }],
+        },
+      },
+      {
+        kind: 'gradebook', title: 'PHYS2041 gradebook', x: 1040, y: 400,
+        data: {
+          status: 'No marks yet',
+          gradeBands: [
+            { grade: 'F', minimum: 0, maximum: 49 }, { grade: 'P', minimum: 50, maximum: 64 },
+            { grade: 'C', minimum: 65, maximum: 74 }, { grade: 'D', minimum: 75, maximum: 100 },
+          ],
+        },
+      },
+      {
+        kind: 'accommodation', title: 'Approved adjustments', x: 0, y: 400,
+        data: {
+          status: 'Not approved', extraTimePercent: 25,
+          provisions: ['25% extra time', 'Captioned recordings'], formats: ['captioned video', 'tagged PDF'],
+          evidenceHeld: 'not-required',
+        },
+      },
+    ],
+    connections: [
+      { source: 0, target: 1, label: 'is set for' }, { source: 1, target: 2, label: 'is marked against' },
+      { source: 1, target: 3, label: 'is answered by' }, { source: 3, target: 4, label: 'aggregates into' },
+      { source: 5, target: 1, label: 'adjusts' },
+    ],
+  },
+  {
+    id: 'research-programme', name: 'Research programme', category: 'Marketplace template',
+    description: 'The scholarly lifecycle in the order it is actually gated: funding, ethics, pre-registration, method, consent, participants, data plan, manuscript and peer review.',
+    objects: [
+      { kind: 'grantProposal', title: 'Funding application', x: 0, y: 0, data: { status: 'Draft proposal', aims: [{ title: 'Aim 1', detail: 'State a claim that can fail.' }] } },
+      { kind: 'literatureReview', title: 'Evidence base', x: 520, y: 0, data: { status: 'Not searched', databases: ['Scopus', 'PubMed'] } },
+      { kind: 'hypothesis', title: 'Primary hypothesis', x: 1040, y: 0, data: { status: 'Untested', statement: 'State it directionally, so that it can be refuted.' } },
+      { kind: 'ethicsApproval', title: 'Ethics submission', x: 0, y: 380, data: { status: 'Not submitted' } },
+      { kind: 'preRegistration', title: 'Pre-registration', x: 520, y: 380, data: { status: 'Draft plan', timepoint: 'before-data-collection' } },
+      { kind: 'protocol', title: 'Method', x: 1040, y: 380, data: { status: 'Draft method', version: '0.1' } },
+      { kind: 'consentForm', title: 'Participant consent', x: 0, y: 760, data: { status: 'Draft form', language: 'en', readingLevel: 'Grade 8' } },
+      { kind: 'participantPool', title: 'Recruitment', x: 520, y: 760, data: { status: 'Not recruiting' } },
+      { kind: 'dataManagementPlan', title: 'Data management plan', x: 1040, y: 760, data: { status: 'Draft plan', retentionYears: 10 } },
+      { kind: 'manuscript', title: 'Manuscript', x: 520, y: 1140, data: { status: 'Draft', citationStyle: 'apa' } },
+      { kind: 'bibliography', title: 'References', x: 1040, y: 1140, data: { status: 'No entries', citationStyle: 'apa', sortOrder: 'author' } },
+      { kind: 'peerReview', title: 'Reviews received', x: 0, y: 1140, data: { status: 'Not reviewed' } },
+    ],
+    connections: [
+      { source: 1, target: 2, label: 'grounds' }, { source: 2, target: 5, label: 'specifies' },
+      { source: 5, target: 3, label: 'is approved by' }, { source: 5, target: 4, label: 'is registered as' },
+      { source: 3, target: 6, label: 'requires' }, { source: 6, target: 7, label: 'consents' },
+      { source: 7, target: 8, label: 'governs' }, { source: 8, target: 9, label: 'evidences' },
+      { source: 10, target: 9, label: 'cites' }, { source: 9, target: 11, label: 'is reviewed by' },
+      { source: 0, target: 5, label: 'funds' },
+    ],
+  },
 ] as const;

@@ -4,22 +4,31 @@
  * a data-driven mode purely because an entry exists here for its id — the tool
  * DEFINITION stays pure (no DB). ToolService looks this registry up.
  *
- * Two tools have one today: the Agentic Maturity Diagnostic (derived from DORA,
- * cycle time, rework, and run outcomes) and Ticket Role & Diagnostic Coverage
- * (derived from the per-ticket audit ledger). Adding a data mode to another tool
- * is a new entry here, not a change to the generic engine.
+ * Four tools have one:
+ *   - `agentic-maturity`     — DORA, cycle time, rework, run outcomes
+ *   - `ticket-role-coverage` — the per-ticket audit ledger
+ *   - `dora-quickcheck`      — `deployment_events` + task lead time
+ *   - `ai-cost-estimator`    — attributed `llm_usage_log` spend
  *
- * NOTE the ones that do NOT have a provider and arguably should: `dora-quickcheck`
- * and `ai-cost-estimator` both tell the reader "sign in to score this from your
- * real data", and both real numbers already exist (`pmoApi.rollup()` returns the
- * four keys and `spend.agentLlmCostUsd`) — so a canvas board can only ever show a
- * hand-entered guess beside real work. See ROADMAP group 10.
+ * Adding a data mode to another tool is a new entry here, not a change to the
+ * generic engine.
+ *
+ * THE RULE THE LAST TWO EXIST TO KEEP. Both of those tools' `about` copy has
+ * always told the reader "sign in to score this from your real data", and for a
+ * long time neither could — so the only DORA or cost figure a canvas board could
+ * hold was a number the operator typed in, sitting beside their real work and
+ * looking equally authoritative. Neither provider defines its own metric: DORA
+ * reuses {@link computeDora} (the same collector behind `/api/pmo/rollup`) and
+ * cost reads the authoritative `cost_usd_millicents` stamped at write time. A
+ * data mode is a second WAY IN to one number, never a second number.
  */
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { memberMetricsPeriod, deploymentEvents, runModelOutcomes, ticketAudits, tasks } from '../../infrastructure/database/schema';
-import { computeProjectDeliveryMetrics } from '../metrics/workforceMetrics';
-import { getTool } from './toolDefinitions';
+import { memberMetricsPeriod, deploymentEvents, llmUsageLog, projects, runModelOutcomes, ticketAudits, tasks } from '../../infrastructure/database/schema';
+import { computeDora, computeProjectDeliveryMetrics } from '../metrics/workforceMetrics';
+import { MILLICENTS_PER_USD } from '../../domain/shared/money';
+import { notSystemTask } from '../task/taskScope';
+import { getTool, money, tierName } from './toolDefinitions';
 import type { QuestionnaireTool, ToolResult, ToolMetric, ToolRecommendation } from './toolTypes';
 
 /** A data provider derives a tool's result from real telemetry. When `projectId`
@@ -262,9 +271,221 @@ const ticketRoleCoverageProvider: ToolDataProvider = async (db, tenantId, _days,
   };
 };
 
+// ── DORA Quick-Check, scored from real deployments ────────────────────────────
+
+/**
+ * The four keys from `deployment_events` + task lead time, rather than four
+ * numbers a person typed in.
+ *
+ * The tool's own `about` copy has always promised this ("sign in to score this
+ * automatically from your real deployment data") and there was no provider behind
+ * it, so the only DORA a board could show was the operator's guess — sitting
+ * beside their real work and looking equally authoritative. The collector already
+ * existed: {@link computeDora} is the same one `/api/pmo/rollup` and the workforce
+ * metrics use, so this adds a mode, not a second definition of the four keys.
+ *
+ * Tiering mirrors the calculator's thresholds exactly (7/1/0.25 deploys per week,
+ * 24/168/730h lead time, 5/15/30% change failure, 1/24/168h restore) so the two
+ * modes cannot drift into disagreeing about what "Elite" means.
+ */
+const doraTier = {
+  frequency: (perWeek: number) => (perWeek >= 7 ? 5 : perWeek >= 1 ? 4 : perWeek >= 0.25 ? 3 : 2),
+  leadTime: (hours: number) => (hours <= 24 ? 5 : hours <= 168 ? 4 : hours <= 730 ? 3 : 2),
+  changeFailure: (pct: number) => (pct <= 5 ? 5 : pct <= 15 ? 4 : pct <= 30 ? 3 : 2),
+  restore: (hours: number) => (hours <= 1 ? 5 : hours <= 24 ? 4 : hours <= 168 ? 3 : 2),
+};
+
+/** The calculator's remediation copy, keyed so both modes read one source. */
+const DORA_RECOMMENDATIONS: Record<string, ToolRecommendation> = {
+  frequency: { title: 'Deploy more often', detail: 'Shrink batch sizes and automate the release pipeline so deploys are routine, not events. Aim for at least weekly, then daily.' },
+  leadTime: { title: 'Cut lead time', detail: 'Reduce hand-offs and manual gates between commit and production. Trunk-based development and CI on every change are the biggest levers.' },
+  changeFailure: { title: 'Lower change-failure rate', detail: 'Add automated tests and progressive delivery (canary / feature flags) so risky changes are caught or contained before full rollout.' },
+  restore: { title: 'Restore faster', detail: 'Invest in alerting, one-click rollback, and runbooks so a failed change is reverted in minutes, not hours.' },
+};
+
+const doraQuickCheckProvider: ToolDataProvider = async (db, tenantId, days, projectId) => {
+  const dora = await computeDora(db, tenantId, days, projectId ?? undefined);
+  const perWeek = dora.deploymentFrequencyPerDay * 7;
+
+  // Each key is scored only when it HAS a number. A tenant that deploys through
+  // Builderforce but has not recorded a restore has no MTTR, and inventing one
+  // (0h reads as Elite) would be the same lie the hand-entered default was.
+  const scored: Array<{ key: keyof typeof DORA_RECOMMENDATIONS; label: string; value: string; tier: number }> = [];
+  const unscored: ToolMetric[] = [];
+
+  if (dora.totalDeployments > 0) {
+    scored.push({ key: 'frequency', label: 'Deployment frequency', value: `${perWeek.toFixed(1)}/week`, tier: doraTier.frequency(perWeek) });
+  } else {
+    unscored.push({ label: 'Deployment frequency', value: 'No deployments recorded' });
+  }
+  if (dora.leadTimeHours != null) {
+    scored.push({ key: 'leadTime', label: 'Lead time for changes', value: `${Math.round(dora.leadTimeHours)}h`, tier: doraTier.leadTime(dora.leadTimeHours) });
+  } else {
+    unscored.push({ label: 'Lead time for changes', value: 'No completed tickets in window' });
+  }
+  if (dora.changeFailureRatePct != null) {
+    scored.push({ key: 'changeFailure', label: 'Change-failure rate', value: `${dora.changeFailureRatePct.toFixed(1)}%`, tier: doraTier.changeFailure(dora.changeFailureRatePct) });
+  } else {
+    unscored.push({ label: 'Change-failure rate', value: 'No deployments recorded' });
+  }
+  if (dora.mttrHours != null) {
+    scored.push({ key: 'restore', label: 'Time to restore', value: `${dora.mttrHours.toFixed(1)}h`, tier: doraTier.restore(dora.mttrHours) });
+  } else {
+    unscored.push({ label: 'Time to restore', value: 'No restored failures in window' });
+  }
+
+  if (scored.length === 0) {
+    return {
+      headline: 'Not enough delivery telemetry yet',
+      summary: `No deployments or completed tickets in the last ${days} days. Record deployments (or complete some tickets) and check back, or use the estimate mode.`,
+      score: null, scoreLabel: null,
+      metrics: [{ label: 'Window', value: `${days} days` }, ...unscored],
+      recommendations: [{ title: 'Start recording deployments', detail: 'Deployment events are what turn the four keys from a self-assessment into a measurement. Wire your release pipeline to the deployments API, or let the cloud agent record them as it ships.' }],
+    };
+  }
+
+  const overall = Math.round(scored.reduce((sum, metric) => sum + metric.tier, 0) / scored.length);
+  const recommendations = scored
+    .filter((metric) => metric.tier < 4)
+    .sort((a, b) => a.tier - b.tier)
+    .map((metric) => DORA_RECOMMENDATIONS[metric.key]!);
+  if (recommendations.length === 0) {
+    recommendations.push({ title: 'Sustain elite performance', detail: 'Keep the four keys under continuous review and protect them as you scale — elite teams optimize, they do not coast.' });
+  }
+
+  return {
+    headline: `${tierName(overall)} performer`,
+    summary: `Scored from your real delivery data over the last ${days} days — ${dora.totalDeployments} deployment${dora.totalDeployments === 1 ? '' : 's'}${scored.length < 4 ? `, ${4 - scored.length} of the four keys not yet measurable` : ''}.`,
+    score: overall,
+    scoreLabel: tierName(overall),
+    metrics: [
+      ...scored.map((metric) => ({ label: metric.label, value: metric.value, hint: tierName(metric.tier), tier: metric.tier })),
+      ...unscored,
+    ],
+    recommendations,
+  };
+};
+
+// ── AI Cost Estimator, replaced by real attributed spend ──────────────────────
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Real attributed spend from `llm_usage_log` — the estimator's own promise
+ * ("sign in to replace the estimate with your real, attributed spend: cost per
+ * task, per project, per merged PR") kept.
+ *
+ * Cost is read from `cost_usd_millicents`, which is stamped authoritatively at
+ * write time from the resolved model's price including cache tiers — NOT
+ * re-priced from tokens here, which would silently disagree with the invoice.
+ *
+ * BYO rows are surfaced separately rather than folded in. Their cost is forced to
+ * 0 because the platform paid nothing for those tokens, so counting them as spend
+ * understates cost-per-task and counting them as free understates volume; the
+ * honest presentation is both numbers, which is also what [[byo-usage-attribution]]
+ * settled for the usage dashboard.
+ *
+ * One grouped query, no fan-out: this is a monthly-ish read on a small result set.
+ */
+const aiCostEstimatorProvider: ToolDataProvider = async (db, tenantId, days, projectId) => {
+  const since = new Date(Date.now() - days * DAY_MS);
+  const forProject = projectId != null;
+
+  const [usage] = await db
+    .select({
+      calls: sql<number>`count(*)::int`,
+      millicents: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}), 0)`,
+      tokens: sql<string>`coalesce(sum(${llmUsageLog.totalTokens}), 0)`,
+      cacheReadTokens: sql<string>`coalesce(sum(${llmUsageLog.cacheReadTokens}), 0)`,
+      promptTokens: sql<string>`coalesce(sum(${llmUsageLog.promptTokens}), 0)`,
+      byoCalls: sql<number>`count(*) filter (where ${llmUsageLog.byo})::int`,
+      attributedTasks: sql<number>`count(distinct ${llmUsageLog.taskId})::int`,
+    })
+    .from(llmUsageLog)
+    .where(and(
+      eq(llmUsageLog.tenantId, tenantId),
+      gte(llmUsageLog.createdAt, since),
+      ...(forProject ? [eq(llmUsageLog.projectId, projectId!)] : []),
+    ));
+
+  const calls = Number(usage?.calls) || 0;
+  if (calls === 0) {
+    return {
+      headline: 'No attributed spend yet',
+      summary: `No agent LLM calls recorded in the last ${days} days${forProject ? ' for this project' : ''}. Run some agent work and check back, or use the estimate mode.`,
+      score: null, scoreLabel: null,
+      metrics: [{ label: 'Window', value: `${days} days` }, { label: 'Agent LLM calls', value: '0' }],
+      recommendations: [{ title: 'Attribute and budget', detail: 'Every agent run stamps its tokens with a task and project, so cost rolls up ticket → project → account the moment work starts flowing. Set a budget with overspend alerts once it does.' }],
+    };
+  }
+
+  const costUsd = Number(usage!.millicents) / MILLICENTS_PER_USD;
+  const tokens = Number(usage!.tokens) || 0;
+  const promptTokens = Number(usage!.promptTokens) || 0;
+  const cacheReadTokens = Number(usage!.cacheReadTokens) || 0;
+  const byoCalls = Number(usage!.byoCalls) || 0;
+  const attributedTasks = Number(usage!.attributedTasks) || 0;
+  // Cache hit rate measured the way the estimator asks for it: the share of
+  // PROMPT tokens served from cache (cache reads are a subset of prompt tokens).
+  const cacheHitPct = promptTokens > 0 ? (cacheReadTokens / promptTokens) * 100 : 0;
+  const perMonth = costUsd * (30 / Math.max(days, 1));
+
+  // Delivered tickets in the same window — the "cost per outcome" the estimator's
+  // last recommendation asks for, from the same task table DORA's lead time uses.
+  const [delivered] = await db
+    .select({ completed: sql<number>`count(*)::int` })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(and(
+      eq(projects.tenantId, tenantId),
+      eq(tasks.archived, false),
+      gte(tasks.completedAt, since),
+      ...(forProject ? [eq(tasks.projectId, projectId!)] : []),
+      notSystemTask,
+    ));
+  const completed = Number(delivered?.completed) || 0;
+
+  const recommendations: ToolRecommendation[] = [];
+  if (cacheHitPct < 40) {
+    recommendations.push({ title: 'Raise your cache hit rate', detail: `Only ${cacheHitPct.toFixed(0)}% of your prompt tokens are being served from cache. Prompt caching reuses the stable prefix of a conversation at roughly a tenth of the input rate — pushing this toward 40–60% cuts spend with no quality loss.` });
+  }
+  if (attributedTasks === 0) {
+    recommendations.push({ title: 'Attribute spend to tickets', detail: 'None of this spend carries a task id, so it can be totalled but not explained. Cost is stamped from the run\'s task — dispatching work from a ticket rather than an ad-hoc prompt is what makes cost-per-outcome answerable.' });
+  }
+  if (completed > 0) {
+    recommendations.push({ title: 'Track cost per outcome, not per token', detail: `You spent ${money(costUsd)} to deliver ${completed} ticket${completed === 1 ? '' : 's'}. Watch this ratio rather than the token count — the cheapest model that fails twice is more expensive than the right one.` });
+  }
+  if (byoCalls > 0) {
+    recommendations.push({ title: 'BYO traffic is excluded from cost', detail: `${byoCalls} of ${calls} calls ran on your own provider credential, so they cost the platform nothing and are recorded at zero. Rank those by tokens rather than by spend when comparing model usage.` });
+  }
+  if (recommendations.length === 0) {
+    recommendations.push({ title: 'Spend is measured and attributed', detail: 'Set a budget with overspend alerts so cost stays managed rather than discovered on the invoice.' });
+  }
+
+  return {
+    headline: `${money(perMonth)} / month`,
+    summary: `Real attributed agent spend over the last ${days} days, projected to a month. Cost is stamped per call at the resolved model's price, including cache tiers.`,
+    score: null,
+    scoreLabel: null,
+    metrics: [
+      { label: 'Spend in window', value: money(costUsd) },
+      { label: 'Projected monthly cost', value: money(perMonth) },
+      { label: 'Tokens', value: `${(tokens / 1_000_000).toFixed(1)}M` },
+      { label: 'Prompt tokens served from cache', value: `${cacheHitPct.toFixed(0)}%` },
+      { label: 'Agent LLM calls', value: calls.toLocaleString('en-US') },
+      { label: 'Tickets carrying spend', value: attributedTasks.toLocaleString('en-US') },
+      ...(completed > 0 ? [{ label: 'Cost per delivered ticket', value: `$${(costUsd / completed).toFixed(2)}` }] : []),
+      ...(byoCalls > 0 ? [{ label: 'Calls on your own credential', value: `${byoCalls.toLocaleString('en-US')} (billed at $0)` }] : []),
+    ],
+    recommendations,
+  };
+};
+
 export const TOOL_DATA_PROVIDERS: Record<string, ToolDataProvider> = {
   'agentic-maturity': agenticMaturityProvider,
   'ticket-role-coverage': ticketRoleCoverageProvider,
+  'dora-quickcheck': doraQuickCheckProvider,
+  'ai-cost-estimator': aiCostEstimatorProvider,
 };
 
 export function hasDataProvider(toolId: string): boolean {

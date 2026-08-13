@@ -19,12 +19,9 @@ vi.mock('@/lib/youtubeApi', () => ({ youtubeApi: youtube }));
 /** The real catalogs, resolved the way next-intl resolves them — including the
  * `plural` forms the file-count and slide-count labels are written in, so these
  * assert the string a person actually reads. */
-vi.mock('next-intl', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('next-intl')>()),
-  useTranslations: (await import('@/test/realCatalogTranslations')).realCatalogTranslator(
-    (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
-  ),
-}));
+vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')).realCatalogIntlMock(
+  (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
+));
 
 vi.mock('@xyflow/react', async () => {
   const inert = () => null;

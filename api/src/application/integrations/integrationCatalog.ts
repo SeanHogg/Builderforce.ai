@@ -21,6 +21,11 @@
  *   drive      — `drive/driveProviders`: the cloud-drive port.
  *   mailbox    — `mailbox/mailboxProviders`: the connected-mailbox port.
  *   payout     — `payouts/payoutProviders`: where an earner's money is sent.
+ *   ledger     — `finance/accountingProviders`: where a company's ACTUALS are read
+ *                from. The half the finance category did not have: until it landed,
+ *                every entry in that category was `direction: 'export'`, so the page
+ *                could claim we pay people out and could not claim we read one real
+ *                number in — which is the first thing a finance buyer asks.
  *
  * A system that appears on more than one port (GitHub is a built-in connector AND
  * a synced board) is ONE catalog entry with both surfaces, because it is one
@@ -42,6 +47,7 @@ import { BUILTIN_CONNECTOR_LIST } from '../connectors/defaults';
 import type { ConnectorCategory, ConnectorManifest } from '../connectors/connectorManifest';
 import { MAILBOX_PROVIDER_NAMES } from '../mailbox/mailboxProviders';
 import { describePayoutProviders } from '../payouts/payoutProviders';
+import { describeAccountingProviders } from '../finance/accountingProviders';
 import { describeProviders, type ProviderFamily } from './dataProviderCatalog';
 
 /**
@@ -61,12 +67,13 @@ export const INTEGRATION_CATEGORIES = [
   'support',
   'storage',
   'data',
+  'hiring',
   'other',
 ] as const;
 export type IntegrationCategory = (typeof INTEGRATION_CATEGORIES)[number];
 
 /** Which port backs an entry. An entry may have several. */
-export type IntegrationSurface = 'connector' | 'board' | 'data' | 'drive' | 'mailbox' | 'payout';
+export type IntegrationSurface = 'connector' | 'board' | 'data' | 'drive' | 'mailbox' | 'payout' | 'ledger';
 
 /** What moves, and which way. Derived per surface — never asserted by hand. */
 export type IntegrationDirection = 'import' | 'export' | 'two-way' | 'event-ingest';
@@ -108,6 +115,10 @@ const CONNECTOR_CATEGORY: Record<ConnectorCategory, IntegrationCategory> = {
   finance: 'finance',
   marketing: 'marketing',
   support: 'support',
+  // Job boards, ATS feeds and HRMS. `INTEGRATION_CATEGORIES` gains the same name rather
+  // than folding hiring into `crm`: the Recruiter seat browses this catalog by category,
+  // and "publish a requisition" and "work a deal" are different jobs.
+  hiring: 'hiring',
   storage: 'storage',
   data: 'data',
   other: 'other',
@@ -209,6 +220,26 @@ function build(): IntegrationCatalogEntry[] {
       surfaces: ['mailbox'],
       direction: 'two-way',
       capabilities: ['oauth'],
+    });
+  }
+
+  // Accounting, banking and revenue sources. `import` because money is READ through
+  // them — the half this category did not have. Until the ledger port landed, every
+  // entry below was `export`, so the page could truthfully claim we pay people and
+  // could not claim we read a single actual, which is the first question a finance
+  // buyer asks.
+  //
+  // `stripe-revenue` deliberately merges onto the payout port's `stripe` entry: it is
+  // one system a buyer asks about once, and the merge rule turns two surfaces into one
+  // card reading "import · export" rather than two cards each telling half the answer.
+  for (const provider of describeAccountingProviders({})) {
+    merge(byId, {
+      id: provider.name === 'stripe-revenue' ? 'stripe' : provider.name,
+      name: provider.name === 'stripe-revenue' ? 'Stripe' : provider.label,
+      category: 'finance',
+      surfaces: ['ledger'],
+      direction: 'import',
+      capabilities: provider.connect === 'oauth' ? ['oauth'] : [],
     });
   }
 

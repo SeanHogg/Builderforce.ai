@@ -1,3 +1,709 @@
+## RESOLVED 2026-08-13 - "What is the canvas missing for a Recruiter?": the funnel before the hire, and the money after it
+
+A recruiter's review of the Creation Canvas found eight gaps, and all eight are now closed. The structural
+finding: `domains/hiring/entities.ts` registered **23 tables**, `provisionBuiltinAgents.ts` shipped a
+`recruiter` built-in agent titled "owns hiring: postings, screening, interviews and offers", and
+`lib/seats.ts` reserved a Recruiter seat with its own colour token - while `CREATION_OBJECT_KINDS` held
+**zero** hiring objects. The chair, the filing cabinet and the job title existed; the desk did not. The
+sharpest single fact was that the largest time sink in the role was *not shipped* rather than *not built*:
+`availabilitySolver.ts`, `calendarFreeBusy.ts` and `googleCalendarSync.ts` were finished, correct and
+timezone-aware, and had exactly ONE consumer - `meetingRoutes.ts`, for tenant-authenticated internal
+meetings. A candidate has no account, so none of it could reach them.
+
+**What shipped.**
+
+- **Nine hiring object kinds, and no render branches.** `HIRING_OBJECT_KINDS` (contract) +
+  `lib/hiringObjects.ts` declare `candidate`, `talentPool`, `jobPosting`, `outreachSequence`, `shortlist`,
+  `interviewLoop`, `scorecard`, `offer`, `placement` once each; the node body, the AI field contract, the
+  registry's `createData`/`MUTABLE_FIELDS`/`CONTEXT_FIELDS` rows and the empty-shell rule are all DERIVED
+  from that one declaration. The shape is deliberately the SALES funnel the canvas already models with six
+  kinds - `candidate` reads like `salesContact`, `talentPool` like `targetMarket` - because two funnels
+  that behave the same should look the same, and the reviewer of one should already know how to read the
+  other. New `Hiring` palette group; localized in all five catalogs (9 labels, 74 field keys, 33 column
+  keys, per locale).
+- **ONE `funnel` kind, two consumers.** The marketing review asked for stage conversion on the same day
+  from the other end of the company, so `funnelDomain` is a VALUE rather than `hiringFunnel` being a second
+  kind - the open/closed rule migration 0410 gave connector vendors, applied to funnels.
+  `lib/sharedCanvasObjects.ts` is the declared home for cross-domain kinds.
+  `application/hiring/hiringFunnel.ts` computes stage conversion, time-in-stage, source-of-hire and the
+  bottleneck from a SINGLE grouped read (the naive per-stage shape is an N+1 that grows with the funnel,
+  and a funnel is the thing most likely to gain a stage), served through `getOrSetCached` with
+  invalidation on pipeline writes. Conversion is per-stage into the NEXT stage rather than cumulative,
+  because a cumulative percentage cannot localise a loss; the bottleneck is the stage losing the most
+  PEOPLE rather than the worst percentage, because a recruiter's next hour goes where the people are.
+- **Candidate self-scheduling - the solver finally has an external consumer.**
+  `application/calendar/attendeeAvailability.ts` extracts the composition that had lived as closures inside
+  `createMeetingRoutes` (declared windows + platform busy + external free/busy -> solver); `meetingRoutes`
+  now calls it, and so does `application/hiring/interviewScheduling.ts`. A booking link is a `share_links`
+  row with `scope: 'book'` - no second token table, so expiry, revocation and use-counting were already
+  built and already audited. `/api/booking/:token` is PUBLIC and session-free, returns nothing identifying
+  (no candidate name, no interviewer names, no job title), and books against the STORED offer while
+  re-checking live availability - the offer is a promise, and "that time is no longer available" after the
+  candidate clicked is the worst moment in a candidate experience. `/book/<token>` is a server shell around
+  one client island, with no shell chrome at all.
+- **Screening at ratio.** `lib/canvasResumeScreening.ts` composes the existing 1:1 analyzer into N:1 with
+  four DECLARED signals - keyword coverage, whether matched terms appear in a dated role (the
+  keyword-stuffed-CV counter), demonstrated years against the stated level (overlapping roles are not
+  double-counted: a contractor with three concurrent clients has not lived three careers), and recency of
+  the roles that actually evidence a matched term. Weights are data, and `describeMethod()` reads the same
+  object, so the explanation cannot drift from the arithmetic. An unanswered knockout never removes anyone
+  (a sourced candidate has filled in no form); a knocked-out candidate still scores and is still shown, so
+  the list survives a knockout that turns out to be wrong.
+- **Job distribution exists at all.** `connectors/defaults/hiring.ts` adds a `hiring` connector category
+  with Greenhouse, Lever, Ashby, Indeed, LinkedIn Jobs and - the important one - `job-feed`, the tenant's
+  own indexable feed, which reaches every aggregator with no partner API and is why this file is not a race
+  to enumerate vendors. Manifests, not code: adding a board is reviewed like data and validated by the same
+  gate tenant-authored connectors pass.
+- **Lawful basis, retention and segregated EEO capture, while the tables still have no rows.** Migration
+  0460 puts `consent_basis` / `consent_at` / `retention_basis` / `retention_date` / `erased_at` on
+  **`party_roles`** rather than in a new `candidates` table: consent is a fact about a person HOLDING A
+  ROLE, and putting it on `job_applications` would repeat it once per application - a repeating group, and
+  the exact 3NF violation the data-model rules forbid. One pair of columns carries both clocks (`erase-by`
+  for a rejected candidate's MAXIMUM retention, `retain-until` for an employment record's statutory
+  MINIMUM), which is the same two facts read from opposite ends. `candidate_demographics` is its own table
+  because SEGREGATION is the requirement rather than a modelling preference, registered `restricted: true`
+  so the generic entity reader cannot reach it, and read only by `candidateDiversityReport()`, which
+  suppresses any group under five - a count of one re-identifies the person as surely as their name would.
+- **A third confidentiality axis: `SpecField.restricted`.** `derived` answers "may the model WRITE it";
+  object confidentiality answers "may this OBJECT be shared or exported"; neither can express "may the
+  model READ this FIELD, inside a tenant where the object itself is legitimately readable".
+  `candidate.selfIdentification` needs exactly that - it must exist so the data has a lawful home, be
+  visible to a compliance reader, and be invisible to the model that ranks the shortlist. It is stripped
+  from `specFieldNames()` (and therefore from every AI context) at the single point the read list is
+  derived. Its own test caught a real collision on the way in: the academic vocabulary declares an
+  AGGREGATE `demographics` that is legitimately readable, and since restriction is keyed on the field name
+  canvas-wide, sharing the word would have forced either restricting a benign research aggregate everywhere
+  or leaving a protected characteristic readable. So the two things do not share a word.
+- **`interview` -> `customerInterview`.** The hiring domain registers `interviews` with `kind: 'interview'`
+  in the kernel `objects` table, so the founder discovery kind gave up the bare noun before the collision
+  had any rows - the same defect class as the FinOps `soc_controls` rename, caught early rather than late.
+  `RENAMED_OBJECT_KINDS` + `renameLegacyKind()` migrate boards saved under the old name on read.
+- **Three canvas tools, so the Recruiter agent has something to call.** `canvas_screen_resumes` (guest-safe:
+  it reads only what is on the board and calls nothing), `canvas_measure_funnel` and
+  `canvas_offer_interview_slots` (both account-required, like `canvas_read_domain`). Until these existed the
+  agent shipped a good bio and no domain tools at all, so it improvised limitations - the failure mode
+  `canvas_add_image` documents at length.
+
+**Two refactors the work forced, both improvements in their own right.**
+
+- **`specDerivedRegistry.ts`** - five vocabularies had five copies of the same eleven-line `.map()`, written
+  one at a time by different passes and already drifted three ways: two used a bare `LABELS[kind]` that
+  yields `undefined` for a forgotten label (an unidentifiable blank card), and four typed their
+  mutable-field map as `Record<string, ...>` - an index signature, which satisfies ANY key, so the
+  registry's exhaustiveness annotation had silently stopped verifying them. One `lower()` now, and a sixth
+  vocabulary costs one line.
+- **`creationObjectContext.ts`** - the AI-context layer ("what may the model READ, and how much of it")
+  split from the registry ("what exists, and what may be written to it"). A different question with
+  different safety properties, and 300 lines of it. Both extractions together brought
+  `creationObjectRegistry.ts` from 1,076 lines back to 650, under the 800-line architecture ratchet.
+
+**Verification.** api + frontend typecheck clean. API suite 5,556 passing, including 7 new
+funnel-arithmetic tests; frontend canvas + lib suites 1,924 passing, including 28 new screening and
+hiring-vocabulary tests. Green: `check:schema`, `check:migrations`, `check:shape-lint`,
+`check:tenant-column`, `check:domain-boundary`, `check:layering`, `check:canvas-tools`,
+`check:prompt-tools`, `check:roadmap`, `check:api-transport`, `check:design-tokens`, `check:edge-runtime`,
+`check:destinations`. The layering guard earned its keep: it caught a real N-layer violation in both new
+routes, which were querying tables directly. The queries moved into
+`application/hiring/candidateRecords.ts` and `interviewScheduling.ts`, and both routes now import zero
+Drizzle. The connector-catalog test caught two invalid manifests (an empty `path` on the GraphQL endpoint,
+a missing header name on the feed's API key) before either could fail in a customer's account.
+
+## RESOLVED 2026-08-13 - "What is the canvas missing for a CFO?": from a board that could raise money to one that can count it
+
+A CFO's review of the Creation Canvas found ten gaps, and all ten are now closed. The structural finding
+was sharper than "features are missing": the finance objects that already EXISTED were authored prose, so
+the board could raise a round, price a product and assemble a data room **without ever adding two numbers
+together**. `founderObjects.ts` documented money as a human-readable string by explicit design - sound
+reasoning (a competitor's revenue is often a range or undisclosed) with a wrong conclusion, because it
+made the role's most basic operation unrepresentable rather than merely unimplemented.
+
+**What shipped.**
+
+- **Money is WRITTEN as prose and READ as a number.** `frontend/src/lib/canvasMoney.ts` parses the same
+  strings the model already writes - "~$2-4M ARR (2025 estimate)" yields an amount, a currency, a midpoint,
+  a preserved qualifier and `approximate: true`; "not disclosed" yields `disclosed: false` with NO amount,
+  so it can never total as zero. `sumMoney` refuses to add a euro to a dollar without rates and returns
+  `skipped` beside the total, because a total that quietly omitted two rows is worse than no total. No
+  migration was needed: every existing board became summable on deploy. (25 tests)
+- **`spreadsheet.formulas` is evaluated.** It was a declared mutable field with zero readers anywhere in
+  the frontend. `canvasFormula.ts` is a tokenizer + precedence parser + evaluator (SUM/AVERAGE/IF/NPV/IRR/
+  PMT/PV/FV/CAGR and twenty more); `canvasSheet.ts` binds it to the `{columns, rows}` shape with
+  dependency-ordered recalculation, cycle detection, whole-column formulas (`{"D": "=B*C"}`) and
+  `overrides` - which is what makes "set churn to 4% and show me runway" one recalculation rather than a
+  second sheet nobody keeps in step. Wired into `DataGridBody`, so a computed cell shows its value, is
+  read-only, and a failed one reports `#REF!`/`#CYCLE!` on the card instead of hiding in row 400. (37 tests)
+- **`budget`, `forecast`, `invoice` and `bill` are canvas kinds**, over the ~29 `finance.ts` tables that had
+  no canvas surface. Budget-vs-actual, a driver/scenario model with a mandatory downside, receivables
+  ageing and payables all have objects now. `headcountPlan` was deliberately NOT duplicated: the HR seat
+  had just declared one, so its single spec gained the finance half (`currency`, `annualCost`,
+  `loadingRate`, per-hire `roles` carrying start dates) rather than the board holding two answers to "how
+  many people are we planning". `role` gained `salary`/`loadedCost`/`startAt`/`level`.
+- **The `finance.*` metric facts have a WRITER.** `burnRateService` read `finance.burn`/`monthly_burn`/
+  `runway_months`, `DOMAIN_MANIFEST` declared them, and the canvas prompt instructed the model to bind
+  `finance.runway_months` - while nothing in `api/src` ever inserted one, so the flagship "live, not stale"
+  promise resolved to `no_data` for every tenant that ever existed. `application/finance/financeRollup.ts`
+  computes burn (with a by-category slice), revenue, MRR, cash and runway into `metric_facts` on a daily
+  sweep. Runway divides by NET burn on a trailing three-month average, and is written only where its inputs
+  exist - no zero-fill, because a fabricated 0 fires every `trigger` on the board.
+- **Money can now come IN.** The entire `finance` integration category was built from
+  `describePayoutProviders` with `direction: 'export'`. `application/finance/accountingProviders.ts` is the
+  seventh port in the mailbox/drive/board family - QuickBooks, Xero, NetSuite, Plaid, Stripe-revenue - with
+  ONE sign convention decided in the port (positive = in) so no adapter can put a negative burn on a
+  board, and declared capabilities so a bank feed says it cannot answer "who owes us" instead of rendering
+  a permanently empty table. Projected into the public catalog as `surface: 'ledger'`. (13 tests)
+- **`canvas_define_metric` can express a ratio.** `computeMetric` ran ONE aggregate over ONE source, so
+  gross margin, CAC payback, NRR and burn multiple - every metric the role reports - were inexpressible.
+  `MetricDefinition.expression` reuses the SAME parser the sheet uses, with operands referencing other
+  metric ids and an optional period offset (`revenue@previous`). A missing operand is named, never
+  defaulted to zero: a margin computed against a COGS of zero reads as a perfect 100% and is the most
+  dangerous wrong answer the layer can produce. Inside an expression a grained metric reads ONE BUCKET, so
+  a growth ratio compares comparable periods - the first implementation compared cumulative-to-month and
+  reported 125% growth on a business that grew 25%. (16 tests)
+- **One approval gate, for two reviews' worth of the same hole.** The CMO review found outbound acts
+  (send/publish/share) direct-firing with no reviewer; this review found no record of who approved a
+  FIGURE. Both are "an act that needs authority before it takes effect", so `canvasApprovalGate.ts` is ONE
+  primitive: gated actions and attributed fields as registry data, per-field provenance
+  (`{field, from, to, by, approvedBy}`) in which the approval request IS the change record, a gated act
+  DEFAULTING to `required`, and a hard rule that an agent may not approve its own change. Evaluated at
+  `canvas_invoke_object_action` - the single seam every model-invoked action passes through. (18 tests)
+- **A board pack can be scheduled.** Migration `0461` adds `board_pack` to `report_type` and
+  `subject_kind`/`subject_ref` to `report_schedules` (with a CHECK making half a reference impossible), so
+  a canvas `frame` renders and delivers on a cadence through the dispatcher that already existed - not a
+  second reporting system. A deleted frame stops sending rather than mailing the investors a blank page.
+
+**Guards closed along the way.** A pre-existing red i18n guard covering **44 object kinds x 5 locales**
+(`creationCanvas.object.*` held 79 keys against 123 registered kinds); the `MUTABLE_FIELDS` exhaustiveness
+annotation that omitted the data-architecture vocabulary and therefore could not compile for ANY kind; a
+`SpecObjectBody` registration defect where the component rendered nothing unless a consumer happened to
+have imported a spec set first (`lib/specObjectSets.ts` now owns that list); and a `meterValue` regression
+that drew a red zero bar for an unscored `fitScore`.
+
+**Verified.** Frontend `tsgo --noEmit` clean and 2352 frontend tests green; api 5536 tests green;
+`check-schema`, `check-migrations`, `check-roadmap`, `check-canvas-tools`, `check-prompt-tools`,
+`check-polymorphic-fk`, `check-domain-boundary` and `check-design-tokens` all pass. `check-table-adoption`
+now reports `expenses`, `invoice_line_items` and `ledger_entries` reached by a feature path rather than
+registry-only.
+
+<details><summary>The ten findings as originally logged</summary>
+
+> Fourth role review, same root cause as the CMO, HR and DS passes and the sharpest form of it. `frontend/src/lib/founderObjects.ts` already ships five money kinds (`pricing`, `capTable`, `fundingRound`, `investorUpdate`, `dataRoom`) plus `contract`, so the canvas *looks* finance-capable — while `api/src/infrastructure/database/schema/finance.ts` carries ~29 tables (`budgets`, `expenses`, `invoice_line_items`, `break_even_scenarios`, `scenario_assumptions`, `monte_carlo_simulations`, `payback_period`, `roi_timeline_entries`, `custom_kpis`, `kpi_formulas`, `compensation_structures`, `timesheets`, `report_subscriptions`) that **no canvas kind reaches**. The role-specific finding is worse than absence: the finance objects that DO exist store authored prose, so the board can raise a round, price a product and assemble a data room without ever adding two numbers together. Object-level confidentiality is deliberately NOT re-logged here — it is the HR review's blocking item above and gates the `capTable`/`fundingRound`/`contract` set identically.
+
+- **Money is stored as a human-readable STRING, so nothing on the board can be summed, converted or rolled up.** *(CFO canvas review, 2026-08-13)* `frontend/src/lib/founderObjects.ts` makes this explicit in `MONEY_HINT` and the block comment above it — *"a human-readable amount including its currency and any qualifier … e.g. `$1.2M ARR (2025 estimate)`"* — and every money field follows: `capTable.postMoney`, `fundingRound.targetAmount`/`committed`/`valuation`, `contract.valueAmount`, `pricing.grossMargin`/`paybackMonths`. Consequence for the role: the CFO's most basic operation — total a column, convert two currencies, consolidate two entities — is not merely unimplemented but *unrepresentable*, so every real figure leaves for a spreadsheet and returns as a screenshot. Fix = a money value type (`{ amount: number; currency: ISO-4217; asOf }`) plus one canonical formatter, migrating every money-bearing field in the same pass per [[no-technical-debt-rule]]. Unblocks: totals, FX, consolidation and variance — i.e. most of the items below.
+- **`spreadsheet.formulas` is a declared mutable field that NOTHING evaluates.** *(CFO canvas review, 2026-08-13)* `frontend/src/components/creation-canvas/creationObjectRegistry.ts:296` lists `formulas` among the spreadsheet's mutable fields and a grep across `frontend/src` finds **zero readers**; `lib/canvasTabularData.ts` parses, profiles and queries rows with no expression engine, and `CreationNode.tsx:1031` makes cells free text. Consequence: the object a CFO reaches for first is a static grid whose formula text is decoration — no drivers, no recalculation, and no way to ask "set churn to 4% and show me runway", which is the entire reason a finance person opens a sheet. Fix = an evaluated cell-expression engine with dependency-ordered recalc behind the existing `spreadsheet` kind. Unblocks: every model below — without it `budget` and `forecast` would be typed numbers too.
+- **No `budget`, `forecast` or `scenario` kind, so there is no plan for actuals to vary against.** *(CFO canvas review, 2026-08-13)* `api/src/application/kernel/DomainService.ts:67` already declares the finance domain's kinds as `['invoice','expense','scenario','plan']`, and `finance.ts` already has `budgets`, `break_even_scenarios`, `scenario_assumptions` and `monte_carlo_simulations` — none has a `CREATION_OBJECT_KINDS` entry. Consequence: the canvas can hold the fundraise and the price list but not the annual plan those exist to fund; budget-vs-actual, the role's core monthly artifact, cannot be drawn on the board at all. Fix = `budget` + `forecast`/`scenario` kinds over the existing tables, with `liveMetric` supplying actuals. Unblocks: variance reporting, driver models, a three-statement view.
+- **Nothing writes finance `metric_facts`, so the canvas's "live, not stale" promise resolves to `no_data` for money.** *(CFO canvas review, 2026-08-13)* `api/src/application/seams/burnRateService.ts` READS `finance.burn` / `finance.monthly_burn` / `finance.runway_months` from `metric_facts`, and a grep across `api/src` finds **no insert into `metricFacts` anywhere** — while `frontend/src/lib/founderCanvasPrompt.ts:51` and the `canvas_refresh_live_metric` tool description both instruct the model to bind exactly `finance.runway_months`. Consequence: the product documents a binding its own backend never populates, so the one number every founder-facing surface leads with is an empty read dressed as a live one. Fix = a finance rollup in `cronSweeps.ts` computing burn/MRR/runway from `expenses` + `invoice_line_items` into `metric_facts`. Unblocks: `liveMetric` + `trigger` becoming true for money, which is what they were added for.
+- **The `finance` integration category is payout-only — money can leave, but no actuals can come in.** *(CFO canvas review, 2026-08-13)* `api/src/application/integrations/integrationCatalog.ts:219-230` builds the entire category from `describePayoutProviders({})` with `direction: 'export'`. There is no accounting connector (QuickBooks, Xero, NetSuite), no bank feed (Plaid), no payroll, and no Stripe-as-revenue-source — Stripe appears in the codebase only as webhook *signature verification* for generated backends (`api/src/application/backend/ingress.ts:195`). Consequence: "idea to REAL" completes at the artifact and stops one step short of the ledger, so every actual on the board is keyed in by hand and stale by definition. Fix = an accounting/banking provider port alongside the existing Drive/Mailbox/Social ports — per [[integration-catalog-projection]] the catalog is a projection, so one port yields the cards for free. Unblocks: the three items above and the one below.
+- **No AR/AP: invoices and bills exist server-side and nowhere on the board, so "what cash lands this month" has no object.** *(CFO canvas review, 2026-08-13)* `finance.ts` carries `freelancer_invoices`, `invoice_line_items`, `expenses` and `payment_methods`; the canvas's only commercial artifact is `contract`, whose `renewsAt` is the sole cash-relevant date in the whole founder set. Consequence: the question the role is actually asked every week — receivables, ageing, who is late — cannot be represented, and collections work has no owner, no due date and nothing for `trigger` to watch. Fix = `invoice` + `bill` kinds bound to those tables with an ageing/DSO view. Unblocks: a cash-in forecast, and dunning as a `trigger.thenDo` instead of something a person has to remember.
+- **Headcount has an org representation but no cost one, so burn is asserted rather than built.** *(CFO canvas review, 2026-08-13)* The canvas has `team`, `role` and `staff` with no salary, start date or fully-loaded rate, while `finance.compensation_structures` and `finance.timesheets` already exist and `fundingRound.useOfFunds` asks for `{area, amount, outcome}` as prose. This is the finance half of the HR review's `headcountPlan`/`compBand` item above — the same missing objects, and the reason they must be built once rather than twice. Consequence: the line consuming most of the money a round is raised for cannot be modelled on the board that plans the round, so `useOfFunds` is a paragraph rather than a total. Fix = `cost`/`startAt`/`loadedRate` on `role` plus one shared `headcountPlan` kind feeding `budget`, per [[no-technical-debt-rule]]. Unblocks: bottom-up burn, and a `fundingRound` whose use of funds adds up.
+- **`canvas_define_metric` cannot express a ratio — it computes one aggregate over one dataset.** *(CFO canvas review, 2026-08-13)* `frontend/src/lib/canvasMetrics.ts:124` (`computeMetric`) runs a single `TabularAggregate` (`op` + `column`) against a single `TabularSource`; there is no operand referencing another metric, no cross-source arithmetic and no period offset. Every metric the role reports — gross margin, CAC payback, net revenue retention, burn multiple, rule of 40 — is arithmetic over two or more sources with a time shift. Consequence: the tool that promises "define a metric ONCE so every KPI, chart and report computes the same number" (`CreationCanvas.tsx:4307`) can define only the numerator, so the semantic layer works for counts and is decorative for finance. Fix = expression-level metric definitions whose operands may reference other metric ids, plus period-over-period operators. Unblocks: a semantic layer the CFO can standardise on.
+- **No provenance or approval on a money value, so no figure on the canvas is defensible.** *(CFO canvas review, 2026-08-13)* `decision` records why a *choice* was made; nothing records who approved a *figure*, when it changed, or from what to what. `approvalMode` exists only on `workflow` (`CreationCanvas.tsx:7807`) — the identical gap the CMO review logs for publishing — and `lib/canvasActionJournal.ts` is board history, not an attributable, immutable per-field change record. Consequence: a board pack, an investor update or a diligence answer sourced from the canvas cannot survive the first "who signed off on this, and where did it come from?", which is the one property the role's entire output is judged on. Fix = extend the SAME shared approval gate the CMO item calls for to value changes on money-bearing kinds, with per-field provenance (source, author, approver, at). Unblocks: board packs and data-room answers that originate on the canvas instead of being retyped off it.
+- **A board pack can be exported but never scheduled, so the role's two standing obligations stay manual.** *(CFO canvas review, 2026-08-13)* `lib/canvasExports.ts` renders `xlsx`/`pptx`/`docx`/`pdf` per object on demand and `investorUpdate` advertises a `send` action, while `finance.report_subscriptions` exists with **no canvas binding** — a grep for it across `frontend/src` returns nothing. Consequence: the monthly investor update and the board pack are hand-assembled from the board every period, which is precisely the recurring work "idea to REAL" claims to remove; a `frame` is already the right unit of delivery and cannot be delivered on a cadence. Fix = bind a canvas `frame`/selection to `report_subscriptions` so it renders and delivers on a schedule. Unblocks: the board pack as a standing output of the canvas rather than a monthly export chore.
+
+---
+
+</details>
+
+---
+
+## RESOLVED 2026-08-13 - "What is the canvas missing for a professor?": the academic vocabulary, from cohort to peer review
+
+A professor's review of the Creation Canvas found that it could author a course and could not TEACH one,
+and could analyse data but could not do RESEARCH. Both gaps had the same shape: the board held the
+artifact and had nowhere to put the people, the gates or the evidence around it.
+
+**The structural finding.** Progress lived on the artifact — `course.completedLessonIds`,
+`practice.attempts` — which is exactly right for one learner and structurally wrong for a class. One
+board meant one progress record, so material could be written and never handed out, marked, or read for
+who is struggling. The fix is a second axis: a `cohort` with a roster, and ONE `submission` PER LEARNER
+as its own object kind rather than an array on the assignment, so two hundred answers each carry their
+own owner, integrity record and returned feedback instead of being a repeating group with a shared editor.
+
+**What shipped.**
+
+- **A shared spec-object primitive** (`lib/specObjects.ts`). The mechanism `founderObjects.ts` invented —
+  declare a kind's fields once, and let the node body, the AI field contract, the registry's
+  mutable/context lists and the empty-shell rule all read that one declaration — was right, and its NAME
+  was wrong. It is now vocabulary-neutral, each vocabulary contributes a SET with its own i18n namespace,
+  and the founder set registers into it unchanged. One node body (`SpecObjectBody.tsx`) now renders every
+  spec vocabulary; four render styles were added (`matrix`, `bars`, `math`, `reference`).
+- **A `derived` field flag**, which is the whole integrity story: `specMutableFields` omits derived fields,
+  so a model may READ a mark, an authorship ledger or an attendance count and can never WRITE one. A model
+  that could write `submission.mark` could award a grade nobody earned.
+- **25 academic object kinds** (`lib/academicObjects.ts`, `contract/src/academic.ts`) across Teaching
+  (cohort, assignment, rubric, submission, gradebook, accommodation, feedbackBank, lecture, poll,
+  officeHours, curriculumMap), Research (grantProposal, ethicsApproval, preRegistration, protocol,
+  consentForm, participantPool, dataManagementPlan, literatureReview, hypothesis, manuscript, peerReview)
+  and three scholarly primitives (citation, bibliography, equation) — with no new render branch.
+- **The engines, all pure and tested** (57 tests): `citations.ts` (BibTeX + RIS import, six styles,
+  in-text citations, DOI-based de-duplication, BibTeX export), `marking.ts` (rubric grid → mark, grade
+  bands, a late policy parsed out of the handbook sentence, moderation), `gradebook.ts` (weighted matrix
+  separating "never handed in" from "handed in, not marked", running vs final totals, at-risk ordering,
+  CSV), `mathTex.ts` (TeX → accessible MathML with a spoken reading, no dependency, CSP-safe),
+  `integrity.ts` (an authorship ledger from evidence the canvas already holds — not a detector),
+  `accessibility.ts` (a WCAG audit whose severity RISES to blocking when a learner on this cohort has an
+  approved accommodation), `assessment.ts` (the three-mode gate that finally lets the canvas administer
+  an exam, plus extra time applied to duration rather than to the calendar).
+- **LTI 1.3 / LTI Advantage** (`domain/lti/ltiClaims.ts`, `application/lti/LtiService.ts`,
+  `presentation/routes/ltiRoutes.ts`, 18 tests signing with real RSA keys): signed launch with a BURNED
+  nonce, RS256-only, AGS grade passback whose `released` flag decides whether the student sees the mark,
+  and NRPS roster pull that follows `Link: rel="next"` pagination. SCORM export was one-way; this is the
+  direction a university actually needs.
+- **Two canvas templates** (assessment cycle, research programme), **CSS for the four new render styles**
+  in both themes, and **326 message keys with real translations in all five catalogs**.
+
+**One defect found and fixed on the way.** `datasource` declares `rows` among its authorable fields, that
+name flowed through a derived spread into `CONTEXT_FIELDS`, and the deliberate exclusion of full dataset
+rows from the AI snapshot was silently reversed — the whole sheet went back into every prompt. The rule
+is now a central `NEVER_IN_CONTEXT` deny-list applied at the snapshot boundary, so no vocabulary can
+reintroduce it by declaring a field.
+
+**Still open**, with the concrete blocker on each, in the Gap Register: SAML 2.0 SSO (XML-DSig
+verification is a signature-wrapping bypass risk to hand-roll and needs a real IdP to validate), an admin
+surface for LTI registrations, and the canvas-side delivery adapters for the academic actions.
+
+## RESOLVED 2026-08-13 - "Create automation tests for my website": QA is a seat at the canvas, not a tab somewhere else
+
+A QA-tester review of the Creation Canvas found ten gaps. Eight are closed here — the whole IDEA → REAL
+path for the request that names the discipline — and the two that need something this repo cannot reach
+stay in the Gap Register with the single concrete blocker each.
+
+**The finding.** `/api/qa` already shipped the entire Agentic QA subsystem: flows, LLM-generated
+Playwright tests, runs, per-project targets, login personas, an interaction heatmap, explorations,
+severity-scored and fingerprint-deduped findings, opt-in routing of a finding into a staffed board lane,
+cron schedules, and a quality trend attributing escaped defects per model and per agent. It was consumed
+by **exactly one** component — a tab on `/workforce`. Meanwhile the canvas advertised 44 `canvas_*` tools,
+**not one of them QA**, and held 115 object kinds with no test, no run and no defect among them. The
+board that is the product's front door was the one place a tester could not work.
+
+**The use case, end to end, with no account.** "I'm trying to create automation tests, can you create
+them for my website" now ends in files someone can run. `canvas_create_test_plan` takes a URL (plus the
+fetched HTML, or named routes, or journeys described in words), discovers same-site routes
+deterministically, and lands a `testPlan` with one `testCase` per route — each carrying ordered steps
+**and** the generated Playwright source, joined to the plan by membership edges. Exporting a case writes
+`<name>.spec.ts`; exporting the plan writes the whole suite as one file with a single import. The
+lowering (`playwrightSpec` in `packages/creation-canvas-contract/src/qa.ts`) is the SAME function the
+API's generator uses, so a spec shown on a board and a spec stored in the tenant's QA library cannot
+disagree — and because it is pure, a guest with no tenant, no key and no gateway gets real tests rather
+than an invitation to sign up.
+
+**Four kinds, and the split behind them.** `testPlan` is the intent and the gate; `testCase` is one
+runnable scenario; `testRun` is pinned evidence; `defect` is what broke. A "test suite" is a plan whose
+cases are its members — a connection, not a fifth kind. `defect` is its own kind rather than a `task`
+because a defect is REPRODUCED and VERIFIED, and carries what a task has nowhere to put: expected vs
+actual, severity, the repro steps, and the fingerprint that makes the same break reported from a canvas
+run and from the Agentic Tester one defect instead of two.
+
+**What a model may not write.** `gateVerdict` and `passRate` are readable and absent from
+`MUTABLE_FIELDS.testPlan`, for the same reason `practice.attempts` is: a model that can write its own
+verdict will eventually report a release green that nothing ran. `evaluateReleaseGate` is their only
+writer, and it computes from the runs, defects and audits actually on the board.
+
+**The release gate now measures the release.** `qa-e2e/src/canvas-release-audit.ts` gated on a
+hand-authored `canvas-release-evidence.json` whose only real validation was that the `REPLACE_`
+placeholder had been deleted. It now also accepts a `testPlan` exported from the canvas — whose checks
+were computed from real runs and defects — and prints each row's provenance, `(measured)` or
+`(declared)`, so a green gate says how much of itself was asserted by a human.
+
+**Coverage, finally an asserted edge.** `CREATION_CONNECTION_KINDS` gained `verifies`. The six existing
+kinds all say how work FLOWS; none said what PROVES, so a board could not answer the two questions a
+tester is paid to answer. `canvas_test_coverage` computes over `verifies` edges ONLY — counting
+`reference` would report every connected board as fully covered, which is worse than no number.
+
+**The repro recorder stopped being thrown away.** The action journal already recorded exactly what a
+defect report needs — ordered actions with durations, failures, and the ones that started and never
+finished — and died on reload, which is the most common shape of a real bug report ("it did this, then I
+refreshed"). It now persists per session in `sessionStorage` (per TAB deliberately: `localStorage` would
+interleave two tabs into one record that reads as one session doing things twice), and every defect the
+board files carries its tail, failures hoisted to the front.
+
+**Accessibility and performance, on the board beside the build.** `canvas_audit_page` scores fetched
+HTML against seventeen decidable rules — language, title, alt text, link and button names, form labels,
+heading order, zoom blocking, frame titles, focus order, landmarks, render-blocking scripts, image
+dimensions, lazy loading, page weight, viewport — each carrying its WCAG 2.2 criterion. It states its
+own limit rather than implying otherwise: a source audit cannot judge contrast or anything that exists
+only after scripts run.
+
+**Test data that exercises something.** The Agentic Tester's own fill value is the literal `qa-probe`,
+which breaks no validation rule any product has. `canvas_generate_test_data` generates three populations
+from the declared `dataContract` — valid, the exact boundaries, and the rows that must be REJECTED —
+plus the string shapes naive validation breaks on, each row labelled with the edge it exercises, and
+deterministic so a fixture is diffable. Masking a real extract composes with `maskTabular` rather than
+reimplementing it, so the mask on screen and the mask in a fixture are the same rule.
+
+**The canvas became automatable.** It shipped with ZERO `data-testid`, so its own e2e suite selected on
+`/session title/i` and `/ask brain/i` — it could only ever pass in English, in a product that ships five
+locales, and a copy edit turned it red with no behaviour change. Stable ids now sit on the board shell,
+the composer, the palette (per kind) and every node (`canvas-node-<kind>` plus `data-node-id`), the
+specs are migrated off text matching, and `QaHeatZone.selector` finally has something stable to key an
+element-level hot zone on for the product's most important surface.
+
+**One grammar, not two.** `QaStep`, the finding vocabulary, the slug/hash identity helpers and the
+Playwright lowering moved from `api/src/application/qa/qaTypes.ts` into the contract both sides already
+alias; `qaTypes.ts` re-exports them so no existing importer changed, and `fallbackSpec` is now a
+four-line wrapper over the shared generator. A second structurally-identical `QaStep` on the canvas side
+would have drifted exactly the way the canvas tool lists once drifted from the gateway's.
+
+**Guest boundary.** Five of the six tools are guest-safe — they run entirely in the visitor's own
+browser. `canvas_publish_tests` (write the suite into the tenant's QA library, read its runs back) is
+guest-GATED rather than absent, so a visitor who has just watched the canvas write their tests is told
+the real one-click reason instead of being handed a model that invents a limitation. `CANVAS_QA_ACCOUNT_GATE`
+makes the refusal name what they already have: complete, runnable spec source they can download now.
+
+**Verification.** 46 unit tests across `canvasQa` / `canvasPageAudit` / `canvasTestData`, 8 render tests
+over the four cards and the audit section asserting real catalog strings, 6 over journal persistence,
+the API QA suite still green through the moved grammar, `check-canvas-tool-contract` green at 50 tools
+(32 guest-safe, 2 guest-gated, 16 account-required), `tsgo` clean, and ~95 new keys with real
+translations in all five catalogs.
+
+**Still open, with the blocker named.** A live preview cannot report its own console/network errors —
+the frame is cross-origin and deliberately without `allow-same-origin`, so the parent cannot read it;
+the routes are an injected reporter or the QA runner container. And a cross-browser verdict needs that
+container deployed. Both are in the Gap Register.
+
+---
+
+## RESOLVED 2026-08-13 - The canvas had no HR: two seats fully modelled in the database and four cards on the board
+
+An HR-generalist review of the Creation Canvas found eleven gaps. Seven are closed here — the whole
+OBJECT MODEL half — and the four that need a server are recorded in the Gap Register with what each
+still needs, because a declared contract with nothing behind it is a seam, not a feature.
+
+**The finding.** `api/src/application/domains/people/entities.ts` declares twenty-two live entities and
+`.../hiring/entities.ts` twenty-five, every one registered in the kernel and readable TODAY through
+`canvas_read_domain` — employees, employment records, headcount plans, competencies, applications,
+interview kits, scorecards, offer letters, placements. The canvas's entire People group was four cards,
+of which `staff` held a job title, a focus line and an accent colour. The gap was never "the data does
+not exist"; it was that a domain the product had already modelled had no shape on the surface that runs
+the company. That is exactly the asymmetry `canvas_sync_company_profile` closed for the investor seat,
+left open for the seat where the rows are about people. The builtin `hr` agent shipped a good bio and
+no object it could put on a board.
+
+**Twelve kinds, declared once.** `packages/creation-canvas-contract/src/people.ts` declares
+`PEOPLE_OBJECT_KINDS` and `frontend/src/lib/peopleObjects.ts` specs them, registered through
+`specObjects.ts` so the node body, the model-facing field contract, the mutable/context lists and the
+empty-shell rule all read one declaration: `employee` (carrying the `managerRef` the board could never
+hold, which is the edge an org chart is drawn from), `orgChart`, `headcountPlan`, `compBand`, `policy`,
+`employeeLifecycle`, `absencePlan`, `performanceReview`, `skillsMatrix`, `case`, `obligation`, and
+`form`. Wired into `creationObjectRegistry.ts` in the four places every other vocabulary is, and
+localized across all five catalogs under `creationCanvas.people.*` — 12 labels, ~100 field labels and
+~47 column headers with real translations in zh/es/fr/de, verified key-by-key against the specs.
+
+**A model may not write an outcome.** Several fields are `derived`, which `specMutableFields()` keeps
+out of the authorable list by construction: a `performanceReview.overallRating`, a `case.outcome`, a
+`compBand.equityFindings`, a `skillsMatrix.gaps`. That is the same judgement the academic set makes
+about `marks`, applied where it matters more — a model that CAN write a rating will eventually write one
+nobody reached, and a rating with no reviewer behind it is the one an appeal wins. The hints are
+correspondingly insistent about provenance: `PAY_HINT` refuses the qualifier the founder set's money
+hint allows, because a salary is not an estimate, and `EVIDENCE_FIELD` exists separately from the shared
+`sources` field so the model is never invited to cite a web page as the basis for a fact about a person.
+
+**Three things that are column values and not kinds.** A PIP is a `case` with
+`caseType: 'performance-plan'`; a one-to-one is a `performanceReview` with `reviewType: 'one-on-one'`;
+onboarding and offboarding are one `employeeLifecycle` with a `direction`, because they are the same
+shape (dated steps against an anchor, an owner and evidence per step) and their compliance-critical
+halves — right-to-work checked, access revoked — are mirror images. All three were named as separate
+kinds by the review. A `pip` kind would have needed its own copy of every restricted-access rule `case`
+already carries, which is how two objects come to disagree about who may read the more sensitive one.
+
+**Closed by this pass:** the org/headcount/comp planning trio; `policy` with a lifecycle (effective date,
+jurisdictions, review cadence, acknowledgement roster); `employeeLifecycle` with access revocation as its
+own field rather than a step category; performance, skills and ER casework; absence and coverage with the
+breaching days computed rather than eyeballed; and statutory `obligation` as the object a `trigger` can
+bind to for a deadline. The `interview` -> `customerInterview` collision is also resolved, with
+`RENAMED_OBJECT_KINDS` as the read-time migration saved boards need.
+
+**Still open, in the Gap Register:** the `form` response store and public route, the signature subsystem,
+confidentiality ENFORCEMENT at the five boundaries that must read it, the hiring/people vocabulary seam,
+and the two independently-extracted spec engines.
+
+## RESOLVED 2026-08-13 - The canvas could not do school: no maths, no practice, no voice, no pen
+
+Four gaps found in a grade-8 student review of the Creation Canvas, closed together because they are
+one story: a board that can hold a sales pipeline, a DORA rollup and a pitch scorecard could not hold a
+line of algebra, could not remember a single answer to a single question, could not be listened to, and
+could not be drawn on.
+
+**Mathematics renders everywhere, from one pipeline.** Six independent `remarkPlugins={[remarkGfm]}`
+literals - chat, the document renderer, the blog and three inside a canvas card - none of which could
+render mathematics: `$rac{a}{b}$` came out as literal dollar-signed source on every surface.
+`lib/markdownPipeline.ts` is now the ONE plugin list (GFM + `remark-math` + `rehype-katex`) and all six
+call sites spread it, so a document cannot read two different ways depending on which panel opened it.
+KaTeX's stylesheet loads once at the root; `.katex` inherits `currentColor` (correct in both themes with
+no per-theme rule) and `.katex-display` scrolls inside its own box so a long equation never widens the
+page. `throwOnError: false` because a half-typed formula is the normal state of a document being written.
+
+**A course is pointed at a subject, and practice is a real object.** `creationObjectRegistry` built EVERY
+palette-placed Course from `buildLlmCourse()` - title "Build an LLM", five modules on tokenizers and
+red-teaming - so a learner on any other subject started by deleting somebody else's curriculum.
+Worse, `courseFromNode` substituted that curriculum whenever a course had no modules, so an empty course
+was unreachable as a state. A Course now starts as `emptyCourse()` carrying only its subject, the card
+asks what to learn, and the inspector asks Brain to write the modules, lessons and checks; the worked LLM
+course is still shipped as what it always was - the example behind the LLM Builder Academy template.
+
+The new `practice` object kind holds questions AND the record of every attempt. `lib/canvasPractice.ts`
+owns the whole model: one grader, one score, and a spaced-repetition-lite recall order (never-seen beats
+got-it-wrong beats seen-once beats mastered, oldest first within a tier). Mastery is a STREAK of two, not
+"ever got it right once". A Course module's knowledge check is now a one-question practice set run by the
+same `PracticeRunner` - it used to hold the chosen answer in `useState`, so closing the card forgot it and
+a course could never tell anyone their score. `attempts` is deliberately absent from every kind's
+`MUTABLE_FIELDS`: it is the learner's record, and a model that could write it could report mastery nobody
+demonstrated.
+
+**Anything with words can be read aloud or re-levelled.** `speechSynthesis` appeared in exactly one file
+(meeting captions). `components/ReadAloud.tsx` is one shared control that decides its own visibility from
+two facts it needs anyway - is there prose (`lib/canvasProse.ts`), and can this browser speak - and it is
+mounted once on the card beside the download row, so every kind that HAS words is covered and a KPI tile
+showing one number is not. `lib/readingLevels.ts` declares the levels as data and composes the one
+meaning-preserving rewrite request; the control appears on any object whose authored content is prose,
+read off the registry rather than a list that could fall behind.
+
+**The pen is a pen.** One pointer-drag made one node holding one single-colour polyline; colour and width
+were editable only afterwards from the inspector; there was no eraser, no second stroke, no shapes, no
+text, and - because a drawing was a free-floating node - no way to mark up the document, image or diagram
+next to it. A drawing is now a LIST of strokes (`lib/canvasDrawing.ts`), each carrying the tool that made
+it. The tray offers pen, highlighter, line, box, circle, text and eraser, with colour and width chosen
+BEFORE the stroke and remembered across sessions. A stroke over an existing drawing joins it; a stroke over
+any other object becomes an annotation carrying `annotatesId` that MOVES with its target (node `data`, not
+React Flow's `parentId`, because only `data` survives `creationGraphFromSnapshot`); a stroke over empty
+board starts a sketch. The eraser removes whole marks. Legacy `points` drawings still open, as one pen
+stroke, and are still written on save.
+
+Two things that were broken next door and are fixed with it: a hand-drawn sketch had NO working SVG
+download (`hasCanvasDrawing` asked for a generator preview URL a drawing never has), and the draw.io
+conversion embedded only the first path. Both now read the same stroke list. `drawingDataUrl` had no
+callers left and is deleted.
+
+Localised in all five catalogs. New tests: `canvasPractice`, `canvasDrawing`, `canvasProse`,
+`markdownPipeline` (both readers, plus the commands a student actually types), and `learningSurfaces`
+for the practice card, the subject-driven course and read-aloud visibility.
+
+## RESOLVED 2026-08-13 - Data-architect canvas review: the eleven gaps, closed, and "create me an ERD" made real
+
+A review of the Creation Canvas from a data architect's seat found eleven gaps. The canvas could
+already ANALYSE data - parse a CSV, profile it, group it, chart it - but it could not MODEL data,
+reach live data, relate two datasets, say what data is allowed to be, prove it is fit to use, define
+what a number means, or say where a number came from. All eleven are closed, and the headline use
+case ends in something executable.
+
+**IDEA -> REAL, for data.** "Create me an ERD" no longer produces a picture. `canvas_create_data_model`
+authors entities/attributes/keys/relationships, VALIDATES them (missing key, dangling foreign key,
+nullable key, repeating group / 1NF, unresolved many-to-many, unclassified PII), resolves every
+many-to-many into a real junction table, and lowers the result to executable `CREATE TABLE` DDL in
+postgres / mysql / sqlite / bigquery - parents ordered before children so the script runs top to
+bottom, and BigQuery's unenforced constraints omitted rather than emitted as DDL that fails. The same
+model renders as a diagram on the board and exports as a Mermaid `erDiagram`. Three ways in, one
+shape: authored from a description, INFERRED from an uploaded dataset's real rows (types, nullability
+and the natural key come from what is actually there), or REVERSE-ENGINEERED from a live database.
+
+**1. Live data sources.** `dataProviderCatalog` had shipped Postgres/Neon, Supabase, BigQuery,
+ClickHouse, Elasticsearch and Airtable with `query` and `list-tables` operations for a long time,
+and the canvas could reach NONE of it - every byte on a board arrived by file upload and sat frozen.
+`application/integrations/dataSourcePort.ts` + `/api/data-sources` close it: list, schema, and one
+bounded read query, over the SAME credential store and encryption secret the workflow `mcp` node
+uses. READS ONLY - `assertReadOnlySql` rejects anything that is not a single SELECT/WITH before a
+credential is even decrypted, so a model asked to "clean up the test rows" cannot author a DELETE
+against production. Schemas are served through `getOrSetCached` (10 min); queries deliberately are
+not, because the point of a live source is that it is live.
+
+**2. The `data` edge finally means something.** `canvasTabularJoin` hash-joins two tabular objects on
+a shared key - inner/left/right/full, keys auto-detected from matching names AND overlapping values.
+It reports what a join must report to be trustworthy: unmatched rows on both sides, renamed colliding
+columns (never silently dropped), and FAN-OUT, because a one-to-many join inflates row counts and any
+SUM taken afterwards is wrong by that factor.
+
+**3. The query engine can express a normal analytical question.** `groupBy` takes up to four columns
+(each its own addressable field, not one joined label); `timeGrain` buckets a date column to
+day/week/month/quarter/year in UTC, in a form that sorts chronologically; `having` filters the GROUPS
+after aggregation; and nine window operators - running total, rank, dense rank, % of total, moving
+average, lag, delta, % change, row number - run over the SORTED result and BEFORE the limit, so
+"top 10 with each row's share of the whole" is correct rather than a share of the ten. "Revenue by
+month by region" was previously unaskable, which meant the model hand-authored the numbers the tool
+description forbids it from authoring.
+
+**4. Data contracts.** `DataContract` declares required / unique / typed / ranged / enumerated
+columns, a primary key, row-count bounds and a freshness SLA; `evaluateDataContract` holds real rows
+to it and returns violations as DATA (rule + counts), never prose, so the same evaluation reads
+correctly on the card, in the inspector, in five languages, and in a tool result. `inferDataContract`
+proposes one from what the data currently is.
+
+**5. Classification, PII and masking.** `classifyTabular` reads column names AND values (values win:
+a column called `contact` holding real addresses is email data whatever it is called; a numeric
+`bank_verified` flag is not financial data) and returns a confidence with every tag. Credentials,
+financial, government-id and health columns are MASKED wherever they render or export, on the render
+path rather than in the store - so analysis still runs over real values (a masked join key matches
+nothing) while a shared board never paints a card number. Masked cells are also not editable, because
+the visible text is the mask. The scan runs at import, not on demand, so a restricted column is
+masked from the first render.
+
+**6. Data quality.** Nine check kinds including referential integrity ACROSS two canvas objects and a
+freshness SLA. A declared contract YIELDS its checks (`checksFromContract`) rather than anyone
+restating "customer_id must be unique" twice. A check that could not run says SKIPPED, never passes,
+and the score is computed over the checks that actually ran so skipped ones cannot flatter it.
+
+**7. The semantic layer.** A `metric` object is a DEFINITION - source, aggregate, filters, dimension,
+time grain, unit, format, target, direction - and the KPI, chart and report that quote it store its
+`metricId` rather than a literal. Two tiles labelled "MRR" can no longer disagree. Attainment is
+direction-aware: a churn metric halved against its ceiling reads as AHEAD, not 50% of target.
+(`metric` is the definition; the founder `liveMetric` is one bound reading of one - the split the
+contract argues for.)
+
+**8. Lineage and impact.** Every derived artifact now stores the TRANSFORM, not just a parent id:
+the query, the join spec or the SQL that produced it. From that, `staleDerivatives` finds artifacts
+whose source was re-read after they were built (the concrete "your dashboard is showing March"
+detector - not an age threshold), and `columnImpact` answers "what breaks if I drop this column"
+with which artifacts read it and HOW (select / filter / groupBy / aggregate / sort / join / derive /
+timeGrain). An empty answer is the useful one: the column is safe to change.
+
+**9. Freshness.** Datasets are stamped `fetchedAt` at import; `freshnessOf` is the ONE reader of
+"how old is this" that the card badge, the quality check, the contract evaluator and the snapshot
+all use, and it reports UNKNOWN rather than "fresh" when nothing recorded the read.
+
+**10. Pushdown.** `canvas_query_data_source` materializes as `dataset` so subsequent analysis runs
+over returned rows without another round trip, and the port appends a LIMIT when a statement omits
+one, so a canvas cannot pull a billion rows into a browser tab by leaving out one word.
+
+**11. `dataset` moved from the Build palette group to Data** - the one true ingestion object was
+missing from the palette every data question starts in, while every object derived from it (table,
+chart, map, KPI) had always been there.
+
+**Shape.** Seven new domain modules (`canvasDataModel`, `canvasDataModelDdl`, `canvasDataGovernance`,
+`canvasDataQuality`, `canvasMetrics`, `canvasTabularJoin`, `canvasLineage`), one application port and
+one route on the API, six new canvas kinds derived from ONE spec (`dataArchitectureObjects.ts`,
+following the `founderObjects.ts` precedent so label/seed/actions/fields cannot drift across three
+lists), eleven new Brain tools registered in the guest/account contract both the client and the
+gateway read, six node bodies in `DataArchitectureViews.tsx` driven entirely by canvas + tone tokens
+(both themes, fluid, scroll-inside-themselves on a narrow viewport), and 740 catalog entries across
+all five locales with real translations and a parity check.
+
+**125 new unit tests**, all passing.
+
+**Two defects found and fixed on the way.** (a) `computeMetricSeries` ordered a categorical breakdown
+by ROW COUNT rather than by the metric - "MRR by plan" ranked by how many subscriptions a plan had
+rather than by how much money it made; `aggregateLabel` is now exported so the sort can name its own
+aggregate. (b) A KPI chip printed `null.toLocaleString()` for an aggregate that is not computable
+over the matched rows (a median of an empty column); the chip is now dropped, because "null" beside
+three real numbers reads as a value that was measured.
+
+**One cross-session defect found and fixed.** Twelve test files each hand-wrote
+`{ ...(await importOriginal('next-intl')), useTranslations: realCatalogTranslator(en) }`. Spreading
+the real module leaves every OTHER next-intl hook real, and a real hook throws outside a provider -
+so the moment a component anywhere in the rendered tree called `useLocale()`, **152 tests across
+nine files failed at once** with "No intl context found", none of which had anything to do with what
+they were testing. `realCatalogIntlMock()` now returns the complete override and all twelve call
+sites use it: 152 failures -> 3, and the next next-intl hook has one place to be added.
+
+---
+
+## RESOLVED 2026-08-13 - Dev-manager canvas review: the four gaps that could be closed without the board
+
+A review of the Creation Canvas from a delivery manager's seat found eight gaps. Four of them lived
+entirely inside `CreationCanvas.tsx` / `creationObjectRegistry.ts` / `CreationNode.tsx`, which a
+concurrent session was rewriting at the time, and stay open in ROADMAP group 10 with that blocker
+named. These four did not, and are closed.
+
+**1. One dependency graph, not two.** `packages/creation-canvas-contract/src/dependencyGraph.ts`
+holds `analyzeDependencies` - blocked-by, blocks, is-ACTUALLY-blocked (a blocker that has finished
+no longer holds anything up), weighted longest path, and cycle detection that still returns a finite
+answer. It takes the status vocabulary as a PREDICATE and the path cost as a per-node WEIGHT, so the
+PMO layer keeps hop-counting over initiatives while a canvas board can rank by estimated hours -
+six one-hour tasks in a row must not outrank one two-week task. `portfolioRollup.computeDependencyAnalysis`
+is now a thin initiative-shaped adapter over it; the DFS that was about to be written a second time
+for the canvas does not exist twice. 9 new unit tests, and the 24 existing PMO tests pass unchanged.
+
+**2. Two tools stopped lying about their own data.** `dora-quickcheck` and `ai-cost-estimator` both
+told the reader "sign in to score this automatically from your real data" and neither had a provider,
+so the only DORA or cost figure a canvas board could carry was a number the operator typed in -
+sitting beside their real work and looking equally authoritative. Both now have one:
+- DORA reuses `computeDora`, the SAME collector behind `/api/pmo/rollup`, and scores each of the four
+  keys only when it has a number. A tenant with no recorded restore gets "No restored failures in
+  window", not an invented 0h that reads as Elite. Tier thresholds are the calculator's own, so the
+  self-assessed and measured modes cannot drift about what "Elite" means.
+- Cost reads the authoritative `cost_usd_millicents` stamped at write time (never re-priced from
+  tokens, which would disagree with the invoice), reports real cache-hit share and cost per delivered
+  ticket, and surfaces BYO traffic separately rather than folding zero-cost rows into an average.
+A regression test now fails the build if any tool's `about` copy makes the "score from your real
+data" claim without a provider behind it - the promise is pinned rather than trusted.
+`tierName`/`money` were being duplicated to serve this; both are now exported from `toolDefinitions`
+and the copies are gone, with `money` gaining cents below $100 so a $4.37 run is not reported as `$4`.
+
+**3. The task scheduling fields became reachable.** The review's premise here was WRONG one layer
+down and the correction is the useful part: `tasks` has carried `story_points` (0246), `start_date`,
+`due_date` and `sprint_id` (0115) all along, and the PATCH route accepts every one. What was broken
+was the typed client - `tasksApi.update`/`create` omitted `startDate` and `storyPoints`, so no
+TypeScript caller could send either. Derived sprint velocity (EMP-4) reads `story_points` as its leaf
+source, so an unestimated ticket silently contributed nothing. Both are now on the client.
+
+**4. The board is searchable.** The canvas had exactly one search box and it filtered the PALETTE of
+object types you can ADD, not the objects you have - so past roughly thirty objects "where is the
+pricing deck" had no answer but scrolling. `CanvasOutlinePanel` (already the list of everything, and
+already where a keyboard user lands) now searches real board content over title/kind/status/subtitle,
+RANKED - a title prefix beats a title hit beats a hit anywhere else - with a chip per kind actually
+present, most-used first. With an empty query it holds board order, because silently re-sorting the
+list a screen-reader user is navigating would be worse than having no search. The result count is
+announced politely. `lib/canvasOutline.ts` is the pure half (13 unit tests); the panel has 9 more.
+The search+chips control the Files library had grown was extracted to `CanvasPanelFilters` and the
+Files panel migrated onto it, with the CSS renamed off `files*` to `panel*` so the two cannot drift.
+Localized in all five catalogs; both themes and the narrow-viewport rule come from the existing
+canvas tokens.
+
+## RESOLVED 2026-08-13 - Founder objects: the canvas could make anything except a company
+
+The canvas held 79 object kinds and could produce video, decks, games, models and campaigns, but
+nothing that represented the BUSINESS doing the making. Asked the real founder question - "do a
+geographical analysis of competitors in the Florida market, use my existing business details to
+research them, outline potential customers based on my GTM, and indicate a strategy to attract
+customers from my competitors" - the board had nowhere to put a competitor, a segment, a
+go-to-market or the decision that came out of it, so all four answers collapsed into one `document`
+full of prose: correct-sounding, unqueryable, and dead the moment the next turn needed to reason
+over "which competitor is weakest in Tampa".
+
+**Seventeen founder kinds** added to `packages/creation-canvas-contract` as `FOUNDER_OBJECT_KINDS`:
+`company`, `competitor`, `customerSegment`, `gtmPlan`, `battlecard`, `interview`, `experiment`,
+`decision`, `objective`, `liveMetric`, `trigger`, `pricing`, `capTable`, `fundingRound`,
+`investorUpdate`, `dataRoom`, `contract`.
+
+**Declared ONCE.** `frontend/src/lib/founderObjects.ts` holds one spec per kind, and the node body,
+the AI field documentation, the registry's `createData`/`mutableFields`/`CONTEXT_FIELDS` entries and
+the empty-shell rule are all DERIVED from it. `FounderObjectBody.tsx` is one generic renderer over
+seven render styles, wired into `CreationNode` as a single branch rather than seventeen - so a new
+founder kind is one entry in one file, with no list to forget.
+
+**Four tools**, both guest tiers correct in the shared contract (the api's `guestCanvasTools` test
+passes unchanged, because both halves read the same declaration):
+- `canvas_map_competitors` (guest-safe) - reads `competitor.locations`, builds a real `map` object
+  through the EXISTING `mapObjectFields`, and returns density by metro plus the metros with no
+  competitor inside the coverage radius. The coverage gaps are the deliverable. `lib/competitorGeo.ts`
+  is the pure analysis (haversine, metro anchors as data, Null-Island rejection).
+- `canvas_evaluate_triggers` (guest-safe) - `lib/canvasTriggers.ts`.
+- `canvas_sync_company_profile` (account) - writes the investor seat's `companies` row onto a
+  `company` object; layered on the same kernel read `canvas_read_domain` performs, not a second one.
+- `canvas_refresh_live_metric` (account) - re-reads `/api/<domain>/metrics`, giving finance and
+  investor numbers the LIVE half that `inbox`/`socialFeed` always had and `dashboard` never did.
+
+Nine founder starting points added to the localized `promptUseCases` catalog (all five locales),
+deliberately without a dotted id so they are not capped by the `canvas_prepare_executive_use_case`
+summarize-existing-evidence contract - a competitor analysis is a research pipeline, not a report
+over rows the tenant already has. Founder system block extracted to `lib/founderCanvasPrompt.ts`,
+composing its field contract from the registry. 72 new tests; all five i18n catalogs updated with
+real translations.
+
+### Two defects found and fixed in the same pass
+
+**1. A KPI's number was authorable and invisible.** `value`, `target`, `unit` and `trend` were in
+`MUTABLE_FIELDS.kpi` and missing from `CONTEXT_FIELDS`, so `creationObjectAiContext` stripped all
+four: Brain could write a KPI onto the board and was then blind to what it said. Asked "is the runway
+KPI below target?" the model saw a titled card with no value. Fixed by adding the four fields, and
+structurally for the founder kinds by deriving both lists from the one spec.
+`founderObjects.test.ts` asserts every founder field survives into the AI context.
+
+**2. `canvas_query_dataset` mis-charted every composite breakdown.** `groupBy` was widened to
+`string | string[]` in `canvasTabularData.ts` while three call sites in `CreationCanvas.tsx` still
+treated it as one column: `column !== args.groupBy` is never true for an array, so the value column
+resolved to the first grouping key and a "by month by region" chart plotted its own labels as its
+values. Normalized once into `groupByColumns`/`groupByLabel`.
+
+---
+
 ## RESOLVED 2026-08-13 - Canvas objects carried citations that were never shown
 
 `sources` is an authorable, Brain-written field on eighteen canvas object kinds - `document`, `report`,

@@ -17,6 +17,7 @@ import { guestBrainConfig } from '@/lib/brain/guestRuntime';
 import { ensureGuestToken } from '@/lib/guestRoomApi';
 import { GUEST_RESEARCH_ACTIONS } from '@/lib/guestResearchActions';
 import { conversationSpeakerLabels, echoesEarlierAnswer, stripSpeakerLabel } from '@/lib/canvasTranscript';
+import { founderCanvasSystemPrompt } from '@/lib/founderCanvasPrompt';
 
 type CanvasAiOptions = {
   prompt: string;
@@ -441,6 +442,10 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       role: 'system',
       content: 'SOCIAL. A request to see, review, analyse or report on social media, posts, channels or engagement is a request for the workspace\'s REAL accounts: call canvas_add_social_feed (or canvas_refresh_social_feed when a feed tile is already on the board) and answer from what it returns. Never invent posts, follower counts or engagement numbers, and never build a chart of made-up social metrics — the tool reads X, LinkedIn, Facebook, Instagram and TikTok directly. Use canvas_pin_social_post to lift one post out for discussion. A request to announce, promote or "post about" something is canvas_create_social_campaign: it drafts one announcement, with per-network variants where the wording should differ, and puts it on the board WITHOUT publishing. Publishing is a separate, explicit act — canvas_publish_social_campaign — that is public and cannot be undone: confirm with the user first, and never call it speculatively or to test. Instagram and TikTok cannot publish text alone; if there is no image or video URL, say so rather than letting those networks be skipped silently. If no account is connected the tool says so and names where to connect one — relay that instead of inventing a limitation.',
     },
+    // THE FOUNDER OBJECTS, AND THE ANALYSIS THAT MUST NOT LAND AS PROSE.
+    // Content lives in `founderCanvasPrompt.ts`, which explains itself and composes its
+    // field contract from the object registry.
+    { role: 'system', content: founderCanvasSystemPrompt() },
     // ANONYMOUS CANVAS. The blocks above describe the full product, including tools
     // that only exist for a signed-in tenant (`canvas_read_project_prds`,
     // `canvas_create_project_prd`, a connected mailbox). On a guest board those are

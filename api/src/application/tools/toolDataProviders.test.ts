@@ -1,15 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import { scoreAgenticMaturityData, hasDataProvider, type MaturityDataInputs } from './toolDataProviders';
+import { TOOLS } from './toolDefinitions';
 
 describe('hasDataProvider', () => {
   it('offers a data-driven mode only to the tools with a registered provider', () => {
     expect(hasDataProvider('agentic-maturity')).toBe(true);
     expect(hasDataProvider('ticket-role-coverage')).toBe(true);
-    // Both of these promise "score this from your real data" in their `about`
-    // copy and neither can — the gap the ROADMAP group 10 entry tracks.
-    expect(hasDataProvider('dora-quickcheck')).toBe(false);
-    expect(hasDataProvider('ai-cost-estimator')).toBe(false);
+    expect(hasDataProvider('dora-quickcheck')).toBe(true);
+    expect(hasDataProvider('ai-cost-estimator')).toBe(true);
     expect(hasDataProvider('nonexistent')).toBe(false);
+  });
+
+  /**
+   * Any tool whose `about` copy tells the reader it can be scored from their real
+   * data MUST have a provider. Two of these shipped promising it with nothing
+   * behind them, so the promise is now pinned rather than trusted — a new tool
+   * that makes the claim fails here until its provider exists.
+   */
+  it('backs every "score from your real data" promise with a provider', () => {
+    const claims = /sign in to (?:score|replace)/i;
+    const broken = TOOLS
+      .filter((tool) => claims.test(tool.about))
+      .filter((tool) => !hasDataProvider(tool.id))
+      .map((tool) => tool.id);
+    expect(broken).toEqual([]);
   });
 });
 
