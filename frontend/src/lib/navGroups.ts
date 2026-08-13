@@ -349,14 +349,20 @@ export const NAV_GROUPS: NavGroup[] = [
 ];
 
 /**
- * The public surface, re-exported.
+ * The public surface lives in `publicDestinations.ts` — the seam this file was
+ * split along (the rail is where a SIGNED-IN person goes; that is which pages a
+ * SIGNED-OUT one can reach). Import it FROM THERE.
  *
- * It lives in `publicDestinations.ts` (this file crossed the 800-line ratchet and
- * the seam was already there: the rail is where a SIGNED-IN person goes, that is
- * which pages a SIGNED-OUT one can reach). Re-exported so every consumer keeps
- * importing "the registry" from one place and no call site had to move.
+ * This file used to re-export it (`export * from './publicDestinations'`) so no
+ * call site had to move, and that convenience closed a loop: the public half is
+ * a PROJECTION over `NAV_GROUPS`, so it imports this file, and re-exporting it
+ * back made the two mutually dependent. Nothing read across the loop at
+ * module-evaluation time, so it never fired — but it is the same shape as the
+ * one that took the whole site down from `aiInsightPanels`, and the six call
+ * sites it was protecting were a one-line change each.
+ *
+ * A projection depends on its source. Never the reverse.
  */
-export * from './publicDestinations';
 
 /**
  * The mobile bottom bar — five high-traffic destinations per audience.

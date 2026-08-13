@@ -33,7 +33,7 @@ import {
   tagChip,
   label,
   statusColorStyle,
-} from '../KnowledgeClient';
+} from '../knowledgeStyles';
 
 const DOC_TYPES: DocType[] = ['sop', 'process', 'doc', 'postmortem', 'known_error'];
 

@@ -21,7 +21,9 @@ import {
   referenceAnchorId, ReferenceCard, ReferenceCta, ReferenceGrid, ReferenceHero, ReferencePage, ReferenceSection,
 } from '@/components/reference/ReferencePage';
 import { useAuth } from '@/lib/AuthContext';
-import type { ReferenceDestination } from '@/lib/navGroups';
+import type {
+  ReferenceDestination
+} from '@/lib/publicDestinations';
 import { seatHueVar } from '@/lib/seats';
 import { Icon } from '@/components/ui/Icon';
 

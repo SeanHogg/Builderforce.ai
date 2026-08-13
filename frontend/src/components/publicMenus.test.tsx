@@ -3,15 +3,17 @@ import { describe, expect, it, vi } from 'vitest';
 import en from '@/i18n/messages/en.json';
 import { BRAND } from '@/lib/content';
 import {
+  NAV_GROUPS
+} from '@/lib/navGroups';
+import {
   LEARN_COLUMNS,
-  NAV_GROUPS,
   PRODUCT_STAGES,
   PUBLIC_DESTINATIONS,
   columnOf,
   destTitleKey,
   footerColumns,
-  productFacesFor,
-} from '@/lib/navGroups';
+  productFacesFor
+} from '@/lib/publicDestinations';
 import MarketingHeader from './MarketingHeader';
 import AppFooter from './AppFooter';
 

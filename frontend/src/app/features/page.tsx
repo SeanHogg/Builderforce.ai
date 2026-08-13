@@ -2,12 +2,14 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import {
   NAV_GROUPS,
+  STAGES,
+  groupsForStage
+} from '@/lib/navGroups';
+import {
   REFERENCE_DOMAINS,
   REFERENCE_FOUNDATIONS,
-  STAGES,
-  groupsForStage,
-  type ReferenceDestination,
-} from '@/lib/navGroups';
+  type ReferenceDestination
+} from '@/lib/publicDestinations';
 import { isSeat, seatHueVar } from '@/lib/seats';
 import type { BurnrateDomainCopy } from '@/components/marketing/BurnrateDomainPage';
 import { Icon } from '@/components/ui/Icon';

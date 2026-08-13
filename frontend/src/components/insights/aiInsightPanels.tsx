@@ -14,13 +14,38 @@
  * show an AI insight. Mirrors the Finance hub's financePanels.tsx.
  */
 
+import dynamic from 'next/dynamic';
 import type { ComponentType, ReactNode } from 'react';
 import type { Capability } from '@/lib/rbac';
-import { AiImpactLens } from './AiImpactLens';
-import { EngineeringLens } from './EngineeringLens';
-import { RecommendationsLens } from './RecommendationsLens';
-import { LlmUsageLens } from './LlmUsageLens';
 import { AiImpactSummary, EngineeringSummary, RecommendationsSummary, LlmUsageSummary } from './AiInsightSummaries';
+
+/**
+ * The lenses load ON DEMAND, and that is load-bearing in two ways.
+ *
+ * 1. It breaks a CYCLE. `AiImpactLens` renders `<WidgetGrid>`, which reads
+ *    `lib/widgets/registry`, which reads `allWidgets`, which reads
+ *    `hubWidgets` — and `hubWidgets` projects THIS registry into pinnable cards,
+ *    so it imports `AI_INSIGHT_PANEL_IDS` back from here. Statically that closes
+ *    a loop, and a loop is only ever as safe as its entry point: this module is
+ *    reached first (the root layout mounts `AiInsightPanelProvider` on every
+ *    page), so `hubWidgets` ran while `AI_INSIGHT_PANEL_IDS` was still in its
+ *    temporal dead zone and every route — including the marketing homepage —
+ *    died on `Cannot access 'AI_INSIGHT_PANEL_IDS' before initialization`.
+ *    A `dynamic()` edge is asynchronous, so it is not part of module-evaluation
+ *    order and cannot form an initialization loop at all.
+ * 2. A lens is DRAWER-ONLY — it renders when someone opens a drill-down. Eagerly
+ *    importing all four put four full reports in the shared chunk that the root
+ *    layout loads for every visitor, including one who only ever reads `/`.
+ *
+ * The summaries stay static: they are compact KPI cards the hub and the widget
+ * registry render immediately, and they do not reach the widget registry.
+ * `check-frontend-architecture.mjs` fails the build if a static import ever
+ * re-closes this loop.
+ */
+const AiImpactLens = dynamic(() => import('./AiImpactLens').then((module) => module.AiImpactLens), { ssr: false });
+const EngineeringLens = dynamic(() => import('./EngineeringLens').then((module) => module.EngineeringLens), { ssr: false });
+const RecommendationsLens = dynamic(() => import('./RecommendationsLens').then((module) => module.RecommendationsLens), { ssr: false });
+const LlmUsageLens = dynamic(() => import('./LlmUsageLens').then((module) => module.LlmUsageLens), { ssr: false });
 
 /** Stable ids (also the `?panel=` deep-link + Brain enum values). */
 export type AiInsightPanelId = 'ai-impact' | 'engineering' | 'llm-usage' | 'recommendations';

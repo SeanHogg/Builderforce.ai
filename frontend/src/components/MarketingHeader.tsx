@@ -13,8 +13,8 @@ import {
   columnOf,
   destTaglineKey,
   destTitleKey,
-  productFacesFor,
-} from '@/lib/navGroups';
+  productFacesFor
+} from '@/lib/publicDestinations';
 import { seatHueVar, type SeatOrPlatform } from '@/lib/seats';
 import { isNavItemActive } from '@/lib/nav';
 import { rendersAppShell } from '@/lib/shellRouting';

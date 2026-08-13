@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import { Icon } from '@/components/ui/Icon';
-import { REFERENCE_DOMAINS, REFERENCE_FOUNDATIONS } from '@/lib/navGroups';
+import { REFERENCE_DOMAINS, REFERENCE_FOUNDATIONS } from '@/lib/publicDestinations';
 import styles from './AboutPage.module.css';
 
 export const runtime = 'edge';

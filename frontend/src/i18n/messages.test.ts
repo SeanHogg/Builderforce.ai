@@ -10,21 +10,23 @@ import { STALL_CAUSES } from '@/lib/builderforceApi';
 import { CREATION_OBJECT_REGISTRY } from '@/components/creation-canvas/creationObjectRegistry';
 import { CREATION_TEMPLATES } from '@/components/creation-canvas/creationTemplates';
 import {
+  NAV_GROUPS,
+  FOR_HIRE_NAV_GROUPS,
+  FREELANCER_NAV_GROUPS,
+  SALES_NAV_GROUPS,
+  STAGES,
+  bottomNavFor
+} from '@/lib/navGroups';
+import {
   FOOTER_COLUMNS,
   LEARN_COLUMNS,
   PRODUCT_COLUMNS,
   PRODUCT_STAGES,
   productFacesFor,
-  NAV_GROUPS,
-  FOR_HIRE_NAV_GROUPS,
-  FREELANCER_NAV_GROUPS,
   PUBLIC_DESTINATIONS,
-  SALES_NAV_GROUPS,
-  STAGES,
-  bottomNavFor,
   destTaglineKey,
-  destTitleKey,
-} from '@/lib/navGroups';
+  destTitleKey
+} from '@/lib/publicDestinations';
 import { FAMILIES, FAMILY_IDS } from '@/lib/marketplaceFamilies';
 import { RESUME_TEMPLATES } from '@/lib/canvasResume';
 

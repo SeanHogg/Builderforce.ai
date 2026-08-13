@@ -4,7 +4,7 @@
  * provider tree; consumed by ConditionalAppShell.
  */
 
-import { PANEL_SURFACES } from './navGroups';
+import { PANEL_SURFACES } from './publicDestinations';
 
 /**
  * Standalone auth-flow screens. They render their own card UI and own their auth

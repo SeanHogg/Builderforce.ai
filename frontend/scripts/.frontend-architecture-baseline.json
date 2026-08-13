@@ -29,5 +29,6 @@
     "lib/builderforceApi.ts",
     "lib/managerDiagnostics.ts",
     "lib/model-provider.ts"
-  ]
+  ],
+  "importCycles": []
 }

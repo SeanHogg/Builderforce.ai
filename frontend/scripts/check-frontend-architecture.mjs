@@ -35,6 +35,106 @@ const oversizedProductionFiles = production
   .filter((file) => rel(file) !== 'lib/content.ts')
   .map(rel);
 
+/**
+ * CIRCULAR STATIC IMPORTS — the one ratchet here that guards a crash rather than
+ * a shape.
+ *
+ * A cycle of `import` statements is a cycle of module EVALUATION, and the module
+ * that gets evaluated second sees the first one's `const`s in their temporal dead
+ * zone. Read one at module scope and the page does not render at all — it throws
+ * `Cannot access 'X' before initialization` before React starts, so there is no
+ * error boundary and no partial page, just white. That is exactly how
+ * `aiInsightPanels -> AiImpactLens -> WidgetGrid -> widgets/registry ->
+ * allWidgets -> hubWidgets -> aiInsightPanels` took down every route including
+ * the marketing homepage: the root layout mounts the panel providers, so every
+ * visitor entered the loop.
+ *
+ * What makes it worth a build guard is that the crash is not local to the change
+ * that causes it. Every module in the loop is individually correct; the failure
+ * appears only in a bundle, only in whichever order the bundler happens to reach
+ * them, and it moves when an unrelated import is added elsewhere. So the rule is
+ * the whole cycle, not the top-level read: no static import cycles, at all.
+ *
+ * The escape hatch is the fix, not an exemption — `dynamic(() => import(...))`.
+ * An async edge takes no part in module-evaluation order, so it cannot form an
+ * initialization loop, and a registry that only needs a component when something
+ * renders wanted to be lazy anyway.
+ *
+ * Type-only imports are erased before runtime and are not counted.
+ */
+const byPath = new Map(files.map((file) => [file, true]));
+function resolveImport(spec, fromFile) {
+  let base;
+  if (spec.startsWith('@/')) base = resolve(src, spec.slice(2));
+  else if (spec.startsWith('.')) base = resolve(dirname(fromFile), spec);
+  else return null;
+  for (const candidate of [`${base}.ts`, `${base}.tsx`, resolve(base, 'index.ts'), resolve(base, 'index.tsx')]) {
+    if (byPath.has(candidate)) return candidate;
+  }
+  return null;
+}
+// `import ... from 'x'` and `export ... from 'x'`, both minus their type-only forms.
+const VALUE_IMPORT = /^\s*import\s+(?!type\s)[\s\S]*?\s*from\s*['"]([^'"]+)['"]/gm;
+const VALUE_REEXPORT = /^\s*export\s+(?!type\s)(?:\*|\{[\s\S]*?\})\s*from\s*['"]([^'"]+)['"]/gm;
+const graph = new Map();
+for (const file of files) {
+  const edges = new Set();
+  for (const pattern of [VALUE_IMPORT, VALUE_REEXPORT]) {
+    pattern.lastIndex = 0;
+    for (let match; (match = pattern.exec(source.get(file))); ) {
+      const target = resolveImport(match[1], file);
+      if (target && target !== file) edges.add(target);
+    }
+  }
+  graph.set(file, edges);
+}
+// Tarjan: every strongly-connected component of more than one module is a cycle.
+const order = new Map();
+const lowlink = new Map();
+const onStack = new Set();
+const stack = [];
+const importCycles = [];
+let counter = 0;
+function visit(root) {
+  // Explicit stack — the graph is ~1,400 modules deep in places and recursion overflows.
+  const work = [[root, 0]];
+  while (work.length) {
+    const frame = work[work.length - 1];
+    const [node] = frame;
+    if (frame[1] === 0) {
+      order.set(node, counter);
+      lowlink.set(node, counter);
+      counter += 1;
+      stack.push(node);
+      onStack.add(node);
+    }
+    const edges = [...(graph.get(node) ?? [])];
+    if (frame[1] < edges.length) {
+      const next = edges[frame[1]];
+      frame[1] += 1;
+      if (!order.has(next)) work.push([next, 0]);
+      else if (onStack.has(next)) lowlink.set(node, Math.min(lowlink.get(node), order.get(next)));
+      continue;
+    }
+    work.pop();
+    if (work.length) {
+      const parent = work[work.length - 1][0];
+      lowlink.set(parent, Math.min(lowlink.get(parent), lowlink.get(node)));
+    }
+    if (lowlink.get(node) === order.get(node)) {
+      const component = [];
+      let member;
+      do {
+        member = stack.pop();
+        onStack.delete(member);
+        component.push(member);
+      } while (member !== node);
+      if (component.length > 1) importCycles.push(component.map(rel).sort().join(' <-> '));
+    }
+  }
+}
+for (const file of files) if (!order.has(file)) visit(file);
+
 const violations = [];
 function ratchetCount(label, actual, maximum) {
   if (actual > maximum) violations.push(`${label}: ${actual} exceeds baseline ${maximum}`);
@@ -49,9 +149,20 @@ ratchetCount("client-rooted pages", clientPages.length, baseline.useClientPages)
 ratchetSet('presentation -> infrastructure', presentationInfrastructureImports, baseline.presentationInfrastructureImports);
 ratchetSet('presentation engine construction', directEngineConstruction, baseline.directEngineConstruction);
 ratchetSet('production files over 800 lines', oversizedProductionFiles, baseline.oversizedProductionFiles);
+ratchetSet('circular static imports', importCycles, baseline.importCycles);
 
 if (violations.length) {
   console.error('❌  Frontend architecture ratchet failed:\n\n  - ' + violations.join('\n  - '));
+  if (violations.some((entry) => entry.startsWith('circular static imports'))) {
+    console.error(
+      '\n  A static import cycle crashes the page it is bundled into with\n' +
+      "  \"Cannot access 'X' before initialization\" — before React mounts, so no\n" +
+      '  error boundary catches it. Break the cycle at the edge that does not need\n' +
+      '  its target until render time:\n\n' +
+      "    const Lens = dynamic(() => import('./Lens').then((m) => m.Lens), { ssr: false });\n\n" +
+      '  Do not add it to the baseline.',
+    );
+  }
   process.exit(1);
 }
-console.log(`✅  Frontend architecture ratchet passed (${client.length} client files, ${clientPages.length} client pages, ${oversizedProductionFiles.length} grandfathered large files).`);
+console.log(`✅  Frontend architecture ratchet passed (${client.length} client files, ${clientPages.length} client pages, ${oversizedProductionFiles.length} grandfathered large files, 0 import cycles).`);

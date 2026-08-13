@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  NAV_GROUPS,
+  RUNG,
+  STAGES,
+  bottomNavFor,
+  earnedRung,
+  groupsForStage
+} from './navGroups';
+import {
   FOOTER_COLUMNS,
   LEARN_COLUMNS,
-  NAV_GROUPS,
   PANEL_SURFACES,
   PRODUCT_COLUMNS,
   PUBLIC_DESTINATIONS,
@@ -10,19 +17,14 @@ import {
   REFERENCE_DESTINATIONS,
   REFERENCE_DOMAINS,
   REFERENCE_FOUNDATIONS,
-  RUNG,
-  STAGES,
-  bottomNavFor,
   columnOf,
   destTitleKey,
-  earnedRung,
   footerColumns,
-  groupsForStage,
   publicById,
   publicDestinationFor,
   referenceByHref,
-  referenceBySlug,
-} from './navGroups';
+  referenceBySlug
+} from './publicDestinations';
 import { FAMILIES, FAMILY_IDS, resolveFamily } from './marketplaceFamilies';
 import { SEATS, isSeat, seatHueVar } from './seats';
 import { classifyShell, isReferenceSurface, rendersAppShell } from './shellRouting';

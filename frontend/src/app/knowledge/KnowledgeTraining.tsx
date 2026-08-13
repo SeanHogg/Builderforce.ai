@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
 import { knowledgeApi, type TrainingItem, type TenantCompliance } from '@/lib/knowledgeApi';
-import { badge } from './KnowledgeClient';
+import { badge } from './knowledgeStyles';
 
 function stateColor(state: string): React.CSSProperties {
   if (state === 'completed' || state === 'acknowledged')

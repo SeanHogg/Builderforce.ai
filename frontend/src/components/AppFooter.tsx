@@ -8,7 +8,7 @@ import { useLegalDocs } from './legal/useLegalDocs';
 import LegalDocModal, { type LegalModalType } from './legal/LegalDocModal';
 import { openProductUpdates } from '@/lib/productUpdates';
 import { BRAND, STATS } from '@/lib/content';
-import { destTitleKey, footerColumns } from '@/lib/navGroups';
+import { destTitleKey, footerColumns } from '@/lib/publicDestinations';
 import { seatHueVar } from '@/lib/seats';
 
 /**

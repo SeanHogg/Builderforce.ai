@@ -28,7 +28,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { panelWidth } from '@/lib/workbenchPolicy';
-import { destTitleKey, publicDestinationFor } from '@/lib/navGroups';
+import { destTitleKey, publicDestinationFor } from '@/lib/publicDestinations';
 import { seatHueVar } from '@/lib/seats';
 import { ShellIndex, useShellIndex } from './ShellIndex';
 import { useOwnReferenceRail, useReferenceChrome, useReferenceSelect, type ReferenceChromeSection } from '@/lib/referenceChrome';

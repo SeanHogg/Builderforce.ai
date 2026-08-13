@@ -20,17 +20,9 @@
  * so a report cannot exist in the drawer and be missing from the picker.
  */
 
+import dynamic from 'next/dynamic';
 import type { ComponentType, ReactNode } from 'react';
 import type { Capability } from '@/lib/rbac';
-import { DeliveryLens } from './DeliveryLens';
-import { AutonomyLens } from './AutonomyLens';
-import { BottleneckLens } from './BottleneckLens';
-import { DoraLens } from './DoraLens';
-import { SpaceLens } from './SpaceLens';
-import { BenchmarkingLens } from './BenchmarkingLens';
-import { FunnelLens } from './FunnelLens';
-import { CrossTeamBenchmarkLens } from './CrossTeamBenchmarkLens';
-import { DelayTaxonomyLens } from './DelayTaxonomyLens';
 import {
   DeliverySummary, BottleneckSummary, DoraSummary, SpaceSummary, BenchmarkingSummary, FunnelSummary,
   AutonomySummary,
@@ -65,6 +57,30 @@ export interface DeliveryPanelDef {
   /** The full report rendered inside the drill-down slide-out. */
   render: () => ReactNode;
 }
+
+/**
+ * The lenses load ON DEMAND — same reason as the AI hub's registry, and the same
+ * cycle. `AutonomyLens` renders `<WidgetGrid>` → `lib/widgets/registry` →
+ * `allWidgets` → `hubWidgets`, and `hubWidgets` projects THIS registry into
+ * pinnable cards, so it imports `DELIVERY_PANEL_IDS` back from here. Held
+ * statically that is an initialization loop, and the root layout mounts
+ * `DeliveryPanelProvider` on every page, so it was a loop every visitor entered.
+ * An async `dynamic()` edge takes no part in module-evaluation order.
+ *
+ * It is also simply what a drawer-only report wants: nine full lenses no longer
+ * ride in the shared chunk of a page that never opens one. Summaries stay static
+ * — the hub and the widget registry render them straight away, and none of them
+ * reaches the widget registry.
+ */
+const DeliveryLens = dynamic(() => import('./DeliveryLens').then((module) => module.DeliveryLens), { ssr: false });
+const AutonomyLens = dynamic(() => import('./AutonomyLens').then((module) => module.AutonomyLens), { ssr: false });
+const BottleneckLens = dynamic(() => import('./BottleneckLens').then((module) => module.BottleneckLens), { ssr: false });
+const DoraLens = dynamic(() => import('./DoraLens').then((module) => module.DoraLens), { ssr: false });
+const SpaceLens = dynamic(() => import('./SpaceLens').then((module) => module.SpaceLens), { ssr: false });
+const BenchmarkingLens = dynamic(() => import('./BenchmarkingLens').then((module) => module.BenchmarkingLens), { ssr: false });
+const FunnelLens = dynamic(() => import('./FunnelLens').then((module) => module.FunnelLens), { ssr: false });
+const CrossTeamBenchmarkLens = dynamic(() => import('./CrossTeamBenchmarkLens').then((module) => module.CrossTeamBenchmarkLens), { ssr: false });
+const DelayTaxonomyLens = dynamic(() => import('./DelayTaxonomyLens').then((module) => module.DelayTaxonomyLens), { ssr: false });
 
 const WIDE = 'min(960px, 96vw)';
 

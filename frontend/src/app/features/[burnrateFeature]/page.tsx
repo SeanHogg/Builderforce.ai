@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import BurnrateDomainPage, { type BurnrateDomainCopy, type BurnrateSharedCopy } from '@/components/marketing/BurnrateDomainPage';
-import { REFERENCE_FOUNDATIONS } from '@/lib/navGroups';
+import { REFERENCE_FOUNDATIONS } from '@/lib/publicDestinations';
 
 export const runtime = 'edge';
 

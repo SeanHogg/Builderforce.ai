@@ -18,6 +18,7 @@ import {
   type DocType,
 } from '@/lib/knowledgeApi';
 import { MyTrainingSection, ComplianceAuditSection } from './KnowledgeTraining';
+import { badge, btnGhost, btnPrimary, chip, chipActive, inputStyle, statusColorStyle, tagChip } from './knowledgeStyles';
 import { useCreateKnowledge } from './useCreateKnowledge';
 
 /**
@@ -30,12 +31,6 @@ import { useCreateKnowledge } from './useCreateKnowledge';
  */
 
 const DOC_TYPE_LABELS: Record<DocType, string> = { sop: 'type_sop', process: 'type_process', doc: 'type_doc', postmortem: 'type_postmortem', known_error: 'type_known_error' };
-
-function statusColor(status: string): { bg: string; fg: string } {
-  if (status === 'published') return { bg: 'var(--success-bg)', fg: 'var(--success-text)' };
-  if (status === 'archived') return { bg: 'var(--surface-2)', fg: 'var(--text-muted)' };
-  return { bg: 'var(--warning-bg)', fg: 'var(--warning-text, var(--amber-bright))' };
-}
 
 export default function KnowledgeClient() {
   const t = useTranslations('knowledge');
@@ -316,66 +311,3 @@ function MiniStat({ label, value, danger }: { label: string; value: number; dang
   );
 }
 
-function statusColorStyle(status: string): { background: string; color: string } {
-  const c = statusColor(status);
-  return { background: c.bg, color: c.fg };
-}
-
-// ---------------------------------------------------------------------------
-// Shared styles — also consumed by the doc editor + training sections. Keep the
-// named exports stable (KnowledgeDocClient + KnowledgeTraining import them).
-// ---------------------------------------------------------------------------
-
-const inputStyle: React.CSSProperties = {
-  padding: '8px 10px',
-  borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--border)',
-  background: 'var(--surface-2)',
-  color: 'inherit',
-  minWidth: 180,
-  flex: '0 1 auto',
-};
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 14px',
-  borderRadius: 'var(--radius-md)',
-  border: 'none',
-  background: 'var(--accent)',
-  color: 'var(--text-on-accent)',
-  cursor: 'pointer',
-  fontWeight: 600,
-};
-const btnGhost: React.CSSProperties = {
-  padding: '8px 14px',
-  borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--border)',
-  background: 'transparent',
-  color: 'inherit',
-  cursor: 'pointer',
-};
-const chip: React.CSSProperties = {
-  padding: '6px 12px',
-  borderRadius: 'var(--radius-full)',
-  border: '1px solid var(--border)',
-  background: 'transparent',
-  color: 'var(--text-muted)',
-  cursor: 'pointer',
-  fontSize: 13,
-  fontWeight: 600,
-};
-const chipActive: React.CSSProperties = {
-  ...chip,
-  background: 'var(--accent)',
-  borderColor: 'var(--accent)',
-  color: 'var(--text-on-accent)',
-};
-const badge: React.CSSProperties = { fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', fontWeight: 600 };
-const tagChip: React.CSSProperties = {
-  fontSize: 11,
-  padding: '2px 8px',
-  borderRadius: 'var(--radius-sm)',
-  background: 'var(--surface-2)',
-  color: 'var(--text-muted)',
-};
-const label: React.CSSProperties = { display: 'block', fontSize: 13, fontWeight: 600, margin: '14px 0 6px' };
-
-export { inputStyle, btnPrimary, btnGhost, badge, tagChip, label, statusColorStyle };
