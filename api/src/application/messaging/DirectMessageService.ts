@@ -110,14 +110,40 @@ export class DirectMessageService {
    * demanded from the route — the same reason `open()` resolves the workspace it
    * writes into. A DM thread belongs to a workspace (`threads.tenantId`, set at
    * open time), and `check-tenant-scope` is the rule that says a read of a
-   * tenant-owned table names the tenant it is reading. Someone in no workspace
-   * has no conversations, which is the honest answer rather than every
-   * conversation.
+   * tenant-owned table names the tenant it is reading.
+   *
+   * A SUPERADMIN is cross-tenant here by design, and this is the one place that
+   * has to say so. The whole feature is superadmin ↔ sales associate
+   * (see `contacts`), and `open()` files the thread under the ASSOCIATE's
+   * workspace — never the superadmin's, because a superadmin has no workspace in
+   * this conversation's sense. Scoping them to their own `tenantMembers` rows
+   * would therefore hide every thread they are actually in, which is the whole
+   * inbox. So their scope is the set of workspaces they hold an active
+   * membership in: still a concrete tenant list on every read, still only rows
+   * reached through their OWN membership, and no wider than the conversations
+   * they were added to.
    */
   private async reachableTenantIds(userId: string): Promise<number[]> {
-    const rows = await this.db.select({ tenantId: tenantMembers.tenantId }).from(tenantMembers)
-      .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.isActive, true)));
-    return [...new Set(rows.map((row) => row.tenantId))];
+    const [me, memberRows] = await Promise.all([
+      this.person(userId),
+      this.db.select({ tenantId: tenantMembers.tenantId }).from(tenantMembers)
+        .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.isActive, true))),
+    ]);
+    const ids = new Set(memberRows.map((row) => row.tenantId));
+    if (me?.isSuperadmin) {
+      // Discovery, not a listing: this asks "which workspaces am I a participant
+      // in", so it is keyed by the caller's own `memberRef` and cannot return
+      // anyone else's rows. It is the query that PRODUCES the tenant filter every
+      // other read then carries.
+      const participantRows = await this.db.select({ tenantId: memberships.tenantId }).from(memberships)
+        .where(and(
+          eq(memberships.memberKind, 'user'),
+          eq(memberships.memberRef, userId),
+          eq(memberships.state, 'active'),
+        ));
+      for (const row of participantRows) ids.add(row.tenantId);
+    }
+    return [...ids];
   }
 
   /** The workspace a person's threads belong to — their first active membership. */
@@ -336,7 +362,7 @@ export class DirectMessageService {
     // The sender has, by definition, seen their own message.
     await this.markRead(threadId, userId, now);
 
-    const participants = await this.participantIds(threadId);
+    const participants = await this.participantIds(threadId, thread.tenantId);
     const me = await this.person(userId);
     await Promise.all([
       broadcastRoom(this.env.SESSION_ROOM, dmThreadRoomName(threadId)),
@@ -359,21 +385,30 @@ export class DirectMessageService {
     };
   }
 
-  private async participantIds(threadId: string): Promise<string[]> {
+  private async participantIds(threadId: string, tenantId: number): Promise<string[]> {
     const rows = await this.db.select({ memberRef: memberships.memberRef }).from(memberships)
       .innerJoin(objects, eq(objects.id, memberships.objectId))
-      .where(and(eq(objects.kind, 'thread'), eq(objects.refId, threadId), eq(memberships.state, 'active')));
+      .where(and(
+        eq(memberships.tenantId, tenantId),
+        eq(objects.kind, 'thread'), eq(objects.refId, threadId), eq(memberships.state, 'active'),
+      ));
     return rows.map((row) => row.memberRef);
   }
 
   /** Mark everything up to `at` seen. `lastSeenAt` on the membership IS the read
    *  cursor — a separate read-state table would be a second copy of presence. */
   async markRead(threadId: string, userId: string, at = new Date()): Promise<boolean> {
+    const tenantIds = await this.reachableTenantIds(userId);
+    if (tenantIds.length === 0) return false;
     const [object] = await this.db.select({ id: objects.id }).from(objects)
-      .where(and(eq(objects.kind, 'thread'), eq(objects.refId, threadId))).limit(1);
+      .where(and(
+        inArray(objects.tenantId, tenantIds),
+        eq(objects.kind, 'thread'), eq(objects.refId, threadId),
+      )).limit(1);
     if (!object) return false;
     await this.db.update(memberships).set({ lastSeenAt: at, updatedAt: at })
       .where(and(
+        inArray(memberships.tenantId, tenantIds),
         eq(memberships.objectId, object.id),
         eq(memberships.memberKind, 'user'),
         eq(memberships.memberRef, userId),

@@ -199,12 +199,8 @@ export async function buildSalesReport(
   // scoped. Reading across tenants here would total another workspace's revenue
   // into this one's leaderboard.
   const referralWhere = associateUserId
-    ? and(
-      eq(salesReferrals.tenantId, tenantId),
-      eq(salesReferrals.associateUserId, associateUserId),
-      isNotNull(salesReferrals.signupNotifiedAt),
-    )
-    : and(eq(salesReferrals.tenantId, tenantId), isNotNull(salesReferrals.signupNotifiedAt));
+    ? and(eq(salesReferrals.associateUserId, associateUserId), isNotNull(salesReferrals.signupNotifiedAt))
+    : isNotNull(salesReferrals.signupNotifiedAt);
 
   const stalledBefore = new Date(now.getTime() - STALLED_CONTACT_DAYS * MS_PER_DAY);
 
@@ -216,7 +212,9 @@ export async function buildSalesReport(
       convertedAt: salesReferrals.convertedAt,
       revenueCents: salesReferrals.revenueCents,
       commissionCents: salesReferrals.commissionCents,
-    }).from(salesReferrals).where(referralWhere).orderBy(desc(salesReferrals.signedUpAt)),
+    }).from(salesReferrals)
+      .where(and(eq(salesReferrals.tenantId, tenantId), referralWhere))
+      .orderBy(desc(salesReferrals.signedUpAt)),
     // The funnel is a GROUP BY, not a fetch-and-count: a programme-wide contact
     // list is unbounded and there is no reason to carry it into the Worker.
     associateUserId

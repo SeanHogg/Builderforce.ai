@@ -492,7 +492,7 @@ export function evaluateDataContract(
     for (const row of rows) {
       const parts = contract.primaryKey.map((column) => cellText(row[column]).trim());
       if (parts.some((part) => !part)) { blank += 1; continue; }
-      const key = parts.join(' ').toLowerCase();
+      const key = parts.join('\u0000').toLowerCase();
       if (keys.has(key)) dupes += 1; else keys.add(key);
     }
     if (blank) violations.push({ severity: 'error', rule: 'primary-key-empty', detail: { rows: blank, key: contract.primaryKey.join(', ') } });
