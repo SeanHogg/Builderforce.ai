@@ -127,11 +127,17 @@ function view(row: ConnectionRow): PayoutAccountView {
 export class PayoutAccountService {
   constructor(private readonly db: Db, private readonly env: Env) {}
 
-  /** Every destination this person has connected, default first. Deliberately
-   *  NOT tenant-scoped: one person, one set of bank details, every workspace. */
-  async list(userId: string): Promise<PayoutAccountView[]> {
+  /** Every destination this person has connected IN THIS WORKSPACE, default
+   *  first. Scoped to the tenant like every other connection: the row carries a
+   *  tenant-derived encryption key, so reading one from another workspace would
+   *  mean decrypting that workspace's credential here. */
+  async list(tenantId: number, userId: string): Promise<PayoutAccountView[]> {
     const rows = await this.db.select().from(connections)
-      .where(and(eq(connections.userId, userId), eq(connections.capability, PAYOUT)))
+      .where(and(
+        eq(connections.tenantId, tenantId),
+        eq(connections.userId, userId),
+        eq(connections.capability, PAYOUT),
+      ))
       .orderBy(desc(IS_DEFAULT), desc(connections.createdAt));
     return rows.map(view);
   }
@@ -164,6 +170,7 @@ export class PayoutAccountService {
     // default, so the existing flag is carried forward rather than reset.
     const [current] = await this.db.select({ config: connections.config }).from(connections)
       .where(and(
+        eq(connections.tenantId, input.tenantId),
         eq(connections.userId, input.userId),
         eq(connections.capability, PAYOUT),
         eq(connections.vendor, input.provider),
@@ -185,7 +192,7 @@ export class PayoutAccountService {
 
     const [row] = await this.db.insert(connections).values(values)
       .onConflictDoUpdate({
-        target: [connections.userId, connections.vendor],
+        target: [connections.tenantId, connections.userId, connections.vendor],
         targetWhere: eq(connections.capability, PAYOUT),
         set: values,
       })
@@ -210,14 +217,19 @@ export class PayoutAccountService {
     // with exactly one connected account and no default would be told they have
     // nowhere to be paid, which is false.
     const [existing] = await this.db.select({ id: connections.id }).from(connections)
-      .where(and(eq(connections.userId, input.userId), eq(connections.capability, PAYOUT), IS_DEFAULT)).limit(1);
+      .where(and(
+        eq(connections.tenantId, input.tenantId),
+        eq(connections.userId, input.userId),
+        eq(connections.capability, PAYOUT),
+        IS_DEFAULT,
+      )).limit(1);
     if (!input.makeDefault && existing) return view(row);
-    return (await this.setDefault(input.userId, row.id)) ?? view(row);
+    return (await this.setDefault(input.tenantId, input.userId, row.id)) ?? view(row);
   }
 
   /** Exactly one default, enforced by clearing the others first (the partial
    *  unique index is the backstop, not the mechanism). */
-  async setDefault(userId: string, id: number): Promise<PayoutAccountView | null> {
+  async setDefault(tenantId: number, userId: string, id: number): Promise<PayoutAccountView | null> {
     const setFlag = (value: boolean) => ({
       config: sql`jsonb_set(coalesce(${connections.config}, '{}'::jsonb), '{isDefault}', ${value ? 'true' : 'false'}::jsonb)`,
       updatedAt: new Date(),
@@ -225,27 +237,46 @@ export class PayoutAccountService {
     // Clear before setting: the partial unique index would refuse the moment two
     // rows claimed the flag, which is the point of having it.
     await this.db.update(connections).set(setFlag(false))
-      .where(and(eq(connections.userId, userId), eq(connections.capability, PAYOUT), IS_DEFAULT));
+      .where(and(
+        eq(connections.tenantId, tenantId),
+        eq(connections.userId, userId),
+        eq(connections.capability, PAYOUT),
+        IS_DEFAULT,
+      ));
     const [row] = await this.db.update(connections).set(setFlag(true))
-      .where(and(eq(connections.userId, userId), eq(connections.capability, PAYOUT), eq(connections.id, id)))
+      .where(and(
+        eq(connections.tenantId, tenantId),
+        eq(connections.userId, userId),
+        eq(connections.capability, PAYOUT),
+        eq(connections.id, id),
+      ))
       .returning();
     return row ? view(row) : null;
   }
 
   /** Remove a destination. Any payout already sent through it stays in the
    *  ledger — deleting where money went is not a thing this offers. */
-  async disconnect(userId: string, id: number): Promise<boolean> {
+  async disconnect(tenantId: number, userId: string, id: number): Promise<boolean> {
     // The sealed credential goes with it: `credentials.connectionId` cascades.
     const rows = await this.db.delete(connections)
-      .where(and(eq(connections.userId, userId), eq(connections.capability, PAYOUT), eq(connections.id, id)))
+      .where(and(
+        eq(connections.tenantId, tenantId),
+        eq(connections.userId, userId),
+        eq(connections.capability, PAYOUT),
+        eq(connections.id, id),
+      ))
       .returning({ id: connections.id });
     if (rows.length === 0) return false;
     // Promote whatever is left, so removing the default never leaves a person
     // with connected accounts and nowhere to be paid.
     const [next] = await this.db.select({ id: connections.id }).from(connections)
-      .where(and(eq(connections.userId, userId), eq(connections.capability, PAYOUT)))
+      .where(and(
+        eq(connections.tenantId, tenantId),
+        eq(connections.userId, userId),
+        eq(connections.capability, PAYOUT),
+      ))
       .orderBy(desc(connections.createdAt)).limit(1);
-    if (next) await this.setDefault(userId, next.id);
+    if (next) await this.setDefault(tenantId, userId, next.id);
     return true;
   }
 
@@ -263,10 +294,11 @@ export class PayoutAccountService {
     return blob as unknown as PayoutCredential;
   }
 
-  /** Money that has actually left, newest first. */
-  async payouts(userId: string, limit = 50): Promise<PayoutRecord[]> {
+  /** Money that has actually left THIS workspace, newest first. */
+  async payouts(tenantId: number, userId: string, limit = 50): Promise<PayoutRecord[]> {
     const rows = await this.db.select().from(ledgerEntries)
       .where(and(
+        eq(ledgerEntries.tenantId, tenantId),
         eq(ledgerEntries.accountKind, 'user'),
         eq(ledgerEntries.accountRef, userId),
         eq(ledgerEntries.entryKind, 'payout'),
@@ -289,11 +321,13 @@ export class PayoutAccountService {
     });
   }
 
-  /** Total already paid out, in cents. One indexed SUM, never a fetch-and-add. */
-  async paidCents(userId: string): Promise<number> {
+  /** Total already paid out in this workspace, in cents. One indexed SUM, never
+   *  a fetch-and-add. */
+  async paidCents(tenantId: number, userId: string): Promise<number> {
     const [row] = await this.db.select({ total: sql<string>`coalesce(sum(abs(${ledgerEntries.amount})), 0)` })
       .from(ledgerEntries)
       .where(and(
+        eq(ledgerEntries.tenantId, tenantId),
         eq(ledgerEntries.accountKind, 'user'),
         eq(ledgerEntries.accountRef, userId),
         eq(ledgerEntries.entryKind, 'payout'),
@@ -304,8 +338,8 @@ export class PayoutAccountService {
 
   /** Earned − paid. `earnedCents` is the caller's domain fact (commission, an
    *  invoice total); this service never guesses at it. */
-  async balance(userId: string, earnedCents: number): Promise<PayoutBalance> {
-    const paid = await this.paidCents(userId);
+  async balance(tenantId: number, userId: string, earnedCents: number): Promise<PayoutBalance> {
+    const paid = await this.paidCents(tenantId, userId);
     return { earnedCents, paidCents: paid, availableCents: Math.max(0, earnedCents - paid) };
   }
 
@@ -335,7 +369,12 @@ export class PayoutAccountService {
     const currency = (input.currency ?? 'USD').toUpperCase();
 
     const [row] = await this.db.select().from(connections)
-      .where(and(eq(connections.userId, input.userId), eq(connections.capability, PAYOUT), IS_DEFAULT)).limit(1);
+      .where(and(
+        eq(connections.tenantId, input.tenantId),
+        eq(connections.userId, input.userId),
+        eq(connections.capability, PAYOUT),
+        IS_DEFAULT,
+      )).limit(1);
 
     let result: PayoutResult;
     let providerName = 'webhook';
@@ -365,7 +404,7 @@ export class PayoutAccountService {
         .set(result.ok
           ? { lastSyncedAt: new Date(), lastError: null, updatedAt: new Date() }
           : { lastError: result.error.slice(0, 500), updatedAt: new Date() })
-        .where(eq(connections.id, row.id));
+        .where(and(eq(connections.tenantId, input.tenantId), eq(connections.id, row.id)));
     } else if (isPayoutsConfigured(this.env)) {
       const legacy = await createWebhookPayout(this.env, {
         invoiceId: input.reference, amountCents: input.amountCents, currency,

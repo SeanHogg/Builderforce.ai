@@ -13,15 +13,18 @@
 -- before the deploy that would have created it, so there is no table and no data
 -- to move: this migration never ran.
 --
--- Two guarantees the dedicated table had are kept, as partial indexes on the
--- kernel table rather than as prose:
+-- A payout destination is TENANT-SCOPED, like every other connection. An earlier
+-- draft keyed it by user alone — "money follows the person", one bank account
+-- across workspaces — and that is genuinely the friendlier product, but it makes
+-- every read cross a tenant boundary: the row's credential is sealed with a
+-- key derived from ITS tenant, so serving it to another workspace means
+-- decrypting that workspace's secret there. `check-tenant-scope` is the rule that
+-- says no, and for a credential it is the right rule. A person in two workspaces
+-- connects a destination in each.
 --
---   • ONE destination per person per vendor, keyed by USER and deliberately not
---     by tenant — money follows the person, and an associate in two workspaces
---     has one bank account. The kernel's own unique index is tenant-scoped, which
---     is right for a mailbox and wrong for a bank account, so payout adds its own.
---     `tenant_id` survives as the ENCRYPTION scope (credentialCrypto derives
---     per-tenant) and as the audit scope, not as identity.
+-- Two partial indexes carry what the shared table cannot say on its own:
+--
+--   • ONE destination per person per vendor, per workspace.
 --   • ONE default. "Two rows both say they are the default" is a data question,
 --     so the data answers it.
 --
@@ -39,27 +42,26 @@
 -- shipped the code writing to it is the one this guard stopped.
 DROP TABLE IF EXISTS payout_connections;
 
--- One destination per person per vendor, across every workspace they belong to.
--- Reconnecting UPDATES that row rather than accumulating dead grants nobody can
--- tell apart.
+-- One destination per person per vendor, within a workspace. Reconnecting
+-- UPDATES that row rather than accumulating dead grants nobody can tell apart.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_connections_payout_user_vendor
-  ON connections (user_id, vendor) WHERE capability = 'payout';
+  ON connections (tenant_id, user_id, vendor) WHERE capability = 'payout';
 
 -- Exactly one default destination per person. A partial unique index costs
 -- nothing when nobody is default.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_connections_payout_default
-  ON connections (user_id) WHERE capability = 'payout' AND config->>'isDefault' = 'true';
+  ON connections (tenant_id, user_id)
+  WHERE capability = 'payout' AND config->>'isDefault' = 'true';
 
 -- "Where can this person be paid, and is it healthy" — the listing read.
 CREATE INDEX IF NOT EXISTS idx_connections_payout_user
-  ON connections (user_id, status) WHERE capability = 'payout';
+  ON connections (tenant_id, user_id, status) WHERE capability = 'payout';
 
 -- Every DM thread a person is in, newest first, without scanning memberships.
 CREATE INDEX IF NOT EXISTS idx_memberships_member_recent
   ON memberships (member_kind, member_ref, state, updated_at DESC);
 
--- The payout ledger reads "everything paid to this user", which the existing
--- account index serves only when the tenant is known — and a superadmin auditing
--- payouts across workspaces does not know it.
-CREATE INDEX IF NOT EXISTS idx_ledger_entries_account_kind
-  ON ledger_entries (account_kind, account_ref, entry_kind, occurred_at DESC);
+-- The payout ledger read is "everything paid to this user IN THIS WORKSPACE",
+-- which `idx_ledger_entries_account` already serves — it leads with tenant_id.
+-- An earlier draft added a tenant-less index here for a cross-workspace audit;
+-- that read no longer exists, and an index nothing queries is only write cost.

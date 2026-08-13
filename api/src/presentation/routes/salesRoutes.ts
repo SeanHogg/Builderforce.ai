@@ -162,12 +162,12 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
     if (!current) return c.json({ error: 'Authentication required' }, 401);
     const requested = c.req.query('associateId');
     if (current.isSuperadmin) {
-      const report = await sales.report(requested || null);
+      const report = await sales.report(c.get('tenantId') as number, requested || null);
       return c.json({ report, scope: requested ? 'associate' : 'aggregate' });
     }
     const target = await owner(c);
     if (!target) return c.json({ error: 'Sales associate access required' }, 403);
-    return c.json({ report: await sales.report(target.id), scope: 'associate' });
+    return c.json({ report: await sales.report(c.get('tenantId') as number, target.id), scope: 'associate' });
   });
 
   /**
@@ -181,11 +181,12 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
     const target = await owner(c);
     if (!target) return c.json({ error: 'Forbidden' }, 403);
     const payouts = new PayoutAccountService(db, c.env as Env);
-    const earned = await earnedCommissionCents(db, target.id);
+    const tenantId = c.get('tenantId') as number;
+    const earned = await earnedCommissionCents(db, tenantId, target.id);
     const [balance, history, accounts] = await Promise.all([
-      payouts.balance(target.id, earned),
-      payouts.payouts(target.id),
-      payouts.list(target.id),
+      payouts.balance(tenantId, target.id, earned),
+      payouts.payouts(tenantId, target.id),
+      payouts.list(tenantId, target.id),
     ]);
     return c.json({ balance, payouts: history, accounts });
   });
@@ -196,7 +197,10 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
     if (!target) return c.json({ error: 'Forbidden' }, 403);
     const requested = c.req.query('window');
     const window = isSalesReportWindow(requested) ? requested : 'month';
-    return c.json({ window, leads: await recentReferrals(db, target.id, windowStart(window, new Date())) });
+    return c.json({
+      window,
+      leads: await recentReferrals(db, c.get('tenantId') as number, target.id, windowStart(window, new Date())),
+    });
   });
 
   r.post('/notes', async (c) => {

@@ -2,9 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { scoreAgenticMaturityData, hasDataProvider, type MaturityDataInputs } from './toolDataProviders';
 
 describe('hasDataProvider', () => {
-  it('only the agentic-maturity tool has a data-driven mode', () => {
+  it('offers a data-driven mode only to the tools with a registered provider', () => {
     expect(hasDataProvider('agentic-maturity')).toBe(true);
+    expect(hasDataProvider('ticket-role-coverage')).toBe(true);
+    // Both of these promise "score this from your real data" in their `about`
+    // copy and neither can — the gap the ROADMAP group 10 entry tracks.
     expect(hasDataProvider('dora-quickcheck')).toBe(false);
+    expect(hasDataProvider('ai-cost-estimator')).toBe(false);
     expect(hasDataProvider('nonexistent')).toBe(false);
   });
 });

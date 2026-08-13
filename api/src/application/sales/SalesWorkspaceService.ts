@@ -44,9 +44,10 @@ export class SalesWorkspaceService {
       .from(users).where(eq(users.accountType, 'sales')).orderBy(desc(users.createdAt));
   }
 
-  /** The CRO report. `associateUserId` null = every associate (the aggregate). */
-  report(associateUserId: string | null) {
-    return buildSalesReport(this.db, { associateUserId });
+  /** The CRO report, for one workspace. `associateUserId` null = every associate
+   *  in it (the aggregate). */
+  report(tenantId: number, associateUserId: string | null) {
+    return buildSalesReport(this.db, tenantId, { associateUserId });
   }
 
   async claimReferral(userId: string, referralCode: string, env: Env) {

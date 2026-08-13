@@ -55,7 +55,7 @@ export function createPayoutRoutes(db: Db): Hono<HonoEnv> {
 
   r.get('/providers', async (c) => c.json({
     providers: describePayoutProviders(c.env as unknown as Record<string, unknown>),
-    connections: await service(c).list(c.get('userId') as string),
+    connections: await service(c).list(c.get('tenantId') as number, c.get('userId') as string),
   }));
 
   /** Connect a provider whose credential the earner TYPES. Required fields are
@@ -155,20 +155,20 @@ export function createPayoutRoutes(db: Db): Hono<HonoEnv> {
   r.put('/connections/:id/default', async (c) => {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
-    const account = await service(c).setDefault(c.get('userId') as string, id);
+    const account = await service(c).setDefault(c.get('tenantId') as number, c.get('userId') as string, id);
     return account ? c.json(account) : c.json({ error: 'Payout destination not found.' }, 404);
   });
 
   r.delete('/connections/:id', async (c) => {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id)) return c.json({ error: 'Invalid connection id.' }, 400);
-    const removed = await service(c).disconnect(c.get('userId') as string, id);
+    const removed = await service(c).disconnect(c.get('tenantId') as number, c.get('userId') as string, id);
     return removed ? c.json({ ok: true }) : c.json({ error: 'Payout destination not found.' }, 404);
   });
 
   r.get('/history', async (c) => c.json({
-    payouts: await service(c).payouts(c.get('userId') as string, Number(c.req.query('limit') ?? 50)),
-    paidCents: await service(c).paidCents(c.get('userId') as string),
+    payouts: await service(c).payouts(c.get('tenantId') as number, c.get('userId') as string, Number(c.req.query('limit') ?? 50)),
+    paidCents: await service(c).paidCents(c.get('tenantId') as number, c.get('userId') as string),
   }));
 
   return r;

@@ -4,9 +4,16 @@
  * a data-driven mode purely because an entry exists here for its id — the tool
  * DEFINITION stays pure (no DB). ToolService looks this registry up.
  *
- * Currently only the Agentic Maturity Diagnostic has one (derived from DORA,
- * cycle time, rework, and run outcomes). Adding a data mode to another tool is a
- * new entry here, not a change to the generic engine.
+ * Two tools have one today: the Agentic Maturity Diagnostic (derived from DORA,
+ * cycle time, rework, and run outcomes) and Ticket Role & Diagnostic Coverage
+ * (derived from the per-ticket audit ledger). Adding a data mode to another tool
+ * is a new entry here, not a change to the generic engine.
+ *
+ * NOTE the ones that do NOT have a provider and arguably should: `dora-quickcheck`
+ * and `ai-cost-estimator` both tell the reader "sign in to score this from your
+ * real data", and both real numbers already exist (`pmoApi.rollup()` returns the
+ * four keys and `spend.agentLlmCostUsd`) — so a canvas board can only ever show a
+ * hand-entered guess beside real work. See ROADMAP group 10.
  */
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';

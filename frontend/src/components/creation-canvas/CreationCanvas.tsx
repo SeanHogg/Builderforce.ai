@@ -6502,9 +6502,9 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         </section>
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
       </>}
-      {kind === 'projectComparison' && <><p className={styles.inspectorHint}>{t('portfolioViewHint')}</p><button className={styles.fullButton} onClick={onCompareProjects}>{t('refreshQualityComparison')}</button><SourceList sources={node.data.sources} /></>}
+      {kind === 'projectComparison' && <><p className={styles.inspectorHint}>{t('portfolioViewHint')}</p><button className={styles.fullButton} onClick={onCompareProjects}>{t('refreshQualityComparison')}</button></>}
       {kind === 'mockup' && <><label>{t('deliveryProject')}<select value={mockupProjectValue} onChange={(event) => { const project = mockupProjects.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ deliveryProjectRef: event.target.value, deliveryProjectName: project?.data.title || (event.target.value === 'draft:builderforce-launch' ? 'BuilderForce launch' : t('noProject')) }); }}><option value="draft:builderforce-launch">BuilderForce launch</option>{mockupProjects.filter((project) => (project.data.resourceId || project.id) !== 'draft:builderforce-launch').map((project) => <option key={project.id} value={project.data.resourceId || project.id}>{project.data.title}</option>)}<option value="">{t('noProject')}</option></select></label><label>{t('assignAgent')}<select value={mockupAgentValue} onChange={(event) => { const agent = mockupAgents.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ mockupAgentRef: event.target.value, mockupAgentName: agent?.data.title || (event.target.value === 'web-analyst' ? 'Web Analyst' : t('unassigned')) }); }}><option value="campaign-strategist">Campaign Strategist</option>{mockupAgents.filter((agent) => (agent.data.resourceId || agent.id) !== 'campaign-strategist').map((agent) => <option key={agent.id} value={agent.data.resourceId || agent.id}>{agent.data.title}</option>)}<option value="web-analyst">Web Analyst</option><option value="">{t('unassigned')}</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>{t('addToProjectAssign')}</button></>}
-      {kind === 'mockupSet' && <><p className={styles.inspectorHint}>{t('mockupSetHint')}</p><button className={styles.fullButton} onClick={onExpandMockupSet}>{t('expandAllMockups')}</button><button className={styles.fullButton} onClick={onDeliverMockup}>{t('addToProjectAssign')}</button><SourceList sources={node.data.sources} /></>}
+      {kind === 'mockupSet' && <><p className={styles.inspectorHint}>{t('mockupSetHint')}</p><button className={styles.fullButton} onClick={onExpandMockupSet}>{t('expandAllMockups')}</button><button className={styles.fullButton} onClick={onDeliverMockup}>{t('addToProjectAssign')}</button></>}
       {kind === 'evermind' && <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} onTrain={onTrainEvermind} />}
       {isPitchObjectKind(kind) && <PitchInspector node={node} editable={editable} onChange={onChange} />}
       {kind === 'standup' && <><p className={styles.inspectorHint}>{t('standupHint')}</p><button className={styles.fullButton} onClick={onStartStandup}>{t('gatherStandup')}</button></>}
@@ -6550,6 +6550,16 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       </>}
       {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'guidedTour', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing', 'diagram'].includes(kind) && !DOCUMENT_EDITOR_KINDS.has(kind) && !CREATIVE_GENERATOR_KINDS.has(kind) && <p className={styles.inspectorHint}>{t('objectLiveHint')}</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} data={node.data} persistence={persistence} role={role} members={members} />}
+      {/* Where the evidence behind THIS object is shown — for every kind that
+          carries it, not the two that happened to mount the list. `sources` is an
+          authorable field on eighteen kinds (document, report, knowledge, chart,
+          slides, roadmap, evaluation, pitch…), and Brain writes it whenever it
+          grounds an answer, but only `projectComparison` and `mockupSet` rendered
+          it: on everything else the citations were written, persisted, and never
+          shown, so a grounded research document was indistinguishable from an
+          invented one. The list decides its own visibility (null when empty), so
+          one mount covers every kind and cannot drift from the field. */}
+      {tab === 'details' && <SourceList sources={node.data.sources} />}
       {tab === 'details' && canvasExportActionsFor(node.data).length > 0 && <section aria-label={t('copyAndDownload')} style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontSize: 12 }}>{t('copyAndDownload')}</strong>
         <CanvasExportActions data={node.data} onExport={(action) => void runArtifactAction(action)} className={styles.panelActions} />

@@ -188,14 +188,23 @@ export function leaderboard(
  */
 export async function buildSalesReport(
   db: Db,
+  tenantId: number,
   options: { associateUserId?: string | null; now?: Date } = {},
 ): Promise<SalesReport> {
   const now = options.now ?? new Date();
   const associateUserId = options.associateUserId ?? null;
 
+  // The aggregate view is "every associate IN THIS WORKSPACE" — a referral is a
+  // workspace's fact about its own programme, so even the superadmin roll-up is
+  // scoped. Reading across tenants here would total another workspace's revenue
+  // into this one's leaderboard.
   const referralWhere = associateUserId
-    ? and(eq(salesReferrals.associateUserId, associateUserId), isNotNull(salesReferrals.signupNotifiedAt))
-    : isNotNull(salesReferrals.signupNotifiedAt);
+    ? and(
+      eq(salesReferrals.tenantId, tenantId),
+      eq(salesReferrals.associateUserId, associateUserId),
+      isNotNull(salesReferrals.signupNotifiedAt),
+    )
+    : and(eq(salesReferrals.tenantId, tenantId), isNotNull(salesReferrals.signupNotifiedAt));
 
   const stalledBefore = new Date(now.getTime() - STALLED_CONTACT_DAYS * MS_PER_DAY);
 
@@ -254,15 +263,19 @@ export async function buildSalesReport(
 
 /** Commission EARNED to date (converted referrals), which is what the payout
  *  balance subtracts from. One SUM, and the one definition of "earned". */
-export async function earnedCommissionCents(db: Db, associateUserId: string): Promise<number> {
+export async function earnedCommissionCents(db: Db, tenantId: number, associateUserId: string): Promise<number> {
   const rows = await db.select({ commissionCents: salesReferrals.commissionCents })
     .from(salesReferrals)
-    .where(and(eq(salesReferrals.associateUserId, associateUserId), isNotNull(salesReferrals.convertedAt)));
+    .where(and(
+      eq(salesReferrals.tenantId, tenantId),
+      eq(salesReferrals.associateUserId, associateUserId),
+      isNotNull(salesReferrals.convertedAt),
+    ));
   return rows.reduce((sum, row) => sum + (row.commissionCents ?? 0), 0);
 }
 
 /** Referrals that signed up since `from` — the "current leads" list the hub shows. */
-export async function recentReferrals(db: Db, associateUserId: string, from: Date) {
+export async function recentReferrals(db: Db, tenantId: number, associateUserId: string, from: Date) {
   return db.select({
     id: salesReferrals.id,
     attributionType: salesReferrals.attributionType,
@@ -272,6 +285,10 @@ export async function recentReferrals(db: Db, associateUserId: string, from: Dat
     revenueCents: salesReferrals.revenueCents,
     commissionCents: salesReferrals.commissionCents,
   }).from(salesReferrals)
-    .where(and(eq(salesReferrals.associateUserId, associateUserId), gte(salesReferrals.signedUpAt, from)))
+    .where(and(
+      eq(salesReferrals.tenantId, tenantId),
+      eq(salesReferrals.associateUserId, associateUserId),
+      gte(salesReferrals.signedUpAt, from),
+    ))
     .orderBy(desc(salesReferrals.signedUpAt));
 }

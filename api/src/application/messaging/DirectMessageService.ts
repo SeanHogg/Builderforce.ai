@@ -103,6 +103,23 @@ export class DirectMessageService {
     return rows.map((row) => ({ userId: row.id, name: row.name, email: row.email, isSuperadmin: row.isSuperadmin }));
   }
 
+  /**
+   * Every workspace this person can read a conversation in.
+   *
+   * A web token carries no tenant claim, so scope is resolved here rather than
+   * demanded from the route — the same reason `open()` resolves the workspace it
+   * writes into. A DM thread belongs to a workspace (`threads.tenantId`, set at
+   * open time), and `check-tenant-scope` is the rule that says a read of a
+   * tenant-owned table names the tenant it is reading. Someone in no workspace
+   * has no conversations, which is the honest answer rather than every
+   * conversation.
+   */
+  private async reachableTenantIds(userId: string): Promise<number[]> {
+    const rows = await this.db.select({ tenantId: tenantMembers.tenantId }).from(tenantMembers)
+      .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.isActive, true)));
+    return [...new Set(rows.map((row) => row.tenantId))];
+  }
+
   /** The workspace a person's threads belong to — their first active membership. */
   private async workspaceOf(userId: string): Promise<number | null> {
     const [row] = await this.db.select({ tenantId: tenantMembers.tenantId }).from(tenantMembers)
@@ -120,17 +137,27 @@ export class DirectMessageService {
   }
 
   /** Thread ids this person is a participant of. */
-  private async myThreadIds(userId: string): Promise<string[]> {
+  private async myThreadIds(userId: string, tenantIds: number[]): Promise<string[]> {
+    if (tenantIds.length === 0) return [];
     const rows = await this.db.select({ objectId: memberships.objectId, updatedAt: memberships.updatedAt })
       .from(memberships)
-      .where(and(eq(memberships.memberKind, 'user'), eq(memberships.memberRef, userId), eq(memberships.state, 'active')))
+      .where(and(
+        inArray(memberships.tenantId, tenantIds),
+        eq(memberships.memberKind, 'user'),
+        eq(memberships.memberRef, userId),
+        eq(memberships.state, 'active'),
+      ))
       .orderBy(desc(memberships.updatedAt))
       .limit(THREADS_PAGE * 4);
     if (rows.length === 0) return [];
     // `memberships` is the kernel's presence table for EVERY object, so the rows
     // have to be narrowed to threads — a board membership is not a conversation.
     const objectRows = await this.db.select({ id: objects.id, refId: objects.refId })
-      .from(objects).where(and(inArray(objects.id, rows.map((row) => row.objectId)), eq(objects.kind, 'thread')));
+      .from(objects).where(and(
+        inArray(objects.tenantId, tenantIds),
+        inArray(objects.id, rows.map((row) => row.objectId)),
+        eq(objects.kind, 'thread'),
+      ));
     return objectRows.map((row) => row.refId);
   }
 
@@ -141,18 +168,24 @@ export class DirectMessageService {
    * query rather than one COUNT per thread — the N+1 the performance rule names.
    */
   async threads(userId: string): Promise<DirectMessageThreadView[]> {
-    const ids = await this.myThreadIds(userId);
+    const tenantIds = await this.reachableTenantIds(userId);
+    const ids = await this.myThreadIds(userId, tenantIds);
     if (ids.length === 0) return [];
 
     const [threadRows, memberRows] = await Promise.all([
-      this.db.select().from(threads).where(inArray(threads.id, ids)).orderBy(desc(threads.lastMessageAt)).limit(THREADS_PAGE),
+      this.db.select().from(threads)
+        .where(and(inArray(threads.tenantId, tenantIds), inArray(threads.id, ids)))
+        .orderBy(desc(threads.lastMessageAt)).limit(THREADS_PAGE),
       this.db.select({
         objectRefId: objects.refId, memberRef: memberships.memberRef, lastSeenAt: memberships.lastSeenAt,
         name: users.displayName, email: users.email, isSuperadmin: users.isSuperadmin,
       }).from(memberships)
         .innerJoin(objects, eq(objects.id, memberships.objectId))
         .leftJoin(users, eq(users.id, memberships.memberRef))
-        .where(and(eq(objects.kind, 'thread'), inArray(objects.refId, ids), eq(memberships.state, 'active'))),
+        .where(and(
+          inArray(memberships.tenantId, tenantIds),
+          eq(objects.kind, 'thread'), inArray(objects.refId, ids), eq(memberships.state, 'active'),
+        )),
     ]);
 
     const participantsByThread = new Map<string, DirectMessageParticipant[]>();
@@ -174,7 +207,7 @@ export class DirectMessageService {
     const unreadRows = clauses.length === 0 ? [] : await this.db
       .select({ threadId: messages.threadId, total: sql<string>`count(*)` })
       .from(messages)
-      .where(and(ne(messages.authorRef, userId), or(...clauses)))
+      .where(and(inArray(messages.tenantId, tenantIds), ne(messages.authorRef, userId), or(...clauses)))
       .groupBy(messages.threadId);
     const unreadByThread = new Map(unreadRows.map((row) => [row.threadId, Number(row.total) || 0]));
 
@@ -194,10 +227,12 @@ export class DirectMessageService {
     return list.reduce((sum, thread) => sum + thread.unread, 0);
   }
 
-  private async isParticipant(threadId: string, userId: string): Promise<boolean> {
+  private async isParticipant(threadId: string, userId: string, tenantIds: number[]): Promise<boolean> {
+    if (tenantIds.length === 0) return false;
     const [row] = await this.db.select({ id: memberships.id }).from(memberships)
       .innerJoin(objects, eq(objects.id, memberships.objectId))
       .where(and(
+        inArray(memberships.tenantId, tenantIds),
         eq(objects.kind, 'thread'), eq(objects.refId, threadId),
         eq(memberships.memberKind, 'user'), eq(memberships.memberRef, userId), eq(memberships.state, 'active'),
       )).limit(1);
@@ -206,13 +241,14 @@ export class DirectMessageService {
 
   /** One conversation's messages, oldest first (a transcript reads downward). */
   async messages(threadId: string, userId: string): Promise<DirectMessageView[] | null> {
-    if (!await this.isParticipant(threadId, userId)) return null;
+    const tenantIds = await this.reachableTenantIds(userId);
+    if (!await this.isParticipant(threadId, userId, tenantIds)) return null;
     const rows = await this.db.select({
       id: messages.id, threadId: messages.threadId, authorRef: messages.authorRef,
       body: messages.body, createdAt: messages.createdAt, name: users.displayName,
     }).from(messages)
       .leftJoin(users, eq(users.id, messages.authorRef))
-      .where(eq(messages.threadId, threadId))
+      .where(and(inArray(messages.tenantId, tenantIds), eq(messages.threadId, threadId)))
       .orderBy(messages.createdAt)
       .limit(MESSAGES_PAGE);
     return rows.map((row) => ({
@@ -279,10 +315,11 @@ export class DirectMessageService {
   async send(threadId: string, userId: string, body: string): Promise<DirectMessageView | null> {
     const text = clean(body, MAX_BODY);
     if (!text) return null;
-    if (!await this.isParticipant(threadId, userId)) return null;
+    const tenantIds = await this.reachableTenantIds(userId);
+    if (!await this.isParticipant(threadId, userId, tenantIds)) return null;
 
     const [thread] = await this.db.select({ id: threads.id, tenantId: threads.tenantId, title: threads.title })
-      .from(threads).where(eq(threads.id, threadId)).limit(1);
+      .from(threads).where(and(inArray(threads.tenantId, tenantIds), eq(threads.id, threadId))).limit(1);
     if (!thread) return null;
 
     const now = new Date();
@@ -295,7 +332,7 @@ export class DirectMessageService {
       // `messageCount` is denormalised on purpose (the kernel says so): a thread
       // list must not fan out one COUNT per row.
       .set({ lastMessageAt: now, messageCount: sql`${threads.messageCount} + 1`, updatedAt: now })
-      .where(eq(threads.id, threadId));
+      .where(and(eq(threads.tenantId, thread.tenantId), eq(threads.id, threadId)));
     // The sender has, by definition, seen their own message.
     await this.markRead(threadId, userId, now);
 

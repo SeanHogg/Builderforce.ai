@@ -1,3 +1,23 @@
+## RESOLVED 2026-08-13 - Canvas objects carried citations that were never shown
+
+`sources` is an authorable, Brain-written field on eighteen canvas object kinds - `document`, `report`,
+`knowledge`, `chart`, `map`, `kpi`, `dashboard`, `slides`, `roadmap`, `evaluation`, `diagram`, `url`,
+`featureSummary`, all four pitch objects and `projectComparison` - and `creationObjectAiContext` feeds it
+back to the model as evidence. Only TWO of those kinds ever rendered it: `projectComparison` and
+`mockupSet` each mounted `<SourceList>` inline in their own inspector branch. On every other kind the
+citations were authored, persisted, round-tripped through the AI context and never displayed, so a
+grounded research document looked exactly like an invented one and there was no way to check where a
+number came from.
+
+`SourceList` already decided its own visibility (it returns null on an empty or non-array `sources`), so
+the fix was to stop mounting it per kind: the details tab of the inspector now mounts it once for every
+object, and the two inline call sites are gone. A kind that gains `sources` tomorrow is covered without
+touching the inspector, which is the point of the shared-component rule - the two-call-site version is
+exactly how sixteen kinds came to be missed.
+
+Found during a grade-8 student review of the canvas, where "show me where this came from" is the whole
+difference between a homework source list and plagiarism. `CreationCanvas.test.tsx` stays green (82/82).
+
 ## RESOLVED 2026-08-12 - Zero-setup onboarding was a browser effect, so it could be skipped
 
 The admin user directory showed builders sitting at **0 workspaces**, which zero-setup onboarding is
