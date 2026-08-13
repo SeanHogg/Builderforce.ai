@@ -22,9 +22,10 @@
  */
 
 import type {
-  AcademicObjectKind, FounderObjectKind, HiringObjectKind, PeopleObjectKind, SharedObjectKind,
+  AcademicObjectKind, DataScienceObjectKind, FounderObjectKind, HiringObjectKind, PeopleObjectKind, SharedObjectKind,
 } from '@builderforce/creation-canvas-contract';
 import { ACADEMIC_LABELS, ACADEMIC_OBJECT_SPECS, ACADEMIC_STATUSES } from '@/lib/academicObjects';
+import { DATA_SCIENCE_LABELS, DATA_SCIENCE_OBJECT_SPECS, DATA_SCIENCE_STATUSES } from '@/lib/dataScienceObjects';
 import { FOUNDER_OBJECT_SPECS } from '@/lib/founderObjects';
 import { HIRING_LABELS, HIRING_OBJECT_SPECS, HIRING_STATUSES } from '@/lib/hiringObjects';
 import { PEOPLE_LABELS, PEOPLE_OBJECT_SPECS, PEOPLE_STATUSES } from '@/lib/peopleObjects';
@@ -119,6 +120,10 @@ export const HIRING_REGISTRY = lower({ specs: HIRING_OBJECT_SPECS, labels: HIRIN
 export const PEOPLE_REGISTRY = lower({ specs: PEOPLE_OBJECT_SPECS, labels: PEOPLE_LABELS, statuses: PEOPLE_STATUSES });
 /** The cross-domain kinds (`funnel` today). */
 export const SHARED_REGISTRY = lower({ specs: SHARED_OBJECT_SPECS, labels: SHARED_LABELS, statuses: SHARED_STATUSES });
+/** The four stages after the data — analysis, model, evaluation, ship. Six kinds, and
+ *  the reason the board can now hold a loss curve, a labelled eval set and a versioned
+ *  prompt instead of describing them in a `document`. */
+export const DATA_SCIENCE_REGISTRY = lower({ specs: DATA_SCIENCE_OBJECT_SPECS, labels: DATA_SCIENCE_LABELS, statuses: DATA_SCIENCE_STATUSES });
 
 /**
  * The authorable fields per vocabulary.
@@ -133,12 +138,13 @@ export const ACADEMIC_MUTABLE_FIELDS = specMutableFieldMap<AcademicObjectKind>(A
 export const HIRING_MUTABLE_FIELDS = specMutableFieldMap<HiringObjectKind>(HIRING_OBJECT_SPECS);
 export const PEOPLE_MUTABLE_FIELDS = specMutableFieldMap<PeopleObjectKind>(PEOPLE_OBJECT_SPECS);
 export const SHARED_MUTABLE_FIELDS = specMutableFieldMap<SharedObjectKind>(SHARED_OBJECT_SPECS);
+export const DATA_SCIENCE_MUTABLE_FIELDS = specMutableFieldMap<DataScienceObjectKind>(DATA_SCIENCE_OBJECT_SPECS);
 
 /** Actions, from the same declaration that gives each kind its fields — so a kind cannot
  *  advertise an action its body has no affordance for. */
 export const SPEC_ACTIONS: Readonly<Record<string, readonly string[]>> = Object.fromEntries(
   [
     ...FOUNDER_OBJECT_SPECS, ...ACADEMIC_OBJECT_SPECS, ...HIRING_OBJECT_SPECS,
-    ...PEOPLE_OBJECT_SPECS, ...SHARED_OBJECT_SPECS,
+    ...PEOPLE_OBJECT_SPECS, ...SHARED_OBJECT_SPECS, ...DATA_SCIENCE_OBJECT_SPECS,
   ].map((spec) => [spec.kind, spec.actions]),
 );

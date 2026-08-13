@@ -10652,6 +10652,13 @@
       "gigsHint": "Des missions ouvertes adaptées à vos compétences et à votre tarif.",
       "timecard": "Saisir vos heures",
       "timecardHint": "Envoyez vos relevés d’heures et suivez vos paiements."
+    },
+    "terms": {
+      "titleVersion": "{title} · v{version}",
+      "intro": "Nous avons mis à jour nos conditions. Acceptez la version actuelle pour continuer à utiliser votre compte.",
+      "agree": "J'accepte les {title} (v{version}) et la Politique de confidentialité.",
+      "accept": "Accepter et continuer",
+      "acceptFailed": "Échec de l'acceptation des conditions"
     }
   },
   "soc2": {

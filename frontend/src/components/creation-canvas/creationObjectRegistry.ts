@@ -1,5 +1,5 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
-import { CREATION_CONNECTION_KINDS, emptyCanvasVideoTimeline, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CreationConnectionKind, type FounderObjectKind, type HiringObjectKind, type PeopleObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
+import { CREATION_CONNECTION_KINDS, emptyCanvasVideoTimeline, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type PeopleObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
 import { FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS, founderMutableFields } from '@/lib/founderObjects';
 // Importing the vocabulary registers it (see `specObjects.ts`), which is what makes the
 // academic kinds resolvable everywhere else without a second list of them here.
@@ -18,6 +18,7 @@ import {
   ACADEMIC_MUTABLE_FIELDS, ACADEMIC_REGISTRY, FOUNDER_MUTABLE_FIELDS, FOUNDER_REGISTRY,
   HIRING_MUTABLE_FIELDS, HIRING_REGISTRY, PEOPLE_MUTABLE_FIELDS, PEOPLE_REGISTRY,
   SHARED_MUTABLE_FIELDS, SHARED_REGISTRY, SPEC_ACTIONS,
+  DATA_SCIENCE_MUTABLE_FIELDS, DATA_SCIENCE_REGISTRY,
 } from './specDerivedRegistry';
 import {
   DATA_ARCHITECTURE_FIELD_NAMES, DATA_ARCHITECTURE_SPECS, dataArchitectureMutableFields, dataArchitectureSeed,
@@ -284,8 +285,16 @@ const BASE_MUTABLE_FIELDS = {
   // `fetchedAt` is what makes staleness computable rather than guessed.
   // `fixtureCases` labels each generated row with the edge it exercises, so a failing
   // fixture can say WHICH boundary broke rather than "row 14".
-  dataset: ['content', 'columns', 'rows', 'sampleRows', 'rowCount', 'profile', 'summary', 'fileName', 'mimeType', 'classifications', 'dataContract', 'violations', 'fetchedAt', 'lineage', 'producedAt', 'sourceUri', 'fixtureCases'],
-  table: ['content', 'columns', 'rows', 'rowCount', 'sampleRows', 'highlightRules', 'summary', 'sourceDatasetId', 'sources', 'classifications', 'lineage', 'producedAt', 'fetchedAt'],
+  // `dataUse` is the governance ENVELOPE — declared purposes, lawful basis, retention.
+  // `classifications` described what the rows ARE and nothing bound that description to
+  // a USE, so nothing stopped a dataset tagged as personal data becoming a fine-tune
+  // corpus. `battlecard.doNotSay` already proves a restriction can travel with an
+  // object; this is the same move for personal data, read by `checkDataUse`.
+  //
+  // `basis` and `datasetVersion` are the reproducibility half: which rows, how many of
+  // them, and which version of this dataset produced everything downstream.
+  dataset: ['content', 'columns', 'rows', 'sampleRows', 'rowCount', 'profile', 'summary', 'fileName', 'mimeType', 'classifications', 'dataContract', 'violations', 'fetchedAt', 'lineage', 'producedAt', 'sourceUri', 'fixtureCases', 'dataUse', 'basis', 'datasetVersion'],
+  table: ['content', 'columns', 'rows', 'rowCount', 'sampleRows', 'highlightRules', 'summary', 'sourceDatasetId', 'sources', 'classifications', 'lineage', 'producedAt', 'fetchedAt', 'basis'],
   spreadsheet: ['content', 'columns', 'rows', 'formulas', 'rowCount', 'highlightRules', 'summary'],
   // `widgets` is the dashboard's own model (see lib/canvasDashboard): an ordered list
   // where the chart kind is a VALUE, so a dashboard can hold any number of charts of
@@ -295,12 +304,31 @@ const BASE_MUTABLE_FIELDS = {
   // that records WHICH dataset it came from but not HOW can never be recomputed,
   // and can never say it has gone stale because its source moved. The transform
   // travels with the artifact — see lib/canvasLineage.
-  chart: ['content', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues', 'kpis', 'widgets', 'sources', 'summary', 'sourceDatasetId', 'lineage', 'producedAt', 'metricId'],
+  // `basis` and the interval fields are the uncertainty half. A board rendered a point
+  // estimate with identical visual authority at n = 12 and n = 1,200,000, and a chart
+  // computed over a truncated frame looked exactly like one computed over the whole
+  // file. `intervals` is per-series {low, high}; `sampleSize` is the n the reader needs
+  // to judge any of it.
+  chart: ['content', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues', 'kpis', 'widgets', 'sources', 'summary', 'sourceDatasetId', 'lineage', 'producedAt', 'metricId', 'basis', 'intervals', 'sampleSize'],
   map: ['content', 'mapPoints', 'mapTitle', 'mapValueLabel', 'mapRegion', 'mapRegionName', 'mapOutline', 'mapAttribution', 'sources', 'summary', 'sourceDatasetId', 'lineage', 'producedAt'],
-  kpi: ['content', 'value', 'target', 'unit', 'trend', 'sources', 'summary', 'sourceDatasetId', 'lineage', 'producedAt', 'metricId'],
-  dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'widgets', 'sources', 'fetchedAt', 'dateRange', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'summary', 'sourceDatasetId', 'lineage', 'producedAt'],
+  kpi: ['content', 'value', 'target', 'unit', 'trend', 'sources', 'summary', 'sourceDatasetId', 'lineage', 'producedAt', 'metricId', 'basis', 'ciLow', 'ciHigh', 'sampleSize'],
+  dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'widgets', 'sources', 'fetchedAt', 'dateRange', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'summary', 'sourceDatasetId', 'lineage', 'producedAt', 'basis'],
   report: ['content', 'markdown', 'chartLabels', 'chartValues', 'widgets', 'sources', 'lineage', 'producedAt'],
-  evaluation: ['content', 'criteria', 'verdict', 'gaps', 'recommendations', 'sources', 'testResults', 'passRate', 'runCount', 'lastRunAt'],
+  // An evaluation used to grade ONE RESPONSE: criteria in, a pass rate out. That is a
+  // percentage with a denominator nobody can defend in a review, and — because nothing
+  // gated on it — a number that could not stop a bad model shipping. The fields added
+  // here are the difference between grading an answer and evaluating a system:
+  //   • `goldenDatasetId` — the eval set it is scored against, so the cases have an
+  //     origin other than the model writing its own and marking them.
+  //   • `judgeModel` / `judgeVersion` — WHO scored it. An unrecorded judge makes two
+  //     runs incomparable, because the scorer may have changed between them.
+  //   • `slices` — per-segment results. An aggregate that hides a failing slice is the
+  //     single most common way a model ships broken for a subgroup.
+  //   • `baselineEvaluationId` + `gate` — what it must beat, and whether falling short
+  //     blocks the publish action. `workflow.approvalMode` already proves the pattern.
+  //   • `costPerCase` / `latencyMs` — quality that costs ten times as much is a
+  //     different answer, and the board could not see the price.
+  evaluation: ['content', 'criteria', 'verdict', 'gaps', 'recommendations', 'sources', 'testResults', 'passRate', 'runCount', 'lastRunAt', 'goldenDatasetId', 'judgeModel', 'judgeVersion', 'slices', 'baselineEvaluationId', 'baselinePassRate', 'gate', 'costPerCase', 'latencyMs', 'subjectObjectId'],
   projectComparison: ['content', 'projects', 'sources', 'fetchedAt', 'recommendations'],
   roadmap: ['content', 'items', 'milestones', 'sources'],
   note: ['content', 'markdown'],
@@ -316,7 +344,14 @@ const BASE_MUTABLE_FIELDS = {
   diagnostics: ['content', 'diagnostics', 'findings', 'checks', 'items', 'severity', 'result', 'results', 'summary', 'verdict', 'nextSteps', 'recommendations', 'actions', 'remediation', 'path', 'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount', 'auditFindings', 'auditScore', 'auditPassed', 'auditTarget'],
   terminal: ['content', 'exitCode'],
   service: ['content', 'url', 'port', 'viewport', 'pageTitle'],
-  llm: ['content', 'model', 'instructions', 'parameters'],
+  // LLM work is bought by the token, and this object had no tokens on it. The platform
+  // records every one — `agent_inference_logs`, `run_model_outcomes`, `llm_usage_log` —
+  // and none of it reached the surface where the architecture is CHOSEN, so the board
+  // could not answer "what does this cost at a million requests a month", which is the
+  // question that decides whether an LLM feature ships at all. `projectedMonthlyCost` is
+  // derived from the rest rather than typed, so a card cannot quote a price that
+  // disagrees with its own inputs.
+  llm: ['content', 'model', 'instructions', 'parameters', 'costPerMillionInput', 'costPerMillionOutput', 'tokensPerRequestIn', 'tokensPerRequestOut', 'latencyP50Ms', 'latencyP95Ms', 'monthlyRequests', 'projectedMonthlyCost', 'promptObjectId'],
   course: ['content', 'course', 'exportStandards'],
   // `attempts` is absent on purpose: it is the learner's record of what they
   // actually answered, and a model that could write it could report mastery
@@ -414,7 +449,7 @@ const BASE_MUTABLE_FIELDS = {
     // Their omission made this annotation demand six entries the object above is not
     // supposed to carry, so the exhaustiveness check it exists to perform could not
     // compile at all — a guard that fails for every kind protects none of them.
-    FounderObjectKind | AcademicObjectKind | HiringObjectKind | PeopleObjectKind | SharedObjectKind | DataArchitectureKind
+    FounderObjectKind | AcademicObjectKind | HiringObjectKind | PeopleObjectKind | SharedObjectKind | DataArchitectureKind | DataScienceObjectKind
   >,
   readonly string[]
 >;
@@ -428,6 +463,7 @@ const MUTABLE_FIELDS: Record<CreationObjectKind, readonly string[]> = {
   ...HIRING_MUTABLE_FIELDS,
   ...PEOPLE_MUTABLE_FIELDS,
   ...SHARED_MUTABLE_FIELDS,
+  ...DATA_SCIENCE_MUTABLE_FIELDS,
   // Cast to the named kind union rather than left as an index signature: an
   // index-signature map satisfies ANY key, so spreading one silently switched the
   // exhaustiveness annotation below off for these six kinds.
@@ -608,6 +644,7 @@ export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
   ...HIRING_REGISTRY,
   ...PEOPLE_REGISTRY,
   ...SHARED_REGISTRY,
+  ...DATA_SCIENCE_REGISTRY,
   ...DATA_ARCHITECTURE_REGISTRY,
 ].map((definition) => ({
   ...definition,

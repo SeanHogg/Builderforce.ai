@@ -10652,6 +10652,13 @@
       "gigsHint": "Offene Aufträge, die zu deinen Fähigkeiten und deinem Satz passen.",
       "timecard": "Stunden erfassen",
       "timecardHint": "Reiche Stundenzettel ein und behalte deine Zahlungen im Blick."
+    },
+    "terms": {
+      "titleVersion": "{title} · v{version}",
+      "intro": "Wir haben unsere Nutzungsbedingungen aktualisiert. Akzeptieren Sie die aktuelle Version, um Ihr Konto weiter zu nutzen.",
+      "agree": "Ich stimme den {title} (v{version}) und der Datenschutzerklärung zu.",
+      "accept": "Akzeptieren und fortfahren",
+      "acceptFailed": "Bedingungen konnten nicht akzeptiert werden"
     }
   },
   "soc2": {

@@ -10653,6 +10653,13 @@
       "gigsHint": "Open roles matched to your skills and rate.",
       "timecard": "Log your hours",
       "timecardHint": "Submit timecards and track what you've been paid."
+    },
+    "terms": {
+      "titleVersion": "{title} · v{version}",
+      "intro": "We updated our terms. Accept the current version to continue using your account.",
+      "agree": "I agree to the {title} (v{version}) and the Privacy Policy.",
+      "accept": "Accept and continue",
+      "acceptFailed": "Failed to accept terms"
     }
   },
   "soc2": {

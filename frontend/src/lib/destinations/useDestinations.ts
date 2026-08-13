@@ -5,10 +5,36 @@ import { useAuth } from '@/lib/AuthContext';
 import { getStoredTenant } from '@/lib/auth';
 import { useConsumption } from '@/lib/useConsumption';
 import { useAvailableForHire, useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
-import { navGroupsForAccountType } from '@/lib/navGroups';
-import { listDestinations, type Destination } from './registry';
+import { navGroupsForAccountType, type NavGroup } from '@/lib/navGroups';
 import { useNavigationFeatures } from '@/lib/NavigationFeaturesContext';
 import { filterNavigationGroups } from '@/lib/navigationFeatures';
+import { listDestinations, type Destination } from './registry';
+
+/**
+ * THE nav groups for the visitor who is here — account type applied, disabled
+ * navigation features filtered out.
+ *
+ * It is a hook of its own because three surfaces were each composing it
+ * themselves: `Sidebar` (which rail rows to draw), `useDestinations` below
+ * (which doors the palette and the Brain may open) and `ShellIndex` (which
+ * destination the shell panel is showing). Two had already drifted — the Sidebar
+ * carried a hand-rolled second copy of `findActiveGroup`'s prefix match as a
+ * fallback, because the shared one resolves against the BUILDER registry and so
+ * never matched a sales or freelancer route.
+ *
+ * One composition, so a fourth account type is one edit rather than three.
+ */
+export function useNavGroups(): NavGroup[] {
+  const isFreelancer = useIsFreelancer();
+  const availableForHire = useAvailableForHire();
+  const isSales = useIsSalesAssociate();
+  const { enabled } = useNavigationFeatures();
+
+  return useMemo(
+    () => filterNavigationGroups(navGroupsForAccountType(isFreelancer, availableForHire, isSales), enabled),
+    [availableForHire, enabled, isFreelancer, isSales],
+  );
+}
 
 /** A destination plus whether a paid plan stands between this user and it. */
 export interface GatedDestination extends Destination {
@@ -53,20 +79,14 @@ export function destinationHref(destination: GatedDestination): string {
  */
 export function useDestinations(): GatedDestination[] {
   const { user } = useAuth();
-  const isFreelancer = useIsFreelancer();
-  const availableForHire = useAvailableForHire();
-  const isSales = useIsSalesAssociate();
   const isSuperadmin = !!user?.isSuperadmin;
   const consumption = useConsumption();
   const features = consumption?.features;
-  const { enabled } = useNavigationFeatures();
+  const groups = useNavGroups();
 
   return useMemo(() => {
     const isOwner = getStoredTenant()?.role === 'owner';
-    return listDestinations(filterNavigationGroups(
-      navGroupsForAccountType(isFreelancer, availableForHire, isSales),
-      enabled,
-    ))
+    return listDestinations(groups)
       .filter((destination) => (!destination.superadminOnly || isSuperadmin) && (!destination.ownerOnly || isOwner))
       .map((destination) => {
         // No feature declared, or no snapshot yet → nothing is KNOWN to be
@@ -81,5 +101,5 @@ export function useDestinations(): GatedDestination[] {
             : {}),
         };
       });
-  }, [availableForHire, enabled, features, isFreelancer, isSales, isSuperadmin]);
+  }, [features, groups, isSuperadmin]);
 }

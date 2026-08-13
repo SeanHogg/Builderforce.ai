@@ -10652,6 +10652,13 @@
       "gigsHint": "与你的技能和费率匹配的空缺职位。",
       "timecard": "记录工时",
       "timecardHint": "提交工时单并跟踪已收款项。"
+    },
+    "terms": {
+      "titleVersion": "{title} · v{version}",
+      "intro": "我们更新了服务条款。请接受当前版本以继续使用您的账户。",
+      "agree": "我同意《{title}》（v{version}）和隐私政策。",
+      "accept": "接受并继续",
+      "acceptFailed": "接受条款失败"
     }
   },
   "soc2": {

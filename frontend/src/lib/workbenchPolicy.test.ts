@@ -25,6 +25,16 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/projects/7')).toBe('standalone');
   });
 
+  it('docks the Sales Hub but not its launchers', () => {
+    // The hub is a read-out — a link to copy, a lead to check, a payout to
+    // chase — so it opens OVER the board an associate is selling from. Its
+    // sub-routes only provision and redirect, and a redirect cannot be a panel.
+    expect(classifyRoute('/sales')).toBe('workbench');
+    expect(panelWidth('/sales')).toBe('wide');
+    expect(classifyRoute('/sales/canvas')).toBe('standalone');
+    expect(classifyRoute('/sales/referral-claim')).toBe('standalone');
+  });
+
   it('never claims a route outside the operator shell', () => {
     expect(classifyRoute('/pricing')).toBe('standalone');
     expect(classifyRoute('/blog/post')).toBe('standalone');

@@ -145,6 +145,25 @@ const CONTEXT_FIELDS = [
    * read from there rather than copied into the plan and allowed to drift.
    */
   'formulas', 'salary', 'loadedCost', 'startAt', 'level', 'team', 'headcountStatus',
+  /**
+   * The DATA-SCIENCE fields added to kinds that are not spec-driven.
+   *
+   * The six new kinds are covered by `specFieldNames()` below; these are the fields
+   * grafted onto `evaluation`, `llm`, `kpi`, `chart`, `dataset` and `table`, and every
+   * one of them is here for the reason this list's header gives — a field the model can
+   * author and cannot read is a field it will overwrite rather than amend.
+   *
+   * `basis` is the most important of them. It is what a derived number was computed
+   * FROM: how many rows, out of how many, at which content hash. Without it in this
+   * list the model can be looking at a KPI computed over 500 rows of a five-million-row
+   * file and have no way to know — which is precisely the "confidently wrong number"
+   * the row-basis work exists to stop, reappearing one layer up in the model's context.
+   */
+  'basis', 'datasetVersion', 'dataUse', 'ciLow', 'ciHigh', 'sampleSize', 'intervals',
+  'goldenDatasetId', 'judgeModel', 'judgeVersion', 'slices', 'baselineEvaluationId',
+  'baselinePassRate', 'gate', 'costPerCase', 'latencyMs', 'subjectObjectId',
+  'costPerMillionInput', 'costPerMillionOutput', 'tokensPerRequestIn', 'tokensPerRequestOut',
+  'latencyP50Ms', 'latencyP95Ms', 'monthlyRequests', 'projectedMonthlyCost', 'promptObjectId',
   ...DATA_ARCHITECTURE_FIELD_NAMES,
   /**
    * Every field name any registered spec vocabulary declares — founder, academic,

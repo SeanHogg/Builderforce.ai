@@ -17,7 +17,7 @@
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { getStoredTenant } from '@/lib/auth';
-import { useIsFreelancer } from '@/lib/rbac';
+import { useNavGroups } from '@/lib/destinations/useDestinations';
 import { findActiveGroup, activeRouteTabId, tabHref, type NavGroup } from '@/lib/navGroups';
 import { useNavCounts } from '@/lib/navCounts';
 import { TabCountBadge } from '@/components/TabCountBadge';
@@ -34,14 +34,16 @@ export function useShellIndex(): ShellIndexModel {
   const pathname = usePathname() || '';
   const searchParams = useSearchParams();
   const counts = useNavCounts();
-  const isFreelancer = useIsFreelancer();
+  // THIS account's rows, not the builder registry's. Resolving against the
+  // builder set meant a restricted account had no active destination at all: the
+  // freelancer branch below had to blank the index to stop it offering
+  // tenant-only tabs that bounce the account, and the sales associate's hub
+  // opened as a panel titled "Panel". An account's own groups answer both —
+  // a freelancer's rows are the ones a freelancer may reach.
+  const groups = useNavGroups();
+  const group = findActiveGroup(pathname, groups);
 
-  const group = findActiveGroup(pathname);
-
-  // `findActiveGroup` resolves against the BUILDER nav groups. A freelancer/gig
-  // account navigates its own restricted set, so surfacing this would offer
-  // tenant-only destinations that bounce the account.
-  if (isFreelancer || !group?.tabs?.length) return { group, items: [], activeId: '' };
+  if (!group?.tabs?.length) return { group, items: [], activeId: '' };
 
   const isOwner = getStoredTenant()?.role === 'owner';
   const items: IndexItem[] = group.tabs

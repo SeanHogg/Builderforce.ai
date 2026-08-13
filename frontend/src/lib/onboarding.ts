@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from './apiClient';
+import { onTermsGate } from './errors/termsGateEvent';
 import { useAuth } from './AuthContext';
 import { AUTH_API_URL, checkUnauthorizedAndRedirect, getMe, getMyTenants, type OnboardingProgress } from './auth';
 import { creationSessionsApi } from './builderforceApi';
@@ -206,6 +207,31 @@ export function useOnboardingState(): OnboardingState {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Terms are resolved once, when the web token appears — but the ACTIVE version
+  // can move while a session is open, and from that moment the API answers every
+  // non-exempt request with 428. Without this the gate kept rendering the chrome
+  // it had already decided on, so the user sat behind a wall of failing requests
+  // (one toast per background poll) with no way to reach the acceptance screen
+  // short of a reload. The transport turns that 428 into TERMS_GATE_EVENT; a
+  // re-read flips the phase to 'pending-terms' in place.
+  const gateReloading = useRef(false);
+  const needsTermsRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    needsTermsRef.current = needsTerms;
+  }, [needsTerms]);
+
+  useEffect(() => onTermsGate(() => {
+    // Every in-flight request 428s at once; one re-read settles them all, and
+    // once the gate is up there is nothing left to learn.
+    if (gateReloading.current || needsTermsRef.current === true) return;
+    gateReloading.current = true;
+    void load()
+      // A transient failure must not wedge the guard shut — the next gated
+      // request re-signals, and the gate tries again.
+      .catch(() => { /* status re-read failed; the next 428 retries */ })
+      .finally(() => { gateReloading.current = false; });
+  }), [load]);
 
   // Zero-setup onboarding, client half. The workspace and its starter project are
   // provisioned SERVER-side now (`ensureStarterWorkspace`, called by every signup

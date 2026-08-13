@@ -584,10 +584,22 @@ export function queryTabular(source: TabularSource, query: TabularQuery = {}): T
  * order, so a month series needs no separate sort key and a chart's x-axis is
  * correct by construction. UTC throughout: a report must not shift a
  * transaction into a different month because of the reader's timezone.
+ *
+ * ── WHY A BARE NUMBER IS REFUSED ─────────────────────────────────────────────
+ * `Date.parse` accepts "100" and "400" as YEARS, so time-bucketing a numeric
+ * column silently produced buckets like `100-01` and `400-01` — a plausible-looking
+ * monthly series assembled entirely from a revenue column somebody grouped by
+ * mistake. It never errored, which made it the worst kind of wrong: a chart with a
+ * sorted x-axis and no relationship to time.
+ *
+ * A four-digit value is still accepted, because a bare `year` column is a real and
+ * common shape. Anything else numeric now has to carry a date separator to be read
+ * as a date at all.
  */
 export function timeBucket(value: TabularCell | undefined, grain: TabularTimeGrain): string {
   const text = cellText(value).trim();
   if (!text) return '';
+  if (/^\d+$/.test(text) && text.length !== 4) return '';
   const parsed = Date.parse(text);
   if (Number.isNaN(parsed)) return '';
   const date = new Date(parsed);

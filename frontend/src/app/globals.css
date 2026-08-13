@@ -1624,57 +1624,65 @@ html[data-theme='light'] .nebula {
   outline: none;
 }
 
-/* Version + Terms/Privacy block in the sidebar footer (relocated from the old
-   global page footer). Sits under the Sign in / Get started CTAs. */
-.nav-legal {
+/* Version + Terms/Privacy strip, bottom-RIGHT corner of the frame (moved out of
+   the sidebar footer, which put it at the widest edge of the board). Last row of
+   `.app-frame`, in normal flow under the team roster, so it can never cover the
+   canvas. One line, right-aligned, separators drawn by CSS. */
+.legal-corner {
+  flex-shrink: 0;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 10px 4px;
-  margin-top: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px 10px;
+  padding: 4px var(--space-4);
+  background: var(--surface-sunken);
+  border-top: 1px solid var(--border-subtle);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--font-size-eyebrow);
+  line-height: 1.5;
 }
 
-/* A button, not a label: it opens the Product Updates panel, exactly as the
-   marketing footer's version does. Styled back down to plain text so the rail
-   reads the same as before it became clickable. */
-.nav-legal-version {
+/* A button, not a label: the version opens the Product Updates panel and the two
+   documents open the legal reader. Styled back down to plain text so the corner
+   stays chrome. */
+.legal-corner-link {
   color: var(--muted);
   background: none;
   border: none;
   padding: 0;
   font: inherit;
-  text-align: left;
   cursor: pointer;
 }
 
-.nav-legal-version:hover {
+.legal-corner-link + .legal-corner-link::before {
+  content: '·';
+  margin-right: 10px;
+  color: var(--border);
+}
+
+.legal-corner-link:hover {
   color: var(--accent);
   text-decoration: underline;
 }
 
-.nav-legal-links {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+.legal-corner-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-sm);
 }
 
-.nav-legal-link {
-  color: var(--text);
-  text-decoration: none;
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
+/* At 360px the three items wrap rather than pushing the frame's last row wide;
+   they stay right-aligned so the corner reads as one block. */
+@media (max-width: 480px) {
+  .legal-corner {
+    gap: 0 8px;
+    padding: 4px var(--space-3);
+  }
 
-.nav-legal-link:hover {
-  color: var(--accent);
-  text-decoration: underline;
+  .legal-corner-link + .legal-corner-link::before {
+    margin-right: 8px;
+  }
 }
 
 /* Round chevron handle that collapses/expands the sidebar. Pinned to the top

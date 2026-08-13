@@ -32,6 +32,7 @@ import {
 } from './auth';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { dispatchApiError } from './errors/apiErrorEvent';
+import { signalTermsGate } from './errors/termsGateEvent';
 import { LOCALE_HEADER, readLocaleCookie } from '@/i18n/config';
 
 export function getApiBaseUrl(): string {
@@ -163,6 +164,32 @@ export class ApiRequestError extends Error {
   }
 }
 
+interface ApiErrorBody {
+  error?: string;
+  code?: string;
+  message?: string;
+  details?: unknown;
+}
+
+/**
+ * The error envelope, parsed once.
+ *
+ * `read` clones the response, so the streaming transport — whose caller still
+ * owns the body — reports the same `code`/`message` as the JSON transports
+ * instead of a bare status line. Without the code it could not tell a fault from
+ * a gate signal, and a terms bump toasted every open stream.
+ */
+async function readErrorBody(res: Response): Promise<ApiErrorBody> {
+  return await res.clone().json().catch(() => ({})) as ApiErrorBody;
+}
+
+/** APIs return a stable machine-readable `error` plus a human-readable `message`
+ *  (for example the task Done gate). Prefer the explanation in the UI while
+ *  retaining `code` for diagnostics. */
+function errorMessage(body: ApiErrorBody, res: Response): string {
+  return body.message || body.error || res.statusText || `Request failed (${res.status})`;
+}
+
 /** The one place a non-ok response becomes a thrown Error + a global toast. */
 async function reportAndThrow(
   res: Response,
@@ -170,17 +197,14 @@ async function reportAndThrow(
   method: string,
   expectedErrors?: number[],
 ): Promise<never> {
-  const body = await res.json().catch(() => ({})) as {
-    error?: string;
-    code?: string;
-    message?: string;
-    details?: unknown;
-  };
-  // APIs commonly return a stable machine-readable `error` plus a human-readable
-  // `message` (for example the task Done gate). Prefer the explanation in the UI
-  // while retaining `code` for diagnostics.
-  const message = body.message || body.error || res.statusText || `Request failed (${res.status})`;
-  if (!expectedErrors?.includes(res.status)) {
+  const body = await readErrorBody(res);
+  const message = errorMessage(body, res);
+  // A terms bump is a GATE, not a fault — it routes the user to the acceptance
+  // screen rather than the support-ticket toast. Signalled before the
+  // `expectedErrors` check so the gate heals whichever call happens to hit it
+  // first, including one whose caller opted out of the error surface.
+  const gated = signalTermsGate(res.status, body.code);
+  if (!gated && !expectedErrors?.includes(res.status)) {
     dispatchApiError({
       method: method.toUpperCase(),
       url,
@@ -261,14 +285,23 @@ export async function apiRequestStream(path: string, opts: RequestOptions = {}):
   // so it throws here exactly as it does in the other two transports rather than
   // leaving each caller to remember the check.
   if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok && !expectedErrors?.includes(res.status)) {
-    dispatchApiError({
-      method: (init.method ?? 'GET').toUpperCase(),
-      url,
-      status: res.status,
-      message: res.statusText || 'Stream request failed',
-      requestId: res.headers.get('x-request-id') ?? undefined,
-    });
+  if (!res.ok) {
+    const body = await readErrorBody(res);
+    // Same gate handling as the JSON transports — this is the path the activity
+    // tracker's best-effort flush takes, and an un-recognised terms bump made it
+    // raise a "Stream request failed" toast every 15 seconds.
+    const gated = signalTermsGate(res.status, body.code);
+    if (!gated && !expectedErrors?.includes(res.status)) {
+      dispatchApiError({
+        method: (init.method ?? 'GET').toUpperCase(),
+        url,
+        status: res.status,
+        code: body.code,
+        message: errorMessage(body, res),
+        details: body.details,
+        requestId: res.headers.get('x-request-id') ?? undefined,
+      });
+    }
   }
   return res;
 }

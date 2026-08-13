@@ -5,7 +5,9 @@ import {
   STAGES,
   bottomNavFor,
   earnedRung,
-  groupsForStage
+  findActiveGroup,
+  groupsForStage,
+  navGroupsForAccountType
 } from './navGroups';
 import {
   FOOTER_COLUMNS,
@@ -244,6 +246,30 @@ describe('the public header has no second Home and no signup wall', () => {
 
   it('leads the signed-out bottom bar with the canvas offer, not a dashboard', () => {
     expect(bottomNavFor(true, false).map((i) => i.href)[0]).toBe('/create');
+  });
+});
+
+describe('the active destination is resolved against the visitor, not the builder', () => {
+  // The rail highlight, the shell panel's title and its index column all ask
+  // this one question. Asked of the builder registry it has no answer for a
+  // restricted account, and "no answer" is not visible as a crash — it is a rail
+  // with nothing lit and a panel titled "Panel".
+  it('resolves a sales associate on their own hub', () => {
+    const groups = navGroupsForAccountType(false, false, true);
+    expect(findActiveGroup('/sales', groups)?.id).toBe('sales');
+    // The builder registry is the wrong book to look it up in — and that is the
+    // defect this parameter exists to make impossible to reintroduce.
+    expect(findActiveGroup('/sales')).toBeUndefined();
+  });
+
+  it('resolves a freelancer on their own destinations', () => {
+    const groups = navGroupsForAccountType(true, false, false);
+    expect(findActiveGroup('/freelancer/timecard', groups)?.id).toBe('freelancer-timecard');
+  });
+
+  it('still answers for a builder without being told which groups', () => {
+    expect(findActiveGroup('/settings')?.id).toBe('settings');
+    expect(findActiveGroup('/settings/api-keys')?.id).toBe('settings');
   });
 });
 

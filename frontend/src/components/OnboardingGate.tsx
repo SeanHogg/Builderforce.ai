@@ -17,6 +17,7 @@
  */
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useOnboardingState, type ActiveTermsDoc } from '@/lib/onboarding';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import RoleChoiceScreen from '@/components/account/RoleChoiceScreen';
@@ -51,6 +52,7 @@ export default function OnboardingGate({ children, renderShell }: OnboardingGate
 }
 
 function GateSkeleton() {
+  const t = useTranslations('common');
   return (
     <div
       style={{
@@ -65,7 +67,7 @@ function GateSkeleton() {
         fontFamily: 'var(--font-body)',
       }}
     >
-      Loading…
+      {t('loading')}
     </div>
   );
 }
@@ -76,6 +78,8 @@ interface TermsAcceptanceScreenProps {
 }
 
 function TermsAcceptanceScreen({ terms, onAccept }: TermsAcceptanceScreenProps) {
+  const t = useTranslations('onboarding.terms');
+  const tCommon = useTranslations('common');
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +90,7 @@ function TermsAcceptanceScreen({ terms, onAccept }: TermsAcceptanceScreenProps) 
     try {
       await onAccept();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to accept terms');
+      setError(e instanceof Error ? e.message : t('acceptFailed'));
       setSubmitting(false);
     }
   };
@@ -133,10 +137,10 @@ function TermsAcceptanceScreen({ terms, onAccept }: TermsAcceptanceScreenProps) 
               fontWeight: 700,
             }}
           >
-            {terms.title} · v{terms.version}
+            {t('titleVersion', { title: terms.title, version: terms.version })}
           </h1>
           <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>
-            We updated our terms. Accept the current version to continue using your account.
+            {t('intro')}
           </p>
         </div>
 
@@ -185,7 +189,7 @@ function TermsAcceptanceScreen({ terms, onAccept }: TermsAcceptanceScreenProps) 
               style={{ marginTop: 3, accentColor: 'var(--coral-bright)' }}
             />
             <span>
-              I agree to the {terms.title} (v{terms.version}) and the Privacy Policy.
+              {t('agree', { title: terms.title, version: terms.version })}
             </span>
           </label>
 
@@ -208,7 +212,7 @@ function TermsAcceptanceScreen({ terms, onAccept }: TermsAcceptanceScreenProps) 
                 letterSpacing: '0.02em',
               }}
             >
-              {submitting ? 'Saving…' : 'Accept and continue'}
+              {submitting ? tCommon('saving') : t('accept')}
             </button>
           </div>
         </div>

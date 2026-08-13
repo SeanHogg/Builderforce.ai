@@ -11,20 +11,16 @@ import {
   earnedRung,
   findActiveGroup,
   groupsForStage,
-  navGroupsForAccountType,
   type NavGroup,
   type Stage,
 } from '@/lib/navGroups';
 import { isSeat, seatHueVar } from '@/lib/seats';
-import { useAvailableForHire, useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import { getStoredTenant, signInHref } from '@/lib/auth';
 import { ButtonLink } from '@/components/ui';
-import SidebarLegalMenu from './legal/SidebarLegalMenu';
 import SessionList from './SessionList';
 import { NavIcon } from './navigation/NavIcon';
 import { isStageRoute } from '@/lib/workbenchPolicy';
-import { useNavigationFeatures } from '@/lib/NavigationFeaturesContext';
-import { filterNavigationGroups } from '@/lib/navigationFeatures';
+import { useNavGroups } from '@/lib/destinations/useDestinations';
 
 /**
  * The left panel — the ARC (PRD 21 §3.2, §11.4.1).
@@ -144,16 +140,13 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
   const ts = useTranslations('sessions');
   const { user, isAuthenticated } = useAuth();
 
-  const isFreelancer = useIsFreelancer();
-  const availableForHire = useAvailableForHire();
-  const isSales = useIsSalesAssociate();
-  const { enabled } = useNavigationFeatures();
-  const allGroups = filterNavigationGroups(
-    navGroupsForAccountType(isFreelancer, availableForHire, isSales),
-    enabled,
-  );
-  const activeGroupId = findActiveGroup(pathname)?.id
-    ?? allGroups.find((g) => g.match.some((m) => pathname === m || pathname.startsWith(`${m}/`)))?.id;
+  const allGroups = useNavGroups();
+  // Resolved against THIS account's rows, so a sales or freelancer route
+  // highlights its own row. It used to ask the builder registry and fall back to
+  // a second, hand-rolled prefix match written right here — two matchers for one
+  // question, and the local one silently disagreed (no `/settings` exact-match
+  // carve-out, so `/settings/api-keys` resolved differently in each).
+  const activeGroupId = findActiveGroup(pathname, allGroups)?.id;
   const groups = allGroups.filter((g) => !g.superadminOnly || user?.isSuperadmin);
 
   // Progressive disclosure through the ONE helper (§11.4.4): a row is always
@@ -264,17 +257,16 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
           </div>
         </div>
 
-        {!collapsed && (
+        {/* The one thing a signed-out visitor's rail is missing: the way to keep
+            what they are making. Their board is real and local-first, so this is
+            an offer rather than a wall. The version + legal strip that used to
+            sit under it now lives in the frame's bottom-right corner
+            (`LegalCorner`), so the footer renders only when it has this to say. */}
+        {!collapsed && !isAuthenticated && (
           <div className="nav-footer">
-            {/* The one thing a signed-out visitor's rail is missing: the way to
-                keep what they are making. Their board is real and local-first,
-                so this is an offer rather than a wall. */}
-            {!isAuthenticated && (
-              <ButtonLink href={signInHref(pathname)} variant="primary" size="sm" block>
-                {ts('signInToKeep')}
-              </ButtonLink>
-            )}
-            <SidebarLegalMenu collapsed={collapsed} />
+            <ButtonLink href={signInHref(pathname)} variant="primary" size="sm" block>
+              {ts('signInToKeep')}
+            </ButtonLink>
           </div>
         )}
       </nav>

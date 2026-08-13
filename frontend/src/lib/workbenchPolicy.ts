@@ -38,11 +38,23 @@ const STAGE_PATTERNS: RegExp[] = [
 /**
  * App-shell routes that still own the whole screen. A single Project keeps its
  * dedicated editor for now; build workspaces are opened from Canvas objects.
+ *
+ * `/sales/*` — but NOT `/sales`. The pattern here used to be `/^\/sales(?:\/|$)/`,
+ * written when `/sales` WAS the launcher: it provisioned a workspace, seeded the
+ * prescriptive canvas and redirected, so it owned the screen by definition. The
+ * launcher moved to `/sales/canvas` and `/sales` became the associate's HUB — a
+ * referral link to copy, a lead to check, a payout to chase — which is the
+ * definition of a thing you consult without leaving what you were doing. The
+ * pattern did not move with it, so the hub kept unmounting the board it is
+ * supposed to open over, and both its own doc comment and the route's said
+ * otherwise. Its two sub-routes stay here: `/sales/canvas` and
+ * `/sales/referral-claim` are transient full-screen launchers that redirect, and
+ * a redirect has nothing to put in a panel.
  */
 const FULL_WIDTH_PATTERNS: RegExp[] = [
   /^\/projects\/[^/]+$/,
   /^\/freelancer(?:\/|$)/,
-  /^\/sales(?:\/|$)/,
+  /^\/sales\/.+/,
 ];
 
 /** True when this route puts a board on the stage rather than rendering a page. */

@@ -10652,6 +10652,13 @@
       "gigsHint": "Vacantes que encajan con tus habilidades y tu tarifa.",
       "timecard": "Registra tus horas",
       "timecardHint": "Envía partes de horas y controla lo que te han pagado."
+    },
+    "terms": {
+      "titleVersion": "{title} · v{version}",
+      "intro": "Hemos actualizado nuestros términos. Acepta la versión actual para seguir usando tu cuenta.",
+      "agree": "Acepto los {title} (v{version}) y la Política de privacidad.",
+      "accept": "Aceptar y continuar",
+      "acceptFailed": "No se pudieron aceptar los términos"
     }
   },
   "soc2": {

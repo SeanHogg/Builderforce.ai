@@ -535,11 +535,24 @@ export function isFreelancerAllowedPath(pathname: string): boolean {
   return FREELANCER_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-/** Longest-prefix match so /create/build resolves to Canvas, /settings/api-keys to Settings, etc. */
-export function findActiveGroup(pathname: string): NavGroup | undefined {
+/**
+ * Longest-prefix match so /create/build resolves to Canvas, /settings/api-keys to
+ * Settings, etc.
+ *
+ * `groups` defaults to the BUILDER registry, which is the right answer for a
+ * question about the product's own routes (which public page carries in-app
+ * tabs). It is a parameter because it is NOT the right answer for a question
+ * about a VISITOR — a sales associate navigates `SALES_NAV_GROUPS` and a
+ * freelancer `FREELANCER_NAV_GROUPS`, so resolving their route against the
+ * builder registry returns nothing and every consumer of "which destination am I
+ * on" degrades: the rail loses its highlight, the shell panel opens with the
+ * generic "Panel" title, and the index column disappears. Callers that know the
+ * account pass its groups (see `useNavGroups`).
+ */
+export function findActiveGroup(pathname: string, groups: readonly NavGroup[] = NAV_GROUPS): NavGroup | undefined {
   let best: NavGroup | undefined;
   let bestLen = -1;
-  for (const g of NAV_GROUPS) {
+  for (const g of groups) {
     for (const m of g.match) {
       if (pathname === m || pathname.startsWith(`${m}/`) || (m !== '/settings' && pathname.startsWith(m))) {
         if (m.length > bestLen) { best = g; bestLen = m.length; }
