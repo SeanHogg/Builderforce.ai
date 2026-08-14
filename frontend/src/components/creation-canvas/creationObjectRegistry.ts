@@ -538,10 +538,18 @@ export function creationObjectMutableFields(kind: CreationObjectKind): readonly 
  */
 const SHELL_IS_LEGITIMATE: ReadonlySet<CreationObjectKind> = new Set<CreationObjectKind>([
   'build', 'chat', 'dataset', 'frame', 'comment', 'selection', 'timer', 'terminal',
-  'browser', 'url', 'file', 'repository', 'service', 'diagnostics', 'inbox', 'email',
+  'browser', 'url', 'file', 'repository', 'service', 'diagnostics', 'inbox',
   // A social feed and a pinned post are READ from connected accounts, exactly as an
   // inbox is — their content arrives from the network, never from an authored patch.
   'socialFeed', 'socialPost',
+  //
+  // `email` is deliberately NOT here any more. It was, on the same read-from-the-network
+  // reasoning — but a pinned message is built by `canvas_pin_email` from what the
+  // mailbox returned and never passes through this guard at all. The only path that
+  // does is `canvas_add_object`, which is the AUTHORED one: "write an email to my boss
+  // asking for a raise". The exemption therefore protected nothing and excused the one
+  // case it should have caught (measured 2026-08-14, ui 2026.8.15: an email tile whose
+  // body read "No body").
   // A run is written BY a run. An empty one is the honest state of a suite that has
   // been dispatched and has not reported yet — the one case where a shell is the
   // truth rather than work handed back to the user.
@@ -575,6 +583,39 @@ export function creationObjectContentFields(kind: CreationObjectKind): readonly 
 }
 
 /**
+ * Fields that ARE the work for their kind: at least one must be written, however much
+ * else the patch carries.
+ *
+ * The rule below passes an object as soon as ANY one content field is populated, which
+ * is right for a kpi (a `value` is the point) and wrong for a message, where the field a
+ * model reliably fills is the SUBJECT — the envelope, not the letter. Measured
+ * 2026-08-14 (ui 2026.8.15): "help me write an email to my boss asking for a raise"
+ * produced an email tile rendering "No body", because `subject` alone cleared the guard.
+ * The same shape is already on the record one kind over — the 2026-08-12 sweep listed
+ * "an emailTemplate with no body" among its eight title-only objects.
+ *
+ * Registry DATA, like everything else here: a kind is covered by being listed, not by a
+ * branch in the checker.
+ */
+const ESSENTIAL_CONTENT_FIELDS: Partial<Record<CreationObjectKind, readonly string[]>> = {
+  email: ['bodyText'],
+  emailTemplate: ['bodyHtml'],
+  // A campaign may carry its own copy or reference an authored template, but it cannot
+  // have neither and still be something anyone could send.
+  emailCampaign: ['bodyHtml', 'templateId'],
+};
+
+/** Written, as opposed to present-but-blank. Shared by both checks below so "authored"
+ *  means one thing. */
+function isAuthored(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value as object).length > 0;
+  return true;
+}
+
+/**
  * Why this authored patch would land as an EMPTY SHELL, or null when it carries work.
  *
  * ── THE DEFECT THIS EXISTS TO STOP ───────────────────────────────────────────────
@@ -596,17 +637,13 @@ export function creationObjectContentFields(kind: CreationObjectKind): readonly 
  */
 export function emptyShellProblem(kind: CreationObjectKind, authored: Record<string, unknown>): string | null {
   if (SHELL_IS_LEGITIMATE.has(kind)) return null;
+  const essential = ESSENTIAL_CONTENT_FIELDS[kind];
+  if (essential && !essential.some((field) => isAuthored(authored[field]))) {
+    return `A ${kind} without ${essential.join(' or ')} is an empty shell — a subject line is the envelope, not the letter, and the user cannot send or keep what was never written. Send the full authored message in fields.${essential[0]}.`;
+  }
   const contentFields = creationObjectContentFields(kind);
   if (contentFields.length === 0) return null;
-  const written = contentFields.filter((field) => {
-    const value = authored[field];
-    if (value == null) return false;
-    if (typeof value === 'string') return value.trim().length > 0;
-    if (Array.isArray(value)) return value.length > 0;
-    if (typeof value === 'object') return Object.keys(value as object).length > 0;
-    return true;
-  });
-  if (written.length > 0) return null;
+  if (contentFields.some((field) => isAuthored(authored[field]))) return null;
   return `A ${kind} with only a title is an empty shell — it hands the work back to the user instead of doing it. Send the authored content in fields: ${contentFields.slice(0, 12).join(', ')}.`;
 }
 

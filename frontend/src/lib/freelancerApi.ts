@@ -339,7 +339,6 @@ export async function getMyEmbedToken(kind: 'profile' | 'resume' = 'profile'): P
 export interface TalentFilters { q?: string; discipline?: string; skill?: string; minRate?: number; maxRate?: number; sort?: string; page?: number; pageSize?: number }
 
 export async function listFreelancers(filters: TalentFilters = {}): Promise<{ items: FreelancerProfile[]; total: number; page: number; pageSize: number }> {
-  const token = getStoredWebToken();
   const p = new URLSearchParams();
   if (filters.q) p.set('q', filters.q);
   if (filters.discipline) p.set('discipline', filters.discipline);
@@ -355,7 +354,6 @@ export async function listFreelancers(filters: TalentFilters = {}): Promise<{ it
 }
 
 export async function getFreelancer(userId: string): Promise<FreelancerProfile> {
-  const token = getStoredWebToken();
   const res = await apiRequestStream(`/api/freelancers/${userId}`, { auth: 'web' });
   return jsonOrThrow<FreelancerProfile>(res, 'Failed to load freelancer');
 }
@@ -453,13 +451,11 @@ export async function listJobs(filters: { q?: string; discipline?: string; skill
   if (filters.q) p.set('q', filters.q);
   if (filters.discipline) p.set('discipline', filters.discipline);
   if (filters.skill) p.set('skill', filters.skill);
-  const token = getStoredWebToken();
   const res = await apiRequestStream(`/api/jobs${p.toString() ? `?${p}` : ''}`, { auth: 'web' });
   return jsonOrThrow<JobPosting[]>(res, 'Failed to load jobs');
 }
 
 export async function getJob(id: string): Promise<JobPosting> {
-  const token = getStoredWebToken();
   const res = await apiRequestStream(`/api/jobs/${id}`, { auth: 'web' });
   return jsonOrThrow<JobPosting>(res, 'Failed to load job');
 }

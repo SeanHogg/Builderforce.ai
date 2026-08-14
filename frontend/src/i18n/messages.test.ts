@@ -27,7 +27,7 @@ import {
   destTaglineKey,
   destTitleKey
 } from '@/lib/publicDestinations';
-import { FAMILIES, FAMILY_IDS } from '@/lib/marketplaceFamilies';
+import { FAMILIES, FAMILY_IDS, kindLabelKey } from '@/lib/marketplaceFamilies';
 import { RESUME_TEMPLATES } from '@/lib/canvasResume';
 
 import { listWidgets } from '@/lib/widgets/registry';
@@ -185,10 +185,16 @@ describe('message catalogs', () => {
       ...bottomNavFor(true, false, true),
       ...bottomNavFor(true, false, false, true),
     ];
+    // A kind chip's label may come from either the family bar's copy or the
+    // canvas listing vocabulary, so the key is taken from `kindLabelKey` — the
+    // same derivation the storefront renders with — rather than assumed to sit
+    // under `marketplace.family.kind.*`.
     const familyKeys = FAMILY_IDS.flatMap((id) => {
       const family = FAMILIES[id];
-      return [family.labelKey, family.publishKey, family.noteKey, ...family.kinds.map((kind) => `kind.${kind}`)]
-        .map((key) => `marketplace.family.${key}`);
+      return [
+        ...[family.labelKey, family.publishKey, family.noteKey].map((key) => `marketplace.family.${key}`),
+        ...family.kinds.map(kindLabelKey),
+      ];
     });
     const panelKeys = [
       ...Object.values(AI_INSIGHT_PANELS).flatMap((panel) => [`insights.aihub.${panel.titleKey}`, `insights.aihub.${panel.descKey}`]),

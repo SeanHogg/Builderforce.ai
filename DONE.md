@@ -1,3 +1,40 @@
+## RESOLVED 2026-08-14 — `/marketplace` filed support tickets about its own logged-out visitors
+
+Reported as a support ticket: `GET /api/creation-listings/earnings` → **401 "Missing or malformed
+Authorization header"**, from `https://builderforce.ai/marketplace`. Nothing was broken for the visitor;
+the page was reporting *itself*. One root cause, three surfaces — a component that self-loads a
+token-scoped read on a page anyone may browse.
+
+The failure mode is specifically hard to notice: each call site already had a `catch` that swallowed the
+error and rendered the empty state, so the UI looked correct. But `dispatchApiError` fires inside the
+transport, *before* the throw the caller catches — so a caller-side `.catch(() => [])` suppresses the data
+and not the toast. The only visible symptom was a support ticket.
+
+- **`SellerEarnings` (the reported one).** Mounted unconditionally at the top of `/marketplace`, so it fired
+  `creationListingApi.mine()` + `.earnings()` on *every* page load, signed in or not. Now gated on
+  `hasTenant`. Gating on `hasTenant` rather than "signed in" is deliberate and matches the gates the same
+  page already applies to its other tenant-scoped fetches: an authenticated-but-tenantless freelancer has a
+  web token and still 401s on a workspace endpoint.
+- **`NotificationsPanel` — the expensive one.** Self-loads `/api/notifications` (`auth: 'web'`) **and polls
+  it every 30 seconds**, so a logged-out visitor filed a fresh ticket twice a minute for as long as the tab
+  stayed open. Gated inside the panel rather than at its call sites — it has three (marketplace gigs,
+  `/freelancer/workspace`, `TalentView`), two of them inside the public marketplace, and fixing it at the
+  primitive is what stops a fourth surface reintroducing it.
+- **`MarketplaceGigsSection`.** All three reads (`listJobs`, `listMyProposals`, `listMyEngagements`) are
+  `auth: 'web'` — "open jobs" included, since who may bid is decided per viewer. Moving this surface *into*
+  the public marketplace is what made that load-bearing. A signed-out visitor now gets the shared
+  `GuestSignupCta` (new `freelancer.gigs.signedOut{Title,Body}` in all five catalogs), which is the actual
+  answer to "find work" rather than three 401s behind an empty list.
+- **Regression test** `SellerEarnings.test.tsx` asserts on the **calls**, not the render — the panel renders
+  nothing either way, so a render assertion passes against the bug. Verified by mutation: with the gate
+  disabled the "asks the API for nothing at all" case fails.
+- **Dead code removed** — four `const token = getStoredWebToken()` assignments in `freelancerApi.ts`
+  (`listFreelancers`, `getFreelancer`, `listJobs`, `getJob`), unused since `auth: 'web'` moved token handling
+  into the transport. The one real use at line 413 stays.
+
+Checked and found already correct: `openPublishPanel` (guards with `requireAccount` before the publish
+panel can mount), `KnowledgeMarketSection`, and the page's own `hasTenant`-gated agent/assignment fetches.
+
 ## RESOLVED 2026-08-14 — two frontend deploys failed at the far end of a 5-minute build; both guards now answer in milliseconds
 
 Back-to-back "Deploy frontend" failures, each spending four to five minutes before reporting. Neither was

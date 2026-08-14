@@ -206,6 +206,7 @@ jobs:
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
 
       - name: Verify the endpoint is live before advertising it
+        id: verify
         run: |
           # A registry listing pointing at a dead endpoint is worse than no
           # listing: every client that discovers it fails on first connect.
@@ -223,13 +224,18 @@ jobs:
               -H 'content-type: application/json' \
               -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' 2>curl-error.txt || true)
             if [ "$code" = "401" ]; then break; fi
+            # Edge mitigation is a property of this runner's IP, not of timing.
+            # Retrying it just burns 30s to reach the same verdict.
+            if grep -qi '^cf-mitigated:' headers.txt; then break; fi
             if [ "$attempt" -lt 3 ]; then sleep 15; fi
           done
 
           if [ "$code" = "401" ]; then
             echo "POST /mcp answered 401 — the route is mounted and challenges as server.json documents."
+            echo "publish=true" >>"$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "publish=false" >>"$GITHUB_OUTPUT"
 
           # Whatever went wrong, say what the endpoint ACTUALLY answered. A bare
           # status code cannot distinguish an unmounted route from an edge that
@@ -250,15 +256,62 @@ jobs:
           # hosted agents, every server-side MCP client. Publishing under that
           # condition advertises a URL that answers interactive-challenge HTML to
           # everyone who discovers it.
+          # This branch is BLOCKED, not BROKEN, and the difference decides whether
+          # the release goes red. The zone setting behind it needs Cloudflare
+          # dashboard access that no credential in this repo carries, so failing
+          # here would paint every push to main red for a condition this workflow
+          # cannot clear — and a permanently-red release is how a genuine
+          # regression in deploy-api or deploy-frontend goes unnoticed. So: warn
+          # loudly, refuse to publish, and let the release stand. The step summary
+          # keeps it in front of a human on EVERY run rather than only in a log
+          # nobody opens once they learn this job is always red.
+          #
+          # Any OTHER unexpected status still fails hard below — an unmounted route
+          # or a 500 IS broken, and nothing external is stopping us from fixing it.
           if grep -qi '^cf-mitigated:' headers.txt; then
-            echo "::error::Cloudflare served a $code managed challenge for https://api.builderforce.ai/mcp. The Worker is probably FINE — mitigation is scored on caller IP, so the same request answers 401 from a laptop and is challenged from this runner's datacenter ASN. That is exactly the audience of this listing (Anthropic connectors, hosted agents, AWS, every server-side MCP client), so publishing would advertise a URL that answers challenge HTML to everyone who discovers it. The fix is the ZONE, not this check, and the two causes have DIFFERENT remedies: Bot Fight Mode (free) takes no exceptions and must be turned OFF, while Super Bot Fight Mode (Pro+) needs a skip rule naming the http_request_sbfm phase. Run 'node scripts/cloudflare-bot-exception.mjs' to read which one is on, then '--apply'. Not publishing."
-            exit 1
+            echo "::warning::BLOCKED (not published): Cloudflare served a $code managed challenge for https://api.builderforce.ai/mcp. The Worker is fine; the zone is challenging this runner's datacenter IP. Fix the zone, then re-run. See the job summary."
+            {
+              echo "### ⚠️ MCP Registry listing NOT published"
+              echo
+              echo "\`POST https://api.builderforce.ai/mcp\` answered **$code** with a \`cf-mitigated\` managed challenge."
+              echo
+              echo "**The Worker is fine.** Mitigation is scored on caller IP: the same request answers \`401\` from a"
+              echo "laptop and is challenged from this runner's datacenter ASN. That is precisely the audience of this"
+              echo "listing — Anthropic connectors, hosted agents, AWS, every server-side MCP client — so publishing"
+              echo "would advertise a URL that answers challenge HTML to everyone who discovers it."
+              echo
+              echo "This does **not** fail the release: the remedy is a Cloudflare zone setting that no credential in"
+              echo "this repo can change. It will keep appearing here until someone clears it."
+              echo
+              echo "Four settings produce this same header, with **different** remedies:"
+              echo
+              echo "| Cause | Remedy |"
+              echo "|---|---|"
+              echo "| Bot Fight Mode (free) | Turn it **off** — it runs outside the Ruleset Engine and skip rules have no effect on it |"
+              echo "| Super Bot Fight Mode (Pro+) | Skip rule naming the \`http_request_sbfm\` phase |"
+              echo "| Security Level \`high\`/\`under_attack\` | Skip the \`securityLevel\` product |"
+              echo "| Browser Integrity Check | Skip the \`bic\` product |"
+              echo
+              echo "\`\`\`"
+              echo "node scripts/cloudflare-bot-exception.mjs           # read which one is on"
+              echo "node scripts/cloudflare-bot-exception.mjs --apply   # apply the matching remedy"
+              echo "\`\`\`"
+              echo
+              echo "Needs a token scoped to the \`builderforce.ai\` zone with Zone Settings:Edit + WAF:Edit."
+              echo "Tracked in \`ROADMAP.md\` → Platform → *Cloudflare serves a managed challenge to every datacenter caller*."
+            } >>"$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
 
           echo "::error::https://api.builderforce.ai/mcp answered $code, expected 401. Not publishing."
           exit 1
 
+      # The verify step now exits 0 on the blocked-by-zone path, so this gate is
+      # what actually stops the publish. Without it, "warn instead of fail" would
+      # silently become "publish anyway" — the exact outcome the check exists to
+      # prevent.
       - name: Publish server.json
+        if: steps.verify.outputs.publish == 'true'
         run: |
           name=$(jq -r '.name' server.json)
           version=$(jq -r '.version' server.json)

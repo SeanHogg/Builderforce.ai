@@ -3358,6 +3358,7 @@
     "installs": "{count, plural, =0 {暂无安装} other {# 次安装}}",
     "marketTitle": "出售的知识与 SOP",
     "marketSubtitle": "将现成的 SOP、流程和文档安装到你的工作区。",
+    "marketEmpty": "这里还没有任何在售内容。从「知识」中发布一份文档，成为第一个。",
     "free": "免费",
     "addToKnowledge": "添加到我的知识库",
     "buy": "购买",
@@ -8333,7 +8334,9 @@
       "tabEngagements": "我的合作",
       "accept": "接受",
       "decline": "拒绝",
-      "clientRatingTip": "来自曾合作自由职业者的客户评分"
+      "clientRatingTip": "来自曾合作自由职业者的客户评分",
+      "signedOutTitle": "你的提案保存在你的账户中",
+      "signedOutBody": "浏览公开职位无需账户。免费创建一个账户即可投标，并在此跟踪你的提案与合作项目。"
     },
     "timecard": {
       "title": "工时卡",
@@ -8535,8 +8538,7 @@
         "model": "模型",
         "skill": "技能",
         "persona": "角色",
-        "knowledge": "知识",
-        "all": "全部"
+        "knowledge": "知识"
       },
       "note": {
         "talent": "人与零工。对一次会话而言，人和智能体是同类参与者，但并非同类listing——一个有档期与费率，另一个有价格与席位。",
@@ -17385,6 +17387,35 @@
         "full": "任何人都可完整使用；付费是为了支持你并保留副本。",
         "preview": "访客只能看到预览，购买后才能使用完整版本。"
       }
+    },
+    "email": {
+      "mailbox": "邮箱",
+      "receivedLabel": "已收到",
+      "readyToSend": "可以发送",
+      "notConnected": "未连接",
+      "loadingMailboxes": "正在检查已连接的邮箱…",
+      "anonymousHint": "此画布仅保存在本设备上，没有关联账户。免费注册即可连接邮箱并发送此邮件。",
+      "sendsFrom": "发件邮箱",
+      "chooseMailbox": "选择邮箱",
+      "noSendingMailbox": "已连接邮箱，但没有一个获准发送。请在集成设置中开启发送权限。",
+      "noMailboxHint": "尚未连接邮箱，因此暂时无法发送此邮件。连接一个邮箱即可用你自己的地址发送。",
+      "connectProvider": "连接 {provider}",
+      "connectFailed": "无法连接该邮箱。",
+      "integrationSettings": "集成设置",
+      "to": "收件人",
+      "toPlaceholder": "name@company.com, second@company.com",
+      "from": "发件人",
+      "fromPlaceholder": "由所选发件邮箱决定",
+      "subject": "主题",
+      "subjectPlaceholder": "这封邮件的主题",
+      "body": "正文",
+      "bodyPlaceholder": "在此撰写邮件正文。",
+      "send": "发送邮件",
+      "sending": "正在发送…",
+      "sent": "已发送。",
+      "sentStatus": "已发送",
+      "sendFailed": "该邮件发送失败。",
+      "openInProvider": "在邮件服务商中打开"
     }
   },
   "canvasCommands": {
@@ -19090,7 +19121,7 @@
   "marketplaceCreations": {
     "heading": "在此构建",
     "blurb": "用户在画板上创建的游戏、应用、工作流与手册 —— 取用前可先试用。",
-    "allKinds": "全部",
+    "publishOnCanvas": "在画布上创建一个",
     "empty": "暂无已发布内容。在画板上创建作品并出售吧。",
     "free": "免费",
     "installs": "{count} 次安装",

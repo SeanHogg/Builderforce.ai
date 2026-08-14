@@ -3358,6 +3358,7 @@
     "installs": "{count, plural, =0 {sin instalaciones} one {# instalación} other {# instalaciones}}",
     "marketTitle": "Conocimiento y SOPs a la venta",
     "marketSubtitle": "Instala SOPs, procesos y documentos listos para usar en tu espacio de trabajo.",
+    "marketEmpty": "Aquí todavía no hay nada a la venta. Publica un documento desde Conocimiento y sé el primero.",
     "free": "Gratis",
     "addToKnowledge": "Añadir a mi Conocimiento",
     "buy": "Comprar",
@@ -8333,7 +8334,9 @@
       "tabEngagements": "Mis contrataciones",
       "accept": "Aceptar",
       "decline": "Rechazar",
-      "clientRatingTip": "Valoración del cliente por freelancers que trabajaron con él"
+      "clientRatingTip": "Valoración del cliente por freelancers que trabajaron con él",
+      "signedOutTitle": "Tus propuestas están en tu cuenta",
+      "signedOutBody": "Explorar los empleos abiertos no requiere cuenta. Crea una gratis para postularte y seguir aquí tus propuestas y contrataciones."
     },
     "timecard": {
       "title": "Hoja de horas",
@@ -8535,8 +8538,7 @@
         "model": "Modelos",
         "skill": "Habilidades",
         "persona": "Perfiles",
-        "knowledge": "Conocimiento",
-        "all": "Todo"
+        "knowledge": "Conocimiento"
       },
       "note": {
         "talent": "Personas y encargos. Para una sesión, una persona y un agente son el mismo tipo de participante, pero no el mismo tipo de anuncio: una tiene disponibilidad y tarifa; el otro, precio y puesto.",
@@ -17385,6 +17387,35 @@
         "full": "Cualquiera puede usarlo por completo; pagar es la forma de apoyarte y conservar una copia.",
         "preview": "Los visitantes ven una vista previa; la versión funcional requiere compra."
       }
+    },
+    "email": {
+      "mailbox": "Buzón",
+      "receivedLabel": "Recibido",
+      "readyToSend": "Listo para enviar",
+      "notConnected": "Sin conectar",
+      "loadingMailboxes": "Comprobando los buzones conectados…",
+      "anonymousHint": "Este lienzo se guarda en este dispositivo y no tiene ninguna cuenta detrás. Regístrate gratis para conectar un buzón y enviar este correo.",
+      "sendsFrom": "Se envía desde",
+      "chooseMailbox": "Elige un buzón",
+      "noSendingMailbox": "Hay un buzón conectado, pero ninguno tiene permiso para enviar. Activa el envío en los ajustes de integraciones.",
+      "noMailboxHint": "No hay ningún buzón conectado, así que este correo todavía no se puede enviar. Conecta uno para enviarlo desde tu propia dirección.",
+      "connectProvider": "Conectar {provider}",
+      "connectFailed": "No se ha podido conectar ese buzón.",
+      "integrationSettings": "Ajustes de integraciones",
+      "to": "Para",
+      "toPlaceholder": "nombre@empresa.com, segundo@empresa.com",
+      "from": "De",
+      "fromPlaceholder": "Lo define el buzón desde el que envías",
+      "subject": "Asunto",
+      "subjectPlaceholder": "De qué trata el mensaje",
+      "body": "Cuerpo",
+      "bodyPlaceholder": "Escribe aquí el mensaje.",
+      "send": "Enviar correo",
+      "sending": "Enviando…",
+      "sent": "Enviado.",
+      "sentStatus": "Enviado",
+      "sendFailed": "No se ha podido enviar ese correo.",
+      "openInProvider": "Abrir en tu proveedor de correo"
     }
   },
   "canvasCommands": {
@@ -19090,7 +19121,7 @@
   "marketplaceCreations": {
     "heading": "Hecho aquí",
     "blurb": "Juegos, aplicaciones, flujos y manuales creados en el lienzo: pruébalos antes de llevarte uno.",
-    "allKinds": "Todo",
+    "publishOnCanvas": "Crea uno en el lienzo",
     "empty": "Todavía no hay nada publicado. Crea algo en el lienzo y véndelo.",
     "free": "Gratis",
     "installs": "{count} instalaciones",

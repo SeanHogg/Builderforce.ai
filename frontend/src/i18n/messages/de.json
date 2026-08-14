@@ -3358,6 +3358,7 @@
     "installs": "{count, plural, =0 {keine Installationen} one {# Installation} other {# Installationen}}",
     "marketTitle": "Wissen & SOPs zu verkaufen",
     "marketSubtitle": "Installieren Sie fertige SOPs, Prozesse und Dokumente in Ihrem Arbeitsbereich.",
+    "marketEmpty": "Hier steht noch nichts zum Verkauf. Veröffentliche ein Dokument aus Wissen und sei der Erste.",
     "free": "Kostenlos",
     "addToKnowledge": "Zu meinem Wissen hinzufügen",
     "buy": "Kaufen",
@@ -8333,7 +8334,9 @@
       "tabEngagements": "Meine Engagements",
       "accept": "Annehmen",
       "decline": "Ablehnen",
-      "clientRatingTip": "Kundenbewertung von Freelancern, die mit ihm gearbeitet haben"
+      "clientRatingTip": "Kundenbewertung von Freelancern, die mit ihm gearbeitet haben",
+      "signedOutTitle": "Deine Angebote liegen in deinem Konto",
+      "signedOutBody": "Offene Jobs kannst du ohne Konto durchsuchen. Erstelle ein kostenloses Konto, um zu bieten und deine Angebote und Engagements hier zu verfolgen."
     },
     "timecard": {
       "title": "Zeiterfassung",
@@ -8535,8 +8538,7 @@
         "model": "Modelle",
         "skill": "Skills",
         "persona": "Personas",
-        "knowledge": "Wissen",
-        "all": "Alle"
+        "knowledge": "Wissen"
       },
       "note": {
         "talent": "Menschen und Aufträge. Für eine Sitzung sind Mensch und Agent dieselbe Art Teilnehmer, aber nicht dieselbe Art Eintrag: der eine hat Verfügbarkeit und Stundensatz, der andere Preis und Sitz.",
@@ -17385,6 +17387,35 @@
         "full": "Alle können es vollständig nutzen; die Zahlung unterstützt dich und sichert eine Kopie.",
         "preview": "Besucher sehen eine Vorschau; die funktionierende Version erfordert einen Kauf."
       }
+    },
+    "email": {
+      "mailbox": "Postfach",
+      "receivedLabel": "Empfangen",
+      "readyToSend": "Bereit zum Senden",
+      "notConnected": "Nicht verbunden",
+      "loadingMailboxes": "Verbundene Postfächer werden geprüft…",
+      "anonymousHint": "Diese Arbeitsfläche ist nur auf diesem Gerät gespeichert und keinem Konto zugeordnet. Registriere dich kostenlos, um ein Postfach zu verbinden und diese E-Mail zu senden.",
+      "sendsFrom": "Sendet von",
+      "chooseMailbox": "Postfach auswählen",
+      "noSendingMailbox": "Ein Postfach ist verbunden, aber keines darf senden. Aktiviere den Versand in den Integrationseinstellungen.",
+      "noMailboxHint": "Es ist kein Postfach verbunden, daher kann diese E-Mail noch nicht gesendet werden. Verbinde eines, um sie von deiner eigenen Adresse zu senden.",
+      "connectProvider": "{provider} verbinden",
+      "connectFailed": "Dieses Postfach konnte nicht verbunden werden.",
+      "integrationSettings": "Integrationseinstellungen",
+      "to": "An",
+      "toPlaceholder": "name@firma.de, zweite@firma.de",
+      "from": "Von",
+      "fromPlaceholder": "Ergibt sich aus dem sendenden Postfach",
+      "subject": "Betreff",
+      "subjectPlaceholder": "Worum es in der Nachricht geht",
+      "body": "Text",
+      "bodyPlaceholder": "Schreibe hier die eigentliche Nachricht.",
+      "send": "E-Mail senden",
+      "sending": "Wird gesendet…",
+      "sent": "Gesendet.",
+      "sentStatus": "Gesendet",
+      "sendFailed": "Diese E-Mail konnte nicht gesendet werden.",
+      "openInProvider": "Beim E-Mail-Anbieter öffnen"
     }
   },
   "canvasCommands": {
@@ -19090,7 +19121,7 @@
   "marketplaceCreations": {
     "heading": "Hier gebaut",
     "blurb": "Spiele, Apps, Workflows und Playbooks, die Menschen auf dem Canvas gebaut haben — probiere sie aus, bevor du eines mitnimmst.",
-    "allKinds": "Alles",
+    "publishOnCanvas": "Erstelle eins auf dem Canvas",
     "empty": "Noch nichts veröffentlicht. Baue etwas auf dem Canvas und verkaufe es.",
     "free": "Kostenlos",
     "installs": "{count} Installationen",

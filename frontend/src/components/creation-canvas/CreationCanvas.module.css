@@ -1241,6 +1241,16 @@
 .workbenchHeading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .workbenchHeading strong { color:var(--canvas-ink); font-size:12px; }
 .workbenchHeading span { color:var(--canvas-muted); font-size:9px; }
+/* The boxed inspector section `.agentWorkbench` has always been. The box is not
+   agent-specific and new sections should not have to say "agent" to inherit it, so the
+   neutral name COMPOSES the original rather than duplicating it — one set of rules,
+   one place where both themes are declared (see the theme block below). */
+.inspectorSection { composes: agentWorkbench; }
+.inspectorSectionHeading { composes: workbenchHeading; }
+/* A quiet trailing link out of a section — integration settings, the provider's own
+   copy of a message. Sized as body text so it stays a tap target on a phone. */
+.inspectorSettingsLink { justify-self:start; padding:6px 0; color:var(--canvas-accent); font-size:11px; font-weight:650; text-decoration:none; }
+.inspectorSettingsLink:hover,.inspectorSettingsLink:focus-visible { text-decoration:underline; }
 .knowledgeList { display:flex; flex-wrap:wrap; gap:5px; }
 .knowledgeList span { padding:4px 6px; border-radius:var(--radius-full); background:#e8f0ff; color:var(--canvas-muted); font-size:9px; }
 .testResponse { display:grid; gap:4px; padding:8px; border-radius:var(--radius-sm); background:#fff; border:1px solid var(--canvas-line); }

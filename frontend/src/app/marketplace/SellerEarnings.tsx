@@ -15,11 +15,20 @@
  * Renders nothing at all for a visitor who has published nothing: an empty
  * earnings panel on a marketplace is furniture, and this component decides that
  * for itself rather than taking a `hasListings` prop from the page.
+ *
+ * It decides its own AUTH the same way, and must: `/marketplace` is a page anyone
+ * may browse, while everything this panel reads is tenant-scoped and behind the
+ * workspace JWT. Asking without one is not a read that might fail — it is a
+ * guaranteed 401 that raises the global error toast and files a support ticket
+ * about a logged-out stranger looking at the shop. Gating on `hasTenant` (not
+ * merely "signed in") also covers the authenticated-but-tenantless freelancer,
+ * which is the same reason the page's other tenant-scoped fetches gate on it.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { useAuth } from '@/lib/AuthContext';
 import { useConfirm } from '@/components/ConfirmProvider';
 import {
   creationListingApi,
@@ -31,6 +40,7 @@ import {
 export function SellerEarnings() {
   const t = useTranslations('marketplaceCreations');
   const confirm = useConfirm();
+  const { hasTenant } = useAuth();
   const [listings, setListings] = useState<CreationListing[]>([]);
   const [earnings, setEarnings] = useState<Earnings | null>(null);
   const [takeRateBps, setTakeRateBps] = useState(0);
@@ -39,6 +49,14 @@ export function SellerEarnings() {
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
+    // No workspace token, no request. See the note at the top of the file: this
+    // is the difference between "the seller has nothing" and a 401 on a public page.
+    if (!hasTenant) {
+      setListings([]);
+      setEarnings(null);
+      setLoaded(true);
+      return;
+    }
     try {
       const [mine, money] = await Promise.all([
         creationListingApi.mine(),
@@ -48,13 +66,13 @@ export function SellerEarnings() {
       setEarnings(money.earnings);
       setTakeRateBps(money.takeRateBps);
     } catch {
-      // A signed-out or unentitled visitor simply has no seller surface; this
-      // panel is additive and must never become the reason the page errors.
+      // An unentitled visitor simply has no seller surface; this panel is
+      // additive and must never become the reason the page errors.
       setListings([]);
     } finally {
       setLoaded(true);
     }
-  }, []);
+  }, [hasTenant]);
 
   useEffect(() => { void load(); }, [load]);
 

@@ -721,33 +721,46 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         break;
       }
       lastSpokenAnswer = spoken;
-      if (!options.participant && !proposedCanvasMutation && mutationRecoveries < MAX_MUTATION_RECOVERIES
-        && mutationRequested
+      // ESCALATION LADDER for a model that discussed an imperative canvas request
+      // instead of executing it. Each rung is tried only when the one before it is
+      // spent, hardest-available remedy first:
+      //   1. re-state the command;
+      //   2. hand the turn to a model that already emitted valid tool calls;
+      //   3. no such model exists — re-state once more, now with research and board
+      //      re-reads withdrawn, and say why prose is not an artifact;
+      //   4. stop, and deliver what the model actually said (see the tail of this
+      //      function) instead of a dead-end notice.
+      // Rung 3 is what the measured 2026-08-14 failure needed and never got: the only
+      // tool-calling model in that turn WAS the stalled one, so rung 2 was a no-op and
+      // the loop went straight from rung 1 to giving up, four turns early.
+      if (!options.participant && !proposedCanvasMutation && mutationRequested
         && (byName.has('canvas_add_object') || byName.has('canvas_update_object'))) {
-        mutationRecoveries += 1;
-        messages.push({ role: 'assistant', content: result.text || finalText });
-        messages.push({
-          role: 'system',
-          // The SECOND attempt runs with research and board re-reads already withdrawn,
-          // so repeating "act now" adds nothing. What the first directive never supplied
-          // is the reason a model stalls here: it has written the answer in prose and has
-          // no idea the prose is not the artifact. Say that, and name the one call left.
-          content: mutationRecoveries > 1
-            ? 'You have now answered twice in prose without creating anything. Prose in this reply is NOT a canvas artifact and the user cannot keep it — only a canvas_add_object call puts it on their board. Make that call now, with the full text you just wrote as the object\'s authored content, and write nothing else in this response.'
-            : 'Your prior response described or discussed an imperative Canvas request without executing it. Act now with the available canvas_add_object or canvas_update_object tool. If a non-Chat object is selected, update that exact object unless the user explicitly requested another one. For a Website/WYSIWYG change, send the complete authored fields.pages structure and websiteTheme; do not ask another optional question and do not rely on renderer defaults.',
-        });
-        finalText = '';
-        continue;
-      }
-      if (mutationRequested && !proposedCanvasMutation && mutationRecoveries > 0) {
-        if (switchToProvenModel(
-          result.resolvedModel,
-          'The prior model did not execute the Canvas command after a retry and has been disabled for this session. Stop researching and use canvas_add_object or canvas_update_object now to complete the user\'s requested artifact.',
+        if (mutationRecoveries === 0 || (
+          !switchToProvenModel(
+            result.resolvedModel,
+            'The prior model did not execute the Canvas command after a retry and has been disabled for this session. Stop researching and use canvas_add_object or canvas_update_object now to complete the user\'s requested artifact.',
+          ) && mutationRecoveries < MAX_MUTATION_RECOVERIES
         )) {
+          mutationRecoveries += 1;
+          messages.push({ role: 'assistant', content: result.text || finalText });
+          messages.push({
+            role: 'system',
+            // The later attempt runs with research and board re-reads already withdrawn,
+            // so repeating "act now" adds nothing. What the first directive never
+            // supplies is the reason a model stalls here: it has written the answer in
+            // prose and has no idea the prose is not the artifact. Say that, and name
+            // the one call left to it.
+            content: mutationRecoveries > 1
+              ? 'You have now answered twice in prose without creating anything. Prose in a reply is NOT a canvas artifact and the user cannot keep, edit or export it — only a canvas_add_object call puts it on their board. Make that call now, passing the full text you just wrote as the new object\'s authored content, and write nothing else in this response.'
+              : 'Your prior response described or discussed an imperative Canvas request without executing it. Act now with the available canvas_add_object or canvas_update_object tool. If a non-Chat object is selected, update that exact object unless the user explicitly requested another one. For a Website/WYSIWYG change, send the complete authored fields.pages structure and websiteTheme; do not ask another optional question and do not rely on renderer defaults.',
+          });
           finalText = '';
           continue;
         }
+        // Either the turn moved to a proven model (which reset the ladder) or every
+        // rung is spent. Continue in the first case, stop in the second.
         finalText = '';
+        if (mutationRecoveries === 0) continue;
         break;
       }
       if (!options.participant && !proposedCanvasMutation && !executiveRequestRecoveryUsed

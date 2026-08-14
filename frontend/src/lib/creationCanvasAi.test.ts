@@ -57,9 +57,16 @@ describe('runCreationCanvasAi', () => {
     // The canvas action PLUS the three research tools a logged-out board gets in place
     // of the tenant MCP catalog. Without them the system prompt names tools the guest
     // model was never given, and "research X and chart it" answers from memory.
-    expect(firstRequest.tools.map((t: { function: { name: string } }) => t.function.name)).toEqual([
+    //
+    // Only the PREFIX is asserted. The career pack that follows is served by
+    // `/api/guest/career/tools`, and re-typing a server-owned list here is the
+    // two-hand-written-lists defect `guestCareerActions.ts` documents — it is also what
+    // made this expectation stale (and this whole file red) when that pack landed.
+    const advertised = firstRequest.tools.map((t: { function: { name: string } }) => t.function.name);
+    expect(advertised.slice(0, 4)).toEqual([
       'canvas_add_object', 'builtin_web_search', 'builtin_web_fetch', 'builtin_geo_geocode',
     ]);
+    expect(new Set(advertised).size).toBe(advertised.length);
     expect(firstRequest.messages[1].content).toContain('kind "llm" is a conventional language-model blueprint');
     expect(firstRequest.messages[1].content).toContain('kind "evermind" is BuilderForce\'s self-learning Evermind model');
     expect(firstRequest.messages[1].content).toContain('"create a workflow" means call canvas_add_object');
@@ -106,9 +113,13 @@ describe('runCreationCanvasAi', () => {
   it('captures resolved model provenance for every iteration, and retires nothing it cannot replace', async () => {
     const completions: unknown[] = [];
     const disabled = vi.fn();
+    const stalled = { text: 'I will create it.', toolCalls: [], resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', account: 'shared', finishReason: 'stop' };
     mocks.streamChatCompletion
-      .mockResolvedValueOnce({ text: 'I will create it.', toolCalls: [], resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', account: 'shared', finishReason: 'stop' })
-      .mockResolvedValueOnce({ text: 'Tell me what to create.', toolCalls: [], resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', account: 'shared', finishReason: 'stop' });
+      .mockResolvedValueOnce(stalled)
+      .mockResolvedValueOnce({ ...stalled, text: 'Tell me what to create.' })
+      // There is no proven model to hand the turn to, so the ladder spends its second
+      // act-now escalation here rather than giving up three rungs early.
+      .mockResolvedValueOnce({ ...stalled, text: 'Here is what the document would say.' });
 
     await runCreationCanvasAi({
       prompt: 'Create a document on the canvas', canvasSnapshot: '{"objects":[]}', persistence: 'local',
@@ -118,9 +129,17 @@ describe('runCreationCanvasAi', () => {
     });
 
     expect(completions).toMatchObject([
-      { iteration: 1, resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', account: 'shared', toolsAdvertised: 4, toolCalls: [] },
-      { iteration: 2, resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', account: 'shared', toolsAdvertised: 4, toolCalls: [] },
+      { iteration: 1, resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', account: 'shared', toolCalls: [] },
+      { iteration: 2, resolvedModel: 'weak/model', resolvedVendor: 'weak-provider', account: 'shared', toolCalls: [] },
+      { iteration: 3, resolvedModel: 'weak/model', toolCalls: [] },
     ]);
+    // Counted RELATIVE to the first iteration, never as a literal: the guest career pack
+    // is server-owned and its size is not this test's business. What is: once the model
+    // has ignored an act-now directive, the three research tools are WITHDRAWN, so it
+    // cannot spend the authoring attempts on the tools it was already stalling on.
+    const advertised = (completions as Array<{ toolsAdvertised: number }>).map((c) => c.toolsAdvertised);
+    expect(advertised[1]).toBe(advertised[0] - 3);
+    expect(advertised[2]).toBe(advertised[0] - 3);
     // `weak/model` refused twice, but it was the ONLY model this turn ever reached, so
     // retiring it would leave the session with nothing to route to — see the
     // "does not disable the only model available" case. Retirement requires a
@@ -248,6 +267,48 @@ describe('runCreationCanvasAi', () => {
       prompt: 'What should I know about SEO?',
       canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
     })).resolves.toBe('Here is what SEO work matters most.');
+  });
+
+  /**
+   * The measured Creation Canvas failure, 2026-08-14 (ui 2026.8.15). "help me write an
+   * email to my boss asking for a raise. Provide coaching on how to get a raise" — a
+   * drafting request the canvas exists to serve — ran for 71 seconds, produced the email
+   * and the coaching TWICE, and showed the user "I couldn't prepare any canvas changes
+   * from that request." The model never called canvas_add_object, so both answers were
+   * discarded and the only copy of the work went with them.
+   *
+   * Not creating the object is a shortfall. Destroying the answer is data loss, and it is
+   * the half the user actually feels.
+   */
+  it('delivers the answer a stalled model DID give instead of destroying it for a dead-end notice', async () => {
+    const unanswered = vi.fn();
+    const add = vi.fn(() => ({ ok: true, proposed: true }));
+    const draft = 'Subject: Reviewing my compensation\n\nHi Dana, I would like to discuss my salary at our next 1:1.';
+    mocks.streamChatCompletion
+      .mockResolvedValueOnce({ text: draft, toolCalls: [], resolvedModel: 'minimaxai/minimax-m3', finishReason: 'stop' })
+      .mockResolvedValueOnce({ text: `${draft}\n\nAsk for a specific number backed by market data.`, toolCalls: [], resolvedModel: 'minimaxai/minimax-m3', finishReason: 'stop' })
+      .mockResolvedValueOnce({ text: `${draft}\n\nOpen with the impact you delivered this year.`, toolCalls: [], resolvedModel: 'minimaxai/minimax-m3', finishReason: 'stop' });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'help me write an email to my boss asking for a raise. Provide coaching on how to get a raise',
+      canvasSnapshot: '{"objects":[]}', persistence: 'local',
+      canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: add }],
+      onUnanswered: unanswered,
+    });
+
+    expect(add).not.toHaveBeenCalled();
+    expect(answer).toContain('Reviewing my compensation');
+    expect(answer).toContain('impact you delivered this year');
+    // Honest about the board, without throwing the work away to say so.
+    expect(answer).toContain('did not put anything on the canvas');
+    // It is a real answer, so it belongs in the transcript — a runtime notice does not.
+    expect(unanswered).not.toHaveBeenCalled();
+    // Three rungs were spent before giving up, not one.
+    expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(3);
+    const directives = mocks.streamChatCompletion.mock.calls[2][0].messages
+      .filter((message: { role: string }) => message.role === 'system')
+      .map((message: { content: string }) => message.content).join('\n');
+    expect(directives).toContain('Prose in a reply is NOT a canvas artifact');
   });
 
   it('reports a runtime notice as UNANSWERED so the surface keeps it out of the transcript', async () => {

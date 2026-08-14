@@ -14,7 +14,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { MARKETPLACE_LISTING_KINDS } from '@builderforce/creation-canvas-contract';
 import {
   formatListingPrice,
   publicListingApi,
@@ -22,10 +21,17 @@ import {
 } from '@/lib/creationListings';
 import { SkeletonGrid } from './SkeletonGrid';
 
-export function CreationsSection({ search }: { search: string }) {
+/**
+ * `kind` comes from the storefront's ONE kind control (the chip row under the
+ * families). This section used to own a second chip row of its own, which meant
+ * picking "Course" filtered this feed and left every other grid on the page
+ * showing everything — the filter looked broken because half the page was not
+ * listening to it. A section that renders a catalogue does not get its own copy
+ * of the catalogue's filter.
+ */
+export function CreationsSection({ search, kind }: { search: string; kind: string }) {
   const t = useTranslations('marketplaceCreations');
   const [listings, setListings] = useState<CreationListing[] | null>(null);
-  const [kind, setKind] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -55,20 +61,6 @@ export function CreationsSection({ search }: { search: string }) {
         </p>
       </header>
 
-      {/* The kind filter is the registry, so a new sellable kind appears here with
-          no edit — the same reason the publish panel reads its options from it. */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <FilterChip active={kind === ''} onClick={() => setKind('')} label={t('allKinds')} />
-        {MARKETPLACE_LISTING_KINDS.map((spec) => (
-          <FilterChip
-            key={spec.id}
-            active={kind === spec.id}
-            onClick={() => setKind(spec.id)}
-            label={`${spec.icon} ${t(`kind.${spec.id}`)}`}
-          />
-        ))}
-      </div>
-
       {error && (
         <p role="alert" style={{
           margin: 0, padding: '10px 14px', borderRadius: 'var(--radius-md)',
@@ -94,25 +86,6 @@ export function CreationsSection({ search }: { search: string }) {
         </div>
       )}
     </section>
-  );
-}
-
-function FilterChip({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      style={{
-        padding: '6px 13px', borderRadius: 'var(--radius-full)', cursor: 'pointer',
-        fontSize: 'var(--font-size-eyebrow)', fontWeight: 600,
-        border: `1px solid ${active ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
-        background: active ? 'var(--coral-bright)' : 'var(--surface-card)',
-        color: active ? 'var(--text-on-accent)' : 'var(--text-secondary)',
-      }}
-    >
-      {label}
-    </button>
   );
 }
 

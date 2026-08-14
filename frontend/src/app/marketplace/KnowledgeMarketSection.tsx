@@ -12,12 +12,17 @@ import { signInHref } from '@/lib/auth';
  * Knowledge" installs a copy into the caller's workspace and opens it; a paid
  * listing is purchased first (checkout), and a logged-out visitor is sent to
  * sign in.
+ *
+ * It is the view the Assets → Knowledge chip selects, not an always-on strip
+ * above the storefront, so it answers the shared search box and says "nothing
+ * here" out loud rather than vanishing — a chip that renders a blank page reads
+ * as a broken filter.
  */
 
 const TYPE_LABEL: Record<DocType, string> = { sop: 'type_sop', process: 'type_process', doc: 'type_doc', postmortem: 'type_postmortem', known_error: 'type_known_error' };
 const TYPE_ICON: Record<DocType, string> = { sop: '📋', process: '🔁', doc: '📄', postmortem: '🔬', known_error: '⚠️' };
 
-export function KnowledgeMarketSection() {
+export function KnowledgeMarketSection({ search = '' }: { search?: string }) {
   const t = useTranslations('knowledge');
   const router = useRouter();
   const { hasTenant } = useAuth();
@@ -30,7 +35,15 @@ export function KnowledgeMarketSection() {
     knowledgeApi.publicListings().then(setListings).catch(() => setListings([]));
   }, []);
 
-  if (listings.length === 0) return null;
+  // The feed is one bounded page of listings, so the shared search box filters
+  // it here rather than costing a round-trip per keystroke.
+  const q = search.trim().toLowerCase();
+  const visible = q
+    ? listings.filter((l) =>
+        l.title.toLowerCase().includes(q) ||
+        (l.summary ?? '').toLowerCase().includes(q) ||
+        l.tags.some((tg) => tg.toLowerCase().includes(q)))
+    : listings;
 
   async function acquire(listing: KnowledgeListing) {
     // Buying/installing writes into a workspace — a logged-out visitor signs in first.
@@ -65,8 +78,13 @@ export function KnowledgeMarketSection() {
       {error && (
         <p role="alert" style={{ color: 'var(--danger)', fontSize: 'var(--font-size-small)', margin: '0 0 12px' }}>{error}</p>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-        {listings.map((l) => (
+      {visible.length === 0 && (
+        <p style={{ textAlign: 'center', padding: '48px 0', margin: 0, color: 'var(--muted)', fontSize: 'var(--font-size-small)' }}>
+          {t('marketEmpty')}
+        </p>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))', gap: 16 }}>
+        {visible.map((l) => (
           <div key={l.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <span style={{ fontWeight: 600, fontSize: 'var(--font-size-body)' }}>

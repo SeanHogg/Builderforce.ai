@@ -3358,6 +3358,7 @@
     "installs": "{count, plural, =0 {no installs} one {# install} other {# installs}}",
     "marketTitle": "Knowledge & SOPs for sale",
     "marketSubtitle": "Install ready-made SOPs, processes and docs into your workspace.",
+    "marketEmpty": "Nothing is on sale here yet. Publish a document from Knowledge to be the first.",
     "free": "Free",
     "addToKnowledge": "Add to my Knowledge",
     "buy": "Buy",
@@ -8334,7 +8335,9 @@
       "tabEngagements": "My engagements",
       "accept": "Accept",
       "decline": "Decline",
-      "clientRatingTip": "Client rating from freelancers who worked with them"
+      "clientRatingTip": "Client rating from freelancers who worked with them",
+      "signedOutTitle": "Your proposals live in your account",
+      "signedOutBody": "Browsing open jobs needs no account. Create a free one to bid, and to track your proposals and engagements here."
     },
     "timecard": {
       "title": "Timecard",
@@ -8536,8 +8539,7 @@
         "model": "Models",
         "skill": "Skills",
         "persona": "Personas",
-        "knowledge": "Knowledge",
-        "all": "All"
+        "knowledge": "Knowledge"
       },
       "note": {
         "talent": "People and gigs. A person and an agent are the same kind of participant to a session, but not the same kind of listing — one has availability and a rate, the other a price and a seat.",
@@ -17386,6 +17388,35 @@
         "full": "Anyone can use it in full; paying is how they support you and keep a copy.",
         "preview": "Visitors see a preview; the working version needs a purchase."
       }
+    },
+    "email": {
+      "mailbox": "Mailbox",
+      "receivedLabel": "Received",
+      "readyToSend": "Ready to send",
+      "notConnected": "Not connected",
+      "loadingMailboxes": "Checking connected mailboxes…",
+      "anonymousHint": "This canvas is saved on this device and has no account behind it. Sign up free to connect a mailbox and send this email.",
+      "sendsFrom": "Sends from",
+      "chooseMailbox": "Choose a mailbox",
+      "noSendingMailbox": "A mailbox is connected, but none of them is allowed to send. Turn sending on in integration settings.",
+      "noMailboxHint": "No mailbox is connected, so this email cannot be sent yet. Connect one to send it from your own address.",
+      "connectProvider": "Connect {provider}",
+      "connectFailed": "That mailbox could not be connected.",
+      "integrationSettings": "Integration settings",
+      "to": "To",
+      "toPlaceholder": "name@company.com, second@company.com",
+      "from": "From",
+      "fromPlaceholder": "Set by the mailbox you send from",
+      "subject": "Subject",
+      "subjectPlaceholder": "What the message is about",
+      "body": "Body",
+      "bodyPlaceholder": "Write the message itself here.",
+      "send": "Send email",
+      "sending": "Sending…",
+      "sent": "Sent.",
+      "sentStatus": "Sent",
+      "sendFailed": "That email could not be sent.",
+      "openInProvider": "Open in your mail provider"
     }
   },
   "canvasCommands": {
@@ -19091,7 +19122,7 @@
   "marketplaceCreations": {
     "heading": "Built here",
     "blurb": "Games, apps, workflows and playbooks people made on the canvas — try them before you take one.",
-    "allKinds": "Everything",
+    "publishOnCanvas": "Build one on the canvas",
     "empty": "Nothing published yet. Build something on the canvas and sell it.",
     "free": "Free",
     "installs": "{count} installs",

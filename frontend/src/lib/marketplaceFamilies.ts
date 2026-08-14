@@ -27,6 +27,8 @@
  * Talent's CTA is "Publish a listing" rather than the ungrammatical alternative.
  */
 
+import { LISTING_KIND_IDS, MARKETPLACE_LISTING_KINDS } from '@builderforce/creation-canvas-contract';
+
 /** The kinds the existing marketplace sections already render, keyed by family. */
 export type FamilyId = 'talent' | 'company' | 'agent' | 'asset';
 
@@ -47,6 +49,66 @@ export interface MarketplaceFamily {
   kinds: string[];
   /** i18n key for the one-line explanation under the grid. */
   noteKey: string;
+}
+
+/**
+ * Which kind chip a CANVAS-PUBLISHED creation files under, when it is not simply
+ * its own chip.
+ *
+ * `MARKETPLACE_LISTING_KINDS` already declares the family each sellable kind
+ * belongs to, so the asset kinds (game, app, course, …) become chips verbatim.
+ * The one `agent` kind is the exception: an agent somebody built and published
+ * IS a community agent, and a chip labelled "Agent" sitting inside the Agents
+ * family would only repeat the family's own name. It rides Community instead,
+ * so that one grid shows both the registry's agents and the canvas's.
+ */
+const CREATION_CHIP: Record<string, string> = { agent: 'community' };
+
+/** The chip a creation kind renders under. */
+const chipFor = (kindId: string) => CREATION_CHIP[kindId] ?? kindId;
+
+/**
+ * A family's kind chips: the ones its own sections have always rendered, plus
+ * the sellable canvas kinds the listing registry files under it.
+ *
+ * Read from the registry rather than restated, because a second hand-written
+ * list of kinds is exactly how the storefront ended up with TWO kind filters —
+ * one governing the canvas feed and one governing everything else — and a
+ * visitor picking "Course" watching the agents below ignore them.
+ */
+function familyKinds(family: FamilyId, own: readonly string[]): string[] {
+  return Array.from(new Set([
+    ...own,
+    ...MARKETPLACE_LISTING_KINDS.filter((spec) => spec.family === family).map((spec) => chipFor(spec.id)),
+  ]));
+}
+
+/**
+ * The creation listing kind a given (family, kind) chip filters the canvas feed
+ * by, or null when the chip is not a creations view at all.
+ *
+ * ONE derivation, so the chip a person presses and the `kind` the browse call
+ * sends cannot disagree.
+ */
+export function creationKindForChip(family: FamilyId, kind: string): string | null {
+  return MARKETPLACE_LISTING_KINDS
+    .find((spec) => spec.family === family && chipFor(spec.id) === kind)?.id ?? null;
+}
+
+/**
+ * The catalogue key a kind chip's label comes from.
+ *
+ * A canvas kind is named by the listing vocabulary that DEFINES it, and every
+ * other kind by the family bar's own copy. One derivation rather than two,
+ * because the alternative is the same twelve labels living in two namespaces —
+ * and a kind renamed in one of them keeping its old name in the other. The
+ * message test asserts against this function, so a chip can never render a key
+ * the catalogs do not carry.
+ */
+export function kindLabelKey(kind: string): string {
+  return LISTING_KIND_IDS.includes(kind)
+    ? `marketplaceCreations.kind.${kind}`
+    : `marketplace.family.kind.${kind}`;
 }
 
 export const FAMILIES: Record<FamilyId, MarketplaceFamily> = {
@@ -74,7 +136,7 @@ export const FAMILIES: Record<FamilyId, MarketplaceFamily> = {
     publishKey: 'publishAgent',
     flow: 'agent',
     hueVar: '--seat-cfo',
-    kinds: ['builtin', 'community'],
+    kinds: familyKinds('agent', ['builtin', 'community']),
     noteKey: 'note.agent',
   },
   asset: {
@@ -83,7 +145,7 @@ export const FAMILIES: Record<FamilyId, MarketplaceFamily> = {
     publishKey: 'publishAsset',
     flow: 'asset',
     hueVar: '--seat-ceo',
-    kinds: ['model', 'skill', 'persona', 'knowledge'],
+    kinds: familyKinds('asset', ['model', 'skill', 'persona', 'knowledge']),
     noteKey: 'note.asset',
   },
 };

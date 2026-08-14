@@ -223,6 +223,30 @@ describe('emptyShellProblem', () => {
     expect(emptyShellProblem('kpi', { title: 'MRR', value: '   ', sources: [] })).toContain('empty shell');
   });
 
+  /**
+   * Measured 2026-08-14 (ui 2026.8.15). Asked to write an email, the canvas produced an
+   * email tile whose body read "No body": `email` was exempt from this guard on the
+   * grounds that a message is READ from a mailbox, but the read path
+   * (`canvas_pin_email`) never reaches this function — only the authored one does. Even
+   * unexempted, a `subject` alone would have cleared it, and the subject is the envelope.
+   */
+  it('rejects a message whose subject was authored but whose body was not', () => {
+    expect(emptyShellProblem('email', { title: 'Reviewing my compensation', subject: 'Reviewing my compensation' }))
+      .toContain('empty shell');
+    // The error NAMES the field to author, so the model can correct it in the same turn.
+    expect(emptyShellProblem('email', { title: 'Raise request' })).toContain('bodyText');
+    expect(emptyShellProblem('emailTemplate', { title: 'Welcome', subject: 'Welcome aboard' })).toContain('bodyHtml');
+    expect(emptyShellProblem('email', { title: 'Raise request', subject: 'x', bodyText: '   ' }))
+      .toContain('empty shell');
+  });
+
+  it('accepts a message that carries its letter, by copy or by template', () => {
+    expect(emptyShellProblem('email', { title: 'Raise request', subject: 'Reviewing my compensation', bodyText: 'Hi Dana, I would like to discuss my salary.' })).toBeNull();
+    expect(emptyShellProblem('emailCampaign', { title: 'Launch', bodyHtml: '<p>We are live.</p>' })).toBeNull();
+    // A campaign may reference an authored template instead of carrying its own copy.
+    expect(emptyShellProblem('emailCampaign', { title: 'Launch', templateId: 42 })).toBeNull();
+  });
+
   it('leaves kinds whose shell IS the point alone', () => {
     // A Builder workspace is seeded from a starter project; a Dataset is filled by an
     // import; a Chat holds the conversation itself.

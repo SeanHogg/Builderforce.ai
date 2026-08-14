@@ -45,7 +45,8 @@ import { SkillTags } from '@/components/SkillTags';
 import { listFreelancers, type FreelancerProfile } from '@/lib/freelancerApi';
 import { RatingStars } from '@/components/freelance/RatingStars';
 import { TrustBadge } from '@/components/freelance/TrustBadge';
-import { FAMILIES, FAMILY_IDS, resolveFamily, type FamilyId } from '@/lib/marketplaceFamilies';
+import { FAMILIES, FAMILY_IDS, creationKindForChip, kindLabelKey, resolveFamily, type FamilyId } from '@/lib/marketplaceFamilies';
+import { MARKETPLACE_LISTING_KINDS } from '@builderforce/creation-canvas-contract';
 import { SkeletonGrid } from './SkeletonGrid';
 import { ModelsExplorer } from './ModelsExplorer';
 import MarketplaceGigsSection from './MarketplaceGigsSection';
@@ -60,7 +61,7 @@ import { signInHref } from '@/lib/auth';
 // verb that was never a category — became the primary button. This stays the
 // INTERNAL section discriminator; the families above it are the vocabulary a
 // person sees, and `SECTION_BY_KIND` is the one place the two meet.
-type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'workforce' | 'talent' | 'models' | 'gigs' | 'publish' | 'company';
+type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'workforce' | 'talent' | 'models' | 'gigs' | 'publish' | 'company' | 'knowledge' | 'creations';
 
 /** (family, kind) → which section renders. A table, so a new kind is a row. */
 const SECTION_BY_KIND: Record<string, MarketplaceCategory> = {
@@ -71,9 +72,17 @@ const SECTION_BY_KIND: Record<string, MarketplaceCategory> = {
   'asset:model': 'models',
   'asset:skill': 'skills',
   'asset:persona': 'personas',
-  'asset:knowledge': 'all',
+  'asset:knowledge': 'knowledge',
   'company:business': 'company',
   'company:storefront': 'company',
+  // Every sellable canvas kind renders the SAME feed, so these rows are read
+  // from the listing registry rather than restated — a new sellable kind must
+  // not need an edit here to be filterable.
+  ...Object.fromEntries(
+    MARKETPLACE_LISTING_KINDS
+      .filter((spec) => spec.family === 'asset')
+      .map((spec) => [`asset:${spec.id}`, 'creations' as MarketplaceCategory]),
+  ),
 };
 
 const TALENT_DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
@@ -193,6 +202,11 @@ export default function MarketplacePageClient() {
   // The families' own copy — labels, the derived publish CTA and the one-line
   // note under each grid all live under `marketplace.family`.
   const tf = useTranslations('marketplace.family');
+  // The canvas-creation vocabulary, shared with the cards that render it.
+  const tc = useTranslations('marketplaceCreations');
+  // Kind labels span two namespaces by design (see `kindLabelKey`), so they
+  // resolve from the root rather than from either one.
+  const tRoot = useTranslations();
   const confirm = useConfirm();
   const tt = useTranslations('talent');
   const tdis = useTranslations('freelancer');
@@ -376,6 +390,10 @@ export default function MarketplacePageClient() {
   const kindParam = searchParams.get('kind');
   const { family, kind } = resolveFamily(familyParam, kindParam, categoryParam);
   const activeFamily = FAMILIES[family];
+  // Non-null when the active chip shows things built on the canvas. ONE
+  // derivation shared by the creations view and the Community agents view,
+  // where canvas-published agents belong to the same catalogue as the registry's.
+  const creationKind = creationKindForChip(family, kind);
 
   useEffect(() => {
     setCategory(SECTION_BY_KIND[`${family}:${kind}`] ?? 'all');
@@ -402,17 +420,17 @@ export default function MarketplacePageClient() {
    *  yours to list. */
   const startPublish = () => {
     if (activeFamily.flow === 'claim') return; // gated below; the button is inert
+    // A canvas creation is not published from a form — it is published from the
+    // board that made it. Under those chips the CTA opens the canvas, because a
+    // skill form is not an answer to "publish a course".
+    if (creationKind) { router.push('/create/new'); return; }
     setCategory('publish');
   };
 
-  const selectCategory = (id: MarketplaceCategory) => {
-    setCategory(id);
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    if (id === 'all') params.delete('category');
-    else params.set('category', id);
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  };
+  /** A kind chip's label, from whichever catalogue names that kind. The key is
+   *  derived by `kindLabelKey`, the same function the message test asserts
+   *  against, so a chip cannot render a key the catalogs do not carry. */
+  const kindLabel = (k: string) => tRoot(kindLabelKey(k) as never);
 
   // Any change to the talent filters (shared search box, discipline, sort) resets to
   // page 1 so the viewer never lands on an out-of-range page.
@@ -498,14 +516,20 @@ export default function MarketplacePageClient() {
     );
   }
 
-  const filteredAgents = agents.filter(
-    (a) =>
-      !q ||
-      a.name.toLowerCase().includes(q) ||
-      (a.title && a.title.toLowerCase().includes(q)) ||
-      (a.bio && a.bio.toLowerCase().includes(q)) ||
-      (a.skills && a.skills.some((s) => s.toLowerCase().includes(q)))
-  );
+  // Built-in vs Community is `ide_agents.builtin_kind` and nothing else — the
+  // platform's own agents carry one, an agent somebody published does not. The
+  // two chips used to select the same unfiltered grid, which is the same defect
+  // as a kind filter that shows everything.
+  const filteredAgents = agents
+    .filter((a) => (kind === 'builtin' ? !!a.builtin_kind : !a.builtin_kind))
+    .filter(
+      (a) =>
+        !q ||
+        a.name.toLowerCase().includes(q) ||
+        (a.title && a.title.toLowerCase().includes(q)) ||
+        (a.bio && a.bio.toLowerCase().includes(q)) ||
+        (a.skills && a.skills.some((s) => s.toLowerCase().includes(q)))
+    );
 
   const handleHire = useCallback(async (agentId: string) => {
     // Hiring requires an account — route anonymous users to sign in (mirrors the
@@ -587,7 +611,7 @@ export default function MarketplacePageClient() {
           title={activeFamily.flow === 'claim' ? tf('companySoon.soonTitle') : undefined}
           style={{ '--seat': `var(${activeFamily.hueVar})` } as React.CSSProperties}
         >
-          {tf(activeFamily.publishKey)}
+          {creationKind ? tc('publishOnCanvas') : tf(activeFamily.publishKey)}
         </button>
       </div>
 
@@ -615,23 +639,16 @@ export default function MarketplacePageClient() {
         <div className="mp-kinds" role="group" aria-label={tf('kindLabel')} style={{ '--seat': `var(${activeFamily.hueVar})` } as React.CSSProperties}>
           {activeFamily.kinds.map((k) => (
             <button key={k} type="button" className="mp-kind" aria-pressed={kind === k} onClick={() => selectFamily(family, k)}>
-              {tf(`kind.${k}`)}
+              {kindLabel(k)}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Knowledge listings (SOPs/processes/docs published for sale). Public
-          browse — renders for logged-out visitors too; hides only when there are
-          no listings. Acquiring prompts sign-in / checkout as needed. */}
-      <KnowledgeMarketSection />
-
-      {/* What people BUILT on the canvas, on sale and runnable. The fourth
-          producer, and the first one whose products the platform itself made.
-          Both components decide their own visibility — the seller panel renders
-          nothing for somebody who has published nothing. */}
+      {/* Your own sales, not a catalogue — it is the one panel that is about the
+          viewer rather than about what is for sale, so it is not behind a kind
+          filter. Renders nothing for somebody who has published nothing. */}
       <SellerEarnings />
-      <CreationsSection search={search} />
 
       <div
         style={{
@@ -874,13 +891,25 @@ export default function MarketplacePageClient() {
         <ModelsExplorer search={search} viewMode={viewMode} />
       ) : category === 'gigs' ? (
         <MarketplaceGigsSection search={search} />
+      ) : category === 'knowledge' ? (
+        <KnowledgeMarketSection search={search} />
+      ) : category === 'creations' ? (
+        // What people BUILT on the canvas, on sale and runnable. One kind per
+        // chip, filtered server-side by the same registry the seller published
+        // against — `creationKindForChip` is the only place the two meet.
+        <CreationsSection search={search} kind={creationKind ?? ''} />
       ) : category === 'workforce' ? (
-        loadingAgents ? (
+        <>
+        {loadingAgents ? (
           <SkeletonGrid />
         ) : filteredAgents.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>
-            {agents.length === 0 ? tm('emptyAgentsNone') : tm('emptyAgentsSearch')}
-          </div>
+          // Under Community the canvas feed below carries the empty state for the
+          // same catalogue, so two "nothing here" messages never stack.
+          creationKind ? null : (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>
+              {agents.length === 0 ? tm('emptyAgentsNone') : tm('emptyAgentsSearch')}
+            </div>
+          )
         ) : viewMode === 'table' ? (
           <div style={tableWrapStyle}>
             <table style={tableStyle}>
@@ -963,7 +992,11 @@ export default function MarketplacePageClient() {
               />
             ))}
           </div>
-        )
+        )}
+        {/* An agent published off the canvas is a community agent — same chip,
+            same grid, one catalogue rather than two that never meet. */}
+        {creationKind && <CreationsSection search={search} kind={creationKind} />}
+        </>
       ) : loading ? (
         <SkeletonGrid />
       ) : filtered.length === 0 ? (

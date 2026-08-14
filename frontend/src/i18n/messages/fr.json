@@ -3358,6 +3358,7 @@
     "installs": "{count, plural, =0 {aucune installation} one {# installation} other {# installations}}",
     "marketTitle": "Connaissances et SOP à vendre",
     "marketSubtitle": "Installez des SOP, processus et documents prêts à l'emploi dans votre espace de travail.",
+    "marketEmpty": "Rien n'est encore en vente ici. Publiez un document depuis Connaissances pour être le premier.",
     "free": "Gratuit",
     "addToKnowledge": "Ajouter à mes Connaissances",
     "buy": "Acheter",
@@ -8333,7 +8334,9 @@
       "tabEngagements": "Mes missions",
       "accept": "Accepter",
       "decline": "Refuser",
-      "clientRatingTip": "Note du client par les freelances ayant travaillé avec lui"
+      "clientRatingTip": "Note du client par les freelances ayant travaillé avec lui",
+      "signedOutTitle": "Vos propositions sont dans votre compte",
+      "signedOutBody": "Parcourir les offres ouvertes ne nécessite aucun compte. Créez-en un gratuitement pour postuler et suivre ici vos propositions et vos missions."
     },
     "timecard": {
       "title": "Feuille de temps",
@@ -8535,8 +8538,7 @@
         "model": "Modèles",
         "skill": "Compétences",
         "persona": "Personas",
-        "knowledge": "Connaissances",
-        "all": "Tout"
+        "knowledge": "Connaissances"
       },
       "note": {
         "talent": "Des personnes et des missions. Pour une session, une personne et un agent sont le même type de participant, mais pas le même type d’annonce : l’une a des disponibilités et un tarif, l’autre un prix et un siège.",
@@ -17385,6 +17387,35 @@
         "full": "Tout le monde peut l’utiliser entièrement ; payer permet de vous soutenir et d’en garder une copie.",
         "preview": "Les visiteurs voient un aperçu ; la version fonctionnelle nécessite un achat."
       }
+    },
+    "email": {
+      "mailbox": "Boîte mail",
+      "receivedLabel": "Reçu",
+      "readyToSend": "Prêt à envoyer",
+      "notConnected": "Non connectée",
+      "loadingMailboxes": "Vérification des boîtes mail connectées…",
+      "anonymousHint": "Ce canevas est enregistré sur cet appareil et n’est rattaché à aucun compte. Inscrivez-vous gratuitement pour connecter une boîte mail et envoyer cet e-mail.",
+      "sendsFrom": "Envoyé depuis",
+      "chooseMailbox": "Choisissez une boîte mail",
+      "noSendingMailbox": "Une boîte mail est connectée, mais aucune n’est autorisée à envoyer. Activez l’envoi dans les paramètres d’intégration.",
+      "noMailboxHint": "Aucune boîte mail n’est connectée, cet e-mail ne peut donc pas encore partir. Connectez-en une pour l’envoyer depuis votre propre adresse.",
+      "connectProvider": "Connecter {provider}",
+      "connectFailed": "Cette boîte mail n’a pas pu être connectée.",
+      "integrationSettings": "Paramètres d’intégration",
+      "to": "À",
+      "toPlaceholder": "nom@entreprise.com, second@entreprise.com",
+      "from": "De",
+      "fromPlaceholder": "Défini par la boîte mail d’envoi",
+      "subject": "Objet",
+      "subjectPlaceholder": "Le sujet du message",
+      "body": "Corps du message",
+      "bodyPlaceholder": "Rédigez ici le message lui-même.",
+      "send": "Envoyer l’e-mail",
+      "sending": "Envoi…",
+      "sent": "Envoyé.",
+      "sentStatus": "Envoyé",
+      "sendFailed": "Cet e-mail n’a pas pu être envoyé.",
+      "openInProvider": "Ouvrir chez votre fournisseur de messagerie"
     }
   },
   "canvasCommands": {
@@ -19090,7 +19121,7 @@
   "marketplaceCreations": {
     "heading": "Créé ici",
     "blurb": "Jeux, applications, flux et guides créés sur le canevas — essayez-les avant d’en prendre un.",
-    "allKinds": "Tout",
+    "publishOnCanvas": "Créez-en un sur le canevas",
     "empty": "Rien de publié pour l’instant. Créez quelque chose sur le canevas et vendez-le.",
     "free": "Gratuit",
     "installs": "{count} installations",

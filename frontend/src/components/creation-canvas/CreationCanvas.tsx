@@ -27,6 +27,7 @@ import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
 import { CanvasDrivePanel } from './CanvasDrivePanel';
 import { CanvasSocialPanel } from './CanvasSocialPanel';
+import { CanvasEmailComposer } from './CanvasEmailComposer';
 import { CanvasHostActions } from './CanvasHostActions';
 import { canvasNavigate, canvasSurface, canvasWebOrigin, type CanvasHostCapture } from '@/lib/canvasHost';
 import { BrainDock } from './BrainDock';
@@ -9184,6 +9185,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         {node.data.frameable === false && <p className={styles.inspectorHint}>{t('webPage.blockedHint')}</p>}
       </>}
       {kind === 'voice' && <CanvasVoiceInspector node={node} persistence={persistence} onChange={onChange} />}
+      {kind === 'email' && <CanvasEmailComposer data={node.data} editable={editable} persistence={persistence} onChange={onChange} />}
       {kind === 'project' && <><label>{t('projectView')}<select value={typeof node.data.projectLens === 'string' ? node.data.projectLens : 'everything'} onChange={(event) => onChange({ projectLens: event.target.value })}><option value="everything">{t('lensEverything')}</option><option value="delivery">{t('lensDelivery')}</option><option value="metrics">{t('lensMetrics')}</option><option value="customer-feedback">{t('lensFeedback')}</option></select></label><p className={styles.inspectorHint}>{t('projectContextHint')}</p><button className={styles.fullButton} onClick={onLoadProjectQuality}>{t('visualizeQuality')}</button><button className={styles.fullButton} onClick={onExpandProject}>{t('addRelatedItems')}</button><button className={styles.fullButton} onClick={onCompareProjects}>{t('compareProjects')}</button></>}
       {kind === 'task' && <>
         <div className={styles.taskInspectorGrid}>

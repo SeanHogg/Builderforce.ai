@@ -4,6 +4,8 @@ import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import NotificationsPanel from '@/components/freelance/NotificationsPanel';
+import { GuestSignupCta } from '@/components/GuestSignupCta';
+import { useAuth } from '@/lib/AuthContext';
 import {
   listMyEngagements, respondEngagement,
   listJobs, bidJob, listMyProposals, withdrawProposal,
@@ -13,6 +15,16 @@ import {
 // The "Find work" surface (open jobs to bid on, my proposals, my engagements) is now
 // a category of the marketplace rather than a standalone /freelancer/gigs page — same
 // shared search box, one merged surface, matching the Talent + Models consolidation.
+//
+// TWO of the three reads are private, and the split matters. `GET /api/jobs` is a
+// PUBLIC browse — open jobs are world-browsable, and hiding them behind a sign-in
+// would make "find work" a catalogue of screenshots. `/jobs/proposals/mine` and
+// `/engagements/mine` are behind the person-level JWT. Moving this surface into the
+// public marketplace is what made that distinction load-bearing: a logged-out visitor
+// picking the Gigs chip fired all three, and the `.catch(() => [])` on each hid the
+// empty result while the transport still raised the global error toast and filed a
+// support ticket. So the jobs list stays open to everyone and only the two tabs that
+// are ABOUT the viewer ask for an account.
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18,
@@ -34,6 +46,7 @@ type Tab = 'work' | 'proposals' | 'engagements';
 
 export default function MarketplaceGigsSection({ search }: { search: string }) {
   const t = useTranslations('freelancer');
+  const { isAuthenticated } = useAuth();
   const [tab, setTab] = useState<Tab>('work');
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [proposals, setProposals] = useState<JobProposal[]>([]);
@@ -47,10 +60,13 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
+      // Open jobs for everyone; the two "mine" reads only when there is a token to
+      // send. Asking for them signed-out is not a read that comes back empty — it is
+      // a 401 that files a support ticket about somebody who is only browsing.
       const [j, p, e] = await Promise.all([
         listJobs().catch(() => []),
-        listMyProposals().catch(() => []),
-        listMyEngagements().catch(() => []),
+        isAuthenticated ? listMyProposals().catch(() => []) : Promise.resolve([]),
+        isAuthenticated ? listMyEngagements().catch(() => []) : Promise.resolve([]),
       ]);
       setJobs(j); setProposals(p); setEngagements(e);
     } catch (err) {
@@ -58,7 +74,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -115,8 +131,18 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
     return <span style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--radius-sm)', background: c.bg, color: c.fg, flexShrink: 0 }}>{t(`status.${s}`)}</span>;
   };
 
+  /** The two tabs that are about the VIEWER rather than about the work on offer. */
+  const guestWall = !isAuthenticated && tab !== 'work' ? (
+    <GuestSignupCta
+      prompt={{ next: '/marketplace?category=gigs' }}
+      title={t('gigs.signedOutTitle')}
+      body={t('gigs.signedOutBody')}
+    />
+  ) : null;
+
   return (
     <div>
+      {/* Self-gating: renders nothing, and polls nothing, without a token. */}
       <NotificationsPanel />
 
       {/* Tabs */}
@@ -134,6 +160,10 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
 
       {error && <div style={{ ...card, color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}>{error}</div>}
       {loading && <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{t('loading')}</p>}
+
+      {/* An account, not an empty list — the two private tabs have nothing to show a
+          visitor who has none, and "no proposals" would be a lie rather than a state. */}
+      {guestWall}
 
       {/* Open jobs to bid on */}
       {!loading && tab === 'work' && (
@@ -182,7 +212,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
       )}
 
       {/* My proposals */}
-      {!loading && tab === 'proposals' && (
+      {!loading && !guestWall && tab === 'proposals' && (
         filteredProposals.length === 0 ? <div style={{ ...card, textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>{t('proposals.empty')}</div> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {filteredProposals.map((p) => (
@@ -205,7 +235,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
       )}
 
       {/* Engagements + accept/decline */}
-      {!loading && tab === 'engagements' && (
+      {!loading && !guestWall && tab === 'engagements' && (
         filteredEngagements.length === 0 ? <div style={{ ...card, textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>{t('gigs.empty')}</div> : (
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))' }}>
             {filteredEngagements.map((e) => (

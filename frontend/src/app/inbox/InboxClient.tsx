@@ -8,6 +8,8 @@ import type { PublishedAgent } from '@/lib/types';
 import { llmChat } from '@/lib/builderforceApi';
 import {
   mailboxApi,
+  htmlFromText,
+  replyAddress,
   type MailboxAutomationRule,
   type MailboxAutomationRuleInput,
   type MailboxAutomationExecution,
@@ -22,14 +24,6 @@ const EMPTY_RULE: MailboxAutomationRuleInput = {
   name: '', enabled: true, fromContains: '', subjectContains: '', agentRef: null,
   responseMode: 'draft', instructions: '',
 };
-
-function htmlFromText(text: string): string {
-  return text.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]!)).replace(/\n/g, '<br>');
-}
-
-function replyAddress(from: string): string {
-  return from.match(/<([^<>]+)>/)?.[1]?.trim() || from.trim();
-}
 
 export function InboxClient() {
   const t = useTranslations('inboxApp');

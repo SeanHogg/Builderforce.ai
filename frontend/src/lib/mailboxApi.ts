@@ -149,6 +149,24 @@ export function describeMailboxFilter(filter: MailboxFilter = {}): string {
   return filter.unread ? text : text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/**
+ * Plain text as the HTML `mailboxApi.send` takes.
+ *
+ * Escaped first, then newlines become `<br>` — the order matters, and getting it wrong
+ * is an injection rather than a typo. One copy, because both senders (the inbox reply
+ * box and the canvas email composer) must escape identically.
+ */
+export function htmlFromText(text: string): string {
+  return text
+    .replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]!))
+    .replace(/\n/g, '<br>');
+}
+
+/** The bare address inside a `Display Name <someone@example.com>` header. */
+export function replyAddress(from: string): string {
+  return from.match(/<([^<>]+)>/)?.[1]?.trim() || from.trim();
+}
+
 export const mailboxApi = {
   providers: (): Promise<{ providers: MailboxProviderInfo[]; connections: MailboxConnection[] }> =>
     apiRequest(`${MAILBOX}/providers`),
