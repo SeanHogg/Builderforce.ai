@@ -1,4 +1,3 @@
-'use client';
 
 /**
  * The details panel for an `email` object.

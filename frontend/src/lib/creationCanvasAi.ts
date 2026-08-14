@@ -18,6 +18,22 @@ import { ensureGuestToken } from '@/lib/guestRoomApi';
 import { GUEST_RESEARCH_ACTIONS } from '@/lib/guestResearchActions';
 import { loadGuestCareerActions } from '@/lib/guestCareerActions';
 import { conversationSpeakerLabels, echoesEarlierAnswer, stripSpeakerLabel } from '@/lib/canvasTranscript';
+import {
+  NON_AUTHORING_TOOL_NAMES,
+  RESEARCH_TOOL_NAMES,
+  WORDS_PER_DRAFT_PAGE,
+  answeredWithoutCanvasChange,
+  authoredDocumentWords,
+  documentWordsInSnapshot,
+  incompleteDocumentAnswer,
+  isExecutiveTeammateRequest,
+  isNarrowSearchResult,
+  isWebsiteRedesignRequest,
+  requestedPagesForTurn,
+  requestsCanvasMutation,
+  snapshotHasTabularRows,
+  unverifiedCreationClaim,
+} from '@/lib/canvasTurnOutcome';
 import { founderCanvasSystemPrompt } from '@/lib/founderCanvasPrompt';
 
 type CanvasAiOptions = {
@@ -141,7 +157,6 @@ function mutates(action: BrainAction, args: unknown): boolean {
   return !!action.mutates;
 }
 
-const WORDS_PER_DRAFT_PAGE = 300;
 
 /**
  * Model round-trips one composer submit may take before the loop gives up.
@@ -188,177 +203,6 @@ const TRUNCATED_TURN_DIRECTIVE = 'Your previous response was cut off at the outp
  * "answer" here would discard a correct intent, so the directive keeps the action
  * and constrains only the encoding. */
 const MALFORMED_TOOL_CALL_DIRECTIVE = 'Your previous tool call could not be parsed and was discarded. Make the same call again with strictly valid JSON arguments: no comments, no trailing commas, no unescaped newlines or quotes inside string values, and no placeholder text. Send one tool call.';
-
-const RESEARCH_TOOL_NAMES = new Set(['builtin_web_search', 'builtin_web_fetch', 'builtin_geo_geocode']);
-
-/**
- * Tools that cannot advance an AUTHORING phase, so they are withdrawn once the turn
- * has nothing left to do but write to the canvas.
- *
- * Research is the obvious half. The board snapshot is the other: it already travels in
- * the turn's context, every call returns the same payload, and a stalled model reaches
- * for it because it is the safest-looking action available. Measured 2026-08-14 (ui
- * 2026.8.15): asked to draft an email, the model read the snapshot, answered in prose,
- * was told to act, read the IDENTICAL snapshot again, answered again, and the turn was
- * abandoned with nothing on the canvas.
- */
-const NON_AUTHORING_TOOL_NAMES = new Set([...RESEARCH_TOOL_NAMES, 'canvas_read_snapshot']);
-
-/**
- * The model ANSWERED but never executed the canvas change the request asked for.
- *
- * The answer is the work the user wanted — an authored email, a plan, a comparison —
- * and it is the only copy of it. Discarding it for a runtime notice loses it outright
- * (measured 2026-08-14: a drafted raise request plus coaching was produced twice and
- * thrown away, and the session showed only "I couldn't prepare any canvas changes from
- * that request"). Deliver it, and be honest that the board is unchanged.
- */
-function answeredWithoutCanvasChange(answer: string): string {
-  return `${answer}\n\nI answered here but did not put anything on the canvas. Ask me to add this to the canvas and I will create the object for it.`;
-}
-
-function isNarrowSearchResult(value: unknown): boolean {
-  return !!value && typeof value === 'object'
-    && (value as { coverage?: unknown }).coverage === 'encyclopedic';
-}
-
-function isWebsiteRedesignRequest(prompt: string): boolean {
-  return /\b(?:website|web\s*site|homepage|landing page)\b/i.test(prompt)
-    && /\b(?:design|redesign|improve|ui\s*\/\s*ux|comparison|compare)\b/i.test(prompt);
-}
-
-/**
- * The landing canvas exposes C-suite agents as clickable teammates. A model can
- * otherwise read "bring the CTO in" as a request to invite a real person, then
- * ask what "this" means on a brand-new board. Keep this narrow so ordinary
- * questions about executive roles remain ordinary chat.
- */
-function isExecutiveTeammateRequest(prompt: string): boolean {
-  const namesExecutiveRole = /\b(?:CEO|CFO|CMO|COO|CTO|CISO)\b/i.test(prompt);
-  const asksToAddRole = /(?:\b(?:add|bring|create|invite|ajoute|am[eè]ne|invit[eé]|trae|invita|crea|hol|f[uü]ge)\b|邀请|添加|创建)/i.test(prompt);
-  return namesExecutiveRole && asksToAddRole;
-}
-
-function requestedDocumentPages(prompt: string): number | null {
-  if (!/\b(?:create|generate|make|write|author|draft)\b/i.test(prompt)) return null;
-  if (!/\b(?:document|doc|manuscript|book|report)\b/i.test(prompt)) return null;
-  const match = prompt.match(/\b(\d[\d,]*)\s*(?:-|\s)?pages?\b/i);
-  if (!match) return null;
-  const pages = Number(match[1]!.replaceAll(',', ''));
-  return Number.isInteger(pages) && pages > 0 ? pages : null;
-}
-
-function authoredDocumentWords(args: unknown): number | null {
-  if (!args || typeof args !== 'object') return null;
-  const input = args as { kind?: unknown; fields?: unknown };
-  if (input.kind !== 'document' || !input.fields || typeof input.fields !== 'object') return null;
-  const fields = input.fields as { markdown?: unknown; content?: unknown };
-  const authored = [fields.markdown, fields.content].find((value) => typeof value === 'string' && value.trim()) as string | undefined;
-  return authored ? (authored.match(/\S+/g) || []).length : 0;
-}
-
-function documentWordsInSnapshot(snapshot: string): number | null {
-  try {
-    const parsed = JSON.parse(snapshot) as { objects?: unknown };
-    if (!Array.isArray(parsed.objects)) return null;
-    const counts = parsed.objects.flatMap((value) => {
-      if (!value || typeof value !== 'object') return [];
-      const object = value as { kind?: unknown; markdown?: unknown; content?: unknown };
-      if (object.kind !== 'document') return [];
-      const authored = [object.markdown, object.content].find((item) => typeof item === 'string' && item.trim()) as string | undefined;
-      return [(authored?.match(/\S+/g) || []).length];
-    });
-    return counts.length ? Math.max(...counts) : null;
-  } catch {
-    return null;
-  }
-}
-
-function requestedPagesForTurn(options: CanvasAiOptions): number | null {
-  const direct = requestedDocumentPages(options.prompt);
-  if (direct != null) return direct;
-  if (!/\b(?:creating|created|done|finished|complete|status|progress|working)\b/i.test(options.prompt)) return null;
-  for (const message of [...(options.conversation || [])].reverse()) {
-    if (message.role !== 'user') continue;
-    const pages = requestedDocumentPages(message.content);
-    if (pages != null) return pages;
-  }
-  return null;
-}
-
-function incompleteDocumentAnswer(requestedPages: number, authoredWords: number, exact: boolean): string {
-  if (!exact) {
-    return `The canvas contains a document draft, but its authored content does not verify the requested ${requestedPages.toLocaleString('en-US')} pages. A manuscript that large cannot be authored in one bounded Brain turn, so it is not complete. Build and review it in sections before treating it as finished or exporting it.`;
-  }
-  const estimatedPages = Math.max(1, Math.ceil(authoredWords / WORDS_PER_DRAFT_PAGE));
-  return `I created a document draft on the canvas with ${authoredWords.toLocaleString('en-US')} words (about ${estimatedPages.toLocaleString('en-US')} page${estimatedPages === 1 ? '' : 's'}), not the requested ${requestedPages.toLocaleString('en-US')} pages. A manuscript that large cannot be authored in one bounded Brain turn, so I have not marked it complete. Build and review it in sections before treating it as finished or exporting it.`;
-}
-
-const CREATION_CLAIM = /\b(?:i(?:'ve| have)?\s+(?:created|added|built|generated|updated|made|produced)|here(?:'s| is)\s+(?:the|a|your)|the\s+\w+\s+(?:has been|is now)\s+(?:created|added|updated))\b/i;
-const CREATED_ARTIFACT = /\b(table|chart|graph|dashboard|kpi|visuali[sz]ation|report|document|slide|drawing|diagram|widget|object|card)\b/i;
-/** Values the model may only state when a tool actually computed them. */
-const FABRICATED_DATA = /\b(?:placeholder|sample|example|illustrative|dummy|mock|assumed|estimated|representative)\s+(?:value|number|figure|data|count|metric|row)s?\b/i;
-
-/**
- * A canvas turn is only honest if the artifact it describes exists. The model
- * occasionally narrates a finished table or chart without calling a tool, which
- * previously reached the user as a success message beside an unchanged canvas.
- */
-function unverifiedCreationClaim(text: string, mutated: boolean, hasTabularData: boolean, enforceCreationClaim = true): string | null {
-  const answer = text.trim();
-  if (!answer) return null;
-  if (enforceCreationClaim && !mutated && CREATION_CLAIM.test(answer) && CREATED_ARTIFACT.test(answer)) {
-    return `I described a canvas change but did not actually make one, so nothing was created. ${hasTabularData ? 'Ask me again and I will query the dataset on this canvas and build the artifact from its real values.' : 'Tell me which object to create and I will build it on the canvas.'}`;
-  }
-  if (hasTabularData && FABRICATED_DATA.test(answer)) {
-    return `${answer}\n\nThose figures are not real: this canvas has an imported dataset, so I should have computed the values from it instead of using placeholders. Ask me to rebuild this and I will query every row.`;
-  }
-  return null;
-}
-
-/** True when the canvas holds an object with imported rows Brain could query. */
-function snapshotHasTabularRows(snapshot: string): boolean {
-  try {
-    const parsed = JSON.parse(snapshot) as { objects?: unknown };
-    if (!Array.isArray(parsed.objects)) return false;
-    return parsed.objects.some((value) => {
-      if (!value || typeof value !== 'object') return false;
-      const object = value as { kind?: unknown; rowCount?: unknown; sampleRows?: unknown };
-      return ['dataset', 'table', 'spreadsheet'].includes(String(object.kind))
-        && (Number(object.rowCount) > 0 || (Array.isArray(object.sampleRows) && object.sampleRows.length > 0));
-    });
-  } catch {
-    return false;
-  }
-}
-
-/** Imperative canvas turns must not degrade into a prose-only answer. */
-function requestsCanvasMutation(prompt: string): boolean {
-  // VISUAL verbs are first-class instructions, not conversation. "draw me a coniferous
-  // landscape at <address>" was classified as small talk because `draw` was absent here,
-  // so the no-tool-call recovery never armed for the one request shape the canvas most
-  // obviously exists to serve, and a prose apology counted as a completed turn
-  // (measured 2026-08-12, ui 2026.7.213).
-  const verb = '(?:create|build|design|redesign|improve|make|add|insert|update|change|edit|revise|replace|remove|delete|use|set|turn|convert|arrange|align|move|resize|connect|apply|implement|write|draft|generate|research|compare|show|provide|run|launch|start|plan|organi[sz]e|schedule|send'
-    + '|draw|sketch|illustrate|render|paint|visuali[sz]e|mock\\s?up|diagram|chart|graph|map)';
-  // A request is routinely phrased as a WANT rather than an order — "I want to connect
-  // my email and run a marketing campaign" is an instruction, not small talk, and the
-  // clause-boundary matcher below cannot see it because the verb sits after "to".
-  // Missing it meant the no-tool-call recovery never armed for exactly the kind of
-  // request the canvas exists to serve (measured 2026-08-12, ui 2026.7.210: one model
-  // round, zero tool calls, no retry).
-  const intent = '(?:i(?:\'d| would)?\\s+(?:want|need|would\\s+like)(?:\\s+you)?\\s+to|i\'m\\s+(?:trying|looking)\\s+to|can\\s+you|could\\s+you|would\\s+you|please|let\'?s|help\\s+me(?:\\s+to)?)';
-  return new RegExp(`^(?:please\\s+)?${verb}\\b`, 'i').test(prompt.trim())
-    // Real requests commonly begin with context ("I have an existing website …")
-    // and put the imperative in the next sentence or bullet. The old start-only
-    // classifier missed exactly that shape and allowed a prose summary to count as
-    // completion. Keep the boundary narrow so "How do I design…?" remains a question.
-    || new RegExp(`(?:^|[.!?;:]\\s+|\\n\\s*|[-*]\\s+)(?:please\\s+)?${verb}\\b`, 'i').test(prompt)
-    // Still verb-anchored, so "I want a coffee" and "can you explain SEO?" stay
-    // ordinary conversation.
-    || new RegExp(`(?:^|[.!?;:]\\s+|\\n\\s*|[-*]\\s+)${intent}\\s+${verb}\\b`, 'i').test(prompt)
-    || /\b(?:change|update|edit|revise|replace|apply)\s+(?:this|the|selected|its)\b/i.test(prompt);
-}
 
 /**
  * A guest turn could not start because no guest token could be obtained. Thrown
