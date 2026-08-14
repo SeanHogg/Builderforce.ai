@@ -1,7 +1,17 @@
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import type { PluggableList } from 'unified';
+import type { Options } from 'react-markdown';
+
+/**
+ * The plugin-list type, taken from `react-markdown`'s own props rather than
+ * imported from `unified`. `unified` is a transitive dependency here, not a
+ * declared one, so a bare `import type … from 'unified'` does not resolve under
+ * pnpm's strict node_modules and fails the production typecheck. Deriving it
+ * from the consumer also guarantees the lists stay exactly what
+ * `<ReactMarkdown>` accepts, whatever version of `unified` it resolves.
+ */
+type PluggableList = NonNullable<Options['remarkPlugins']>;
 
 /**
  * The ONE markdown pipeline. Every `<ReactMarkdown>` on the platform spreads
