@@ -380,6 +380,11 @@ jobs:
           # answers the same question in milliseconds, so the deploy fails fast on
           # a route that was localized without being moved to the Edge Runtime.
           pnpm run check:edge-runtime
+          # A dependency imported but not DECLARED resolves in a flat local
+          # node_modules and not under pnpm's strict layout here, so it fails
+          # only in CI — and a type-only one survives every test and dies in the
+          # middle of `next build`. Also milliseconds.
+          pnpm run check:declared-deps
           pnpm run cf-build
           wrangler deploy --no-bundle
 

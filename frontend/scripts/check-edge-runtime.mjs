@@ -19,8 +19,13 @@
  *
  * So this guard reproduces the rule statically, in milliseconds:
  *
- *   a route file that is dynamic (itself or via an ancestor layout) must resolve
- *   to `export const runtime = 'edge'`, on itself or on an ancestor layout.
+ *   a route that is dynamic — through its own source, an ancestor layout, or an
+ *   un-prerendered `[param]` in its PATH — must resolve to
+ *   `export const runtime = 'edge'`, on itself or on an ancestor layout.
+ *
+ * The path clause is not decoration. /book/[token] passed this guard and still
+ * failed the deploy: its source imports nothing dynamic at all, and the only
+ * thing making it a per-request function was the `[token]` in its name.
  *
  * Segment config is INHERITED, so `legal/layout.tsx` declaring edge covers every
  * page under /legal — the guard walks ancestors rather than demanding the export
