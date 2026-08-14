@@ -195,7 +195,10 @@ describe('withdrawal does not repossess', () => {
 async function readListingSource(): Promise<string> {
   const { readFile } = await import('node:fs/promises');
   const { fileURLToPath } = await import('node:url');
-  return readFile(fileURLToPath(new URL('./creationListings.ts', import.meta.url)), 'utf8');
+  // `new URL(...)` here resolves to the workers-types/DOM `URL`, which is not
+  // structurally node:url's `URL`. fileURLToPath accepts a string — same idiom
+  // as the sibling source-text tests.
+  return readFile(fileURLToPath(new URL('./creationListings.ts', import.meta.url).href), 'utf8');
 }
 
 describe('kind spec lookup', () => {
