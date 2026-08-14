@@ -59,6 +59,9 @@ const DYNAMIC_SIGNALS = [
 const EDGE_RUNTIME = /export\s+const\s+runtime\s*=\s*['"]edge['"]/;
 const OTHER_RUNTIME = /export\s+const\s+runtime\s*=\s*['"](?!edge)([^'"]+)['"]/;
 const GENERATE_STATIC_PARAMS = /export\s+(?:async\s+)?function\s+generateStaticParams|export\s+const\s+generateStaticParams/;
+const DYNAMIC_PARAMS_FALSE = /export\s+const\s+dynamicParams\s*=\s*false\b/;
+/** `[slug]`, `[...rest]`, `[[...rest]]` — a segment whose value is only known per request. */
+const DYNAMIC_SEGMENT = /\[{1,2}(?:\.\.\.)?[^\]]+\]{1,2}/;
 
 const read = (file) => readFileSync(file, 'utf8');
 const rel = (file) => relative(appDir, file).split('\\').join('/');
@@ -107,6 +110,18 @@ for (const routeFile of collectRouteFiles(appDir)) {
   const reasons = /^route\.tsx?$/.test(routeFile.split(/[\\/]/).pop())
     ? ['is a route handler (always server-rendered)']
     : [];
+
+  // A `[param]` route is rendered on demand unless it prerenders EVERY param —
+  // which means enumerating them with generateStaticParams AND closing the set
+  // with `dynamicParams = false`. With dynamicParams left at its default of
+  // true, an unlisted param still falls through to a per-request render, so the
+  // route is a function either way. This is the case that let /book/[token]
+  // through: no next-intl, no next/headers, nothing in the FILE said "dynamic"
+  // — the dynamic segment in its PATH did.
+  if (DYNAMIC_SEGMENT.test(rel(routeFile)) && !(GENERATE_STATIC_PARAMS.test(source) && DYNAMIC_PARAMS_FALSE.test(source))) {
+    reasons.push('has a dynamic path segment that is not fully prerendered (no generateStaticParams + dynamicParams = false)');
+  }
+
   for (const file of chain) {
     const text = file === routeFile ? source : read(file);
     for (const signal of DYNAMIC_SIGNALS) {

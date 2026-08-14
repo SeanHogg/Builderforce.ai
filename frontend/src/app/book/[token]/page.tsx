@@ -12,6 +12,8 @@
  */
 import { BookingClient } from './BookingClient';
 
+export const runtime = 'edge';
+
 export default async function BookingPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   return <BookingClient token={token} />;
