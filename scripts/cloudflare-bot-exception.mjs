@@ -21,19 +21,37 @@
  * the correct call: a listing pointing at a URL that answers challenge HTML is
  * worse than no listing.
  *
- * ── THE TWO CAUSES ARE NOT INTERCHANGEABLE ───────────────────────────────────
- * They present identically (`cf-mitigated:` header, 403) and have DIFFERENT
- * remedies, which is why this script reads the setting rather than guessing:
+ * ── THE CAUSES ARE NOT INTERCHANGEABLE ───────────────────────────────────────
+ * FOUR different settings emit the same `cf-mitigated:` header and the same
+ * 403, and they have DIFFERENT remedies — which is why this reads the zone
+ * rather than guessing:
  *
  *   Bot Fight Mode (free plan)
- *     Runs ahead of WAF custom rules and takes NO exceptions — there is no skip
- *     rule, no allowlist, no bypass. The only remedy is to turn it OFF (or move
- *     to a plan with Super Bot Fight Mode). Advice to "add a WAF skip rule" is
- *     simply wrong here and costs an afternoon to disprove.
+ *     Runs OUTSIDE the Ruleset Engine and takes NO exceptions. Cloudflare's own
+ *     docs: "You cannot bypass or skip Bot Fight Mode using WAF custom rules or
+ *     Page Rules" — Skip, Bypass and Allow "have no effect". The only remedy is
+ *     to turn it OFF. Advice to "add a WAF skip rule" is simply wrong here and
+ *     costs an afternoon to disprove.
  *
  *   Super Bot Fight Mode (Pro and above)
  *     Skippable, but NOT by a plain "skip remaining custom rules" rule — the
  *     skip must name the `http_request_sbfm` phase explicitly.
+ *
+ *   Security Level
+ *     Challenges by IP REPUTATION. Datacenter ranges carry threat scores, so
+ *     'high' challenges exactly the callers this API is for. Skippable as the
+ *     `securityLevel` product.
+ *
+ *   Browser Integrity Check
+ *     Challenges requests whose headers don't look like a browser — which is
+ *     every correct API client. Skippable as the `bic` product.
+ *
+ * ── WHAT THIS DELIBERATELY DOES NOT SKIP ─────────────────────────────────────
+ * WAF Managed Rules (`http_request_firewall_managed`) and rate limiting stay
+ * ON. The problem is interactive challenges served to legitimate machines, not
+ * request inspection: an API hostname should still be protected from injection
+ * and abuse. Turning those off is a security decision for a human, not a side
+ * effect of unblocking a registry listing.
  *
  * ── USAGE ────────────────────────────────────────────────────────────────────
  *   node scripts/cloudflare-bot-exception.mjs            # read-only; exits 1 if mitigated
@@ -62,6 +80,10 @@ const PROTECTED = [
 
 const SKIP_RULE_DESCRIPTION = 'builderforce: skip bot mitigation for API + MCP + gateway clients';
 const SKIP_RULE_EXPRESSION = PROTECTED.map((p) => p.expression).join(' or ');
+
+/** Super Bot Fight Mode is a phase; the reputation/browser checks are products. */
+const SKIP_PHASES = ['http_request_sbfm'];
+const SKIP_PRODUCTS = ['securityLevel', 'bic', 'uaBlock'];
 
 if (!token) {
   console.error(
@@ -97,7 +119,21 @@ if (!zone) {
 }
 console.log(`Zone ${zone.name} (${zone.id}) — plan: ${zone.plan?.name ?? 'unknown'}`);
 
-const bots = await cf(`/zones/${zone.id}/bot_management`);
+// Some of these are plan-gated; a token that cannot read one should still get a
+// verdict on the rest rather than crashing with nothing to show.
+async function optional(path, fallback) {
+  try {
+    return await cf(path);
+  } catch (error) {
+    console.log(`    (could not read ${path}: ${error.message})`);
+    return fallback;
+  }
+}
+
+const bots = await optional(`/zones/${zone.id}/bot_management`, {});
+const securityLevel = (await optional(`/zones/${zone.id}/settings/security_level`, {}))?.value;
+const browserCheck = (await optional(`/zones/${zone.id}/settings/browser_check`, {}))?.value;
+
 const fightMode = bots?.fight_mode === true;
 // Super Bot Fight Mode grades traffic in three buckets; only the automated ones
 // challenge an API client. 'allow' means it is already out of the way.
@@ -108,10 +144,28 @@ const sbfm = {
 const sbfmMitigating = ['definitelyAutomated', 'likelyAutomated'].filter(
   (key) => sbfm[key] && sbfm[key] !== 'allow',
 );
+// 'medium' is the default and challenges only genuinely bad reputation; 'high'
+// and 'under_attack' reach far enough to catch ordinary datacenter egress.
+const reputationChallenging = ['high', 'under_attack'].includes(securityLevel);
+const bicOn = browserCheck === 'on';
 
-if (!fightMode && sbfmMitigating.length === 0) {
-  console.log('✅  No bot mitigation is challenging these hostnames.');
+console.log(
+  `Settings — bot fight mode: ${fightMode ? 'ON' : 'off'}` +
+    `, SBFM: ${sbfmMitigating.length ? sbfmMitigating.map((k) => `${k}=${sbfm[k]}`).join(', ') : 'not mitigating'}` +
+    `, security level: ${securityLevel ?? 'unknown'}` +
+    `, browser integrity check: ${browserCheck ?? 'unknown'}`,
+);
+
+const skippable = sbfmMitigating.length > 0 || reputationChallenging || bicOn;
+
+if (!fightMode && !skippable) {
+  console.log('\n✅  Nothing in the zone is challenging these hostnames:');
   for (const p of PROTECTED) console.log(`      · ${p.label}`);
+  console.log(
+    '\n    If a datacenter caller is STILL challenged, the cause is outside these' +
+      '\n    settings — check WAF managed rules and any Page Rule or firewall rule' +
+      "\n    with a challenge action, which this script deliberately does not edit.\n",
+  );
   process.exit(0);
 }
 
@@ -134,16 +188,19 @@ if (fightMode) {
   console.log('    → Bot Fight Mode turned OFF.');
 }
 
-if (sbfmMitigating.length > 0) {
-  console.log('\n⚠️  Super Bot Fight Mode is mitigating:');
-  for (const key of sbfmMitigating) console.log(`      · ${key} = ${sbfm[key]}`);
-  console.log('    This one IS skippable — but only by a rule that names the');
-  console.log("    'http_request_sbfm' phase. A generic skip rule does not touch it.");
+if (skippable) {
+  console.log('\n⚠️  Challenging these hostnames, and skippable by WAF custom rule:');
+  for (const key of sbfmMitigating) console.log(`      · Super Bot Fight Mode ${key} = ${sbfm[key]}`);
+  if (reputationChallenging) console.log(`      · Security Level = ${securityLevel} (challenges by IP reputation)`);
+  if (bicOn) console.log('      · Browser Integrity Check = on (challenges non-browser headers)');
+  console.log('    Skippable — but only by a rule naming the phase/products explicitly.');
+  console.log('    A generic "skip remaining custom rules" rule does not touch any of them.');
 
   if (!apply) {
     console.log('\n    Re-run with --apply to write the skip rule:');
     console.log(`      expression: ${SKIP_RULE_EXPRESSION}`);
-    console.log("      action:     skip → phases: ['http_request_sbfm']\n");
+    console.log(`      action:     skip → phases: ${JSON.stringify(SKIP_PHASES)}`);
+    console.log(`                       → products: ${JSON.stringify(SKIP_PRODUCTS)}\n`);
     process.exit(1);
   }
 
