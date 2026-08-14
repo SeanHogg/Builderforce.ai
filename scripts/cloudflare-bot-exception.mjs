@@ -224,7 +224,7 @@ if (skippable) {
   const existing = (full.rules ?? []).find((r) => r.description === SKIP_RULE_DESCRIPTION);
   const rule = {
     action: 'skip',
-    action_parameters: { phases: ['http_request_sbfm'] },
+    action_parameters: { phases: SKIP_PHASES, products: SKIP_PRODUCTS },
     expression: SKIP_RULE_EXPRESSION,
     description: SKIP_RULE_DESCRIPTION,
     enabled: true,
