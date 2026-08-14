@@ -170,6 +170,9 @@ const MAX_NARROW_SEARCHES = 2;
  * this prevents the user-facing handoff from ending in the middle of a sentence. */
 const CANVAS_RESPONSE_TOKENS = 3_200;
 
+/** Act-now escalations before the turn stops asking a stalled model to author. */
+const MAX_MUTATION_RECOVERIES = 2;
+
 /** An INTERRUPTED turn — truncated by the output ceiling, or a tool call the
  * provider could not parse — is retried with the instruction that matches the
  * interruption. Two per turn: enough to clear a one-off, few enough that a model
@@ -187,6 +190,32 @@ const TRUNCATED_TURN_DIRECTIVE = 'Your previous response was cut off at the outp
 const MALFORMED_TOOL_CALL_DIRECTIVE = 'Your previous tool call could not be parsed and was discarded. Make the same call again with strictly valid JSON arguments: no comments, no trailing commas, no unescaped newlines or quotes inside string values, and no placeholder text. Send one tool call.';
 
 const RESEARCH_TOOL_NAMES = new Set(['builtin_web_search', 'builtin_web_fetch', 'builtin_geo_geocode']);
+
+/**
+ * Tools that cannot advance an AUTHORING phase, so they are withdrawn once the turn
+ * has nothing left to do but write to the canvas.
+ *
+ * Research is the obvious half. The board snapshot is the other: it already travels in
+ * the turn's context, every call returns the same payload, and a stalled model reaches
+ * for it because it is the safest-looking action available. Measured 2026-08-14 (ui
+ * 2026.8.15): asked to draft an email, the model read the snapshot, answered in prose,
+ * was told to act, read the IDENTICAL snapshot again, answered again, and the turn was
+ * abandoned with nothing on the canvas.
+ */
+const NON_AUTHORING_TOOL_NAMES = new Set([...RESEARCH_TOOL_NAMES, 'canvas_read_snapshot']);
+
+/**
+ * The model ANSWERED but never executed the canvas change the request asked for.
+ *
+ * The answer is the work the user wanted — an authored email, a plan, a comparison —
+ * and it is the only copy of it. Discarding it for a runtime notice loses it outright
+ * (measured 2026-08-14: a drafted raise request plus coaching was produced twice and
+ * thrown away, and the session showed only "I couldn't prepare any canvas changes from
+ * that request"). Deliver it, and be honest that the board is unchanged.
+ */
+function answeredWithoutCanvasChange(answer: string): string {
+  return `${answer}\n\nI answered here but did not put anything on the canvas. Ask me to add this to the canvas and I will create the object for it.`;
+}
 
 function isNarrowSearchResult(value: unknown): boolean {
   return !!value && typeof value === 'object'
@@ -502,12 +531,22 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   let finalText = '';
   let proposedCanvasMutation = false;
   let executiveRequestRecoveryUsed = false;
-  let imperativeMutationRecoveryUsed = false;
+  /** Act-now escalations spent on a model that answered in prose instead of calling a
+   *  canvas tool. Two: the first re-states the command, the second runs with research
+   *  and board re-reads already withdrawn and tells it why prose is not an artifact. */
+  let mutationRecoveries = 0;
   let degenerateAnswerRecoveryUsed = false;
   let interruptedTurnRecoveries = 0;
   let authoringDirectiveIssued = false;
   let narrowSearches = 0;
   let lastToolError = '';
+  /**
+   * The most recent real thing the model SAID this turn — non-empty, not an echo of an
+   * earlier reply. Held across iterations because the recovery paths deliberately clear
+   * `finalText` before continuing, and one of them then gives up: without this, an
+   * answer the model actually produced is unrecoverable by the time the loop ends.
+   */
+  let lastSpokenAnswer = '';
   let activeModel = options.model;
   let activeModelStrict = options.modelStrict;
   const toolCallingModels: string[] = [];
@@ -544,7 +583,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     }
     activeModel = fallback;
     activeModelStrict = true;
-    imperativeMutationRecoveryUsed = false;
+    mutationRecoveries = 0;
     degenerateAnswerRecoveryUsed = false;
     interruptedTurnRecoveries = 0;
     options.onModelFallback?.(fallback);
@@ -564,17 +603,23 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   let documentWords: number | null = requestedPages == null ? null : documentWordsInSnapshot(options.canvasSnapshot);
   let documentWordCountExact = false;
   for (let turn = 0; turn < MAX_CANVAS_TOOL_TURNS; turn += 1) {
+    // The authoring phase arms on EITHER trigger. Turn count alone made it unreachable
+    // for the failure it exists to stop: a model that answers in prose instead of
+    // calling a tool is told once to act, ignores it, and the loop gives up on turn 4 —
+    // three turns before the reserved window it never reaches. Having already ignored
+    // an explicit act-now directive is the stronger signal of the two, so it arms the
+    // same phase: research and re-reads withdrawn, authoring tools only.
     const authoringOnly = mutationRequested && !proposedCanvasMutation
-      && MAX_CANVAS_TOOL_TURNS - turn <= RESERVED_AUTHORING_TURNS;
+      && (mutationRecoveries > 0 || MAX_CANVAS_TOOL_TURNS - turn <= RESERVED_AUTHORING_TURNS);
     if (authoringOnly && !authoringDirectiveIssued) {
       authoringDirectiveIssued = true;
       messages.push({
         role: 'system',
-        content: 'The research phase is over. Use the remaining turns only to create or update the requested Canvas artifacts with canvas_* tools. Build from the evidence already gathered, state any evidence gap inside the artifact, and do not make another search or fetch call.',
+        content: 'The research phase is over. Use the remaining turns only to create or update the requested Canvas artifacts with canvas_* tools. Build from what you already have — you have the board snapshot and do not need to read it again — state any evidence gap inside the artifact, and do not make another search or fetch call.',
       });
     }
     const availableActions = authoringOnly
-      ? actions.filter((action) => !RESEARCH_TOOL_NAMES.has(action.name))
+      ? actions.filter((action) => !NON_AUTHORING_TOOL_NAMES.has(action.name))
       : actions;
     const result = await streamChatCompletion({
       transport,
@@ -675,19 +720,26 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         finalText = '';
         break;
       }
-      if (!options.participant && !proposedCanvasMutation && !imperativeMutationRecoveryUsed
+      lastSpokenAnswer = spoken;
+      if (!options.participant && !proposedCanvasMutation && mutationRecoveries < MAX_MUTATION_RECOVERIES
         && mutationRequested
         && (byName.has('canvas_add_object') || byName.has('canvas_update_object'))) {
-        imperativeMutationRecoveryUsed = true;
+        mutationRecoveries += 1;
         messages.push({ role: 'assistant', content: result.text || finalText });
         messages.push({
           role: 'system',
-          content: 'Your prior response described or discussed an imperative Canvas request without executing it. Act now with the available canvas_add_object or canvas_update_object tool. If a non-Chat object is selected, update that exact object unless the user explicitly requested another one. For a Website/WYSIWYG change, send the complete authored fields.pages structure and websiteTheme; do not ask another optional question and do not rely on renderer defaults.',
+          // The SECOND attempt runs with research and board re-reads already withdrawn,
+          // so repeating "act now" adds nothing. What the first directive never supplied
+          // is the reason a model stalls here: it has written the answer in prose and has
+          // no idea the prose is not the artifact. Say that, and name the one call left.
+          content: mutationRecoveries > 1
+            ? 'You have now answered twice in prose without creating anything. Prose in this reply is NOT a canvas artifact and the user cannot keep it — only a canvas_add_object call puts it on their board. Make that call now, with the full text you just wrote as the object\'s authored content, and write nothing else in this response.'
+            : 'Your prior response described or discussed an imperative Canvas request without executing it. Act now with the available canvas_add_object or canvas_update_object tool. If a non-Chat object is selected, update that exact object unless the user explicitly requested another one. For a Website/WYSIWYG change, send the complete authored fields.pages structure and websiteTheme; do not ask another optional question and do not rely on renderer defaults.',
         });
         finalText = '';
         continue;
       }
-      if (mutationRequested && !proposedCanvasMutation && imperativeMutationRecoveryUsed) {
+      if (mutationRequested && !proposedCanvasMutation && mutationRecoveries > 0) {
         if (switchToProvenModel(
           result.resolvedModel,
           'The prior model did not execute the Canvas command after a retry and has been disabled for this session. Stop researching and use canvas_add_object or canvas_update_object now to complete the user\'s requested artifact.',
@@ -731,8 +783,8 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         documentWordCountExact = true;
       }
       let outcome: unknown;
-      if (authoringOnly && RESEARCH_TOOL_NAMES.has(call.name)) {
-        outcome = { error: 'The bounded research phase has ended. Create the requested Canvas artifacts from the evidence already gathered.' };
+      if (authoringOnly && NON_AUTHORING_TOOL_NAMES.has(call.name)) {
+        outcome = { error: 'The bounded research phase has ended. Create the requested Canvas artifacts from the evidence already gathered and the board snapshot you already have.' };
       } else if (call.name === 'builtin_web_search' && narrowSearches >= MAX_NARROW_SEARCHES) {
         outcome = { error: 'Search stopped after two encyclopedic results. Fetch a known official URL directly or create the requested Canvas artifacts with the evidence already gathered.' };
       } else if (!action) {
@@ -751,7 +803,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         const result = outcome as { proposed?: unknown; error?: unknown };
         if (result.proposed === true) proposedCanvasMutation = true;
         if (typeof result.error === 'string' && result.error.trim()
-          && !(RESEARCH_TOOL_NAMES.has(call.name) && (authoringOnly || narrowSearches >= MAX_NARROW_SEARCHES))) {
+          && !(NON_AUTHORING_TOOL_NAMES.has(call.name) && (authoringOnly || narrowSearches >= MAX_NARROW_SEARCHES))) {
           lastToolError = result.error.trim();
         }
       }
@@ -769,9 +821,20 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // From here down the string is a RUNTIME NOTICE, not something the model said. The
   // caller is told so it can record it as a failed turn instead of writing it into the
   // transcript as an assistant reply for the next turn to copy.
+  // A tool that FAILED still outranks prose: the error names what blocked the turn and
+  // what would clear it, which the model's own narration routinely gets wrong.
   if (lastToolError) {
     options.onUnanswered?.({ reason: 'tool-error', detail: lastToolError });
     return `I couldn't prepare the requested canvas changes: ${lastToolError}`;
+  }
+  // Otherwise: an answer the model gave earlier in this turn is NOT a runtime notice, and
+  // the fact that it never reached canvas_add_object does not make it worthless — for a
+  // drafting request it IS the deliverable. Deliver it (still subject to the
+  // unverified-creation check, which replaces an answer CLAIMING a canvas change nobody
+  // made) rather than discarding the user's result in favour of a dead end.
+  if (lastSpokenAnswer) {
+    const checked = verified(lastSpokenAnswer);
+    return finish(checked === lastSpokenAnswer ? answeredWithoutCanvasChange(checked) : checked);
   }
   options.onUnanswered?.({ reason: mutationRequested ? 'command-not-executed' : 'no-answer' });
   return "I couldn't prepare any canvas changes from that request.";
