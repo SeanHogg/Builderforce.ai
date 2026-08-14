@@ -34,6 +34,8 @@ import { isAgentOwner } from '@/lib/agentPermissions';
 import { formatAgentPrice } from '@/lib/agentPresentation';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 import { KnowledgeMarketSection } from './KnowledgeMarketSection';
+import { CreationsSection } from './CreationsSection';
+import { SellerEarnings } from './SellerEarnings';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { AgentCard } from '@/components/workforce/AgentCard';
@@ -623,6 +625,13 @@ export default function MarketplacePageClient() {
           browse — renders for logged-out visitors too; hides only when there are
           no listings. Acquiring prompts sign-in / checkout as needed. */}
       <KnowledgeMarketSection />
+
+      {/* What people BUILT on the canvas, on sale and runnable. The fourth
+          producer, and the first one whose products the platform itself made.
+          Both components decide their own visibility — the seller panel renders
+          nothing for somebody who has published nothing. */}
+      <SellerEarnings />
+      <CreationsSection search={search} />
 
       <div
         style={{

@@ -9,7 +9,9 @@ import { Select } from '@/components/Select';
 import { Button, Surface } from '@/components/ui';
 import { TalentProfileView } from '@/components/freelance/TalentProfileView';
 import ProfileIdentityCard from '@/components/profile/ProfileIdentityCard';
-import { TALENT_DISCIPLINES, TALENT_AVAILABILITIES } from '@/components/freelance/talentFields';
+import {
+  TALENT_DISCIPLINES, TALENT_AVAILABILITIES, TALENT_SEEKING_MODES, TALENT_WORK_MODES, TALENT_SENIORITIES,
+} from '@/components/freelance/talentFields';
 import {
   getMyFreelancerProfile, updateMyFreelancerProfile, uploadMyResume,
   getMyEmbedToken, checkMySlug, getResumeSuggestions, connectHiredVideo,
@@ -19,6 +21,9 @@ import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 const DISCIPLINES = TALENT_DISCIPLINES;
 const AVAILABILITIES = TALENT_AVAILABILITIES;
+const SEEKING_MODES = TALENT_SEEKING_MODES;
+const WORK_MODES = TALENT_WORK_MODES;
+const SENIORITIES = TALENT_SENIORITIES;
 
 export default function FreelancerProfilePage() {
   const t = useTranslations('freelancer');
@@ -31,6 +36,11 @@ export default function FreelancerProfilePage() {
   const [skillsText, setSkillsText] = useState('');
   const [rateDollars, setRateDollars] = useState('');
   const [slugText, setSlugText] = useState('');
+  // Career intent — free-text fields kept as strings while editing so a half-typed
+  // comma list or salary never round-trips through the number/array shape mid-keystroke.
+  const [targetRolesText, setTargetRolesText] = useState('');
+  const [salaryMinText, setSalaryMinText] = useState('');
+  const [salaryMaxText, setSalaryMaxText] = useState('');
   const [slugCheck, setSlugCheck] = useState<SlugCheck | null>(null);
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -50,6 +60,9 @@ export default function FreelancerProfilePage() {
       setSkillsText((p.skills ?? []).join(', '));
       setRateDollars(p.hourlyRateCents != null ? (p.hourlyRateCents / 100).toString() : '');
       setSlugText(p.slug ?? '');
+      setTargetRolesText((p.targetRoles ?? []).join(', '));
+      setSalaryMinText(p.desiredSalaryMinCents != null ? (p.desiredSalaryMinCents / 100).toString() : '');
+      setSalaryMaxText(p.desiredSalaryMaxCents != null ? (p.desiredSalaryMaxCents / 100).toString() : '');
       const embed = await getMyEmbedToken('profile').catch(() => null);
       setEmbedUrl(embed?.embedUrl ?? null);
     } catch (e) {
@@ -62,6 +75,10 @@ export default function FreelancerProfilePage() {
   useEffect(() => { void load(); }, [load]);
 
   const set = (patch: Partial<FreelancerProfile>) => setProfile((p) => (p ? { ...p, ...patch } : p));
+
+  // The employment fields exist only when this listing is offered to employers. Derived
+  // here from the one value that decides it rather than tracked as separate state.
+  const seeksEmployment = profile?.seeking === 'employment' || profile?.seeking === 'both';
 
   // Debounced slug availability check (only when it changed from the saved value).
   useEffect(() => {
@@ -88,6 +105,16 @@ export default function FreelancerProfilePage() {
         headline: profile.headline, bio: profile.bio, discipline: profile.discipline,
         skills: currentSkills, hourlyRateCents, currency: profile.currency, visibility: profile.visibility,
         availability: profile.availability, published: profile.published, location: profile.location, timezone: profile.timezone,
+        // Career intent — the same listing, offered to employment demand as well as
+        // project demand. PATCH replaces the row, so these travel with every save.
+        seeking: profile.seeking ?? 'services',
+        targetRoles: targetRolesText.split(',').map((r) => r.trim()).filter(Boolean).slice(0, 12),
+        seniority: profile.seniority ?? null,
+        desiredSalaryMinCents: salaryMinText ? Math.round(parseFloat(salaryMinText) * 100) : undefined,
+        desiredSalaryMaxCents: salaryMaxText ? Math.round(parseFloat(salaryMaxText) * 100) : undefined,
+        workMode: profile.workMode ?? null,
+        noticePeriodDays: profile.noticePeriodDays ?? undefined,
+        openToRelocation: profile.openToRelocation === true,
         // Only send slug when it changed (empty string clears it).
         ...(trimmedSlug !== (profile.slug ?? '') ? { slug: trimmedSlug } : {}),
       });
@@ -251,6 +278,77 @@ export default function FreelancerProfilePage() {
             <label className="ui-field__label">{t('profile.skills')}</label>
             <input className="ui-input" value={skillsText} onChange={(e) => setSkillsText(e.target.value)} placeholder={t('profile.skillsPlaceholder')} />
           </div>
+
+          {/* ── What you are open to ────────────────────────────────────────────
+              ONE listing, two kinds of demand. A full-time role is a posting with
+              postingType 'fte' and an application is a proposal on it, so employment
+              needed no second profile — only this statement of intent. The employment
+              fields below are what an employer's search actually matches on, and a
+              strong listing that never states them is invisible to every one of them. */}
+          <fieldset className="ui-fieldset">
+            <legend className="ui-field__label">{t('profile.seekingLegend')}</legend>
+            <p className="ui-field__message">{t('profile.seekingHint')}</p>
+            <Select
+              className="ui-input"
+              aria-label={t('profile.seekingLegend')}
+              value={profile.seeking ?? 'services'}
+              onChange={(e) => set({ seeking: e.target.value as NonNullable<FreelancerProfile['seeking']> })}
+            >
+              {SEEKING_MODES.map((mode) => <option key={mode} value={mode}>{t(`seeking.${mode}`)}</option>)}
+            </Select>
+
+            {seeksEmployment && (
+              <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
+                <div>
+                  <label className="ui-field__label" htmlFor="targetRoles">{t('profile.targetRoles')}</label>
+                  <input id="targetRoles" className="ui-input" value={targetRolesText}
+                    onChange={(e) => setTargetRolesText(e.target.value)} placeholder={t('profile.targetRolesPlaceholder')} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+                  <div>
+                    <label className="ui-field__label" htmlFor="seniority">{t('profile.seniority')}</label>
+                    <Select id="seniority" className="ui-input" value={profile.seniority ?? ''}
+                      onChange={(e) => set({ seniority: e.target.value || null })}>
+                      <option value="">—</option>
+                      {SENIORITIES.map((level) => <option key={level} value={level}>{t(`seniority.${level}`)}</option>)}
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="ui-field__label" htmlFor="workMode">{t('profile.workMode')}</label>
+                    <Select id="workMode" className="ui-input" value={profile.workMode ?? ''}
+                      onChange={(e) => set({ workMode: (e.target.value || null) as FreelancerProfile['workMode'] })}>
+                      <option value="">—</option>
+                      {WORK_MODES.map((mode) => <option key={mode} value={mode}>{t(`workMode.${mode}`)}</option>)}
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="ui-field__label" htmlFor="noticeDays">{t('profile.noticePeriod')}</label>
+                    <input id="noticeDays" className="ui-input" type="number" min={0} max={365} step="1"
+                      value={profile.noticePeriodDays ?? ''}
+                      onChange={(e) => set({ noticePeriodDays: e.target.value === '' ? null : Number(e.target.value) })}
+                      placeholder="30" />
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+                  <div>
+                    <label className="ui-field__label" htmlFor="salaryMin">{t('profile.salaryMin')}</label>
+                    <input id="salaryMin" className="ui-input" type="number" min={0} step="1000" value={salaryMinText}
+                      onChange={(e) => setSalaryMinText(e.target.value)} placeholder="80000" />
+                  </div>
+                  <div>
+                    <label className="ui-field__label" htmlFor="salaryMax">{t('profile.salaryMax')}</label>
+                    <input id="salaryMax" className="ui-input" type="number" min={0} step="1000" value={salaryMaxText}
+                      onChange={(e) => setSalaryMaxText(e.target.value)} placeholder="110000" />
+                  </div>
+                  <label className="ui-field__label" style={{ display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'end', minHeight: 40 }}>
+                    <input type="checkbox" checked={profile.openToRelocation === true}
+                      onChange={(e) => set({ openToRelocation: e.target.checked })} />
+                    {t('profile.openToRelocation')}
+                  </label>
+                </div>
+              </div>
+            )}
+          </fieldset>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <div>
               <label className="ui-field__label">{t('profile.rate')}</label>

@@ -27,6 +27,7 @@ import {
 } from '../../application/integrations/hiredVideo';
 import { notify } from '../../application/notifications/notify';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
+import { normalizeSeeking, normalizeWorkMode } from '../../application/career/listing';
 import { parseJsonArray } from '../../domain/shared/json';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { buildDatabase } from '../../infrastructure/database/connection';
@@ -64,6 +65,17 @@ const profileColumns = {
   resume_key: freelancerProfiles.resumeKey,
   resume_filename: freelancerProfiles.resumeFilename,
   resume_extract: freelancerProfiles.resumeExtract,
+  // Career intent (0462) — the same listing offered to employment demand as well as
+  // project demand. Selected in the ONE projection every profile surface reads, so the
+  // browse card, the detail page and the tools cannot disagree about what someone wants.
+  seeking: freelancerProfiles.seeking,
+  target_roles: freelancerProfiles.targetRoles,
+  seniority: freelancerProfiles.seniority,
+  desired_salary_min_cents: freelancerProfiles.desiredSalaryMinCents,
+  desired_salary_max_cents: freelancerProfiles.desiredSalaryMaxCents,
+  work_mode: freelancerProfiles.workMode,
+  notice_period_days: freelancerProfiles.noticePeriodDays,
+  open_to_relocation: freelancerProfiles.openToRelocation,
   created_at: freelancerProfiles.createdAt,
   updated_at: freelancerProfiles.updatedAt,
 } as const;
@@ -351,6 +363,17 @@ function mapPublicProfile(row: Record<string, unknown>): Record<string, unknown>
     availability: row.availability ?? 'open',
     location: row.location ?? null,
     timezone: row.timezone ?? null,
+    // Career intent (0462). Projected on the PUBLIC shape on purpose: an employer
+    // browsing talent has to be able to see who is open to employment, which is the
+    // whole point of the listing carrying it. See application/career/listing.ts.
+    seeking: row.seeking ?? 'services',
+    targetRoles: parseSkills(row.target_roles),
+    seniority: row.seniority ?? null,
+    desiredSalaryMinCents: row.desired_salary_min_cents == null ? null : Number(row.desired_salary_min_cents),
+    desiredSalaryMaxCents: row.desired_salary_max_cents == null ? null : Number(row.desired_salary_max_cents),
+    workMode: row.work_mode ?? null,
+    noticePeriodDays: row.notice_period_days == null ? null : Number(row.notice_period_days),
+    openToRelocation: Boolean(row.open_to_relocation),
     hasResume: Boolean(row.hired_video_user_id) || Boolean(row.resume_key),
     rating: row.avg_rating == null ? null : Number(row.avg_rating),
     ratingCount: row.rating_count == null ? 0 : Number(row.rating_count),
@@ -488,6 +511,26 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     const location = typeof b.location === 'string' ? b.location.slice(0, 120) : null;
     const timezone = typeof b.timezone === 'string' ? b.timezone.slice(0, 60) : null;
 
+    // Career intent (0462). The two enumerations are normalised by the CAREER DOMAIN
+    // rather than re-listed here: `application/career/listing.ts` owns what "seeking"
+    // and "work mode" may be, and the readings over them (readiness per channel, which
+    // posting types this listing is offered) read the same constants. A second copy of
+    // the vocabulary in this route is exactly how the two would drift apart.
+    const seeking = normalizeSeeking(b.seeking);
+    const workMode = normalizeWorkMode(b.workMode);
+    const targetRoles = Array.isArray(b.targetRoles)
+      ? JSON.stringify((b.targetRoles as unknown[]).filter((r) => typeof r === 'string' && r.trim()).slice(0, 12))
+      : null;
+    const seniority = typeof b.seniority === 'string' ? b.seniority.slice(0, 30) : null;
+    const cents = (v: unknown): number | null =>
+      typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : null;
+    const desiredSalaryMinCents = cents(b.desiredSalaryMinCents);
+    const desiredSalaryMaxCents = cents(b.desiredSalaryMaxCents);
+    const noticePeriodDays = typeof b.noticePeriodDays === 'number' && Number.isFinite(b.noticePeriodDays) && b.noticePeriodDays >= 0
+      ? Math.min(365, Math.round(b.noticePeriodDays))
+      : null;
+    const openToRelocation = b.openToRelocation === true;
+
     // Slug: validate + enforce case-insensitive uniqueness. Empty string clears it.
     let slug: string | null | undefined;
     if (typeof b.slug === 'string') {
@@ -513,6 +556,8 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     await db.insert(freelancerProfiles).values({
       userId, headline, bio, discipline, skills,
       hourlyRateCents: rate, currency, visibility, availability, published, location, timezone,
+      seeking, targetRoles, seniority, desiredSalaryMinCents, desiredSalaryMaxCents,
+      workMode, noticePeriodDays, openToRelocation,
       updatedAt: sql`NOW()`,
     }).onConflictDoUpdate({
       target: freelancerProfiles.userId,
@@ -520,7 +565,12 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
         headline: sql`EXCLUDED.headline`, bio: sql`EXCLUDED.bio`, discipline: sql`EXCLUDED.discipline`,
         skills: sql`EXCLUDED.skills`, hourlyRateCents: sql`EXCLUDED.hourly_rate_cents`, currency: sql`EXCLUDED.currency`,
         visibility: sql`EXCLUDED.visibility`, availability: sql`EXCLUDED.availability`, published: sql`EXCLUDED.published`,
-        location: sql`EXCLUDED.location`, timezone: sql`EXCLUDED.timezone`, updatedAt: sql`NOW()`,
+        location: sql`EXCLUDED.location`, timezone: sql`EXCLUDED.timezone`,
+        seeking: sql`EXCLUDED.seeking`, targetRoles: sql`EXCLUDED.target_roles`, seniority: sql`EXCLUDED.seniority`,
+        desiredSalaryMinCents: sql`EXCLUDED.desired_salary_min_cents`, desiredSalaryMaxCents: sql`EXCLUDED.desired_salary_max_cents`,
+        workMode: sql`EXCLUDED.work_mode`, noticePeriodDays: sql`EXCLUDED.notice_period_days`,
+        openToRelocation: sql`EXCLUDED.open_to_relocation`,
+        updatedAt: sql`NOW()`,
       },
     });
     // Slug is only touched when the caller sends the field (undefined = leave as-is).

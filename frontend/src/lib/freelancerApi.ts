@@ -33,6 +33,20 @@ export interface FreelancerProfile {
   availability: 'open' | 'limited' | 'unavailable';
   location: string | null;
   timezone: string | null;
+  /** Career intent (0462) — the SAME listing, offered to two kinds of demand.
+   *
+   *  A full-time job is a `job_postings` row with postingType 'fte' and an application
+   *  is a `job_proposals` row, so employment needed no second profile and no second
+   *  pipeline — only the supply side saying which kind of demand it wants. `seeking`
+   *  is that statement; the rest are what an employment search matches on. */
+  seeking?: 'services' | 'employment' | 'both' | 'not_looking';
+  targetRoles?: string[];
+  seniority?: string | null;
+  desiredSalaryMinCents?: number | null;
+  desiredSalaryMaxCents?: number | null;
+  workMode?: 'remote' | 'hybrid' | 'onsite' | null;
+  noticePeriodDays?: number | null;
+  openToRelocation?: boolean;
   hasResume?: boolean;
   published?: boolean;
   hiredVideoConnected?: boolean;
@@ -239,24 +253,6 @@ export interface Engagement {
   terminatedAt: string | null;
 }
 
-export interface Timecard {
-  id: string;
-  engagementId: string;
-  tenantId: number;
-  tenantName: string | null;
-  freelancerName: string | null;
-  periodStart: string;
-  periodEnd: string;
-  status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'paid';
-  totalMinutes: number;
-  billableMinutes: number;
-  rateCents: number | null;
-  currency: string;
-  amountCents: number;
-  submittedAt: string | null;
-  approvedAt: string | null;
-}
-
 /**
  * Every call in this module goes through `apiClient.apiRequestStream`, which
  * supplies the Authorization header (per `auth` mode), the locale header, the
@@ -392,72 +388,6 @@ export async function terminateEngagement(id: string, reason?: string): Promise<
 }
 
 // ---- Timecards ----------------------------------------------------------
-
-export async function resolveTimecard(input: { engagementId: string; periodStart: string; periodEnd: string }): Promise<{ id: string; totalMinutes: number; billableMinutes: number }> {
-  const res = await apiRequestStream(`/api/timecards/resolve`, { method: 'POST', auth: 'web', body: JSON.stringify(input) });
-  return jsonOrThrow(res, 'Failed to resolve timecard');
-}
-
-export async function listMyTimecards(): Promise<Timecard[]> {
-  const res = await apiRequestStream(`/api/timecards/mine`, { auth: 'web' });
-  return jsonOrThrow<Timecard[]>(res, 'Failed to load timecards');
-}
-
-export async function listEmployerTimecards(): Promise<Timecard[]> {
-  const res = await apiRequestStream(`/api/timecards`, { auth: 'tenant' });
-  return jsonOrThrow<Timecard[]>(res, 'Failed to load timecards');
-}
-
-export async function submitTimecard(id: string): Promise<void> {
-  const res = await apiRequestStream(`/api/timecards/${id}/submit`, { method: 'POST', auth: 'web' });
-  await jsonOrThrow(res, 'Failed to submit');
-}
-
-export async function approveTimecard(id: string): Promise<void> {
-  const res = await apiRequestStream(`/api/timecards/${id}/approve`, { method: 'POST', auth: 'tenant' });
-  await jsonOrThrow(res, 'Failed to approve');
-}
-
-export async function rejectTimecard(id: string, reason?: string): Promise<void> {
-  const res = await apiRequestStream(`/api/timecards/${id}/reject`, { method: 'POST', auth: 'tenant', body: JSON.stringify({ reason }) });
-  await jsonOrThrow(res, 'Failed to reject');
-}
-
-export interface TimecardEntry {
-  id: string;
-  workDate: string;
-  minutes: number;
-  source: 'auto' | 'manual' | 'meeting';
-  billable: boolean;
-  description: string | null;
-}
-
-// Worker: view + edit the line items on a draft timecard.
-export async function listTimecardEntries(id: string): Promise<TimecardEntry[]> {
-  const res = await apiRequestStream(`/api/timecards/${id}/entries`, { auth: 'web' });
-  return jsonOrThrow<TimecardEntry[]>(res, 'Failed to load entries');
-}
-
-export async function addTimecardEntry(id: string, input: { workDate?: string; minutes: number; description?: string; billable?: boolean }): Promise<void> {
-  const res = await apiRequestStream(`/api/timecards/${id}/entries`, { method: 'POST', auth: 'web', body: JSON.stringify(input) });
-  await jsonOrThrow(res, 'Failed to add entry');
-}
-
-export async function updateTimecardEntry(id: string, entryId: string, patch: { minutes?: number; billable?: boolean; description?: string }): Promise<void> {
-  const res = await apiRequestStream(`/api/timecards/${id}/entries/${entryId}`, { method: 'PATCH', auth: 'web', body: JSON.stringify(patch) });
-  await jsonOrThrow(res, 'Failed to update entry');
-}
-
-export async function deleteTimecardEntry(id: string, entryId: string): Promise<void> {
-  const res = await apiRequestStream(`/api/timecards/${id}/entries/${entryId}`, { method: 'DELETE', auth: 'web' });
-  await jsonOrThrow(res, 'Failed to delete entry');
-}
-
-// Employer: the approval view (card + its entries), tenant-scoped.
-export async function getTimecardReview(id: string): Promise<{ card: Timecard; entries: TimecardEntry[] }> {
-  const res = await apiRequestStream(`/api/timecards/${id}/review`, { auth: 'tenant' });
-  return jsonOrThrow(res, 'Failed to load timecard');
-}
 
 // Worker: log a meeting as paid time (emits a billable meeting span).
 export async function logMeeting(input: { engagementId: string; occurredAt?: string; durationMinutes: number; note?: string }): Promise<void> {

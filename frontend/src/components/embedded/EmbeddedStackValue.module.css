@@ -1,0 +1,37 @@
+/* The selling half of /embedded. Every colour is a token so the section reads in
+   both themes, and every track is fluid so it survives the 70vw ShellPanel and a
+   360px viewport without a horizontal scrollbar. */
+.sell { display: grid; gap: 22px; padding: 24px; border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--bg-base); }
+.lead h2 { margin: 0; color: var(--text-primary); font-size: var(--font-size-section); letter-spacing: -.02em; }
+.lead p { max-width: 720px; margin: 8px 0 0; color: var(--text-secondary); font-size: var(--font-size-body); line-height: 1.6; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat { display: grid; gap: 4px; padding: 15px 16px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border-subtle)); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--accent) 7%, var(--bg-elevated)); }
+.stat strong { color: var(--text-primary); font-size: var(--font-size-section); letter-spacing: -.03em; }
+.stat span { color: var(--text-muted); font-size: var(--font-size-small); line-height: 1.35; }
+
+.tools { display: grid; gap: 9px; }
+.toolsLabel { color: var(--text-secondary); font-size: var(--font-size-small); font-weight: 650; }
+.toolChips { display: flex; flex-wrap: wrap; gap: 6px; }
+.disclaimer { margin: 0; color: var(--text-muted); font-size: var(--font-size-eyebrow); line-height: 1.5; }
+
+.pillars { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.pillar { padding: 17px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-elevated); }
+.pillar h3 { margin: 0 0 6px; color: var(--text-primary); font-size: var(--font-size-body); }
+.pillar p { margin: 0; color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.55; }
+
+.loop { padding: 19px; border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border-subtle)); border-radius: var(--radius-lg); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--bg-base)), var(--bg-base) 60%); }
+.loop h3 { margin: 0; color: var(--text-primary); font-size: var(--font-size-lede); }
+.loopLead { max-width: 720px; margin: 7px 0 0; color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.6; }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 17px 0 0; padding: 0; list-style: none; }
+.step { display: grid; grid-template-columns: 28px 1fr; gap: 11px; align-items: start; }
+.stepIndex { display: grid; width: 28px; height: 28px; place-items: center; border-radius: var(--radius-full); background: var(--accent); color: var(--text-on-accent); font-size: var(--font-size-small); font-weight: 750; }
+.step h4 { margin: 3px 0 5px; color: var(--text-primary); font-size: var(--font-size-body); }
+.step p { margin: 0; color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.5; }
+.stepLink { display: inline-flex; align-items: center; gap: 6px; margin-top: 9px; padding: 0; border: 0; background: transparent; color: var(--accent); font-family: inherit; font-size: var(--font-size-small); font-weight: 700; text-decoration: none; cursor: pointer; }
+.stepLink:hover { text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .sell { padding: 18px; }
+  .loop { padding: 15px; }
+}

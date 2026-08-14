@@ -120,7 +120,17 @@ export interface WebhookEvent {
     | 'card.validation_failed'   // explicit card-validation could not complete
     | 'addon.activated'
     | 'addon.past_due'
-    | 'addon.cancelled';
+    | 'addon.cancelled'
+    /**
+     * A marketplace creation was paid for.
+     *
+     * The REDIRECT is the normal way that grant happens, and this is the reason
+     * it cannot be the only way: a buyer who pays and then closes the tab has
+     * been charged, and without this event they hold nothing until they think to
+     * revisit the link. The handler is idempotent against the redirect path —
+     * both end at the same licence, which the unique index makes one.
+     */
+    | 'listing.purchased';
 
   /** Use this to look up the tenant */
   externalCustomerId: string;
@@ -147,13 +157,43 @@ export interface WebhookEvent {
   discountRedemptionId?: string;
   /** Signed checkout/subscription metadata identifying the attributed referral. */
   salesReferralId?: string;
-  purchaseKind?: 'business_phone';
+  purchaseKind?: 'business_phone' | 'marketplace_listing';
   activationCents?: number;
   monthlyCents?: number;
   cartId?: string;
+  /** `listing.purchased` — the checkout session to settle, re-read on handling. */
+  checkoutSessionId?: string;
+  /** `listing.purchased` — who bought it, from the session's signed metadata. */
+  buyerRef?: string;
 
   /** Raw provider-specific data for logging/debugging */
   raw: unknown;
+}
+
+/** A one-off purchase, hosted by the processor. */
+export interface OneTimeCheckoutOpts {
+  amountCents: number;
+  currency: string;
+  productName: string;
+  billingEmail?: string | null;
+  successUrl: string;
+  cancelUrl: string;
+  /** Stamped on the session AND its payment intent, and read back to authorise. */
+  metadata: Record<string, string>;
+  /** Same key for the same buyer + item, so a double-click is one session. */
+  idempotencyKey: string;
+}
+
+/** What the processor says about a session, as opposed to what a redirect claims. */
+export interface RetrievedCheckoutSession {
+  id: string;
+  /** `'paid'` is the only value that may grant anything. */
+  paymentStatus: string;
+  amountTotalCents: number;
+  currency: string;
+  paymentIntentId: string | null;
+  customerEmail: string | null;
+  metadata: Record<string, string>;
 }
 
 export interface PaymentProvider {
@@ -166,6 +206,22 @@ export interface PaymentProvider {
 
   /** Purchase the Business Phone recurring add-on plus its one-time activation. */
   createBusinessPhoneCheckoutSession(opts: BusinessPhoneCheckoutOpts): Promise<CheckoutSessionResult>;
+
+  /**
+   * A ONE-OFF hosted payment — a marketplace creation bought once, not a plan.
+   * Grants nothing; pair it with {@link retrieveCheckoutSession}.
+   */
+  createOneTimeCheckoutSession(opts: OneTimeCheckoutOpts): Promise<{ sessionId: string; checkoutUrl: string }>;
+
+  /**
+   * Read a checkout session back FROM THE PROCESSOR.
+   *
+   * The only thing that may authorise a paid grant. A session id reaches us in a
+   * redirect URL — i.e. from the buyer's address bar — so the answer to "was this
+   * paid, for what, and by whom" has to come from the party that took the money.
+   * Returns null when the session does not exist.
+   */
+  retrieveCheckoutSession(sessionId: string): Promise<RetrievedCheckoutSession | null>;
 
   /**
    * Start an explicit CARD-VALIDATION session (SetupIntent / $0 auth) so the tenant

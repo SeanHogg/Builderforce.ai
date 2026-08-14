@@ -380,6 +380,15 @@ export interface Env {
 
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
+  /**
+   * The platform's cut of a marketplace sale, in basis points. 1500 = 15%.
+   *
+   * A take rate is deployment policy, not tenant data: a white-labelled install
+   * charges what its operator decided, and every seller on one deployment is on
+   * the same terms. It is read once per sale by `platformTakeRateBps()` and is
+   * stamped onto the order line, so changing it never re-prices a past sale.
+   */
+  MARKETPLACE_TAKE_RATE_BPS?: string;
   /** Pro plan flat-rate prices */
   STRIPE_PRICE_PRO_MONTHLY?: string;    // price_... for $29/mo
   STRIPE_PRICE_PRO_YEARLY?: string;     // price_... for $290/yr

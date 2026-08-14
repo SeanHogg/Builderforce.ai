@@ -267,6 +267,70 @@ export const GUEST_RESEARCH_TOOL_NAMES = [
   'builtin_geo_geocode',
 ] as const;
 
+/**
+ * CAREER tools an anonymous canvas turn may use.
+ *
+ * ── WHY THESE ARE GUEST-SAFE ─────────────────────────────────────────────────────
+ * Every one runs entirely over TEXT THE VISITOR SUPPLIES — the résumé they pasted, the
+ * posting they pasted, the numbers they typed. No tenant resource, no network, no clock:
+ * the implementations live in `api/src/application/career/*`, which is pure by
+ * construction, and the guest route dispatches the exact same functions the signed-in
+ * catalog does. There is one implementation, so a logged-out visitor gets the identical
+ * scoring a paying tenant gets rather than a degraded imitation of it.
+ *
+ * ── WHY THIS SET AND NOT A SMALLER ONE ───────────────────────────────────────────
+ * The person most likely to arrive logged-out and type their situation into the first
+ * box they see is someone out of work. Gating the résumé score behind an account is not
+ * a conversion tactic — it is the product having nothing to say to the visitor with the
+ * most urgent need, on the surface that is the front door. The tools that DO need an
+ * account (applying to a posting, editing a public listing, reading a mailbox) are
+ * account-required for the ordinary reason: they write to a tenant, and a guest has none.
+ *
+ * These names are the `builtin_*` ADVERTISED forms, matching what the authenticated
+ * canvas gets from the MCP catalog, for the same reason the research names do: one
+ * system prompt drives both surfaces, so a guest-only alias would make the prompt name a
+ * tool that is absent from the guest's list — a failure that is silent by construction.
+ */
+export const GUEST_CAREER_TOOL_NAMES = [
+  // Résumé readings — the whole point of the guest surface for this visitor.
+  'builtin_recruiter_score_resume',
+  'builtin_recruiter_optimize_resume',
+  'builtin_recruiter_tailor_resume',
+  'builtin_recruiter_match_job',
+  'builtin_recruiter_summarize_resume',
+  'builtin_recruiter_resume_sentiment',
+  'builtin_recruiter_roast_resume',
+  'builtin_recruiter_extract_skills',
+  'builtin_recruiter_parse_resume',
+  'builtin_recruiter_consolidate_resumes',
+  // The hiring side of the same pure comparison. A logged-out visitor evaluating the
+  // product by pasting a candidate's résumé and their own posting reaches no tenant and
+  // no network — it is the identical overlap measurement the seeker half runs, reported
+  // to the other party. Withholding it would only mean the model improvises a screening
+  // verdict instead of computing one against stated criteria.
+  'builtin_recruiter_screen_candidate',
+  'builtin_recruiter_build_packet',
+  // Preparation and positioning.
+  'builtin_recruiter_interview_questions',
+  'builtin_hr_coach',
+  'builtin_hr_value_proposition',
+  'builtin_hr_employer_research',
+  // Direction.
+  'builtin_hr_career360_suggest_targets',
+  'builtin_hr_career360_select_target',
+  // Money. `hr_runway` is the number that paces every other decision, and it is pure
+  // arithmetic over figures the visitor typed — there is nothing to gate.
+  'builtin_hr_salary_analyze',
+  'builtin_hr_comp_analyze',
+  'builtin_hr_runway',
+  'builtin_hr_compare_work_options',
+  // Drafting a listing they do not have an account to save yet. Deliberately included:
+  // seeing the listing their own résumé produces is the strongest reason to make one.
+  'builtin_listing_draft_from_resume',
+  'builtin_listing_readiness',
+  'builtin_listing_profile_blocks',
+] as const;
+
 export type GuestSafeCanvasTool = typeof GUEST_SAFE_CANVAS_TOOLS[number];
 export type GuestGatedCanvasTool = typeof GUEST_GATED_CANVAS_TOOLS[number];
 export type AccountRequiredCanvasTool = typeof ACCOUNT_REQUIRED_CANVAS_TOOLS[number];
@@ -278,11 +342,12 @@ export const CREATION_CANVAS_TOOLS = [
   ...ACCOUNT_REQUIRED_CANVAS_TOOLS,
 ] as const;
 
-/** The complete tool vocabulary an anonymous canvas turn may use — canvas + research. */
+/** The complete tool vocabulary an anonymous canvas turn may use — canvas + research + career. */
 export const GUEST_CANVAS_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
   ...GUEST_SAFE_CANVAS_TOOLS,
   ...GUEST_GATED_CANVAS_TOOLS,
   ...GUEST_RESEARCH_TOOL_NAMES,
+  ...GUEST_CAREER_TOOL_NAMES,
 ]);
 
 const ACCOUNT_REQUIRED_SET: ReadonlySet<string> = new Set<string>(ACCOUNT_REQUIRED_CANVAS_TOOLS);

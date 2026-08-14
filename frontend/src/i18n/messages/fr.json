@@ -8295,7 +8295,17 @@
       "fillFromResume": "Remplir depuis le CV",
       "filling": "Lecture…",
       "autofilled": "Rempli depuis votre CV — vérifiez et enregistrez.",
-      "autofillUnavailable": "Téléversez un CV texte ou connectez hired.video pour le remplissage automatique."
+      "autofillUnavailable": "Téléversez un CV texte ou connectez hired.video pour le remplissage automatique.",
+      "seekingLegend": "Ce que vous acceptez",
+      "seekingHint": "Un seul profil, deux types de travail. Les clients cherchent des profils en freelance ; les employeurs cherchent des personnes ouvertes à un poste — et ne vous voient que si vous le précisez ici.",
+      "targetRoles": "Postes visés",
+      "targetRolesPlaceholder": "Ingénieur plateforme, Ingénieur fiabilité",
+      "seniority": "Niveau recherché",
+      "workMode": "Mode de travail",
+      "noticePeriod": "Préavis (jours)",
+      "salaryMin": "Salaire souhaité (minimum)",
+      "salaryMax": "Salaire souhaité (maximum)",
+      "openToRelocation": "Ouvert à la mobilité"
     },
     "resume": {
       "title": "CV",
@@ -8383,6 +8393,27 @@
     "proposals": {
       "empty": "Vous n’avez encore envoyé aucune proposition.",
       "withdraw": "Retirer"
+    },
+    "seeking": {
+      "services": "Missions et travail en freelance",
+      "employment": "Postes à temps plein",
+      "both": "Les deux — missions et postes à temps plein",
+      "not_looking": "Pas en recherche actuellement"
+    },
+    "workMode": {
+      "remote": "À distance",
+      "hybrid": "Hybride",
+      "onsite": "Sur site"
+    },
+    "seniority": {
+      "junior": "Junior",
+      "mid": "Confirmé",
+      "senior": "Senior",
+      "staff": "Staff",
+      "lead": "Responsable technique",
+      "principal": "Principal",
+      "director": "Directeur",
+      "executive": "Dirigeant"
     }
   },
   "marketplace": {
@@ -13430,6 +13461,60 @@
         "description": "Publish live service health as an inline component or standalone status page.",
         "consent": "Publishes the workspace's selected monitor status and incident updates to the customer site."
       }
+    },
+    "availableCapabilities": "capacités intégrables",
+    "replaces": "Remplace {tools}",
+    "sell": {
+      "label": "Pourquoi les capacités intégrées",
+      "title": "Un seul script au lieu de treize contrats",
+      "description": "Tout ce que vous construisez dans BuilderForce peut fonctionner à l’intérieur de votre propre produit : support, retours, analytique, feature flags, consentement, page d’état. Chaque capacité est gouvernée séparément, et toutes arrivent par une balise unique installée une seule fois.",
+      "stats": {
+        "capabilities": "capacités dans une seule balise",
+        "script": "script à installer",
+        "stack": "par mois d’outils spécialisés remplacés",
+        "yearly": "d’outillage par an retiré de votre feuille de route"
+      },
+      "replacesLabel": "Remplace des outils comme",
+      "benchmarkNote": "Les chiffres de comparaison sont les tarifs publics d’entrée de gamme d’outils spécialisés équivalents, pour une petite équipe. Ce sont des repères, pas des devis : vos coûts et vos usages seront différents.",
+      "pillars": {
+        "install": {
+          "title": "Installez une fois, changez d’avis ensuite",
+          "body": "Une balise sur votre site. Activer ou désactiver une capacité se fait dans votre espace de travail et s’applique au chargement suivant : aucun redéploiement, aucun nouveau fournisseur à intégrer, aucun script supplémentaire à faire valider."
+        },
+        "govern": {
+          "title": "Le consentement est intégré, pas rajouté",
+          "body": "Chaque capacité s’active individuellement, face à un texte de consentement versionné, et chaque activation comme chaque retrait est inscrit dans un journal d’espace de travail inaltérable, remettable à un auditeur."
+        },
+        "own": {
+          "title": "Cela reste à vous",
+          "body": "Les données appartiennent à votre espace de travail, l’expérience porte votre marque, et la capacité est bien ce que vous avez conçu dans Canvas — pas un widget tiers habillé à vos couleurs."
+        }
+      },
+      "loop": {
+        "title": "De l’idée à l’intégration, puis à la vente",
+        "description": "Notre métier est de vous aider à vendre ce que vous créez : le même chemin va donc jusqu’au bout — concevez l’expérience, mettez-la devant vos clients, puis publiez-la pour tous les autres.",
+        "steps": {
+          "build": {
+            "title": "Construisez-la dans Canvas",
+            "body": "Décrivez l’expérience voulue et façonnez-la sur le tableau jusqu’à ce qu’elle soit exactement ce que vous aviez en tête.",
+            "action": "Ouvrir Canvas"
+          },
+          "embed": {
+            "title": "Intégrez-la là où sont vos clients",
+            "body": "Collez un script dans votre produit, votre site ou votre portail client, puis activez les capacités dont vous avez besoin.",
+            "action": "Voir le code d’installation"
+          },
+          "sell": {
+            "title": "Vendez-la sur la Marketplace",
+            "body": "Publiez ce que vous avez construit pour que d’autres équipes l’installent, et soyez payé pour l’idée au lieu de seulement l’utiliser.",
+            "action": "Parcourir la Marketplace"
+          }
+        }
+      },
+      "cta": {
+        "title": "Placez votre idée à l’intérieur du produit de vos clients",
+        "body": "Créez un espace de travail gratuit pour obtenir votre clé d’intégration, activez les capacités souhaitées et publiez-les dès aujourd’hui sur votre site."
+      }
     }
   },
   "embedInstall": {
@@ -14938,7 +15023,13 @@
       "case": "Dossier RH",
       "obligation": "Obligation légale",
       "form": "Formulaire",
-      "funnel": "Entonnoir"
+      "funnel": "Entonnoir",
+      "labelSet": "Jeu d’annotations",
+      "model": "Modèle",
+      "notebook": "Notebook",
+      "prompt": "Prompt",
+      "runComparison": "Comparaison d’exécutions",
+      "trainingRun": "Exécution d’entraînement"
     },
     "twilioSetup": {
       "title": "Intégration Twilio",
@@ -17235,6 +17326,65 @@
         "noJudge": "Aucun modèle évaluateur enregistré, ce score n’est donc pas comparable",
         "notRun": "Cette évaluation n'a jamais été exécutée"
       }
+    },
+    "publish": {
+      "accountTitle": "Enregistrez d’abord ce canevas",
+      "accountBody": "Pour vendre quelque chose, il faut que ce soit hébergé là où d’autres peuvent y accéder. Créez un compte pour le publier.",
+      "crumb": "Marketplace",
+      "title": "Vendre ceci sur la marketplace",
+      "loading": "Lecture du canevas…",
+      "emptyBoard": "Rien n’est encore vendable sur ce canevas. Créez d’abord un jeu, un site, un flux, un tableau de bord ou un document.",
+      "whatLabel": "Que vendez-vous ?",
+      "wholeBoard": "Tout le canevas — {title}",
+      "kindLabel": "De quoi s’agit-il ?",
+      "nameLabel": "Nom",
+      "namePlaceholder": "Ce que verront les acheteurs",
+      "summaryLabel": "Résumé",
+      "summaryPlaceholder": "Une ou deux phrases sur ce que ça fait et pour qui",
+      "priceLabel": "Prix",
+      "splitYouKeep": "Vous gardez {amount}",
+      "splitFee": "Commission de la plateforme {amount} ({rate} %)",
+      "splitFree": "Gratuit — n’importe qui peut en prendre une copie.",
+      "trialLabel": "Avant d’acheter, les visiteurs peuvent…",
+      "trialFull": "Tout utiliser",
+      "trialPreview": "Voir seulement un aperçu",
+      "trialHintFree": "Une annonce gratuite s’exécute pour quiconque l’ouvre.",
+      "publishing": "Publication…",
+      "update": "Mettre à jour l’annonce",
+      "publishAction": "Publier",
+      "withdraw": "Retirer de la vente",
+      "liveAt": "En ligne à",
+      "noticePublished": "« {name} » est en ligne sur la marketplace",
+      "noticeWithdrawn": "Retiré de la vente",
+      "sectionLabel": "Marketplace",
+      "sellAsAction": "Vendre ceci comme {kind}",
+      "sellAction": "Vendre ceci",
+      "sellHint": "Publiez-le pour que d’autres puissent le trouver, l’essayer et l’acheter.",
+      "kind": {
+        "game": "Jeu",
+        "app": "Application",
+        "automation": "Automatisation",
+        "agent": "Agent",
+        "template": "Modèle",
+        "pack": "Pack de canevas",
+        "dashboard": "Tableau de bord",
+        "playbook": "Guide pratique",
+        "course": "Cours",
+        "dataset": "Jeu de données",
+        "tool": "Outil",
+        "creative": "Ressource créative"
+      },
+      "launchHint": {
+        "play": "Les acheteurs y jouent dans le navigateur.",
+        "open": "Les acheteurs ouvrent le site en ligne.",
+        "run": "Les acheteurs l’exécutent.",
+        "preview": "Les acheteurs le consultent.",
+        "install": "Les acheteurs le copient sur leur propre canevas."
+      },
+      "trialHint": {
+        "full": "Tout le monde peut l’utiliser entièrement ; payer permet de vous soutenir et d’en garder une copie.",
+        "preview": "Les visiteurs voient un aperçu ; la version fonctionnelle nécessite un achat."
+      }
     }
   },
   "canvasCommands": {
@@ -18905,5 +19055,81 @@
     "taken": "Ce créneau vient d’être pris. Choisissez-en un autre.",
     "failed": "Une erreur est survenue. Réessayez.",
     "slotAria": "Réserver {time}"
+  },
+  "marketplaceListing": {
+    "byAuthor": "par {author}",
+    "installs": "{count} installations",
+    "launchSection": "Essayez-le",
+    "free": "Gratuit",
+    "signInToInstall": "Connectez-vous pour installer",
+    "signInToBuy": "Connectez-vous pour acheter",
+    "youOwnIt": "Vous le possédez",
+    "working": "En cours…",
+    "install": "En prendre une copie",
+    "buy": "Acheter",
+    "openInCanvas": "Ouvrir dans mon canevas",
+    "previewOnly": "Ceci est un aperçu. Achetez-le pour utiliser la version fonctionnelle.",
+    "playFrameTitle": "Vous jouez à {name}",
+    "siteFrameTitle": "{name}, en ligne",
+    "nothingToShow": "Rien à afficher pour l’instant.",
+    "kind": {
+      "game": "Jeu",
+      "app": "Application",
+      "automation": "Automatisation",
+      "agent": "Agent",
+      "template": "Modèle",
+      "pack": "Pack de canevas",
+      "dashboard": "Tableau de bord",
+      "playbook": "Guide pratique",
+      "course": "Cours",
+      "dataset": "Jeu de données",
+      "tool": "Outil",
+      "creative": "Ressource créative"
+    }
+  },
+  "marketplaceCreations": {
+    "heading": "Créé ici",
+    "blurb": "Jeux, applications, flux et guides créés sur le canevas — essayez-les avant d’en prendre un.",
+    "allKinds": "Tout",
+    "empty": "Rien de publié pour l’instant. Créez quelque chose sur le canevas et vendez-le.",
+    "free": "Gratuit",
+    "installs": "{count} installations",
+    "sellerHeading": "Ce que vous vendez",
+    "earned": "Gagné",
+    "paidOut": "Versé",
+    "available": "Disponible",
+    "sales": "Ventes",
+    "takeRateNote": "La plateforme conserve {rate} % de chaque vente.",
+    "payOutNow": "Verser mon solde",
+    "payoutDestination": "Où va l’argent",
+    "working": "En cours…",
+    "payoutSent": "{amount} envoyés vers votre destination de versement.",
+    "payoutFailed": "Le versement n’a pas abouti.",
+    "withdraw": "Retirer de la vente",
+    "withdrawn": "Pas en vente",
+    "withdrawTitle": "Retirer de la vente ?",
+    "withdrawBody": "« {name} » disparaîtra de la marketplace. Les personnes qui l’ont déjà acheté conservent leur copie.",
+    "withdrawConfirm": "Retirer de la vente",
+    "kind": {
+      "game": "Jeu",
+      "app": "Application",
+      "automation": "Automatisation",
+      "agent": "Agent",
+      "template": "Modèle",
+      "pack": "Pack de canevas",
+      "dashboard": "Tableau de bord",
+      "playbook": "Guide pratique",
+      "course": "Cours",
+      "dataset": "Jeu de données",
+      "tool": "Outil",
+      "creative": "Ressource créative"
+    },
+    "launchVerb": {
+      "play": "Jouer",
+      "open": "Ouvrir",
+      "run": "Exécuter",
+      "preview": "Aperçu",
+      "install": "Installer"
+    }
   }
 }

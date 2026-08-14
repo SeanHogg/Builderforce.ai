@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { capabilitySnippet, EMBEDDED_CAPABILITIES, EMBEDDED_CAPABILITY_KEYS, unifiedEmbedSnippet } from './embeddedCapabilities';
+import {
+  capabilitySnippet,
+  EMBEDDED_CAPABILITIES,
+  EMBEDDED_CAPABILITY_KEYS,
+  EMBEDDED_REPLACED_TOOLS,
+  EMBEDDED_STACK_BENCHMARK_MONTHLY,
+  unifiedEmbedSnippet,
+} from './embeddedCapabilities';
 
 describe('embedded capability catalog', () => {
   it('contains every migrated capability exactly once', () => {
@@ -21,6 +28,35 @@ describe('embedded capability catalog', () => {
   it('provides an activation example for every capability', () => {
     for (const capability of EMBEDDED_CAPABILITIES) {
       expect(capabilitySnippet(capability.key).trim().length).toBeGreaterThan(10);
+    }
+  });
+});
+
+/**
+ * The selling claims on /embedded are DERIVED from this registry, so the tests
+ * that matter are the ones that keep a published number honest when the catalog
+ * changes underneath it.
+ */
+describe('embedded capability stack value', () => {
+  it('gives every capability something it stands in for and a price to stand against', () => {
+    for (const item of EMBEDDED_CAPABILITIES) {
+      expect(item.replaces.length, item.key).toBeGreaterThan(0);
+      expect(item.benchmarkMonthlyUsd, item.key).toBeGreaterThan(0);
+    }
+  });
+
+  it('sums the stack benchmark from the catalog rather than a typed headline', () => {
+    const expected = EMBEDDED_CAPABILITIES.reduce((total, item) => total + item.benchmarkMonthlyUsd, 0);
+    expect(EMBEDDED_STACK_BENCHMARK_MONTHLY).toBe(expected);
+    // A visitor is shown this figure beside a catalog of N cards; if the two
+    // could disagree the page would advertise a stack it does not ship.
+    expect(EMBEDDED_STACK_BENCHMARK_MONTHLY).toBeGreaterThan(0);
+  });
+
+  it('lists each displaced tool once, however many capabilities name it', () => {
+    expect(new Set(EMBEDDED_REPLACED_TOOLS).size).toBe(EMBEDDED_REPLACED_TOOLS.length);
+    for (const item of EMBEDDED_CAPABILITIES) {
+      for (const tool of item.replaces) expect(EMBEDDED_REPLACED_TOOLS).toContain(tool);
     }
   });
 });

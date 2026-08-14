@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const auth = vi.hoisted(() => ({
   tenant: { id: '42', role: 'owner' },
   tenantToken: null as string | null,
+  isAuthenticated: false,
 }));
 const api = vi.hoisted(() => ({ getConfig: vi.fn(), setFeature: vi.fn() }));
 
@@ -12,6 +13,7 @@ vi.mock('@/lib/AuthContext', () => ({ useAuth: () => auth }));
 vi.mock('@/lib/builderforceApi', () => ({ embedApi: api }));
 vi.mock('next-intl', () => ({
   useTranslations: () => (key: string) => key,
+  useFormatter: () => ({ number: (value: number) => String(value) }),
 }));
 vi.mock('@/components/settings/EmbedIntegrationSettings', () => ({ EmbedIntegrationSettings: () => null }));
 vi.mock('@/components/SlideOutPanel', () => ({ SlideOutPanel: ({ children }: { children: ReactNode }) => children }));
@@ -45,6 +47,7 @@ const config = {
 describe('EmbeddedCapabilities authentication boundary', () => {
   beforeEach(() => {
     auth.tenantToken = null;
+    auth.isAuthenticated = false;
     api.getConfig.mockReset();
     api.getConfig.mockResolvedValue(config);
   });
@@ -57,5 +60,44 @@ describe('EmbeddedCapabilities authentication boundary', () => {
     view.rerender(<EmbeddedCapabilities />);
 
     await waitFor(() => expect(api.getConfig).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not tell an anonymous visitor to select a workspace they cannot have', () => {
+    const view = render(<EmbeddedCapabilities />);
+    expect(view.queryByText('selectWorkspace')).toBeNull();
+
+    auth.isAuthenticated = true;
+    view.rerender(<EmbeddedCapabilities />);
+    expect(view.queryByText('selectWorkspace')).not.toBeNull();
+  });
+});
+
+describe('EmbeddedCapabilities selling surface', () => {
+  beforeEach(() => {
+    auth.tenantToken = null;
+    auth.isAuthenticated = false;
+    api.getConfig.mockReset();
+    api.getConfig.mockResolvedValue(config);
+  });
+
+  it('pitches to a visitor with no workspace, and leads with the catalog size rather than "0 active"', () => {
+    const view = render(<EmbeddedCapabilities />);
+
+    expect(view.queryByLabelText('label')).not.toBeNull();
+    expect(view.queryByText('availableCapabilities')).not.toBeNull();
+    expect(view.queryByText('activeCapabilities')).toBeNull();
+  });
+
+  it('stops pitching once the workspace has a capability live', async () => {
+    auth.tenantToken = 'tenant-jwt';
+    api.getConfig.mockResolvedValue({
+      ...config,
+      customerFeatures: { ...config.customerFeatures, heatmaps: { enabled: true, consentVersion: 1, consentedAt: null, consentedBy: null } },
+    });
+
+    const view = render(<EmbeddedCapabilities />);
+
+    await waitFor(() => expect(view.queryByText('activeCapabilities')).not.toBeNull());
+    expect(view.queryByLabelText('label')).toBeNull();
   });
 });

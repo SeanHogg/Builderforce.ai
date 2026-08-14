@@ -27,6 +27,16 @@ function realRepoPaths(): string[] | null {
 }
 
 describe('Privacy diagnostic dogfood (real repo)', () => {
+  /**
+   * 60s, not the default 5s.
+   *
+   * This one shells out to `git ls-files` over the WHOLE repository and scores
+   * every path — tens of thousands of them. It finishes in under a second on an
+   * idle machine and blows a 5s budget the moment the box is busy, which in
+   * practice means it fails in CI beside 5,600 other tests and passes the instant
+   * anyone re-runs it alone. A flaky failure in a suite this size is worse than a
+   * slow test: it teaches people to re-run rather than to read.
+   */
   it('scores the Builderforce repo and prints the report + remediation tickets', (t) => {
     const paths = realRepoPaths();
     if (!paths) { t.skip(); return; }
@@ -75,5 +85,5 @@ describe('Privacy diagnostic dogfood (real repo)', () => {
     expect(result.score!).toBeGreaterThanOrEqual(1);
     expect(result.score!).toBeLessThanOrEqual(5);
     expect(result.metrics.length).toBeGreaterThan(0);
-  });
+  }, 60_000);
 });

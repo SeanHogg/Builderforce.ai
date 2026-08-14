@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
+import { EmbeddedStackValue } from '@/components/embedded/EmbeddedStackValue';
 import { EmbedIntegrationSettings } from '@/components/settings/EmbedIntegrationSettings';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Icon } from '@/components/ui/Icon';
@@ -19,7 +20,7 @@ type Filter = 'all' | EmbeddedCapabilityCategory;
 
 export function EmbeddedCapabilities() {
   const t = useTranslations('embedded');
-  const { tenant, tenantToken } = useAuth();
+  const { isAuthenticated, tenant, tenantToken } = useAuth();
   const [tab, setTab] = useState<Tab>('features');
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
@@ -43,9 +44,13 @@ export function EmbeddedCapabilities() {
     return () => { cancelled = true; };
   }, [t, tenantToken]);
 
+  // `null` — not 0 — when no workspace config has resolved. They are different
+  // facts and the hero renders them differently: a signed-out visitor was being
+  // shown "0/13 capabilities active" as the lead metric of a public marketing
+  // page, which reads as an empty product rather than an unconnected workspace.
   const activeCount = config
     ? Object.values(config.customerFeatures).filter((item) => item.enabled).length
-    : 0;
+    : null;
   const visible = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase();
     return EMBEDDED_CAPABILITIES.filter((item) => {
@@ -110,8 +115,9 @@ export function EmbeddedCapabilities() {
         <Link className={styles.canvasLink} href="/create">{t('openCanvas')} <span aria-hidden="true">→</span></Link>
       </div>
       <div className={styles.heroMetric}>
-        <strong>{activeCount}/{EMBEDDED_CAPABILITIES.length}</strong>
-        <span>{t('activeCapabilities')}</span>
+        {activeCount === null
+          ? <><strong>{EMBEDDED_CAPABILITIES.length}</strong><span>{t('availableCapabilities')}</span></>
+          : <><strong>{activeCount}/{EMBEDDED_CAPABILITIES.length}</strong><span>{t('activeCapabilities')}</span></>}
       </div>
     </section>
 
@@ -120,9 +126,13 @@ export function EmbeddedCapabilities() {
     </div>}
 
     {error && <div className={styles.error} role="alert">{error}</div>}
-    {!tenantToken && <div className={styles.notice} role="status">{t('selectWorkspace')}</div>}
+    {/* "Select a workspace" is an instruction, and an anonymous visitor has no
+        workspace to select — for them this page is a marketing page, and the
+        pitch below is the honest answer to "what is this?". */}
+    {isAuthenticated && !tenantToken && <div className={styles.notice} role="status">{t('selectWorkspace')}</div>}
 
     {tab === 'features' && <>
+      <EmbeddedStackValue activeCount={activeCount} onShowInstall={() => setTab('install')} />
       <div className={styles.toolbar}>
         <input className={styles.search} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('search')} aria-label={t('search')} />
         {filters.map((item) => <button key={item} type="button" className={`${styles.filter} ${filter === item ? styles.filterActive : ''}`} onClick={() => setFilter(item)}>{t(`categories.${item}`)}</button>)}
@@ -135,6 +145,10 @@ export function EmbeddedCapabilities() {
             <div>
               <h3>{t(`features.${item.key}.name`)}</h3>
               <p>{t(`features.${item.key}.description`)}</p>
+              {/* What a team buys INSTEAD of this row. A description says what a
+                  capability does; this says what it is worth, which is the half
+                  a catalog of thirteen switches was never making. */}
+              <p className={styles.replaces}>{t('replaces', { tools: item.replaces.join(' · ') })}</p>
               <div className={styles.meta}>
                 <span className={styles.badge}>{t(`categories.${item.category}`)}</span>
                 <span>{t('examples', { count: item.examples })}</span>

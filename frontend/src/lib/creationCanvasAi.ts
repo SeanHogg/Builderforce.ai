@@ -16,6 +16,7 @@ import { brainConfig } from '@/lib/brain/runtime';
 import { guestBrainConfig } from '@/lib/brain/guestRuntime';
 import { ensureGuestToken } from '@/lib/guestRoomApi';
 import { GUEST_RESEARCH_ACTIONS } from '@/lib/guestResearchActions';
+import { loadGuestCareerActions } from '@/lib/guestCareerActions';
 import { conversationSpeakerLabels, echoesEarlierAnswer, stripSpeakerLabel } from '@/lib/canvasTranscript';
 import { founderCanvasSystemPrompt } from '@/lib/founderCanvasPrompt';
 
@@ -383,7 +384,12 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // model's weights instead of from sources. Same NAMES as the MCP ones on purpose
   // (see guestResearchActions), so one prompt is correct on both surfaces.
   const researchActions = options.persistence === 'server' ? [] : GUEST_RESEARCH_ACTIONS;
-  const actions = [...options.canvasActions, ...mcpActions, ...researchActions];
+  // The same argument, one domain over: the career tools (résumé scoring, job match,
+  // interview prep, runway) are pure over text the visitor supplies, so a guest gets the
+  // IDENTICAL implementation a tenant does rather than a degraded imitation. Fetched
+  // from the server catalog rather than re-declared here — see guestCareerActions.
+  const careerActions = options.persistence === 'server' ? [] : await loadGuestCareerActions();
+  const actions = [...options.canvasActions, ...mcpActions, ...researchActions, ...careerActions];
   const byName = new Map(actions.map((action) => [action.name, action]));
   let recalled: EvermindRecallResult | null = null;
   if (options.evermind) {

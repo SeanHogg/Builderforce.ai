@@ -270,6 +270,23 @@ export const freelancerProfiles = pgTable('freelancer_profiles', {
   resumeKey:              varchar('resume_key', { length: 300 }),
   resumeFilename:         varchar('resume_filename', { length: 255 }),
   resumeExtract:          text('resume_extract'),                  // cached hired.video getProfile JSON
+  /** Career intent (0462) — the SAME listing, offered to two kinds of demand.
+   *
+   *  `job_postings.posting_type` already accepts 'fte' and `job_proposals` already
+   *  carries submitted → shortlisted → accepted → declined → withdrawn, so a full-time
+   *  job is a posting and an application is a proposal. The only thing missing was the
+   *  supply side saying which it wants — hence columns here rather than a second
+   *  candidate profile that would fork this person's résumé and reputation in two.
+   *  Defaults to 'services', so every row written before this migration keeps behaving
+   *  exactly as it did. See application/career/listing.ts for the readings over it. */
+  seeking:                varchar('seeking', { length: 20 }).notNull().default('services'), // services|employment|both|not_looking
+  targetRoles:            text('target_roles'),                    // JSON string[]
+  seniority:              varchar('seniority', { length: 30 }),
+  desiredSalaryMinCents:  integer('desired_salary_min_cents'),
+  desiredSalaryMaxCents:  integer('desired_salary_max_cents'),
+  workMode:               varchar('work_mode', { length: 10 }),    // remote|hybrid|onsite
+  noticePeriodDays:       integer('notice_period_days'),
+  openToRelocation:       boolean('open_to_relocation').notNull().default(false),
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({

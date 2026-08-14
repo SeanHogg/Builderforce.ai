@@ -8296,7 +8296,17 @@
       "fillFromResume": "Fill from résumé",
       "filling": "Reading…",
       "autofilled": "Filled from your résumé — review and save.",
-      "autofillUnavailable": "Upload a text résumé or connect hired.video to auto-fill."
+      "autofillUnavailable": "Upload a text résumé or connect hired.video to auto-fill.",
+      "seekingLegend": "What you are open to",
+      "seekingHint": "One listing, two kinds of work. Clients search project listings; employers search for people open to a role — and only see you if you say so here.",
+      "targetRoles": "Target roles",
+      "targetRolesPlaceholder": "Platform Engineer, Site Reliability Engineer",
+      "seniority": "Level you are seeking",
+      "workMode": "Work mode",
+      "noticePeriod": "Notice period (days)",
+      "salaryMin": "Salary expectation (min)",
+      "salaryMax": "Salary expectation (max)",
+      "openToRelocation": "Open to relocation"
     },
     "resume": {
       "title": "Résumé",
@@ -8384,6 +8394,27 @@
     "proposals": {
       "empty": "You haven’t submitted any proposals yet.",
       "withdraw": "Withdraw"
+    },
+    "seeking": {
+      "services": "Project and contract work",
+      "employment": "Full-time roles",
+      "both": "Both — contract work and full-time roles",
+      "not_looking": "Not looking right now"
+    },
+    "workMode": {
+      "remote": "Remote",
+      "hybrid": "Hybrid",
+      "onsite": "On site"
+    },
+    "seniority": {
+      "junior": "Junior",
+      "mid": "Mid-level",
+      "senior": "Senior",
+      "staff": "Staff",
+      "lead": "Lead",
+      "principal": "Principal",
+      "director": "Director",
+      "executive": "Executive"
     }
   },
   "marketplace": {
@@ -13431,6 +13462,60 @@
         "description": "Publish live service health as an inline component or standalone status page.",
         "consent": "Publishes the workspace's selected monitor status and incident updates to the customer site."
       }
+    },
+    "availableCapabilities": "capabilities you can embed",
+    "replaces": "Replaces {tools}",
+    "sell": {
+      "label": "Why embedded capabilities",
+      "title": "One script instead of thirteen contracts",
+      "description": "Everything you build in BuilderForce can run inside your own product — support, feedback, analytics, flags, consent, status. Each capability is governed on its own, and all of them arrive through a single tag you install once.",
+      "stats": {
+        "capabilities": "capabilities in one tag",
+        "script": "script to install",
+        "stack": "per month of point tools it stands in for",
+        "yearly": "a year of tooling off the roadmap"
+      },
+      "replacesLabel": "Stands in for tools like",
+      "benchmarkNote": "Comparison figures are published entry-tier list prices for comparable point tools at small-team volume. They are an anchor, not a quote — your own costs and usage will differ.",
+      "pillars": {
+        "install": {
+          "title": "Install once, change your mind later",
+          "body": "One tag goes on your site. Turning a capability on or off happens in your workspace and applies on the next page load — no redeploy, no second vendor to onboard, no new script to review."
+        },
+        "govern": {
+          "title": "Consent is built in, not bolted on",
+          "body": "Every capability is opted into individually, against a versioned consent text, and each opt-in and opt-out is written to an immutable workspace log you can hand to an auditor."
+        },
+        "own": {
+          "title": "It stays yours",
+          "body": "The data belongs to your workspace, the experience carries your brand, and the capability is the thing you designed in Canvas — not a third-party widget wearing your colours."
+        }
+      },
+      "loop": {
+        "title": "From idea to embedded to sold",
+        "description": "Our job is to help you sell what you build, so the same path runs end to end: design the experience, put it in front of your customers, then list it for everyone else.",
+        "steps": {
+          "build": {
+            "title": "Build it in Canvas",
+            "body": "Describe the experience you want and shape it on the board until it is the thing you meant.",
+            "action": "Open Canvas"
+          },
+          "embed": {
+            "title": "Embed it where your customers are",
+            "body": "Paste one script into your product, website, or customer portal and switch on the capabilities you need.",
+            "action": "See the install snippet"
+          },
+          "sell": {
+            "title": "Sell it in the Marketplace",
+            "body": "List what you built so other teams can install it, and get paid for the idea rather than only using it.",
+            "action": "Browse the Marketplace"
+          }
+        }
+      },
+      "cta": {
+        "title": "Put your idea inside your customers’ product",
+        "body": "Create a free workspace to get your embed key, turn on the capabilities you want, and ship them to your own site today."
+      }
     }
   },
   "embedInstall": {
@@ -14939,7 +15024,13 @@
       "case": "ER case",
       "obligation": "Statutory obligation",
       "form": "Form",
-      "funnel": "Funnel"
+      "funnel": "Funnel",
+      "labelSet": "Label set",
+      "model": "Model",
+      "notebook": "Notebook",
+      "prompt": "Prompt",
+      "runComparison": "Run comparison",
+      "trainingRun": "Training run"
     },
     "twilioSetup": {
       "title": "Twilio integration",
@@ -17236,6 +17327,65 @@
         "noJudge": "No judge model recorded, so this score is not comparable",
         "notRun": "This evaluation has never been run"
       }
+    },
+    "publish": {
+      "accountTitle": "Save this board first",
+      "accountBody": "Selling something means it has to live somewhere other people can reach. Create an account to publish it.",
+      "crumb": "Marketplace",
+      "title": "Sell this in the marketplace",
+      "loading": "Reading the board…",
+      "emptyBoard": "Nothing on this board can be sold yet. Make a game, a site, a workflow, a dashboard or a document first.",
+      "whatLabel": "What are you selling?",
+      "wholeBoard": "The whole board — {title}",
+      "kindLabel": "What is it?",
+      "nameLabel": "Name",
+      "namePlaceholder": "What buyers will see",
+      "summaryLabel": "Summary",
+      "summaryPlaceholder": "One or two sentences on what it does and who it is for",
+      "priceLabel": "Price",
+      "splitYouKeep": "You keep {amount}",
+      "splitFee": "Platform fee {amount} ({rate}%)",
+      "splitFree": "Free — anyone can take a copy.",
+      "trialLabel": "Before buying, people can…",
+      "trialFull": "Use the whole thing",
+      "trialPreview": "See a preview only",
+      "trialHintFree": "A free listing runs for anyone who opens it.",
+      "publishing": "Publishing…",
+      "update": "Update the listing",
+      "publishAction": "Publish it",
+      "withdraw": "Take it off sale",
+      "liveAt": "Live at",
+      "noticePublished": "“{name}” is live in the marketplace",
+      "noticeWithdrawn": "Taken off sale",
+      "sectionLabel": "Marketplace",
+      "sellAsAction": "Sell this as a {kind}",
+      "sellAction": "Sell this",
+      "sellHint": "Publish it so other people can find it, try it and buy it.",
+      "kind": {
+        "game": "Game",
+        "app": "App",
+        "automation": "Automation",
+        "agent": "Agent",
+        "template": "Template",
+        "pack": "Board pack",
+        "dashboard": "Dashboard",
+        "playbook": "Playbook",
+        "course": "Course",
+        "dataset": "Dataset",
+        "tool": "Tool",
+        "creative": "Creative asset"
+      },
+      "launchHint": {
+        "play": "Buyers play it in the browser.",
+        "open": "Buyers open the live site.",
+        "run": "Buyers run it.",
+        "preview": "Buyers read it.",
+        "install": "Buyers copy it onto their own board."
+      },
+      "trialHint": {
+        "full": "Anyone can use it in full; paying is how they support you and keep a copy.",
+        "preview": "Visitors see a preview; the working version needs a purchase."
+      }
     }
   },
   "canvasCommands": {
@@ -18906,5 +19056,81 @@
     "taken": "That time has just been taken. Choose another.",
     "failed": "Something went wrong. Try again.",
     "slotAria": "Book {time}"
+  },
+  "marketplaceListing": {
+    "byAuthor": "by {author}",
+    "installs": "{count} installs",
+    "launchSection": "Try it",
+    "free": "Free",
+    "signInToInstall": "Sign in to install",
+    "signInToBuy": "Sign in to buy",
+    "youOwnIt": "You own this",
+    "working": "Working…",
+    "install": "Take a copy",
+    "buy": "Buy it",
+    "openInCanvas": "Open in my canvas",
+    "previewOnly": "This is a preview. Buy it to use the working version.",
+    "playFrameTitle": "Playing {name}",
+    "siteFrameTitle": "{name}, live",
+    "nothingToShow": "Nothing to show yet.",
+    "kind": {
+      "game": "Game",
+      "app": "App",
+      "automation": "Automation",
+      "agent": "Agent",
+      "template": "Template",
+      "pack": "Board pack",
+      "dashboard": "Dashboard",
+      "playbook": "Playbook",
+      "course": "Course",
+      "dataset": "Dataset",
+      "tool": "Tool",
+      "creative": "Creative asset"
+    }
+  },
+  "marketplaceCreations": {
+    "heading": "Built here",
+    "blurb": "Games, apps, workflows and playbooks people made on the canvas — try them before you take one.",
+    "allKinds": "Everything",
+    "empty": "Nothing published yet. Build something on the canvas and sell it.",
+    "free": "Free",
+    "installs": "{count} installs",
+    "sellerHeading": "What you are selling",
+    "earned": "Earned",
+    "paidOut": "Paid out",
+    "available": "Available",
+    "sales": "Sales",
+    "takeRateNote": "The platform keeps {rate}% of each sale.",
+    "payOutNow": "Pay out my balance",
+    "payoutDestination": "Where the money goes",
+    "working": "Working…",
+    "payoutSent": "Sent {amount} to your payout destination.",
+    "payoutFailed": "The payout did not go through.",
+    "withdraw": "Take off sale",
+    "withdrawn": "Not on sale",
+    "withdrawTitle": "Take this off sale?",
+    "withdrawBody": "“{name}” will disappear from the marketplace. People who already bought it keep their copy.",
+    "withdrawConfirm": "Take it off sale",
+    "kind": {
+      "game": "Game",
+      "app": "App",
+      "automation": "Automation",
+      "agent": "Agent",
+      "template": "Template",
+      "pack": "Board pack",
+      "dashboard": "Dashboard",
+      "playbook": "Playbook",
+      "course": "Course",
+      "dataset": "Dataset",
+      "tool": "Tool",
+      "creative": "Creative asset"
+    },
+    "launchVerb": {
+      "play": "Play",
+      "open": "Open",
+      "run": "Run",
+      "preview": "Preview",
+      "install": "Install"
+    }
   }
 }

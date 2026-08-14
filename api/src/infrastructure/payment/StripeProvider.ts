@@ -178,6 +178,105 @@ export class StripeProvider implements PaymentProvider {
     return { sessionId: session.id, checkoutUrl: session.url, externalCustomerId: session.customer ?? null, externalSubscriptionId: null };
   }
 
+  /**
+   * A ONE-OFF payment — the marketplace's shape, not a subscription.
+   *
+   * The two methods above both create recurring sessions; a creation someone
+   * bought once is `mode: 'payment'`, and the difference is not cosmetic: a
+   * subscription session produces no `payment_status` to verify against and would
+   * bill the buyer again next month for a thing they already own.
+   *
+   * Everything the grant needs is stamped into `metadata`, because the redirect
+   * back to our site proves nothing on its own. `retrieveCheckoutSession` reads it
+   * back FROM STRIPE, which is the only party that knows whether money moved.
+   */
+  async createOneTimeCheckoutSession(opts: {
+    amountCents: number;
+    currency: string;
+    productName: string;
+    billingEmail?: string | null;
+    successUrl: string;
+    cancelUrl: string;
+    metadata: Record<string, string>;
+    /** Same key for the same buyer+listing, so a double-click is one session. */
+    idempotencyKey: string;
+  }): Promise<{ sessionId: string; checkoutUrl: string }> {
+    this.requireConfigured();
+    const params = new URLSearchParams({
+      mode: 'payment',
+      success_url: opts.successUrl,
+      cancel_url: opts.cancelUrl,
+      'line_items[0][quantity]': '1',
+      'line_items[0][price_data][currency]': opts.currency.toLowerCase(),
+      'line_items[0][price_data][unit_amount]': String(opts.amountCents),
+      'line_items[0][price_data][product_data][name]': opts.productName.slice(0, 250),
+    });
+    if (opts.billingEmail) params.set('customer_email', opts.billingEmail);
+    for (const [key, value] of Object.entries(opts.metadata)) {
+      params.set(`metadata[${key}]`, value);
+      params.set(`payment_intent_data[metadata][${key}]`, value);
+    }
+
+    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.config.secretKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Idempotency-Key': opts.idempotencyKey,
+      },
+      body: params.toString(),
+    });
+    if (!res.ok) {
+      const err = await res.json() as { error?: { message?: string } };
+      throw new Error(`Stripe checkout error: ${err.error?.message ?? res.status}`);
+    }
+    const session = await res.json() as { id: string; url: string };
+    return { sessionId: session.id, checkoutUrl: session.url };
+  }
+
+  /**
+   * Read a checkout session back from Stripe.
+   *
+   * This is the ONLY thing that may authorise a paid grant. A `session_id` in a
+   * redirect URL is a string the buyer's browser handed us and can be edited in
+   * the address bar; `payment_status` from Stripe is not.
+   */
+  async retrieveCheckoutSession(sessionId: string): Promise<{
+    id: string;
+    paymentStatus: string;
+    amountTotalCents: number;
+    currency: string;
+    paymentIntentId: string | null;
+    customerEmail: string | null;
+    metadata: Record<string, string>;
+  } | null> {
+    this.requireConfigured();
+    const res = await fetch(
+      `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`,
+      { headers: { Authorization: `Bearer ${this.config.secretKey}` } },
+    );
+    if (!res.ok) return null;
+    const session = await res.json() as {
+      id: string;
+      payment_status?: string;
+      amount_total?: number;
+      currency?: string;
+      payment_intent?: string | { id?: string } | null;
+      customer_details?: { email?: string | null } | null;
+      metadata?: Record<string, string> | null;
+    };
+    const intent = session.payment_intent;
+    return {
+      id: session.id,
+      paymentStatus: session.payment_status ?? 'unpaid',
+      amountTotalCents: session.amount_total ?? 0,
+      currency: (session.currency ?? 'usd').toUpperCase(),
+      paymentIntentId: typeof intent === 'string' ? intent : intent?.id ?? null,
+      customerEmail: session.customer_details?.email ?? null,
+      metadata: session.metadata ?? {},
+    };
+  }
+
   private async ensureDiscountCoupon(discount: NonNullable<CheckoutSessionOpts['discount']>): Promise<string> {
     const couponId = `bf_${discount.id.replace(/-/g, '')}_${discount.percentOff}_${discount.durationYears * 12}`;
     const params = new URLSearchParams({
@@ -360,6 +459,25 @@ export class StripeProvider implements PaymentProvider {
         }
 
         const customerDetails = obj['customer_details'] as Record<string, string> | undefined;
+
+        // A marketplace purchase is `mode: 'payment'` and has no subscription, so
+        // it is branched BEFORE the subscription mapping below — which would
+        // otherwise read a plan activation out of a one-off creation sale.
+        if (meta['purchaseKind'] === 'marketplace_listing') {
+          const buyerTenantId = Number(meta['buyerTenantId']);
+          return {
+            type: 'listing.purchased',
+            purchaseKind: 'marketplace_listing',
+            checkoutSessionId: obj['id'] as string,
+            buyerRef: meta['buyerRef'],
+            ...(Number.isInteger(buyerTenantId) && buyerTenantId > 0 ? { tenantId: buyerTenantId } : {}),
+            externalCustomerId: customer ?? '',
+            externalSubscriptionId: '',
+            billingEmail: (obj['customer_email'] as string | undefined) ?? customerDetails?.['email'],
+            raw: event,
+          };
+        }
+
         if (meta['purchaseKind'] === 'business_phone') {
           return {
             type: 'addon.activated', purchaseKind: 'business_phone',

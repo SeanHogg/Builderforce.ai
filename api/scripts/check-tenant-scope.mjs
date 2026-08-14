@@ -208,7 +208,18 @@ function targetTables(statement) {
   return targets;
 }
 
-const SCOPED = /scopedToTenant|scopedToSegment|tenantId|tenant_id/;
+/**
+ * What counts as "this statement has thought about tenancy".
+ *
+ * `acrossTenants` is the DECLARED exception: a read with no tenant to filter by —
+ * the public marketplace catalogue, a share token, a superadmin surface — which
+ * says so in the statement and must still supply an access predicate of its own
+ * (see infrastructure/database/tenantScope.ts). It is admitted here rather than
+ * through the baseline on purpose: the baseline is frozen DEBT and may only
+ * shrink, and filing a deliberate decision there would make the number go up when
+ * nothing is owed, then dare the next person to pay it down by breaking a feature.
+ */
+const SCOPED = /scopedToTenant|scopedToSegment|acrossTenants|tenantId|tenant_id/;
 
 /**
  * Conditions are very often accumulated into a local array and spread into the

@@ -66,6 +66,57 @@ export function scopedToTenant(
 }
 
 /**
+ * The reasons a read against a tenant-owned table may legitimately cross tenants.
+ *
+ * A CLOSED set, because "this one is special" is exactly the sentence that
+ * precedes a leak. Each value names a mechanism that supplies access control of
+ * its own, which is the only thing that makes the absent tenant predicate safe:
+ *
+ *   `public_catalogue` — the row is published FOR strangers. `catalog_items` is
+ *     the case: its `tenant_id` is nullable precisely because a public listing is
+ *     platform-facing, and filtering the marketplace by the shopper's own tenant
+ *     would mean nobody could buy anything they had not already published.
+ *     The access predicate is `visibility = 'public'`.
+ *   `share_token` — the TOKEN is the credential and carries no session, so the row
+ *     it resolves to reports the tenant rather than the caller asserting one.
+ *   `platform_admin` — a superadmin surface that is cross-tenant by definition and
+ *     is gated before the query is reached.
+ */
+export type CrossTenantReason = 'public_catalogue' | 'share_token' | 'platform_admin';
+
+/**
+ * A DECLARED cross-tenant read.
+ *
+ * The tenant-scope guard exists to catch the query that FORGOT its tenant. A
+ * handful of reads have no tenant to filter by, and until now the only way to say
+ * so was to add a line to the frozen-debt baseline — which files a deliberate
+ * decision in the same drawer as an accident, and makes the debt number go up when
+ * nothing was owed.
+ *
+ * This is the other answer: state the reason, in the statement, in a form the guard
+ * and a reviewer both read. It is greppable (`acrossTenants(` finds every one), it
+ * is typed against tables that actually have a `tenantId` so it cannot be pointed
+ * at the wrong one, and — the property that matters — it REFUSES to build a
+ * predicate out of nothing. A cross-tenant read still has to say what governs it;
+ * dropping the tenant filter is allowed, dropping all access control is not.
+ */
+export function acrossTenants(
+  _table: TenantOwnedTable,
+  _reason: CrossTenantReason,
+  ...conditions: Array<SQL | undefined>
+): SQL {
+  const present = conditions.filter((condition): condition is SQL => condition !== undefined);
+  if (present.length === 0) {
+    // Unlike `scopedToTenant`, there is no always-present predicate to fall back
+    // on here, so an empty call would silently return the whole table across every
+    // tenant on the deployment. That is the one outcome this helper exists to make
+    // impossible, and a thrown error at the call site beats it reaching a customer.
+    throw new Error('acrossTenants: a cross-tenant read must still carry an access predicate');
+  }
+  return and(...present) as SQL;
+}
+
+/**
  * The tenant AND segment predicate for `table`.
  *
  * Use on the segmented tier, where a tenant is subdivided into end-client

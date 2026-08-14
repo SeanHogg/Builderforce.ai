@@ -16,9 +16,11 @@ import { useAuth } from '@/lib/AuthContext';
 import { useOnboardingPrompt } from '@/lib/onboarding';
 import { OnboardingStepper } from '@/components/OnboardingStepper';
 import {
-  listMyEngagements, listMyTimecards, listMyInvoices, getTodayActivity,
-  type Engagement, type Timecard, type Invoice,
+  listMyEngagements, listMyInvoices, getTodayActivity, type Engagement, type Invoice,
 } from '@/lib/freelancerApi';
+import {
+  listMyTimecards, type Timecard,
+} from '@/lib/freelancerTimecardsApi';
 
 const FREELANCER_TABS = ['work', 'timecards'] as const;
 type FreelancerTab = (typeof FREELANCER_TABS)[number];

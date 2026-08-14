@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The provenance line under a derived number, and the gate badge beside a score.
  *
@@ -20,6 +18,10 @@
  * Shared component, not a prop-drilled boolean: each one decides its own visibility
  * and returns null when there is nothing worth saying — a caveat printed on every card
  * is a caveat nobody reads.
+ *
+ * No `'use client'`: `CreationNode` is the only caller and it already declares the
+ * boundary. The directive here was a second marker for a component no server tree can
+ * reach, and it put the client-file ratchet over its baseline.
  */
 
 import { useTranslations } from 'next-intl';

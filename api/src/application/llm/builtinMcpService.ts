@@ -23,6 +23,7 @@ import { and, eq, desc, getTableColumns, inArray, isNotNull, sql, type SQL } fro
 import { type ToolSchema } from '@builderforce/agent-tools';
 import { CREATIVE_CAPABILITIES } from '@builderforce/creation-canvas-contract';
 import { advertisedName } from './toolNaming';
+import { CAREER_TOOLS } from './careerToolCatalog';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import {
   clampErrorLogLimit,
@@ -118,36 +119,13 @@ function toTenantPlanEnum(ep: 'free' | 'pro' | 'teams'): TenantPlan {
 
 type Json = Record<string, unknown>;
 
-interface BuiltinCtx {
-  db: Db;
-  tenantId: number;
-  projects: ProjectService;
-  tasks: TaskService;
-  /** Worker env — present when the caller threads it (needed by tools that
-   *  decrypt integration credentials / reach external providers, e.g. migration). */
-  env?: Env;
-  /** Authed user id (createdBy on migration runs), when known. */
-  userId?: string | null;
-  /**
-   * The CLOUD AGENT making this call (`ide_agents.id` / published ref), when the caller
-   * is an agent rather than a person. Carried into the replay JWT as the signed `agt`
-   * claim so a replayed WRITE is credited to the agent.
-   *
-   * The cloud-agent engine also passes this ref as `userId` (it is what `createdBy`
-   * columns have always recorded for agent-authored rows, and changing that would
-   * rewrite existing authorship). This field is what lets the replayed route tell the
-   * two apart instead of reading an agent ref as a person.
-   */
-  agentRef?: string | null;
-  /** The caller's role — used to mint a replay JWT for gateway-key callers. */
-  role?: TenantRole;
-  /** The caller's raw Bearer token — forwarded on route replay when it's a JWT
-   *  (a real user) so the replayed route runs with the caller's exact identity. */
-  authToken?: string | null;
-  /** The request's ExecutionContext — passed to `app.request` so replayed routes'
-   *  `waitUntil` side-effects don't throw. */
-  executionCtx?: ExecutionContext;
-}
+// The caller context, route replay and catalog-row shape now live in their own
+// module so a domain can declare its own CATALOG rows without a cycle back to
+// this file. Re-exported here so every existing importer is unaffected.
+export type { BuiltinCtx, BuiltinTool, ReplayAuthPlan } from './builtinToolContext';
+export { replayRoute, resolveReplayAuth } from './builtinToolContext';
+import { replayRoute, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
+
 
 /** Best-effort invalidation after a strategy write (portfolio / initiative /
  *  objective / key-result). Bumps BOTH caches these rows feed:
@@ -221,102 +199,6 @@ async function invalidateRoadmap(ctx: BuiltinCtx, segmentId: string, projectId: 
   await bumpTicketSearchVersion(ctx.env, ctx.tenantId);
 }
 
-/**
- * Run a platform action by REPLAYING the real `/api/*` route in-process (reuses
- * its logic AND its role-gate authz — the single source of truth). Forwards the
- * caller's JWT when present (real-user identity/role/segment); mints a short-lived
- * tenant JWT for gateway-key callers (bfk_/bfa_). Used for the heavy/computed/auth
- * tail that isn't a simple table op (executions dispatch, decks, analytics, …).
- */
-async function replayRoute(
-  ctx: BuiltinCtx,
-  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
-  path: string,
-  body?: Json,
-  /** Send `body.text` as a raw text/plain body instead of JSON (e.g. project file
-   *  contents, whose route reads `c.req.text()`). */
-  opts?: { rawText?: string },
-): Promise<unknown> {
-  if (!ctx.env) throw new Error('route replay unavailable in this context');
-  // Dynamic import avoids a static import cycle (index → routes → this module).
-  const { buildApp } = await import('../../index');
-  const app = buildApp(ctx.env);
-  const auth = resolveReplayAuth({
-    authToken: ctx.authToken,
-    agentRef: ctx.agentRef,
-  });
-  const bearer = auth.forwardToken
-    ? auth.forwardToken
-    : await signJwt(
-        {
-          sub: auth.subject,
-          tid: ctx.tenantId,
-          role: ctx.role ?? TenantRole.DEVELOPER,
-          // Signed authorship: when an AGENT is driving this call, the replayed route
-          // credits the agent instead of mistaking its ref in `sub` for a user id.
-          ...(ctx.agentRef ? { agt: ctx.agentRef } : {}),
-        },
-        ctx.env.JWT_SECRET,
-      );
-  const headers: Record<string, string> = { authorization: `Bearer ${bearer}` };
-  const rawText = opts?.rawText;
-  if (rawText !== undefined) headers['content-type'] = 'text/plain';
-  else if (body !== undefined) headers['content-type'] = 'application/json';
-  const req = new Request(`https://internal${path}`, {
-    method,
-    headers,
-    body: rawText !== undefined ? rawText : body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const noopCtx = { waitUntil: () => undefined, passThroughOnException: () => undefined } as unknown as ExecutionContext;
-  const res = await app.request(req, {}, ctx.env, ctx.executionCtx ?? noopCtx);
-  const text = await res.text();
-  let parsed: unknown;
-  try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
-  if (!res.ok) {
-    const detail = typeof parsed === 'object' && parsed ? JSON.stringify(parsed) : String(parsed);
-    throw new Error(`${method} ${path} → ${res.status} ${detail}`.slice(0, 400));
-  }
-  return parsed;
-}
-
-export interface ReplayAuthPlan {
-  /** A real person's still-authoritative bearer token. Never set for an agent run. */
-  forwardToken?: string;
-  /** Machine subject used when the platform must mint a fresh in-process token. */
-  subject: 'agentHost:mcp';
-}
-
-/**
- * Decide how an in-process route replay authenticates.
- *
- * Cloud agents must never inherit the web/session JWT that happened to launch a
- * run. A run can outlive that token, and an agent UUID is not a user with an
- * `auth_tokens` row. Minting a fresh machine token per replay keeps the call
- * bounded by the run's tenant/role while the signed `agt` claim above preserves
- * the real agent authorship. Human MCP calls still forward their bearer so
- * session revocation and exact user permissions remain authoritative.
- */
-export function resolveReplayAuth(args: {
-  authToken?: string | null;
-  agentRef?: string | null;
-}): ReplayAuthPlan {
-  const token = args.authToken?.trim() ?? '';
-  const isGatewayKey = /^(bfk_|bfa_|clk_)/.test(token);
-  if (!args.agentRef && token && !isGatewayKey) {
-    return { forwardToken: token, subject: 'agentHost:mcp' };
-  }
-  return { subject: 'agentHost:mcp' };
-}
-
-interface BuiltinTool {
-  /** `<domain>.<method>` — the relay name passed back on /v1/mcp/call. */
-  tool: string;
-  description: string;
-  parameters: Json;
-  /** Whether the tool changes state (parity with the frontend manifest). */
-  mutates: boolean;
-  run: (ctx: BuiltinCtx, args: Json) => Promise<unknown>;
-}
 
 // --- tiny JSON-schema helpers ----------------------------------------------
 const S = { type: 'string' } as const;
@@ -3534,6 +3416,15 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ sinceHours: N }),
     run: async (ctx, a) => ({ sources: await listErrorLogSources(await errorLogDb(ctx), a.sinceHours != null ? num(a.sinceHours) : undefined) }),
   },
+  // ---- Career: the résumé/job/listing surface (PRD 18 §1.2) ----------------
+  //
+  // Declared in their own module and spread here. Two reasons: the domain is large
+  // enough to earn a file, and the guest boundary is DERIVED from which half of that
+  // file a row sits in rather than maintained as a second hand-written allowlist.
+  // These are the `recruiter.*` / `hr.*` rows the PRD specified, plus the seeker half
+  // of the marketplace (`jobs.search`, `proposals.submit|mine|withdraw`) whose routes
+  // have existed all along with no tool in front of them.
+  ...CAREER_TOOLS,
 ];
 
 /** Assert the worker env was threaded (tools that decrypt credentials / reach
@@ -3868,6 +3759,27 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // Executions — READ ONLY (accurate "what's remaining"; no submit/cancel/post_message)
   'executions.get', 'executions.list_active', 'executions.list_for_task', 'executions.list_recent',
   'executions.task_file_changes', 'executions.trace',
+  // Career — ANALYSIS ONLY, and the split here is deliberate rather than cautious.
+  //
+  // Everything below computes over text the run already holds: score a résumé, match it
+  // to a posting, screen against STATED criteria, build an interview kit, search the job
+  // board and the talent directory. Safe unattended, because none of it is visible to
+  // anyone outside the run.
+  //
+  // Deliberately EXCLUDED: `proposals.submit`, `proposals.withdraw`, `listing.update`
+  // and `listing.set_available_for_hire`. Each of those acts OUTWARD under a real
+  // person's name — an application an employer reads, a public listing, the opt-in that
+  // removes them from every search. An unattended agent must never send one of those on
+  // someone's behalf without them seeing the words first, so the tool exists and the
+  // unattended grant does not.
+  'recruiter.parse_resume', 'recruiter.score_resume', 'recruiter.optimize_resume',
+  'recruiter.tailor_resume', 'recruiter.match_job', 'recruiter.summarize_resume',
+  'recruiter.extract_skills', 'recruiter.interview_questions', 'recruiter.screen_candidate',
+  'recruiter.build_packet', 'recruiter.source_candidates',
+  'hr.career360_suggest_targets', 'hr.career360_select_target', 'hr.career360_state',
+  'hr.salary_analyze', 'hr.comp_analyze', 'hr.employer_research',
+  'listing.get_mine', 'listing.audit', 'listing.readiness',
+  'jobs.search', 'jobs.get', 'proposals.mine',
 ];
 
 /** Chat-scoped tools an agent gets ONLY when it is replying INSIDE a Brain chat (the

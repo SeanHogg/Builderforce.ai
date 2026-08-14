@@ -19,6 +19,7 @@ import { markDiscountRedeemed } from '../../application/tenant/discountCodeServi
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { recordReferralConversion } from '../../application/sales/recordReferralConversion';
 import { recordBusinessPhoneEvent } from '../../application/tenant/businessPhoneSubscription';
+import { completeListingCheckout } from '../../application/marketplace/listingCommerce';
 
 export function createWebhookRoutes(
   tenantService: TenantService,
@@ -95,6 +96,44 @@ export function createWebhookRoutes(
       } catch (err) {
         reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", context: { logMessage: '[webhook] card validation update failed:', details: err } });
         return c.json({ error: 'Processing failed' }, 500);
+      }
+    }
+
+    /**
+     * A marketplace creation was paid for.
+     *
+     * The redirect back to the listing page is the normal way this grant happens.
+     * This is the path for the buyer who paid and then closed the tab — without
+     * it they have been charged and hold nothing until they think to revisit the
+     * link. Both routes end at `completeListingCheckout`, which re-reads the
+     * session from the processor and lands on the same licence; the unique index
+     * on `(tenant, catalog item, licensee)` makes the second arrival a no-op
+     * rather than a second sale.
+     */
+    if (event.type === 'listing.purchased') {
+      if (!event.checkoutSessionId || !event.buyerRef || !event.tenantId) {
+        console.warn('[webhook] listing purchase with incomplete metadata; ignoring');
+        return c.json({ received: true, processed: false });
+      }
+      try {
+        await completeListingCheckout(buildDatabase(c.env as Env), c.env as Env, {
+          tenantId: event.tenantId,
+          buyerRef: event.buyerRef,
+          buyerEmail: event.billingEmail ?? null,
+          checkoutSessionId: event.checkoutSessionId,
+        });
+        return c.json({ received: true, processed: true });
+      } catch (err) {
+        // A buyer who already collected via the redirect is the COMMON case here,
+        // not a fault: the grant is idempotent and this arrives second about half
+        // the time. Acknowledge so the processor stops retrying, and record it.
+        reportCaughtError(err, {
+          source: 'presentation/routes/webhookRoutes.ts',
+          operation: 'listingPurchase',
+          level: 'warning',
+          context: { logMessage: '[webhook] listing grant did not apply:', details: err },
+        });
+        return c.json({ received: true, processed: false });
       }
     }
 

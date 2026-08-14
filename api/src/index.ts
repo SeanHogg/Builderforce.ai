@@ -215,6 +215,7 @@ import { createAgentAssignmentRoutes } from './presentation/routes/agentAssignme
 import { createSecurityReviewRoutes } from './presentation/routes/securityReviewRoutes';
 import { createKnowledgeRoutes } from './presentation/routes/knowledgeRoutes';
 import { createKnowledgeMarketRoutes } from './presentation/routes/knowledgeMarketRoutes';
+import { createCreationListingRoutes, createPublicListingRoutes } from './presentation/routes/creationListingRoutes';
 import { createWebSearchRoutes } from './presentation/routes/webSearchRoutes';
 
 import { API_VERSION } from './version';
@@ -861,6 +862,13 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/monitoring',        createMonitoringRoutes(db));
   app.route('/api/knowledge',         createKnowledgeRoutes(db));
   app.route('/api/knowledge-market',  createKnowledgeMarketRoutes(db)); // PUBLIC browse (logged-out)
+
+  // Selling what you built on the canvas. Two mounts because they are two auth
+  // models: publishing/earning/paying out needs the workspace token, while browse,
+  // detail and LAUNCH are public — a marketplace whose products only run after a
+  // sign-up is a catalogue of screenshots.
+  app.route('/api/creation-listings', createCreationListingRoutes(db));
+  app.route('/api/listings',          createPublicListingRoutes(db)); // PUBLIC browse + launch
 
   // The domain router is intentionally LAST among `/api` mounts. It owns dynamic
   // `/api/:domain/*` paths and installs blanket auth for them; mounting it earlier

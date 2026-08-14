@@ -8295,7 +8295,17 @@
       "fillFromResume": "从简历填充",
       "filling": "读取中…",
       "autofilled": "已根据你的简历填充——请检查并保存。",
-      "autofillUnavailable": "上传文本简历或连接 hired.video 以自动填充。"
+      "autofillUnavailable": "上传文本简历或连接 hired.video 以自动填充。",
+      "seekingLegend": "你愿意接受的工作类型",
+      "seekingHint": "一份资料，两类工作。客户搜索项目型资料；雇主搜索愿意入职的人选——只有你在此说明，他们才能看到你。",
+      "targetRoles": "目标职位",
+      "targetRolesPlaceholder": "平台工程师、站点可靠性工程师",
+      "seniority": "期望级别",
+      "workMode": "工作方式",
+      "noticePeriod": "离职通知期（天）",
+      "salaryMin": "期望薪资（最低）",
+      "salaryMax": "期望薪资（最高）",
+      "openToRelocation": "可接受搬迁"
     },
     "resume": {
       "title": "简历",
@@ -8383,6 +8393,27 @@
     "proposals": {
       "empty": "您尚未提交任何提案。",
       "withdraw": "撤回"
+    },
+    "seeking": {
+      "services": "项目与合同工作",
+      "employment": "全职职位",
+      "both": "两者皆可——合同工作与全职职位",
+      "not_looking": "暂不寻找机会"
+    },
+    "workMode": {
+      "remote": "远程",
+      "hybrid": "混合办公",
+      "onsite": "现场办公"
+    },
+    "seniority": {
+      "junior": "初级",
+      "mid": "中级",
+      "senior": "高级",
+      "staff": "资深专家",
+      "lead": "技术主管",
+      "principal": "首席",
+      "director": "总监",
+      "executive": "高管"
     }
   },
   "marketplace": {
@@ -13430,6 +13461,60 @@
         "description": "Publish live service health as an inline component or standalone status page.",
         "consent": "Publishes the workspace's selected monitor status and incident updates to the customer site."
       }
+    },
+    "availableCapabilities": "项可嵌入的能力",
+    "replaces": "可替代 {tools}",
+    "sell": {
+      "label": "为什么选择嵌入式能力",
+      "title": "一段脚本，取代十三份合同",
+      "description": "您在 BuilderForce 中构建的一切都能在您自己的产品中运行——客服、反馈、分析、功能开关、同意管理、状态页。每项能力单独治理，而它们全都通过一次安装的同一段标签抵达。",
+      "stats": {
+        "capabilities": "项能力，同一段标签",
+        "script": "段脚本即可安装",
+        "stack": "每月，它所替代的单点工具费用",
+        "yearly": "一年的工具开支从路线图上消失"
+      },
+      "replacesLabel": "可替代这些工具",
+      "benchmarkNote": "对比数字取自同类单点工具在小团队规模下公开的入门档定价。它们只是参照，不是报价——您的实际成本与用量会有所不同。",
+      "pillars": {
+        "install": {
+          "title": "安装一次，随时改主意",
+          "body": "一段标签放到您的网站上。启用或停用某项能力在您的工作区完成，下次页面加载即生效——无需重新部署，无需再接入一家供应商，也没有新脚本要审查。"
+        },
+        "govern": {
+          "title": "同意机制内建，而非事后加装",
+          "body": "每项能力都需单独授权，对应带版本的同意文本，且每一次开启与关闭都会写入不可篡改的工作区日志，可直接交给审计方。"
+        },
+        "own": {
+          "title": "它始终属于您",
+          "body": "数据归属您的工作区，体验带着您的品牌，而这项能力正是您在 Canvas 中设计的东西——不是套上您配色的第三方小挂件。"
+        }
+      },
+      "loop": {
+        "title": "从创意，到嵌入，到售出",
+        "description": "我们的使命是帮您把所构建的东西卖出去，因此这条路径贯穿始终：设计体验，交到客户面前，再把它上架给所有人。",
+        "steps": {
+          "build": {
+            "title": "在 Canvas 中构建",
+            "body": "描述您想要的体验，并在画布上不断打磨，直到它正是您所设想的样子。",
+            "action": "打开 Canvas"
+          },
+          "embed": {
+            "title": "嵌入到客户所在之处",
+            "body": "把一段脚本粘贴到您的产品、网站或客户门户中，然后开启所需的能力。",
+            "action": "查看安装代码"
+          },
+          "sell": {
+            "title": "在市场中出售",
+            "body": "把您构建的成果上架，让其他团队也能安装，并让这个创意本身为您带来收入，而不只是自用。",
+            "action": "浏览市场"
+          }
+        }
+      },
+      "cta": {
+        "title": "把您的创意放进客户的产品里",
+        "body": "创建免费工作区即可获取嵌入密钥，开启所需能力，今天就发布到您自己的网站。"
+      }
     }
   },
   "embedInstall": {
@@ -14938,7 +15023,13 @@
       "case": "员工关系个案",
       "obligation": "法定义务",
       "form": "表单",
-      "funnel": "转化漏斗"
+      "funnel": "转化漏斗",
+      "labelSet": "标注集",
+      "model": "模型",
+      "notebook": "笔记本",
+      "prompt": "提示词",
+      "runComparison": "运行对比",
+      "trainingRun": "训练运行"
     },
     "twilioSetup": {
       "title": "Twilio 集成",
@@ -17235,6 +17326,65 @@
         "noJudge": "未记录评审模型，因此该分数不可比较",
         "notRun": "此评估从未运行过"
       }
+    },
+    "publish": {
+      "accountTitle": "请先保存此画板",
+      "accountBody": "要出售作品，它必须存放在他人可以访问的地方。请创建账户后再发布。",
+      "crumb": "市场",
+      "title": "在市场中出售",
+      "loading": "正在读取画板…",
+      "emptyBoard": "此画板上暂无可出售的内容。请先创建游戏、网站、工作流、仪表板或文档。",
+      "whatLabel": "你要出售什么？",
+      "wholeBoard": "整个画板 —— {title}",
+      "kindLabel": "它属于哪一类？",
+      "nameLabel": "名称",
+      "namePlaceholder": "买家将看到的名称",
+      "summaryLabel": "简介",
+      "summaryPlaceholder": "用一两句话说明它的用途和适用人群",
+      "priceLabel": "价格",
+      "splitYouKeep": "你将获得 {amount}",
+      "splitFee": "平台费 {amount}（{rate}%）",
+      "splitFree": "免费 —— 任何人都可以取用副本。",
+      "trialLabel": "购买前，访客可以…",
+      "trialFull": "完整使用",
+      "trialPreview": "仅查看预览",
+      "trialHintFree": "免费商品对任何打开它的人都可直接运行。",
+      "publishing": "正在发布…",
+      "update": "更新商品",
+      "publishAction": "立即发布",
+      "withdraw": "下架",
+      "liveAt": "已上线于",
+      "noticePublished": "“{name}”已在市场上线",
+      "noticeWithdrawn": "已下架",
+      "sectionLabel": "市场",
+      "sellAsAction": "作为{kind}出售",
+      "sellAction": "出售此项",
+      "sellHint": "发布后，其他人即可发现、试用并购买。",
+      "kind": {
+        "game": "游戏",
+        "app": "应用",
+        "automation": "自动化流程",
+        "agent": "智能体",
+        "template": "模板",
+        "pack": "画板套件",
+        "dashboard": "仪表板",
+        "playbook": "操作手册",
+        "course": "课程",
+        "dataset": "数据集",
+        "tool": "工具",
+        "creative": "创意素材"
+      },
+      "launchHint": {
+        "play": "买家可在浏览器中直接试玩。",
+        "open": "买家可打开在线站点。",
+        "run": "买家可直接运行。",
+        "preview": "买家可阅读内容。",
+        "install": "买家可复制到自己的画板。"
+      },
+      "trialHint": {
+        "full": "任何人都可完整使用；付费是为了支持你并保留副本。",
+        "preview": "访客只能看到预览，购买后才能使用完整版本。"
+      }
     }
   },
   "canvasCommands": {
@@ -18905,5 +19055,81 @@
     "taken": "该时间刚刚被预约。请另选一个。",
     "failed": "出现问题，请重试。",
     "slotAria": "预约 {time}"
+  },
+  "marketplaceListing": {
+    "byAuthor": "作者：{author}",
+    "installs": "{count} 次安装",
+    "launchSection": "立即体验",
+    "free": "免费",
+    "signInToInstall": "登录后安装",
+    "signInToBuy": "登录后购买",
+    "youOwnIt": "你已拥有",
+    "working": "处理中…",
+    "install": "获取副本",
+    "buy": "立即购买",
+    "openInCanvas": "在我的画板中打开",
+    "previewOnly": "这是预览版。购买后即可使用完整版本。",
+    "playFrameTitle": "正在试玩 {name}",
+    "siteFrameTitle": "{name}（在线）",
+    "nothingToShow": "暂无可展示的内容。",
+    "kind": {
+      "game": "游戏",
+      "app": "应用",
+      "automation": "自动化流程",
+      "agent": "智能体",
+      "template": "模板",
+      "pack": "画板套件",
+      "dashboard": "仪表板",
+      "playbook": "操作手册",
+      "course": "课程",
+      "dataset": "数据集",
+      "tool": "工具",
+      "creative": "创意素材"
+    }
+  },
+  "marketplaceCreations": {
+    "heading": "在此构建",
+    "blurb": "用户在画板上创建的游戏、应用、工作流与手册 —— 取用前可先试用。",
+    "allKinds": "全部",
+    "empty": "暂无已发布内容。在画板上创建作品并出售吧。",
+    "free": "免费",
+    "installs": "{count} 次安装",
+    "sellerHeading": "你正在出售的内容",
+    "earned": "已赚取",
+    "paidOut": "已提现",
+    "available": "可提现",
+    "sales": "销量",
+    "takeRateNote": "平台从每笔交易中收取 {rate}%。",
+    "payOutNow": "提现余额",
+    "payoutDestination": "收款方式",
+    "working": "处理中…",
+    "payoutSent": "已向你的收款账户发送 {amount}。",
+    "payoutFailed": "提现未能完成。",
+    "withdraw": "下架",
+    "withdrawn": "未在售",
+    "withdrawTitle": "确认下架？",
+    "withdrawBody": "“{name}”将从市场中移除。已购买的用户仍可保留副本。",
+    "withdrawConfirm": "确认下架",
+    "kind": {
+      "game": "游戏",
+      "app": "应用",
+      "automation": "自动化流程",
+      "agent": "智能体",
+      "template": "模板",
+      "pack": "画板套件",
+      "dashboard": "仪表板",
+      "playbook": "操作手册",
+      "course": "课程",
+      "dataset": "数据集",
+      "tool": "工具",
+      "creative": "创意素材"
+    },
+    "launchVerb": {
+      "play": "试玩",
+      "open": "打开",
+      "run": "运行",
+      "preview": "预览",
+      "install": "安装"
+    }
   }
 }

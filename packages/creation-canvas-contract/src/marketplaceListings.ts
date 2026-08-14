@@ -266,3 +266,36 @@ export function resolveTrialPolicy(
 export function allowsPricing(kindId: string): boolean {
   return listingKindSpec(kindId)?.pricing === 'either';
 }
+
+/**
+ * FIELDS THAT NEVER LEAVE THE SELLER'S TENANT.
+ *
+ * A published snapshot is a copy of a canvas object, and a canvas object carries
+ * more than its content: it carries the BINDINGS that made it work here — the
+ * project it compiles in, the repository path it was captured from, the connector
+ * connection it reads, the R2 key its upload lives at. None of that is the product.
+ * Shipping it would hand a stranger the coordinates of the seller's own resources,
+ * and in the connector case an id they can quote at an API.
+ *
+ * Stripped on the server at publish time, so a client that forgets is not the thing
+ * standing between a seller's infrastructure and a public URL. Declared here rather
+ * than in the API because the publish panel shows the seller what will be included,
+ * and a preview that disagrees with the projection is worse than no preview.
+ */
+export const LISTING_STRIPPED_FIELDS: readonly string[] = [
+  'resourceId', 'resourceType', 'resourceRevision',
+  'projectId', 'sessionId', 'tenantId', 'workspaceId', 'segmentId',
+  'path', 'filePath', 'repoUrl', 'repository', 'storageKey', 'r2Key',
+  'connectionId', 'connectorId', 'credentialId', 'secretName', 'secrets',
+  'apiKey', 'token', 'accessToken', 'refreshToken', 'webhookUrl', 'ingressToken',
+  'createdBy', 'updatedBy', 'lockedBy', 'assigneeId', 'ownerUserId',
+];
+
+/** True when a snapshot key must be dropped before publication. Case-insensitive
+ *  and suffix-matched, so a binding a kind renamed for itself (`gameProjectId`,
+ *  `sourceRepoUrl`) is caught as the same binding rather than as a new field
+ *  nobody added to the list. */
+export function isStrippedListingField(key: string): boolean {
+  const lower = key.toLowerCase();
+  return LISTING_STRIPPED_FIELDS.some((field) => lower.endsWith(field.toLowerCase()));
+}

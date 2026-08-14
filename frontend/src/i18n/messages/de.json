@@ -8295,7 +8295,17 @@
       "fillFromResume": "Aus Lebenslauf ausfüllen",
       "filling": "Wird gelesen…",
       "autofilled": "Aus Ihrem Lebenslauf ausgefüllt – prüfen und speichern.",
-      "autofillUnavailable": "Laden Sie einen Text-Lebenslauf hoch oder verbinden Sie hired.video zum automatischen Ausfüllen."
+      "autofillUnavailable": "Laden Sie einen Text-Lebenslauf hoch oder verbinden Sie hired.video zum automatischen Ausfüllen.",
+      "seekingLegend": "Wofür Sie offen sind",
+      "seekingHint": "Ein Profil, zwei Arten von Arbeit. Kunden suchen nach Projektprofilen; Arbeitgeber suchen nach Menschen, die für eine Stelle offen sind – und finden Sie nur, wenn Sie es hier angeben.",
+      "targetRoles": "Zielpositionen",
+      "targetRolesPlaceholder": "Platform Engineer, Site Reliability Engineer",
+      "seniority": "Gesuchte Ebene",
+      "workMode": "Arbeitsmodell",
+      "noticePeriod": "Kündigungsfrist (Tage)",
+      "salaryMin": "Gehaltsvorstellung (Minimum)",
+      "salaryMax": "Gehaltsvorstellung (Maximum)",
+      "openToRelocation": "Umzugsbereit"
     },
     "resume": {
       "title": "Lebenslauf",
@@ -8383,6 +8393,27 @@
     "proposals": {
       "empty": "Sie haben noch keine Angebote abgegeben.",
       "withdraw": "Zurückziehen"
+    },
+    "seeking": {
+      "services": "Projekt- und Vertragsarbeit",
+      "employment": "Festanstellungen",
+      "both": "Beides – Projektarbeit und Festanstellung",
+      "not_looking": "Derzeit nicht auf der Suche"
+    },
+    "workMode": {
+      "remote": "Remote",
+      "hybrid": "Hybrid",
+      "onsite": "Vor Ort"
+    },
+    "seniority": {
+      "junior": "Junior",
+      "mid": "Mittleres Niveau",
+      "senior": "Senior",
+      "staff": "Staff",
+      "lead": "Lead",
+      "principal": "Principal",
+      "director": "Director",
+      "executive": "Führungsebene"
     }
   },
   "marketplace": {
@@ -13430,6 +13461,60 @@
         "description": "Publish live service health as an inline component or standalone status page.",
         "consent": "Publishes the workspace's selected monitor status and incident updates to the customer site."
       }
+    },
+    "availableCapabilities": "einbettbare Funktionen",
+    "replaces": "Ersetzt {tools}",
+    "sell": {
+      "label": "Warum eingebettete Funktionen",
+      "title": "Ein Skript statt dreizehn Verträgen",
+      "description": "Alles, was Sie in BuilderForce bauen, kann in Ihrem eigenen Produkt laufen: Support, Feedback, Analytics, Feature-Flags, Einwilligung, Statusseite. Jede Funktion wird einzeln gesteuert, und alle kommen über ein einziges Tag, das Sie einmal einbauen.",
+      "stats": {
+        "capabilities": "Funktionen in einem Tag",
+        "script": "Skript zum Einbauen",
+        "stack": "pro Monat an Einzeltools, für die es einsteht",
+        "yearly": "Tooling pro Jahr weniger auf der Roadmap"
+      },
+      "replacesLabel": "Steht für Tools wie",
+      "benchmarkNote": "Die Vergleichszahlen sind veröffentlichte Einstiegs-Listenpreise vergleichbarer Einzeltools für kleine Teams. Sie sind ein Anhaltspunkt, kein Angebot — Ihre Kosten und Nutzung werden abweichen.",
+      "pillars": {
+        "install": {
+          "title": "Einmal einbauen, später umentscheiden",
+          "body": "Ein Tag kommt auf Ihre Website. Eine Funktion ein- oder auszuschalten geschieht in Ihrem Workspace und greift beim nächsten Seitenaufruf — kein Redeploy, kein weiterer Anbieter zum Onboarden, kein neues Skript zur Prüfung."
+        },
+        "govern": {
+          "title": "Einwilligung ist eingebaut, nicht angeflanscht",
+          "body": "Jede Funktion wird einzeln aktiviert, gegen einen versionierten Einwilligungstext, und jede Zustimmung wie jeder Widerruf landet in einem unveränderlichen Workspace-Protokoll, das Sie einer Prüfung vorlegen können."
+        },
+        "own": {
+          "title": "Es bleibt Ihres",
+          "body": "Die Daten gehören Ihrem Workspace, die Erfahrung trägt Ihre Marke, und die Funktion ist das, was Sie in Canvas entworfen haben — kein Fremd-Widget in Ihren Farben."
+        }
+      },
+      "loop": {
+        "title": "Von der Idee über die Einbettung zum Verkauf",
+        "description": "Unsere Aufgabe ist es, Ihnen beim Verkaufen dessen zu helfen, was Sie bauen. Deshalb führt derselbe Weg bis zum Ende: Erfahrung entwerfen, vor Ihre Kunden bringen, dann für alle anderen listen.",
+        "steps": {
+          "build": {
+            "title": "In Canvas bauen",
+            "body": "Beschreiben Sie die gewünschte Erfahrung und formen Sie sie auf dem Board, bis sie genau das ist, was Sie gemeint haben.",
+            "action": "Canvas öffnen"
+          },
+          "embed": {
+            "title": "Dort einbetten, wo Ihre Kunden sind",
+            "body": "Fügen Sie ein Skript in Ihr Produkt, Ihre Website oder Ihr Kundenportal ein und schalten Sie die benötigten Funktionen frei.",
+            "action": "Installations-Snippet ansehen"
+          },
+          "sell": {
+            "title": "Im Marketplace verkaufen",
+            "body": "Listen Sie, was Sie gebaut haben, damit andere Teams es installieren können — und verdienen Sie an der Idee, statt sie nur selbst zu nutzen.",
+            "action": "Marketplace ansehen"
+          }
+        }
+      },
+      "cta": {
+        "title": "Bringen Sie Ihre Idee in das Produkt Ihrer Kunden",
+        "body": "Legen Sie einen kostenlosen Workspace an, holen Sie sich Ihren Embed-Key, aktivieren Sie die gewünschten Funktionen und bringen Sie sie noch heute auf Ihre eigene Website."
+      }
     }
   },
   "embedInstall": {
@@ -14938,7 +15023,13 @@
       "case": "ER-Fall",
       "obligation": "Gesetzliche Pflicht",
       "form": "Formular",
-      "funnel": "Funnel"
+      "funnel": "Funnel",
+      "labelSet": "Label-Set",
+      "model": "Modell",
+      "notebook": "Notebook",
+      "prompt": "Prompt",
+      "runComparison": "Laufvergleich",
+      "trainingRun": "Trainingslauf"
     },
     "twilioSetup": {
       "title": "Twilio-Integration",
@@ -17235,6 +17326,65 @@
         "noJudge": "Kein Bewertungsmodell erfasst, daher ist dieser Wert nicht vergleichbar",
         "notRun": "Diese Bewertung wurde nie ausgeführt"
       }
+    },
+    "publish": {
+      "accountTitle": "Speichere dieses Board zuerst",
+      "accountBody": "Etwas zu verkaufen bedeutet, dass es dort liegen muss, wo andere es erreichen können. Erstelle ein Konto, um es zu veröffentlichen.",
+      "crumb": "Marktplatz",
+      "title": "Auf dem Marktplatz verkaufen",
+      "loading": "Board wird gelesen…",
+      "emptyBoard": "Auf diesem Board ist noch nichts verkäuflich. Erstelle zuerst ein Spiel, eine Website, einen Workflow, ein Dashboard oder ein Dokument.",
+      "whatLabel": "Was verkaufst du?",
+      "wholeBoard": "Das ganze Board — {title}",
+      "kindLabel": "Was ist es?",
+      "nameLabel": "Name",
+      "namePlaceholder": "Was Käufer sehen werden",
+      "summaryLabel": "Kurzbeschreibung",
+      "summaryPlaceholder": "Ein bis zwei Sätze dazu, was es tut und für wen es ist",
+      "priceLabel": "Preis",
+      "splitYouKeep": "Du behältst {amount}",
+      "splitFee": "Plattformgebühr {amount} ({rate} %)",
+      "splitFree": "Kostenlos — jede Person kann eine Kopie mitnehmen.",
+      "trialLabel": "Vor dem Kauf können Besucher…",
+      "trialFull": "Alles nutzen",
+      "trialPreview": "Nur eine Vorschau sehen",
+      "trialHintFree": "Ein kostenloser Eintrag läuft für alle, die ihn öffnen.",
+      "publishing": "Wird veröffentlicht…",
+      "update": "Eintrag aktualisieren",
+      "publishAction": "Veröffentlichen",
+      "withdraw": "Vom Verkauf nehmen",
+      "liveAt": "Live unter",
+      "noticePublished": "„{name}“ ist auf dem Marktplatz live",
+      "noticeWithdrawn": "Vom Verkauf genommen",
+      "sectionLabel": "Marktplatz",
+      "sellAsAction": "Als {kind} verkaufen",
+      "sellAction": "Dies verkaufen",
+      "sellHint": "Veröffentliche es, damit andere es finden, ausprobieren und kaufen können.",
+      "kind": {
+        "game": "Spiel",
+        "app": "App",
+        "automation": "Automatisierung",
+        "agent": "Agent",
+        "template": "Vorlage",
+        "pack": "Board-Paket",
+        "dashboard": "Dashboard",
+        "playbook": "Playbook",
+        "course": "Kurs",
+        "dataset": "Datensatz",
+        "tool": "Werkzeug",
+        "creative": "Kreativ-Asset"
+      },
+      "launchHint": {
+        "play": "Käufer spielen es im Browser.",
+        "open": "Käufer öffnen die Live-Website.",
+        "run": "Käufer führen es aus.",
+        "preview": "Käufer lesen es.",
+        "install": "Käufer kopieren es auf ihr eigenes Board."
+      },
+      "trialHint": {
+        "full": "Alle können es vollständig nutzen; die Zahlung unterstützt dich und sichert eine Kopie.",
+        "preview": "Besucher sehen eine Vorschau; die funktionierende Version erfordert einen Kauf."
+      }
     }
   },
   "canvasCommands": {
@@ -18905,5 +19055,81 @@
     "taken": "Dieser Termin wurde gerade vergeben. Bitte wählen Sie einen anderen.",
     "failed": "Etwas ist schiefgelaufen. Bitte erneut versuchen.",
     "slotAria": "{time} buchen"
+  },
+  "marketplaceListing": {
+    "byAuthor": "von {author}",
+    "installs": "{count} Installationen",
+    "launchSection": "Ausprobieren",
+    "free": "Kostenlos",
+    "signInToInstall": "Zum Installieren anmelden",
+    "signInToBuy": "Zum Kaufen anmelden",
+    "youOwnIt": "Gehört dir bereits",
+    "working": "Wird ausgeführt…",
+    "install": "Kopie mitnehmen",
+    "buy": "Kaufen",
+    "openInCanvas": "In meinem Canvas öffnen",
+    "previewOnly": "Das ist eine Vorschau. Kaufe es, um die funktionierende Version zu nutzen.",
+    "playFrameTitle": "{name} wird gespielt",
+    "siteFrameTitle": "{name}, live",
+    "nothingToShow": "Noch nichts zu zeigen.",
+    "kind": {
+      "game": "Spiel",
+      "app": "App",
+      "automation": "Automatisierung",
+      "agent": "Agent",
+      "template": "Vorlage",
+      "pack": "Board-Paket",
+      "dashboard": "Dashboard",
+      "playbook": "Playbook",
+      "course": "Kurs",
+      "dataset": "Datensatz",
+      "tool": "Werkzeug",
+      "creative": "Kreativ-Asset"
+    }
+  },
+  "marketplaceCreations": {
+    "heading": "Hier gebaut",
+    "blurb": "Spiele, Apps, Workflows und Playbooks, die Menschen auf dem Canvas gebaut haben — probiere sie aus, bevor du eines mitnimmst.",
+    "allKinds": "Alles",
+    "empty": "Noch nichts veröffentlicht. Baue etwas auf dem Canvas und verkaufe es.",
+    "free": "Kostenlos",
+    "installs": "{count} Installationen",
+    "sellerHeading": "Was du verkaufst",
+    "earned": "Verdient",
+    "paidOut": "Ausgezahlt",
+    "available": "Verfügbar",
+    "sales": "Verkäufe",
+    "takeRateNote": "Die Plattform behält {rate} % jedes Verkaufs.",
+    "payOutNow": "Guthaben auszahlen",
+    "payoutDestination": "Wohin das Geld geht",
+    "working": "Wird ausgeführt…",
+    "payoutSent": "{amount} an dein Auszahlungsziel gesendet.",
+    "payoutFailed": "Die Auszahlung ist nicht durchgegangen.",
+    "withdraw": "Vom Verkauf nehmen",
+    "withdrawn": "Nicht im Verkauf",
+    "withdrawTitle": "Vom Verkauf nehmen?",
+    "withdrawBody": "„{name}“ verschwindet vom Marktplatz. Wer es bereits gekauft hat, behält seine Kopie.",
+    "withdrawConfirm": "Vom Verkauf nehmen",
+    "kind": {
+      "game": "Spiel",
+      "app": "App",
+      "automation": "Automatisierung",
+      "agent": "Agent",
+      "template": "Vorlage",
+      "pack": "Board-Paket",
+      "dashboard": "Dashboard",
+      "playbook": "Playbook",
+      "course": "Kurs",
+      "dataset": "Datensatz",
+      "tool": "Werkzeug",
+      "creative": "Kreativ-Asset"
+    },
+    "launchVerb": {
+      "play": "Spielen",
+      "open": "Öffnen",
+      "run": "Ausführen",
+      "preview": "Vorschau",
+      "install": "Installieren"
+    }
   }
 }

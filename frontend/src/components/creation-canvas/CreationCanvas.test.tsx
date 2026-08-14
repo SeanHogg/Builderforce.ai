@@ -629,7 +629,12 @@ describe('CreationCanvas', () => {
     render(<CreationCanvas sessionId="agent-settings-test" persistence="local" />);
     fireEvent.click(screen.getAllByText('Campaign Strategist')[0]!);
 
-    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'Evermind' } });
+    // Scoped to the `select`, exactly as the "Research" note below is scoped to the
+    // agent card: the data-science vocabulary registered a `model` OBJECT KIND, so
+    // the palette now carries a drag handle whose aria-label is also "Model" and a
+    // bare `getByLabelText` matches two elements. The inspector control is the one
+    // this test means, and naming the element type says so.
+    fireEvent.change(screen.getByLabelText('Model', { selector: 'select' }), { target: { value: 'Evermind' } });
     fireEvent.change(screen.getByLabelText('Instructions'), { target: { value: 'Investigate customer friction.' } });
     fireEvent.change(screen.getByLabelText('Autonomy'), { target: { value: 'high' } });
     fireEvent.click(screen.getByRole('button', { name: '+ Add tool' }));

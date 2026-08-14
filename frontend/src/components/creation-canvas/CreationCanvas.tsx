@@ -191,6 +191,7 @@ import {
 import { markdownHtmlDocument, printCanvasObject } from '@/lib/printDocument';
 import { canvasObjectSvg } from '@/lib/renderedSvg';
 import { CanvasExportActions, canvasExportActionsFor } from './CanvasExportActions';
+import { SellInMarketplace } from './SellInMarketplace';
 import { CourseSubjectControl, PracticeAuthoring, ReadingLevelControl } from './LearningControls';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { canvasProjectId, canvasProjectNodes, connectedCanvasProjectNode } from '@/lib/canvasProjectRef';
@@ -231,6 +232,10 @@ const AITrainingPanel = dynamic(
 );
 const CanvasGamePanel = dynamic(
   () => import('./CanvasGamePanel').then((module) => module.CanvasGamePanel),
+  { ssr: false },
+);
+const CanvasPublishPanel = dynamic(
+  () => import('./CanvasPublishPanel').then((module) => module.CanvasPublishPanel),
   { ssr: false },
 );
 
@@ -970,6 +975,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [buildFocus, setBuildFocus] = useState<{ nodeId: string; storageProjectId: number } | null>(null);
   /** The game object whose ship-to-device panel is open, by node id. */
   const [gameFocus, setGameFocus] = useState<string | null>(null);
+  /** The object being listed for sale, by node id — `''` publishes the whole board. */
+  const [publishFocus, setPublishFocus] = useState<string | null>(null);
   const [creatingBuild, setCreatingBuild] = useState(false);
   const [framePresets, setFramePresets] = useState<FramePreset[]>([]);
   const [serverTemplates, setServerTemplates] = useState<ServerCreationTemplate[]>([]);
@@ -7395,6 +7402,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setGameFocus(gameId);
   }, [nodes, persistence, requireAccount, t]);
 
+  /**
+   * Open the sell-it panel for one object, or for the whole board.
+   *
+   * Guarded here for the same reason `openGamePanel` is: a guest session has
+   * nothing on a server to publish FROM, and the honest place to say so is the
+   * canvas rather than a panel that would open onto an error. The panel itself
+   * stays a pure view of a saved session.
+   */
+  const openPublishPanel = useCallback((nodeId?: string) => {
+    if (persistence !== 'server' || !sessionId) {
+      requireAccount('publish', t('publish.accountTitle'), t('publish.accountBody'));
+      return;
+    }
+    setPublishFocus(nodeId ?? '');
+  }, [persistence, requireAccount, sessionId, t]);
+
   /** The project a game ships into, and the game as it stands right now. */
   const gamePanelTarget = useMemo(() => {
     const target = gameFocus ? nodes.find((node) => node.id === gameFocus) : null;
@@ -8707,6 +8730,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           game={gamePanelTarget.game}
           onNotice={setNotice}
         />}
+        {publishFocus !== null && sessionId && <CanvasPublishPanel
+          open
+          onClose={() => setPublishFocus(null)}
+          sessionId={sessionId}
+          focusObjectId={publishFocus || null}
+          onNotice={setNotice}
+        />}
         {driveOpen && <CanvasDrivePanel
           onImport={(file) => addFilesToCanvas([file], undefined, 'drive_import')}
           onClose={() => setDriveOpen(false)}
@@ -8744,7 +8774,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(selectedNode.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDrawio={(diagramId) => { const result = convertObjectToDrawio(selectedNode.id, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'drawioAddedStatus' : 'drawioCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} />}
+        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onPublishListing={() => openPublishPanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(selectedNode.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDrawio={(diagramId) => { const result = convertObjectToDrawio(selectedNode.id, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'drawioAddedStatus' : 'drawioCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} />}
 
         {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
           <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>
@@ -8916,7 +8946,7 @@ function GuidedTourInspector({ node, nodes, onChange }: { node: CreationFlowNode
   </section>;
 }
 
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onEditWorkflow, onBuildWorkflow, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDrawio, onExportArtifact, onAskBrain }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDrawio: (diagramId?: string) => string; onExportArtifact: (action: CanvasExportAction) => Promise<string>;
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onPublishListing, onEditWorkflow, onBuildWorkflow, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDrawio, onExportArtifact, onAskBrain }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onPublishListing: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDrawio: (diagramId?: string) => string; onExportArtifact: (action: CanvasExportAction) => Promise<string>;
   /** The ONE route from the inspector back to Brain. Learning controls compose
    *  their own request text (see LearningControls.tsx) rather than each adding a
    *  callback to a panel that already takes forty. */
@@ -9262,6 +9292,10 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         <PracticeAuthoring data={node.data} editable={editable} onChange={onChange} onAskBrain={onAskBrain} />
       </>}
       {tab === 'details' && <SourceList sources={node.data.sources} />}
+      {/* The step that used to be missing: an object that runs on this board and
+          nowhere else becomes something a stranger can find, buy and play. The
+          button decides for itself whether this kind is sellable. */}
+      {tab === 'details' && <SellInMarketplace kind={kind} disabled={!editable} onPublish={onPublishListing} />}
       {tab === 'details' && canvasExportActionsFor(node.data).length > 0 && <section aria-label={t('copyAndDownload')} style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontSize: 12 }}>{t('copyAndDownload')}</strong>
         <CanvasExportActions data={node.data} onExport={(action) => void runArtifactAction(action)} className={styles.panelActions} />

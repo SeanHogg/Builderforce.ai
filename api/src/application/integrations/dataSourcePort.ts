@@ -13,6 +13,9 @@
  * Presentation (`dataSourceRoutes`) depends on this; this depends on the catalog
  * and the credential store. Nothing above it knows a provider exists, and
  * nothing here knows about HTTP status codes or Hono — failures are typed.
+ * The read-through CACHING of the two read paths lives here too, for the same
+ * reason: which reads are cacheable and for how long is a property of what they
+ * read, not of the transport that happens to expose them.
  *
  * READS ONLY. {@link assertReadOnlySql} rejects anything that is not a single
  * SELECT/WITH statement before a credential is even decrypted. A canvas is a
@@ -23,6 +26,8 @@
 
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { integrationCredentials } from '../../infrastructure/database/schema';
 import { decryptCredentials } from './credentialCrypto';
 import { callProvider, describeProviders, providerSpec, tcpTransportMessage } from './dataProviderCatalog';
@@ -96,8 +101,18 @@ export interface DataSourceDeps {
   db: Db;
   tenantId: number;
   encryptionSecret: string;
+  /** Carries the KV binding the read-through cache uses. Absent (unit tests,
+   *  non-Worker callers) simply means every read goes to the source. */
+  env?: Env;
   fetchImpl?: typeof fetch;
 }
+
+/** The connected-source list moves when someone connects or disables an
+ *  integration — rare, and a minute of staleness costs nothing on a picker. */
+const LIST_TTL_SECONDS = 60;
+/** A live schema changes on deploys, not on requests. Ten minutes keeps an ERD
+ *  rebuild instant without hiding a migration for a working day. */
+const SCHEMA_TTL_SECONDS = 600;
 
 /** Providers whose schema this runtime knows how to read. Everything else is
  *  honestly reported as connect-and-query-only rather than half-working. */
@@ -160,8 +175,20 @@ export function assertReadOnlySql(sql: string): string {
 const PROVIDER_DESCRIPTORS = new Map(describeProviders().map((provider) => [provider.id, provider]));
 
 /** Every connected source a canvas may bind to. `family: 'data'` only —
- *  a marketing CRM is a connector, not a warehouse. */
-export async function listDataSources(db: Db, tenantId: number): Promise<DataSourceSummary[]> {
+ *  a marketing CRM is a connector, not a warehouse. Served through the canonical
+ *  read-through cache, so a board that mounts several data objects at once does
+ *  not re-query the credential table per object. */
+export async function listDataSources(deps: DataSourceDeps): Promise<DataSourceSummary[]> {
+  if (!deps.env) return loadDataSources(deps.db, deps.tenantId);
+  return getOrSetCached(
+    deps.env,
+    `data-sources:list:${deps.tenantId}`,
+    () => loadDataSources(deps.db, deps.tenantId),
+    { kvTtlSeconds: LIST_TTL_SECONDS },
+  );
+}
+
+async function loadDataSources(db: Db, tenantId: number): Promise<DataSourceSummary[]> {
   const rows = await db
     .select({
       id: integrationCredentials.id,
@@ -415,6 +442,20 @@ export async function introspectDataSource(
   deps: DataSourceDeps,
   id: string,
   options: { dataset?: string } = {},
+): Promise<DataSourceSchema> {
+  if (!deps.env) return loadSchema(deps, id, options);
+  return getOrSetCached(
+    deps.env,
+    `data-sources:schema:${deps.tenantId}:${id}:${options.dataset ?? ''}`,
+    () => loadSchema(deps, id, options),
+    { kvTtlSeconds: SCHEMA_TTL_SECONDS },
+  );
+}
+
+async function loadSchema(
+  deps: DataSourceDeps,
+  id: string,
+  options: { dataset?: string },
 ): Promise<DataSourceSchema> {
   const source = await resolveSource(deps, id);
   if (!INTROSPECTABLE.has(source.provider)) {

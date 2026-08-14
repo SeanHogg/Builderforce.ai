@@ -6,10 +6,11 @@ import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { Select } from '@/components/Select';
 import {
-  listMyEngagements, listMyTimecards, resolveTimecard, submitTimecard, getTodayActivity,
-  listTimecardEntries, addTimecardEntry, updateTimecardEntry, deleteTimecardEntry, logMeeting,
-  type Engagement, type Timecard, type TimecardEntry,
+  listMyEngagements, getTodayActivity, logMeeting, type Engagement,
 } from '@/lib/freelancerApi';
+import {
+  listMyTimecards, resolveTimecard, submitTimecard, listTimecardEntries, addTimecardEntry, updateTimecardEntry, deleteTimecardEntry, type Timecard, type TimecardEntry,
+} from '@/lib/freelancerTimecardsApi';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18,

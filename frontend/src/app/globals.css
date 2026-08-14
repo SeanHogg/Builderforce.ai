@@ -2476,6 +2476,19 @@ select.input option {
 .ui-field__message { color: var(--text-muted); font-size: 12px; line-height: 1.45; }
 .ui-field__message--error { color: var(--error-text); }
 .ui-field--error .ui-input { border-color: var(--error-border); }
+/* A labelled GROUP of fields whose members belong together and can appear or
+   disappear as a set — e.g. the employment half of a for-hire listing, which only
+   exists when the listing is offered to employers. Every colour is a token, so the
+   group reads correctly in both themes without a second rule. */
+.ui-fieldset {
+  display: grid;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  min-inline-size: 0;
+}
+.ui-fieldset > legend { padding-inline: var(--space-2); }
 
 /* Cards */
 .ui-surface,

@@ -1,3 +1,235 @@
+## RESOLVED 2026-08-13 — the career layer: one "hire me" listing, two kinds of demand, and 35 tools over it
+
+PRD 18 §1.2 declared a catalog of `recruiter.*` / `hr.*` tools and the catalog held **zero**. The two
+built-in agents those tools exist for (`recruiter`, `hr`) shipped with bios, skill labels and no tools at
+all — an agent told it "owns hiring end to end" with nothing to call does not report the absence, it
+improvises a limitation, which is the failure mode `canvasTools.ts` documents at length for
+`canvas_add_image`. Meanwhile the marketplace tools that DID exist were entirely the hiring side:
+`jobs.create`, `jobs.list_mine`, `proposals.shortlist|evaluate|decline`. An agent on this platform could
+post a job and decline you, and could not find you a job or apply on your behalf — while `jobRoutes.ts`
+had served public browse, apply-by-proposal, `proposals/mine` and withdraw the entire time with no tool in
+front of them.
+
+- **NO NEW TABLES, and that is the design.** The obvious build was a second silo — a candidate profile, a
+  job-application table, an application pipeline. It would have given one person two profiles, two résumés,
+  two reputations and two inboxes for the same working life. The spine already modelled employment and
+  nobody had connected it: `job_postings.postingType` accepts `'fte'`, `engagementType` accepts `'fte'`, and
+  `job_proposals.status` already runs submitted → shortlisted → accepted → declined → withdrawn. **A
+  full-time job IS a posting. A job application IS a proposal.** What was missing was the SUPPLY side saying
+  which kind of demand it wants — so migration `0462_listing_career_intent.sql` adds eight columns to
+  `freelancer_profiles` (`seeking`, `target_roles`, `seniority`, `desired_salary_min/max_cents`, `work_mode`,
+  `notice_period_days`, `open_to_relocation`) and one partial index. `seeking` defaults to `'services'`, so
+  every listing written before the migration keeps behaving exactly as it did.
+- **A pure career domain — `api/src/application/career/` (9 modules).** No database, no network, no clock, no
+  Worker env. That is not tidiness: it is what lets the SAME functions serve the tenant-scoped MCP tools, the
+  anonymous guest surface and the unit tests. One implementation, three surfaces, no drift — a logged-out
+  visitor gets the identical scoring a paying tenant gets rather than a degraded imitation. `lexicon` owns
+  the one tokenizer (so the scorer and the matcher can never disagree that "React.js" and "ReactJS" are the
+  same skill); `resumeModel` the one parser; then scoring/tone/summary/critique/merge, job match + tailoring
+  + screening, interview kits + coaching, the compensation model, Career 360, the listing readings, and
+  personal runway.
+- **Tools measure; the model writes.** Every analytical tool returns counts, anchored evidence and an
+  `instruction`, and none generate prose. A résumé score that comes out of a language model moves when you
+  ask twice, and people rewrite their documents to chase it — so every category is a COUNT reported with its
+  evidence ("Impact 48/100 — 4 of 17 bullets carry a number"). It is also the right split on this platform,
+  where the CALLER of an MCP tool is itself a language model with the conversation context the tool lacks.
+  `optimizeResume` returns the edits it can prove are needed and quotes the exact text they apply to; it
+  never writes the replacement bullet, because a fabricated line on a résumé is one the candidate has to
+  defend in a room.
+- **35 tools across five namespaces.** `recruiter.*` (parse, score, optimize, tailor, roast, summarize,
+  sentiment, consolidate, extract_skills, match_job, interview_questions, screen_candidate, build_packet,
+  source_candidates), `hr.*` (coach, value_proposition, salary_analyze, comp_analyze, career360_suggest_targets,
+  career360_select_target, career360_state, employer_research, runway, compare_work_options), `listing.*`
+  (get_mine, update, set_available_for_hire, audit, readiness, draft_from_resume, profile_blocks) and the
+  **seeker half of the marketplace** — `jobs.search`, `jobs.get`, `proposals.submit`, `proposals.mine`,
+  `proposals.withdraw`. The tenant rows replay the routes that already own the data rather than reaching past
+  them into tables; `listing.update` read-merge-writes, because PATCH replaces the row and an agent asked to
+  "set me open for employment" must not erase the bio.
+- **The guest boundary is DERIVED, not maintained.** 25 of the 35 are pure, and `GUEST_SAFE_CAREER_TOOLS` is
+  computed from that half of the module rather than hand-listed — so a tenant tool cannot leak into the
+  anonymous vocabulary by someone forgetting to update a second list, which is the exact drift
+  `canvasTools.ts` exists to document. A contract test asserts the advertised set equals the executable set;
+  it caught two tools missing from the guest list on its first run. `POST /api/guest/career/:tool` dispatches
+  them behind the same signed-token + daily-allowance guard as guest research (one visitor, one allowance —
+  two counters would be two answers to one question), and the browser builds its action list from
+  `GET /api/guest/career/tools` rather than re-typing 25 descriptions.
+- **`hr.runway` is the number the product did not have.** Every money object on the canvas belonged to a
+  company — pricing, cap table, funding round, `liveMetric` bound to `finance.runway_months` for a TENANT.
+  Nothing modelled savings ÷ burn for a person, which is the number that governs whether someone takes
+  contract work today or holds for the salaried role. `hr.compare_work_options` converts both into WEEKS,
+  because the comparison people get wrong is not the rate — it is the start date, and a bigger number
+  arriving after the balance hits zero is worth nothing.
+- **Two real defects found by the tests, both kept.** `machinelearning`, `seo`, `contentmarketing`,
+  `socialmedia` and `incidentresponse` were canonical tokens the tokenizer produced and `isSkillToken`
+  rejected, which made machine learning invisible to the scorer, the matcher and the role catalogue alike.
+  And `tailorResume` found nothing to promote on a résumé that was obviously relevant — because every skill
+  the posting wanted was in the person's Skills line and in no achievement. That became
+  `claimedButUnevidenced`: the document that passes the keyword filter and then has nothing to say in the
+  room. It is now the most useful finding in the tailoring pass.
+- **Safety split on the unattended grant.** The read-only career tools are in `CLOUD_AGENT_PLATFORM_TOOLS`;
+  `proposals.submit`, `proposals.withdraw`, `listing.update` and `listing.set_available_for_hire` are
+  deliberately NOT. Each acts outward under a real person's name — an application an employer reads, a public
+  listing, the opt-in that removes them from every search. The tool exists; the unattended grant does not.
+- **A cycle removed on the way through.** `careerToolCatalog` needs three primitives from `builtinMcpService`,
+  and importing them put a runtime cycle between the two. It happened to be safe, which is the worst kind —
+  it survives until someone moves a `const` above a function declaration and then fails at module-evaluation
+  time in production. `builtinToolContext.ts` now owns `BuiltinCtx`, `BuiltinTool`, `replayRoute` and
+  `resolveReplayAuth`; both modules depend on it and neither on the other, and the re-exports mean no existing
+  importer changed.
+- **Visible end-to-end.** `freelancer_profiles` projection → `/api/freelancers/me` → typed client →
+  the profile editor's "What you are open to" group, whose employment fields derive their own visibility from
+  `seeking` rather than taking a prop. Localised in all five catalogs. `freelancerApi.ts` crossed the 800-line
+  architecture ratchet on the way, so timecards — their own lifecycle, their own two audiences — moved to
+  `freelancerTimecardsApi.ts` and their three importers now point at it.
+- **Validation:** api `npm test` green (11 guards + **5,626** tests, `check-prompt-tool-names` now counting
+  351 catalog tools, `check-canvas-tool-contract` classifying 59 canvas tools with 40 guest-visible
+  descriptions cross-checked); 51 new tests across `career.test.ts` and `careerToolCatalog.test.ts`; frontend
+  typecheck and guard chain green.
+
+## RESOLVED 2026-08-13 — a creation can be published to the marketplace, sold, and RUN by a stranger
+
+The canvas could take an idea, make it and run it, and then stopped. There was no code path anywhere that
+turned a canvas object or session into a marketplace listing: the marketplace had four hardcoded producers
+(`marketplace_skills` and its form, `ide_agents.published`, knowledge listings, gigs) and not one of them
+could accept something built on the board. `MarketplacePageClient.tsx` even had `'publish'` as a category —
+rendering a *skill* form. So a person who had just built a working game had no way to say "this is a Game,
+it costs $9, go and play it", and the platform's own output was the one thing its marketplace did not carry.
+The canvas could PULL from the marketplace (`CREATION_TEMPLATES`, "Marketplace packs") and never push.
+
+- **The vocabulary is spec DATA, in the shared contract.** `packages/creation-canvas-contract/src/marketplaceListings.ts`
+  declares twelve sellable kinds (game, app, automation, agent, template, pack, dashboard, playbook, course,
+  dataset, tool, creative), each carrying which canvas kinds may become it, its FAMILY, whether it may be
+  priced, and — the field that makes the marketplace worth visiting — its `launch` verb: play / open / run /
+  preview / install. Both the API and the web app import it, so what a seller may pick, what the server
+  accepts and what a buyer's button does cannot drift. **A new sellable kind is one entry plus its i18n keys**,
+  never a render branch. A canvas kind absent from every `from` list is deliberately not sellable: a résumé,
+  a comment and a private inbox are not products.
+- **NO NEW TABLE.** `catalog_items` (kernel.ts) was written for exactly this — "every marketplace listing,
+  template, pack and offering is a `catalog_items` row with a kind" — and had no real consumer. Adding
+  `creation_listings` beside it would have been the twenty-fourth intra-product duplicate the data-model
+  analysis found, created knowingly. A publish writes three rows: the registry `objects` entry, an IMMUTABLE
+  `snapshots` row (`reason: 'publication'`), and the `catalog_items` listing. The snapshot is load-bearing —
+  without it, editing a card on your own board silently changes what a stranger already paid for.
+- **Buyers get the snapshot, stripped of the seller's bindings.** `LISTING_STRIPPED_FIELDS` + a recursive
+  strip drop `projectId`, `storageKey`, `connectionId`, `apiKey`, repo paths and their per-kind renames
+  (`gameProjectId` goes with `projectId`) before anything is published. Suffix-matched, because a list matched
+  on exact names ships the renamed one.
+- **Full commerce.** `orders` + `order_line_items` + `template_licenses` + two `ledger_entries` per sale.
+  Platform take rate is `MARKETPLACE_TAKE_RATE_BPS` (default 15%), clamped to 0–5000bps so a typo cannot
+  invert a seller's earning into a debt, and **stamped onto the order line** so changing the rate never
+  re-prices a past sale. Refund revokes the licence FIRST, then reverses both ledger rows. Payout goes
+  through the existing `PayoutAccountService.pay`, and the AMOUNT is computed server-side from the available
+  balance — a payout endpoint that accepts an amount pays whatever a crafted request asks for.
+- **The paid path has exactly one door, and it verifies.** The first cut of `acquireListing` took a
+  `paymentIntentId` off the request body, which is a paid product handed to anyone who posts a plausible
+  string — it looks like a working integration while it does it. Replaced: `acquireListing` grants FREE
+  listings and *cannot* grant anything priced; a paid one goes `startListingCheckout` → the processor's
+  hosted page → `completeListingCheckout`, which re-reads the session FROM the processor and checks
+  `payment_status === 'paid'`, the purchase kind, the captured amount against the current price, **and that
+  the buyer completing it is the buyer it was created for** — without that last check, one person's paid
+  session grants a licence to whoever pastes its id. `createOneTimeCheckoutSession` / `retrieveCheckoutSession`
+  are on the `PaymentProvider` PORT, so the application layer names no vendor.
+- **It RUNS from the marketplace.** `/marketplace/listing/[slug]` (edge, indexable) + a client launch island:
+  a game plays in a frame that is `sandbox="allow-scripts"` and **never** `allow-same-origin`, fed by `srcDoc`
+  — the same invariant `gameNode.test.tsx` pins on the canvas, held here because this is where the code is a
+  STRANGER's. Sites open live, packs install onto a NEW board of the buyer's own (ids regenerated, laid out in
+  a readable grid rather than at the seller's coordinates). **Launch is public**: a marketplace whose products
+  only run after a sign-up is a catalogue of screenshots. The server decides preview-vs-product and says so in
+  `entitled`; the preview carries metadata only, never the payload behind a flag.
+- **Withdrawing takes it off SALE; it does not repossess it.** Every browse surface filters on
+  `visibility = 'public'`, which is right for a catalogue and wrong for the two paths a BUYER uses —
+  the first cut resolved launch and install through that same filter, so the moment a seller
+  withdrew a listing the person who had paid $9 for it got a 404. `resolveListingBySlug` reads the
+  row without the visibility predicate and the licence rule is applied after: a withdrawn listing
+  still runs for the people who own it and is simply gone to everyone else.
+- **The published snapshot is cached by id and NEVER invalidated**, which is a property of the
+  design rather than a hope: a re-publish writes a NEW snapshot and repoints the listing, so the row
+  behind an id is immutable from the moment it exists. That is what makes a popular free game a
+  cache hit instead of a JSONB read out of Postgres on every press of Play.
+- **Two bugs the build guards caught while landing this, both fixed:**
+  - **the seller's earnings were being written to the BUYER's tenant.** Every other row a sale writes (order,
+    line, licence) belongs to the buyer's workspace, and taking that tenant for the ledger too meant
+    `sellerEarnings` would have found nothing in the seller's books and **every payout balance on the platform
+    would have read zero forever.** Found because `check:tenant-scope` asked what tenant the query meant.
+  - **`career/compensation.ts` computed `position` — where your current salary sits in the modelled band —
+    and dropped it from the returned payload**, so a caller who supplied their current base got the band back
+    with no answer to the only question that made them supply it. Plus 15 other strict-null errors across
+    `career/*` that had the API's `tsgo` typecheck red.
+- **`acrossTenants()` — a new primitive in `infrastructure/database/tenantScope.ts`.** The public catalogue is
+  genuinely cross-tenant (you buy FROM another workspace; filtering by the shopper's own tenant means nobody
+  can buy anything they did not publish). The only way to say that was a line in the frozen-debt baseline,
+  which files a deliberate decision in the same drawer as an accident and makes the debt number go up when
+  nothing is owed. `acrossTenants(table, reason, ...conditions)` states the reason in the statement, is
+  greppable, is typed against tables that have a `tenantId`, and **refuses to build a predicate out of
+  nothing** — dropping the tenant filter is allowed, dropping all access control is not. Reasons are a closed
+  set: `public_catalogue` | `share_token` | `platform_admin`.
+- Paid down 2 `'use client'` ratchet points by removing directives from `SkeletonGrid` and
+  `KnowledgeMarketSection`, which are imported only by client modules; the ratchet was already 1 over baseline
+  before this change.
+- **Two red tests fixed on the way past, neither caused by this work:**
+  `privacyDogfood.test.ts` shells out to `git ls-files` over the whole repository and scored it
+  against the DEFAULT 5s budget — it finishes in under a second idle and times out the moment the box
+  is busy, so it failed in CI beside 5,600 other tests and passed the instant anyone re-ran it alone.
+  Given an explicit 60s. And `CreationCanvas.test.tsx`'s `getByLabelText('Model')` began matching two
+  elements once the data-science vocabulary registered a `model` OBJECT KIND whose palette handle
+  carries the same aria-label; scoped to `{ selector: 'select' }`, the same way the "Research"
+  assertion below it is already scoped.
+- Localized in all five catalogs (en/zh/es/fr/de) — three namespaces, 75 keys. 26 new tests
+  (21 API + 5 frontend) covering the trial policy, the binding strip, the split arithmetic, the take-rate
+  clamp, the single-door paid path, the withdrawal rule, and the sandbox invariant.
+
+## RESOLVED 2026-08-13 - `/embedded` sells the embedded capabilities instead of only switching them on
+
+The company's whole promise is *take an idea and help someone sell it*, and the one page describing the
+capabilities we sell was written as a console: thirteen switches, an install snippet, a consent log. That
+is the right surface for an owner who has already bought the argument, and it was the entire surface a
+VISITOR got - on a public, indexed marketing route whose hero metric read **"0/13 capabilities active"**
+and whose only instruction was "Select a workspace before managing embedded capabilities", to somebody
+with no account to select one from. The product that sells distribution was not selling its own.
+
+- **`components/embedded/EmbeddedStackValue.tsx`** - the argument, in the order a buyer asks for it: the
+  number (13 capabilities against **$1,148/mo** of point tooling), why one script beats thirteen contracts
+  (install / governance / ownership), then the loop this all exists for - **build it in Canvas -> embed it
+  where your customers are -> sell it in the Marketplace**. It DECIDES ITS OWN VISIBILITY: it sells until
+  it has been bought, and a workspace with a capability already live renders nothing. It ends with the
+  shared `GuestSignupCta`, not a hand-written button pair.
+- **The claim is DERIVED, not typed.** `replaces` (Intercom, Hotjar, LaunchDarkly, OneTrust, Statuspage,
+  ...) and `benchmarkMonthlyUsd` are columns on `EMBEDDED_CAPABILITIES`; `EMBEDDED_STACK_BENCHMARK_MONTHLY`
+  and `EMBEDDED_REPLACED_TOOLS` fold the catalog. A headline figure typed by hand is how "replaces
+  $1,148/mo" survives three capabilities being added and stays wrong on the page nobody re-reads.
+  `embeddedCapabilities.test.ts` asserts the fold, so the number beside the grid and the grid agree.
+  The figures are labelled ON the surface as published entry-tier list prices for comparable point tools,
+  not quotes.
+- **Product names are registry DATA, not catalog strings.** A brand name is the same in five languages;
+  routing thirteen of them through five message files would put the same literal in five places.
+- **The hero tells a visitor what is AVAILABLE (13), an owner what is ACTIVE (n/13).** `activeCount` is
+  `null` rather than `0` when no workspace config has resolved - they are different facts, and conflating
+  them advertised an empty product. "Select a workspace" now renders only for someone signed IN without a
+  workspace token.
+- **Each card says what it stands in for**, so a catalog of switches reads as thirteen line items a team
+  is already paying for.
+
+Localized across en/zh/es/fr/de (`scripts/i18n-patch-embedded-sell.mjs`), token-driven in both themes, and
+verified in a browser: light and dark at 1280px and dark at 360px, 0px of horizontal overflow, no console
+errors.
+
+## RESOLVED 2026-08-13 - Two build guards were already red at HEAD, and both hid everything behind them
+
+Found while running the guard chain for the `/embedded` work. Neither was caused by it; both are fixed
+here rather than logged and walked past.
+
+- **`check:architecture` - 785 client files against a baseline of 784.** The last commit added
+  `creation-canvas/DerivedProvenance.tsx` with a `'use client'` directive it does not need: `CreationNode`
+  is its only caller and already declares the boundary, so the directive was a second boundary marker for
+  a component no server tree can reach. Removed - 784, green, baseline untouched. (The same reasoning
+  keeps the new `EmbeddedStackValue` off the count.)
+- **`messages.test.ts` - six canvas object kinds unlabeled in ALL FIVE locales.** `labelSet`, `model`,
+  `notebook`, `prompt`, `runComparison` and `trainingRun` were registered in `CREATION_OBJECT_REGISTRY`
+  with no entry under `creationCanvas.object.*`, so five of the file's tests were red - and a red file
+  hides every later failure in it. On the board itself an object of one of those kinds rendered the raw
+  key `creationCanvas.object.notebook` as its type label. Labelled in all five locales
+  (`scripts/i18n-patch-canvas-ml-kinds.mjs`); the file is 49/49.
+
 ## RESOLVED 2026-08-13 - `/sales` opens as a slide-out panel, and the panel can finally name a page the builder registry has never heard of
 
 `/sales` replaced the board instead of opening over it. Both its own doc comments said otherwise -
@@ -9131,3 +9363,4 @@ not a reason to add nullable tenant ownership or a directory table.
 validate-only reports 344 source tables and 114 one-to-one targets; tenancy audit validate-only
 confirms the existing-shape/no-DDL contract. The production account map and ETL execution remain the
 Identity/Data gates and were not fabricated without read-only production credentials.
+

@@ -1,5 +1,3 @@
-'use client';
-
 /** Placeholder card grid shown while real cards lazy-load — the page shell + search
  *  render instantly, then the cards stream in over these skeletons. Shared by every
  *  marketplace category (listings, workforce, talent, models). */

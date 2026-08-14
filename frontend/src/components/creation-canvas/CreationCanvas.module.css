@@ -2842,3 +2842,45 @@
 @media(max-width:760px){
   .gateBadge { flex-direction:column; gap:2px; }
 }
+
+/* ── Publish to marketplace ──────────────────────────────────────────────────
+   The panel that turns a card on this board into something a stranger can buy
+   and run. Every colour is a canvas token, so the form reads in both themes the
+   same way the board it was opened from does; the fields are a single fluid
+   column so the panel survives its narrow width on a phone. */
+.publishPanel { display:flex; flex-direction:column; gap:14px; padding:4px 2px 18px; }
+.publishField { display:flex; flex-direction:column; gap:5px; font:600 12px inherit; color:var(--canvas-ink); }
+.publishField > span { color:var(--canvas-muted); letter-spacing:.02em; }
+.publishField input,
+.publishField select,
+.publishField textarea {
+  width:100%; box-sizing:border-box; padding:9px 11px; font:inherit; font-size:13px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink);
+}
+/* A native option list paints itself from the UA palette unless it is told not
+   to, which is how a themed select ends up with unreadable rows in one theme. */
+.publishField option { background:var(--canvas-panel); color:var(--canvas-ink); }
+.publishField textarea { resize:vertical; min-height:64px; }
+.publishField input:disabled,
+.publishField select:disabled,
+.publishField textarea:disabled { opacity:.55; cursor:not-allowed; }
+.publishHint { margin:0; font:500 11px inherit; line-height:1.45; color:var(--canvas-muted); }
+.publishSplit {
+  display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px;
+  padding:10px 12px; border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel-muted); font:650 13px inherit; color:var(--canvas-ink);
+}
+.publishActions { display:flex; flex-wrap:wrap; gap:8px; margin-top:2px; }
+.publishActions > button { flex:1 1 160px; }
+.publishError {
+  margin:0; padding:9px 12px; border-radius:var(--radius-md);
+  background:var(--tone-danger-bg); color:var(--tone-danger-ink);
+  border-left:3px solid var(--tone-danger-mark); font:600 12px inherit;
+}
+.publishSuccess {
+  margin:0; padding:9px 12px; border-radius:var(--radius-md);
+  background:var(--tone-success-bg); color:var(--tone-success-ink);
+  border-left:3px solid var(--tone-success-mark); font:600 12px inherit; word-break:break-all;
+}
+.publishSuccess a { color:inherit; }

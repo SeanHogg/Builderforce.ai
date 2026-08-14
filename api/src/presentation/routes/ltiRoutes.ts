@@ -19,37 +19,10 @@
 import { Hono, type Context } from 'hono';
 import type { HonoEnv } from '../../env';
 import {
-  buildLoginRedirect, fetchRoster, pushScore, rosterFromMembers, toolPublicJwks, verifyLaunch,
-  type LtiRegistration,
+  buildLoginRedirect, fetchRoster, loadRegistrations, pushScore, registrationFor,
+  rosterFromMembers, toolPublicJwks, verifyLaunch,
 } from '../../application/lti/LtiService';
 import { canReturnGrades } from '../../domain/lti/ltiClaims';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-
-/**
- * Registrations, from the `LTI_REGISTRATIONS` secret.
- *
- * A secret rather than a table, deliberately and for now: a registration contains an
- * RSA PRIVATE KEY, and the platform's generic entity layer serves every table it knows
- * about through one reader. `entityDefinition.ts` redacts on column-name patterns, and
- * betting a signing key on a regex matching `tool_private_key_jwk` is a bet this
- * subsystem should not make. Secrets are write-only in the deployment (see the
- * Cloudflare account-split note), which is the property a signing key needs.
- */
-async function registrations(env: HonoEnv['Bindings']): Promise<readonly LtiRegistration[]> {
-  return getOrSetCached<readonly LtiRegistration[]>(env, 'lti:registrations', async () => {
-    const raw = (env as unknown as { LTI_REGISTRATIONS?: string }).LTI_REGISTRATIONS;
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      return Array.isArray(parsed) ? parsed as LtiRegistration[] : [];
-    } catch {
-      return [];
-    }
-  }, { kvTtlSeconds: 300 });
-}
-
-const findRegistration = (all: readonly LtiRegistration[], issuer: string, clientId: string | null): LtiRegistration | null =>
-  all.find((entry) => entry.issuer === issuer && (!clientId || entry.clientId === clientId)) ?? null;
 
 /** Read a form or query parameter, whichever binding the platform used. */
 async function param(request: Request, name: string): Promise<string> {
@@ -66,7 +39,7 @@ export function createLtiRoutes() {
   const app = new Hono<HonoEnv>();
 
   /** The tool's public keys. Public by design — it is how the platform verifies us. */
-  app.get('/jwks', async (c) => c.json(toolPublicJwks(await registrations(c.env))));
+  app.get('/jwks', async (c) => c.json(toolPublicJwks(await loadRegistrations(c.env))));
 
   /**
    * The configuration blob an administrator pastes into their LMS.
@@ -102,7 +75,7 @@ export function createLtiRoutes() {
     const clientId = await param(c.req.raw, 'client_id');
     if (!issuer) return c.json({ error: 'Missing iss.' }, 400);
 
-    const registration = findRegistration(await registrations(c.env), issuer, clientId || null);
+    const registration = await registrationFor(c.env, issuer, clientId || null);
     if (!registration) return c.json({ error: 'Unknown platform issuer.' }, 404);
 
     const origin = new URL(c.req.url).origin;
@@ -146,7 +119,7 @@ export function createLtiRoutes() {
     } catch {
       return c.json({ error: 'Malformed id_token.' }, 400);
     }
-    const registration = findRegistration(await registrations(c.env), issuer, null);
+    const registration = await registrationFor(c.env, issuer, null);
     if (!registration) return c.json({ error: 'Unknown platform issuer.' }, 404);
 
     const result = await verifyLaunch(c.env, idToken, registration, read('lti_nonce') || null);
@@ -174,7 +147,7 @@ export function createLtiRoutes() {
     const body = await c.req.json().catch(() => ({})) as { issuer?: string; membershipsUrl?: string };
     if (!body.issuer || !body.membershipsUrl) return c.json({ error: 'issuer and membershipsUrl are required.' }, 400);
 
-    const registration = findRegistration(await registrations(c.env), body.issuer, null);
+    const registration = await registrationFor(c.env, body.issuer, null);
     if (!registration) return c.json({ error: 'Unknown platform issuer.' }, 404);
 
     const result = await fetchRoster(c.env, registration, body.membershipsUrl);
@@ -194,7 +167,7 @@ export function createLtiRoutes() {
     if (typeof body.scoreGiven !== 'number' || typeof body.scoreMaximum !== 'number' || body.scoreMaximum <= 0) {
       return c.json({ error: 'scoreGiven and a positive scoreMaximum are required.' }, 400);
     }
-    const registration = findRegistration(await registrations(c.env), body.issuer, null);
+    const registration = await registrationFor(c.env, body.issuer, null);
     if (!registration) return c.json({ error: 'Unknown platform issuer.' }, 404);
 
     const result = await pushScore(c.env, registration, body.lineItemUrl, {

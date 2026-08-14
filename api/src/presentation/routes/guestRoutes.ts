@@ -15,6 +15,9 @@ import { GUEST_CHAT_LIMITS, GUEST_ROOM_LIMITS } from '../../domain/tenant/PlanLi
 import {
   consumeGuestResearchCall, guestWebSearch, guestWebFetch, guestGeocode,
 } from '../../application/guest/guestResearch';
+import { GUEST_SAFE_CAREER_TOOLS, guestCareerTool } from '../../application/llm/careerToolCatalog';
+import { advertisedName } from '../../application/llm/toolNaming';
+import { isGuestCanvasToolName } from '@builderforce/creation-canvas-contract';
 import { iceServers } from '../../application/meetings/iceServers';
 import { applyMediaPrivacyMode } from '../../domain/meetings/mediaPrivacy';
 import type { GuestPromptService } from '../../application/marketing/GuestPromptService';
@@ -221,8 +224,11 @@ export function createGuestRoutes(
   // per-IP daily call allowance, and backed only by the PLATFORM search backing (a
   // guest can never reach a tenant's BYO key). See application/guest/guestResearch.ts.
 
-  /** Shared guard: verified guest + one charged research call, or the refusal to send. */
-  async function chargeResearch(c: Context<HonoEnv>): Promise<{ visitorId: string } | Response> {
+  /** Shared guard: verified guest + one charged anonymous call, or the refusal to send.
+   *  Used by BOTH the research and career surfaces — one visitor, one daily allowance,
+   *  because "how much free compute does an anonymous visitor get today" is one question
+   *  and two counters would be two answers to it. */
+  async function chargeGuestCall(c: Context<HonoEnv>): Promise<{ visitorId: string } | Response> {
     if (!guestBrainEnabled(c.env)) {
       return c.json({ error: 'Guest research is disabled.', code: 'guest_brain_disabled' }, 503);
     }
@@ -247,7 +253,7 @@ export function createGuestRoutes(
   }
 
   router.post('/research/search', async (c) => {
-    const charged = await chargeResearch(c);
+    const charged = await chargeGuestCall(c);
     if (charged instanceof Response) return charged;
     const { query } = await c.req.json<{ query?: string }>().catch((): { query?: string } => ({}));
     if (typeof query !== 'string' || !query.trim()) return c.json({ error: 'A query is required' }, 400);
@@ -255,7 +261,7 @@ export function createGuestRoutes(
   });
 
   router.post('/research/fetch', async (c) => {
-    const charged = await chargeResearch(c);
+    const charged = await chargeGuestCall(c);
     if (charged instanceof Response) return charged;
     const { url } = await c.req.json<{ url?: string }>().catch((): { url?: string } => ({}));
     if (typeof url !== 'string' || !url.trim()) return c.json({ error: 'A url is required' }, 400);
@@ -268,7 +274,7 @@ export function createGuestRoutes(
   });
 
   router.post('/research/geocode', async (c) => {
-    const charged = await chargeResearch(c);
+    const charged = await chargeGuestCall(c);
     if (charged instanceof Response) return charged;
     const body = await c.req
       .json<{ queries?: unknown; context?: string; countryCodes?: string; outline?: boolean }>()
@@ -285,6 +291,76 @@ export function createGuestRoutes(
       ...(body.countryCodes?.trim() ? { countryCodes: body.countryCodes.trim().toLowerCase() } : {}),
       ...(body.outline === true ? { outline: true } : {}),
     }));
+  });
+
+  // ── Career ─────────────────────────────────────────────────────────────────
+  //
+  // The logged-out canvas's `builtin_recruiter_*` / `builtin_hr_*` / `builtin_listing_*`
+  // tools. Same argument as the research surface above, one need over: a guest has no
+  // tenant, so they cannot reach the MCP catalog that owns these for authed users — and
+  // the visitor most likely to arrive logged-out and type their situation into the first
+  // box they see is someone out of work.
+  //
+  // What makes this cheap to expose is that the implementations are PURE. Every tool
+  // reachable here runs over text the visitor supplied, touches no tenant resource, no
+  // network and no clock, and is the SAME function the signed-in catalog dispatches —
+  // `GUEST_SAFE_CAREER_TOOLS` is derived from that half of the catalog module rather
+  // than hand-listed, so a tenant tool cannot leak in by someone forgetting a list.
+  //
+  // Charged against the same anonymous allowance as research, because it is the same
+  // question — how much free compute one visitor gets in a day — and two counters would
+  // be two answers to it.
+
+  // The guest canvas has to ADVERTISE these tools to the model, and the browser must not
+  // own a second copy of twenty-three descriptions and parameter schemas — that is
+  // precisely the drift `packages/creation-canvas-contract/src/canvasTools.ts` was
+  // written to document, one layer up. So the client asks the catalog what it may call
+  // and builds its action list from the answer: one source, no divergence possible.
+  //
+  // Unauthenticated and uncharged: it is static metadata about the same tools the
+  // contract already names publicly, and requiring a token to learn the shape of a tool
+  // you are allowed to call would only mean the canvas fetches a token to render.
+  router.get('/career/tools', (c) => c.json({
+    tools: GUEST_SAFE_CAREER_TOOLS.map((tool) => {
+      const impl = guestCareerTool(tool);
+      return {
+        name: advertisedName(tool),
+        description: impl?.description ?? '',
+        parameters: impl?.parameters ?? { type: 'object', properties: {} },
+      };
+    }),
+  }));
+
+  router.post('/career/:tool', async (c) => {
+    const charged = await chargeGuestCall(c);
+    if (charged instanceof Response) return charged;
+
+    // The path segment is the ADVERTISED name (`builtin_hr_runway`), because that is
+    // what the model was given and what it will call. Resolve it back through the same
+    // contract the gateway filters on, so the two cannot disagree about the vocabulary.
+    const advertised = c.req.param('tool');
+    if (!isGuestCanvasToolName(advertised)) {
+      return c.json({ error: `"${advertised}" is not available without an account.`, code: 'guest_tool_forbidden' }, 403);
+    }
+    const entry = GUEST_SAFE_CAREER_TOOLS.find((tool) => advertisedName(tool) === advertised);
+    if (!entry) {
+      return c.json({ error: `"${advertised}" is not a career tool.`, code: 'guest_tool_unknown' }, 404);
+    }
+    const impl = guestCareerTool(entry);
+    if (!impl) return c.json({ error: `"${advertised}" is unavailable.`, code: 'guest_tool_unknown' }, 404);
+
+    const args = await c.req.json<Record<string, unknown>>().catch((): Record<string, unknown> => ({}));
+    try {
+      // These tools take no context: they are pure over their arguments, which is the
+      // property that made them guest-safe. The cast supplies the shape the signature
+      // asks for without handing an anonymous caller a database or a tenant.
+      const result = await impl.run(undefined as never, args ?? {});
+      return c.json(result as Record<string, unknown>);
+    } catch (error) {
+      // A validation refusal ("paste your résumé first") is information the model should
+      // relay, not a failed turn — same contract as the research surface.
+      return c.json({ error: error instanceof Error ? error.message : 'The career tool could not run.' }, 400);
+    }
   });
 
   // ── Shared rooms ───────────────────────────────────────────────────────────

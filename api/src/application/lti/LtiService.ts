@@ -62,17 +62,59 @@ export interface LtiRegistration {
   tenantId: number;
 }
 
-/** Where registrations come from. A PORT, so the route never sees storage. */
-export interface LtiRegistrationStore {
-  find(issuer: string, clientId: string): Promise<LtiRegistration | null>;
-}
-
 const JWKS_TTL_SECONDS = 3_600;
 const NONCE_TTL_SECONDS = 600;
 const CLOCK_LEEWAY_SECONDS = 60;
+const REGISTRATIONS_TTL_SECONDS = 300;
 
 const jwksCacheKey = (url: string) => `lti:jwks:${url}`;
 const nonceKey = (issuer: string, nonce: string) => `lti:nonce:${issuer}:${nonce}`;
+
+// ---------------------------------------------------------------------------
+// Where registrations come from
+// ---------------------------------------------------------------------------
+
+/**
+ * Registrations, from the `LTI_REGISTRATIONS` secret.
+ *
+ * A secret rather than a table, deliberately and for now: a registration contains an
+ * RSA PRIVATE KEY, and the platform's generic entity layer serves every table it knows
+ * about through one reader. `entityDefinition.ts` redacts on column-name patterns, and
+ * betting a signing key on a regex matching `tool_private_key_jwk` is a bet this
+ * subsystem should not make. Secrets are write-only in the deployment (see the
+ * Cloudflare account-split note), which is the property a signing key needs.
+ *
+ * Parsing lives here rather than in the route because the storage a registration comes
+ * from is exactly what the route must not know — swapping the secret for a table later
+ * is then one function's business.
+ */
+export async function loadRegistrations(env: Env): Promise<readonly LtiRegistration[]> {
+  return getOrSetCached<readonly LtiRegistration[]>(env, 'lti:registrations', async () => {
+    const raw = (env as unknown as { LTI_REGISTRATIONS?: string }).LTI_REGISTRATIONS;
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return Array.isArray(parsed) ? parsed as LtiRegistration[] : [];
+    } catch {
+      return [];
+    }
+  }, { kvTtlSeconds: REGISTRATIONS_TTL_SECONDS });
+}
+
+/**
+ * The registration a launch or service call belongs to, or null.
+ *
+ * `clientId` is optional because the OIDC initiation may omit it, but when the platform
+ * does send one it must match: one issuer can host many tools.
+ */
+export async function registrationFor(
+  env: Env,
+  issuer: string,
+  clientId: string | null,
+): Promise<LtiRegistration | null> {
+  const all = await loadRegistrations(env);
+  return all.find((entry) => entry.issuer === issuer && (!clientId || entry.clientId === clientId)) ?? null;
+}
 
 // ---------------------------------------------------------------------------
 // Encoding
