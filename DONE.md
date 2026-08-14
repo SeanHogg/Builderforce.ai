@@ -20,11 +20,16 @@ and not the toast. The only visible symptom was a support ticket.
   stayed open. Gated inside the panel rather than at its call sites — it has three (marketplace gigs,
   `/freelancer/workspace`, `TalentView`), two of them inside the public marketplace, and fixing it at the
   primitive is what stops a fourth surface reintroducing it.
-- **`MarketplaceGigsSection`.** All three reads (`listJobs`, `listMyProposals`, `listMyEngagements`) are
-  `auth: 'web'` — "open jobs" included, since who may bid is decided per viewer. Moving this surface *into*
-  the public marketplace is what made that load-bearing. A signed-out visitor now gets the shared
-  `GuestSignupCta` (new `freelancer.gigs.signedOut{Title,Body}` in all five catalogs), which is the actual
-  answer to "find work" rather than three 401s behind an empty list.
+- **`MarketplaceGigsSection` — and the client/server split that nearly got it wrong.** All three reads send
+  `auth: 'web'`, which reads as "all three are private". Checking the routes says otherwise: `GET /api/jobs`
+  is a **public** browse (so is `GET /api/freelancers`, which is why the Talent category was never affected),
+  while `/api/jobs/proposals/mine` and `/api/engagements/mine` are behind `webAuthMiddleware`. The first
+  attempt at this fix gated the whole section and would have hidden a world-browsable job list from every
+  logged-out visitor — the exact "catalogue of screenshots" this codebase argues against elsewhere. Shipped
+  instead: open jobs load for everyone, the two `mine` reads are skipped without a token, and only the two
+  tabs that are *about the viewer* show the shared `GuestSignupCta` (new
+  `freelancer.gigs.signedOut{Title,Body}` in all five catalogs). **`auth: 'web'` on the client says "send the
+  token if there is one", not "this endpoint requires one"** — the route is the only place that answers it.
 - **Regression test** `SellerEarnings.test.tsx` asserts on the **calls**, not the render — the panel renders
   nothing either way, so a render assertion passes against the bug. Verified by mutation: with the gate
   disabled the "asks the API for nothing at all" case fails.
@@ -33,7 +38,8 @@ and not the toast. The only visible symptom was a support ticket.
   into the transport. The one real use at line 413 stays.
 
 Checked and found already correct: `openPublishPanel` (guards with `requireAccount` before the publish
-panel can mount), `KnowledgeMarketSection`, and the page's own `hasTenant`-gated agent/assignment fetches.
+panel can mount), `KnowledgeMarketSection`, the Talent and Models categories (public routes), and the page's
+own `hasTenant`-gated agent/assignment fetches.
 
 ## RESOLVED 2026-08-14 — two frontend deploys failed at the far end of a 5-minute build; both guards now answer in milliseconds
 

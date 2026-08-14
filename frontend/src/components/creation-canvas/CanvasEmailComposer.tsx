@@ -172,7 +172,15 @@ export function CanvasEmailComposer({ data, editable, persistence, onChange }: {
       />
     </label>
     <label>{t('from')}
-      <input value={text(data.from) || text(data.accountEmail)} disabled placeholder={t('fromPlaceholder')} />
+      {/* The RESOLVED mailbox, not just a stored one. A single connected mailbox is
+          resolved implicitly and never written to the object until the user touches the
+          picker — so reading only the stored value left this blank on a draft the panel
+          had already reported as ready to send from that very address. */}
+      <input
+        value={text(data.from) || text(data.accountEmail) || (resolved.ok ? resolved.connection.accountEmail : '')}
+        disabled
+        placeholder={t('fromPlaceholder')}
+      />
     </label>
     <label>{t('subject')}
       <input
