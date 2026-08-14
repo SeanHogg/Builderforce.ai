@@ -1,3 +1,29 @@
+## RESOLVED 2026-08-14 — two frontend deploys failed at the far end of a 5-minute build; both guards now answer in milliseconds
+
+Back-to-back "Deploy frontend" failures, each spending four to five minutes before reporting. Neither was
+caught by a test, and in both cases the failure was reachable statically — the cost was entirely in *where*
+it was discovered.
+
+- **Phantom dependency — `lib/markdownPipeline.ts` imported `PluggableList` from `unified`.** `unified` is a
+  transitive dependency of react-markdown/remark and is not declared in `frontend/package.json`. It resolves
+  in a flat local `node_modules` and does **not** under pnpm's strict layout in CI, so `next build` died with
+  "Cannot find module 'unified'" *after* compiling successfully. Fixed by deriving the type from a package
+  that IS declared — `NonNullable<Options['remarkPlugins']>` off react-markdown's own props — which also
+  guarantees the lists stay exactly what `<ReactMarkdown>` accepts, whatever `unified` it resolves.
+  A type-only phantom is the worst kind: zero runtime surface, so it survives every test and dies at deploy.
+- **New ratchet `scripts/check-declared-deps.mjs`** — every bare specifier imported from `src/**` must resolve
+  to a package this app declares. Specifiers come from `ts.preProcessFile`, not a regex: this codebase is full
+  of source code *inside* strings (scaffold templates, generated Playwright specs, model prompts), and a regex
+  first pass reported 27 violations of which **all 27** were prose or template literals. Wired into `npm test`
+  and into the deploy job beside `check:edge-runtime`.
+- **`/book/[token]` was missing `runtime = 'edge'` — and `check:edge-runtime` passed it.** The guard only read
+  file *contents* for dynamic signals (next-intl/server, next/headers, `force-dynamic`, `revalidate = 0`).
+  This page imports none of them; the only thing making it a per-request function is the `[token]` in its
+  **path**. Added that signal: a `[param]` route is dynamic unless it prerenders the whole set
+  (`generateStaticParams` **and** `dynamicParams = false`) — with `dynamicParams` at its default of true an
+  unlisted param still falls through to a per-request render, so the route is a function either way.
+  A guard that reads only half the inputs is worse than no guard, because the green tick is believed.
+
 ## RESOLVED 2026-08-13 — the career layer: one "hire me" listing, two kinds of demand, and 35 tools over it
 
 PRD 18 §1.2 declared a catalog of `recruiter.*` / `hr.*` tools and the catalog held **zero**. The two

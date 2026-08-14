@@ -251,7 +251,7 @@ jobs:
           # condition advertises a URL that answers interactive-challenge HTML to
           # everyone who discovers it.
           if grep -qi '^cf-mitigated:' headers.txt; then
-            echo "::error::Cloudflare served a $code managed challenge for https://api.builderforce.ai/mcp, so the endpoint is unreachable to non-browser clients — including every remote MCP client this listing would send here. The fix is the ZONE, not this check: turn off Bot Fight Mode for builderforce.ai, or add a WAF rule that SKIPS bot mitigation for api.builderforce.ai and builderforce.ai/gateway/*. Not publishing."
+            echo "::error::Cloudflare served a $code managed challenge for https://api.builderforce.ai/mcp. The Worker is probably FINE — mitigation is scored on caller IP, so the same request answers 401 from a laptop and is challenged from this runner's datacenter ASN. That is exactly the audience of this listing (Anthropic connectors, hosted agents, AWS, every server-side MCP client), so publishing would advertise a URL that answers challenge HTML to everyone who discovers it. The fix is the ZONE, not this check, and the two causes have DIFFERENT remedies: Bot Fight Mode (free) takes no exceptions and must be turned OFF, while Super Bot Fight Mode (Pro+) needs a skip rule naming the http_request_sbfm phase. Run 'node scripts/cloudflare-bot-exception.mjs' to read which one is on, then '--apply'. Not publishing."
             exit 1
           fi
 
