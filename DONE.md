@@ -1,3 +1,55 @@
+## ✅ RESOLVED 2026-08-15 — `column u.name does not exist`, and the guard that will not let it happen again
+
+**The red deploy.** `db:migrate` aborted on `0467_developer_portal.sql`:
+
+```
+NeonDbError: column u.name does not exist        (code 42703, position 769)
+```
+
+The backfill that gives every existing `developer_api_keys` holder a personal publisher org
+named its owner with `COALESCE(NULLIF(TRIM(u.name), ''), u.email, 'Developer')`. `users` has
+`id`, `email`, `username`, `display_name` — it has never had a `name`. Fixed to
+`display_name → username → email → 'Developer'`, wrapped in `left(…, 200)` because
+`developer_orgs.legal_name` is `varchar(200)` while both source columns are `varchar(255)`:
+an over-long display name would have aborted the same file on a value overflow the moment
+the missing column stopped doing it.
+
+`migrate.mjs` applies each file inside one transaction with its own ledger row, so 0467
+rolled back whole and was never recorded — the file was safe to correct in place, and
+0468–0473 had not run at all.
+
+**Why nothing caught it.** This class of bug is invisible to the entire test chain: tsgo does
+not read SQL, no test executes a migration, and `check-schema-drift` only asks whether a
+Drizzle column exists in the DDL — never the reverse. The first and only signal was a red
+deploy. `check-migrations.mjs` already carried the sibling lesson in its own comments — the
+FK-type guard exists because `0372_rehearsal.sql` shipped `created_by INTEGER REFERENCES
+users(id)` against `users.id VARCHAR(36)` and "the first signal was a red deploy."
+
+**The fourth guard** in `check-migrations.mjs` closes the other half of that hole. It resolves
+every `alias.column` in all 419 migration files against the alias's table, using the union of
+every column the migrations declare and everything `schema/` declares. Conservative by
+construction, because it blocks deploys — every ambiguity resolves to silence:
+
+- an alias bound to a derived table, a CTE or a `JOIN LATERAL` is skipped; its columns are
+  computed and cannot be looked up;
+- an alias bound to two different tables in one statement is skipped;
+- only a table with a `CREATE TABLE` or a `pgTable` is judged. A table known ONLY through
+  `ALTER TABLE … ADD COLUMN` — legacy `coderclaw_instances`, guarded behind `to_regclass(…)`
+  — has an unknown base shape, and every column it already had would report as missing;
+- literals are blanked by content, so seeded prose cannot be read as SQL. Dollar-quoted
+  blocks split by POSITION: `$v$[…]$v$` after a comma is a value and is blanked (0210 seeds a
+  prompt variable described as "e.g. idea, pre-launch", which parses as `e.g` — a reference
+  to a column `g` on whatever `e` is bound to in the same statement), while `DO $$ … $$` is
+  plpgsql and is kept, because the `segment_id` backfills in 0056 live inside those blocks
+  and are exactly the DML most likely to name a column wrong;
+- the column set is a UNION over all migrations plus both `RENAME COLUMN` sides, so a column
+  that was later dropped or renamed still resolves for the migration that legitimately used
+  it while it existed.
+
+Verified in both directions: clean across all 419 files, and re-introducing the typo reports
+`0467_developer_portal.sql:200: u.name — users has no column 'name'. Did you mean username,
+display_name?`
+
 ## ✅ RESOLVED 2026-08-15 — The three medium runtimes, and a ratchet that says what broke it
 
 Closes three Gap Register entries from the canvas-surface pass.
