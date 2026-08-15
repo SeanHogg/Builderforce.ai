@@ -1,3 +1,58 @@
+## ✅ RESOLVED 2026-08-15 — File history lost a version whenever two writes shared a millisecond
+
+`workspaceStore.test.ts`'s "restores an earlier version, and archives the restore so it can be
+undone again" was failing on `main` — intermittently, and only on CI. It was not a flaky test.
+
+The archive key is `ide/history/projects/<id>/<epochMs>/<path>`, stamped straight from
+`Date.now()`. Two archives of the SAME file inside one millisecond therefore produce the same
+key, and the second `put` silently overwrites the first: a version disappears from the undo
+chain. `Date.now()` has millisecond resolution; an agent rewriting a file does not have
+millisecond pauses, so the loss lands exactly when edits come fastest — which is the
+autonomous-agent case this history was built to undo. Save-then-immediately-revert loses its
+"before" the same way, on any machine quick enough.
+
+The stamp now only ever moves FORWARD: the wall clock, or one tick past the last archive when
+the clock has not advanced. `at` still reads as "when this version was superseded", nudged
+only far enough to stay distinct, and the ordering it is actually used for — prune oldest,
+list newest-first — becomes exact. Per-isolate, deliberately: two isolates archiving one path
+in the same millisecond is the concurrent-write race `withSameObjectRetry` already governs,
+and a coordinated counter would cost a round-trip on every save.
+
+The new test freezes the clock rather than racing it, which is what a fast machine does anyway
+— and is how this reached CI as an intermittent failure instead of as the data loss it is.
+
+## ✅ RESOLVED 2026-08-15 — `site_subscriptions` has a seat, and two global-uniqueness reads say so
+
+The last consolidated table with no entity-catalog entry is filed where its siblings already
+live: `growth`, alongside `site_releases`, `site_users` and `site_user_sessions`. Read-only,
+for the reason `purchase_orders` is — a generic PATCH over a subscription row hands out paid
+access for free, and the billing webhook that moves `status` and `current_period_end` is only
+sound while it is that column's single writer.
+
+The same register entry named two unscoped tenant queries beside it, and they wanted the
+opposite of what the entry assumed. Neither is a forgotten filter: `projects.key` and a
+hosting subdomain are unique across the WHOLE deployment, so `scopedToTenant` would not be a
+narrower question — it would be the wrong one, answering "free" for a name another tenant
+already holds and then either tripping the unique constraint or pointing a second site at an
+address someone else is serving on.
+
+So they are declared rather than filed as debt: `acrossTenants(…, 'global_uniqueness', …)`,
+a sixth reason on the closed union in `tenantScope.ts`. It states the intent in the statement
+where the guard and a reviewer both read it, and it still refuses to build a predicate out of
+nothing — dropping the tenant filter is allowed, dropping all access control is not. Filing
+these in the frozen baseline instead would have recorded a deliberate decision as debt, and
+then dared the next reader to pay it down by breaking hosting.
+
+`publishStaticSite.ts` had also been cleaned from 3 unscoped statements to 2 without its
+baseline line following; the ratchet is re-tightened to match.
+
+## ✅ RESOLVED 2026-08-15 — `socialProviders.test.ts` counts eleven connectors, not five
+
+Closed by the pass that added the connectors. Recorded here because the register entry named
+the right weakness underneath the failure: the test asserted a COUNT where it meant to assert
+uniqueness — the same thing the kernel roster tests did before they were changed to name
+their members, and the reason a correct addition read as a regression.
+
 ## ✅ RESOLVED 2026-08-15 — Every consolidated table has an entity-catalog entry again
 
 `entityCatalog.test.ts`'s "covers every consolidated table" was red on `main` with nine
@@ -90,6 +145,37 @@ entry opening with an exact match (`{count, plural, =0 {Open the board} one {…
 — how a real empty state is written) did not match at all and the raw ICU source was
 asserted against as if it were copy. It now parses every arm, exact matches first. That
 file's own header warns about exactly this class of drift; this was the second instance.
+
+---
+
+## ✅ RESOLVED 2026-08-15 — Both design ratchets are green again after a same-day contention.
+
+Recorded because the *contention* is the reusable lesson, not the fix.
+
+For part of 2026-08-15 two build guards were red at once and neither failure belonged to
+the change that noticed them. `check-design-scale` read `literalHexFiles` **4** against a
+baseline of **0** (plus off-scale radii and font sizes) and `check-frontend-architecture`
+read **800** `'use client'` files against a baseline of 797. Every flagged file —
+`BuilderWorkspace.tsx`, `PreviewFrame.tsx`, `SiteReleasePanel.tsx`, `lib/visualEditor.ts`,
+`freelance/TalentProfileView.tsx`, `freelance/ProfileResumePanel.tsx`,
+`onboarding/HiredWizardSteps.tsx` — was written between 11:26 and 15:02 by a **concurrent
+session's** visual-editor and hired.video work.
+
+**What was deliberately NOT done.** The Miro-import pass did not re-tokenise those files
+and did not bump the architecture baseline to 800 to make its own run green. The
+architecture ratchet only moves with a written justification in the script, and the
+justification for a client boundary has to come from whoever chose it; re-baselining
+someone else's in-flight work would have recorded a reason nobody held and silently
+absorbed their regression into the accepted floor. It was logged with "a concurrent
+session owns these files" as the named blocker instead. The one baseline that pass DID
+move was its own: 796 → 797 for `CanvasMiroPanel.tsx`, with its reason in the header.
+
+**Outcome.** The owning session finished and cleaned up after itself:
+`literalHexFiles` back to **0**, off-scale radii to 1 (baseline), font sizes down to 3,793,
+and the client-file baseline re-set at 799 by the people who added the files. Both guards
+pass. Total elapsed: about four hours, no cross-session collision, and no ratchet quietly
+widened to accommodate a regression — which is the whole point of [[build-guard-ratchets]]
+and the reason "one red guard hides the rest" is worth waiting out rather than papering over.
 
 ---
 

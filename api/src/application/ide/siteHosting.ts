@@ -16,6 +16,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { projectSites } from '../../infrastructure/database/schema';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 
 /** R2 key prefix all hosted sites live under. */
@@ -260,10 +261,13 @@ export async function checkSubdomainAvailability(
     return { label: null, available: false, reason, host: null };
   }
 
+  // DELIBERATELY cross-tenant: a subdomain is unique across the whole hosting
+  // apex, so scoping this to the asker's tenant would report a label as available
+  // while another tenant is already serving on it.
   const [owner] = await db
     .select({ projectId: projectSites.projectId })
     .from(projectSites)
-    .where(eq(projectSites.subdomain, label))
+    .where(acrossTenants(projectSites, 'global_uniqueness', eq(projectSites.subdomain, label)))
     .limit(1);
 
   const takenByAnother = owner != null && Number(owner.projectId) !== Number(forProjectId ?? -1);

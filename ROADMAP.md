@@ -133,12 +133,12 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
 | 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 38 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 163 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 162 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
-| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 38 |
-| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 31 |
+| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 37 |
+| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 29 |
 Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
 
 | Group | Exact open bullets |
@@ -153,12 +153,12 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 7 | 25 |
 | 8 | 3 |
 | 9 | 38 |
-| 10 | 163 |
+| 10 | 162 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
-| 14 | 38 |
-| 15 | 31 |
+| 14 | 37 |
+| 15 | 29 |
 ---
 
 
@@ -761,8 +761,6 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 - **The landing page and the app build collide in one R2 prefix.** *(new 2026-08-15, from the "two shop windows" decision)* `api/src/application/ide/publishStaticSite.ts` REPLACES the site's contents under a single prefix, and `application/realization/realizeService.ts:21` documents exactly this hazard for proofs ("publishing replaces the site … a project accumulates proofs", which is why it publishes the whole canvas rather than one pass's files). With a landing page added, two producers — a canvas-authored `website` card and the app's built output — both want the root of that one prefix, so publishing either with today's semantics silently deletes the other: a creator deploys a fix and their brand page is gone, or republishes their page and the app 404s. Fix = ONE publish with two sources — landing page renders to the site root, app build lands beneath it, written in a single `publishStaticSite` call so a release is atomic and rollback restores a coherent pair. A second publish path is how the two get out of step. Unblocks: shipping the landing page without a silent-data-loss defect. **(R13)**
 
 - **The platform take rate is a constant where the comparables all use a threshold.** *(new 2026-08-15, aligning to the Vercel-marketplace model in the "Missing Third Bucket" assessment)* `api/src/application/marketplace/listingCommerce.ts:62` — `platformTakeRateBps` reads one env var, clamps 0–5000 and returns the same 1500 bps for every seller, so a creator is charged 15% from their first dollar. monday.com / Square / Atlassian all run threshold models (monday: 85/15 in the developer's favour, but only after $200k lifetime) because in year one the scarce resource is listings, not margin — a fee charged before somebody has made real money is a fee charged for the privilege of trying. The current constant also *cannot* express a threshold: nothing reads a seller's lifetime total at checkout time. Fix = resolve the rate per seller from their lifetime credited total (which `sellerEarnings` already sums with ONE indexed SUM over the account index — no new aggregate, no N+1), clamp exactly as today, and **keep stamping it onto `order_line_items.commissionCents`** so crossing the threshold never re-prices a past sale. ONE derivation, read by the checkout, the earnings receipt and the listing card's "Creator split" line — three call sites is how two of them end up disagreeing about what a seller is owed. Unblocks: a marketplace that is attractive to list on before it is profitable to run. **(R14)**
-
-- **Three frontend guards are red on work that is mid-flight in the tree, and one of them hides the rest.** *(observed 2026-08-15 while closing the résumé template-engine / canvas-stall pass)* Running `frontend` `npm test` stops at `check:architecture`, which reports `'use client' files: 791 exceeds baseline 789` and `production files over 800 lines: new violation lib/academicObjects.ts`; `check:design-scale` then reports `literalHexFiles 4 (baseline 0)`, `offScaleRadii 3 (baseline 1)` — down from 4 on 2026-08-15, when the publisher pass fixed the one in `DeveloperPortalContent.tsx`, the only named file it had touched — and `offScaleFontSizes 3865 (baseline 3818)` naming `components/BuilderWorkspace.tsx`, `components/PreviewFrame.tsx`, `components/site/SiteReleasePanel.tsx`, `lib/visualEditor.ts`, `components/admin/panels/LlmRatingsPanel.tsx`, `components/UnreadBadge.tsx` and `app/challenges/page.tsx`. Separately, `tsc` currently fails on `CreationCanvas.tsx` (`Cannot find name 'threeD'` — a 3D-surface refactor that has introduced `threeD.active` / `threeD.commandProps` / `threeD.toggle` call sites without the binding) and on `lib/academicObjects.ts` (`identifies`, `submissionsFor`, `gradebookOf`, `statsOf`, `mappingRows` all undefined), which red-lines every `CreationCanvas.*.test.tsx` suite with `ReferenceError: threeD is not defined`. **Blocked on the owner of that in-flight refactor**: none of these files were touched by this pass, the same files were observed changing under it mid-run (`brainSurfaceContext.tsx` → `canvasSurfaceContext.tsx`, and the architecture baseline itself moving 788 → 789), and editing a half-finished refactor from a second direction would collide rather than fix. Needed to clear it: the `threeD` binding and the five `academicObjects` helpers landed, then a baseline decision on the two ratchets. Unblocks: `frontend` `npm test` running to the vitest stage at all, and the canvas component suites being trustworthy again.
 
 - **Stage's checks are STATIC ANALYSIS of the snapshot, not a run in a sandbox workspace.** *(identified 2026-08-15 while building the Build/Stage/Live release lifecycle)* `api/src/application/marketplace/stageChecks.ts` reads the staged snapshot payload — the copy a buyer actually receives, after `stripBindings` — and answers six harnesses' worth of questions about it (a CDN reference in a game document, an orphaned question id, an empty page, a mesh with no unit, a cloned voice that will not transfer). That catches the whole class of defect the seller cannot see on their own board, which is the point. What it does NOT do is what the proposal called for: install the snapshot into a throwaway tenant, boot it with every outbound step stubbed, and measure the result. So `runtime.touch` is a regex over the document rather than a driven play; `media.duration` reads a declared field rather than a render that finished; `system.outbound` reports that steps WOULD be stubbed rather than that they were. Consequence: a document that boots and then throws on frame 2 passes, and a workflow whose stubbed step would have failed is not caught. **Blocked on an infrastructure decision**: a disposable tenant needs a lifecycle (who creates it, who destroys it, what it costs per stage press) and a headless runner with an outbound interceptor — neither exists, and inventing either inside this pass would have shipped a sandbox nobody had agreed to pay for. Unblocks: the difference between "the payload looks right" and "it ran".
 
@@ -1448,36 +1446,11 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
 - **Standing rule:** any page/component ADDED or MODIFIED must be localized (all 5 catalogs en/zh/es/fr/de), dark+light, and mobile-friendly in the same pass — see [[i18n-localization]], [[theme-and-responsive-ui]].
 - **Date/number formatting bypasses next-intl at 180 call sites** *(architecture review 2026-07-26)* — `frontend/src` has **180** `toLocaleDateString`/`toLocaleString`/`toLocaleTimeString` calls: **157** pass **no locale argument** (so they render in the *browser/OS* language, not the locale the user picked — a zh user on an en-US machine sees English dates inside a Chinese UI) and **10** hardcode `'en-US'` (`adminShared.tsx`, `ArticleCard`, `BlogPostClient`, `RfpDetailClient`, `tools/[id]/page.tsx`). Only 1 `Intl.NumberFormat` and 16 `Intl.DateTimeFormat` instances exist, none locale-bound. Fix: a `useFormat()` hook (+ `getFormat()` server variant) that reads the active next-intl locale and exposes `date`/`dateTime`/`number`/`currency`/`relative`, then codemod the 180 sites. Unblocks: locale-correct dates/numbers, which no amount of catalog translation reaches. Related: the `taskStatusLabel` item below.
 - **RSC is effectively unused and i18n coverage is ~58%** *(architecture review 2026-07-26)* — **571 of 660** `.tsx` components carry `'use client'` (86%), so the App Router ships a SPA and the server-component data path is unavailable to almost every screen; **384 of 660** use `useTranslations`/`getTranslations`, leaving ~276 components with hardcoded English (consistent with the ~330 figure above, measured differently). No fix proposed as a single item — this is the size of the i18n backlog above plus a note that any "move this fetch to the server" plan is blocked until the client boundary is pushed down.
-- **The design-scale ratchet is RED and hiding every other design regression behind it.** *(measured 2026-08-15
-  during the Miro-import pass; `npm run check:design-scale`)* Three counters moved the wrong way:
-  `literalHexFiles` 4 against a baseline of **0**, `offScaleRadii` 4 against 1, `offScaleFontSizes` 3,865 against
-  3,818. The files carrying them — `components/BuilderWorkspace.tsx`, `components/PreviewFrame.tsx`,
-  `components/site/SiteReleasePanel.tsx`, `lib/visualEditor.ts`, plus off-scale radii in `LlmRatingsPanel`,
-  `DeveloperPortalContent` and `UnreadBadge` — were all written today between 11:26 and 12:53, i.e. by the
-  visual-editor/site-release work that is still in flight. `literalHexFiles` is the one that matters: its baseline
-  is deliberately 0 so a literal cannot land quietly, and a literal renders the SAME in both themes. Fix = tokens
-  (or a `COLOUR_EXEMPT` entry with its reason, if these are author-picked colours the product persists — which for
-  a visual editor is plausible and is exactly what the exemption list is for).
-
-  The **architecture** ratchet is red from the same batch and for the same reason: `'use client' files` reads 800
-  against a baseline of 797, and the three additions (`components/freelance/TalentProfileView.tsx`,
-  `components/freelance/ProfileResumePanel.tsx`, `components/onboarding/HiredWizardSteps.tsx`, alongside a rewrite
-  of `components/developer/DeveloperPortalContent.tsx` and `components/resume/ResumeDocumentView.tsx`) were all
-  written at 15:02 by the hired.video work. That ratchet is deliberately not self-bumping — the baseline moves only
-  with a written reason in `check-frontend-architecture.mjs`, and the reason has to come from whoever chose the
-  client boundary. **Blocker for both counters: a concurrent session owns those files right now**, and a second
-  writer re-tokenising or re-baselining them mid-edit would collide and would be recording a justification it does
-  not have. Unblocks: both ratchets going green, which is what lets them catch the NEXT regression instead of being
-  ignored — the failure mode [[build-guard-ratchets]] exists to prevent.
 - **`taskStatusLabel` is an English-only label map outside next-intl** *(found 2026-07-25 while fixing the accountability banner)* — `frontend/src/lib/taskStatus.ts` `TASK_STATUS_LABELS` ("Backlog"/"In Review"/…) plus the `humanizeStatus` fallback are plain constants consumed by the board, the lane editor and now the Sign-off gap lines, so every lane/status name renders English in zh/es/fr/de. Fix: move the labels to a `taskStatus.*` catalog namespace and expose a `useTaskStatusLabel()` hook (plus a `getTranslations` variant for server callers), then migrate the call sites. Unblocks: a fully-localized board, which is the largest remaining English surface after the marketing copy.
 
 ---
 
 ## 15 · 🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt
-
-- **`site_subscriptions` has no entity-catalog entry, so `check:table-adoption` is red.** *(observed 2026-08-15 while closing the publisher/tenant consolidation)* `0473_embedded_apps.sql` creates `site_subscriptions`; no domain's `entities.ts` declares it, so it is the one consolidated table of 310 that is not reachable through the generic layer at all, and the guard fails on it. The fix is one line — `entity(siteSubscriptions, …)` — and the sibling `site_releases`, `site_users` and `site_user_sessions` are all filed under `growth`, which is almost certainly its home too. The same pass also added two unscoped tenant queries — `application/canvas/convertSessionToApp.ts:95` against `projects` and `application/ide/siteHosting.ts:263` against `projectSites` — so `check:tenant-scope` is red alongside it; both want `scopedToTenant(...)` rather than a bare `eq` on the id. **Blocker: it is another session's actively-landing work** — `0473_embedded_apps.sql` and both files appeared in the tree during this pass, after the publisher migration was complete — so choosing the table's seat or editing those queries now would collide with an author still writing them. Unblocks: `api npm test` reaching the vitest stage.
-
-- **`socialProviders.test.ts` expects five social connector keys and the registry now has eleven.** *(observed 2026-08-15)* `maps every social connector key back to exactly one provider` fails with `expected [ 'x-social', 'linkedin-social', …(9) ] to have a length of 5`. Either six connectors were added without the test being moved, or the test is asserting a count where it means to assert uniqueness — the same weakness the roster tests had before they were changed to name their members. **Blocker: the file is another session's uncommitted, in-flight work** (modified in the tree as this was logged). Unblocks: `api npm test` green.
 
 ### 🛡️ Cloudflare serves a managed challenge to every datacenter caller of the whole `builderforce.ai` zone *(found 2026-08-08)*
 

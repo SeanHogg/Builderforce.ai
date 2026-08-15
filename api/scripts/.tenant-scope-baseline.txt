@@ -30,7 +30,7 @@ application/deck/DeckService.ts:2
 application/deck/TemplateLibraryService.ts:1
 application/demo/demoSeedService.ts:2
 application/feedback/feedbackEngine.ts:6
-application/ide/publishStaticSite.ts:3
+application/ide/publishStaticSite.ts:2
 application/incident/EscalationService.ts:5
 application/incident/IncidentService.ts:4
 application/incident/OnCallService.ts:2

@@ -124,17 +124,16 @@ export function scopedToNullableTenant(
  *     that is not owed and then dares the next reader to pay it down by breaking
  *     a feature. A sweep still has to name what it acts ON — the predicate is
  *     what separates "every expired request" from "every request".
- */
-/**
- * Why a read legitimately has no tenant to filter by. A union rather than a free
- * string so the set stays reviewable, and so adding a category is a deliberate
- * edit here instead of a new phrase invented at a call site.
- *
- * `global_uniqueness` is the namespace check: a project key or a hosting subdomain
- * is unique across the whole deployment, so asking "is this taken?" within one
- * tenant is not a narrower question — it is the WRONG one. It answers "free" for a
- * name another tenant already holds, and the caller then either trips the unique
- * constraint or, worse, points a second site at a name someone else is serving on.
+ *   `global_uniqueness` — a NAMESPACE check, where the namespace is the whole
+ *     deployment: a project key, a hosting subdomain. Asking "is this taken?"
+ *     within one tenant is not a narrower question, it is the WRONG one — it
+ *     answers "free" for a name another tenant already holds, and the caller then
+ *     either trips the unique constraint or, worse, points a second site at a name
+ *     someone else is already serving on. The read returns no tenant content: the
+ *     answer is a boolean about a name, and the access predicate is the name
+ *     itself. Use it ONLY where the uniqueness constraint is genuinely global —
+ *     if the column is unique per tenant, `scopedToTenant` is both correct and
+ *     the tighter answer.
  */
 export type CrossTenantReason =
   | 'public_catalogue'
