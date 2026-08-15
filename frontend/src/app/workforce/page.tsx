@@ -18,14 +18,15 @@ import { MeetingsCalendar } from '@/components/meetings/MeetingsCalendar';
 import MeetingsContent from '@/components/meetings/MeetingsContent';
 import PageContainer from '@/components/PageContainer';
 import { AgentOpsContent, type AgentOpsTab } from '@/components/agent-ops/AgentOpsClient';
+import { CofounderMatching } from '@/components/cofounder/CofounderMatching';
 
 // Workforce sub-views are declared as query tabs in navGroups; the shell
 // <ShellIndex> renders the sub-view index. Here we just read `?tab=` to pick the
 // body and the per-tab sub-label, mirroring the /quality surface.
-type WorkforceTab = 'workforce' | 'roles' | 'teams' | 'meetings' | 'calendar' | 'talent' | 'performance' | 'plan' | 'chats' | 'approvals' | 'qa' | AgentOpsTab;
+type WorkforceTab = 'workforce' | 'roles' | 'teams' | 'meetings' | 'calendar' | 'talent' | 'cofounder' | 'performance' | 'plan' | 'chats' | 'approvals' | 'qa' | AgentOpsTab;
 
 const TAB_IDS: ReadonlyArray<WorkforceTab> = [
-  'workforce', 'roles', 'teams', 'meetings', 'calendar', 'talent', 'performance', 'plan', 'chats', 'approvals', 'qa', 'coordination', 'memory', 'rehearsal',
+  'workforce', 'roles', 'teams', 'meetings', 'calendar', 'talent', 'cofounder', 'performance', 'plan', 'chats', 'approvals', 'qa', 'coordination', 'memory', 'rehearsal',
 ];
 
 const AGENT_OPS_TABS: ReadonlyArray<AgentOpsTab> = ['coordination', 'memory', 'rehearsal'];
@@ -67,6 +68,12 @@ function WorkforcePageInner() {
         <RolesView />
       ) : tab === 'talent' ? (
         <TalentView />
+      ) : tab === 'cofounder' ? (
+        // The SAME component `/cofounder` renders. One implementation, two
+        // addresses: the tab is the door, and the standalone route is what a
+        // shared link points at — a second copy is how the two come to disagree
+        // about what a match means.
+        <CofounderMatching />
       ) : tab === 'teams' ? (
         <TeamsView />
       ) : tab === 'meetings' ? (

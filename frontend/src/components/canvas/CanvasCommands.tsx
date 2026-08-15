@@ -158,6 +158,18 @@ export function CanvasSocialIcon() {
   </svg>;
 }
 
+/** Paid media: rising delivery plus the money that bought it. Deliberately unlike
+ *  {@link CanvasSocialIcon}'s share graph — the two sit next to each other on the rail
+ *  and "post something" and "spend something" must not look like the same button. */
+export function CanvasAdsIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M2 13.5h12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    <rect x="3" y="9" width="2.6" height="4.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <rect x="6.7" y="6.5" width="2.6" height="7" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <rect x="10.4" y="3.5" width="2.6" height="10" fill="none" stroke="currentColor" strokeWidth="1.2" />
+  </svg>;
+}
+
 /** The universal-access glyph used by every canvas that publishes a text outline. */
 export function AccessibleOutlineIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">

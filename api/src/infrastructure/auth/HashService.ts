@@ -35,12 +35,17 @@ export async function verifySecret(value: string, storedHash: string): Promise<b
  *             all `clk_*` keys have rotated to `bfa_*`.
  *   - `clu` — Legacy user-bootstrap API key (`users.api_key_hash`)
  *   - `bfk` — Tenant API key for the LLM gateway (`tenant_api_keys.key_hash`)
- *   - `bfai` — Developer API key for the public read-only API (`developer_api_keys.key_hash`)
+ *   - `bfai` — RETIRED (migration 0471). Was the developer API key for the public
+ *             read-only API, on a `developer_api_keys` table that no longer exists.
+ *             Issued keys were copied into `tenant_api_keys` with their hash intact
+ *             and still AUTHENTICATE; the prefix is simply never minted again,
+ *             because a developer is a tenant and mints a `bfk_*`. Not in the union
+ *             below: a prefix nothing can issue is not a parameter.
  *   - `whsec` — Outbound-webhook signing secret (`webhook_subscriptions.secret`)
  *   - `bfq` — Quality error-ingest key, per source (`error_sources.key_hash`)
  *   - `bff` — Product Feedback ingest key, per project collector (`feedback_collectors.key_hash`)
  */
-export function generateApiKey(prefix: 'bfa' | 'clk' | 'clu' | 'bfk' | 'bfai' | 'whsec' | 'bfq' | 'bff'): string {
+export function generateApiKey(prefix: 'bfa' | 'clk' | 'clu' | 'bfk' | 'whsec' | 'bfq' | 'bff'): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   const hex   = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
   return `${prefix}_${hex}`;

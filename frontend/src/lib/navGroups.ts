@@ -152,7 +152,7 @@ export const NAV_GROUPS: NavGroup[] = [
     // calendars. `/meetings` redirects into ?tab=meetings.
     id: 'workforce', labelKey: 'group.workforce', icon: '👥', href: '/workforce',
     seat: 'Manager', stage: 'make', rung: RUNG.WORKSPACE,
-    match: ['/workforce', '/hires', '/meetings', '/agent-ops'],
+    match: ['/workforce', '/hires', '/meetings', '/agent-ops', '/cofounder'],
     tabKind: 'query', basePath: '/workforce',
     tabs: [
       { id: '', labelKey: 'tab.workforce', icon: '👥' },
@@ -161,6 +161,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'meetings', labelKey: 'tab.meetings', icon: '📹' },
       { id: 'calendar', labelKey: 'tab.calendar', icon: '📅' },
       { id: 'talent', labelKey: 'tab.talent', icon: '🤝' },
+      // Finding a CO-FOUNDER, not a hire. It is a tab of Workforce rather than a
+      // row of its own because it is the same question this destination already
+      // answers — who is on this team — asked about the one seat that has to be
+      // filled before there is a team. It is deliberately NOT a Talent sub-view:
+      // a co-founder has no requisition, no offer and no salary, and filing one
+      // under hiring would put a peer into a funnel that ends in employment.
+      { id: 'cofounder', labelKey: 'tab.cofounder', icon: '🧬' },
       { id: 'performance', labelKey: 'tab.performance', icon: '📊' },
       { id: 'plan', labelKey: 'tab.plan', icon: '🧮' },
       { id: 'chats', labelKey: 'tab.chats', icon: '💬' },

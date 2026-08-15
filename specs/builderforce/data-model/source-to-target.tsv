@@ -184,7 +184,7 @@ BF	user_legal_acceptances	Identity & tenancy	merged	(folded into a sibling)
 BF	user_mfa_recovery_codes	Identity & tenancy	merged	(folded into a sibling)
 BF	auth_user_sessions	Identity & tenancy	keep	auth_user_sessions
 BF	auth_tokens	Identity & tenancy	primitive	share_link
-BF	developer_api_keys	Platform & observability	primitive	credential
+BF	developer_api_keys	Platform & observability	merged	(folded into a sibling)
 BF	tenant_api_keys	Identity & tenancy	primitive	credential
 BF	tenant_mcp_extensions	Identity & tenancy	merged	(folded into a sibling)
 BF	tenants	Identity & tenancy	keep	tenants

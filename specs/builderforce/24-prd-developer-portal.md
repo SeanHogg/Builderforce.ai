@@ -176,31 +176,59 @@ version of this); hyperscaler marketplace listings (§9, later phase).
 
 ## 5. Design
 
-### 5.1 Developer identity
+### 5.1 Developer identity — **a developer is a tenant**
 
-A **developer org** is a first-class party, distinct from a tenant. A vendor is
-not necessarily our customer, and their staff are not our tenant's members.
+> **Superseded (migration 0471).** This section originally proposed a *developer
+> org* as a first-class party distinct from a tenant, on the argument that "a
+> vendor is not necessarily our customer". That was overruled by the owner: **a
+> developer is a tenant, and only the tenant survives.** What follows is the
+> shipped design; the original proposal is kept above the line only so the
+> decision is legible to a reader who finds `developer_orgs` in an old migration.
+
+Publishing is something a **workspace does**, not a second kind of party. A
+publisher is a `tenants` row with `publisher_state <> 'none'`:
 
 ```
-developer_orgs        id, slug, legal_name, website, support_email,
-                      verification_state, verified_at, tax_profile_id,
-                      payout_connection_id, created_at
-developer_org_members developer_org_id, user_id, role (owner|admin|publisher)
+tenants  … publisher_state (none|unverified|domain_verified|identity_verified),
+           publisher_website, publisher_support_email, publisher_domain,
+           publisher_verification_token, publisher_verified_at,
+           publisher_payout_connection_id,
+           publisher_suspended_at, publisher_suspended_reason
 ```
 
-Verification states: `unverified → domain_verified → identity_verified`. A
-package's badge and its eligibility to charge money are functions of this state —
-that is the trust half MCP registries do not have.
+Nine nullable columns, every one functionally dependent on `tenants.id` and 1:1
+with the row — 3NF as columns, and never a separate entity. It is also how this
+platform already says "this party is also an X": `users.available_for_hire`,
+`field_jobs.discipline`, `ide_agents.builtin_kind`. A kind is a value; a facet is
+a column.
 
-`developer_api_keys` (today: user-scoped, no scopes) is **re-parented to
-`developer_orgs`** and given the same `scopes` + `allowed_origins` shape
-`tenant_api_keys` already uses. One key model, not two. (See §8 — this is the
-concrete drift logged in the Gap Register.)
+`publisher_state` carries both facts on one ordered scale, so the combination
+nobody wants — not a publisher, yet identity-verified — is unrepresentable rather
+than merely unlikely. A package's badge and its eligibility to charge money are
+functions of this state; that is the trust half MCP registries do not have.
+
+**Membership and credentials come for free, which is the point:**
+
+- A publisher's staff are `tenant_members`. There is no second membership table
+  to keep in sync, no second role ladder to disagree with the first, and no way
+  for a vendor's engineer to be inside the company but outside the publisher.
+  Authority is `application/tenant/tenantRoles.ts`: at least `developer` to ship
+  a version, at least `manager` to list, delist or claim a domain.
+- A publisher's API key is a `tenant_api_keys` row with `read:catalog`,
+  `read:installs` or `write:packages` in the SAME scope list every other tenant
+  key uses. Minting, listing and revoking happen where every other tenant key is
+  managed. Issued `bfai_*` keys were copied across with their hash intact and
+  still authenticate; the prefix is simply never minted again.
+
+The case the original design was built for — a publisher who is not a customer —
+is still expressible. It is a free workspace that publishes. It is not a
+different KIND of thing, and that distinction is the whole of the change.
 
 ### 5.2 One publishable artifact
 
 ```
-extension_packages    id, developer_org_id, slug, kind, name, tagline,
+extension_packages    id, tenant_id (the PUBLISHER's workspace), slug, kind,
+                      name, tagline,
                       categories[], listing_state, current_version_id,
                       catalog_item_id → catalog_items(id)
 extension_versions    id, package_id, semver, spec (jsonb), requested_scopes[],
@@ -330,7 +358,7 @@ tenant · engineering hours for design partners.
 
 | Phase | Ships | Proves |
 |---|---|---|
-| **1 — Publisher identity + the connector kind** | `developer_orgs`, re-parented keys with scopes, `extension_packages`/`versions`/`installs`, `kind='connector'` end-to-end, sandbox tenant, static review, `/developers` shell, docs | A vendor publishes with **zero hosting** and a tenant installs it |
+| **1 — Publisher identity + the connector kind** | the publisher facet on `tenants`, tenant keys with publisher scopes, `extension_packages`/`versions`/`installs`, `kind='connector'` end-to-end, sandbox tenant, static review, `/developers` shell, docs | A vendor publishes with **zero hosting** and a tenant installs it |
 | **2 — MCP kind + native billing** | `kind='mcp_server'`, install-scoped OAuth, paid plans on `catalog_items`, vendor webhooks, metered usage → invoice, payouts | The Vercel model works end-to-end |
 | **3 — Discovery + trust** | Published packages in `integrationCatalog`, search/categories/ranking, verification badges, install analytics, dynamic + agentic review | Discovery — the thing the MCP registry does not solve |
 | **4 — Programs** | Technology + Solutions tracks, rev-share threshold, co-marketing, hyperscaler listings | Adoption, not just capability |
@@ -339,14 +367,18 @@ tenant · engineering hours for design partners.
 
 ## 8. Known drift this PRD resolves
 
-- **`/api/v1` is a listings-embed API wearing a platform's name.** Four read-only
-  endpoints, keys parented to a **user** while the rest of the platform is
-  tenant-scoped, no `scopes`, no `allowed_origins`, no rate tier — while
-  `tenant_apiKeys` next to it has all three. §5.1 re-parents it to
-  `developer_orgs` and unifies the scope model.
-- **Two key models, one concept.** `developer_api_keys` and `tenant_api_keys`
-  both mean "a credential calling us from outside", with different columns and
-  different middleware. One shape.
+- **`/api/v1` is a listings-embed API wearing a platform's name.** ✅ RESOLVED
+  (0471). Four read-only endpoints, keys parented to a **user** while the rest of
+  the platform is tenant-scoped, no `scopes`, no `allowed_origins`, no rate tier —
+  while `tenant_api_keys` next to it had all three. The endpoints now authenticate
+  with a tenant key through the shared resolver, require `read:catalog`, and
+  enforce the origin allowlist that path already had.
+- **Two key models, one concept.** ✅ RESOLVED (0471). `developer_api_keys` and
+  `tenant_api_keys` both meant "a credential calling us from outside", with
+  different columns and different middleware. 0467's answer was to keep them apart
+  by REMOVING a column until `check-signature-duplication` stopped scoring them as
+  one table — which dodges a threshold rather than answering it. There is now one
+  table, one vocabulary and one resolver.
 - **`tenant_mcp_extensions` is a dead-end for vendors.** A vendor can stand up an
   MCP server and reach exactly one tenant. `kind='mcp_server'` gives that same
   artifact distribution.

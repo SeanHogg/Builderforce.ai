@@ -1509,6 +1509,30 @@
 }
 .socialFormActions button:hover:not(:disabled),.socialFormActions button:focus-visible:not(:disabled) { background:var(--canvas-hover); outline:none; }
 .socialFormActions button:disabled { opacity:.5; cursor:not-allowed; }
+/* `select` shares the input treatment so a picker and a text box do not read as two
+   different controls. The `option` rule is NOT redundant: a native option renders in
+   the OS popup layer, which does not inherit the panel's background — without its own
+   opaque pair it is dark-on-dark in one theme. */
+.socialForm select {
+  width:100%; box-sizing:border-box; min-height:30px; padding:6px 8px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink); font:inherit; font-size:11px;
+}
+.socialForm select option { background:var(--canvas-panel); color:var(--canvas-ink); }
+/* A checkbox that reads as one line with its label rather than the stacked grid the
+   other fields use. */
+.socialInlineCheck { display:flex !important; align-items:center; gap:6px; color:var(--canvas-ink) !important; font-size:11px; }
+.socialInlineCheck input { width:auto; min-height:0; }
+/* The measurement tiles. `auto-fit` + `minmax` so the row reflows to one column in a
+   narrow panel instead of overflowing it. */
+.socialStats { display:grid; grid-template-columns:repeat(auto-fit,minmax(7rem,1fr)); gap:6px; margin:0; padding:8px 10px; }
+.socialStats > div {
+  display:grid; gap:2px; padding:6px 8px; min-width:0;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted);
+}
+.socialStats dt { color:var(--canvas-muted); font-size:9px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+.socialStats dd { margin:0; color:var(--canvas-ink); font-size:13px; font-weight:650; overflow-wrap:anywhere; }
+
 .socialTargetPicker { display:grid; gap:5px; margin:0; padding:8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
 .socialTargetPicker legend { padding:0 4px; color:var(--canvas-ink-soft); font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
 .socialTargetPicker label { display:flex; align-items:center; gap:6px; color:var(--canvas-ink); font-size:11px; }

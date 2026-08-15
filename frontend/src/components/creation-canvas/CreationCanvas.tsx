@@ -19,7 +19,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasDriveIcon, CanvasFilesIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasDriveIcon, CanvasFilesIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
@@ -32,6 +32,7 @@ import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
 import { CanvasDrivePanel } from './CanvasDrivePanel';
 import { CanvasSocialPanel } from './CanvasSocialPanel';
+import { CanvasAdsPanel } from './CanvasAdsPanel';
 import { CanvasEmailComposer } from './CanvasEmailComposer';
 import { CanvasHostActions } from './CanvasHostActions';
 import { canvasNavigate, canvasSurface, canvasWebOrigin, type CanvasHostCapture } from '@/lib/canvasHost';
@@ -826,6 +827,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const tFiles = useTranslations('creationCanvas.files');
   const tDrive = useTranslations('creationCanvas.drive');
   const tSocial = useTranslations('creationCanvas.social');
+  const tAds = useTranslations('canvas.ads');
   const tImport = useTranslations('creationCanvas.import');
   /** The import engine is a plain module, so it is handed the catalog rather
    * than reaching for one — every string it produces stays translated. */
@@ -1230,6 +1232,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [filesOpen, setFilesOpen] = useState(false);
   const [driveOpen, setDriveOpen] = useState(false);
   const [socialOpen, setSocialOpen] = useState(false);
+  const [adsOpen, setAdsOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   /** True while the BROWSER is what put us full screen, false for the CSS fallback. */
   const nativeFullscreenRef = useRef(false);
@@ -9369,6 +9372,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 label={tSocial('title')}
               ><CanvasSocialIcon /></CanvasRailToggle>
               <CanvasRailToggle
+                pressed={adsOpen}
+                onClick={() => setAdsOpen((value) => !value)}
+                label={tAds('title')}
+              ><CanvasAdsIcon /></CanvasRailToggle>
+              <CanvasRailToggle
                 pressed={outlineOpen}
                 onClick={() => setOutlineOpen((value) => !value)}
                 label={t('canvasOutline')}
@@ -9393,6 +9401,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button type="button" onClick={() => setFilesOpen((value) => !value)} aria-pressed={filesOpen} aria-label={tFiles('title')}><CanvasFilesIcon /></button>
           <button type="button" onClick={() => setDriveOpen((value) => !value)} aria-pressed={driveOpen} aria-label={tDrive('title')}><CanvasDriveIcon /></button>
           <button type="button" onClick={() => setSocialOpen((value) => !value)} aria-pressed={socialOpen} aria-label={tSocial('title')}><CanvasSocialIcon /></button>
+          <button type="button" onClick={() => setAdsOpen((value) => !value)} aria-pressed={adsOpen} aria-label={tAds('title')}><CanvasAdsIcon /></button>
           <button type="button" onClick={() => setOutlineOpen((value) => !value)} aria-pressed={outlineOpen} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
         </div>
 
@@ -9478,6 +9487,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           boardMedia={boardMedia}
           onClose={() => setSocialOpen(false)}
         />}
+        {adsOpen && <CanvasAdsPanel onClose={() => setAdsOpen(false)} />}
         {outlineOpen && <CanvasOutlinePanel
           nodes={nodes}
           edges={edges}

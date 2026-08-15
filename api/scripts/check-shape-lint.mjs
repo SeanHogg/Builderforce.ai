@@ -119,16 +119,6 @@ const ADJUDICATED = new Map([
       'An `artifacts` row instead identifies an owned creation and its stored rendition.',
   ],
   [
-    'developer_org_members',
-    'the staff of a PUBLISHER (PRD 24), which is not a tenant and has no workspace. ' +
-      '`memberships` is tenant-scoped twice over — `tenant_id NOT NULL`, and an ' +
-      '`object_id` into the tenant-scoped object registry — so using it would have to ' +
-      'invent a tenant for a third-party vendor. Whichever workspace was picked, a ' +
-      'colleague signed in elsewhere could not see the publisher they work for, and a ' +
-      "vendor's staff list would sit inside one customer's tenancy. The absence of a " +
-      'tenant is the whole point of the row, and it is the one thing the primitive requires.',
-  ],
-  [
     'extension_versions',
     'an installable ARTIFACT, not a step in an edit history. `tenant_extension_installs` ' +
       'holds an ON DELETE RESTRICT foreign key to it, every tenant installs the SAME ' +

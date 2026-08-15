@@ -1,12 +1,12 @@
 /**
  * A stored SCOPE LIST — the one implementation of "what may this credential do?".
  *
- * Three credentials on this platform answer that question: a tenant API key
- * (`bfk_*`), a developer/publisher API key (`bfai_*`), and an extension install's
- * grant. All three store the answer the same way — a JSON array in a `text`
- * column, with NULL or `[]` meaning UNRESTRICTED — and all three need the same
- * three operations: serialise on write, deserialise on read, and test one
- * required scope against what was stored.
+ * Two credentials on this platform answer that question: a tenant API key
+ * (`bfk_*` — since migration 0471 that includes the publisher's, which used to be
+ * a third), and an extension install's grant. Both store the answer the same way
+ * — a JSON array in a `text` column, with NULL or `[]` meaning UNRESTRICTED — and
+ * both need the same three operations: serialise on write, deserialise on read,
+ * and test one required scope against what was stored.
  *
  * `tenantApiKeyService.ts` had the only copy, welded to `TENANT_API_SCOPES`.
  * Adding publisher keys and install grants would have made that three copies of

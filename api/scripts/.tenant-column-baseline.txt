@@ -18,7 +18,6 @@ creation_session_snapshots
 creation_session_timeline
 demo_events
 dev_team_members
-developer_api_keys
 discount_codes
 email_delivery_failures
 email_preferences
