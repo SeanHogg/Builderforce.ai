@@ -64,6 +64,7 @@ import { runPrReconciliationSweep } from './application/reconciliation/runPrReco
 import { cronSweepEnabled } from './application/runtime/cronControls';
 import { runStakeholderDigestSweep, runStakeholderReminderSweep } from './application/stakeholderAlignment/StakeholderMapService';
 import { runFinanceRollup } from './application/finance/financeRollup';
+import { runTriggerSweep } from './application/canvas/runTriggerSweep';
 import { runOperationsRollup } from './application/operations/operationsRollup';
 
 /**
@@ -125,6 +126,30 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       return r.facts > 0 || r.fixesResolved > 0
         ? `facts=${r.facts} fixes=${r.fixesResolved}${r.skipped.length ? ` skipped=${r.skipped.length}` : ''}`
         : null;
+    },
+  },
+  {
+    key: 'canvas-triggers',
+    cadence: 'daily',
+    // Runs AFTER `finance-rollup` deliberately: a `liveMetric` bound to `finance.runway_
+    // months` is refreshed from the facts that pass writes, so evaluating first would
+    // compare today's threshold against yesterday's number and report a stale all-clear
+    // — the same ordering argument the rollup makes against `object-registry`.
+    description:
+      'Evaluate every saved canvas `trigger` — numeric thresholds against a liveMetric, and '
+      + 'deadlines (contract renewals, invoice/bill due dates, statutory obligations, policy '
+      + 'reviews, offer expiries) — and log the state TRANSITIONS. The half that makes a '
+      + 'trigger fire without someone opening the board first.',
+    run: async ({ env }) => {
+      const r = await runTriggerSweep(env, buildDatabase(env));
+      if (!r.changed && !r.skipped) return null;
+      return [
+        `boards=${r.boards}`, `evaluated=${r.evaluated}`, `changed=${r.changed}`,
+        r.breached ? `breached=${r.breached}` : '',
+        r.resolved ? `rearmed=${r.resolved}` : '',
+        r.unbound ? `unbound=${r.unbound}` : '',
+        r.skipped ? `skipped=${r.skipped}` : '',
+      ].filter(Boolean).join(' ');
     },
   },
   {

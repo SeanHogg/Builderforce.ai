@@ -147,7 +147,8 @@ import { buildLineageGraph, columnImpact, impactOf, lineagePatch, staleDerivativ
 import { dataSourceApi, resolveDataSource, type DataSourceSummary } from '@/lib/dataSourceApi';
 import { detectGeoColumns, mapObjectFields, mapPointsFromRows } from '@/lib/canvasGeo';
 import { analyzeCompetitorGeography, competitorSitesFrom } from '@/lib/competitorGeo';
-import { evaluateTrigger } from '@/lib/canvasTriggers';
+import { evaluateCanvasTriggers, isDateComparator, triggerUnboundHint } from '@/lib/canvasTriggers';
+import { deadlineBearingKinds } from '@/lib/specObjects';
 import { useCoarsePointer } from '@/lib/useCoarsePointer';
 import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
 import { canvasStrokes, drawingPatch, DRAWING_TOOLS, eraseStrokes, strokesSvg, type CanvasDrawingTool, type CanvasStroke } from '@/lib/canvasDrawing';
@@ -3851,35 +3852,32 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const args = raw as { objectId?: string };
       const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const board = [...nodes, ...stagedNodes];
-      const triggers = board.filter((node) => node.data.kind === 'trigger' && (!args.objectId || node.id === args.objectId));
-      if (!triggers.length) return { error: args.objectId ? 'That object is not a trigger on this canvas.' : 'No trigger objects are on this canvas.' };
-      const metrics = board.filter((node) => node.data.kind === 'liveMetric');
-      const evaluatedAt = new Date().toISOString();
-      const results = triggers.map((trigger) => {
-        const watches = String(trigger.data.watches ?? '').trim().toLowerCase();
-        const metric = metrics.find((node) => node.data.title.trim().toLowerCase() === watches)
-          ?? metrics.find((node) => watches && node.data.title.trim().toLowerCase().includes(watches));
-        const series = Array.isArray(metric?.data.series) ? metric.data.series as Array<Record<string, unknown>> : [];
-        const evaluation = evaluateTrigger({
-          comparator: trigger.data.comparator,
-          threshold: trigger.data.threshold,
-          state: trigger.data.state,
-          metricValue: metric?.data.value,
-          previousValue: series.length > 1 ? series[series.length - 2]?.value : undefined,
-          metricFound: !!metric,
-        });
+      if (!board.some((node) => node.data.kind === 'trigger' && (!args.objectId || node.id === args.objectId))) {
+        return { error: args.objectId ? 'That object is not a trigger on this canvas.' : 'No trigger objects are on this canvas.' };
+      }
+      const now = Date.now();
+      const evaluatedAt = new Date(now).toISOString();
+      // ONE traversal, shared with the nightly sweep — see `contract/triggers.ts` for why
+      // a second copy of this comparison would be worse than no sweep at all.
+      const resolved = evaluateCanvasTriggers(board, now, { onlyTriggerId: args.objectId });
+      const results = resolved.map((entry) => {
         const patch = sanitizeCreationObjectPatch('trigger', {
-          state: evaluation.state,
+          state: entry.evaluation.state,
           lastEvaluatedAt: evaluatedAt,
-          status: t(`founderTriggerState_${evaluation.state}`),
+          status: t(`founderTriggerState_${entry.evaluation.state}`),
         });
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('founderTriggerEvaluated', { title: trigger.data.title }), objectId: trigger.id, patch });
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: t('founderTriggerEvaluated', { title: entry.triggerTitle }), objectId: entry.triggerId, patch });
         return {
-          id: trigger.id, title: trigger.data.title,
-          watches: trigger.data.watches ?? null, metricTitle: metric?.data.title ?? null,
-          state: evaluation.state, reason: evaluation.reason, observed: evaluation.observed,
-          threshold: trigger.data.threshold ?? null, comparator: trigger.data.comparator ?? null,
-          thenDo: Array.isArray(trigger.data.thenDo) ? trigger.data.thenDo : [],
+          id: entry.triggerId, title: entry.triggerTitle,
+          watches: entry.watchedTitle, watchedKind: entry.watchedKind,
+          deadlineField: entry.deadlineField,
+          state: entry.evaluation.state, reason: entry.evaluation.reason, observed: entry.evaluation.observed,
+          threshold: entry.threshold, comparator: entry.comparator,
+          // For a deadline this is days remaining, negative once past — say so, so the
+          // model reports "9 days overdue" rather than an unlabelled -9.
+          observedMeans: isDateComparator(entry.comparator) ? 'days-remaining' : 'metric-value',
+          hint: triggerUnboundHint(entry),
+          thenDo: entry.thenDo,
         };
       });
       const breached = results.filter((result) => result.state === 'breached');
@@ -3888,10 +3886,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ok: true, proposed: true, evaluatedAt, results,
         breachedCount: breached.length, unboundCount: unbound.length,
         instruction: breached.length
-          ? 'Lead your reply with the breached triggers and the action each one names in `thenDo`. Do not bury them under the ones that are fine.'
+          ? 'Lead your reply with the breached triggers and the action each one names in `thenDo`. For a deadline trigger, `observed` is DAYS REMAINING and is negative once the date has passed — say "renews in 12 days" or "9 days overdue", never the bare number. Do not bury a breach under the ones that are fine.'
           : unbound.length
-            ? 'Say which triggers could NOT be evaluated and why — an unbound trigger is not a healthy one, and reporting "all clear" over it is the failure this tool exists to prevent.'
-            : 'Confirm that every trigger was evaluated and none breached, naming the metrics checked.',
+            ? 'Say which triggers could NOT be evaluated and why — each carries a `hint` naming exactly what is missing. An unbound trigger is not a healthy one, and reporting "all clear" over it is the failure this tool exists to prevent.'
+            : 'Confirm that every trigger was evaluated and none breached, naming what was checked.',
       };
     },
   }, {
