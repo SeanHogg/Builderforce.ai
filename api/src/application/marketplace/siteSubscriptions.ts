@@ -239,7 +239,14 @@ export async function completeSiteSubscription(
   const sellerRef = listing.publisherRef
     ?? (listing.body as { seller?: { userId?: string } } | null)?.seller?.userId
     ?? null;
+  // A hosted app is somebody's running project, so it always has a seller
+  // workspace. A listing with none is platform-owned — there is nothing to
+  // subscribe to and nobody to credit, and inventing a tenant for it would put
+  // money in a workspace that does not exist.
   const sellerTenantId = listing.tenantId;
+  if (sellerTenantId == null) {
+    throw new ListingError('This listing cannot be subscribed to', 400);
+  }
   const { bps } = await resolveTakeRateBps(db, env, { tenantId: sellerTenantId, ref: sellerRef });
   const commissionCents = Math.round((priceCents * bps) / 10_000);
   const sellerCents = Math.max(0, priceCents - commissionCents);

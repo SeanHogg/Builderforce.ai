@@ -24,15 +24,23 @@ import { readProfileResume } from '../resume/profileResume';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import type { Db } from '../../infrastructure/database/connection';
 
-/** Years of experience implied by the earliest dated role — the ATS's coarsest filter. */
+/**
+ * Years of experience implied by the earliest dated role — the ATS's coarsest filter.
+ *
+ * Reads the year in UTC. A résumé date is a bare `YYYY-MM` with no timezone, so
+ * comparing it against a LOCAL year makes the answer depend on where the worker
+ * happens to run: at 00:00 UTC on 1 January, a server behind UTC would report a
+ * candidate as a year less experienced than one an hour to the east.
+ */
 export function inferYearsOfExperience(document: CanvasResumeDocument, now = new Date()): number | null {
+  const currentYear = now.getUTCFullYear();
   const starts = (document.work ?? [])
     .map((entry) => (typeof entry.startDate === 'string' ? Number(entry.startDate.slice(0, 4)) : NaN))
-    .filter((year) => Number.isFinite(year) && year > 1900 && year <= now.getFullYear());
+    .filter((year) => Number.isFinite(year) && year > 1900 && year <= currentYear);
   if (starts.length === 0) return null;
   const earliest = Math.min(...starts);
   // One decimal place, matching `candidate_resumes.years_exp` numeric(4,1).
-  return Math.round(Math.min(60, now.getFullYear() - earliest) * 10) / 10;
+  return Math.round(Math.min(60, currentYear - earliest) * 10) / 10;
 }
 
 /** The skill names an ATS filters on, deduplicated and bounded. */

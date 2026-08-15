@@ -34,7 +34,8 @@ import styles from './CreationCanvas.module.css';
  * called, which one is lit and what a press does are decided ONCE, above the split.
  */
 
-const SURFACE_ICON: Record<CanvasSurfaceId, () => React.JSX.Element> = {
+/** Only the board-scoped surfaces reach the rail, so only they need a rail glyph. */
+const SURFACE_ICON: Record<string, () => React.JSX.Element> = {
   chat: ChatSurfaceIcon,
   graph: GraphSurfaceIcon,
   scene3d: ThreeDIcon,
@@ -49,7 +50,9 @@ export interface CanvasSurfaceSwitcherProps {
 
 export function CanvasSurfaceSwitcher({ surface, onChange, variant }: CanvasSurfaceSwitcherProps) {
   const t = useTranslations('creationCanvas');
-  const ordered = [...CANVAS_SURFACES].sort((a, b) => a.order - b.order);
+  // The rail's contents are decided by the registry, not filtered here: an object-scoped
+  // surface has no answer to "press this with nothing selected", so it is never offered.
+  const ordered = boardCanvasSurfaces();
 
   return <>{ordered.map((def) => {
     const Glyph = SURFACE_ICON[def.id];

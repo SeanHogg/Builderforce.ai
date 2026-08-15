@@ -50,8 +50,16 @@ function sectionFor(line: string): 'requirements' | 'responsibilities' | 'benefi
   return null;
 }
 
+/**
+ * The value of a `Label: value` line.
+ *
+ * The alternation is wrapped in a non-capturing group on purpose: without it,
+ * `^\s*company|employer\s*[:-]\s*(.+)$` parses as "line starts with company" OR
+ * "employer followed by a colon", so only the LAST alternative ever carried the
+ * anchors — and the first label silently never matched.
+ */
 const LABELLED = (label: RegExp, text: string): string | null => {
-  const match = text.match(new RegExp(`^\\s*${label.source}\\s*[:\\-]\\s*(.+)$`, 'im'));
+  const match = text.match(new RegExp(`^\\s*(?:${label.source})\\s*[:\\-]\\s*(.+)$`, 'im'));
   return match?.[1]?.trim().slice(0, 200) ?? null;
 };
 
