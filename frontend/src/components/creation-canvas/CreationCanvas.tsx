@@ -62,6 +62,7 @@ import {
   getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName,
 } from '@/lib/guestRoomApi';
 import { GuestAiUnavailableError, runCreationCanvasAi, type CanvasAiCompletion } from '@/lib/creationCanvasAi';
+import { canvasNoticesFrom } from '@/lib/canvasNotices';
 import { canvasTranscriptForModel } from '@/lib/canvasTranscript';
 import { approvalGuidance, evaluateGate, readProvenance, type ApprovalMode } from '@/lib/canvasApprovalGate';
 import { sheetFormulaGuidance } from '@/lib/canvasSheet';
@@ -759,6 +760,13 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
 
 function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
   const t = useTranslations('creationCanvas');
+  /**
+   * A turn's runtime notices, already in the viewer's language. Built here because the
+   * turn runner is not a component and cannot translate for itself, and memoized so the
+   * three call sites below pass a stable object.
+   */
+  const noticeText = useTranslations('creationCanvas.notice');
+  const canvasNotices = useMemo(() => canvasNoticesFrom(noticeText), [noticeText]);
   const router = useRouter();
   /**
    * A shipped pack's name and blurb are product copy, so they come from the
@@ -3832,7 +3840,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, {
     // What makes the board speak first.
     name: 'canvas_evaluate_triggers',
-    description: 'Evaluate every `trigger` object on this canvas against the `liveMetric` it watches, and mark each armed, breached or unbound. Call this after refreshing a metric, and whenever the user asks what needs their attention. A trigger whose metric has no value is reported unbound rather than healthy — silence about an unevaluated threshold is the failure this prevents.',
+    description: `Evaluate every \`trigger\` object on this canvas and mark each armed, breached or unbound. A trigger watches EITHER a \`liveMetric\`'s number (below/above/equals/changes-by) OR a deadline on any object that carries one — kinds: ${deadlineBearingKinds().join(', ')} — with due-within (warn me N days before, and stay breached once past) or overdue-by (chase it once N days late). Call this after refreshing a metric, and whenever the user asks what needs their attention or what is coming up. A trigger whose metric has no value, or whose watched object carries no deadline, is reported unbound rather than healthy — silence about an unevaluated threshold is the failure this prevents.`,
     parameters: {
       type: 'object', additionalProperties: false,
       properties: { objectId: { type: 'string', description: 'Evaluate one trigger. Omit to evaluate all of them.' } },
@@ -6748,7 +6756,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(t('noticeTestingAgent', { name: agent.data.title }));
     try {
       const response = await runCreationCanvasAi({
-        prompt: testPrompt.trim(), canvasSnapshot: snapshot, persistence, canvasActions: [],
+        prompt: testPrompt.trim(), canvasSnapshot: snapshot, persistence, canvasActions: [], notices: canvasNotices,
         disabledModels: brainRuntime.current.disabledModels,
         onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
         ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
@@ -6882,7 +6890,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 prompt: 'Contribute a specialist perspective to the latest request.', canvasSnapshot: snapshot,
                 guestTurnId: requestMessageId,
                 guestTurnInput: request,
-                persistence, canvasActions, routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+                persistence, canvasActions, notices: canvasNotices, routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
                 autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
                 disabledModels: brainRuntime.current.disabledModels,
                 onCompletion: recordBrainCompletion, onModelDisabled: disableBrainModel,
@@ -6908,7 +6916,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           prompt: connectedAgentNodes.length
             ? `Synthesize the invited agents' perspectives and complete the user's requested outcome. Resolve disagreements, make the final Canvas changes, and state what was actually created.`
             : request,
-          canvasSnapshot: snapshot, persistence, canvasActions,
+          canvasSnapshot: snapshot, persistence, canvasActions, notices: canvasNotices,
           guestTurnId: requestMessageId,
           guestTurnInput: request,
           // The session's mode + the project the ticket would be filed against, so a

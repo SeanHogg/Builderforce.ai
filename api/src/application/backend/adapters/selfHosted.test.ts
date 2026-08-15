@@ -13,7 +13,7 @@ import { BUILTIN_CONNECTORS } from '../../connectors/defaults';
 import type { MaterializeContext } from '../hostingStrategy';
 import { parseHandlerSpec, type HandlerSpec } from '../handlerSpec';
 import { twilioOmnichannelBlueprint } from '../../challenge/blueprints/twilioOmnichannel';
-import { BACKEND_HEALTH_PATH, renderHandlerEngineSource } from './handlerEngineSource';
+import { BACKEND_HEALTH_MARKER, BACKEND_HEALTH_PATH, renderHandlerEngineSource } from './handlerEngineSource';
 import { githubWorkerStrategy, WORKER_DIR } from './githubWorker';
 import { awsLambdaStrategy, AWS_DIR, AWS_DEPLOY_WORKFLOW_PATH } from './awsLambda';
 import { gcpCloudRunStrategy, GCP_DIR, GCP_DEPLOY_WORKFLOW_PATH } from './gcpCloudRun';
@@ -102,6 +102,18 @@ describe('the shared handler engine', () => {
     expect(source).toContain('Boolean(env[n])');
     // Names and booleans only — never a value, never a prefix.
     expect(source).not.toContain('env[n].slice');
+  });
+
+  it('emits the marker the deployed-backend monitor matches on', () => {
+    // The contract between `watchDeployedBackend` and this generator. A status
+    // code alone proves nothing on either side — a deleted Lambda can answer 200
+    // from an edge, and a Cloud Run revision that failed to start answers 503
+    // through a healthy load balancer — so the monitor matches on a substring
+    // only the engine emits. A second copy of that string would keep matching
+    // until the health payload changed shape, and then report every healthy
+    // deployment as down.
+    expect(source).toContain('ok: true,');
+    expect(JSON.stringify({ ok: true, backend: 'Acme Comms' })).toContain(BACKEND_HEALTH_MARKER);
   });
 
   it('reads a data step back over the API instead of silently dropping it', () => {

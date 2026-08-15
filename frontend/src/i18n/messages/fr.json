@@ -16417,6 +16417,7 @@
         "vendor": "fournisseur",
         "verdict": "Verdict",
         "watches": "Surveille",
+        "watchesField": "Champ surveillé",
         "weaknesses": "Faiblesses",
         "website": "Site web",
         "wedge": "Angle d’attaque"
@@ -17615,6 +17616,17 @@
         "owner": "Responsable",
         "dueAt": "Échéance"
       }
+    },
+    "notice": {
+      "addedToCanvas": "J’ai ajouté le contenu demandé au canevas.",
+      "noAnswer": "Je n’ai pas pu préparer de modification du canevas à partir de cette demande.",
+      "toolError": "Je n’ai pas pu préparer les modifications demandées du canevas : {detail}",
+      "answeredWithoutChange": "J’ai répondu ici, mais je n’ai rien placé sur le canevas. Demandez-moi de l’ajouter au canevas et je créerai l’objet correspondant.",
+      "unverifiedCreationPlain": "J’ai décrit une modification du canevas sans la faire réellement : rien n’a donc été créé. Dites-moi quel objet créer et je le construirai sur le canevas.",
+      "unverifiedCreationTabular": "J’ai décrit une modification du canevas sans la faire réellement : rien n’a donc été créé. Redemandez-le-moi et j’interrogerai le jeu de données de ce canevas pour construire l’artefact à partir de ses vraies valeurs.",
+      "fabricatedData": "Ces chiffres ne sont pas réels : ce canevas contient un jeu de données importé, j’aurais donc dû en calculer les valeurs au lieu d’utiliser des espaces réservés. Demandez-moi de le refaire et j’interrogerai chaque ligne.",
+      "documentUnverified": "Le canevas contient un brouillon de document, mais son contenu rédigé ne vérifie pas les {requestedPages, number} pages demandées. Un manuscrit de cette taille ne peut pas être rédigé en un seul tour borné de Brain : il n’est donc pas complet. Construisez-le et relisez-le par sections avant de le considérer comme terminé ou de l’exporter.",
+      "documentIncomplete": "J’ai créé sur le canevas un brouillon de document de {authoredWords, number} mots (environ {estimatedPages, number} {estimatedPages, plural, one {page} other {pages}}), et non les {requestedPages, number} pages demandées. Un manuscrit de cette taille ne peut pas être rédigé en un seul tour borné de Brain : je ne l’ai donc pas marqué comme terminé. Construisez-le et relisez-le par sections avant de le considérer comme terminé ou de l’exporter."
     }
   },
   "canvasCommands": {

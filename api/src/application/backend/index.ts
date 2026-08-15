@@ -26,6 +26,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
 import { deleteWorkspaceFile, listWorkspaceFiles, readWorkspaceFile, writeWorkspaceFile } from '../ide/workspaceStore';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { MonitoringService } from '../monitoring/MonitoringService';
 import { declarativeStrategy } from './adapters/declarative';
 import { githubWorkerStrategy } from './adapters/githubWorker';
 import { awsLambdaStrategy } from './adapters/awsLambda';
@@ -121,6 +122,16 @@ export async function ensureProjectBackend(
         .set({ strategy, updatedAt: new Date() })
         .where(scopedToTenant(projectBackends, tenantId, eq(projectBackends.id, existing.id)));
       await invalidateIngress(env, existing.ingressToken, projectId);
+      // Moving back to the platform ingress means the self-hosted deployment is
+      // no longer the address anything points at. Left watching, it would page
+      // on-call for a backend the customer deliberately stopped using.
+      if (strategy === 'declarative') {
+        try {
+          await new MonitoringService(db).unwatchDeployedBackend(tenantId, projectId);
+        } catch (error) {
+          reportCaughtError(error, { source: 'application/backend/index.ts', operation: 'ensureProjectBackend:unwatch' });
+        }
+      }
       return { ...existing, strategy };
     }
     return existing;
@@ -585,6 +596,23 @@ export async function recordWorkerDeployment(
   // cached readiness for both the old and the new address has to go.
   await invalidateWorkerHealth(env, backend.deployedUrl);
   await invalidateWorkerHealth(env, parsed.origin);
+
+  // Start watching it. Reporting the address once at deploy time and never asking
+  // again is how a deleted stack keeps being shown as the place to point provider
+  // webhooks at — see `watchDeployedBackend`. Best-effort: the deployment IS live,
+  // and failing this call would turn a successful deploy into a reported failure.
+  try {
+    const name = await projectDisplayName(db, args.tenantId, args.projectId);
+    await new MonitoringService(db).watchDeployedBackend(args.tenantId, {
+      projectId: args.projectId,
+      projectName: name,
+      deployedUrl: parsed.origin,
+      healthPath: BACKEND_HEALTH_PATH,
+    });
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/backend/index.ts', operation: 'recordWorkerDeployment:watch' });
+  }
+
   return { ok: true, url: parsed.origin };
 }
 

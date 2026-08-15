@@ -16417,6 +16417,7 @@
         "vendor": "proveedor",
         "verdict": "Veredicto",
         "watches": "Observa",
+        "watchesField": "Campo observado",
         "weaknesses": "Debilidades",
         "website": "Sitio web",
         "wedge": "Punto de ataque"
@@ -17615,6 +17616,17 @@
         "owner": "Responsable",
         "dueAt": "Vence"
       }
+    },
+    "notice": {
+      "addedToCanvas": "He añadido al lienzo el contenido solicitado.",
+      "noAnswer": "No he podido preparar ningún cambio en el lienzo a partir de esa petición.",
+      "toolError": "No he podido preparar los cambios solicitados en el lienzo: {detail}",
+      "answeredWithoutChange": "He respondido aquí, pero no he puesto nada en el lienzo. Pídeme que lo añada al lienzo y crearé el objeto correspondiente.",
+      "unverifiedCreationPlain": "He descrito un cambio en el lienzo, pero no lo he hecho realmente, así que no se ha creado nada. Dime qué objeto crear y lo construiré en el lienzo.",
+      "unverifiedCreationTabular": "He descrito un cambio en el lienzo, pero no lo he hecho realmente, así que no se ha creado nada. Pídemelo de nuevo y consultaré el conjunto de datos de este lienzo para construir el artefacto con sus valores reales.",
+      "fabricatedData": "Esas cifras no son reales: este lienzo tiene un conjunto de datos importado, así que debería haber calculado los valores a partir de él en lugar de usar marcadores de posición. Pídeme que lo rehaga y consultaré cada fila.",
+      "documentUnverified": "El lienzo contiene un borrador de documento, pero su contenido redactado no verifica las {requestedPages, number} páginas solicitadas. Un manuscrito de ese tamaño no puede redactarse en un único turno acotado de Brain, así que no está completo. Constrúyelo y revísalo por secciones antes de darlo por terminado o exportarlo.",
+      "documentIncomplete": "He creado en el lienzo un borrador de documento con {authoredWords, number} palabras (unas {estimatedPages, number} {estimatedPages, plural, one {página} other {páginas}}), no las {requestedPages, number} páginas solicitadas. Un manuscrito de ese tamaño no puede redactarse en un único turno acotado de Brain, así que no lo he marcado como completo. Constrúyelo y revísalo por secciones antes de darlo por terminado o exportarlo."
     }
   },
   "canvasCommands": {

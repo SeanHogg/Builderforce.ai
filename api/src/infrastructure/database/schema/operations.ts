@@ -157,11 +157,16 @@ export const workOrders = pgTable('work_orders', {
    *  somebody made and must be visible, not a silent write-off. */
   billingBasis:  varchar('billing_basis', { length: 16 }).notNull().default('billable'),
   /**
-   * Whether it was fixed on the FIRST visit.
+   * Whether it was fixed on the FIRST visit — the domain's headline metric.
    *
-   * Nullable and written by the completion path from the visits, never by a
-   * client: it is the headline operational metric of the whole domain, and a
-   * self-reported one is worthless. Null means "not yet knowable".
+   * DERIVED, and recomputed from `work_order_visits` by `operationsRollup.ts` on
+   * every sweep. The generic entity writer can set any writable column, so a
+   * client CAN assert this one; what the rollup guarantees is that an asserted
+   * value is CORRECTED rather than trusted. Saying "never written by a client"
+   * would be a comment the code does not enforce, which is worse than the gap.
+   *
+   * Null means not yet knowable — an order with no recorded attendance is absent
+   * from the rate rather than counted as a failure.
    */
   firstTimeFix:  boolean('first_time_fix'),
   completedAt:   timestamp('completed_at'),

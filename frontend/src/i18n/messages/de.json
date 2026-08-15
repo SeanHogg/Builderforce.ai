@@ -16417,6 +16417,7 @@
         "vendor": "Lieferant",
         "verdict": "Fazit",
         "watches": "Überwacht",
+        "watchesField": "Überwachtes Feld",
         "weaknesses": "Schwächen",
         "website": "Website",
         "wedge": "Ansatzpunkt"
@@ -17615,6 +17616,17 @@
         "owner": "Verantwortlich",
         "dueAt": "Fällig"
       }
+    },
+    "notice": {
+      "addedToCanvas": "Ich habe den gewünschten Inhalt auf der Arbeitsfläche ergänzt.",
+      "noAnswer": "Aus dieser Anfrage konnte ich keine Änderung an der Arbeitsfläche vorbereiten.",
+      "toolError": "Die gewünschten Änderungen an der Arbeitsfläche konnte ich nicht vorbereiten: {detail}",
+      "answeredWithoutChange": "Ich habe hier geantwortet, aber nichts auf der Arbeitsfläche abgelegt. Bitte mich, es der Arbeitsfläche hinzuzufügen, dann lege ich das Objekt dafür an.",
+      "unverifiedCreationPlain": "Ich habe eine Änderung an der Arbeitsfläche beschrieben, sie aber nicht tatsächlich vorgenommen — es wurde also nichts erstellt. Sag mir, welches Objekt entstehen soll, dann baue ich es auf der Arbeitsfläche.",
+      "unverifiedCreationTabular": "Ich habe eine Änderung an der Arbeitsfläche beschrieben, sie aber nicht tatsächlich vorgenommen — es wurde also nichts erstellt. Frag mich erneut, dann werte ich den Datensatz auf dieser Arbeitsfläche aus und baue das Artefakt aus seinen echten Werten.",
+      "fabricatedData": "Diese Zahlen sind nicht echt: Auf dieser Arbeitsfläche liegt ein importierter Datensatz, aus dem ich die Werte hätte berechnen müssen, statt Platzhalter zu verwenden. Bitte mich, das neu zu bauen, dann werte ich jede Zeile aus.",
+      "documentUnverified": "Auf der Arbeitsfläche liegt ein Dokumententwurf, dessen verfasster Inhalt die angeforderten {requestedPages, number} Seiten jedoch nicht belegt. Ein Manuskript dieser Größe lässt sich nicht in einem begrenzten Brain-Durchlauf verfassen, es ist also nicht vollständig. Baue und prüfe es abschnittsweise, bevor du es als fertig behandelst oder exportierst.",
+      "documentIncomplete": "Ich habe auf der Arbeitsfläche einen Dokumententwurf mit {authoredWords, number} Wörtern erstellt (etwa {estimatedPages, number} {estimatedPages, plural, one {Seite} other {Seiten}}) — nicht die angeforderten {requestedPages, number} Seiten. Ein Manuskript dieser Größe lässt sich nicht in einem begrenzten Brain-Durchlauf verfassen, deshalb habe ich es nicht als fertig markiert. Baue und prüfe es abschnittsweise, bevor du es als fertig behandelst oder exportierst."
     }
   },
   "canvasCommands": {

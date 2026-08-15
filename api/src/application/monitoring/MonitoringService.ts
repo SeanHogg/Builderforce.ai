@@ -24,6 +24,7 @@ import { findTenantIncidentManagerRef, dispatchIncidentTriage } from '../inciden
 import { comparatorMatches } from '../alerts/runAlertSweep';
 import { evaluateMetric } from '../alerts/metricEvaluators';
 import { fireEventTriggers } from '../workflow/eventTriggers';
+import { BACKEND_HEALTH_MARKER } from '../backend/adapters/handlerEngineSource';
 import type { EvaluateMetricArgs } from '../alerts/metricEvaluators';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -65,6 +66,16 @@ function toPublicMonitor(m: MonitorRow): PublicMonitor {
 function newSecret(): string {
   return crypto.randomUUID().replace(/-/g, '');
 }
+
+/**
+ * The board and the affected-system tag generated backend monitors carry.
+ *
+ * `affectedSystem` is the identity here, not the label: a label is editable by
+ * anyone with the board open, and matching on one would make a redeploy create a
+ * second monitor the moment somebody renamed the first.
+ */
+const DEPLOYED_BACKEND_BOARD = 'Deployed backends';
+const DEPLOYED_BACKEND_SYSTEM = 'project-backend';
 
 export class MonitoringService {
   constructor(private readonly db: Db) {}
@@ -144,6 +155,116 @@ export class MonitoringService {
       webhookSecret: newSecret(),
     }).returning();
     return row!;
+  }
+
+  /**
+   * The board every self-hosted backend monitor lives on, created on first use.
+   *
+   * One board per workspace rather than one per project: a customer with six
+   * projects deployed into their own cloud wants one page that answers "is any of
+   * it down", and six boards holding one monitor each is a directory, not a view.
+   */
+  private async deployedBackendBoardId(tenantId: number): Promise<string> {
+    const [existing] = await this.db
+      .select({ id: monitoringBoards.id })
+      .from(monitoringBoards)
+      .where(and(eq(monitoringBoards.tenantId, tenantId), eq(monitoringBoards.name, DEPLOYED_BACKEND_BOARD)))
+      .limit(1);
+    if (existing) return existing.id;
+    const board = await this.createBoard(tenantId, { name: DEPLOYED_BACKEND_BOARD });
+    return board.id;
+  }
+
+  /**
+   * Watch a backend that runs in the CUSTOMER's own cloud.
+   *
+   * ── WHY THIS EXISTS ───────────────────────────────────────────────────────
+   * A self-hosted strategy reports where it landed exactly once, at deploy time,
+   * and nothing ever asks again. A CloudFormation stack deleted from the console,
+   * a Cloud Run service scaled to zero revisions, an Azure app stopped for
+   * billing — all three leave the platform showing a stale address as the place
+   * to point provider webhooks at, and the first anyone hears of it is the
+   * provider's retry log. That is a worse failure than the platform-hosted case
+   * precisely because the thing that broke is somewhere we cannot see.
+   *
+   * ── WHY A MONITOR AND NOT A NEW SWEEP ─────────────────────────────────────
+   * `runMonitorSweep` already evaluates `http_check` monitors every five minutes,
+   * opens an incident on breach, pages on-call and dispatches triage. A second
+   * sweep would be a second set of rules about what "down" means and who gets
+   * woken up. The generated health route is a plain GET returning JSON, which is
+   * exactly what an http_check consumes — so this is a row, not a mechanism.
+   *
+   * `bodyMatch` rather than status alone: a Function URL whose Lambda has been
+   * deleted can still answer 200 from an edge, and a Cloud Run revision that
+   * failed to start answers 503 through a load balancer that is itself healthy.
+   * The generated engine only ever emits `"ok":true` when it is the thing
+   * answering.
+   *
+   * Idempotent per project: a redeploy updates the URL in place rather than
+   * accumulating one monitor per deployment.
+   */
+  async watchDeployedBackend(tenantId: number, input: {
+    projectId: number;
+    projectName: string;
+    /** Origin the deployment reported, e.g. `https://acme-backend.example.workers.dev`. */
+    deployedUrl: string;
+    /** Path the generated engine serves its readiness on. */
+    healthPath: string;
+  }): Promise<void> {
+    const url = `${input.deployedUrl.replace(/\/$/, '')}${input.healthPath}`;
+    const config = { url, method: 'GET', bodyMatch: BACKEND_HEALTH_MARKER };
+
+    const [existing] = await this.db
+      .select({ id: monitors.id })
+      .from(monitors)
+      .where(and(
+        eq(monitors.tenantId, tenantId),
+        eq(monitors.projectId, input.projectId),
+        eq(monitors.affectedSystem, DEPLOYED_BACKEND_SYSTEM),
+      ))
+      .limit(1);
+
+    if (existing) {
+      // Re-activated as well as re-pointed: a project switched back to a
+      // self-hosted strategy after a spell on the platform ingress must start
+      // being watched again, and a monitor that stayed inactive would look
+      // present and report nothing.
+      await this.updateMonitor(tenantId, existing.id, { config, active: true });
+      return;
+    }
+
+    await this.createMonitor(tenantId, await this.deployedBackendBoardId(tenantId), {
+      label: `${input.projectName} — deployed backend`.slice(0, 255),
+      description:
+        'Generated by Builderforce when this project reported a self-hosted deployment. It asks the '
+        + 'deployed backend\'s own readiness route whether it is answering. A breach means the address '
+        + 'your providers are pointed at is not serving — check the deployment in your own cloud console.',
+      monitorType: 'http_check',
+      config,
+      affectedSystem: DEPLOYED_BACKEND_SYSTEM,
+      // A customer-facing backend that has stopped answering is not a sev3: every
+      // webhook aimed at it is failing while it is down.
+      severity: 'sev2',
+      projectId: input.projectId,
+    });
+  }
+
+  /**
+   * Stop watching a project's deployed backend.
+   *
+   * Deactivated rather than deleted: the monitor carries its own breach history,
+   * and a project that moves back to a self-hosted strategy should resume with
+   * that history intact rather than as a fresh row with no past.
+   */
+  async unwatchDeployedBackend(tenantId: number, projectId: number): Promise<void> {
+    await this.db
+      .update(monitors)
+      .set({ active: false, updatedAt: new Date() })
+      .where(and(
+        eq(monitors.tenantId, tenantId),
+        eq(monitors.projectId, projectId),
+        eq(monitors.affectedSystem, DEPLOYED_BACKEND_SYSTEM),
+      ));
   }
 
   async updateMonitor(tenantId: number, monitorId: string, patch: {

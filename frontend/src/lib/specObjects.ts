@@ -141,6 +141,34 @@ export interface SpecField {
    * layer can produce — the refusal `canvasMetricsDerived` already argues for metrics.
    */
   derive?: (data: Record<string, unknown>) => unknown;
+  /**
+   * A DATE THIS OBJECT IS JUDGED AGAINST — a renewal, a due date, an expiry, a review.
+   *
+   * ── WHY A FLAG AND NOT A CONVENTION ────────────────────────────────────────────
+   * `trigger` could only watch a `liveMetric`'s number, so the four dates a founder is
+   * actually ambushed by — `contract.renewsAt`, `invoice.dueAt`, `obligation.dueAt`,
+   * `fundingRound.closeTarget` — were unwatchable. The vocabularies had already noticed
+   * and written the instruction anyway: `obligation.dueAt` says "Bind a `trigger` to it
+   * so the board warns before rather than reporting after" and `policy.reviewAt` says
+   * "Bind a `trigger` to it". Both were false. A model that follows a documented
+   * instruction into a binding that silently never fires is worse served than one told
+   * nothing.
+   *
+   * The alternative — a `DATE_FIELD_BY_KIND` map in `canvasTriggers.ts` — would be the
+   * fifth hand-maintained list this module exists to abolish, and it would drift the
+   * first time a vocabulary added a kind: the map lives in one file, the kinds in
+   * another, and nothing holds them together. Declaring it beside the field means a new
+   * deadline-bearing kind is watchable the moment it is declared.
+   *
+   * NOT every date. `customerInterview.heldAt` and `decision.decidedAt` record when
+   * something HAPPENED — nothing is owed, so a countdown against one is noise. Mark a
+   * field only when passing it means somebody has missed something.
+   *
+   * The VALUE is an ISO date (or anything `Date.parse` accepts). Read by
+   * `specDeadlineFields()`, which is what `canvas_evaluate_triggers` and the server
+   * sweep both resolve a `trigger`'s binding through.
+   */
+  deadline?: boolean;
 }
 
 export interface SpecObjectSpec {
@@ -334,6 +362,31 @@ export function specMutableFieldMap<K extends string>(
   specs: readonly SpecObjectSpec[],
 ): Record<K, readonly string[]> {
   return Object.fromEntries(specs.map((spec) => [spec.kind, specMutableFields(spec.kind)])) as Record<K, readonly string[]>;
+}
+
+/**
+ * The deadline-bearing fields on one kind, in declaration order.
+ *
+ * Declaration order is the resolution order: a `trigger` that names an object and no
+ * field watches the FIRST one, so a kind with a single deadline needs no configuration
+ * at all and a kind with two (a contract's `effectiveAt` and `renewsAt`, were both ever
+ * marked) resolves to the one its author declared first.
+ */
+export function specDeadlineFields(kind: string): readonly string[] {
+  const spec = specObjectSpec(kind);
+  return spec ? spec.fields.filter((field) => field.deadline).map((field) => field.name) : [];
+}
+
+/**
+ * Every kind that carries a deadline, across every vocabulary.
+ *
+ * Read by the trigger tool's model-facing description, so the model is told which
+ * objects are watchable from the registry rather than from a prompt paragraph that
+ * drifts from it — the contract `check-prompt-tool-names.mjs` holds for tool names,
+ * applied to a vocabulary.
+ */
+export function deadlineBearingKinds(): readonly string[] {
+  return allSpecObjectSpecs().filter((spec) => spec.fields.some((field) => field.deadline)).map((spec) => spec.kind);
 }
 
 /** Every field a spec kind owns that Brain may READ — authored or derived, never

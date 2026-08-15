@@ -64,6 +64,7 @@ import { runPrReconciliationSweep } from './application/reconciliation/runPrReco
 import { cronSweepEnabled } from './application/runtime/cronControls';
 import { runStakeholderDigestSweep, runStakeholderReminderSweep } from './application/stakeholderAlignment/StakeholderMapService';
 import { runFinanceRollup } from './application/finance/financeRollup';
+import { runOperationsRollup } from './application/operations/operationsRollup';
 
 /**
  * `null` from a sweep's `run` = nothing worth a log line. Preserved verbatim from
@@ -107,6 +108,23 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       const r = await runFinanceRollup(buildDatabase(env));
       return r.facts > 0 ? `facts=${r.facts}${r.skipped.length ? ` skipped=${r.skipped.length}` : ''}` : null;
+    },
+  },
+  {
+    key: 'operations-rollup',
+    cadence: 'daily',
+    // Runs AFTER `object-registry` for the same reason `finance-rollup` does: the seat's
+    // surface reads `<domain>.items` beside these keys, and an ordering swap would leave
+    // the two halves of one panel a day apart.
+    description:
+      'Compute the operations backlog, first-time-fix rate and SLA breaches into '
+      + 'metric_facts — the WRITER for the `operations.*` keys DOMAIN_MANIFEST declares — '
+      + 'and recompute each work order’s first-time-fix evidence from its visits.',
+    run: async ({ env }) => {
+      const r = await runOperationsRollup(buildDatabase(env));
+      return r.facts > 0 || r.fixesResolved > 0
+        ? `facts=${r.facts} fixes=${r.fixesResolved}${r.skipped.length ? ` skipped=${r.skipped.length}` : ''}`
+        : null;
     },
   },
   {

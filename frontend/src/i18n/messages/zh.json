@@ -16417,6 +16417,7 @@
         "vendor": "供应商",
         "verdict": "结论",
         "watches": "监控对象",
+        "watchesField": "监控字段",
         "weaknesses": "劣势",
         "website": "网站",
         "wedge": "突破口"
@@ -17615,6 +17616,17 @@
         "owner": "负责人",
         "dueAt": "截止"
       }
+    },
+    "notice": {
+      "addedToCanvas": "我已将所需内容添加到画布上。",
+      "noAnswer": "我无法根据该请求准备任何画布改动。",
+      "toolError": "我无法准备所请求的画布改动：{detail}",
+      "answeredWithoutChange": "我在这里作了回答，但没有在画布上放置任何内容。让我把它添加到画布，我就会为它创建对象。",
+      "unverifiedCreationPlain": "我描述了一处画布改动，但并没有真正执行，因此什么都没有创建。告诉我要创建哪个对象，我就会把它建在画布上。",
+      "unverifiedCreationTabular": "我描述了一处画布改动，但并没有真正执行，因此什么都没有创建。再让我做一次，我会查询这个画布上的数据集，并用真实数值来构建该产物。",
+      "fabricatedData": "这些数字并不真实：本画布已导入数据集，我本应据此计算数值，而不是使用占位数据。让我重建一次，我会查询每一行。",
+      "documentUnverified": "画布上有一份文档草稿，但其撰写内容无法印证所要求的 {requestedPages, number} 页。这么大的稿件无法在一次受限的 Brain 回合内完成，因此它并不完整。请分章节构建与审阅，之后再视为完成或导出。",
+      "documentIncomplete": "我在画布上创建了一份文档草稿，共 {authoredWords, number} 字（约 {estimatedPages, number} 页），而非所要求的 {requestedPages, number} 页。这么大的稿件无法在一次受限的 Brain 回合内完成，因此我没有将其标记为完成。请分章节构建与审阅，之后再视为完成或导出。"
     }
   },
   "canvasCommands": {

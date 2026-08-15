@@ -27,9 +27,28 @@ import {
 import { DOMAIN_MANIFEST, ROSTER, UNIVERSAL_METRICS, metricsFor } from './DomainService';
 
 describe('the roster', () => {
-  it('has exactly the fifteen domains PRD 20 §3 enumerates', () => {
-    expect(DOMAINS).toHaveLength(15);
-    expect(new Set(DOMAINS).size).toBe(15);
+  /**
+   * The roster, written out.
+   *
+   * This used to be `expect(DOMAINS).toHaveLength(15)`, which is the weaker half of
+   * the invariant: it catches an accidental sixteenth seat and is blind to a renamed
+   * one, a reordered one, or a duplicate that keeps the count right. Naming them makes
+   * adding a seat a deliberate edit — which it must be, because the schema's `domain`
+   * column, the navigation and the permission modules all read this list — and catches
+   * the drift a count cannot see.
+   *
+   * `operations` is the sixteenth, added because every one of the original fifteen
+   * models how a company runs ITSELF and none modelled what it SELLS. See `DOMAINS`.
+   */
+  const EXPECTED = [
+    'growth', 'delivery', 'agents', 'hiring', 'finance', 'revenue', 'commerce',
+    'identity', 'people', 'platform', 'governance', 'investor', 'support',
+    'canvas', 'integrations', 'operations',
+  ];
+
+  it('is exactly the roster PRD 20 §3 enumerates, in order, with no duplicates', () => {
+    expect([...DOMAINS]).toEqual(EXPECTED);
+    expect(new Set(DOMAINS).size).toBe(DOMAINS.length);
   });
 
   it('gives every domain a manifest entry — a seat with no manifest is a surface that cannot be built', () => {

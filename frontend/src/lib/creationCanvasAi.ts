@@ -22,7 +22,6 @@ import {
   NON_AUTHORING_TOOL_NAMES,
   RESEARCH_TOOL_NAMES,
   WORDS_PER_DRAFT_PAGE,
-  answeredWithoutCanvasChange,
   authoredDocumentWords,
   documentWordsInSnapshot,
   incompleteDocumentAnswer,
@@ -35,6 +34,7 @@ import {
   unverifiedCreationClaim,
 } from '@/lib/canvasTurnOutcome';
 import { founderCanvasSystemPrompt } from '@/lib/founderCanvasPrompt';
+import type { CanvasNotices } from '@/lib/canvasNotices';
 
 type CanvasAiOptions = {
   prompt: string;
@@ -45,6 +45,13 @@ type CanvasAiOptions = {
   canvasSnapshot: string;
   persistence: 'local' | 'server';
   canvasActions: BrainAction[];
+  /**
+   * Every sentence this turn can return that the MODEL did not write, already in the
+   * viewer's language. Required, not defaulted: an English fallback here would be a
+   * second source for text the catalogs own, and the notices reach the user as Brain
+   * speaking (see `lib/canvasNotices.ts`).
+   */
+  notices: CanvasNotices;
   model?: string;
   modelStrict?: boolean;
   routingMode?: 'auto' | 'byo_pool';
@@ -434,6 +441,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     messages.push({ role: 'system', content: `${directive} Continue on ${fallback}, which already emitted valid tool calls in this turn.` });
     return true;
   };
+  const notices = options.notices;
   const mutationRequested = !options.participant && requestsCanvasMutation(options.prompt);
   const hasTabularData = snapshotHasTabularRows(options.canvasSnapshot);
   // An informational question is allowed to mention documents, reports, charts,
@@ -442,7 +450,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // "I described a canvas change but did not make one." Only enforce this contract
   // when the user's request actually asked Canvas to create or update something.
   const verified = (answer: string): string =>
-    unverifiedCreationClaim(answer, proposedCanvasMutation, hasTabularData, mutationRequested) ?? answer;
+    unverifiedCreationClaim(notices, answer, proposedCanvasMutation, hasTabularData, mutationRequested) ?? answer;
   const requestedPages = requestedPagesForTurn(options);
   let documentWords: number | null = requestedPages == null ? null : documentWordsInSnapshot(options.canvasSnapshot);
   let documentWordCountExact = false;
@@ -619,7 +627,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         continue;
       }
       if (requestedPages != null && documentWords != null && documentWords < requestedPages * WORDS_PER_DRAFT_PAGE) {
-        return finish(incompleteDocumentAnswer(requestedPages, documentWords, documentWordCountExact));
+        return finish(incompleteDocumentAnswer(notices, requestedPages, documentWords, documentWordCountExact));
       }
       // `spoken` is the answer with any copied speaker label already removed, so a
       // model that relapses cannot seed the next turn with a prefix to extend.
@@ -670,11 +678,11 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     finalText = '';
   }
   if (requestedPages != null && documentWords != null && documentWords < requestedPages * WORDS_PER_DRAFT_PAGE) {
-    return finish(incompleteDocumentAnswer(requestedPages, documentWords, documentWordCountExact));
+    return finish(incompleteDocumentAnswer(notices, requestedPages, documentWords, documentWordCountExact));
   }
   const trailing = stripSpeakerLabel(finalText, speakerLabels).trim();
   if (trailing && !echoesEarlierAnswer(trailing, options.conversation, speakerLabels)) return finish(verified(trailing));
-  if (proposedCanvasMutation) return finish('I added the requested content to the canvas.');
+  if (proposedCanvasMutation) return finish(notices.addedToCanvas);
   // From here down the string is a RUNTIME NOTICE, not something the model said. The
   // caller is told so it can record it as a failed turn instead of writing it into the
   // transcript as an assistant reply for the next turn to copy.
@@ -682,7 +690,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // what would clear it, which the model's own narration routinely gets wrong.
   if (lastToolError) {
     options.onUnanswered?.({ reason: 'tool-error', detail: lastToolError });
-    return `I couldn't prepare the requested canvas changes: ${lastToolError}`;
+    return notices.toolError(lastToolError);
   }
   // Otherwise: an answer the model gave earlier in this turn is NOT a runtime notice, and
   // the fact that it never reached canvas_add_object does not make it worthless — for a
@@ -691,8 +699,8 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   // made) rather than discarding the user's result in favour of a dead end.
   if (lastSpokenAnswer) {
     const checked = verified(lastSpokenAnswer);
-    return finish(checked === lastSpokenAnswer ? answeredWithoutCanvasChange(checked) : checked);
+    return finish(checked === lastSpokenAnswer ? notices.answeredWithoutCanvasChange(checked) : checked);
   }
   options.onUnanswered?.({ reason: mutationRequested ? 'command-not-executed' : 'no-answer' });
-  return "I couldn't prepare any canvas changes from that request.";
+  return notices.noAnswer;
 }

@@ -8,6 +8,8 @@
  * be tested directly against the wording that defeated it.
  */
 
+import type { CanvasNotices } from '@/lib/canvasNotices';
+
 /** Words a drafted page is assumed to hold when verifying a page count. */
 export const WORDS_PER_DRAFT_PAGE = 300;
 
@@ -25,19 +27,6 @@ export const RESEARCH_TOOL_NAMES = new Set(['builtin_web_search', 'builtin_web_f
  * abandoned with nothing on the canvas.
  */
 export const NON_AUTHORING_TOOL_NAMES = new Set([...RESEARCH_TOOL_NAMES, 'canvas_read_snapshot']);
-
-/**
- * The model ANSWERED but never executed the canvas change the request asked for.
- *
- * The answer is the work the user wanted — an authored email, a plan, a comparison —
- * and it is the only copy of it. Discarding it for a runtime notice loses it outright
- * (measured 2026-08-14: a drafted raise request plus coaching was produced twice and
- * thrown away, and the session showed only "I couldn't prepare any canvas changes from
- * that request"). Deliver it, and be honest that the board is unchanged.
- */
-export function answeredWithoutCanvasChange(answer: string): string {
-  return `${answer}\n\nI answered here but did not put anything on the canvas. Ask me to add this to the canvas and I will create the object for it.`;
-}
 
 export function isNarrowSearchResult(value: unknown): boolean {
   return !!value && typeof value === 'object'
@@ -115,12 +104,9 @@ export function requestedPagesForTurn(options: PageRequestContext): number | nul
   return null;
 }
 
-export function incompleteDocumentAnswer(requestedPages: number, authoredWords: number, exact: boolean): string {
-  if (!exact) {
-    return `The canvas contains a document draft, but its authored content does not verify the requested ${requestedPages.toLocaleString('en-US')} pages. A manuscript that large cannot be authored in one bounded Brain turn, so it is not complete. Build and review it in sections before treating it as finished or exporting it.`;
-  }
-  const estimatedPages = Math.max(1, Math.ceil(authoredWords / WORDS_PER_DRAFT_PAGE));
-  return `I created a document draft on the canvas with ${authoredWords.toLocaleString('en-US')} words (about ${estimatedPages.toLocaleString('en-US')} page${estimatedPages === 1 ? '' : 's'}), not the requested ${requestedPages.toLocaleString('en-US')} pages. A manuscript that large cannot be authored in one bounded Brain turn, so I have not marked it complete. Build and review it in sections before treating it as finished or exporting it.`;
+export function incompleteDocumentAnswer(notices: CanvasNotices, requestedPages: number, authoredWords: number, exact: boolean): string {
+  if (!exact) return notices.documentUnverified(requestedPages);
+  return notices.documentIncomplete(authoredWords, Math.max(1, Math.ceil(authoredWords / WORDS_PER_DRAFT_PAGE)), requestedPages);
 }
 
 const CREATION_CLAIM = /\b(?:i(?:'ve| have)?\s+(?:created|added|built|generated|updated|made|produced)|here(?:'s| is)\s+(?:the|a|your)|the\s+\w+\s+(?:has been|is now)\s+(?:created|added|updated))\b/i;
@@ -133,15 +119,13 @@ const FABRICATED_DATA = /\b(?:placeholder|sample|example|illustrative|dummy|mock
  * occasionally narrates a finished table or chart without calling a tool, which
  * previously reached the user as a success message beside an unchanged canvas.
  */
-export function unverifiedCreationClaim(text: string, mutated: boolean, hasTabularData: boolean, enforceCreationClaim = true): string | null {
+export function unverifiedCreationClaim(notices: CanvasNotices, text: string, mutated: boolean, hasTabularData: boolean, enforceCreationClaim = true): string | null {
   const answer = text.trim();
   if (!answer) return null;
   if (enforceCreationClaim && !mutated && CREATION_CLAIM.test(answer) && CREATED_ARTIFACT.test(answer)) {
-    return `I described a canvas change but did not actually make one, so nothing was created. ${hasTabularData ? 'Ask me again and I will query the dataset on this canvas and build the artifact from its real values.' : 'Tell me which object to create and I will build it on the canvas.'}`;
+    return notices.unverifiedCreation(hasTabularData);
   }
-  if (hasTabularData && FABRICATED_DATA.test(answer)) {
-    return `${answer}\n\nThose figures are not real: this canvas has an imported dataset, so I should have computed the values from it instead of using placeholders. Ask me to rebuild this and I will query every row.`;
-  }
+  if (hasTabularData && FABRICATED_DATA.test(answer)) return notices.fabricatedData(answer);
   return null;
 }
 

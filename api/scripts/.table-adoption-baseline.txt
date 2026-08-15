@@ -20,6 +20,7 @@ ai_usage_records
 ai_voice_agent_calls
 answer_cache
 approval_actions
+asset_inspections
 availability_slots
 badges
 billing_plans
@@ -99,12 +100,14 @@ health_dimensions
 hiring_decisions
 hr_emergency_contacts
 hr_employment_records
+inbound_shipments
 inbox_actions
 inbox_seat_addons
 interview_kit_stages
 interview_kits
 interview_question_sets
 interviews
+inventory_items
 investment_opportunities
 investor_peer_comparables
 invoice_line_items
@@ -143,6 +146,9 @@ onboarding_checklists
 onboarding_flows
 onboarding_progress
 onboarding_tasks
+operations_incidents
+operations_suppliers
+operator_certifications
 outplacement_packages
 page_embed_videos
 partner_program_opt_ins
@@ -168,6 +174,7 @@ pricing_simulations
 product_ideas
 products
 promo_projects
+purchase_orders
 question_sets
 queue_job_to_process
 queue_job_to_resume
@@ -194,6 +201,8 @@ scorecard_attributes
 scorm_cmi_states
 scratch_pad_attachments
 screening_template_items
+service_agreements
+service_assets
 session_discussions
 sessions
 sign_offs
@@ -222,5 +231,6 @@ waitlist_entries
 webauthn_challenges
 website_pages
 whitelabel_tenants
+work_estimates
 workflow_actions
 workspace_grants

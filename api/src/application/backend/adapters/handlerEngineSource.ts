@@ -53,6 +53,22 @@ import type { MaterializeContext } from '../hostingStrategy';
  */
 export const BACKEND_HEALTH_PATH = '/__builderforce/health';
 
+/**
+ * The substring that proves the ENGINE answered, not something in front of it.
+ *
+ * A status code is not enough on either side of this. A Function URL whose Lambda
+ * has been deleted can still answer 200 from an edge, and a Cloud Run revision
+ * that failed to start answers 503 through a load balancer that is itself
+ * perfectly healthy. Only the engine emits this, and it emits it only when it is
+ * the thing replying.
+ *
+ * Exported so the monitor that watches a deployed backend and the code that
+ * generates the reply are reading the same string — a second copy would keep
+ * matching until the day the health payload changed shape, and then report every
+ * healthy deployment as down.
+ */
+export const BACKEND_HEALTH_MARKER = '"ok":true';
+
 /** Where the shared engine module is written, relative to a bundle's root. */
 export const ENGINE_FILE = 'engine.js';
 

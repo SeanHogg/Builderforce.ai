@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createTranslator } from 'next-intl';
+import en from '@/i18n/messages/en.json';
+import { canvasNoticesFrom, type CanvasNoticeTranslator } from './canvasNotices';
 
 const mocks = vi.hoisted(() => ({
   streamChatCompletion: vi.fn(),
@@ -17,6 +20,16 @@ vi.mock('@/lib/guestRoomApi', () => ({ ensureGuestToken: mocks.ensureGuestToken 
 
 const { runCreationCanvasAi, MAX_CANVAS_TOOL_TURNS } = await import('./creationCanvasAi');
 
+/**
+ * Runtime notices come from the CATALOG now, not from string literals in the runner, so
+ * the suite binds the real `en.json` rather than restating the English. A missing key or
+ * a broken ICU message therefore fails here instead of reaching a user.
+ */
+const translateNotice = createTranslator({ locale: 'en', messages: en as never, namespace: 'creationCanvas.notice' as never });
+const NOTICES = canvasNoticesFrom(((key, values) => translateNotice(key as never, values as never)) as CanvasNoticeTranslator);
+const runTurn = (options: Omit<Parameters<typeof runCreationCanvasAi>[0], 'notices'>) =>
+  runCreationCanvasAi({ ...options, notices: NOTICES });
+
 describe('runCreationCanvasAi', () => {
   beforeEach(() => {
     mocks.streamChatCompletion.mockReset();
@@ -32,7 +45,7 @@ describe('runCreationCanvasAi', () => {
       })
       .mockResolvedValueOnce({ text: 'I proposed a new LLM for review.', toolCalls: [] });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'build a new LLM',
       guestTurnId: 'user-submit-1',
       canvasSnapshot: '{"objects":[]}',
@@ -98,7 +111,7 @@ describe('runCreationCanvasAi', () => {
       .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'update-site', name: 'canvas_update_object', args: JSON.stringify({ objectId: 'site-1', fields: { pages, websiteTheme: { style: 'technical', accent: '#28c9b7' } } }) }] })
       .mockResolvedValueOnce({ text: 'I updated the selected website with the Acme content and navigation.', toolCalls: [] });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'Use Home, About, Services, and Contact and change the headline for Acme Analytics.',
       canvasSnapshot: JSON.stringify({ scope: 'selection', selectedObjectIds: ['site-1'], objects: [{ id: 'site-1', kind: 'website', title: 'Acme', mutableFields: ['pages', 'websiteTheme'] }] }),
       persistence: 'local',
@@ -121,7 +134,7 @@ describe('runCreationCanvasAi', () => {
       // act-now escalation here rather than giving up three rungs early.
       .mockResolvedValueOnce({ ...stalled, text: 'Here is what the document would say.' });
 
-    await runCreationCanvasAi({
+    await runTurn({
       prompt: 'Create a document on the canvas', canvasSnapshot: '{"objects":[]}', persistence: 'local',
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: vi.fn() }],
       onCompletion: (completion) => completions.push(completion),
@@ -148,7 +161,7 @@ describe('runCreationCanvasAi', () => {
   });
 
   it('does not invoke an explicitly selected model disabled by this session', async () => {
-    await expect(runCreationCanvasAi({
+    await expect(runTurn({
       prompt: 'Create a document', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
       model: 'weak/model', disabledModels: ['weak/model'],
     })).rejects.toThrow("Model 'weak/model' is disabled for this session");
@@ -165,7 +178,7 @@ describe('runCreationCanvasAi', () => {
   it('routes AROUND a previously-failed model instead of refusing to run', async () => {
     mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Here is the plan.', toolCalls: [], resolvedModel: 'other/model', finishReason: 'stop' });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'What should I know about SEO?', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
       disabledModels: ['weak/model'],
     });
@@ -175,7 +188,7 @@ describe('runCreationCanvasAi', () => {
   });
 
   it('still refuses an EXPLICIT pin the user can change themselves', async () => {
-    await expect(runCreationCanvasAi({
+    await expect(runTurn({
       prompt: 'Create a document', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
       model: 'weak/model', modelStrict: true, disabledModels: ['weak/model'],
     })).rejects.toThrow("Model 'weak/model' is disabled for this session");
@@ -186,7 +199,7 @@ describe('runCreationCanvasAi', () => {
     const disabled = vi.fn();
     mocks.streamChatCompletion.mockResolvedValue({ text: 'I will create it.', toolCalls: [], resolvedModel: 'only/model', finishReason: 'stop' });
 
-    await runCreationCanvasAi({
+    await runTurn({
       prompt: 'Create a campaign plan on the canvas', canvasSnapshot: '{"objects":[]}', persistence: 'local',
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: vi.fn() }],
       onModelDisabled: disabled,
@@ -210,7 +223,7 @@ describe('runCreationCanvasAi', () => {
       .mockResolvedValueOnce({ text: '', resolvedModel: 'minimaxai/minimax-m3', toolCalls: [{ id: 'a1', name: 'canvas_add_object', args: '{"kind":"document","title":"SEO guide","fields":{"content":"Improve titles and visual hierarchy."}}' }], finishReason: 'tool_calls' })
       .mockResolvedValueOnce({ text: 'I created the SEO and visual-improvement guide.', resolvedModel: 'minimaxai/minimax-m3', toolCalls: [], finishReason: 'stop' });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'Improve my website and provide an SEO and visual appeal guide.',
       canvasSnapshot: '{"objects":[]}', persistence: 'local',
       canvasActions: [
@@ -247,7 +260,7 @@ describe('runCreationCanvasAi', () => {
       .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'a1', name: 'canvas_add_object', args: '{"kind":"emailCampaign","title":"Launch campaign"}' }], resolvedModel: 'minimaxai/minimax-m3', finishReason: 'tool_calls' })
       .mockResolvedValueOnce({ text: 'I drafted the campaign on the canvas.', toolCalls: [], resolvedModel: 'minimaxai/minimax-m3', finishReason: 'stop' });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'I want to connect my email and run a marketing campaign',
       canvasSnapshot: '{"objects":[]}', persistence: 'local', conversation,
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: add }],
@@ -263,7 +276,7 @@ describe('runCreationCanvasAi', () => {
   it('strips a speaker label the model copied onto its own answer', async () => {
     mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Brain: Here is what SEO work matters most.', toolCalls: [], finishReason: 'stop' });
 
-    await expect(runCreationCanvasAi({
+    await expect(runTurn({
       prompt: 'What should I know about SEO?',
       canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
     })).resolves.toBe('Here is what SEO work matters most.');
@@ -289,7 +302,7 @@ describe('runCreationCanvasAi', () => {
       .mockResolvedValueOnce({ text: `${draft}\n\nAsk for a specific number backed by market data.`, toolCalls: [], resolvedModel: 'minimaxai/minimax-m3', finishReason: 'stop' })
       .mockResolvedValueOnce({ text: `${draft}\n\nOpen with the impact you delivered this year.`, toolCalls: [], resolvedModel: 'minimaxai/minimax-m3', finishReason: 'stop' });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'help me write an email to my boss asking for a raise. Provide coaching on how to get a raise',
       canvasSnapshot: '{"objects":[]}', persistence: 'local',
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: add }],
@@ -315,7 +328,7 @@ describe('runCreationCanvasAi', () => {
     const unanswered = vi.fn();
     mocks.streamChatCompletion.mockResolvedValue({ text: '', toolCalls: [], resolvedModel: 'weak/model', finishReason: 'stop' });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'Create a campaign plan on the canvas',
       canvasSnapshot: '{"objects":[]}', persistence: 'local',
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: vi.fn() }],
@@ -336,7 +349,7 @@ describe('runCreationCanvasAi', () => {
       .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'a1', name: 'canvas_add_object', args: '{"kind":"document","title":"Launch plan","fields":{"content":"Week 1: brief."}}' }], resolvedModel: 'weak/model', finishReason: 'tool_calls' })
       .mockResolvedValueOnce({ text: 'I added the launch plan.', toolCalls: [], resolvedModel: 'weak/model', finishReason: 'stop' });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'Create a launch plan on the canvas',
       canvasSnapshot: '{"objects":[]}', persistence: 'local',
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run }],
@@ -358,7 +371,7 @@ describe('runCreationCanvasAi', () => {
       .mockResolvedValueOnce({ text: 'I added the launch plan.', toolCalls: [], resolvedModel: 'googleai/gemini-2.5-flash', finishReason: 'stop' });
 
     const trace = vi.fn();
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'Create a launch plan on the canvas',
       canvasSnapshot: '{"objects":[]}', persistence: 'local',
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run }],
@@ -381,7 +394,7 @@ describe('runCreationCanvasAi', () => {
   it('tells an anonymous canvas which capabilities need an account instead of leaving it to guess', async () => {
     mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Signing up unlocks the mailbox; here is the plan meanwhile.', toolCalls: [], finishReason: 'stop' });
 
-    await runCreationCanvasAi({
+    await runTurn({
       prompt: 'I want to connect my email and run a marketing campaign',
       canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
     });
@@ -421,7 +434,7 @@ describe('runCreationCanvasAi', () => {
         ],
       });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt,
       canvasSnapshot: '{"objects":[{"kind":"chat","title":"Brain"}]}',
       persistence: 'server',
@@ -464,7 +477,7 @@ describe('runCreationCanvasAi', () => {
       })
       .mockResolvedValueOnce({ text: 'I added the CTO and a connected production-readiness review.', toolCalls: [] });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'Bring the CTO in to review how this ships to production',
       canvasSnapshot: '{"objects":[{"kind":"chat","title":"Brain"}]}',
       persistence: 'local',
@@ -484,7 +497,7 @@ describe('runCreationCanvasAi', () => {
   it('does not force a canvas mutation for an informational executive-role question', async () => {
     mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'A CTO leads the technology strategy.', toolCalls: [] });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'What does a CTO do?', canvasSnapshot: '{"objects":[]}', persistence: 'local',
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: vi.fn() }],
     });
@@ -497,7 +510,7 @@ describe('runCreationCanvasAi', () => {
     const answerText = 'CommonMark is a standardized document format; Atom or RSS exposes blog updates across platforms.';
     mocks.streamChatCompletion.mockResolvedValueOnce({ text: answerText, toolCalls: [] });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'What is a standard cross-platform headless blog format?',
       canvasSnapshot: '{"objects":[]}', persistence: 'local',
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: vi.fn() }],
@@ -510,7 +523,7 @@ describe('runCreationCanvasAi', () => {
   it('runs an invited Canvas agent under its own identity and instructions', async () => {
     mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'I recommend validating demand before expanding scope.', toolCalls: [] });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'Contribute to the launch discussion', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
       participant: { ref: 'market-researcher', name: 'Market Researcher', instructions: 'Challenge unsupported market assumptions.' },
       conversation: [{ role: 'user', content: 'Should we launch this product?' }],
@@ -535,7 +548,7 @@ describe('runCreationCanvasAi', () => {
       })
       .mockResolvedValueOnce({ text: 'I created the complete 400-page Word document.', toolCalls: [] });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'create a 400 page word doc on astronomy', canvasSnapshot: '{"objects":[]}', persistence: 'local',
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run }],
     });
@@ -557,7 +570,7 @@ describe('runCreationCanvasAi', () => {
       })
       .mockResolvedValueOnce({ text: 'I created the requested one-page document.', toolCalls: [] });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'write a 1 page document', canvasSnapshot: '{"objects":[]}', persistence: 'local',
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run }],
     });
@@ -568,7 +581,7 @@ describe('runCreationCanvasAi', () => {
   it('corrects a false completion claim on a follow-up status question', async () => {
     mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Yes, I am creating it now. I added the 400-page document.', toolCalls: [] });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'are you creating the document?',
       canvasSnapshot: JSON.stringify({ objects: [{ kind: 'document', title: 'Astronomy', content: 'Only a short scope description.' }] }),
       persistence: 'local', canvasActions: [],
@@ -590,7 +603,7 @@ describe('runCreationCanvasAi', () => {
       toolCalls: [{ id: 'call-1', name: 'canvas_add_object', args: JSON.stringify({ kind: 'note' }) }],
     });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'add notes', canvasSnapshot: '{"objects":[]}', persistence: 'local',
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run }],
     });
@@ -606,7 +619,7 @@ describe('runCreationCanvasAi', () => {
       toolCalls: [{ id: 'call-layout', name: 'canvas_arrange_objects', args: '{}' }],
     });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'fix the layout', canvasSnapshot: '{"scope":"selection","objects":[{"id":"brain"}]}', persistence: 'local',
       canvasActions: [{ name: 'canvas_arrange_objects', description: 'Arrange', parameters: { type: 'object' }, mutates: true, run }],
     });
@@ -621,7 +634,7 @@ describe('runCreationCanvasAi', () => {
       .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'call-tenant', name: 'tenant_update', args: '{"enabled":true}' }] })
       .mockResolvedValueOnce({ text: 'Updated.', toolCalls: [] });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'update it', canvasSnapshot: '{"objects":[]}', persistence: 'local', autoApprove: true,
       confirmAction,
       canvasActions: [{ name: 'tenant_update', description: 'Update tenant state', parameters: { type: 'object' }, mutates: true, run }],
@@ -639,7 +652,7 @@ describe('runCreationCanvasAi', () => {
       .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'call-approved', name: 'tenant_update', args: '{"enabled":true}' }] })
       .mockResolvedValueOnce({ text: 'Approved and updated.', toolCalls: [] });
 
-    await runCreationCanvasAi({
+    await runTurn({
       prompt: 'update it', canvasSnapshot: '{"objects":[]}', persistence: 'local', confirmAction,
       canvasActions: [{ name: 'tenant_update', description: 'Update tenant state', parameters: { type: 'object' }, mutates: true, run }],
     });
@@ -654,7 +667,7 @@ describe('runCreationCanvasAi', () => {
     const onTrace = vi.fn();
     mocks.streamChatCompletion.mockResolvedValueOnce({ text: answer, toolCalls: [] });
 
-    await runCreationCanvasAi({
+    await runTurn({
       prompt: 'How should we release?', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
       evermind: {
         recall: async () => ({ seeded: true, version: 4, mode: 'connected', items: [{ id: 8, text: 'Use the established launch checklist and preserve the approved review gate', score: .92 }] }),
@@ -674,7 +687,7 @@ describe('runCreationCanvasAi', () => {
   it('directs data questions to the query tool instead of authored values', async () => {
     mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Done.', toolCalls: [] });
 
-    await runCreationCanvasAi({
+    await runTurn({
       prompt: 'chart the delivery success rate', canvasSnapshot: DATASET_SNAPSHOT, persistence: 'local', canvasActions: [],
     });
 
@@ -690,7 +703,7 @@ describe('runCreationCanvasAi', () => {
       toolCalls: [],
     });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'Use this data set to visualize as a table', canvasSnapshot: DATASET_SNAPSHOT, persistence: 'local', canvasActions: [],
     });
 
@@ -703,7 +716,7 @@ describe('runCreationCanvasAi', () => {
       .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'c1', name: 'canvas_query_dataset', args: JSON.stringify({ materializeAs: 'table' }) }] })
       .mockResolvedValueOnce({ text: 'I have created a table from all 812 rows.', toolCalls: [] });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'build the table', canvasSnapshot: DATASET_SNAPSHOT, persistence: 'local',
       canvasActions: [{
         name: 'canvas_query_dataset', description: 'Query', parameters: { type: 'object' }, mutates: true,
@@ -724,7 +737,7 @@ describe('runCreationCanvasAi', () => {
       toolCalls: [],
     });
 
-    const answer = await runCreationCanvasAi({
+    const answer = await runTurn({
       prompt: 'visualize it', canvasSnapshot: DATASET_SNAPSHOT, persistence: 'local',
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: () => ({ ok: true, proposed: true }) }],
     });

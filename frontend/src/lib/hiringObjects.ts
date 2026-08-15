@@ -269,7 +269,7 @@ export const HIRING_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       { name: 'bonus', render: 'stat', label: 'bonus', hint: 'Variable compensation, with the basis it is earned on.' },
       { name: 'equity', render: 'stat', label: 'equity', hint: 'Grant size and vesting, in the words the offer letter will use.' },
       { name: 'startDate', render: 'stat', label: 'startDate', hint: 'ISO proposed start date.' },
-      { name: 'expiresAt', render: 'stat', label: 'expiresAt', hint: 'ISO instant the offer lapses. Exploding offers damage acceptance rates — set this generously or leave it empty.' },
+      { name: 'expiresAt', render: 'stat', label: 'expiresAt', hint: 'ISO instant the offer lapses. Exploding offers damage acceptance rates — set this generously or leave it empty. Bind a `trigger` with comparator "due-within" so the candidate is chased before it lapses.', deadline: true },
       {
         name: 'approvals',
         render: 'rows',

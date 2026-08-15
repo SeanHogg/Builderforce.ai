@@ -79,6 +79,7 @@ repo_analysis_runs
 sales_associate_settings
 sales_coaching_notes
 security_audits
+service_assets
 source_control_integrations
 spec_versions
 team_members

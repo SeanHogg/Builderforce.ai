@@ -16418,6 +16418,7 @@
         "vendor": "vendor",
         "verdict": "Verdict",
         "watches": "Watches",
+        "watchesField": "Watched field",
         "weaknesses": "Weaknesses",
         "website": "Website",
         "wedge": "Wedge"
@@ -17616,6 +17617,17 @@
         "owner": "Owner",
         "dueAt": "Due"
       }
+    },
+    "notice": {
+      "addedToCanvas": "I added the requested content to the canvas.",
+      "noAnswer": "I couldn't prepare any canvas changes from that request.",
+      "toolError": "I couldn't prepare the requested canvas changes: {detail}",
+      "answeredWithoutChange": "I answered here but did not put anything on the canvas. Ask me to add this to the canvas and I will create the object for it.",
+      "unverifiedCreationPlain": "I described a canvas change but did not actually make one, so nothing was created. Tell me which object to create and I will build it on the canvas.",
+      "unverifiedCreationTabular": "I described a canvas change but did not actually make one, so nothing was created. Ask me again and I will query the dataset on this canvas and build the artifact from its real values.",
+      "fabricatedData": "Those figures are not real: this canvas has an imported dataset, so I should have computed the values from it instead of using placeholders. Ask me to rebuild this and I will query every row.",
+      "documentUnverified": "The canvas contains a document draft, but its authored content does not verify the requested {requestedPages, number} pages. A manuscript that large cannot be authored in one bounded Brain turn, so it is not complete. Build and review it in sections before treating it as finished or exporting it.",
+      "documentIncomplete": "I created a document draft on the canvas with {authoredWords, number} words (about {estimatedPages, number} {estimatedPages, plural, one {page} other {pages}}), not the requested {requestedPages, number} pages. A manuscript that large cannot be authored in one bounded Brain turn, so I have not marked it complete. Build and review it in sections before treating it as finished or exporting it."
     }
   },
   "canvasCommands": {

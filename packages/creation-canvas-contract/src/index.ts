@@ -7,6 +7,7 @@ export * from './academic';
 export * from './qa';
 export * from './people';
 export * from './dataScience';
+export * from './triggers';
 export * from './operations';
 // `export *` re-exports a binding; it does not bring it INTO scope here, and the
 // kind list below spreads it — without this import the whole contract module

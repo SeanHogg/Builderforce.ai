@@ -150,9 +150,10 @@ CREATE TABLE IF NOT EXISTS work_orders (
   labour_hours      numeric(8,2),
   labour_rate_cents integer,
   billing_basis     varchar(16) NOT NULL DEFAULT 'billable',
-  -- Nullable and written by the completion path from the visits, never by a
-  -- client: it is the headline operational metric of the whole domain and a
-  -- self-reported one is worthless. NULL means "not yet knowable".
+  -- DERIVED from work_order_visits and recomputed by operationsRollup.ts on every
+  -- sweep, so a value asserted through the generic writer is corrected rather than
+  -- trusted. NULL means "not yet knowable" — an order with no recorded attendance
+  -- is absent from the rate rather than counted as a failure.
   first_time_fix    boolean,
   completed_at      timestamp,
   cancelled_at      timestamp,
@@ -437,4 +438,4 @@ COMMENT ON TABLE work_orders IS
 COMMENT ON TABLE service_assets IS
   'The physical or managed thing work is done TO — the only row in the domain with a life longer than any single job, and what makes lifetime cost per asset answerable.';
 COMMENT ON COLUMN work_orders.first_time_fix IS
-  'Whether the job was fixed on the FIRST visit. Written by the completion path from work_order_visits, never by a client: it is the domain''s headline metric and a self-reported one is worthless. NULL = not yet knowable.';
+  'Whether the job was fixed on the FIRST visit — the domain''s headline metric. Derived from work_order_visits and recomputed by operationsRollup.ts each sweep, so an asserted value is corrected rather than trusted. NULL = not yet knowable.';
