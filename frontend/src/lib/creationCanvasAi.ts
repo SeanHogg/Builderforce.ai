@@ -109,6 +109,14 @@ type CanvasAiOptions = {
   /** The canonical project this session is bound to, when it has one. Work mode needs
    *  it to file the ticket somewhere; absent, the model is told to ask for one. */
   projectId?: number | null;
+  /**
+   * Interrupts the turn — the composer's Stop button. Aborts the in-flight model
+   * stream and is re-checked between loop iterations and between tool calls, so a
+   * stopped run cannot spend another round-trip or run another tool after the user
+   * has said stop. The rejection is always a {@link CanvasRunAbortedError}, so the
+   * surface can tell "the user stopped this" apart from "the turn failed".
+   */
+  signal?: AbortSignal;
 };
 
 export interface CanvasAiCompletion {
@@ -217,6 +225,29 @@ const MALFORMED_TOOL_CALL_DIRECTIVE = 'Your previous tool call could not be pars
  * language — this path is reachable from the public landing canvas, where a raw
  * English string would be the first thing the product ever says to them.
  */
+/**
+ * The user pressed Stop. Thrown (never returned) so a stopped turn can never be
+ * mistaken for an answer, and typed so the canvas records "you stopped this"
+ * instead of the red failure notice a real error earns.
+ */
+export class CanvasRunAbortedError extends Error {
+  readonly code = 'canvas-run-aborted' as const;
+  constructor() {
+    super('canvas-run-aborted');
+    this.name = 'CanvasRunAbortedError';
+  }
+}
+
+/**
+ * True for every shape a stopped run can arrive in: our own typed error, and the
+ * `AbortError` the fetch layer rejects the streaming request with when the signal
+ * fires mid-stream. One predicate, so no surface has to know both.
+ */
+export function isCanvasRunAborted(error: unknown): boolean {
+  if (error instanceof CanvasRunAbortedError) return true;
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 export class GuestAiUnavailableError extends Error {
   readonly code = 'guest-ai-unavailable' as const;
   constructor() {
@@ -227,6 +258,9 @@ export class GuestAiUnavailableError extends Error {
 
 /** Run a small, bounded agent loop over the active canvas and shared MCP catalog. */
 export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<string> {
+  /** Every await boundary a stopped turn must not cross. */
+  const throwIfStopped = () => { if (options.signal?.aborted) throw new CanvasRunAbortedError(); };
+  throwIfStopped();
   if (options.model && options.disabledModels?.includes(options.model)) {
     throw new Error(`Model '${options.model}' is disabled for this session because it did not execute an earlier Canvas command.`);
   }
@@ -328,6 +362,14 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       role: 'system',
       content: 'SOCIAL. A request to see, review, analyse or report on social media, posts, channels or engagement is a request for the workspace\'s REAL accounts: call canvas_add_social_feed (or canvas_refresh_social_feed when a feed tile is already on the board) and answer from what it returns. Never invent posts, follower counts or engagement numbers, and never build a chart of made-up social metrics — the tool reads X, LinkedIn, Facebook, Instagram and TikTok directly. Use canvas_pin_social_post to lift one post out for discussion. A request to announce, promote or "post about" something is canvas_create_social_campaign: it drafts one announcement, with per-network variants where the wording should differ, and puts it on the board WITHOUT publishing. Publishing is a separate, explicit act — canvas_publish_social_campaign — that is public and cannot be undone: confirm with the user first, and never call it speculatively or to test. Instagram and TikTok cannot publish text alone; if there is no image or video URL, say so rather than letting those networks be skipped silently. If no account is connected the tool says so and names where to connect one — relay that instead of inventing a limitation.',
     },
+    // BUILDING SOFTWARE. Gated on a tenant for the reason the anonymous block below
+    // states at length: the seven build tools are account-required, so on a local
+    // board this paragraph would be instructions about tools the model has not been
+    // given — the exact failure that made it invent limitations about images.
+    ...(options.persistence === 'server' ? [{
+      role: 'system' as const,
+      content: 'BUILDING A REAL WEBSITE, WEB APP OR MOBILE APP. When the user asks for one, BUILD IT — call canvas_create_build, which provisions a runnable project (Vite + React for a website, React Native for mobile) that runs in a live preview and publishes to a real URL. Authoring a `website`, `prototype` or `document` card INSTEAD is the wrong answer to "build me an app": those describe software, and the user asked for software. Then work like an engineer, in this order. (1) canvas_list_build_files before you write anything, so you build on the starter template rather than over it. (2) canvas_read_build_file on any file you are about to change — you need its exact current text. (3) canvas_edit_build_file for EVERY change to a file that already exists: it replaces the exact text you name and cannot silently drop the code you did not mention. canvas_write_build_file is for genuinely NEW files only; using it on an existing file is how a working app loses features it already had. (4) canvas_search_build_files to find where something lives instead of reading the whole project. When the user says the app is broken, blank, or not working, call canvas_read_build_diagnostics FIRST — it returns the real build and runtime errors the workspace produced, including errors thrown inside the live preview — and fix what it reports. Never guess at a cause while that tool has the answer, and never tell the user to check the console themselves.',
+    }] : []),
     // THE FOUNDER OBJECTS, AND THE ANALYSIS THAT MUST NOT LAND AS PROSE.
     // Content lives in `founderCanvasPrompt.ts`, which explains itself and composes its
     // field contract from the object registry.
@@ -455,6 +497,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   let documentWords: number | null = requestedPages == null ? null : documentWordsInSnapshot(options.canvasSnapshot);
   let documentWordCountExact = false;
   for (let turn = 0; turn < MAX_CANVAS_TOOL_TURNS; turn += 1) {
+    throwIfStopped();
     // The authoring phase arms on EITHER trigger. Turn count alone made it unreachable
     // for the failure it exists to stop: a model that answers in prose instead of
     // calling a tool is told once to act, ignores it, and the loop gives up on turn 4 —
@@ -491,7 +534,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
         ? { excludeModels: [...new Set([...excludeModels, ...commandFailedModels])] }
         : {}),
       metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
+      signal: options.signal,
     }, { onTextDelta: (delta) => { finalText += delta; options.onText?.(finalText); } });
+    throwIfStopped();
     options.onCompletion?.({
       at: new Date().toISOString(), iteration: turn + 1,
       requestedModel: activeModel ?? null,
@@ -638,6 +683,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       tool_calls: result.toolCalls.map((call) => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.args } })),
     });
     for (const call of result.toolCalls) {
+      // A stopped run must not START another tool. One already in flight is left to
+      // settle (its own transport owns the cancellation); nothing after it runs.
+      throwIfStopped();
       const toolStartedAt = Date.now();
       const action = byName.get(call.name);
       let args: unknown = {};

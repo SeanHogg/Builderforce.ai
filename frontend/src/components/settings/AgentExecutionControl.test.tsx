@@ -7,6 +7,16 @@ const confirmSpy = vi.fn();
 vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => confirmSpy }));
 vi.mock('@/components/RoleGate', () => ({ RoleGate: ({ children }: { children: unknown }) => children }));
 
+/**
+ * Both saves go through an AWAITED confirm promise, so the assertion has to
+ * survive two microtask hops plus React's commit. Testing Library's 1s default
+ * is enough when this file runs alone and is not when it runs as one of 249 test
+ * files on a loaded machine — observed 2026-08-15 as a `waitFor` timeout whose
+ * rendered DOM still showed the pre-click state. A longer patience weakens
+ * nothing: the assertion is unchanged, only how long it is willing to wait.
+ */
+const SAVE_TIMEOUT = { timeout: 5_000 };
+
 describe('AgentExecutionControl', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -25,7 +35,7 @@ describe('AgentExecutionControl', () => {
     const button = await screen.findByRole('button', { name: 'Disable and stop all agents' });
     await act(async () => { fireEvent.click(button); });
 
-    await waitFor(() => expect(save).toHaveBeenCalledWith(false));
+    await waitFor(() => expect(save).toHaveBeenCalledWith(false), SAVE_TIMEOUT);
     expect(confirmSpy).toHaveBeenCalledOnce();
     expect(await screen.findByText('Status: EXECUTION DISABLED')).toBeInTheDocument();
     expect(screen.getByText('Execution is disabled. 3 active runs stopped.')).toBeInTheDocument();
@@ -39,7 +49,7 @@ describe('AgentExecutionControl', () => {
     const button = await screen.findByRole('button', { name: 'Enable agent execution' });
     await act(async () => { fireEvent.click(button); });
 
-    await waitFor(() => expect(save).toHaveBeenCalledWith(true));
+    await waitFor(() => expect(save).toHaveBeenCalledWith(true), SAVE_TIMEOUT);
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(await screen.findByText('Status: Execution enabled')).toBeInTheDocument();
   });

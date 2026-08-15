@@ -61,7 +61,7 @@ import {
   createGuestRoom, leaveGuestRoom, fetchGuestRoomCanvas, pushGuestRoomCanvas,
   getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName,
 } from '@/lib/guestRoomApi';
-import { GuestAiUnavailableError, runCreationCanvasAi, type CanvasAiCompletion } from '@/lib/creationCanvasAi';
+import { CanvasRunAbortedError, GuestAiUnavailableError, isCanvasRunAborted, runCreationCanvasAi, type CanvasAiCompletion } from '@/lib/creationCanvasAi';
 import { canvasNoticesFrom } from '@/lib/canvasNotices';
 import { canvasTranscriptForModel } from '@/lib/canvasTranscript';
 import { approvalGuidance, evaluateGate, readProvenance, type ApprovalMode } from '@/lib/canvasApprovalGate';
@@ -181,7 +181,8 @@ import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
 import { C_SUITE_CANVAS_USE_CASES, PromptUseCasePicker, cSuiteCanvasOwner, cSuiteCanvasWorkflow, executiveCanvasPrompt } from '@/components/PromptUseCasePicker';
 import { DOMAINS, getDomainItems, getDomainMetrics, getDomainSummary, getEntityRows, getScopeEntities, isDomain } from '@/lib/kernel/kernelApi';
 import { TwilioCanvasSetup } from './TwilioCanvasSetup';
-import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
+import { NEW_CHAT_MODE, normalizeChatMode, useQueuedTurns, type ChatMode } from '@/lib/brain';
+import { QueuedTurnsNotice } from '@/components/brain/QueuedTurnsNotice';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
 import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativeBrief, creativeMeshGeometry, creativePreviewImageUrl, evermindMediaArtifact, generateEvermindMedia, generateServerCreativeArtifact, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, EVERMIND_CREATIVE_KINDS, SERVER_CREATIVE_KINDS, type CreationDeliverable, type CreativeArtifact } from '@/lib/creationDeliverables';
 import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
@@ -207,6 +208,8 @@ import { auditPageHtml } from '@/lib/canvasPageAudit';
 import { generateFixture } from '@/lib/canvasTestData';
 import * as qaApi from '@/lib/qa/api';
 import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
+import { canvasBuildActions, type BoundCanvasBuild } from '@/lib/canvasBuildTools';
+import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
 import { canvasWebPageUrl, isWebPageKind, normalizeWebPageUrl, webPageHost, webPageViewport } from '@/lib/canvasWebPage';
 import { deleteIdeProject, listIdeProjects } from '@/lib/api';
 import type { IdeProject } from '@/lib/types';
@@ -1022,6 +1025,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [clampPromptHeight]);
   const [twilioPromptSelected, setTwilioPromptSelected] = useState(false);
   const [thinking, setThinking] = useState(false);
+  /**
+   * The in-flight turn's cancellation handle and the correlation id it was started
+   * under — everything Stop needs to interrupt the run AND record that the user is
+   * the one who ended it. Held in a ref rather than state because Stop must reach
+   * the CURRENT run from a callback the composer holds for the whole session.
+   */
+  const canvasRunRef = useRef<{ abort: AbortController; requestMessageId: string; startedAt: number } | null>(null);
   // When the in-flight turn began. Shared with every Brain surface (dock strip,
   // transcript, board anchor) so they narrate the same phase at the same instant.
   const [brainRunStartedAt, setBrainRunStartedAt] = useState<number | null>(null);
@@ -3312,6 +3322,56 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!source.columns.length) return { error: `${node.data.title} has no columns yet.` } as const;
     return { node, source } as const;
   }, [nodes]);
+
+  /**
+   * The BUILD vocabulary — creating and editing the code behind a Builder object.
+   *
+   * Held in `lib/canvasBuildTools.ts` rather than inline below: the action array
+   * in this component is already ~3 700 lines, and these are pure functions over
+   * an injected context, so they unit-test without React or a canvas.
+   *
+   * `boundBuildsRef` exists so the tools read CURRENT board state without `nodes`
+   * being a dependency of the memo that builds them — otherwise every object added
+   * to the board would re-register all seven tools mid-turn.
+   */
+  const boundBuildsRef = useRef<BoundCanvasBuild[]>([]);
+  boundBuildsRef.current = useMemo(() => {
+    const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+    return [...nodes, ...staged].flatMap((node) => {
+      if (node.data.kind !== 'build') return [];
+      const binding = canvasBuildBinding(node.data);
+      return binding ? [{ objectId: node.id, title: String(node.data.title ?? 'Build'), binding }] : [];
+    });
+  }, [nodes]);
+
+  /**
+   * Provision a workspace for the model and put its Builder object on the board.
+   *
+   * Committed straight to `nodes` rather than staged as a proposal, unlike almost
+   * every other authoring tool. The reason is that the expensive half already
+   * happened: `createCanvasBuild` creates a real build record with a seeded R2
+   * workspace behind it, so a rejected proposal would leave an orphaned workspace
+   * the board no longer references. This is the same order `openBuild` uses for
+   * the click path, so both routes leave identical state.
+   */
+  const createBuildForTool = useCallback(async (input: { title: string; modality: ProjectModality }): Promise<BoundCanvasBuild> => {
+    const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+    const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
+    const node = newNode('build', nextCanvasObjectPosition([...nodes, ...staged], {}, narrowViewport, 'build'));
+    const ide = await createCanvasBuild({ title: input.title, modality: input.modality });
+    const patch = canvasBuildPatch(ide);
+    node.data = { ...node.data, ...patch, title: input.title };
+    setNodes((current) => [...current, node]);
+    const binding = canvasBuildBinding(node.data);
+    if (!binding) throw new Error('The workspace was created but could not be bound to the board.');
+    return { objectId: node.id, title: input.title, binding };
+  }, [nodes, setNodes]);
+
+  const canvasBuildActionList = useMemo<BrainAction[]>(() => canvasBuildActions({
+    builds: () => boundBuildsRef.current,
+    createBuild: createBuildForTool,
+    onFilesChanged: notifyWorkspaceFilesChanged,
+  }), [createBuildForTool]);
 
   const canvasActions = useMemo<BrainAction[]>(() => ([{
     name: 'canvas_prepare_executive_use_case',
@@ -6720,8 +6780,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(projectId == null ? { note: 'Published without a project. Add a project object to the canvas to file these under it, which is what gives them a run target and a persona.' } : {}),
       };
     },
-  }].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [canEdit, convertObjectToDrawio, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId]);
+  }, ...canvasBuildActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
+  [canEdit, canvasBuildActionList, convertObjectToDrawio, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -6787,6 +6847,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const evaluateCanvas = useCallback((promptOverride?: string) => {
     const requestText = (promptOverride ?? prompt).trim();
     if (!requestText || thinking) return;
+    /**
+     * Only a turn the user just typed empties the composer. A replay, a queued turn
+     * flushing, or an object-initiated request carries its own text — clearing on
+     * those wipes whatever the user is typing RIGHT NOW, which is exactly what the
+     * composer staying live while a run streams makes possible.
+     */
+    const clearComposer = () => { if (promptOverride === undefined) setPrompt(''); };
     const executiveUseCase = C_SUITE_CANVAS_USE_CASES.find((candidate) => requestText.includes(`Execution contract ${candidate.id}:`)) ?? null;
     const executiveWorkflow = executiveUseCase ? cSuiteCanvasWorkflow(executiveUseCase) : null;
     trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: canvasSurface(), scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))], ...(executiveUseCase ? { useCaseId: executiveUseCase.id } : {}) } });
@@ -6797,6 +6864,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const promptAuthor = persistence === 'server' ? members.find((member) => member.userId === currentUserId) : null;
     const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'human', ref: currentUserId || 'local', name: promptAuthor?.displayName || 'You' } }, initialMessage?.clientMessageId);
     const promptStartedAt = performance.now();
+    // The handle Stop reaches this run through. Created before the first await so a
+    // Stop pressed while the request is still being assembled still lands.
+    const runAbort = new AbortController();
+    canvasRunRef.current = { abort: runAbort, requestMessageId, startedAt: promptStartedAt };
     if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'started', metadata: { scope: resolvedScopeMode, ...(executiveUseCase ? { useCaseId: executiveUseCase.id } : {}) } }).catch(() => undefined);
     // A composer submission is a chat interaction, so reveal its Brain object
     // immediately. Waiting for the vendor request to succeed left a blank canvas
@@ -6830,7 +6901,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         objects: scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }),
         connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
       });
-      setPrompt('');
+      clearComposer();
       const connectedAgentNodes = nodes.filter((node) => node.data.kind === 'agent' && (
         effectiveSelectedIds.includes(node.id)
         || edges.some((edge) => (edge.source === brainId && edge.target === node.id) || (edge.target === brainId && edge.source === node.id))
@@ -6842,6 +6913,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return confirm({ title: 'Approve agent action', message: `A session agent wants to run ${name.replaceAll('_', ' ')}.${preview ? `\n\n${preview}` : ''}`, confirmLabel: 'Approve', cancelLabel: 'Cancel', destructive: false });
       };
       const runGroupTurn = async () => {
+        // Stop is honoured between every phase of the turn, not only inside the model
+        // stream: a run interrupted while the invited agents are replying must not go
+        // on to spend a synthesis turn.
+        const throwIfStopped = () => { if (runAbort.signal.aborted) throw new CanvasRunAbortedError(); };
         const historicalConversation = canvasTranscriptForModel(timeline);
         const groupConversation = connectedAgentNodes.length
           ? [...historicalConversation, { role: 'user' as const, content: request }]
@@ -6859,6 +6934,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               title, projectId,
               sessionId, prompt: request, agents: canonicalAgents,
             });
+            throwIfStopped();
             setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, resourceId: `chat:${groupTurn.chatId}`, status: 'Canonical group chat' } } : node));
             for (const { agent, message } of groupTurn.contributions) {
               appendTimeline('assistant', message.content, {
@@ -6874,6 +6950,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               });
             }
           } catch (error) {
+            // A stopped run is the user's decision, not a group-turn failure.
+            if (isCanvasRunAborted(error)) throw error;
             const detail = describeTurnError(error, 'noticeAgentGroupFailed');
             appendTimeline('system', t('noticeAgentGroupTurnFailed', { reason: detail }), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:agent-group-error`);
           }
@@ -6895,12 +6973,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 onModelFallback: (model) => setModelSelection({ mode: 'model', model }),
                 participant: { ref, name, instructions: typeof agent.data.instructions === 'string' ? agent.data.instructions : agent.data.subtitle },
                 conversation: groupConversation,
+                signal: runAbort.signal,
               });
               if (contribution.trim()) {
                 appendTimeline('assistant', contribution.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'agent', ref, name } }, `${requestMessageId}:draft-agent:${agent.id}`);
                 groupConversation.push({ role: 'assistant', content: `${name}: ${contribution.trim()}` });
               }
-            } catch { /* Brain synthesis still runs with the available transcript. */ }
+            } catch (error) {
+              // Brain synthesis still runs with the available transcript — unless the
+              // user stopped the turn, which ends every remaining specialist too.
+              if (isCanvasRunAborted(error)) throw error;
+            }
             finally {
               setActiveAgentIds((current) => {
                 const next = new Set(current);
@@ -6910,6 +6993,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             }
           }
         }
+        throwIfStopped();
         return runCreationCanvasAi({
           prompt: connectedAgentNodes.length
             ? `Synthesize the invited agents' perspectives and complete the user's requested outcome. Resolve disagreements, make the final Canvas changes, and state what was actually created.`
@@ -6945,6 +7029,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             setBrainTrace((current) => [...current, event]);
           },
           conversation: groupConversation,
+          signal: runAbort.signal,
         });
       };
       // The turn, start to finish — including the SCOPE it ran against, which is
@@ -6955,6 +7040,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         `scope=${resolvedScopeMode} (${scopedNodes.length}/${nodes.length} objects) · ${request.slice(0, 80)}`,
       );
       void runGroupTurn().then((answer) => {
+        // A run the user stopped has no result to record. `stopCanvasRun` already
+        // unwound the UI and wrote the "you stopped this" line; a late answer from a
+        // request that was already in flight must not overwrite it.
+        if (runAbort.signal.aborted) return;
+        if (canvasRunRef.current?.abort === runAbort) canvasRunRef.current = null;
         // A runtime notice ("I couldn't prepare any canvas changes…") is NOT something
         // Brain said, and writing it into the transcript as an assistant reply is what
         // let one failed turn become the template for the next: the following request
@@ -7007,6 +7097,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         trackActivity('creation_ai_evaluation_completed', { sessionId, metadata: { clientSurface: canvasSurface(), proposedChangeCount: changes.length, objectKinds: [...new Set(nodes.map((node) => node.data.kind))], ...(executiveUseCase ? { useCaseId: executiveUseCase.id, contractSatisfied: executiveContractSatisfied } : {}) } });
         if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: executiveContractSatisfied ? 'succeeded' : 'failed', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metricKey: 'artifacts_proposed', metricValue: changes.length, unit: 'count', metadata: executiveUseCase ? { useCaseId: executiveUseCase.id, contractSatisfied: executiveContractSatisfied, allowedOutputs: executiveWorkflow?.outputs } : undefined }).catch(() => undefined);
       }).catch((error) => {
+        if (isCanvasRunAborted(error) || runAbort.signal.aborted) {
+          // Stop is not a failure. The journal still closes the turn (an open span
+          // would make the next diagnostics report unreadable), and the transcript
+          // entry was written by `stopCanvasRun` at the moment the user asked.
+          turnDone({ ok: false, detail: 'stopped by user' });
+          if (canvasRunRef.current?.abort === runAbort) canvasRunRef.current = null;
+          return;
+        }
+        if (canvasRunRef.current?.abort === runAbort) canvasRunRef.current = null;
         const detail = describeTurnError(error, 'noticeBrainFailed');
         turnDone({ ok: false, detail });
         appendTimeline('system', detail, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
@@ -7025,7 +7124,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const lab: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1020, y: 230 }, data: { ...createDefaultCreationData('code'), title: 'LLM capstone lab', status: 'Practice workspace', language: 'python', code: '# Build your tokenizer, model, and training loop here\n' } };
         setNodes((current) => [...current, course, lab]);
         setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: course.id, target: lab.id, type: 'smoothstep', label: 'practice', animated: true, data: { connectionKind: 'reference' } }], brain?.id || '', [course.id], 'Created with Brain'));
-        setSelectedId(course.id); setThinking(false); setPrompt(''); setNotice(t('noticeLlmCourseAdded')); return;
+        setSelectedId(course.id); setThinking(false); clearComposer(); setNotice(t('noticeLlmCourseAdded')); return;
       }
       if (request.includes('roadmap')) {
         const project = nodes.find((node) => node.data.kind === 'project');
@@ -7034,7 +7133,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const slides: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 315 }, data: { kind: 'slides', title: request.includes('executive') ? 'Executive team presentation' : 'Sales presentation', status: 'AI generated' } };
         setNodes((current) => [...current, roadmap, slides]);
         setEdges((current) => associateBrainWithArtifacts([...current, ...(project ? [{ id: crypto.randomUUID(), source: project.id, target: roadmap.id, type: 'smoothstep' as const }] : []), { id: crypto.randomUUID(), source: roadmap.id, target: slides.id, type: 'smoothstep', label: 'presents', animated: true }], brain?.id || '', [roadmap.id], 'Created with Brain'));
-        setSelectedId(roadmap.id); setThinking(false); setPrompt(''); setNotice(t('noticeRoadmapAdded')); return;
+        setSelectedId(roadmap.id); setThinking(false); clearComposer(); setNotice(t('noticeRoadmapAdded')); return;
       }
       if (request.includes('top 10') || request.includes('requested features')) {
         const brain = nodes.find((node) => node.data.kind === 'chat');
@@ -7042,7 +7141,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const mockups: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 300 }, data: { kind: 'mockupSet', title: 'Top 10 feature mockups', status: 'Ready for review', subtitle: 'Ten linked high-fidelity concepts generated from user feedback.', items: ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'], sources: [{ label: 'Customer feedback evidence', resource: '/api/feedback' }] } };
         setNodes((current) => [...current, summary, mockups]);
         setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: summary.id, target: mockups.id, type: 'smoothstep', animated: true }], brain?.id || '', [summary.id], 'Created with Brain'));
-        setSelectedId(mockups.id); setThinking(false); setPrompt(''); setNotice(t('noticeFeatureSummaryAdded')); return;
+        setSelectedId(mockups.id); setThinking(false); clearComposer(); setNotice(t('noticeFeatureSummaryAdded')); return;
       }
       const evaluationId = crypto.randomUUID();
       setNodes((current) => [...current, { id: evaluationId, type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'evaluation', title: 'Canvas evaluation', status: 'AI evaluation' } }]);
@@ -7052,7 +7151,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setEdges((current) => associateBrainWithArtifacts([...current, ...[workflow, website].filter((node): node is CreationFlowNode => !!node).map((node) => ({ id: crypto.randomUUID(), source: node.id, target: evaluationId, type: 'smoothstep', animated: true }))], brain?.id || '', [evaluationId], 'Created with Brain'));
       setSelectedId(evaluationId);
       setThinking(false);
-      setPrompt('');
+      clearComposer();
       setNotice(t('noticeEvaluationAdded'));
     }, 850);
   }, [appendTimeline, canvasActions, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, persistence, prompt, recordBrainCompletion, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, t, thinking, timeline, title]);
@@ -8064,6 +8163,54 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, []);
   const evaluateCanvasRef = useRef(evaluateCanvas);
   evaluateCanvasRef.current = evaluateCanvas;
+  /**
+   * Turns typed while Brain is working.
+   *
+   * The composer stays live for the whole run (see the `ChatInput` below): a turn
+   * typed mid-run is HELD and sent the moment the current one finishes, so a long
+   * research turn never means a dead input box. Shared with the Brain panel — one
+   * queueing rule for every composer in the product.
+   */
+  const queuedTurns = useQueuedTurns({
+    running: thinking,
+    send: (text) => evaluateCanvasRef.current(text),
+    resetKey: sessionId,
+  });
+  /**
+   * STOP. Interrupts the in-flight turn: the model stream is aborted, the loop
+   * refuses to start another round-trip or tool, and anything the user had queued
+   * behind it is dropped — they stopped the conversation, not just this sentence.
+   *
+   * The UI unwinds HERE rather than in the run's rejection handler, because a tool
+   * already in flight can take seconds to settle and a Stop that leaves the board
+   * saying "Executing…" is not a stop.
+   */
+  const stopCanvasRun = useCallback(() => {
+    const run = canvasRunRef.current;
+    if (!run) return;
+    canvasRunRef.current = null;
+    run.abort.abort();
+    queuedTurns.clear();
+    setThinking(false);
+    setActiveAgentIds(new Set());
+    setBrainRunStartedAt(null);
+    setNotice(t('noticeBrainStopped'));
+    appendTimeline('system', t('noticeBrainStopped'), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, `${run.requestMessageId}:stopped`);
+    if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, {
+      correlationId: run.requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'user',
+      durationMs: performance.now() - run.startedAt, metadata: { stopped: true },
+    }).catch(() => undefined);
+  }, [appendTimeline, persistence, queuedTurns, resolvedScopeMode, scopedNodeIds, sessionId, t]);
+  /**
+   * The composer's submit. A turn typed while Brain is still working joins the
+   * queue instead of being refused, which is what lets the input stay enabled.
+   */
+  const submitCanvasPrompt = useCallback(() => {
+    const text = prompt.trim();
+    if (!text) return;
+    if (queuedTurns.submit(text)) { setPrompt(''); return; }
+    evaluateCanvasRef.current();
+  }, [prompt, queuedTurns]);
   const tailorResumeFromNode = useCallback((nodeId: string, request: string) => {
     setSelectedId(nodeId);
     setSelectedIds([nodeId]);
@@ -8355,6 +8502,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         startedAt={brainRunStartedAt}
         variant="composer"
       />
+      {/* Turns waiting behind the running one — the receipt for a composer that
+          never refused input. Self-gating: nothing renders at zero. */}
+      <QueuedTurnsNotice count={queuedTurns.count} />
       {promptStarter}
     </div>
     <div className={styles.promptComposerShell} style={{ '--canvas-prompt-height': `${promptHeight}px` } as CSSProperties}>
@@ -8380,10 +8530,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       className={styles.composer}
       value={prompt}
       onChange={setPrompt}
-      onSubmit={evaluateCanvas}
+      onSubmit={submitCanvasPrompt}
       placeholder={t('askBrain')}
       submitLabel={t('sendBrain')}
-      disabled={thinking}
+      // NEVER disabled while Brain works. An empty composer offers Stop (which
+      // interrupts the run); typing into it queues the next turn. The box being
+      // greyed out for the length of a research turn was the single most common
+      // way the canvas read as hung.
+      running={thinking}
+      onStop={stopCanvasRun}
       rows={1}
       submitOnEnter
       contextControls={<>

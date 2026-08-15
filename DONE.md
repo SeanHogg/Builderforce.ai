@@ -1,3 +1,73 @@
+## ✅ RESOLVED 2026-08-15 — The canvas can build software: `canvas_create_build`, a surgical editor, and failures that reach the agent
+
+Five of the ten AI-app-builder parity gaps opened earlier the same day (ROADMAP group 11). The other
+five — rollback, native mobile packaging, visual editing, end-user auth, and the `AgentSurface`
+rename — remain open there.
+
+### What was wrong
+
+The canvas advertised **60 `canvas_*` tools and not one of them touched a file, a build, or a line of
+code**. The two code actions that existed (`create_file`, `apply_code_to_active_file`) were registered
+by `<BuilderWorkspace>` itself, so they existed only while a Builder panel happened to be open — and
+both were WHOLE-FILE writes against a model whose entire view of the project was the open file,
+truncated to 4 000 characters. "Build me an app" typed at the canvas prompt, the front door, had no
+path to code at all.
+
+Failures were invisible in the other direction: `npm install` exit codes, `Build failed (exit N)` and
+dev-server errors were written with `terminalWriter(…)` and stopped there, so the model that had just
+written the broken file could not learn it was broken. An app that COMPILED and then threw on render
+produced a blank preview frame and no signal anywhere at all.
+
+### What shipped
+
+**`frontend/src/lib/canvasBuildTools.ts`** — seven tools, pure functions over an injected context so
+they unit-test without React, a canvas or a WebContainer:
+
+| Tool | What it closes |
+|---|---|
+| `canvas_create_build` | The front door reaching code. Provisions a seeded, runnable workspace and puts the Builder object on the board, reusing `canvasBuild.ts`'s existing binding. |
+| `canvas_list_build_files` | Blindness. Returns every path **plus each source file's exported symbols** — the repo map that replaces one truncated file. |
+| `canvas_read_build_file` / `canvas_search_build_files` | Reading before writing, and finding a symbol without paging the project. |
+| `canvas_write_build_file` | New files, through the same `validateFileContentForPath` guard the editor uses. |
+| `canvas_edit_build_file` | **The surgical edit.** Exact-anchor search/replace that refuses an ambiguous anchor rather than silently editing the wrong line. |
+| `canvas_read_build_diagnostics` | The agent reading the real error instead of guessing. |
+
+The names mirror the cloud runner's `list_files`/`read_file`/`search_code`/`edit_file` vocabulary
+(`cloudAgentTools.ts`, under `repo.*`) behind the `canvas_` prefix the guest boundary is drawn over.
+All seven are **account-required** — a workspace is tenant storage — and the reasoning for not making
+them guest-gated is written into the contract entry.
+
+**`frontend/src/lib/buildDiagnostics.ts`** — one collection point for both failure kinds. `teeOutput`
+splits a command's stream so the terminal still shows it to a human while the tail (bounded, because
+the END of a build log is where the cause is) reaches the agent. Consecutive identical failures
+collapse into a count, so a crashing render loop is reported as "×400" rather than 400 copies.
+
+**The preview error reporter** is injected into the MOUNTED copy of `index.html` only — never the file
+on disk, never the publish path. So a project that predates this gets it with no migration, the user's
+source stays what they wrote, and a published site never ships a development shim.
+
+**One implementation, both surfaces.** `<BuilderWorkspace>` registers the same seven tools (minus
+`canvas_create_build`), so the docked Brain gained list/read/search and the surgical editor too, and an
+edit behaves identically whether it was asked for on the board or in the panel. `create_file` and
+`apply_code_to_active_file` survive because they also back the "Create file"/"Apply code" buttons on a
+chat code block — their descriptions now steer the model at `canvas_edit_build_file`.
+
+`workspaceFileEvents.ts` closes the loop the other way: a board-side write re-reads into an open
+editor and pushes into the running dev server, so the panel cannot save a stale buffer back over the
+agent's work.
+
+### Guards and tests
+
+- `check-canvas-tool-contract.mjs` now follows the DECLARATIONS across files rather than assuming one
+  component holds them — the rule is about the advertised vocabulary, not where it is typed. Green at
+  66 tools (38 guest-safe, 2 guest-gated, 26 account-required).
+- 31 new unit tests. One caught a real defect before it shipped: `String.replace` interprets `$&` /
+  `$1` in the REPLACEMENT as capture references, so a model editing a price string or a regex literal
+  would have got silently mangled text back. Both branches are now literal index arithmetic.
+- Frontend typecheck clean; 2 577 of 2 578 frontend tests pass (the one failure,
+  `AgentExecutionControl.test.tsx`, is a `waitFor` timeout under full-suite load — it passes in
+  isolation and imports nothing from this change).
+
 ## ✅ RESOLVED 2026-08-15 — Both deploys were red: a shape-lint baseline, and 4.7 MB of message catalogs inside every Edge function
 
 Two CI jobs failed on the same push. They had nothing to do with each other.

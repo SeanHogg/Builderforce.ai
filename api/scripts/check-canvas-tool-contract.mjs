@@ -36,10 +36,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const CANVAS_FILE = path.resolve('..', 'frontend', 'src', 'components', 'creation-canvas', 'CreationCanvas.tsx');
+/**
+ * Every source file that DECLARES canvas actions.
+ *
+ * The canvas component held all of them until the build vocabulary was added;
+ * that component is ~9 700 lines with a single ~3 700-line action `useMemo`, so
+ * new tool families land as their own modules and are spread into the array.
+ * The guard follows the declarations rather than the file, because the rule it
+ * enforces is about the advertised VOCABULARY, not about where it is typed. A
+ * new family adds one line here.
+ */
+const CANVAS_FILES = [
+  path.resolve('..', 'frontend', 'src', 'components', 'creation-canvas', 'CreationCanvas.tsx'),
+  path.resolve('..', 'frontend', 'src', 'lib', 'canvasBuildTools.ts'),
+];
 const CONTRACT_FILE = path.resolve('..', 'packages', 'creation-canvas-contract', 'src', 'canvasTools.ts');
 
-for (const file of [CANVAS_FILE, CONTRACT_FILE]) {
+for (const file of [...CANVAS_FILES, CONTRACT_FILE]) {
   if (!fs.existsSync(file)) {
     console.error(`check-canvas-tool-contract: expected file is missing — ${file}`);
     process.exit(1);
@@ -54,11 +67,13 @@ for (const file of [CANVAS_FILE, CONTRACT_FILE]) {
  * description — no separate string parser needed, and a template literal is covered.
  */
 function declaredCanvasTools() {
-  const text = fs.readFileSync(CANVAS_FILE, 'utf8');
   const declarations = new Map();
-  for (const m of text.matchAll(/^\s*name:\s*'(canvas_[a-z0-9_]+)',$/gm)) {
-    const end = text.indexOf('parameters:', m.index);
-    declarations.set(m[1], end === -1 ? '' : text.slice(m.index + m[0].length, end));
+  for (const file of CANVAS_FILES) {
+    const text = fs.readFileSync(file, 'utf8');
+    for (const m of text.matchAll(/^\s*name:\s*'(canvas_[a-z0-9_]+)',$/gm)) {
+      const end = text.indexOf('parameters:', m.index);
+      declarations.set(m[1], end === -1 ? '' : text.slice(m.index + m[0].length, end));
+    }
   }
   return declarations;
 }

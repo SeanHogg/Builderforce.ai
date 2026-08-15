@@ -249,6 +249,27 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   // to anyone without an account.
   'canvas_measure_funnel',
   'canvas_offer_interview_slots',
+  // ── The build vocabulary (`lib/canvasBuildTools.ts`) ─────────────────────────
+  // Creating, listing, reading, searching and editing the CODE behind a Builder
+  // object. Account-required for the plainest possible reason: a workspace is
+  // tenant storage (`ide/projects/<id>/` in R2, behind a tenant JWT), and a guest
+  // has no workspace to write into.
+  //
+  // These are deliberately NOT guest-gated. The gated set exists for a capability
+  // whose absence would make the model invent a limitation — a picture, a test
+  // run — where "that needs a free account" is a true one-sentence answer. Here
+  // the guest path is not a refusal but a different and complete answer: an
+  // anonymous board can already author a `website` object, a `prototype` and a
+  // full spec with the tools it has. Advertising seven build tools that every
+  // guest call would refuse would spend the model's attention on the one route it
+  // cannot take, on the surface where first impressions are formed.
+  'canvas_create_build',
+  'canvas_list_build_files',
+  'canvas_read_build_file',
+  'canvas_search_build_files',
+  'canvas_write_build_file',
+  'canvas_edit_build_file',
+  'canvas_read_build_diagnostics',
 ] as const;
 
 /**

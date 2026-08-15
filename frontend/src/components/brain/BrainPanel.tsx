@@ -47,6 +47,7 @@ import { ChatModeToggle } from '@/components/brain/ChatModeToggle';
 import { WorkOptionsPicker } from '@/components/brain/WorkOptionsPicker';
 import { CapabilityArtifactNotice } from '@/components/brain/CapabilityArtifactNotice';
 import { AllowanceBanner } from '@/components/brain/AllowanceBanner';
+import { QueuedTurnsNotice } from '@/components/brain/QueuedTurnsNotice';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { Select } from '@/components/Select';
 import { fetchProjects, createProject } from '@/lib/api';
@@ -67,6 +68,7 @@ import {
   isStepMessage,
   getBrainCapability,
   normalizeChatMode,
+  useQueuedTurns,
   NEW_CHAT_MODE,
   type ChatMode,
   type WorkOptionId,
@@ -1016,10 +1018,15 @@ export function BrainPanel({
     }
   }, [newProjectName, chats, creatingProject]);
 
-  // Messages the user typed while a run was still streaming. Held here and
-  // flushed one at a time as each run completes, so the composer NEVER blocks
-  // typing while the AI is thinking — you can keep composing and stack turns.
-  const [queuedMessages, setQueuedMessages] = useState<string[]>([]);
+  // Messages the user typed while a run was still streaming. Held by the shared
+  // queueing primitive and flushed one at a time as each run completes, so the
+  // composer NEVER blocks typing while the AI is thinking — the same rule, and
+  // the same implementation, as the Creation Canvas composer.
+  const queuedTurns = useQueuedTurns({
+    running: conv.sending,
+    send: (text) => { void conv.send(text, { addressedTo: recipient }); },
+    resetKey: chats.activeChat?.id ?? null,
+  });
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -1027,38 +1034,15 @@ export function BrainPanel({
     setInput('');
     // Audited engagement signal: interacting with the AI agent is billable activity.
     trackActivity('agent_message', { weight: 2 });
-    // A run is already streaming — queue this turn and let the flush effect send
-    // it once the current run finishes, instead of disabling the composer.
-    if (conv.sending) {
-      setQueuedMessages((q) => [...q, text]);
-      return;
-    }
+    // A run is already streaming — the queue holds this turn and sends it once
+    // the current run finishes, instead of disabling the composer.
+    if (queuedTurns.submit(text)) return;
     // Restore the text if the send fails before it's persisted (e.g. an expired
     // session) so the user's message is never silently lost. `addressedTo` routes
     // the turn: a participant is talked to (no BRAIN run); null runs the BRAIN.
     const ok = await conv.send(text, { addressedTo: recipient });
     if (!ok) setInput((cur) => cur || text);
-  }, [input, conv, recipient]);
-
-  // Flush one queued message per completed run (on the sending→idle edge). Sends
-  // exactly one queued turn each time the current run finishes.
-  const prevSendingRef = useRef(conv.sending);
-  useEffect(() => {
-    const was = prevSendingRef.current;
-    prevSendingRef.current = conv.sending;
-    if (was && !conv.sending && queuedMessages.length > 0) {
-      const [next, ...rest] = queuedMessages;
-      setQueuedMessages(rest);
-      void conv.send(next, { addressedTo: recipient });
-    }
-  }, [conv.sending, queuedMessages, conv, recipient]);
-
-  // Discard any queued turns when the active chat changes — queued text belongs
-  // to the chat it was typed in, never the one switched to.
-  const activeChatKey = chats.activeChat?.id ?? null;
-  useEffect(() => {
-    setQueuedMessages([]);
-  }, [activeChatKey]);
+  }, [input, conv, queuedTurns, recipient]);
 
   // Capture execution: copy the Brain run's LLM/tool/error trace + transcript to
   // the clipboard — the Brain twin of the Observability/Logs "Copy triage info"
@@ -1382,7 +1366,6 @@ export function BrainPanel({
       disabled={false}
       running={conv.sending}
       onStop={conv.stop}
-      stopLabel={tTimeline('stop')}
       rows={2}
       submitOnEnter={false}
       onAttach={conv.attach}
@@ -1615,12 +1598,7 @@ export function BrainPanel({
             {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
             {promptComposer}
             {conv.uploading && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
-            {queuedMessages.length > 0 && (
-              <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span aria-hidden><Icon source="⏳" size="1em" /></span>
-                {tBrain('queuedCount', { count: queuedMessages.length })}
-              </div>
-            )}
+            <QueuedTurnsNotice count={queuedTurns.count} />
           </div>
         </>
       )}

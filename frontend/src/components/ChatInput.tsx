@@ -46,8 +46,6 @@ export interface ChatInputProps {
   running?: boolean;
   /** Interrupt the in-flight run (shown as a Stop button while `running`). */
   onStop?: () => void;
-  /** Stop button label/title. */
-  stopLabel?: string;
   /** Number of rows for the text area. Default 2. */
   rows?: number;
   /** If false, Enter does not submit (send only via button). Default true. */
@@ -332,7 +330,6 @@ export function ChatInput({
   submitLabel = 'Send',
   running = false,
   onStop,
-  stopLabel = 'Stop',
   rows = 2,
   submitOnEnter = false,
   onAttach,
@@ -733,8 +730,8 @@ export function ChatInput({
           <button
             type="button"
             onClick={onStop}
-            title={stopLabel}
-            aria-label={stopLabel}
+            title={t('stop')}
+            aria-label={t('stop')}
             style={sendButtonStyle(false)}
           >
             <StopSquareIcon />

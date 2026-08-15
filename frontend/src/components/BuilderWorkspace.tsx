@@ -28,6 +28,9 @@ import { useVideoVersions } from '@/hooks/useVideoVersions';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject } from '@/lib/api';
 import { validateFileContentForPath, coerceFileContent } from '@/lib/fileContentGuard';
+import { clearBuildFailures, previewErrorFrom, recordBuildFailure, teeOutput, withPreviewErrorReporter } from '@/lib/buildDiagnostics';
+import { canvasBuildActions } from '@/lib/canvasBuildTools';
+import { notifyWorkspaceFilesChanged, subscribeWorkspaceFiles } from '@/lib/workspaceFileEvents';
 import { isBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
 import { PrdReviewModal, TasksReviewModal } from './ArtifactReviewModals';
@@ -396,6 +399,10 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       }
     }
     setIsRunning(true);
+    // A new run is judged on its own output: clear the previous attempt's failures
+    // so a repair turn is never handed an error the user has already fixed. A run
+    // that fails the same way immediately re-records it.
+    clearBuildFailures(projectIdNum);
     try {
       terminalWriter?.('\r\n\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
       terminalWriter?.('\x1b[36m▶ Run started\x1b[0m\r\n');
@@ -409,13 +416,27 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       terminalWriter?.('  \x1b[32m✓\x1b[0m Project files ready.\r\n\r\n');
 
       terminalWriter?.('\x1b[36m[2/3] Mounting project files...\x1b[0m\r\n');
-      await mountFiles(mountContents);
+      // The reporter goes into the MOUNTED copy only — never the files on disk and
+      // never the publish path — so a runtime error inside the preview reaches the
+      // agent while the user's source and their published build stay untouched.
+      await mountFiles(withPreviewErrorReporter(mountContents));
       terminalWriter?.(`  \x1b[32m✓\x1b[0m Mounted ${Object.keys(mountContents).length} file(s).\r\n\r\n`);
 
       terminalWriter?.('\x1b[36m[3/3] Installing dependencies...\x1b[0m\r\n');
-      const installCode = await ensureInstalled(mountContents, (data) => terminalWriter?.(data));
+      // Tee the install output: the terminal shows it to a human, the tail is what
+      // an agent needs to know WHY it failed. Before this, only the exit code
+      // survived and the cause stayed in pixels.
+      const installLog = teeOutput((data) => terminalWriter?.(data));
+      const installCode = await ensureInstalled(mountContents, installLog.write);
       if (installCode !== 0) {
         terminalWriter?.('\r\n\x1b[31m✗ npm install failed (exit code ' + installCode + '). Fix errors above and try again.\x1b[0m\r\n');
+        recordBuildFailure(projectIdNum, {
+          source: 'build',
+          command: 'npm install',
+          exitCode: installCode,
+          message: `npm install failed (exit ${installCode}).`,
+          detail: installLog.text(),
+        });
         return;
       }
       terminalWriter?.('\r\n  \x1b[32m✓\x1b[0m Dependencies ready.\r\n\r\n');
@@ -429,6 +450,14 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       console.error('Run failed:', e);
+      // Recorded BEFORE the terminal formatting below, so the agent's copy is the
+      // raw message rather than whichever branch happened to render it.
+      recordBuildFailure(projectIdNum, {
+        source: 'build',
+        command: 'npm run dev',
+        message: errorMsg.split('\n')[0] || 'The dev server failed to start.',
+        detail: errorMsg,
+      });
 
       // Always surface the error in the terminal so the user sees it
       if (errorMsg.includes('EJSONPARSE') || errorMsg.includes('Invalid package.json')) {
@@ -460,7 +489,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, startDevServer, mountFiles, assembleMountContents, ensureInstalled, terminalWriter, checkResults, gateRunOnChecks]);
+  }, [isRunning, startDevServer, mountFiles, assembleMountContents, ensureInstalled, terminalWriter, checkResults, gateRunOnChecks, confirm, tc, projectIdNum]);
 
   /**
    * Build the project in the WebContainer and capture its `dist/` output for
@@ -556,9 +585,14 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       }
 
       await mountFiles(mount);
-      const installCode = await ensureInstalled(mount, (d) => terminalWriter?.(d));
+      const installLog = teeOutput((d) => terminalWriter?.(d));
+      const installCode = await ensureInstalled(mount, installLog.write);
       if (installCode !== 0) {
         setCheckResults([{ label: 'npm install', status: 'fail', detail: `exit ${installCode}` }]);
+        recordBuildFailure(projectIdNum, {
+          source: 'build', command: 'npm install', exitCode: installCode,
+          message: `npm install failed (exit ${installCode}).`, detail: installLog.text(),
+        });
         return;
       }
 
@@ -584,8 +618,20 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
           continue;
         }
         terminalWriter?.(`\r\n\x1b[36m▶ ${step.label}…\x1b[0m\r\n`);
-        const code = await runCommandAndWait(step.cmd[0], step.cmd[1], (d) => terminalWriter?.(d));
+        const stepLog = teeOutput((d) => terminalWriter?.(d));
+        const code = await runCommandAndWait(step.cmd[0], step.cmd[1], stepLog.write);
         results.push({ label: step.label, status: code === 0 ? 'pass' : 'fail', detail: code === 0 ? undefined : `exit ${code}` });
+        if (code !== 0) {
+          // A failed type-check or build is the single most repairable thing this
+          // workspace produces, and its output was previously terminal-only.
+          recordBuildFailure(projectIdNum, {
+            source: 'build',
+            command: `${step.cmd[0]} ${step.cmd[1].join(' ')}`,
+            exitCode: code,
+            message: `${step.label} failed (exit ${code}).`,
+            detail: stepLog.text(),
+          });
+        }
       }
       setCheckResults(results);
       const failed = results.filter(r => r.status === 'fail').length;
@@ -598,10 +644,11 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       const msg = e instanceof Error ? e.message : String(e);
       terminalWriter?.(`\r\n\x1b[31m✗ Check error: ${msg}\x1b[0m\r\n`);
       setCheckResults([{ label: 'checks', status: 'fail', detail: msg }]);
+      recordBuildFailure(projectIdNum, { source: 'build', message: msg.split('\n')[0] || 'Checks failed.', detail: msg });
     } finally {
       setIsChecking(false);
     }
-  }, [isChecking, isRunning, assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, terminalWriter]);
+  }, [isChecking, isRunning, assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, terminalWriter, projectIdNum]);
 
   const handleTerminalInput = useCallback((data: string) => {
     shellWriter?.write(data);
@@ -614,6 +661,49 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       setFiles(updated);
     } catch { /* silent */ }
   }, [project.id]);
+
+  /**
+   * Runtime errors thrown INSIDE the preview, reported by the shim injected into
+   * the mounted `index.html`. Without this an app that compiles and then throws
+   * left a blank frame and no signal the agent could read.
+   *
+   * `event.source` is deliberately not checked against the preview iframe: the
+   * dev server is a cross-origin document whose `contentWindow` this frame cannot
+   * compare, so the message TYPE plus the shape check in `previewErrorFrom` is
+   * the identification. Both are namespaced, and the payload is only ever read as
+   * three strings, so a hostile sender's best case is a spurious diagnostic line.
+   */
+  useEffect(() => {
+    if (!previewUrl) return;
+    const onMessage = (event: MessageEvent) => {
+      const failure = previewErrorFrom(event.data);
+      if (failure) recordBuildFailure(projectIdNum, failure);
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [previewUrl, projectIdNum]);
+
+  /**
+   * A file this workspace has open was written from the BOARD.
+   *
+   * The canvas build tools write over the API whether or not this panel is
+   * mounted, so without this the editor would keep showing the pre-edit buffer
+   * over post-edit content — and the next manual save would write the stale text
+   * back over the agent's work. Re-reads the changed file, refreshes the tree, and
+   * pushes it into the running dev server so the preview updates too.
+   */
+  useEffect(() => subscribeWorkspaceFiles((storageProjectId, paths) => {
+    if (storageProjectId !== projectIdNum) return;
+    void refreshFiles();
+    for (const path of paths) {
+      void fetchFileContent(project.id, path)
+        .then((content) => {
+          setFileContents((prev) => (prev[path] === content ? prev : { ...prev, [path]: content }));
+          if (previewUrl) void writeFileToContainer(path, content).catch(() => { /* best-effort */ });
+        })
+        .catch(() => { /* the file may have been deleted between write and read */ });
+    }
+  }), [projectIdNum, project.id, previewUrl, refreshFiles, writeFileToContainer]);
 
   // --- Brain integration ----------------------------------------------------
   // Builder's AI lives in the global Brain drawer. Builder exposes its
@@ -655,10 +745,38 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const liveRef = useRef({ activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum, setVoiceText: voice.setText });
   liveRef.current = { activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum, setVoiceText: voice.setText };
 
+  /**
+   * The workspace's own copy of the canvas BUILD vocabulary.
+   *
+   * The same seven tools the board gets (`lib/canvasBuildTools.ts`), bound to
+   * THIS project, minus `canvas_create_build` — a workspace that is already open
+   * has nothing to create. Registering them here is what gives the docked Brain
+   * the ability to LIST, READ and SEARCH the project it is editing, and to make a
+   * surgical edit instead of regenerating a whole file. Before this, the docked
+   * Brain could only write, and only ever whole files.
+   *
+   * It is the same implementation rather than a second one so an edit behaves
+   * identically whether it was asked for on the board or in the panel.
+   */
+  const buildToolActions = useMemo<BrainAction[]>(() => canvasBuildActions({
+    builds: () => [{
+      objectId: String(projectIdNum),
+      title: project.name,
+      binding: { ideProjectId: projectIdNum, storageProjectId: projectIdNum, storageProjectPublicId: String(projectIdNum), modality },
+    }],
+    createBuild: async () => { throw new Error('This workspace is already open — edit its files instead of creating another build.'); },
+    onFilesChanged: notifyWorkspaceFilesChanged,
+  }).filter((action) => action.name !== 'canvas_create_build'), [modality, project.name, projectIdNum]);
+
   const brainActions = useMemo<BrainAction[]>(() => [
+    ...buildToolActions,
     {
       name: 'create_file',
-      description: 'Create or overwrite a file in the current project and open it in the editor.',
+      // Steered at the surgical editor deliberately: this action also backs the
+      // "Create file" button on a code block in a chat reply, so it cannot be
+      // removed — but a model choosing between it and `canvas_edit_build_file`
+      // for an EXISTING file should choose the one that cannot drop code.
+      description: 'Create a NEW file in the current project and open it in the editor. To change a file that already exists, use canvas_edit_build_file instead — this action replaces the whole file and silently drops anything you did not reproduce.',
       parameters: {
         type: 'object',
         properties: {
@@ -677,7 +795,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     },
     {
       name: 'apply_code_to_active_file',
-      description: "Replace the contents of the file currently open in the editor.",
+      description: "Replace the entire contents of the file currently open in the editor. Prefer canvas_edit_build_file, which changes only the part you name and costs a fraction of a rewrite; use this only when the whole file genuinely is being replaced.",
       parameters: {
         type: 'object',
         properties: { code: { type: 'string', description: 'New full contents for the open file' } },
@@ -786,7 +904,9 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     },
     // Closures read only stable refs/setters + module imports; the actual save
     // (which needs projectIdNum) happens in the review-confirm handlers below.
-  ], []);
+    // `buildToolActions` is the one real dependency: it rebinds when the project
+    // or modality changes, and the tools must follow the workspace they edit.
+  ], [buildToolActions]);
 
   useRegisterBrainActions(brainActions);
 
