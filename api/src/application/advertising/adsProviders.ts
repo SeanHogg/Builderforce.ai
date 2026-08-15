@@ -28,6 +28,15 @@
  * enums — and without a silent fallback quietly buying awareness with a leads budget.
  */
 
+import { googleAdsProvider } from './networks/google';
+import { metaAdsProvider } from './networks/meta';
+import { linkedinAdsProvider } from './networks/linkedin';
+import { tiktokAdsProvider } from './networks/tiktok';
+import { xAdsProvider } from './networks/x';
+import { redditAdsProvider } from './networks/reddit';
+import { pinterestAdsProvider } from './networks/pinterest';
+import { snapchatAdsProvider } from './networks/snapchat';
+
 /** The networks this deployment can spend on. */
 export const AD_NETWORKS = ['google', 'meta', 'linkedin', 'tiktok', 'x', 'reddit', 'pinterest', 'snapchat'] as const;
 export type AdNetwork = typeof AD_NETWORKS[number];
@@ -179,12 +188,22 @@ export {
 // ---------------------------------------------------------------------------
 
 /**
- * Adapters are imported at the BOTTOM, after the shared helpers they consume.
- *
- * Every adapter imports `ask`, `toCents` and friends from this module, so the registry
- * has to sit below their definitions — a top-of-file import would evaluate the adapter
- * modules while this one's `const` helpers are still in the temporal dead zone.
+ * The adapters are imported at the TOP of this section and the map is a plain const,
+ * which only works because the shared helpers moved to `./adsNormalize`. Adapters now
+ * import VALUES from there and only TYPES from here, so the cycle is erased at compile
+ * time and `ADS_CONNECTOR_KEYS` can be evaluated at module scope.
  */
+const PROVIDERS: Readonly<Record<AdNetwork, AdsProvider>> = {
+  google: googleAdsProvider,
+  meta: metaAdsProvider,
+  linkedin: linkedinAdsProvider,
+  tiktok: tiktokAdsProvider,
+  x: xAdsProvider,
+  reddit: redditAdsProvider,
+  pinterest: pinterestAdsProvider,
+  snapchat: snapchatAdsProvider,
+};
+
 export function getAdsProvider(network: string): AdsProvider | null {
   return isAdNetwork(network) ? PROVIDERS[network] : null;
 }

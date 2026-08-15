@@ -11,30 +11,27 @@
  * database, because every one of them is decided at definition time.
  */
 import { describe, expect, it } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ENTITY_CATALOG, entitiesForScope, findEntity, registeredEntities } from './entityCatalog';
 import { ENTITY_SCOPES, isEntityScope, singularize } from './entityDefinition';
 import { DOMAINS, isDomain } from '../kernel/ObjectRegistry';
 import { DOMAIN_MANIFEST } from '../kernel/DomainService';
+import { collectCreatedTables } from '../../../scripts/lib/tableAdoption.mjs';
 
 const api = resolve(__dirname, '..', '..', '..');
 
-/** Every table created by the consolidation migrations, read from the migrations
- *  themselves — the same source `check-table-adoption.mjs` measures, so the test
- *  and the guard cannot disagree about which tables are in scope. */
-const created = (() => {
-  const dir = resolve(api, 'migrations');
-  const names = new Set<string>();
-  for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql'))) {
-    if (Number.parseInt(file.slice(0, 4), 10) < 418) continue;
-    const sql = readFileSync(resolve(dir, file), 'utf8').replace(/--[^\n]*/g, ' ');
-    for (const m of sql.matchAll(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?"?([a-z0-9_]+)"?/gi)) {
-      if (m[1]) names.add(m[1]);
-    }
-  }
-  return names;
-})();
+/**
+ * Every table the consolidation migrations create AND LEAVE BEHIND.
+ *
+ * Read through the SAME collector `check-table-adoption.mjs` uses, which is what
+ * this comment already claimed and was not true: the guard had learned to replay
+ * `DROP TABLE`, and this file kept its own creates-only copy. So migration 0471 —
+ * which drops `developer_orgs` and `developer_org_members` because a publisher is
+ * a workspace — left the guard green and this test red, demanding an entity entry
+ * for two relations Postgres no longer has. Two implementations of one question
+ * is how a test starts disagreeing with the thing it is testing.
+ */
+const created = new Set(collectCreatedTables(resolve(api, 'migrations')).keys());
 
 describe('the entity catalog', () => {
   it('parses the consolidation series rather than passing vacuously', () => {

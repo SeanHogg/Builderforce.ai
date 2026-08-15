@@ -17914,6 +17914,31 @@
         "enter": "Ver este lienzo en 3D",
         "active": "Salir de 3D"
       }
+    },
+    "miro": {
+      "title": "Tableros de Miro",
+      "close": "Cerrar",
+      "accounts": "Cuentas de Miro conectadas",
+      "loading": "Cargando…",
+      "loadFailed": "No se pudieron leer tus tableros de Miro.",
+      "callFailed": "Miro rechazó esa solicitud.",
+      "connect": "Conectar Miro",
+      "connectPrompt": "Conecta una cuenta de Miro para traer tus tableros.",
+      "noBoards": "Esta cuenta aún no tiene tableros.",
+      "untitledBoard": "Tablero sin título",
+      "import": "Importar",
+      "importing": "Importando…",
+      "importingCount": "{count} elementos…",
+      "importFailed": "No se pudo importar {name}.",
+      "imported": "Se importaron {count} objetos de {name}.",
+      "importedWithSkips": "Se importaron {count} objetos de {name}. Omitidos: {types}.",
+      "importedNothing": "{name} no contenía nada que este lienzo pueda alojar.",
+      "communityTemplateHint": "Plantillas de la comunidad: cópiala primero a tu propia cuenta de Miro y aparecerá aquí."
+    },
+    "sticky": {
+      "label": "Texto de la nota adhesiva",
+      "placeholder": "Escribe una nota",
+      "empty": "Nota vacía"
     }
   },
   "canvasCommands": {

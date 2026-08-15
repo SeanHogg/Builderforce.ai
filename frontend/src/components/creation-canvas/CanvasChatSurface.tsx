@@ -48,15 +48,17 @@ export function CanvasChatSurface({
       <header className={styles.chatSurfaceHeader}>
         <span className={styles.brainDockMark} aria-hidden><Icon source="✦" size="1em" /></span>
         <strong>{t('brain')}</strong>
-        {/* The shared controls decide for themselves which of them apply here: the
-            placement control reads the active surface and stands down because there is
-            no board on screen to move the conversation into. */}
+        {/* The shared controls decide for themselves which of them apply here, so this
+            placement gets the execution-detail toggle and nothing else: the placement
+            control reads the active surface and stands down (no board on screen to move
+            into), and no `onClose` is supplied because dismissing a conversation that IS
+            the page would leave nothing behind. The way out is the footer, and the
+            surface switcher on the rail. */}
         <BrainSurfaceActions
           mode="docked"
           showExecutionDetail={body.showExecutionDetail}
           onModeChange={() => { /* placement is not offered while chat is the surface */ }}
           onExecutionDetailChange={onExecutionDetailChange}
-          onClose={onOpenBoard}
         />
       </header>
       <div className={styles.chatSurfaceBody}>

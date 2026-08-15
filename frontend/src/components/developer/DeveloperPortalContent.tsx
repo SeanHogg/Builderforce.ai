@@ -103,7 +103,7 @@ const chip = (tone: 'neutral' | 'good' | 'warn'): React.CSSProperties => ({
   padding: '2px 8px',
   fontSize: 11,
   fontWeight: 600,
-  borderRadius: 999,
+  borderRadius: 'var(--radius-full)',
   border: '1px solid var(--border-subtle)',
   color:
     tone === 'good' ? 'var(--success-text)'

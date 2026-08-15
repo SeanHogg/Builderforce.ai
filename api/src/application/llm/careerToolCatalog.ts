@@ -98,7 +98,11 @@ function toCareerListing(row: Json): CareerListing {
     published: row.published === true,
     slug: row.slug == null ? null : str(row.slug),
     avatarKey: row.avatarUrl == null ? null : str(row.avatarUrl),
-    resumeFilename: row.resumeFilename == null ? null : str(row.resumeFilename),
+    // `/api/freelancers/me` returns the résumé as an object summary (0471); a listing
+    // only needs to know one is attached and what it is called.
+    resumeTitle: row.resume && typeof row.resume === 'object' && !Array.isArray(row.resume)
+      ? str((row.resume as Json).title) || null
+      : null,
     seeking: normalizeSeeking(row.seeking),
     targetRoles: strArray(row.targetRoles),
     seniority: row.seniority == null ? null : str(row.seniority),
@@ -413,7 +417,7 @@ const PURE_TOOLS: BuiltinTool[] = [
     description: 'Grade a listing SEPARATELY per demand channel — services and employment — because the two sides filter on different fields and a listing can be excellent for contract work and invisible to employers. Returns what is BLOCKING discovery on each channel and what would merely improve it. Fix everything blocking before anything improving: polishing a bio under a blocking item is wasted work.',
     parameters: obj({
       seeking: S, headline: S, bio: S, discipline: S, skills: SA, published: B, hourlyRateCents: N,
-      location: S, timezone: S, avatarUrl: S, resumeFilename: S, targetRoles: SA, seniority: S,
+      location: S, timezone: S, avatarUrl: S, resumeTitle: S, targetRoles: SA, seniority: S,
       desiredSalaryMinCents: N, workMode: S, noticePeriodDays: N,
     }, ['seeking']),
     run: async (_ctx, a) => listingReadiness(toCareerListing(a)),
@@ -488,7 +492,7 @@ const TENANT_TOOLS: BuiltinTool[] = [
           discipline: listing.discipline, hourlyRateCents: listing.hourlyRateCents,
           location: listing.location, timezone: listing.timezone, avatarKey: listing.avatarKey,
           slug: listing.slug, published: listing.published, availability: listing.availability,
-          resumeFilename: listing.resumeFilename, seeking: listing.seeking, targetRoles: listing.targetRoles,
+          resumeTitle: listing.resumeTitle, seeking: listing.seeking, targetRoles: listing.targetRoles,
         }),
         readiness: listingReadiness(listing),
       };

@@ -17915,6 +17915,31 @@
         "enter": "View this canvas in 3D",
         "active": "Exit 3D"
       }
+    },
+    "miro": {
+      "title": "Miro boards",
+      "close": "Close",
+      "accounts": "Connected Miro accounts",
+      "loading": "Loading…",
+      "loadFailed": "Could not read your Miro boards.",
+      "callFailed": "Miro rejected that request.",
+      "connect": "Connect Miro",
+      "connectPrompt": "Connect a Miro account to bring your boards across.",
+      "noBoards": "This account has no boards yet.",
+      "untitledBoard": "Untitled board",
+      "import": "Import",
+      "importing": "Importing…",
+      "importingCount": "{count} items…",
+      "importFailed": "Could not import {name}.",
+      "imported": "Imported {count} objects from {name}.",
+      "importedWithSkips": "Imported {count} objects from {name}. Skipped: {types}.",
+      "importedNothing": "{name} had nothing this canvas can hold.",
+      "communityTemplateHint": "Community templates: copy one into your own Miro account first, then it appears here."
+    },
+    "sticky": {
+      "label": "Sticky note text",
+      "placeholder": "Type a note",
+      "empty": "Empty note"
     }
   },
   "canvasCommands": {

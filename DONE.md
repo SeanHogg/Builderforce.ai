@@ -457,6 +457,17 @@ The original entry, for the record:
 
 ## ✅ RESOLVED 2026-08-15 — Developer Portal Phase 1: the third bucket exists (PRD 24)
 
+> **⚠️ PARTLY SUPERSEDED, same day, by migration 0471** (the entry at the top of this file).
+> The *third bucket* — a published, installable extension — is current and unchanged, and so is
+> everything below about packages, versions, installs, scope grants, review and the
+> `connectorRegistry` third source. What did NOT survive is this entry's PARTY MODEL: the
+> `developer_orgs`, `developer_org_members` and `developer_api_keys` tables described under
+> "What shipped" were removed by 0471, which made a publisher a FACET of `tenants`
+> (`publisher_state`) rather than a second kind of party. Read the sections below as the
+> history of how Phase 1 arrived, not as a description of the schema. The three guards this
+> entry records arguing with — `check-signature-duplication`, `check-shape-lint` and the
+> tenancy guard — were right, and 0471 acts on them.
+
 **The finding.** Everything a third party could build for the platform landed in one of two buckets:
 TENANT-PRIVATE (a `connectors` row, a `tenant_mcp_extensions` row — real capability, one workspace) or
 CODE-OWNED (the 40 `defaults/` manifests, `BOARD_PROVIDERS`, `dataProviderCatalog`, the drive/mailbox/
@@ -520,11 +531,14 @@ or "build a workspace of one". That is why the integration catalogue was entirel
 - **`PreviewFrame.tsx` referenced `--accent-primary`**, declared in neither theme — so the literal `#2563eb`
   fallback was always what painted, one hardcoded blue in light AND dark. Now `--accent`.
 
-**Adjudicated, with arguments, in `check-shape-lint.mjs` rather than baselined:** `developer_org_members`
-(the `memberships` primitive is tenant-scoped twice over, and the absence of a tenant is the whole point of
-a publisher) and `extension_versions` (an installable artifact an `ON DELETE RESTRICT` foreign key points
-at, not a step in one tenant's edit history — the same argument `agent_definition_versions` makes, one
-layer out).
+**Adjudicated in `check-shape-lint.mjs` rather than baselined:** `extension_versions` — an installable
+artifact an `ON DELETE RESTRICT` foreign key points at, not a step in one tenant's edit history; the same
+argument `agent_definition_versions` makes, one layer out. That adjudication stands.
+
+A second one, for `developer_org_members`, was written here and **has since been withdrawn**: it argued
+that the `memberships` primitive was unusable because it is tenant-scoped and a publisher has no tenant.
+0471 removed the premise rather than the guard — a publisher is a tenant, its staff are `tenant_members`,
+and the guard was correct that the table was `memberships` with the tenancy taken out.
 
 ## ✅ RESOLVED 2026-08-15 — The free plan announced an upstream model it would not let you pick; the thumbs it collected taught nothing
 

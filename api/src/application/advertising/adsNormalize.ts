@@ -156,27 +156,3 @@ export function totalInsights(rows: readonly AdInsightRow[]): Omit<AdInsightRow,
     { spendCents: 0, impressions: 0, clicks: 0, conversions: 0, currency: 'USD' },
   );
 }
-
-// ---------------------------------------------------------------------------
-// Adapter wiring
-// ---------------------------------------------------------------------------
-
-import { googleAdsProvider } from './networks/google';
-import { metaAdsProvider } from './networks/meta';
-import { linkedinAdsProvider } from './networks/linkedin';
-import { tiktokAdsProvider } from './networks/tiktok';
-import { xAdsProvider } from './networks/x';
-import { redditAdsProvider } from './networks/reddit';
-import { pinterestAdsProvider } from './networks/pinterest';
-import { snapchatAdsProvider } from './networks/snapchat';
-
-const PROVIDERS: Readonly<Record<AdNetwork, AdsProvider>> = {
-  google: googleAdsProvider,
-  meta: metaAdsProvider,
-  linkedin: linkedinAdsProvider,
-  tiktok: tiktokAdsProvider,
-  x: xAdsProvider,
-  reddit: redditAdsProvider,
-  pinterest: pinterestAdsProvider,
-  snapchat: snapchatAdsProvider,
-};

@@ -91,15 +91,21 @@ export async function invalidatePublisher(env: Env, tenantId: number): Promise<v
  * means a consumer cannot forget to check: there is nothing to render.
  */
 export async function publisherFor(db: Db, env: Env, tenantId: number): Promise<PublisherView | null> {
-  return getOrSetCached(
+  // Cached as an ENVELOPE rather than as `PublisherView | null`. `getOrSetCached`
+  // reads KV with `cached != null`, so a bare `null` round-trips as a MISS and
+  // every non-publisher workspace — which is nearly all of them — would re-query
+  // on each isolate. Wrapping it means "no, this workspace does not publish" is a
+  // cached answer like any other.
+  const { publisher } = await getOrSetCached(
     env,
     publisherCacheKey(tenantId),
-    async () => {
+    async (): Promise<{ publisher: PublisherView | null }> => {
       const row = await loadTenant(db, tenantId);
-      return publishes(row.publisherState) ? toPublisherView(row) : null;
+      return { publisher: publishes(row.publisherState) ? toPublisherView(row) : null };
     },
     { kvTtlSeconds: 300, l1TtlMs: 60_000 },
   );
+  return publisher;
 }
 
 /**

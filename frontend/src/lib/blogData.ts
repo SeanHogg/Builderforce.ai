@@ -81,6 +81,67 @@ import eightWaysToMakeItReal from '@/content/blog/eight-ways-to-make-an-idea-rea
 import readProveBuild from '@/content/blog/read-prove-build-the-inner-loop.md';
 import menuAsMethodology from '@/content/blog/idea-make-run-measure-menu-as-methodology.md';
 
+// The hired.video article corpus, ported wholesale when hired.video was
+// absorbed into Builderforce (PRD 18). Slugs are preserved 1:1 so
+// hired.video/blog/<slug> redirects to builderforce.ai/blog/<slug> without
+// losing link equity.
+import howToScoreYourResumeForAts from '@/content/blog/how-to-score-your-resume-for-ats.md';
+import optimizeYourResumeForAnyJob from '@/content/blog/optimize-your-resume-for-any-job.md';
+import howToResearchYourMarketSalary from '@/content/blog/how-to-research-your-market-salary.md';
+import howToMatchYourResumeToAnyJob from '@/content/blog/how-to-match-your-resume-to-any-job.md';
+import completeGuideToVideoResumes from '@/content/blog/complete-guide-to-video-resumes.md';
+import tailorYourResumeForEveryApplication from '@/content/blog/tailor-your-resume-for-every-application.md';
+import writeAConfidentResumeToneGuide from '@/content/blog/write-a-confident-resume-tone-guide.md';
+import howToWriteYourPersonalValueProposition from '@/content/blog/how-to-write-your-personal-value-proposition.md';
+import mergeMultipleResumesIntoOne from '@/content/blog/merge-multiple-resumes-into-one.md';
+import writeAProfessionalSummaryThatGetsNoticed from '@/content/blog/write-a-professional-summary-that-gets-noticed.md';
+import parseResumePdfToStructuredJson from '@/content/blog/parse-resume-pdf-to-structured-json.md';
+import howToPrepareForAnyJobInterview from '@/content/blog/how-to-prepare-for-any-job-interview.md';
+import howToChooseTheRightResumeTemplate from '@/content/blog/how-to-choose-the-right-resume-template.md';
+import bestResumeTemplateForFinanceAndPayroll from '@/content/blog/best-resume-template-for-finance-and-payroll.md';
+import bestResumeTemplateForConsultingAndRisk from '@/content/blog/best-resume-template-for-consulting-and-risk.md';
+import bestResumeTemplateForExecutivesAndCSuite from '@/content/blog/best-resume-template-for-executives-and-c-suite.md';
+import bestResumeTemplateForNewGradsAndInterns from '@/content/blog/best-resume-template-for-new-grads-and-interns.md';
+import bestResumeTemplateForHospitalityAndRetail from '@/content/blog/best-resume-template-for-hospitality-and-retail.md';
+import bestResumeTemplateForDesignersAndCreatives from '@/content/blog/best-resume-template-for-designers-and-creatives.md';
+import bestResumeTemplateForSoftwareEngineers from '@/content/blog/best-resume-template-for-software-engineers.md';
+import bestResumeTemplateForNursesAndHealthcare from '@/content/blog/best-resume-template-for-nurses-and-healthcare.md';
+import bestResumeTemplateForSalesAndBusinessDevelopment from '@/content/blog/best-resume-template-for-sales-and-business-development.md';
+import whatMakesAStandoutCandidateProfile from '@/content/blog/what-makes-a-standout-candidate-profile.md';
+import videoResumeExamplesThatLandInterviews from '@/content/blog/video-resume-examples-that-land-interviews.md';
+import researchEmployersWithReviewsAndSalaryData from '@/content/blog/research-employers-with-reviews-and-salary-data.md';
+import aiRecruiterAgentSource50CandidatesIn5Minutes from '@/content/blog/ai-recruiter-agent-source-50-candidates-in-5-minutes.md';
+import runALiveScreeningBlockIn30Minutes from '@/content/blog/run-a-live-screening-block-in-30-minutes.md';
+import hiredVideoVsLinkedinRecruiter2026Comparison from '@/content/blog/hired-video-vs-linkedin-recruiter-2026-comparison.md';
+import hiredVideoVsIndeedWhenToUseEach from '@/content/blog/hired-video-vs-indeed-when-to-use-each.md';
+import hiredVideoVsZiprecruiterPricingAiVideoScreening from '@/content/blog/hired-video-vs-ziprecruiter-pricing-ai-video-screening.md';
+import hiredVideoVsGlassdoorReviewsSalaryEmployerBranding from '@/content/blog/hired-video-vs-glassdoor-reviews-salary-employer-branding.md';
+import howToMakeAPodcastEpisodeInHiredVideoStudio from '@/content/blog/how-to-make-a-podcast-episode-in-hired-video-studio.md';
+import howToMakeAnAnimatedComicResumeInHiredVideoStudio from '@/content/blog/how-to-make-an-animated-comic-resume-in-hired-video-studio.md';
+import howToBuildA3dWorldResumeInHiredVideoStudio from '@/content/blog/how-to-build-a-3d-world-resume-in-hired-video-studio.md';
+import howToMakeAVideoResumeInHiredVideoStudio from '@/content/blog/how-to-make-a-video-resume-in-hired-video-studio.md';
+import howToLaunchACourseAndUploadScormOnHiredVideo from '@/content/blog/how-to-launch-a-course-and-upload-scorm-on-hired-video.md';
+import howToRunAClassroomCohortAsAnEducator from '@/content/blog/how-to-run-a-classroom-cohort-as-an-educator.md';
+import howToEarnAVerifiableCertificateOnHiredVideo from '@/content/blog/how-to-earn-a-verifiable-certificate-on-hired-video.md';
+import howToRunTakeHomeAssignmentsWithoutLosingCandidates from '@/content/blog/how-to-run-take-home-assignments-without-losing-candidates.md';
+import structuredScorecardsAndBlindReviewToReduceHiringBias from '@/content/blog/structured-scorecards-and-blind-review-to-reduce-hiring-bias.md';
+import retainedVsContingencySearchAndThePowerOfWarmIntros from '@/content/blog/retained-vs-contingency-search-and-the-power-of-warm-intros.md';
+import howToRunEffectiveOneOnOnes from '@/content/blog/how-to-run-effective-one-on-ones.md';
+import howToBuildAnOrgChartThatStaysAccurate from '@/content/blog/how-to-build-an-org-chart-that-stays-accurate.md';
+import teamHealthSignalsEveryManagerShouldWatch from '@/content/blog/team-health-signals-every-manager-should-watch.md';
+import howToHostAHiringEventOnHiredVideo from '@/content/blog/how-to-host-a-hiring-event-on-hired-video.md';
+import howToBookACoachingSessionOnHiredVideo from '@/content/blog/how-to-book-a-coaching-session-on-hired-video.md';
+import howToLeaveACompanyReviewThatHelps from '@/content/blog/how-to-leave-a-company-review-that-helps.md';
+import howToAskForAReferenceAndShareIt from '@/content/blog/how-to-ask-for-a-reference-and-share-it.md';
+import buildACareerRoadmapWithAi from '@/content/blog/build-a-career-roadmap-with-ai.md';
+import extractSkillsFromAnyJobOrResume from '@/content/blog/extract-skills-from-any-job-or-resume.md';
+import syncYourResumeEverywhereWithoutCopyPaste from '@/content/blog/sync-your-resume-everywhere-without-copy-paste.md';
+import addAiVoiceoverToYourVideoResume from '@/content/blog/add-ai-voiceover-to-your-video-resume.md';
+import turnYourReferencesIntoAJobWinningAsset from '@/content/blog/turn-your-references-into-a-job-winning-asset.md';
+import earnVerifiableCertificatesAndLevelUpYourCareer from '@/content/blog/earn-verifiable-certificates-and-level-up-your-career.md';
+import sendHiringManagersABiasFreeCandidatePacket from '@/content/blog/send-hiring-managers-a-bias-free-candidate-packet.md';
+import hireAssignAndPayForWorkInOnePlace from '@/content/blog/hire-assign-and-pay-for-work-in-one-place.md';
+
 export interface BlogPost {
   slug: string;
   title: string;
@@ -211,6 +272,63 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('automated-rfp-response-from-your-codebase', rfpResponse),
   buildPost('memory-first-inference-skip-the-llm', memoryFirst),
   buildPost('local-first-ai-webgpu-in-the-browser', localFirstWebgpu),
+  // ── Ported hired.video corpus ──────────────────────────────────────────
+  buildPost('how-to-score-your-resume-for-ats', howToScoreYourResumeForAts),
+  buildPost('optimize-your-resume-for-any-job', optimizeYourResumeForAnyJob),
+  buildPost('how-to-research-your-market-salary', howToResearchYourMarketSalary),
+  buildPost('how-to-match-your-resume-to-any-job', howToMatchYourResumeToAnyJob),
+  buildPost('complete-guide-to-video-resumes', completeGuideToVideoResumes),
+  buildPost('tailor-your-resume-for-every-application', tailorYourResumeForEveryApplication),
+  buildPost('write-a-confident-resume-tone-guide', writeAConfidentResumeToneGuide),
+  buildPost('how-to-write-your-personal-value-proposition', howToWriteYourPersonalValueProposition),
+  buildPost('merge-multiple-resumes-into-one', mergeMultipleResumesIntoOne),
+  buildPost('write-a-professional-summary-that-gets-noticed', writeAProfessionalSummaryThatGetsNoticed),
+  buildPost('parse-resume-pdf-to-structured-json', parseResumePdfToStructuredJson),
+  buildPost('how-to-prepare-for-any-job-interview', howToPrepareForAnyJobInterview),
+  buildPost('how-to-choose-the-right-resume-template', howToChooseTheRightResumeTemplate),
+  buildPost('best-resume-template-for-finance-and-payroll', bestResumeTemplateForFinanceAndPayroll),
+  buildPost('best-resume-template-for-consulting-and-risk', bestResumeTemplateForConsultingAndRisk),
+  buildPost('best-resume-template-for-executives-and-c-suite', bestResumeTemplateForExecutivesAndCSuite),
+  buildPost('best-resume-template-for-new-grads-and-interns', bestResumeTemplateForNewGradsAndInterns),
+  buildPost('best-resume-template-for-hospitality-and-retail', bestResumeTemplateForHospitalityAndRetail),
+  buildPost('best-resume-template-for-designers-and-creatives', bestResumeTemplateForDesignersAndCreatives),
+  buildPost('best-resume-template-for-software-engineers', bestResumeTemplateForSoftwareEngineers),
+  buildPost('best-resume-template-for-nurses-and-healthcare', bestResumeTemplateForNursesAndHealthcare),
+  buildPost('best-resume-template-for-sales-and-business-development', bestResumeTemplateForSalesAndBusinessDevelopment),
+  buildPost('what-makes-a-standout-candidate-profile', whatMakesAStandoutCandidateProfile),
+  buildPost('video-resume-examples-that-land-interviews', videoResumeExamplesThatLandInterviews),
+  buildPost('research-employers-with-reviews-and-salary-data', researchEmployersWithReviewsAndSalaryData),
+  buildPost('ai-recruiter-agent-source-50-candidates-in-5-minutes', aiRecruiterAgentSource50CandidatesIn5Minutes),
+  buildPost('run-a-live-screening-block-in-30-minutes', runALiveScreeningBlockIn30Minutes),
+  buildPost('hired-video-vs-linkedin-recruiter-2026-comparison', hiredVideoVsLinkedinRecruiter2026Comparison),
+  buildPost('hired-video-vs-indeed-when-to-use-each', hiredVideoVsIndeedWhenToUseEach),
+  buildPost('hired-video-vs-ziprecruiter-pricing-ai-video-screening', hiredVideoVsZiprecruiterPricingAiVideoScreening),
+  buildPost('hired-video-vs-glassdoor-reviews-salary-employer-branding', hiredVideoVsGlassdoorReviewsSalaryEmployerBranding),
+  buildPost('how-to-make-a-podcast-episode-in-hired-video-studio', howToMakeAPodcastEpisodeInHiredVideoStudio),
+  buildPost('how-to-make-an-animated-comic-resume-in-hired-video-studio', howToMakeAnAnimatedComicResumeInHiredVideoStudio),
+  buildPost('how-to-build-a-3d-world-resume-in-hired-video-studio', howToBuildA3dWorldResumeInHiredVideoStudio),
+  buildPost('how-to-make-a-video-resume-in-hired-video-studio', howToMakeAVideoResumeInHiredVideoStudio),
+  buildPost('how-to-launch-a-course-and-upload-scorm-on-hired-video', howToLaunchACourseAndUploadScormOnHiredVideo),
+  buildPost('how-to-run-a-classroom-cohort-as-an-educator', howToRunAClassroomCohortAsAnEducator),
+  buildPost('how-to-earn-a-verifiable-certificate-on-hired-video', howToEarnAVerifiableCertificateOnHiredVideo),
+  buildPost('how-to-run-take-home-assignments-without-losing-candidates', howToRunTakeHomeAssignmentsWithoutLosingCandidates),
+  buildPost('structured-scorecards-and-blind-review-to-reduce-hiring-bias', structuredScorecardsAndBlindReviewToReduceHiringBias),
+  buildPost('retained-vs-contingency-search-and-the-power-of-warm-intros', retainedVsContingencySearchAndThePowerOfWarmIntros),
+  buildPost('how-to-run-effective-one-on-ones', howToRunEffectiveOneOnOnes),
+  buildPost('how-to-build-an-org-chart-that-stays-accurate', howToBuildAnOrgChartThatStaysAccurate),
+  buildPost('team-health-signals-every-manager-should-watch', teamHealthSignalsEveryManagerShouldWatch),
+  buildPost('how-to-host-a-hiring-event-on-hired-video', howToHostAHiringEventOnHiredVideo),
+  buildPost('how-to-book-a-coaching-session-on-hired-video', howToBookACoachingSessionOnHiredVideo),
+  buildPost('how-to-leave-a-company-review-that-helps', howToLeaveACompanyReviewThatHelps),
+  buildPost('how-to-ask-for-a-reference-and-share-it', howToAskForAReferenceAndShareIt),
+  buildPost('build-a-career-roadmap-with-ai', buildACareerRoadmapWithAi),
+  buildPost('extract-skills-from-any-job-or-resume', extractSkillsFromAnyJobOrResume),
+  buildPost('sync-your-resume-everywhere-without-copy-paste', syncYourResumeEverywhereWithoutCopyPaste),
+  buildPost('add-ai-voiceover-to-your-video-resume', addAiVoiceoverToYourVideoResume),
+  buildPost('turn-your-references-into-a-job-winning-asset', turnYourReferencesIntoAJobWinningAsset),
+  buildPost('earn-verifiable-certificates-and-level-up-your-career', earnVerifiableCertificatesAndLevelUpYourCareer),
+  buildPost('send-hiring-managers-a-bias-free-candidate-packet', sendHiringManagersABiasFreeCandidatePacket),
+  buildPost('hire-assign-and-pay-for-work-in-one-place', hireAssignAndPayForWorkInOnePlace),
 ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 export function getPostBySlug(slug: string): BlogPost | undefined {

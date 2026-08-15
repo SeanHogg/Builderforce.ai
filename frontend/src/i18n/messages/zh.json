@@ -17914,6 +17914,31 @@
         "enter": "以 3D 方式查看此画布",
         "active": "退出 3D"
       }
+    },
+    "miro": {
+      "title": "Miro 白板",
+      "close": "关闭",
+      "accounts": "已连接的 Miro 账户",
+      "loading": "加载中…",
+      "loadFailed": "无法读取你的 Miro 白板。",
+      "callFailed": "Miro 拒绝了该请求。",
+      "connect": "连接 Miro",
+      "connectPrompt": "连接 Miro 账户，即可把白板迁移过来。",
+      "noBoards": "该账户还没有白板。",
+      "untitledBoard": "未命名白板",
+      "import": "导入",
+      "importing": "导入中…",
+      "importingCount": "已读取 {count} 个元素…",
+      "importFailed": "无法导入 {name}。",
+      "imported": "已从 {name} 导入 {count} 个对象。",
+      "importedWithSkips": "已从 {name} 导入 {count} 个对象。已跳过：{types}。",
+      "importedNothing": "{name} 中没有本画布可承载的内容。",
+      "communityTemplateHint": "社区模板：请先复制到你自己的 Miro 账户，随后即可在此看到。"
+    },
+    "sticky": {
+      "label": "便签内容",
+      "placeholder": "输入便签",
+      "empty": "空白便签"
     }
   },
   "canvasCommands": {

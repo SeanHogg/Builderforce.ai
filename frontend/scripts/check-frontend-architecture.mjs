@@ -39,6 +39,13 @@
  *   deliberately NOT among them: it chooses which surface to mount and does
  *   that on the server, which is the boundary this ratchet exists to keep
  *   somebody thinking about.
+ *
+ *   796 → 797 (`useClientFiles`, 2026-08-15) — `CanvasMiroPanel.tsx`, the Miro
+ *   import browser. It has no server form: every interesting thing it does is a
+ *   round trip driven by a click (list the boards, then WALK a cursor to the end
+ *   of one, reporting progress as it goes), and a server component cannot report
+ *   progress on work it has already finished. It sits beside `CanvasDrivePanel`
+ *   in every respect including this one.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';

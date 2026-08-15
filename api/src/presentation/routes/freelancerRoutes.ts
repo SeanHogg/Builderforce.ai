@@ -614,9 +614,13 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     return c.json({ slug: norm, valid: true, available: false, suggestions });
   });
 
-  // POST /me/resume — upload a resume file. Stored in R2 (native fallback) AND,
-  // when hired.video is configured + linked, synced there so the parsed profile
-  // + embedded viewer stay current.
+  // POST /me/resume — upload a résumé. The file's TEXT is extracted server-side
+  // (PDF and DOCX included), structured into JSON Resume, and stored as a revision of
+  // the person's Canvas résumé object. The original bytes are kept in R2 and referenced
+  // by the revision so the source stays retrievable — but they are no longer the résumé.
+  //
+  // A second upload never overwrites the first: it lands as a new revision, because the
+  // variants someone tailored from an earlier version must survive a re-upload.
   router.post('/me/resume', webAuthMiddleware, async (c) => {
     const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
@@ -628,101 +632,109 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     const type = file.type || 'application/octet-stream';
     if (!RESUME_MIME.has(type)) return c.json({ error: 'Unsupported file type' }, 415);
 
+    const tenantId = await resolveResumeTenantId(db, c.env as Env, userId);
+    if (tenantId === null) return c.json({ error: 'Resume storage unavailable' }, 503);
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const extracted = await extractResumeText(bytes, { contentType: type, filename: file.name });
+    if (!extracted.ok) {
+      // A scan has no text layer. Say so precisely — the person can convert the file,
+      // and the canvas import path can still read it with a model.
+      return c.json({ error: extracted.message, code: extracted.code }, 422);
+    }
+
+    // The source file is kept, but it is now an ATTACHMENT of the revision rather than
+    // the résumé itself, so a missing bucket degrades to "no source" and not to failure.
     const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
     const key = `resumes/${userId}/${crypto.randomUUID()}.${ext}`;
     if (c.env.UPLOADS) {
-      await c.env.UPLOADS.put(key, file.stream(), { httpMetadata: { contentType: type } });
+      await c.env.UPLOADS.put(key, bytes, { httpMetadata: { contentType: type } });
     }
-    // Text-ish resumes can be forwarded to hired.video for parsing; binaries just
-    // register the title (hired.video parses the claimed upload on their side).
-    const rawText = type.startsWith('text/') ? (await file.text()).slice(0, 100_000) : undefined;
 
-    const selected = await db.select({
-      hired_video_user_id: freelancerProfiles.hiredVideoUserId,
-      skills: freelancerProfiles.skills,
-      resume_extract: freelancerProfiles.resumeExtract,
-    }).from(freelancerProfiles).where(eq(freelancerProfiles.userId, userId));
-    const row = selected[0] as Record<string, unknown> | undefined;
-    let resumeId: string | undefined;
-    const hiredId = await resolveHiredUserId(db, c.env, userId, row?.hired_video_user_id as string | undefined);
-    if (hiredId) {
-      // Text résumés parse on hired.video; binaries are R2-only (uploadResume skips
-      // them — hired.video rejects binary — and the worker parses/claims on their side).
-      const res = await hiredUploadResume(c.env, hiredId, { title: file.name, rawText });
-      resumeId = res.resumeId;
-      // Refresh the cached extract, and PREFILL skills when the worker has none yet.
-      const prof = await hiredGetProfile(c.env, hiredId);
-      if (prof.extract) {
-        const hasSkills = parseSkills(row?.skills).length > 0;
-        const prefill = !hasSkills && prof.extract.skills.length > 0 ? JSON.stringify(prof.extract.skills.slice(0, 50)) : null;
-        await db.update(freelancerProfiles).set({
-          resumeExtract: JSON.stringify(prof.extract.raw),
-          skills: sql`COALESCE(${prefill}, ${freelancerProfiles.skills})`,
-          updatedAt: sql`NOW()`,
-        }).where(eq(freelancerProfiles.userId, userId));
-        if (prefill) await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
-      }
+    const document = resumeDocumentFromText(extracted.text);
+    const title = file.name.replace(/\.[^.]+$/, '').trim().slice(0, 120) || 'Resume';
+    await saveImportedResume(db, c.env as Env, {
+      userId,
+      tenantId,
+      title,
+      markdown: extracted.text,
+      document,
+      sourceFile: { key: c.env.UPLOADS ? key : null, name: file.name, mimeType: type, size: file.size },
+    });
+
+    // Prefill skills when the profile has none yet — the same courtesy the old
+    // hired.video path did, now from our own parse.
+    const suggestions = suggestionsFromDocument(document);
+    const [row] = await db.select({ skills: freelancerProfiles.skills })
+      .from(freelancerProfiles).where(eq(freelancerProfiles.userId, userId));
+    if (parseSkills(row?.skills).length === 0 && suggestions.skills.length > 0) {
+      await db.update(freelancerProfiles)
+        .set({ skills: JSON.stringify(suggestions.skills.slice(0, 50)), updatedAt: sql`NOW()` })
+        .where(eq(freelancerProfiles.userId, userId));
+      await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     }
-    // Native fallback: when hired.video isn't linked but the résumé is text we can
-    // read, parse a local extract so the "Fill from résumé" button still works.
-    let nativeExtract: { native: true; headline: string | null; summary: string | null; skills: string[] } | null = null;
-    if (!hiredId && rawText) {
-      const parsed = parseResumeText(rawText);
-      nativeExtract = { native: true, ...parsed };
-    }
-    await db.update(freelancerProfiles).set({
-      resumeKey: key,
-      resumeFilename: file.name,
-      hiredVideoResumeId: sql`COALESCE(${resumeId ?? null}, ${freelancerProfiles.hiredVideoResumeId})`,
-      resumeExtract: sql`COALESCE(${nativeExtract ? JSON.stringify(nativeExtract) : null}, ${freelancerProfiles.resumeExtract})`,
-      updatedAt: sql`NOW()`,
-    }).where(eq(freelancerProfiles.userId, userId));
-    // Auto-fill is possible when we have a hired.video link OR any cached extract
-    // (this upload's native parse, a prior hired parse, …). Binary résumés without
-    // hired.video yield nothing locally — hired.video parses them on claim.
-    const canAutofill = Boolean(hiredId) || Boolean(nativeExtract) || Boolean(row?.resume_extract);
-    return c.json({ ok: true, resumeFilename: file.name, canAutofill });
+
+    return c.json({ ok: true, resumeTitle: title, canAutofill: suggestions.available });
   });
 
-  // GET /me/resume/suggestions — extracted {headline, summary, skills, discipline}
-  // the editor uses to prefill fields (from hired.video when linked, else the cached
-  // native parse). Never writes — the user reviews + saves.
-  router.get('/me/resume/suggestions', webAuthMiddleware, async (c) => {
+  // GET /me/resume — the full révision family, for the profile's own résumé viewer
+  // and editor. Owner-only: this is the one projection that includes every variant.
+  router.get('/me/resume', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const resume = await readProfileResume(db, c.get('userId') as string);
+    if (!resume) return c.json({ resume: null });
+    return c.json({
+      resume: {
+        objectId: resume.objectId,
+        sessionId: resume.sessionId,
+        title: resume.title,
+        family: resume.family,
+      },
+    });
+  });
+
+  // PATCH /me/resume — the person choosing how their résumé looks and who may see it:
+  // its template (style), which revision is master, and its privacy.
+  router.patch('/me/resume', webAuthMiddleware, async (c) => {
     const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
-    const [row] = await db.select({
-      hired_video_user_id: freelancerProfiles.hiredVideoUserId,
-      resume_extract: freelancerProfiles.resumeExtract,
-    }).from(freelancerProfiles).where(eq(freelancerProfiles.userId, userId));
-    const empty: ResumeSuggestions = { available: false, headline: null, summary: null, skills: [], discipline: null };
+    const body = await c.req.json<{ templateId?: unknown; privacy?: unknown; masterRevisionId?: unknown }>();
+    const resume = await readProfileResume(db, userId);
+    if (!resume) return c.json({ error: 'No resume yet' }, 404);
 
-    const hiredId = await resolveHiredUserId(db, c.env, userId, row?.hired_video_user_id as string | undefined);
-    if (hiredId) {
-      const prof = await hiredGetProfile(c.env, hiredId);
-      if (prof.extract) {
-        const { headline, summary, skills } = prof.extract;
-        return c.json({
-          available: true, headline: headline ?? null, summary: summary ?? null, skills: skills ?? [],
-          discipline: inferDiscipline(`${headline ?? ''} ${(skills ?? []).join(' ')}`),
-        } satisfies ResumeSuggestions);
-      }
+    const family = { ...resume.family, revisions: [...resume.family.revisions] };
+    if (isResumeTemplateId(body.templateId)) {
+      family.defaultTemplateId = body.templateId;
+      // The template is stored per revision as well, so restyling from the profile has
+      // to reach the revision the profile actually shows — otherwise the picker
+      // appears to do nothing.
+      const masterId = family.masterRevisionId;
+      family.revisions = family.revisions.map((revision) => revision.id === masterId
+        ? { ...revision, templateId: body.templateId as typeof revision.templateId, updatedAt: new Date().toISOString() }
+        : revision);
     }
-    // Native cached extract (from a text résumé upload).
-    if (typeof row?.resume_extract === 'string') {
-      try {
-        const parsed = JSON.parse(row.resume_extract) as { native?: boolean; headline?: string | null; summary?: string | null; skills?: string[] };
-        if (parsed.native) {
-          const skills = Array.isArray(parsed.skills) ? parsed.skills : [];
-          return c.json({
-            available: true, headline: parsed.headline ?? null, summary: parsed.summary ?? null, skills,
-            discipline: inferDiscipline(`${parsed.headline ?? ''} ${skills.join(' ')}`),
-          } satisfies ResumeSuggestions);
-        }
-      } catch (error) { /* not our native shape */ 
-        reportCaughtError(error, { source: "presentation/routes/freelancerRoutes.ts", operation: "createFreelancerRoutes" });
-      }
+    const PRIVACIES: readonly ResumePrivacy[] = ['public', 'recruiter_only', 'connections', 'private', 'draft'];
+    if (typeof body.privacy === 'string' && PRIVACIES.includes(body.privacy as ResumePrivacy)) {
+      family.privacy = body.privacy as ResumePrivacy;
     }
-    return c.json(empty);
+    if (typeof body.masterRevisionId === 'string' && family.revisions.some((r) => r.id === body.masterRevisionId)) {
+      family.masterRevisionId = body.masterRevisionId;
+    }
+
+    await writeProfileResumeFamily(db, c.env as Env, { ...resume, userId }, family);
+    // `hasResume` and the public card depend on the résumé being publicly visible.
+    await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
+    return c.json({ ok: true, family });
+  });
+
+  // GET /me/resume/suggestions — {headline, summary, skills, discipline} the editor
+  // uses to prefill profile fields. Never writes — the user reviews + saves.
+  router.get('/me/resume/suggestions', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const resume = await readProfileResume(db, c.get('userId') as string);
+    const empty: ResumeSuggestions = { available: false, headline: null, summary: null, skills: [], discipline: null };
+    if (!resume) return c.json(empty);
+    return c.json(suggestionsFromDocument(masterResumeRevision(resume.family).document));
   });
 
   // POST /me/avatar — upload a profile picture. Stored in R2; the public serve URL
@@ -756,33 +768,6 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     await db.update(users).set({ avatarUrl, updatedAt: sql`NOW()` }).where(eq(users.id, userId));
     await invalidateCached(c.env as Env, FREELANCER_PUBLIC_LIST_CACHE_KEY);
     return c.json({ ok: true, avatarUrl });
-  });
-
-  // GET /me/embed-token — mint a short-lived hired.video embed URL for the
-  // signed-in freelancer's own profile/resume viewer.
-  router.get('/me/embed-token', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
-    const userId = c.get('userId') as string;
-    const kind = c.req.query('kind') === 'resume' ? 'resume' : 'profile';
-    const [row] = await db.select({ hired_video_user_id: freelancerProfiles.hiredVideoUserId })
-      .from(freelancerProfiles).where(eq(freelancerProfiles.userId, userId));
-    const hiredId = await resolveHiredUserId(db, c.env, userId, row?.hired_video_user_id as string | undefined);
-    if (!hiredId) return c.json({ configured: false, embedUrl: null });
-    const res = await hiredCreateEmbedToken(c.env, hiredId, kind);
-    return c.json({ configured: res.configured, embedUrl: res.embedUrl ?? null, expiresAt: res.expiresAt ?? null });
-  });
-
-  // POST /me/connect — start the consent flow to link an EXISTING hired.video
-  // account (instead of the auto-provisioned one).
-  router.post('/me/connect', webAuthMiddleware, async (c) => {
-    const db = buildDatabase(c.env);
-    const userId = c.get('userId') as string;
-    const b = await c.req.json<{ email?: string; redirectUrl?: string }>();
-    const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId));
-    const email = (b.email || (u?.email as string) || '').trim();
-    if (!email) return c.json({ error: 'email required' }, 400);
-    const res = await hiredConnectExisting(c.env, { email, externalUserId: userId, redirectUrl: b.redirectUrl });
-    return c.json({ configured: res.configured, consentUrl: res.consentUrl ?? null });
   });
 
   // POST /me/availability { available } — an EXISTING builder opts IN or OUT of being
@@ -887,12 +872,6 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'This profile is only visible to signed-in members', code: 'AUTH_REQUIRED' }, 401);
     }
     const uid = row.user_id as string;
-    // Give an authed viewer a hired.video embed URL for the in-page resume viewer.
-    let embedUrl: string | null = null;
-    if (viewer && row.hired_video_user_id) {
-      const res = await hiredCreateEmbedToken(c.env, row.hired_video_user_id as string, 'profile');
-      embedUrl = res.embedUrl ?? null;
-    }
     const reviews = await db.select({
       rating: freelancerReviews.rating,
       comment: freelancerReviews.comment,
@@ -907,13 +886,35 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
     const stats = await computeFreelancerStats(db, c.env, uid, (row.currency as string) ?? 'USD');
     return c.json({
       ...mapPublicProfile(row),
-      embedUrl,
+      resume: await publicResumeFor(db, uid, Boolean(viewer)),
       stats,
       reviews: reviews.map((r) => ({ rating: Number(r.rating), comment: r.comment ?? null, createdAt: r.created_at, reviewerName: r.reviewer_name ?? null })),
     });
   });
 
   return router;
+}
+
+/**
+ * The résumé a VISITOR may see on someone's public profile.
+ *
+ * This is the replacement for the hired.video iframe, and it is deliberately a
+ * projection rather than the object: a viewer gets exactly one revision — the master —
+ * with the revision history and the uploaded file's storage key removed, because the
+ * variants someone tailored for specific employers are nobody else's business.
+ *
+ * Signing in widens the audience but never the depth: `recruiter_only` and
+ * `connections` résumés become visible, still as one revision.
+ */
+async function publicResumeFor(
+  db: Db,
+  userId: string,
+  signedIn: boolean,
+): Promise<{ title: string; family: unknown } | null> {
+  const resume = await readProfileResume(db, userId);
+  if (!resume) return null;
+  const family = projectPublicResumeFamily(resume.family, { audience: signedIn ? 'recruiter' : 'public' });
+  return family ? { title: resume.title, family } : null;
 }
 
 /**

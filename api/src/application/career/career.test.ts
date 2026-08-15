@@ -381,7 +381,7 @@ describe('listing — one listing, two kinds of demand', () => {
     headline: 'Staff engineer who ships payment systems that reconcile',
     bio: 'x'.repeat(200), discipline: 'developer', skills: ['TypeScript', 'React', 'AWS', 'Docker', 'PostgreSQL'],
     hourlyRateCents: 12_000, currency: 'USD', availability: 'open', location: 'London', timezone: 'GMT',
-    published: true, slug: 'jane', avatarKey: 'a.png', resumeFilename: 'jane.pdf',
+    published: true, slug: 'jane', avatarKey: 'a.png', resumeTitle: 'Jane Doe — Resume',
     seeking: 'both', targetRoles: ['Platform Engineer'], seniority: 'senior',
     desiredSalaryMinCents: 9_000_000, desiredSalaryMaxCents: 12_000_000,
     workMode: 'remote', noticePeriodDays: 30, openToRelocation: false,
@@ -403,7 +403,7 @@ describe('listing — one listing, two kinds of demand', () => {
   it('catches the listing that is strong for clients and invisible to employers', () => {
     // The exact defect the career fields exist to fix: a complete freelancer profile
     // that never says it wants a job, so an employment search never returns it.
-    const servicesOnly: CareerListing = { ...base, targetRoles: [], seniority: null, resumeFilename: null };
+    const servicesOnly: CareerListing = { ...base, targetRoles: [], seniority: null, resumeTitle: null };
     const employment = listingReadiness(servicesOnly).channels.find((c) => c.channel === 'employment')!;
     const services = listingReadiness(servicesOnly).channels.find((c) => c.channel === 'services')!;
     expect(services.blocking).toEqual([]);

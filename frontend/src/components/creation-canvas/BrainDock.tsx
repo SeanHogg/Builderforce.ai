@@ -180,9 +180,14 @@ export function BrainSurfaceBody({
 export interface BrainSurfaceActionsProps {
   mode: BrainDockMode;
   showExecutionDetail: boolean;
+  /** Move the conversation between the edge and the Brain Object. Not offered — and
+   *  therefore never called — while a surface other than the board is drawn. */
   onModeChange: (mode: BrainDockMode) => void;
   onExecutionDetailChange: (show: boolean) => void;
-  onClose: () => void;
+  /** Put the conversation away. Omitted by a placement that IS the conversation, where
+   *  there is nothing left on screen once it goes — the way out of that one is the
+   *  surface switcher, not a dismiss. */
+  onClose?: () => void;
   /** Edge-only placement controls; an inline surface is sized by its Object. */
   side?: BrainDockSide;
   size?: BrainDockSize;
@@ -193,7 +198,8 @@ export interface BrainSurfaceActionsProps {
 /**
  * The surface's controls. It decides for itself which of them apply: which edge and
  * how wide are meaningless for a surface that lives in an Object on the graph, where
- * the Object's own resize handles already do that job.
+ * the Object's own resize handles already do that job — and both placement and dismiss
+ * are meaningless for a surface that IS the whole canvas.
  */
 export function BrainSurfaceActions({
   mode, showExecutionDetail, onModeChange, onExecutionDetailChange, onClose,
@@ -251,7 +257,7 @@ export function BrainSurfaceActions({
         title={expanded ? t('slimBrain') : t('expandBrain')}
         onClick={() => onSizeChange!(expanded ? 'slim' : 'expanded')}
       >{expanded ? '⤡' : '⤢'}</button>}
-      <button type="button" aria-label={t('closeBrain')} title={t('closeBrain')} onClick={onClose}>×</button>
+      {onClose && <button type="button" aria-label={t('closeBrain')} title={t('closeBrain')} onClick={onClose}>×</button>}
     </div>
   );
 }

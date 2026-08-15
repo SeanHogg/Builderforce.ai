@@ -17914,6 +17914,31 @@
         "enter": "Voir ce canevas en 3D",
         "active": "Quitter la 3D"
       }
+    },
+    "miro": {
+      "title": "Tableaux Miro",
+      "close": "Fermer",
+      "accounts": "Comptes Miro connectés",
+      "loading": "Chargement…",
+      "loadFailed": "Impossible de lire vos tableaux Miro.",
+      "callFailed": "Miro a refusé cette requête.",
+      "connect": "Connecter Miro",
+      "connectPrompt": "Connectez un compte Miro pour importer vos tableaux.",
+      "noBoards": "Ce compte n’a encore aucun tableau.",
+      "untitledBoard": "Tableau sans titre",
+      "import": "Importer",
+      "importing": "Importation…",
+      "importingCount": "{count} éléments…",
+      "importFailed": "Impossible d’importer {name}.",
+      "imported": "{count} objets importés depuis {name}.",
+      "importedWithSkips": "{count} objets importés depuis {name}. Ignorés : {types}.",
+      "importedNothing": "{name} ne contenait rien que ce canevas puisse accueillir.",
+      "communityTemplateHint": "Modèles de la communauté : copiez-en un dans votre propre compte Miro, il apparaîtra ensuite ici."
+    },
+    "sticky": {
+      "label": "Texte du pense-bête",
+      "placeholder": "Écrivez une note",
+      "empty": "Note vide"
     }
   },
   "canvasCommands": {

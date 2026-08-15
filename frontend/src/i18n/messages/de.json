@@ -17914,6 +17914,31 @@
         "enter": "Diese Leinwand in 3D ansehen",
         "active": "3D verlassen"
       }
+    },
+    "miro": {
+      "title": "Miro-Boards",
+      "close": "Schließen",
+      "accounts": "Verbundene Miro-Konten",
+      "loading": "Wird geladen…",
+      "loadFailed": "Deine Miro-Boards konnten nicht gelesen werden.",
+      "callFailed": "Miro hat diese Anfrage abgelehnt.",
+      "connect": "Miro verbinden",
+      "connectPrompt": "Verbinde ein Miro-Konto, um deine Boards herüberzuholen.",
+      "noBoards": "Dieses Konto hat noch keine Boards.",
+      "untitledBoard": "Board ohne Titel",
+      "import": "Importieren",
+      "importing": "Wird importiert…",
+      "importingCount": "{count} Elemente…",
+      "importFailed": "{name} konnte nicht importiert werden.",
+      "imported": "{count} Objekte aus {name} importiert.",
+      "importedWithSkips": "{count} Objekte aus {name} importiert. Übersprungen: {types}.",
+      "importedNothing": "{name} enthielt nichts, was dieses Canvas aufnehmen kann.",
+      "communityTemplateHint": "Community-Vorlagen: kopiere eine zuerst in dein eigenes Miro-Konto, dann erscheint sie hier."
+    },
+    "sticky": {
+      "label": "Text der Haftnotiz",
+      "placeholder": "Notiz schreiben",
+      "empty": "Leere Notiz"
     }
   },
   "canvasCommands": {

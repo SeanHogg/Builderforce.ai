@@ -47,7 +47,13 @@ import { getLimits, type PlanLimits } from '../../domain/tenant/PlanLimits';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
 import { notify } from '../notifications/notify';
-import { isCreationConnectionKind, isCreationObjectKind, type CreationObjectKind } from '@builderforce/creation-canvas-contract';
+import {
+  isCreationConnectionKind,
+  isCreationObjectKind,
+  projectPublicResumeFamily,
+  type CanvasResumeFamily,
+  type CreationObjectKind,
+} from '@builderforce/creation-canvas-contract';
 import { broadcastRoom, creationSessionRoomName } from '../../infrastructure/relay/broadcastRoom';
 import { sendTransactionalEmail } from '../email/sendEmail';
 import { sendCreationSessionInviteEmail } from '../../infrastructure/email/EmailService';
@@ -231,11 +237,12 @@ async function findSessionObject(db: Db, session: SessionRef): Promise<ObjectRef
   return findObject(db, session.tenantId, 'creation_session', session.id);
 }
 
-function publicResumeFamily(content: unknown): Record<string, unknown> | null {
+/** Is this résumé object publishable by link? One answer, shared with the projection
+ *  that actually serves it — a third private copy of this rule is how a résumé comes to
+ *  be share-able but un-viewable. */
+function publicResumeFamily(content: unknown): CanvasResumeFamily | null {
   if (!content || typeof content !== 'object' || Array.isArray(content)) return null;
-  const family = (content as Record<string, unknown>).resumeFamily;
-  if (!family || typeof family !== 'object' || Array.isArray(family)) return null;
-  return (family as Record<string, unknown>).privacy === 'public' ? family as Record<string, unknown> : null;
+  return projectPublicResumeFamily((content as Record<string, unknown>).resumeFamily);
 }
 
 async function ensureResumeObject(db: Db, env: Env, access: { session: SessionRef }, objectId: string) {

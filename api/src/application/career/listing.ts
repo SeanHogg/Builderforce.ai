@@ -60,7 +60,10 @@ export interface CareerListing {
   published: boolean;
   slug: string | null;
   avatarKey: string | null;
-  resumeFilename: string | null;
+  /** Title of the résumé object attached to this listing, or null when there is none.
+   *  A TITLE and not a filename since 0471: the résumé is an object the person names,
+   *  not a file we stored. */
+  resumeTitle: string | null;
   // ── The career half ──────────────────────────────────────────────────────────
   seeking: SeekingMode;
   targetRoles: string[];
@@ -159,7 +162,7 @@ export function listingReadiness(listing: CareerListing): ListingReadiness {
     const improving: string[] = [];
     if (!listing.published) blocking.push('The listing is not published, so no employer can find it.');
     if (!listing.targetRoles.length) blocking.push('No target roles named. An employment search matches a role title, and this listing states none.');
-    if (!text(listing.resumeFilename)) blocking.push('No résumé attached — an employer who likes the profile has nothing to forward internally.');
+    if (!text(listing.resumeTitle)) blocking.push('No résumé attached — an employer who likes the profile has nothing to forward internally.');
     if (!text(listing.seniority)) blocking.push('No seniority stated, so the listing matches every level and ranks for none.');
     if (listing.skills.length < 5) blocking.push(`Only ${listing.skills.length} skills — below what a role filter needs.`);
     if (!listing.desiredSalaryMinCents) improving.push('No salary expectation. Stating one saves a round of screening on both sides.');

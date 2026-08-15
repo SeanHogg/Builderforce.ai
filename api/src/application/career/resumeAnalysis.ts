@@ -506,7 +506,7 @@ export function auditProfile(profile: {
   slug?: string | null;
   published?: boolean | null;
   availability?: string | null;
-  resumeFilename?: string | null;
+  resumeTitle?: string | null;
   /** Career intent — what employment this person is open to, when they have said. */
   seeking?: string | null;
   targetRoles?: readonly string[] | null;
@@ -521,7 +521,7 @@ export function auditProfile(profile: {
     { field: 'rate', ok: (profile.hourlyRateCents ?? 0) > 0, weight: 8, detail: 'A published rate filters out the wrong enquiries before they cost you a conversation.' },
     { field: 'location', ok: !!text(profile.location) || !!text(profile.timezone), weight: 6, detail: 'Location or timezone is how a client judges overlap. Neither present reads as unavailable.' },
     { field: 'slug', ok: !!text(profile.slug), weight: 6, detail: 'A vanity slug gives you a link you can put in an application. The generated URL is not memorable.' },
-    { field: 'resume', ok: !!text(profile.resumeFilename), weight: 10, detail: 'No résumé attached, so an employer viewing the profile has nothing to forward internally.' },
+    { field: 'resume', ok: !!text(profile.resumeTitle), weight: 10, detail: 'No résumé attached, so an employer viewing the profile has nothing to forward internally.' },
     { field: 'published', ok: profile.published === true, weight: 10, detail: 'The profile is not published, so none of the above is visible to anyone.' },
   ];
   const total = checks.reduce((sum, c) => sum + c.weight, 0);
