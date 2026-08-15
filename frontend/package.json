@@ -17,10 +17,11 @@
     "check:architecture": "node scripts/check-frontend-architecture.mjs",
     "check:edge-runtime": "node scripts/check-edge-runtime.mjs",
     "check:declared-deps": "node scripts/check-declared-deps.mjs",
-    "test": "npm run check:api-transport && npm run check:architecture && npm run check:design-tokens && npm run check:destinations && npm run check:design-scale && npm run check:edge-runtime && npm run check:declared-deps && npm run check:methodology && node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs run",
+    "check": "node ../scripts/run-checks.mjs scripts/checks.manifest.mjs",
+    "test": "npm run check && node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs run",
     "test:watch": "node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs",
     "typecheck:native": "tsgo --noEmit",
-    "type-check": "tsgo --noEmit && tsc --noEmit",
+    "type-check": "node ../scripts/run-checks.mjs scripts/typecheck.manifest.mjs",
     "check:design-scale": "node scripts/check-design-scale.mjs",
     "check:destinations": "node scripts/check-destinations.mjs",
     "check:methodology": "node scripts/check-methodology.mjs"

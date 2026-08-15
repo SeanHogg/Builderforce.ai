@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { importCanvasFile, type ImportTranslator } from './canvasFileImport';
 import { PAGE_BREAK_MARKER } from './officeFormats';

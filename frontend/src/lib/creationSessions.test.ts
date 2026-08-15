@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createLocalCreationSession, creationGraphFromSnapshot, creationStorageKey, listLocalCreationSessions, mergeLocalCreationSessions, readLocalCreationSession, removeLocalCreationSession, updateLocalCreationSession, writeLocalCreationSession } from './creationSessions';
 import type { CreationFlowNode } from '@/components/creation-canvas/CreationNode';

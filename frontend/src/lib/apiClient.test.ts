@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { API_ERROR_EVENT } from './errors/apiErrorEvent';
 

@@ -54,6 +54,40 @@ export default defineConfig({
      */
     testTimeout: 60_000,
     hookTimeout: 60_000,
+    /**
+     * A jsdom document is built for every test FILE, and 155 of the 257 test files
+     * are `src/lib` — router-free logic that never touches a DOM. Measured, that
+     * directory spent 23.9s actually running 1,887 tests and 1,688s of cumulative
+     * worker time constructing environments for them: 194s wall to assert on pure
+     * functions.
+     *
+     * So `src/lib` runs in `node` and everything that renders keeps jsdom. The 21
+     * lib files that DO need a document (storage, `window` events, hooks, anything
+     * mounting) carry their own `@vitest-environment jsdom` docblock, which
+     * overrides the project. That way the requirement is stated by the file that
+     * has it, and a new DOM-using lib test declares itself rather than silently
+     * failing against a central glob nobody remembers to update.
+     */
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'lib',
+          include: ['src/lib/**/*.test.{ts,tsx}'],
+          environment: 'node',
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'dom',
+          // Overriding `exclude` replaces vitest's defaults, so they are restated.
+          include: ['src/**/*.test.{ts,tsx}'],
+          exclude: ['**/node_modules/**', '**/dist/**', 'src/lib/**'],
+          environment: 'jsdom',
+        },
+      },
+    ],
   },
   resolve: {
     alias: {
