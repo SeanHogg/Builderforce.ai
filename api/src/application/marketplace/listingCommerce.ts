@@ -67,16 +67,35 @@ const DEFAULT_TAKE_RATE_THRESHOLD_CENTS = 20_000_000;
  * the band is a typo, and the safe reading of a typo is the default.
  */
 export function platformTakeRateBps(env: Env): number {
-  const raw = Number.parseInt(String(env.MARKETPLACE_TAKE_RATE_BPS ?? ''), 10);
-  if (!Number.isFinite(raw) || raw < 0 || raw > 5000) return DEFAULT_TAKE_RATE_BPS;
+  const raw = wholeNumberOrNull(env.MARKETPLACE_TAKE_RATE_BPS);
+  if (raw === null || raw < 0 || raw > 5000) return DEFAULT_TAKE_RATE_BPS;
   return raw;
 }
 
 /** The lifetime total a seller must cross before any fee applies. */
 export function takeRateThresholdCents(env: Env): number {
-  const raw = Number.parseInt(String(env.MARKETPLACE_TAKE_RATE_THRESHOLD_CENTS ?? ''), 10);
-  if (!Number.isFinite(raw) || raw < 0) return DEFAULT_TAKE_RATE_THRESHOLD_CENTS;
+  const raw = wholeNumberOrNull(env.MARKETPLACE_TAKE_RATE_THRESHOLD_CENTS);
+  if (raw === null || raw < 0) return DEFAULT_TAKE_RATE_THRESHOLD_CENTS;
   return raw;
+}
+
+/**
+ * A configured integer, or null when the value is not one.
+ *
+ * `Number.parseInt` is the wrong tool for reading configuration and this is the
+ * bug it caused: `parseInt('50%', 10)` is `50`, not NaN, so an operator who
+ * typed "50%" meaning half got 50 basis points — 0.5% — and the range clamp
+ * above waved it through because 50 is a legal rate. The failure is silent and
+ * the money is wrong by a factor of a hundred.
+ *
+ * Requiring the WHOLE string to be digits is the fix. A value that is not a
+ * number is a typo, and the safe reading of a typo is the default.
+ */
+function wholeNumberOrNull(value: unknown): number | null {
+  const text = String(value ?? '').trim();
+  if (!/^\d+$/.test(text)) return null;
+  const parsed = Number(text);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 /**

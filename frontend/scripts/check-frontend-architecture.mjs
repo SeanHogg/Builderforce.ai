@@ -55,6 +55,11 @@
  *   bodies over `useSharedSource`, whose entire purpose is that the four pinned
  *   together cost one request — a hook, and therefore client.
  *
+ *   799 → 800 (`useClientFiles`, 2026-08-15) — `components/freelance/JobAlertsPanel.tsx`.
+ *   A standing search is created, toggled and deleted entirely by clicking, and the
+ *   panel owns its own reads so the gigs surface never fetches alerts it may not
+ *   show. Nothing about it renders before the first interaction.
+ *
  *   The THIRD, `components/resume/ResumeDocumentView.tsx`, is why this is +2 and
  *   not +3: it had the directive and needed none. Props in, paper out, no hook and
  *   no handler. Its interactive hosts pull it into their bundle by importing it,

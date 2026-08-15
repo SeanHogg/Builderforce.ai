@@ -44,7 +44,7 @@ import {
   siteUsers,
 } from '../../infrastructure/database/schema';
 import { buildPaymentProvider } from '../../infrastructure/payment';
-import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { registerObject } from '../kernel/ObjectRegistry';
 import { ListingError, invalidateListingCaches, recordInstall } from './creationListings';
 import { resolveTakeRateBps } from './listingCommerce';
@@ -84,6 +84,7 @@ export interface SiteSubscriptionView {
  */
 export async function activeSiteSubscription(
   db: Db,
+  tenantId: number,
   siteId: number,
   siteUserId: number,
 ): Promise<SiteSubscriptionView | null> {
@@ -98,7 +99,9 @@ export async function activeSiteSubscription(
       cancelledAt: siteSubscriptions.cancelledAt,
     })
     .from(siteSubscriptions)
-    .where(and(
+    .where(scopedToTenant(
+      siteSubscriptions,
+      tenantId,
       eq(siteSubscriptions.siteId, siteId),
       eq(siteSubscriptions.siteUserId, siteUserId),
     ))
@@ -152,14 +155,19 @@ export async function startSiteSubscriptionCheckout(
   const priceCents = listing.priceCents ?? 0;
   if (priceCents <= 0) throw new ListingError('This app is free — no checkout is needed', 400);
 
-  if (await activeSiteSubscription(db, input.siteId, input.siteUserId)) {
+  if (await activeSiteSubscription(db, input.tenantId, input.siteId, input.siteUserId)) {
     throw new ListingError('You are already subscribed', 400);
   }
 
   const [user] = await db
     .select({ email: siteUsers.email })
     .from(siteUsers)
-    .where(and(eq(siteUsers.id, input.siteUserId), eq(siteUsers.siteId, input.siteId)))
+    .where(scopedToTenant(
+      siteUsers,
+      input.tenantId,
+      eq(siteUsers.id, input.siteUserId),
+      eq(siteUsers.siteId, input.siteId),
+    ))
     .limit(1);
   if (!user) throw new ListingError('Sign in first', 403);
 
@@ -388,13 +396,16 @@ export async function completeSiteSubscription(
  */
 export async function cancelSiteSubscription(
   db: Db,
+  tenantId: number,
   siteId: number,
   siteUserId: number,
 ): Promise<{ ok: boolean }> {
   const [row] = await db
     .update(siteSubscriptions)
     .set({ status: 'cancelled', cancelledAt: new Date(), updatedAt: new Date() })
-    .where(and(
+    .where(scopedToTenant(
+      siteSubscriptions,
+      tenantId,
       eq(siteSubscriptions.siteId, siteId),
       eq(siteSubscriptions.siteUserId, siteUserId),
     ))
@@ -419,10 +430,7 @@ export async function siteSubscriptionSummary(
       monthlyCents: sql<string>`coalesce(sum(${siteSubscriptions.priceCents}) filter (where ${siteSubscriptions.status} = 'active'), 0)`,
     })
     .from(siteSubscriptions)
-    .where(and(
-      eq(siteSubscriptions.tenantId, tenantId),
-      eq(siteSubscriptions.siteId, siteId),
-    ));
+    .where(scopedToTenant(siteSubscriptions, tenantId, eq(siteSubscriptions.siteId, siteId)));
   return {
     activeCount: Number(row?.activeCount ?? 0),
     monthlyCents: Number(row?.monthlyCents ?? 0),

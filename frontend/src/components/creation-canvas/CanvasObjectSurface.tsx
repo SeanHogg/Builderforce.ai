@@ -1,5 +1,9 @@
-'use client';
-
+/*
+ * No `'use client'` here on purpose. This is imported only by `CreationCanvas.tsx`, which
+ * already declares the boundary, so a directive would mark a second entry point that does
+ * not exist — and `check-frontend-architecture` counts directives, not components. Its own
+ * header says it: the directive is sometimes the bug.
+ */
 import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';

@@ -8,6 +8,7 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
   .realCatalogIntlMock((await import('@/i18n/messages/en.json')).default as Record<string, unknown>));
 
 import {
+  boardCanvasSurfaces,
   CANVAS_SURFACES,
   CANVAS_SURFACE_STORAGE_KEY,
   canvasSurfaceDefinition,
@@ -16,6 +17,7 @@ import {
   sanitizeCanvasSurface,
   writeCanvasSurface,
 } from '@/lib/canvasSurfaces';
+import { creationObjectSurface } from './creationObjectSurfaces';
 import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
 import { CreationCanvas } from './CreationCanvas';
 
@@ -42,10 +44,49 @@ describe('canvas surface registry', () => {
     expect(CANVAS_SURFACES.filter((def) => def.showsObjects).map((def) => def.id)).toEqual(['graph', 'scene3d']);
   });
 
+  /**
+   * An object surface is a surface OF something, so it cannot be offered by a control that
+   * has no object in hand, and cannot be restored on a reload that has forgotten which.
+   * Both rules are the `scope` field, read rather than re-derived at each call site.
+   */
+  it('keeps object-scoped surfaces out of the rail and out of the stored preference', () => {
+    const objectScoped = CANVAS_SURFACES.filter((def) => def.scope === 'object');
+    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'timeline']);
+    // None persists: a page cannot be reopened without knowing which page.
+    expect(objectScoped.every((def) => !def.persist)).toBe(true);
+    // None draws the board or its objects — each is about exactly one.
+    expect(objectScoped.every((def) => !def.showsBoard && !def.showsObjects)).toBe(true);
+    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'scene3d']);
+  });
+
+  /** The join between the two axes: a kind declares the surface that authors it. */
+  it('sends each medium to the runtime that can draw its axis, and nothing else', () => {
+    expect(creationObjectSurface('resume')).toBe('page');
+    expect(creationObjectSurface('prd')).toBe('page');
+    expect(creationObjectSurface('game')).toBe('play');
+    expect(creationObjectSurface('video')).toBe('timeline');
+    expect(creationObjectSurface('voice')).toBe('timeline');
+    // A card IS the whole object for most kinds, and should stay that way.
+    expect(creationObjectSurface('task')).toBeNull();
+    expect(creationObjectSurface('sticky')).toBeNull();
+    // Every declared target is a real, object-scoped surface.
+    for (const def of CANVAS_SURFACES) {
+      if (def.scope !== 'object') continue;
+      expect(boardCanvasSurfaces().some((board) => board.id === def.id)).toBe(false);
+    }
+  });
+
   it('degrades an unknown surface to the board rather than to a blank centre', () => {
-    expect(sanitizeCanvasSurface('timeline')).toBe(DEFAULT_CANVAS_SURFACE);
+    // A string that is NOT a declared surface. This used to be 'timeline', which was
+    // then promoted to a real object-scoped surface — so the assertion quietly started
+    // testing that a valid id sanitizes to itself, which is the opposite of the rule.
+    // Every id here must stay one the registry can never declare.
+    expect(sanitizeCanvasSurface('not-a-surface')).toBe(DEFAULT_CANVAS_SURFACE);
     expect(sanitizeCanvasSurface(null)).toBe(DEFAULT_CANVAS_SURFACE);
     expect(canvasSurfaceDefinition('nope' as 'graph').id).toBe(DEFAULT_CANVAS_SURFACE);
+    // …and a surface that IS declared survives, so the guard above cannot pass by
+    // sanitizing everything to the board.
+    expect(sanitizeCanvasSurface('timeline')).toBe('timeline');
   });
 
   /**
@@ -151,6 +192,57 @@ describe('the chat surface on the canvas', () => {
    * what preserves the toggle behaviour the 3D command has always had without the
    * registry needing to know that 3D is special.
    */
+  /**
+   * The rail lists BOARD surfaces. If an object surface leaked into it, pressing it with
+   * nothing selected would open a runtime with no object — a screen showing nothing.
+   */
+  it('never offers an object surface on the rail', () => {
+    render(<CreationCanvas sessionId="surface-rail-scope-test" persistence="local" />);
+    for (const name of ['Page', 'Play', 'Timeline']) {
+      expect(screen.queryAllByRole('button', { name })).toHaveLength(0);
+    }
+    expect(screen.getAllByRole('button', { name: 'Board' }).length).toBeGreaterThan(0);
+  });
+
+  /**
+   * The whole vertical slice for an object-scoped runtime: add the object, open it at full
+   * size from its details panel, and get the board back. The button is not wired per kind
+   * — it reads `creationObjectSurface`, which is why one control opens all three runtimes.
+   */
+  it('opens an object at full size from its details panel, and hands the board back', () => {
+    render(<CreationCanvas sessionId="surface-page-open-test" persistence="local" />);
+    const board = () => document.querySelector<HTMLElement>('[data-view]')!;
+
+    // Adding selects, which is what opens the details panel the control lives in.
+    fireEvent.click(screen.getByTestId('canvas-palette-resume'));
+    const open = screen.getByTestId('open-page-surface');
+    expect(open).toHaveAccessibleName('Open as a page');
+
+    fireEvent.click(open);
+    expect(board()).toHaveAttribute('data-view', 'page');
+    const surface = screen.getByTestId('canvas-page-surface');
+    // The medium is named beside the object, so the surface says what it is.
+    expect(within(surface).getByText('Page')).toBeInTheDocument();
+
+    fireEvent.click(within(surface).getByRole('button', { name: 'Back to the board' }));
+    expect(board()).toHaveAttribute('data-view', 'graph');
+    expect(screen.queryByTestId('canvas-page-surface')).not.toBeInTheDocument();
+    // An object surface is never remembered — it cannot be restored without its object.
+    expect(window.localStorage.getItem(CANVAS_SURFACE_STORAGE_KEY)).not.toBe('page');
+  });
+
+  /**
+   * A card is the whole object for most kinds. Offering "open at full size" on a task
+   * would promise a runtime that does not exist, so the control renders nothing.
+   */
+  it('offers no full-size surface for a kind whose card is the whole object', () => {
+    render(<CreationCanvas sessionId="surface-no-open-test" persistence="local" />);
+    fireEvent.click(screen.getByTestId('canvas-palette-task'));
+    expect(screen.queryByTestId('open-page-surface')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('open-play-surface')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('open-timeline-surface')).not.toBeInTheDocument();
+  });
+
   it('lets exactly one surface be lit, and returns to the board when it is pressed again', () => {
     render(<CreationCanvas sessionId="surface-switcher-test" persistence="local" />);
     const lit = () => ['Chat', 'Board', '3D space']

@@ -8,7 +8,7 @@ import {
   listConversations, getConversationThread, sendConversationMessage, markConversationRead,
   startEmployerConversation, startFreelancerConversation, fetchConversationAttachment,
   type ConversationSummary, type ConversationMessage, type MessagingSide,
-} from '@/lib/freelancerApi';
+} from '@/lib/messagingApi';
 
 /**
  * In-platform messaging drawer — employer<->freelancer threads. ONE component both

@@ -1,11 +1,15 @@
-'use client';
-
+/*
+ * No `'use client'` here on purpose. This is imported only by `CreationCanvas.tsx`, which
+ * already declares the boundary, so a directive would mark a second entry point that does
+ * not exist — and `check-frontend-architecture` counts directives, not components. Its own
+ * header says it: the directive is sometimes the bug.
+ */
 import { useTranslations } from 'next-intl';
 import styles from './CreationCanvas.module.css';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
 import { CanvasResumeEditor, type ResumeShareActions } from './CanvasResumeEditor';
 import { DocumentEditor } from './DocumentEditor';
-import { authoredMarkdown } from './CreationNode';
+import { authoredMarkdown } from '@/lib/canvasDocuments';
 import type { CreationNodeData } from './types';
 
 /**

@@ -1612,6 +1612,42 @@
    right) so no other panel can sit underneath it. Floating it is a small card ON the
    canvas that reserves nothing. Either way the user drags it to any width, which
    arrives as an inline --brain-dock-size. */
+/* ── OBJECT-SCOPED SURFACES ──────────────────────────────────────────────────────
+   One object, given the canvas. z-index 7 is the surface layer, the same place the 3D
+   scene and the conversation sit: under the React Flow root (raised to 9 with pointer
+   events off) so the command rail inside it stays reachable. The bottom band is the
+   composer's, from the same measured `--composer-space` every low panel clears.
+   All colour comes from the `--canvas-*` family the board declares for BOTH themes. */
+.objectSurface { position:absolute; z-index:7; inset:0; box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-bottom:var(--composer-space); background:var(--canvas-board-background); color:var(--canvas-ink); }
+.objectSurfaceHeader { display:flex; flex:none; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 16px 10px 62px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
+.objectSurfaceMark { display:grid; place-items:center; width:26px; height:26px; flex:none; border-radius:var(--radius-sm); background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); }
+.objectSurfaceTitle { min-width:0; flex:1; display:flex; flex-direction:column; }
+.objectSurfaceTitle strong { overflow:hidden; color:var(--canvas-ink); font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+.objectSurfaceTitle small { color:var(--canvas-muted); font-size:10px; }
+.objectSurfaceAction,.objectSurfaceExit,.objectSurfaceOpen { flex:none; min-height:32px; padding:6px 12px; border:1px solid var(--canvas-line); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-ink); font:650 11px var(--font-sans); cursor:pointer; }
+.objectSurfaceExit { border-color:var(--canvas-brain-border); color:var(--canvas-brain-accent); }
+.objectSurfaceAction:hover,.objectSurfaceExit:hover,.objectSurfaceOpen:hover,
+.objectSurfaceAction:focus-visible,.objectSurfaceExit:focus-visible,.objectSurfaceOpen:focus-visible { border-color:var(--canvas-brain-accent); background:var(--canvas-hover); outline:none; }
+.objectSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; overflow:auto; overscroll-behavior:contain; }
+
+/* A page keeps a MEASURE. Stretching prose to a 2560px monitor makes the surface bigger
+   and the document worse, and the sheet is also what makes this resemble the export. */
+.pageSheet { width:min(100%,var(--page-sheet-width,880px)); margin:0 auto; padding:20px 16px 28px; }
+.pageSheetReadOnly { padding:24px; color:var(--canvas-muted); font-size:12px; text-align:center; }
+
+/* A build wants the room, so the frame takes it and the controls sit under it. */
+.playStage { min-height:0; flex:1; display:flex; flex-direction:column; gap:10px; padding:14px 16px 18px; }
+.playFrame { min-height:0; flex:1; width:100%; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); }
+.playStopped { display:grid; place-items:center; min-height:180px; flex:1; margin:0; color:var(--canvas-muted); font-size:12px; }
+.playControls { display:flex; flex:none; flex-wrap:wrap; gap:6px; margin:0; padding:0; list-style:none; }
+.playControls li { padding:4px 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-muted); font-size:10px; }
+
+/* Time needs width, which is the whole reason this surface exists. */
+.timelineStage { min-height:0; flex:1; display:flex; flex-direction:column; width:min(100%,1440px); margin:0 auto; padding:14px 16px 20px; }
+.timelineMeta { display:flex; flex:none; align-items:baseline; gap:6px; }
+.timelineMeta strong { color:var(--canvas-ink); font:700 13px var(--font-mono,var(--font-sans)); font-variant-numeric:tabular-nums; }
+.timelineMeta small { color:var(--canvas-muted); font-size:10px; }
+
 /* The conversation AS the canvas — the zero-object surface.
    z-index 7 puts it exactly where the 3D scene sits: under the React Flow root, which
    the rule above raises to 9 with pointer events off so the command rail inside it
@@ -1762,6 +1798,12 @@
   /* A phone has no room for a reading measure — the column IS the viewport. The rail
      still owns the left edge, so the transcript starts clear of it. */
   .chatSurface { --chat-surface-width:100%; }
+  /* Same on the object surfaces: the sheet gives up its measure, and the header stops
+     reserving the rail's gutter because the rail moves to the bottom edge here. */
+  .pageSheet { --page-sheet-width:100%; padding:12px 10px 20px; }
+  .objectSurfaceHeader { gap:8px; padding:8px 10px; }
+  .objectSurfaceTitle strong { font-size:12px; }
+  .playStage,.timelineStage { padding:10px 8px 14px; }
   .chatSurfaceHeader { padding:10px 12px 8px; }
   .chatSurfaceBody { padding:0 2px 0 54px; }
   .chatSurfaceFooter { padding:4px 12px 8px; }

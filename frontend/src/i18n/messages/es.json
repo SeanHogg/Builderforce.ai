@@ -17960,7 +17960,24 @@
         "label": "Espacio 3D",
         "enter": "Ver este lienzo en 3D",
         "active": "Salir de 3D"
-      }
+      },
+      "page": {
+        "label": "Página",
+        "open": "Abrir como página"
+      },
+      "play": {
+        "label": "Jugar",
+        "open": "Jugar a tamaño completo",
+        "ship": "Publicar",
+        "controls": "Controles"
+      },
+      "timeline": {
+        "label": "Línea de tiempo",
+        "open": "Abrir la línea de tiempo",
+        "clipCount": "{count, plural, =0 {sin clips} one {# clip} other {# clips}}"
+      },
+      "backToBoard": "Volver al tablero",
+      "objectLabel": "{title}, a tamaño completo"
     },
     "miro": {
       "title": "Tableros de Miro",

@@ -17960,7 +17960,24 @@
         "label": "3D-Raum",
         "enter": "Diese Leinwand in 3D ansehen",
         "active": "3D verlassen"
-      }
+      },
+      "page": {
+        "label": "Seite",
+        "open": "Als Seite öffnen"
+      },
+      "play": {
+        "label": "Spielen",
+        "open": "In voller Größe spielen",
+        "ship": "Veröffentlichen",
+        "controls": "Steuerung"
+      },
+      "timeline": {
+        "label": "Zeitleiste",
+        "open": "Zeitleiste öffnen",
+        "clipCount": "{count, plural, =0 {keine Clips} one {# Clip} other {# Clips}}"
+      },
+      "backToBoard": "Zurück zum Board",
+      "objectLabel": "{title}, in voller Größe"
     },
     "miro": {
       "title": "Miro-Boards",

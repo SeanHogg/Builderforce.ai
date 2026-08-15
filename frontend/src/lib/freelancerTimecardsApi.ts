@@ -13,14 +13,7 @@
  */
 
 import { apiRequestStream } from './apiClient';
-
-async function jsonOrThrow<T>(res: Response, fallback: string): Promise<T> {
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? fallback);
-  }
-  return res.json() as Promise<T>;
-}
+import { jsonOrThrow } from './apiEnvelope';
 
 export interface Timecard {
   id: string;

@@ -108,7 +108,9 @@ function ResumePreview({ html, page, zoom, mode, onClose }: { html: string; page
   return <div className={styles.resumePreviewShell}><button type="button" className={styles.resumePreviewClose} onClick={onClose} aria-label={t('closePreview')}>×</button><div className={styles.resumePreviewViewport} data-page-view={mode}><div className={styles.resumePreviewCanvas} style={{ width: `${page.width * zoom / 100}mm`, minHeight: `${page.height * pageCount * zoom / 100}mm`, '--resume-page-height': `${page.height * zoom / 100}mm` } as CSSProperties}><div ref={documentRef} style={{ width: `${page.width}mm`, minHeight: `${page.height}mm`, transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }} dangerouslySetInnerHTML={{ __html: html }} />{mode !== 'continuous' && Array.from({ length: pageCount }, (_, index) => <span key={index} className={styles.resumePageNumber} style={{ top: `calc(var(--resume-page-height) * ${index + 1} - 22px)` }}>{t('pageNumber', { page: index + 1, count: pageCount })}</span>)}</div></div></div>;
 }
 
-type ResumeShareActions = { create: (kind: 'view' | 'embed') => Promise<void>; list: () => Promise<CanvasResumeShare[]>; revoke: (shareId: string) => Promise<void> };
+/** Exported because the page surface hands the same bundle through — one shape, so the
+ *  card and the full-size page can never offer different sharing. */
+export type ResumeShareActions = { create: (kind: 'view' | 'embed') => Promise<void>; list: () => Promise<CanvasResumeShare[]>; revoke: (shareId: string) => Promise<void> };
 
 /** A picked `.json` that is already a résumé, in the shape the server extractor returns
  *  — so the caller has one code path whether the document was parsed here or there. */

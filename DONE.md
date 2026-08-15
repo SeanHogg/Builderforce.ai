@@ -1,3 +1,225 @@
+## ✅ RESOLVED 2026-08-15 — The three medium runtimes, and a ratchet that says what broke it
+
+Closes three Gap Register entries from the canvas-surface pass.
+
+### 1. `page`, `play` and `timeline` — the runtimes a creation type is actually authored on
+
+The surface axis shipped with `graph` / `scene3d` / `chat`. The three that make a *medium*
+feel native were the recorded scope cut, and all three turned out to be PROMOTIONS rather
+than builds — the editors already existed, crammed into a ~340px node body where the
+medium's own axis had nowhere to go:
+
+- **`page`** — `DocumentEditor` and `CanvasResumeEditor`, on a sheet with a page measure
+  instead of inside a card. A document has a column because prose has a comfortable line
+  length, so the sheet does NOT go full-bleed; that is also what makes it resemble the export.
+- **`play`** — the generated build at full size. The sandbox rule (`allow-scripts`,
+  deliberately no `allow-same-origin`, `srcDoc` not a blob) is IMPORTED from
+  `GAME_FRAME_SANDBOX`, never retyped: a second copy of a security-critical string is a
+  second place for it to be wrong, and this surface runs the same untrusted model-authored
+  document the node body does.
+- **`timeline`** — `CanvasVideoEditor` with the horizontal room a multi-track edit assumes.
+  A `video` / `voice` object already persisted a real `CanvasVideoTimeline`; a second track
+  and a two-minute cut simply had nowhere to be drawn.
+
+**The architectural addition is `scope`.** These three are *object*-scoped — a page is a
+page OF something — which is a different kind of surface from the board-scoped three, and
+one flag now carries every consequence: they never appear in the rail's switcher (pressing
+"page" with nothing selected has no answer), they never persist (a surface bound to one
+object cannot be restored without it), and losing their target returns you to the board.
+`surfaceNode` is DERIVED from the id rather than stored beside it, so an object deleted by
+a collaborator or by Brain simply stops resolving.
+
+Entry is one self-gating control, `CanvasObjectSurfaceButton`, which reads
+`creationObjectSurface(kind)` and renders nothing for the majority of kinds where the card
+IS the whole object. One button opens all three runtimes, so a fourth is one registry entry.
+
+**`gameFocus` is gone.** That boolean carried two jobs under one name: it is now
+`gameShipFocus` (the ship/publish slide-out — distribution, still a panel) and the `play`
+surface (judging the build — not panel-shaped). "Open the game" used to mean "open a 620px
+panel about publishing it".
+
+**Two claims in the original entry were wrong and are corrected here.** It said `timeline`
+was "the only genuinely new build" — it was not, `CanvasVideoEditor` already existed. And it
+said the render must hand off through "the existing `api/src/application/integrations/hiredVideo.ts`
+port" — **that file does not exist**, and no hired.video render port exists anywhere in the
+API. Nothing in this work needs one; a handoff would be a separate integration.
+
+### 2. The ratchets now name the file that moved them
+
+`scripts/lib/ratchetDelta.mjs`, used by both `check-design-scale` and
+`check-frontend-architecture`. Each ratchet records a per-FILE tally beside its number; the
+count stays the gate and the tally explains it, so a failure prints the two or three files
+that actually changed instead of a `.slice(0, 12)` of a 3,793-offender corpus that is the
+same twelve lines every time. Per-file rather than per-offender on purpose — storing every
+offender string makes the record exact, unreadable and unmergeable, while a tally is stable
+under edits that do not change how many offences a file carries.
+
+It is advisory and never a second gate: it only explains a failure the count already
+decided, and it is written only under `RATCHET_WRITE_TALLY=1` so a guard can never quietly
+re-baseline itself.
+
+**It found its own first two regressions immediately**, both from this work, and both fixed
+rather than baselined:
+- Five new components carried `'use client'` and needed none — they are imported only by
+  `CreationCanvas.tsx`, which already declares the boundary. The guard's own header warns
+  that "the directive is sometimes the bug"; here it was, five times. Directives removed,
+  ratchet unmoved.
+- `creationObjectRegistry.ts` crossed 800 lines. The fix was not an exemption: the kind
+  → surface join is about the SURFACE axis and had no business in the object registry, so
+  it moved to `creationObjectSurfaces.ts` — where it also reads better, since the object
+  registry does not need to know surfaces exist and the surface registry cannot know about
+  kinds without inverting its dependency.
+
+### 3. `previewAdapter` is gone
+
+Declared on the interface, built for every definition, consumed by nothing — removed while
+this was in flight. Verified absent from `api/`, `frontend/`, `packages/`, `clients/` and
+`shared/`.
+
+Verified: 329 creation-canvas tests (25 files), `tsgo` clean, and all eight frontend guards
+green including both ratchets.
+
+---
+
+## ✅ RESOLVED 2026-08-15 — Embedded apps: a board becomes an app, and a consumer can pay for it (migration 0473)
+
+**The situation.** The canvas and the delivery side of the platform had no join that meant IDENTITY.
+`creation_session_project_links` recorded that a board REFERENCES a project — context, many-to-many,
+copied when a board is branched — and nothing recorded that a board BECAME one. So a person who had
+just designed something on a board had no action that turned it into a project, and everything the
+platform already does for a project (a kanban board, tickets, the agent workforce, a manager, an
+address, monitoring, releases with rollback) was unreachable from the surface where every idea starts.
+
+**The join is a ROLE on an existing association, not a new column.** The first draft added
+`creation_sessions.project_id`; that is wrong, because a session's project would then live in two
+places free to disagree — the per-feature copy of an existing shape 3NF forbids. `link_kind` carries
+`'reference'` (the default, so every existing row and reader is untouched) or `'app'`, unique on BOTH
+sides by partial index, so "which board is this app" is answered by the database rather than by a
+check somebody remembered to write. `copyableLinkFilter` is exported and applied at all three copy
+sites (copy, branch, merge): cloning an `app` link would give a duplicated board a second claim on
+somebody's running app and the partial index would fail the whole batch.
+
+**`is_ide_storage: false` is load-bearing and explicit.** A projects row that is storage-backing for
+an `ide_project` (0224) is HIDDEN from the board and the PMO list, so an app created that way would
+carry the hosting and none of the agents — precisely the leverage conversion exists to deliver. Set
+explicitly in `convertSessionToApp`, with `modality: 'app'` as a column VALUE rather than a new flag.
+
+**The address is claimed at conversion, not discovered at publish.** `checkSubdomainAvailability` is
+one primitive shared by the new `GET /api/creations/address-available`, the conversion path and
+`publishStaticSite` — which was MIGRATED onto it, deleting its inline normalise-and-check. It
+separates `reserved` from merely `invalid` because "pick different characters" and "that belongs to
+the platform" are different instructions. Deliberately uncached: a cached "available" that survives
+somebody else claiming the name tells the creator they have it and then fails the publish.
+
+**A consumer can now pay the creator, with no second account and no second invoice.** `site_users`
+was already the right identity — its own space, no password anywhere in the feature, reach limited to
+one site — so no third `account_type` was added. `site_subscriptions` records the recurring
+RELATIONSHIP and no money at all: settlement runs through the SAME `orders`, `order_line_items` and
+`ledger_entries` a one-time sale writes, with the same reference-keyed idempotency, because a second
+money path is how a seller's balance and the platform's books stop agreeing. Served at
+`/__api/billing/*` on the app's OWN origin, where the consumer already is, and the return URL is
+rebuilt from the request origin rather than taken from the body — a caller-supplied one is an open
+redirect a processor would send a paying customer to.
+
+**The take rate is resolved per seller, not a constant.** `resolveTakeRateBps` reads the seller's
+lifetime credited total (the same ONE indexed SUM `sellerEarnings` uses, extracted as
+`lifetimeSellerCents` so the rate a buyer is charged and the figure the seller is shown cannot drift)
+and returns **0 bps under a $200,000 lifetime threshold**, then the configured 1500. Still stamped
+onto `order_line_items.commissionCents`, which matters MORE now it moves: the sale that carries a
+seller over the threshold must not re-price the four hundred before it.
+
+**A real bug found by writing the test for it.** `platformTakeRateBps` documented that it refused a
+misconfigured `"50%"` — and did not: `Number.parseInt('50%', 10)` is `50`, not `NaN`, so an operator
+who typed "50%" meaning half silently got 50 basis points, 0.5%, and the range clamp waved it through
+because 50 is a legal rate. Money wrong by a factor of a hundred, silently. `wholeNumberOrNull` now
+requires the entire string to be digits; both rate and threshold read through it.
+
+**Also shipped:** `delivery: 'copy' | 'hosted'` as spec data on `MarketplaceListingKindSpec` (a LIST,
+because one listing can legitimately offer both doors), with `resolveDelivery` / `requiresWorkspace`
+as the single derivations — `requiresWorkspace` is the consumer rule in one place, so the storefront
+and the checkout cannot disagree about whether somebody has to sign up. `createSubscriptionCheckoutSession`
+on the `PaymentProvider` port, and `subscriptionId` on `RetrievedCheckoutSession` — a `mode=subscription`
+session carries no payment intent, so reading only the intent is why a recurring purchase would have
+looked unpaid to a caller that had just been told the money moved.
+
+**Verification.** 24/24 API guards pass (`check:table-adoption` and `check:tenant-scope` both went red
+first and were fixed properly, not baselined); 5,932 tests pass.
+
+Closes **R1, R2, R3, R4, R6, R14**. **R5 is closed as ruled out** — no per-app hosting or database
+choice is offered; an app runs on Builderforce and its data lives in Builderforce collections.
+
+---
+
+## ✅ RESOLVED 2026-08-15 — The résumé stops being an integration (migration 0471)
+
+**The situation.** A for-hire profile provisioned a job-seeker account at hired.video on signup,
+uploaded the file there for parsing, cached their JSON extract locally, and displayed the result
+by embedding an iframe on a 15-minute token. With `HIRED_API_KEY` unset — every environment but
+one — the person got a single un-parsed file and no viewer at all. Meanwhile this platform already
+had the better résumé: the Canvas `resume` object, with an immutable Original, named variants,
+twelve live-rendered templates and PDF/DOCX/HTML/Markdown export. The two halves had never been
+joined, so the engine and the profile were disconnected.
+
+**The seam is gone, not inverted.** `application/integrations/hiredVideo.ts` is DELETED, the
+`@seanhogg/hired-video-sdk` dependency is dropped, and `HIRED_API_KEY`/`HIRED_API_BASE_URL` are
+out of `env.ts`. Migration 0471 drops the four `hired_video_*` columns plus `resume_key`,
+`resume_filename` and `resume_extract`, and adds `freelancer_profiles.resume_object_id →
+creation_session_objects`. The résumé is a pointer to the Canvas object, not a copy: PRD 20's
+session test says a thing that is authored, can be shared, and people can be present in IS the
+canvas, so no résumé table was added.
+
+**What replaced the vendor's capability.** `application/career/resumeExtract.ts` reads PDF text
+(`unpdf`) and DOCX (`fflate`) server-side, and `resumeDocument.ts` structures it into JSON Resume
+deterministically — built over the existing `parseResume` rather than porting hired.video's second
+parser, which would have given the scorer and the document builder two different readings of one
+file. This closes the standing "binary PDF/DOCX can't be parsed locally" gap and needs no model,
+no tenant plan and no provider: `POST /api/creative/resume/import` reaches an LLM and is
+tenant-scoped, which also meant it 401'd for the tenantless freelancer it existed to serve.
+
+**A for-hire account now gets a workspace.** `accountTypeGetsWorkspace` was true only for
+`'standard'`, so a freelancer had no tenant and therefore could not own the one artefact the
+account exists to produce. `ensurePersonalWorkspace` provisions a tenant with NO starter project,
+sharing one implementation with `ensureStarterWorkspace`. Owning a tenant and being shown builder
+navigation are different questions — `navGroupsForAccountType` is unchanged.
+
+**Three copies of the family logic became one.** The résumé document and revision family moved into
+`@builderforce/creation-canvas-contract`, and every duplicate migrated in the same pass:
+`publicResumeProjection.ts` and `creationSessionRouteService.ts` each had their own answer to
+"which revision is the live one" and to "may this be shared", and the frontend had a third.
+`ResumeDocumentView` is now the single renderer behind the owner's profile, `/talent/[id]` and the
+public share link, so the editor preview is a promise about what an employer sees.
+
+**The employer's half finally has a writer.** `candidate_resumes` and `party_roles` both landed with
+the 0419 hiring domain and neither had ever been written to, which left consent, the retention
+clock, erasure and the diversity report unreachable. Applying now runs
+`application/hiring/candidateIntake.ts`: it registers the applicant as a `candidate` party role and
+projects their master revision into the employer's tenant. A copy, not a join — a recruiter must
+never see the variants someone tailored for a competitor. `candidateRefForUser` uses the user id
+through `partyRef()` rather than a display name, so two people called John Smith stay two candidates.
+
+**Jobs, job-seeker half.** Saved jobs are a proposal in the `saved` state rather than a second
+table, so saving and applying are one lifecycle that cannot disagree about "did I already apply?".
+Alerts are `saved_searches` rows with `scope='listing'` — that column exists precisely so the fifth
+scope adds no DDL. `POST /api/jobs/extract` reads a JD from pasted text or an uploaded file through
+the same extractor, and returns the match and tailoring plan from the existing pure `career/`
+functions in the same call.
+
+**Two bugs the new tests caught in code written this pass**, both fixed: `LABELLED` built its regex
+without a non-capturing group, so `^s*company|employers*[:-]` bound the anchors to the last
+alternative only and the first label silently never matched; and `inferYearsOfExperience` compared
+a timezone-less résumé year against a LOCAL year, which would report a candidate a year less
+experienced depending on which side of UTC the worker ran.
+
+Validation: API and frontend both typecheck clean; 65 career + hiring tests pass (17 new); all five
+locale catalogs parse and carry real translations for every new string.
+
+Superseded roadmap entry: *"Résumés are a REMOTE capability behind an env-gated third-party SDK"*
+(hired.video port, T1) — removed from ROADMAP.md. What remains of that programme is logged there as
+four narrower entries: the ATS/AI résumé tools, the candidates pipeline, job sourcing/scraping, and
+the evaluator that would make an alert actually alert.
+
+---
+
 ## ✅ RESOLVED 2026-08-15 — Both frontend ratchets green, and the guard that could not say what broke it
 
 Six Gap Register entries, logged across three passes, were one situation: `check:architecture`
@@ -778,6 +1000,17 @@ The document stylesheet was an inline `<style>` beside every rendering — thirt
 of the same 4 KB inside one open editor, multiplied by every résumé on the board. It is
 now mounted once per page and reference-counted, so a board with no résumé carries no
 résumé CSS.
+
+### One unrelated stale assertion, found by the full-suite run and fixed
+
+`canvasSurfaces.test.tsx` asserted `sanitizeCanvasSurface('timeline') === DEFAULT_CANVAS_SURFACE`
+using `'timeline'` as its example of an UNKNOWN surface. The surface registry has since
+declared `timeline` as a real object-scoped surface, so the assertion had silently
+inverted: it was testing that a valid id sanitizes to itself. Now uses a string the
+registry can never declare, and gained the missing other half — a declared surface must
+SURVIVE sanitisation, so the guard cannot pass by degrading everything to the board.
+Not part of the résumé work; it was the single red test in the full run and is a
+one-line restoration of the test's own stated intent.
 
 Tests: `canvasResume.test.ts` (PascalCase recognition, negative cases, legacy-dataset
 recovery, fan-out determinism, per-variant template binding), `canvasFileImport.test.ts`

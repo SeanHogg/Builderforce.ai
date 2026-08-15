@@ -3,7 +3,7 @@
 import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { listConversations, type MessagingSide } from '@/lib/freelancerApi';
+import { listConversations, type MessagingSide } from '@/lib/messagingApi';
 import { MessagesPanel, type MessagesLaunchContext } from './MessagesPanel';
 
 /**

@@ -17960,7 +17960,24 @@
         "label": "3D 空间",
         "enter": "以 3D 方式查看此画布",
         "active": "退出 3D"
-      }
+      },
+      "page": {
+        "label": "页面",
+        "open": "以页面方式打开"
+      },
+      "play": {
+        "label": "试玩",
+        "open": "全屏试玩",
+        "ship": "发布",
+        "controls": "操作方式"
+      },
+      "timeline": {
+        "label": "时间轴",
+        "open": "打开时间轴",
+        "clipCount": "{count, plural, =0 {无片段} other {# 个片段}}"
+      },
+      "backToBoard": "返回画板",
+      "objectLabel": "{title}（全屏）"
     },
     "miro": {
       "title": "Miro 白板",

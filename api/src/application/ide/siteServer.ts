@@ -401,7 +401,7 @@ async function handleSiteBilling(
   if (!identity) return jsonResponse({ error: 'Sign in first.' }, 401);
 
   if (action === 'me' && request.method === 'GET') {
-    const subscription = await activeSiteSubscription(db, site.siteId, identity.userId);
+    const subscription = await activeSiteSubscription(db, site.tenantId, site.siteId, identity.userId);
     return jsonResponse({ ok: true, subscription }, 200);
   }
 
@@ -447,7 +447,7 @@ async function handleSiteBilling(
   }
 
   if (action === 'cancel' && request.method === 'POST') {
-    const result = await cancelSiteSubscription(db, site.siteId, identity.userId);
+    const result = await cancelSiteSubscription(db, site.tenantId, site.siteId, identity.userId);
     return jsonResponse({ ok: result.ok }, result.ok ? 200 : 404);
   }
 

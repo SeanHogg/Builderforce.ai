@@ -17961,7 +17961,24 @@
         "label": "3D space",
         "enter": "View this canvas in 3D",
         "active": "Exit 3D"
-      }
+      },
+      "page": {
+        "label": "Page",
+        "open": "Open as a page"
+      },
+      "play": {
+        "label": "Play",
+        "open": "Play at full size",
+        "ship": "Ship it",
+        "controls": "Controls"
+      },
+      "timeline": {
+        "label": "Timeline",
+        "open": "Open the timeline",
+        "clipCount": "{count, plural, =0 {no clips} one {# clip} other {# clips}}"
+      },
+      "backToBoard": "Back to the board",
+      "objectLabel": "{title}, at full size"
     },
     "miro": {
       "title": "Miro boards",

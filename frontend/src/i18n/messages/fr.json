@@ -17960,7 +17960,24 @@
         "label": "Espace 3D",
         "enter": "Voir ce canevas en 3D",
         "active": "Quitter la 3D"
-      }
+      },
+      "page": {
+        "label": "Page",
+        "open": "Ouvrir en pleine page"
+      },
+      "play": {
+        "label": "Jouer",
+        "open": "Jouer en grand",
+        "ship": "Publier",
+        "controls": "Commandes"
+      },
+      "timeline": {
+        "label": "Montage",
+        "open": "Ouvrir le montage",
+        "clipCount": "{count, plural, =0 {aucun clip} one {# clip} other {# clips}}"
+      },
+      "backToBoard": "Retour au tableau",
+      "objectLabel": "{title}, en grand"
     },
     "miro": {
       "title": "Tableaux Miro",

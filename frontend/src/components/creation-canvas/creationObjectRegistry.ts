@@ -35,7 +35,6 @@ import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
 // (CanvasCommands, Canvas3DView), so this is the direction the graph already runs.
 import { STICKY_COLORS } from '@/components/canvas/canvasModel';
 import { DEFAULT_MODALITY } from '@/lib/modality';
-import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { DEFAULT_PITCH_COMPETITION_ID } from '@/lib/pitchCompetition';
 import { COURSE_EXPORT_STANDARDS, emptyCourse } from '@/lib/courseLms';
 import { defaultCanvasTourDesign } from '@/lib/onboarding/canvasTourDesign';
@@ -233,38 +232,6 @@ const DATA_ARCHITECTURE_REGISTRY = DATA_ARCHITECTURE_SPECS.map((spec) => ({
 const CAPABILITIES: Partial<Record<CreationObjectKind, string>> = {
   evermind: 'evermind', mcp: 'integrations', agent: 'agents', llm: 'models', voice: 'voice', video: 'video',
 };
-/**
- * The surface a kind is AUTHORED on when it is given the whole canvas — the join between
- * the two extensibility axes (`lib/canvasSurfaces.ts`).
- *
- * A node body is a card, and a card is the right size for a preview of anything and the
- * wrong size for the medium's own axis: a resume has a page, a build has a running frame,
- * an edit has a second track. Those axes do not fit in ~340px, which is why each of these
- * kinds already had an editor crammed into one.
- *
- * Absent means "the card IS the object" — a note, a task, a metric. Most kinds are absent
- * and should stay that way: a surface is for a medium with a dimension the board cannot
- * draw, not for anything that would merely enjoy more room.
- */
-const AUTHORING_SURFACE: Partial<Record<CreationObjectKind, CanvasSurfaceId>> = {
-  // A page. `DOCUMENT_BODY_KINDS` + the resume, which is the same paper with a schema.
-  document: 'page', prd: 'page', knowledge: 'page', resume: 'page',
-  // A running build. Already a full-surface runtime before this existed — it just wore a
-  // bespoke `gameFocus` boolean instead of a surface id.
-  game: 'play',
-  // Time. Both kinds persist a `CanvasVideoTimeline`, which is tracks × seconds.
-  video: 'timeline', voice: 'timeline',
-};
-
-/**
- * Which surface opens this object full-size, or `null` when the card is the whole object.
- * Consumers read this instead of listing kinds, so the "open full size" control appears
- * exactly where there is something to open — see `CanvasObjectSurfaceButton`.
- */
-export function creationObjectSurface(kind: CreationObjectKind): CanvasSurfaceId | null {
-  return AUTHORING_SURFACE[kind] ?? null;
-}
-
 const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   workflow: ['edit', 'build', 'run'], website: ['edit', 'preview', 'publish'], prototype: ['edit', 'preview'],
   // Opening the Builder IS the adapter: run, checks, terminal and publish all

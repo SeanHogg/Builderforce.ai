@@ -13,7 +13,7 @@ const card: React.CSSProperties = {
 };
 const input: React.CSSProperties = {
   background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-md)', padding: '7px 10px', fontSize: 13, outline: 'none', minWidth: 0,
+  borderRadius: 'var(--radius-md)', padding: '7px 10px', fontSize: 'var(--font-size-small)', outline: 'none', minWidth: 0,
 };
 
 /**
