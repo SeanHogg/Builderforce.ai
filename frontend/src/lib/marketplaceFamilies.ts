@@ -111,6 +111,44 @@ export function kindLabelKey(kind: string): string {
     : `marketplace.family.kind.${kind}`;
 }
 
+/**
+ * WHAT THE PUBLISH BUTTON DOES, for the chip that is active.
+ *
+ * The families declare a `flow`, but the storefront only ever implemented two
+ * of its values: `claim` was inert and EVERY other chip opened the skill form —
+ * so "Publish an asset" under Personas offered a slug/version/repo form that
+ * does not describe a persona, and under the canvas kinds it offered a form for
+ * something that is only ever published from the board that made it.
+ *
+ * A thing is published where it is authored. That is the rule this table
+ * encodes, one row per chip that has somewhere else to be, so a chip cannot
+ * advertise a publish path it does not have.
+ */
+export type PublishAction =
+  | { via: 'form' }
+  | { via: 'route'; href: string; requiresAuth: boolean }
+  | { via: 'disabled' };
+
+/** Chips whose thing is authored on a page of its own. */
+const PUBLISH_ROUTE: Record<string, { href: string; requiresAuth: boolean }> = {
+  'asset:persona': { href: '/personas', requiresAuth: true },
+  'asset:knowledge': { href: '/knowledge/new', requiresAuth: true },
+};
+
+/** Chips nobody can publish into. The provider catalogue owns the model list;
+ *  a person does not add a row to it, and a button saying they can is a lie. */
+const PUBLISH_CLOSED = new Set(['asset:model']);
+
+export function publishActionFor(family: FamilyId, kind: string): PublishAction {
+  if (FAMILIES[family].flow === 'claim') return { via: 'disabled' };
+  if (PUBLISH_CLOSED.has(`${family}:${kind}`)) return { via: 'disabled' };
+  // A canvas creation is published from the board that made it. The canvas is
+  // open to guests, so this is the one publish path with no sign-in gate.
+  if (creationKindForChip(family, kind)) return { via: 'route', href: '/create/new', requiresAuth: false };
+  const route = PUBLISH_ROUTE[`${family}:${kind}`];
+  return route ? { via: 'route', ...route } : { via: 'form' };
+}
+
 export const FAMILIES: Record<FamilyId, MarketplaceFamily> = {
   talent: {
     id: 'talent',

@@ -50,13 +50,23 @@ import {
 import { sha256Hex } from '../../domain/shared/hash';
 import type { Env } from '../../env';
 
-/** The fifteen seats on the roster (PRD 20 §3). The schema's domain column, the
- *  permission module's `domain`, and the navigation's surface list are the same
- *  list, and §7 says neither may drift from the other — so it is declared once. */
+/**
+ * The seats on the roster (PRD 20 §3). The schema's domain column, the permission
+ * module's `domain`, and the navigation's surface list are the same list, and §7 says
+ * neither may drift from the other — so it is declared once.
+ *
+ * `operations` is the sixteenth, and the first added since the roster was drawn. Every
+ * one of the original fifteen models how a company runs ITSELF; none modelled what it
+ * DOES for the customer who pays it — the job, the asset, the visit, the part, the
+ * certificate. That is fine for a horizontal SaaS whose product is the software, and
+ * fatal for the verticals most companies actually are. `delivery` is the software
+ * backlog and `support` is the ticket about the work, so neither could absorb it
+ * without meaning something else. See `schema/operations.ts`.
+ */
 export const DOMAINS = [
   'growth', 'delivery', 'agents', 'hiring', 'finance', 'revenue', 'commerce',
   'identity', 'people', 'platform', 'governance', 'investor', 'support',
-  'canvas', 'integrations',
+  'canvas', 'integrations', 'operations',
 ] as const;
 export type Domain = (typeof DOMAINS)[number];
 

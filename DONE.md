@@ -1,3 +1,150 @@
+## RESOLVED 2026-08-15 — Idea → REAL: eight proof forms, and a backend that runs in the customer's own cloud
+
+The platform could take a pasted brief and produce exactly ONE thing: a working webhook system on a
+Builderforce-hosted ingress. That is the most expensive proof there is, and for most of the questions a
+business actually has to answer it is the wrong one. "Can you show me?" does not need a running system.
+"Does anyone want this?" is answered by a landing page and a number — and answering it with a built
+system is how six weeks get spent on something nobody asked for. There was no cheaper rung on the
+ladder, and no way at all to run the result anywhere but here.
+
+Two halves shipped together, because neither is much use alone: a registry of what REAL can mean, and
+somewhere real to put it.
+
+### 1 · The realization port — `api/src/application/realization/` (migration 0463)
+
+`RealizationTarget` is a target declared as DATA plus one function, so a ninth proof form is a registry
+entry rather than a branch in a builder. Eight shipped, ordered by fidelity because that is the order a
+sensible team walks them:
+
+| Target | The question it answers | Fidelity / effort |
+|---|---|---|
+| `demo-video` | Can you show me what this is? | 1 / 1 |
+| `clickable-prototype` | Can someone complete this without help? | 2 / 2 |
+| `smoke-test` | Does anyone actually want this? | 2 / 2 |
+| `wizard-of-oz` | Is the outcome worth paying for, before we can automate it? | 3 / 2 |
+| `poc` | Does the hard part work, reliably enough? | 3 / 3 |
+| `pilot` | Does it hold up with real people, at a survivable size? | 4 / 4 |
+| `phone-line` | Can customers reach this by phone — and can it reach them? | 4 / 3 |
+| `live-system` | Is it actually running, and can we operate it? | 5 / 5 |
+
+Each produces canvas files, handlers, tickets, connectors, secrets and acceptance criteria — which is
+exactly a `ChallengePlan`, so `materializeChallenge` writes it. That was the design decision that made
+the whole thing small: the canvas write contract, the idempotent ticket seeding, the auto-run gate and
+the readiness list are already correct, and a second materialiser would have been a second set of rules
+about when the platform may spend a customer's run budget.
+
+What each target actually generates is a working artefact, not a placeholder:
+
+- **`demo-video`** — a timed, self-advancing 90-second reel you screen-record, plus the narration script
+  with per-scene timings. Not an MP4: a generated video of placeholder screens is worth less than
+  nothing, while a page that makes recording one a twenty-minute job is worth a lot.
+- **`clickable-prototype`** — an instrumented click-through with a recorded click log and an "I am stuck"
+  button, because the finding that matters is where someone hesitated and that is invisible if you only
+  watch them finish. Runs from `file://`; a prototype that needs a deploy is not a prototype.
+- **`smoke-test`** — a fake-door landing page, a waitlist, and a demand console judged against a
+  threshold written *before* the traffic arrives. Everyone who signs up is told immediately that it is
+  not built yet — the interest being measured has to be interest in the thing, not in a purchase somebody
+  thinks they made.
+- **`wizard-of-oz`** — a real front end with a human behind it on a 60-minute clock, on the same routes
+  the built system will use, so replacing the human with code changes nothing the customer can see.
+- **`poc`** — the riskiest step isolated behind a 20-trial harness with a pre-registered pass rate. One
+  successful run of a non-deterministic step is evidence of nothing, which is how a team commits to
+  something that works four times in five.
+- **`pilot`** — a bounded cohort, a weekly feedback loop, and written exit criteria. Pilots do not fail
+  by missing their number; they fail by not ending, so the dashboard shows the clock as prominently as
+  the metric.
+- **`phone-line`** — inbound *and* outbound. `<Gather input="speech">` into a model turn rather than a
+  digit menu (the handler vocabulary tests emptiness, not equality — and a phone tree is what everyone
+  building this is trying to escape), plus a signed `/campaign/call` endpoint that places outbound calls
+  onto the same reply route. Signed because an unauthenticated endpoint that places calls is an
+  unauthenticated endpoint that spends money, and it will be found.
+- **`live-system`** — the only target with `extendsBriefPlan`, so it builds ON the blueprint's handlers
+  rather than replacing them, and adds the two things a build never produces: an ops console and a
+  runbook written while nothing is on fire.
+
+The recommender deliberately prefers the **cheapest** proof that fits (`FIT_WEIGHT` 0.6, cost the rest)
+and never puts `live-system` first. A recommender that reached for the impressive one because a brief
+mentioned three integrations would be agreeing with whatever the customer was already going to do, which
+is not advice. Every target comes back ranked with reasons — it is advice, not a filter.
+
+**`realizeService` is what makes it REAL rather than built.** `materializeChallenge` produces a project;
+a proof needs an address. So the service also publishes the canvas's static files (the whole canvas, not
+just what this pass generated — publishing replaces the site, and a project accumulates proofs) and
+creates the site collections the generated forms post to. That second step is not a nicety:
+`/__api/collections/<name>` answers 404 identically for a collection that does not exist and one that
+does not accept public writes, so a landing page whose collection was never created reports **zero
+demand for an idea people wanted** — the worst possible failure for a feature whose only job is to
+produce evidence. Order is load-bearing: materialize → publish → collections, because the site row does
+not exist until the first publish and a collection needs a site id.
+
+`realizations` is a table and not a column on `challenges` because an idea has MANY proofs over its
+life; a `realization_key` column could hold exactly one, making "what have we already tried?"
+unanswerable. `target_key` is a column value with no CHECK constraint — a ninth proof form is an
+adapter, never a migration.
+
+Surfaces: `GET/POST /api/realizations` (+ `/targets`, `/plan`, `/:id/build`), a localized `/realize` page
+in all five catalogs, and a link from `/challenges` that passes the challenge id so the brief is read
+once and the two pages cannot show different interpretations of it.
+
+### 2 · Three new hosting adapters — AWS, Google Cloud, Azure
+
+"It runs on our platform" is not an acceptable answer to a procurement question about data residency, an
+existing enterprise agreement, or a security review that only knows how to audit one provider. The
+hosting port already existed for exactly this; these are the adapters it was shaped for.
+
+**One engine, five runtimes.** `github-worker` carried its own 500-line copy of the handler lowering
+inside a template string. A second copy for AWS, a third for GCP and a fourth for Azure would have been
+four places where "a failing step binds empty and the reply is still well-formed" could drift, and the
+drift would only ever be discovered by a customer whose Twilio calls started dropping. So the lowering
+is now `adapters/handlerEngineSource.ts` — plain JavaScript, zero dependencies, only web standards
+present in both Workers and Node 20 — and all four self-hosted adapters embed it **byte-identically**
+(asserted, not hoped: `selfHosted.test.ts` compares each adapter's engine to a fresh render). Cloudflare
+was migrated onto it in the same pass; `worker/src/index.js` is now nine lines.
+
+What differs per cloud is what genuinely differs:
+
+- **`aws-lambda`** — a SAM template with a Function URL at `AuthType: NONE`. IAM auth there would be
+  strictly worse than useless: Twilio, Stripe and Shopify cannot sign SigV4, so the only callers it would
+  exclude are the ones the system exists to serve. The request URL is rebuilt from the forwarded host,
+  because Twilio signs the URL it called byte for byte. Secrets travel as `NoEcho` parameters, and an
+  unset repository secret is *skipped* rather than pushed empty.
+- **`gcp-cloudrun`** — a three-line Dockerfile over a plain Node server, deployed with Workload Identity
+  Federation rather than a downloaded service-account key. Env vars use the `^##^` delimiter, because a
+  signing secret may legitimately contain a comma and the default separator would split it into two half
+  variables.
+- **`azure-functions`** — Node v4 model, one anonymous function claiming `{*path}`, and `host.json` with
+  `routePrefix: ""`. Left at the default, a handler claiming `/sms` answers on `/api/sms` and the URL the
+  customer pasted into Twilio 404s because of a default nobody typed.
+
+All three serve **the project's site as well as its API**, because "deploy it to AWS" does not mean
+"deploy the webhooks to AWS and leave the pages on ours". `collect-site.mjs` gathers the pages from the
+repo at deploy time, so there is exactly one copy and no chance of the deployed one going stale, and
+each generated bundle serves handlers first and static files second — a page can never shadow an
+endpoint a provider calls.
+
+**A migration bug closed along the way:** the generated Worker silently DROPPED every `data` step. A
+handler that read a site collection worked perfectly on the platform and returned an empty list the day
+it moved to another cloud, with nothing anywhere saying why — the worst class of migration defect, where
+the system does not fail, it quietly stops being right. `GET /api/backend-runtime/projects/:id/collections/:name`
+now serves that read to a deployed backend, authenticated by the same tenant API key its model calls
+already carry (`requireTenantAccess`, not a user JWT — the caller is a Lambda, not a browser) and
+re-scoped to the project, because a key is scoped to a tenant and the project id comes off the URL.
+
+### Verification
+
+`api npm test`: 5741 passing, including 133 new across `realization.test.ts`, `selfHosted.test.ts` and
+the rewritten `githubWorker.test.ts`. The assertions worth having are about invariants rather than
+markup: that a target which collects data declares the collection it writes to, that no handler with a
+connector step is left unverified, that no working document (`.md` charter, runbook, hypothesis) is
+publishable to the public site, that every generated page spells the ingress substitution exactly as the
+materialiser rewrites it, and that the recommender never opens with the expensive answer.
+
+Residuals are on the register under groups 9 and 10 — chiefly that no generated cloud deploy has yet run
+against a live account (blocked on credentials for three cloud providers), and that a realization records
+what was *built* and not what was *learned*.
+
+---
+
 ## RESOLVED 2026-08-14 — `/marketplace` filed support tickets about its own logged-out visitors
 
 Reported as a support ticket: `GET /api/creation-listings/earnings` → **401 "Missing or malformed

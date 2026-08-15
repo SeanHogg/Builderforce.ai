@@ -14,14 +14,18 @@
 
 import { apiRequest } from '@/lib/apiClient';
 
-/** The fifteen seats. Mirrors `DOMAINS` in the api's ObjectRegistry — §7 says
- *  the fifteen domains and the fifteen seats are the same list and neither may
- *  drift, so the api serves it at `/api/roster/manifest` and this literal is the
- *  compile-time half of the same list. `rosterManifest()` is the runtime check. */
+/** The seats. Mirrors `DOMAINS` in the api's ObjectRegistry — §7 says the
+ *  domains and the seats are the same list and neither may drift, so the api
+ *  serves it at `/api/roster/manifest` and this literal is the compile-time half
+ *  of the same list. `rosterManifest()` is the runtime check.
+ *
+ *  `operations` is the sixteenth: the work a vertical company SELLS — the job,
+ *  the asset, the visit, the part, the certificate — which none of the original
+ *  fifteen modelled. See `schema/operations.ts` in the api. */
 export const DOMAINS = [
   'growth', 'delivery', 'agents', 'hiring', 'finance', 'revenue', 'commerce',
   'identity', 'people', 'platform', 'governance', 'investor', 'support',
-  'canvas', 'integrations',
+  'canvas', 'integrations', 'operations',
 ] as const;
 export type Domain = (typeof DOMAINS)[number];
 

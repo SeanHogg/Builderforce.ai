@@ -27,7 +27,11 @@ import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/
 import { deleteWorkspaceFile, listWorkspaceFiles, readWorkspaceFile, writeWorkspaceFile } from '../ide/workspaceStore';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { declarativeStrategy } from './adapters/declarative';
-import { githubWorkerStrategy, WORKER_HEALTH_PATH } from './adapters/githubWorker';
+import { githubWorkerStrategy } from './adapters/githubWorker';
+import { awsLambdaStrategy } from './adapters/awsLambda';
+import { gcpCloudRunStrategy } from './adapters/gcpCloudRun';
+import { azureFunctionsStrategy } from './adapters/azureFunctions';
+import { BACKEND_HEALTH_PATH } from './adapters/handlerEngineSource';
 import {
   isBackendStrategy,
   type BackendHostingStrategy,
@@ -40,6 +44,9 @@ import { HANDLERS_DIR, handlerNameFromPath, parseHandlerSpec, type HandlerSpec }
 const STRATEGIES: Record<BackendStrategyKey, BackendHostingStrategy> = {
   declarative: declarativeStrategy,
   'github-worker': githubWorkerStrategy,
+  'aws-lambda': awsLambdaStrategy,
+  'gcp-cloudrun': gcpCloudRunStrategy,
+  'azure-functions': azureFunctionsStrategy,
 };
 
 /** Every strategy, for the picker UI. */
@@ -543,13 +550,14 @@ export async function materializeBackend(args: {
 }
 
 /**
- * Record where a `github-worker` backend actually landed.
+ * Record where a self-hosted backend actually landed.
  *
- * Without this the strategy is generate-only: we write the Worker and the Action,
- * the runner deploys it, and the platform never learns the address — so the UI
- * keeps showing the Builderforce ingress as the place to point webhooks at, which
- * for this strategy is the WRONG URL. The generated workflow reports the URL back
- * over the same GitHub OIDC path the static deploy uses.
+ * Without this a self-hosted strategy is generate-only: we write the code and the
+ * Action, the runner deploys it, and the platform never learns the address — so
+ * the UI keeps showing the Builderforce ingress as the place to point webhooks
+ * at, which for these strategies is the WRONG URL. Every generated workflow —
+ * Cloudflare, AWS, Google Cloud, Azure — reports the URL back over the same
+ * GitHub OIDC path the static deploy uses.
  *
  * Only an `https://` URL is accepted: this value is rendered as a link and copied
  * into a provider console, so a runner echoing junk must not become a click target.
@@ -594,12 +602,16 @@ export interface WorkerHealth {
 }
 
 /**
- * Ask a deployed `github-worker` backend whether it is actually credentialled.
+ * Ask a deployed self-hosted backend whether it is actually credentialled.
+ *
+ * Every generated target — Cloudflare, AWS, Google Cloud, Azure — serves the
+ * same health route from the same shared engine, so this one probe answers for
+ * all four rather than needing a per-cloud check.
  *
  * The deploy workflow SKIPS a secret that is absent from the repository rather
  * than pushing it empty, which is the right failure posture but leaves the
  * platform unable to tell "deployed" from "deployed and will 403 everything".
- * This closes that: the generated Worker reports which of its expected secrets
+ * This closes that: the generated backend reports which of its expected secrets
  * are bound, by name, and the panel can say so before a provider does.
  *
  * Guarded like any other server-side fetch to a customer-controlled URL, and
@@ -615,7 +627,7 @@ export async function probeWorkerHealth(env: Env, deployedUrl: string | null): P
     async () => {
       let target: URL;
       try {
-        target = assertSafeUrl(new URL(WORKER_HEALTH_PATH, deployedUrl).toString(), { allowHttp: false });
+        target = assertSafeUrl(new URL(BACKEND_HEALTH_PATH, deployedUrl).toString(), { allowHttp: false });
         await resolveAndAssertPublic(target.hostname);
       } catch (error) {
         return { reachable: false, secrets: {}, handlers: [], reason: error instanceof Error ? error.message : 'Blocked URL' };

@@ -115,11 +115,15 @@ export interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
   // ── IDEA ─────────────────────────────────────────────────────────────────
   // Every creation mode lives in Canvas. Middleware redirects legacy entry URLs.
-  { id: 'create', labelKey: 'group.create', icon: '✦', href: '/create', match: ['/create', '/brainstorm', '/workflows'], seat: 'Brain', stage: 'idea', rung: RUNG.PUBLIC },
+  { id: 'create', labelKey: 'group.create', icon: '✦', href: '/create', match: ['/create', '/brainstorm', '/workflows', '/challenges', '/realize'], seat: 'Brain', stage: 'idea', rung: RUNG.PUBLIC },
   // `challenges` is NOT a row. A challenge is something the CANVAS DOES — paste a
   // brief, get a working system — and a capability of a destination does not get
   // a door beside it. `/challenges` is still a route and the canvas still opens
   // it; what is gone is the menu item that made it look like a separate place.
+  // `/realize` (choose what REAL means — a demo video, a demand test, a phone
+  // line, the whole system) is the same class of thing and gets no row either,
+  // but both are in `match` so the IDEA row stays lit while you are on them
+  // rather than leaving the shell with nothing selected.
   // ── MAKE ─────────────────────────────────────────────────────────────────
   {
     id: 'projects', labelKey: 'group.projects', icon: '▦', href: '/projects',

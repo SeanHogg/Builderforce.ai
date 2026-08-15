@@ -408,6 +408,19 @@ export default function ChallengesPage() {
                 {t('openProject')}
               </a>
             )}
+            {/* Building the whole system is the most expensive answer to a brief,
+                and for most of the questions behind one it is the wrong one.
+                Realize offers the cheaper proofs against the SAME spec — passed
+                by id so the brief is not read twice and the two pages cannot end
+                up showing different interpretations of it. */}
+            {selected && (
+              <a
+                href={`/realize?challenge=${encodeURIComponent(selected.id)}`}
+                style={{ fontSize: 14, color: 'var(--accent)' }}
+              >
+                {t('makeItReal')}
+              </a>
+            )}
           </div>
           <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
             {t('twoStepNote')}

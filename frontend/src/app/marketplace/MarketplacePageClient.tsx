@@ -45,7 +45,7 @@ import { SkillTags } from '@/components/SkillTags';
 import { listFreelancers, type FreelancerProfile } from '@/lib/freelancerApi';
 import { RatingStars } from '@/components/freelance/RatingStars';
 import { TrustBadge } from '@/components/freelance/TrustBadge';
-import { FAMILIES, FAMILY_IDS, creationKindForChip, kindLabelKey, resolveFamily, type FamilyId } from '@/lib/marketplaceFamilies';
+import { FAMILIES, FAMILY_IDS, creationKindForChip, kindLabelKey, publishActionFor, resolveFamily, type FamilyId } from '@/lib/marketplaceFamilies';
 import { MARKETPLACE_LISTING_KINDS } from '@builderforce/creation-canvas-contract';
 import { SkeletonGrid } from './SkeletonGrid';
 import { ModelsExplorer } from './ModelsExplorer';
@@ -84,6 +84,9 @@ const SECTION_BY_KIND: Record<string, MarketplaceCategory> = {
       .map((spec) => [`asset:${spec.id}`, 'creations' as MarketplaceCategory]),
   ),
 };
+
+/** The sections whose grids render `viewMode`. Everything else gets no toggle. */
+const VIEW_TOGGLE_SECTIONS = new Set<MarketplaceCategory>(['all', 'personas', 'skills', 'workforce', 'models']);
 
 const TALENT_DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
 
@@ -394,14 +397,15 @@ export default function MarketplacePageClient() {
   // derivation shared by the creations view and the Community agents view,
   // where canvas-published agents belong to the same catalogue as the registry's.
   const creationKind = creationKindForChip(family, kind);
+  // What the publish CTA does under this chip. ONE derivation for the action,
+  // its disabled state and its label, so the button cannot advertise a path the
+  // storefront does not run.
+  const publishAction = publishActionFor(family, kind);
 
   useEffect(() => {
     setCategory(SECTION_BY_KIND[`${family}:${kind}`] ?? 'all');
   }, [family, kind]);
 
-  // Selecting a category chip mirrors the choice into the URL (?category=…) so the tab
-  // is deep-linkable + shareable + survives refresh — 'all' clears the param. Reuses
-  // the same query the deep-link read above consumes (one source of truth).
   /** Move to a family (and optionally a kind), mirroring the choice into the URL
    *  so the storefront stays deep-linkable, shareable and refresh-proof. The
    *  legacy `?category=` is dropped on the way out — one vocabulary in the bar. */
@@ -415,16 +419,17 @@ export default function MarketplacePageClient() {
   };
 
   /** The publish CTA. ONE derivation for the label and the flow, so the button
-   *  can never disagree with the filter above it — and "Publish a company" runs
-   *  the claim, not a listing form, because a company you do not own is not
-   *  yours to list. */
+   *  can never disagree with the filter above it — "Publish a company" runs the
+   *  claim, not a listing form, because a company you do not own is not yours to
+   *  list, and a course is published from the board that made it. */
   const startPublish = () => {
-    if (activeFamily.flow === 'claim') return; // gated below; the button is inert
-    // A canvas creation is not published from a form — it is published from the
-    // board that made it. Under those chips the CTA opens the canvas, because a
-    // skill form is not an answer to "publish a course".
-    if (creationKind) { router.push('/create/new'); return; }
-    setCategory('publish');
+    if (publishAction.via === 'disabled') return; // the button is inert
+    if (publishAction.via === 'form') { setCategory('publish'); return; }
+    // Publishing writes into a workspace everywhere except the canvas, which is
+    // open to guests — so the gate is the destination's, not the button's.
+    router.push(publishAction.requiresAuth && !isAuthenticated
+      ? signInHref(publishAction.href)
+      : publishAction.href);
   };
 
   /** A kind chip's label, from whichever catalogue names that kind. The key is
@@ -600,15 +605,21 @@ export default function MarketplacePageClient() {
           <h1 className="mp-title">{tm('title')}</h1>
           <p className="mp-blurb">{tm('blurb')}</p>
         </div>
-        {/* `publish` was never a category — it is the verb. Its label AND the
-            flow it runs are derived from the active family, so the button can
-            never disagree with the filter underneath it. */}
+        {/* `publish` was never a category — it is the verb. Its label, its
+            disabled state AND the flow it runs are derived from the active chip
+            (`publishActionFor`), so the button can never disagree with the
+            filter underneath it — nor offer a form for something published
+            somewhere else entirely. */}
         <button
           type="button"
           className="mp-publish"
           onClick={startPublish}
-          disabled={activeFamily.flow === 'claim'}
-          title={activeFamily.flow === 'claim' ? tf('companySoon.soonTitle') : undefined}
+          disabled={publishAction.via === 'disabled'}
+          title={
+            publishAction.via !== 'disabled' ? undefined
+            : activeFamily.flow === 'claim' ? tf('companySoon.soonTitle')
+            : tf('publishClosed')
+          }
           style={{ '--seat': `var(${activeFamily.hueVar})` } as React.CSSProperties}
         >
           {creationKind ? tc('publishOnCanvas') : tf(activeFamily.publishKey)}
@@ -711,7 +722,10 @@ export default function MarketplacePageClient() {
             </Select>
           </div>
         )}
-        {category !== 'publish' && category !== 'talent' && category !== 'gigs' && (
+        {/* Only the views that actually READ `viewMode` offer the toggle — an
+            inclusion list, because the exclusion list it replaced kept handing a
+            dead control to every section added after it. */}
+        {VIEW_TOGGLE_SECTIONS.has(category) && (
           <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
             <ViewToggle value={viewMode} onChange={setViewMode} />
           </div>

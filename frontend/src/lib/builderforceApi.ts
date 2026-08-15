@@ -8288,18 +8288,30 @@ export interface ChallengeSpec {
 export interface ChallengeRequiredConnector { key: string; label: string; why: string }
 export interface ChallengeRequiredSecret { name: string; label: string; where: string }
 
+/**
+ * Where a project's server-side half runs. Mirrors `BACKEND_STRATEGIES` on the
+ * API; the three cloud values exist because "it runs on our platform" is not an
+ * acceptable answer to a procurement question.
+ */
+export type BackendStrategyKey =
+  | 'declarative'
+  | 'github-worker'
+  | 'aws-lambda'
+  | 'gcp-cloudrun'
+  | 'azure-functions';
+
 export interface ChallengePlan {
   blueprintKey: string;
   blueprintName: string;
   matchScore: number;
   matchReasons: string[];
   considered: Array<{ key: string; name: string; score: number; reasons: string[] }>;
-  strategy: 'declarative' | 'github-worker';
+  strategy: BackendStrategyKey;
   summary: string;
   files: Record<string, string>;
   handlers: Record<string, unknown>;
   handlerWarnings: string[];
-  tasks: Array<{ title: string; description: string; order: number }>;
+  tasks: Array<{ title: string; description: string; order: number; kind?: 'setup' | 'build' }>;
   requiredConnectors: ChallengeRequiredConnector[];
   requiredSecrets: ChallengeRequiredSecret[];
   successCriteria: string[];
@@ -8393,6 +8405,109 @@ export const challengeApi = {
 
   blueprints: (): Promise<{ blueprints: BlueprintSummary[]; strategies: HostingStrategySummary[] }> =>
     request<{ blueprints: BlueprintSummary[]; strategies: HostingStrategySummary[] }>('/api/challenges/blueprints'),
+};
+
+// ---------------------------------------------------------------------------
+// Realizations — idea → something a person can open
+// ---------------------------------------------------------------------------
+
+/** The eight proof forms. Mirrors `REALIZATION_KEYS` on the API. */
+export type RealizationKey =
+  | 'demo-video'
+  | 'clickable-prototype'
+  | 'smoke-test'
+  | 'wizard-of-oz'
+  | 'poc'
+  | 'pilot'
+  | 'phone-line'
+  | 'live-system';
+
+export interface RealizationTargetSummary {
+  key: RealizationKey;
+  name: string;
+  summary: string;
+  /** The question a stakeholder is really asking when they ask for this one. */
+  answers: string;
+  /** 1 = a sketch of the idea, 5 = the thing itself. */
+  fidelity: number;
+  /** 1 = an afternoon, 5 = weeks. */
+  effort: number;
+  suits: string[];
+  hasBackend: boolean;
+  /** Only the live system lets you choose which cloud it runs in. */
+  allowsStrategyChoice: boolean;
+}
+
+export interface RealizationRecommendation {
+  key: RealizationKey;
+  score: number;
+  reasons: string[];
+  recommended: boolean;
+}
+
+export interface Realization {
+  id: string;
+  challengeId: string | null;
+  projectId: number | null;
+  targetKey: RealizationKey;
+  title: string;
+  strategy: BackendStrategyKey;
+  status: 'planned' | 'building' | 'built' | 'failed';
+  /** The address a person can open. Null until it has been built and published. */
+  liveUrl: string | null;
+  spec: ChallengeSpec;
+  plan: ChallengePlan;
+  error: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface RealizationBuildResult extends ChallengeBuildResult {
+  liveUrl: string | null;
+  publishedAssets: number;
+  collections: string[];
+}
+
+export const realizationApi = {
+  targets: (): Promise<{ targets: RealizationTargetSummary[]; strategies: HostingStrategySummary[] }> =>
+    request<{ targets: RealizationTargetSummary[]; strategies: HostingStrategySummary[] }>('/api/realizations/targets'),
+
+  list: (): Promise<Realization[]> =>
+    request<{ realizations: Realization[] }>('/api/realizations').then((r) => r.realizations),
+
+  get: (id: string): Promise<Realization> =>
+    request<{ realization: Realization }>(`/api/realizations/${encodeURIComponent(id)}`).then((r) => r.realization),
+
+  /** Read an idea and rank the proofs. Persists nothing. */
+  plan: (idea: string): Promise<{
+    spec: ChallengeSpec;
+    recommendations: RealizationRecommendation[];
+    targets: RealizationTargetSummary[];
+  }> =>
+    request('/api/realizations/plan', { method: 'POST', body: JSON.stringify({ idea }) }),
+
+  /** Choose a proof and plan it. Still builds nothing. */
+  create: (input: {
+    idea?: string;
+    challengeId?: string;
+    projectId?: number;
+    targetKey: RealizationKey;
+    strategy?: BackendStrategyKey;
+  }): Promise<Realization> =>
+    request<{ realization: Realization }>('/api/realizations', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }).then((r) => r.realization),
+
+  /** Build it, publish it, wire its forms. Idempotent. */
+  build: (id: string): Promise<{ realization: Realization | null; result: RealizationBuildResult }> =>
+    request<{ realization: Realization | null; result: RealizationBuildResult }>(
+      `/api/realizations/${encodeURIComponent(id)}/build`,
+      { method: 'POST' },
+    ),
+
+  remove: (id: string): Promise<{ ok: boolean }> =>
+    request<{ ok: boolean }>(`/api/realizations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
 // ---------------------------------------------------------------------------

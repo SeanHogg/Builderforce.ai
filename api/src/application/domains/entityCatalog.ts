@@ -22,6 +22,7 @@ import { IDENTITY_ENTITIES } from './identity/entities';
 import { INTEGRATIONS_ENTITIES } from './integrations/entities';
 import { INVESTOR_ENTITIES } from './investor/entities';
 import { KERNEL_ENTITIES } from './kernel/entities';
+import { OPERATIONS_ENTITIES } from './operations/entities';
 import { PEOPLE_ENTITIES } from './people/entities';
 import { PLATFORM_ENTITIES } from './platform/entities';
 import { REVENUE_ENTITIES } from './revenue/entities';
@@ -41,6 +42,7 @@ export const ENTITY_CATALOG: readonly EntityDef[] = [
   ...IDENTITY_ENTITIES,
   ...INTEGRATIONS_ENTITIES,
   ...INVESTOR_ENTITIES,
+  ...OPERATIONS_ENTITIES,
   ...PEOPLE_ENTITIES,
   ...PLATFORM_ENTITIES,
   ...REVENUE_ENTITIES,

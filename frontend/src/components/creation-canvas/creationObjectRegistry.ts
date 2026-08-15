@@ -1,5 +1,5 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
-import { CREATION_CONNECTION_KINDS, emptyCanvasVideoTimeline, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type PeopleObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
+import { CREATION_CONNECTION_KINDS, emptyCanvasVideoTimeline, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
 import { FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS, founderMutableFields } from '@/lib/founderObjects';
 // Importing the vocabulary registers it (see `specObjects.ts`), which is what makes the
 // academic kinds resolvable everywhere else without a second list of them here.
@@ -13,12 +13,16 @@ import { HIRING_OBJECT_SPECS } from '@/lib/hiringObjects';
 // separately for the same reason the academic and founder sets do.
 import { PEOPLE_OBJECT_SPECS } from '@/lib/peopleObjects';
 import { SHARED_OBJECT_SPECS } from '@/lib/sharedCanvasObjects';
+// The field operation — the work a vertical company sells. Imported for the same
+// registration side effect as the vocabularies above.
+import { OPERATIONS_OBJECT_SPECS } from '@/lib/operationsObjects';
 import { specBookkeepingFields, specFieldNames } from '@/lib/specObjects';
 import {
   ACADEMIC_MUTABLE_FIELDS, ACADEMIC_REGISTRY, FOUNDER_MUTABLE_FIELDS, FOUNDER_REGISTRY,
   HIRING_MUTABLE_FIELDS, HIRING_REGISTRY, PEOPLE_MUTABLE_FIELDS, PEOPLE_REGISTRY,
   SHARED_MUTABLE_FIELDS, SHARED_REGISTRY, SPEC_ACTIONS,
   DATA_SCIENCE_MUTABLE_FIELDS, DATA_SCIENCE_REGISTRY,
+  OPERATIONS_MUTABLE_FIELDS, OPERATIONS_REGISTRY,
 } from './specDerivedRegistry';
 import {
   DATA_ARCHITECTURE_FIELD_NAMES, DATA_ARCHITECTURE_SPECS, dataArchitectureMutableFields, dataArchitectureSeed,
@@ -134,7 +138,11 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   // One message, PINNED. It stops changing, which is the point: it can be
   // annotated and connected to a task, and it is still there tomorrow after it
   // has scrolled out of the live view.
-  { kind: 'email', label: 'Email', icon: '✉', group: 'Integrations', createData: () => ({ kind: 'email', title: 'Email', status: 'Pinned from inbox' }) },
+  // "Pinned from inbox" is true of an email `canvas_pin_email` created and false of one
+  // dragged out of the palette or authored by a turn — which is the majority now that
+  // the details panel composes and sends. A card must not claim a provenance it does
+  // not have.
+  { kind: 'email', label: 'Email', icon: '✉', group: 'Integrations', createData: () => ({ kind: 'email', title: 'Email', status: 'Draft' }) },
   { kind: 'emailCampaign', label: 'Email campaign', icon: '◎', group: 'Integrations', createData: () => ({ kind: 'emailCampaign', title: 'New campaign', status: 'Draft', transport: 'platform' }) },
   { kind: 'emailTemplate', label: 'Email template', icon: '▤', group: 'Integrations', createData: () => ({ kind: 'emailTemplate', title: 'Email template', status: 'Draft', mergeFields: [] }) },
   // The social trio, mirroring inbox/email/emailCampaign for the same reasons.
@@ -449,7 +457,7 @@ const BASE_MUTABLE_FIELDS = {
     // Their omission made this annotation demand six entries the object above is not
     // supposed to carry, so the exhaustiveness check it exists to perform could not
     // compile at all — a guard that fails for every kind protects none of them.
-    FounderObjectKind | AcademicObjectKind | HiringObjectKind | PeopleObjectKind | SharedObjectKind | DataArchitectureKind | DataScienceObjectKind
+    FounderObjectKind | AcademicObjectKind | HiringObjectKind | PeopleObjectKind | SharedObjectKind | DataArchitectureKind | DataScienceObjectKind | OperationsObjectKind
   >,
   readonly string[]
 >;
@@ -464,6 +472,7 @@ const MUTABLE_FIELDS: Record<CreationObjectKind, readonly string[]> = {
   ...PEOPLE_MUTABLE_FIELDS,
   ...SHARED_MUTABLE_FIELDS,
   ...DATA_SCIENCE_MUTABLE_FIELDS,
+  ...OPERATIONS_MUTABLE_FIELDS,
   // Cast to the named kind union rather than left as an index signature: an
   // index-signature map satisfies ANY key, so spreading one silently switched the
   // exhaustiveness annotation below off for these six kinds.
@@ -683,6 +692,7 @@ export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
   ...SHARED_REGISTRY,
   ...DATA_SCIENCE_REGISTRY,
   ...DATA_ARCHITECTURE_REGISTRY,
+  ...OPERATIONS_REGISTRY,
 ].map((definition) => ({
   ...definition,
   ...(CAPABILITIES[definition.kind] ? { capability: CAPABILITIES[definition.kind] } : {}),
@@ -719,6 +729,6 @@ export function availableCreationObjects(capabilities: ReadonlySet<string>): rea
  */
 export const CREATION_PALETTE_GROUPS = ([
   'Build', 'Data', 'Knowledge', 'Insights', 'Work', 'Quality', 'Teaching', 'Research',
-  'Pitch', 'People', 'Hiring', 'Agents', 'Models', 'Collaborate', 'Integrations',
+  'Pitch', 'People', 'Hiring', 'Operations', 'Agents', 'Models', 'Collaborate', 'Integrations',
 ] as const satisfies readonly CreationObjectGroup[])
   .map((group) => ({ group, items: CREATION_OBJECT_REGISTRY.filter((definition) => definition.group === group) }));

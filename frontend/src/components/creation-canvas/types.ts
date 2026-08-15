@@ -31,7 +31,13 @@ export type CreationNodeData = {
  * a kind is FOUND: nine recruiting kinds mixed in with `staff`, `team`, `role` and
  * `standup` is a group nobody scans to the end of, and the two vocabularies are used by
  * different people on different days.
+ *
+ * `Operations` is its own group for the stronger version of the same reason: it is the
+ * only group on this list that holds what a company SELLS rather than how it runs itself,
+ * so for a field-service, property, clinical or logistics business it is the group they
+ * live in all day and everything else is occasional. Filing a `workOrder` under `Work`
+ * beside `prd` and `mockup` would bury the operation inside the software backlog.
  */
 export type CreationObjectGroup =
   | 'Build' | 'Data' | 'Knowledge' | 'Insights' | 'Work' | 'Quality' | 'Teaching' | 'Research'
-  | 'Pitch' | 'People' | 'Hiring' | 'Agents' | 'Models' | 'Collaborate' | 'Integrations';
+  | 'Pitch' | 'People' | 'Hiring' | 'Operations' | 'Agents' | 'Models' | 'Collaborate' | 'Integrations';

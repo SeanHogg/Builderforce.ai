@@ -27,5 +27,14 @@ import './academicObjects';
 import './hiringObjects';
 import './peopleObjects';
 import './sharedCanvasObjects';
+// The two data vocabularies were missing from this list for exactly the reason the
+// header describes, and the app hid it: `creationObjectRegistry` imports
+// `dataScienceObjects` transitively, so the running board resolved a `model`, a
+// `trainingRun` and a `labelSet` while `SpecObjectBody` imported on its own rendered
+// null for all six. A set that registers itself and is never listed here works in
+// whichever surface happens to pull it in and silently renders nothing everywhere else.
+import './dataScienceObjects';
+// The field vocabulary — the operation a vertical company actually runs.
+import './operationsObjects';
 
 export {};

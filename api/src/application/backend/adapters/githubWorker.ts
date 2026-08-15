@@ -1,24 +1,21 @@
 /**
  * The `github-worker` hosting adapter — the same handlers, as REAL CODE, in the
- * customer's own repo and account.
+ * customer's own repo and Cloudflare account.
  *
  * ── WHY COMPILE RATHER THAN HAND OVER A TEMPLATE ────────────────────────────
  * The declarative strategy has a vocabulary ceiling. The escape hatch has to be
- * "here is a Worker that does exactly what your live handlers already do, now
- * edit it" — not "here is a starter, reimplement your system in it". So this
- * adapter LOWERS the handler specs into readable TypeScript with the same
- * semantics as `handlerRuntime.ts`: same template scope, same step ordering, same
- * "a failing step binds empty and the reply is still well-formed" posture.
- * Switching strategies is then a migration, not a rewrite, and a customer can
- * diff the generated code against the behaviour they already tested.
+ * "here is a backend that does exactly what your live handlers already do, now
+ * edit it" — not "here is a starter, reimplement your system in it". So the
+ * handler specs are LOWERED into readable JavaScript with the same semantics as
+ * `handlerRuntime.ts`. Switching strategies is then a migration, not a rewrite,
+ * and a customer can diff the generated code against behaviour they already
+ * tested.
  *
- * ── WHY THE MANIFEST TRAVELS AND THE CREDENTIALS DO NOT ─────────────────────
- * A connector manifest is pure data — base URL, auth SHAPE, actions — and carries
- * no secret, so it is written into the repo verbatim and the generated
- * `callConnector` reproduces our request assembly. The credential values stay in
- * Builderforce; the generated Worker reads its own, from Worker secrets the
- * customer sets (`TWILIO_PASSWORD`, …). That is the correct boundary: their code,
- * their account, their credentials, and nothing of ours leaks into a repo.
+ * That lowering is NOT written here: it is
+ * {@link renderHandlerEngineSource}, shared with the AWS, GCP and Azure
+ * adapters. This file is only the part that is genuinely Cloudflare — the
+ * `fetch` entrypoint, `wrangler.toml`, and an Action that deploys with the
+ * customer's own API token.
  *
  * ── WHY NO FRAMEWORK ────────────────────────────────────────────────────────
  * The generated Worker has zero dependencies. `npm ci` on a runner is the single
@@ -26,15 +23,14 @@
  * `export default { fetch }` cannot fail that way.
  */
 
-import type { ConnectorManifest } from '../../connectors/connectorManifest';
-import { authFieldsFor } from '../../connectors/connectorManifest';
 import { BUILDERFORCE_OIDC_AUDIENCE } from '../../ide/githubOidc';
 import {
-  STRIPE_TIMESTAMP_TOLERANCE_SECONDS,
-  verifySecretNameFor,
-  VERIFY_SECRET_NAME,
-  VERIFY_SIGNATURE_HEADER,
-} from '../webhookVerification';
+  BACKEND_HEALTH_PATH,
+  backendNameFor,
+  ENGINE_FILE,
+  renderHandlerEngineSource,
+  requiredBackendSecrets,
+} from './handlerEngineSource';
 import {
   missingSecretSteps,
   type BackendHostingStrategy,
@@ -48,38 +44,14 @@ import {
 export const WORKER_DIR = 'worker/';
 export const WORKER_DEPLOY_WORKFLOW_PATH = '.github/workflows/builderforce-worker-deploy.yml';
 
-/** `accountSid` → `ACCOUNT_SID`, so generated env names read like the vendor's own. */
-export function screamingSnake(camel: string): string {
-  return camel
-    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    .replace(/[^A-Za-z0-9]+/g, '_')
-    .toUpperCase();
-}
-
-/** The Worker-secret name a connector's auth field is read from. */
-export function connectorEnvVar(connectorKey: string, fieldKey: string): string {
-  return `${screamingSnake(connectorKey)}_${screamingSnake(fieldKey)}`;
-}
-
 /**
- * Every secret the generated Worker needs: one per connector auth field, plus the
- * verification key for each handler that checks a signature, plus the gateway key
- * when any handler calls a model.
+ * Path the generated Worker answers its own readiness on.
+ *
+ * Re-exported from the shared engine rather than redeclared: the platform probes
+ * this path, and a second copy of the string would silently stop matching the
+ * one the generated code actually serves.
  */
-export function requiredWorkerSecrets(ctx: MaterializeContext): string[] {
-  const names = new Set<string>();
-  for (const manifest of ctx.connectors) {
-    for (const field of authFieldsFor(manifest)) {
-      if (field.required || field.secret) names.add(connectorEnvVar(manifest.key, field.key));
-    }
-  }
-  for (const handler of ctx.handlers) {
-    const secret = verifySecretNameFor(handler);
-    if (secret) names.add(secret);
-    if (handler.steps.some((s) => s.kind === 'llm')) names.add('BUILDERFORCE_API_KEY');
-  }
-  return [...names].sort();
-}
+export const WORKER_HEALTH_PATH = BACKEND_HEALTH_PATH;
 
 const json = (v: unknown): string => JSON.stringify(v, null, 2);
 
@@ -92,9 +64,9 @@ function renderWranglerToml(ctx: MaterializeContext, workerName: string): string
 #
 # This Worker is YOURS: it deploys to your own Cloudflare account, runs on your
 # own logs and quotas, and can be edited freely. Re-generating from the canvas
-# rewrites src/index.ts and this file — everything else you add is preserved.
+# rewrites src/engine.js and this file — everything else you add is preserved.
 name = "${workerName}"
-main = "src/index.ts"
+main = "src/index.js"
 compatibility_date = "2026-01-01"
 
 # Secrets are NEVER committed. Set each one with:
@@ -102,7 +74,7 @@ compatibility_date = "2026-01-01"
 # …or let the deploy workflow push them from GitHub repository secrets.
 #
 # Required:
-${requiredWorkerSecrets(ctx).map((n) => `#   ${n}`).join('\n') || '#   (none)'}
+${requiredBackendSecrets(ctx).map((n) => `#   ${n}`).join('\n') || '#   (none)'}
 `;
 }
 
@@ -117,9 +89,35 @@ function renderPackageJson(workerName: string): string {
     },
     devDependencies: {
       wrangler: '^3.90.0',
-      typescript: '^5.6.0',
     },
   });
+}
+
+/**
+ * The Worker entrypoint.
+ *
+ * Everything it does is delegate: the engine answers a `Request` with a
+ * `Response`, or with null when no handler claims the path — which is the only
+ * decision left for a runtime that serves nothing but handlers.
+ */
+function renderWorkerEntry(ctx: MaterializeContext): string {
+  return `/**
+ * ${ctx.projectName} — Cloudflare Worker entrypoint.
+ *
+ * The behaviour lives in ./engine.js, which is shared verbatim with the AWS,
+ * GCP and Azure targets. This file exists only to hand Cloudflare's \`fetch\`
+ * signature to it, so moving clouds later changes THIS file and nothing else.
+ */
+
+import { handleRequest } from './engine.js';
+
+export default {
+  async fetch(request, env) {
+    const response = await handleRequest(request, env);
+    return response ?? new Response('Not found', { status: 404 });
+  },
+};
+`;
 }
 
 /**
@@ -129,8 +127,8 @@ function renderPackageJson(workerName: string): string {
  * is a third party's account. It is read from a repository secret and never
  * echoed; `wrangler deploy` is the only consumer.
  */
-function renderDeployWorkflow(ctx: MaterializeContext, workerName: string): string {
-  const secrets = requiredWorkerSecrets(ctx);
+function renderDeployWorkflow(ctx: MaterializeContext): string {
+  const secrets = requiredBackendSecrets(ctx);
   const pushSecrets = secrets.length
     ? `
       # Push each backend secret into the Worker. A secret that is absent from the
@@ -162,7 +160,7 @@ ${secrets.map((n) => `          ${n}: \${{ secrets.${n} }}`).join('\n')}
 # Set these repository secrets (Settings → Secrets and variables → Actions):
 #   CLOUDFLARE_API_TOKEN   — an "Edit Cloudflare Workers" token
 #   CLOUDFLARE_ACCOUNT_ID  — your account id
-${requiredWorkerSecrets(ctx).map((n) => `#   ${n}`).join('\n')}
+${requiredBackendSecrets(ctx).map((n) => `#   ${n}`).join('\n')}
 name: Deploy backend Worker
 
 on:
@@ -242,551 +240,6 @@ ${ctx.handlers.map((h) => `          echo "  ${h.method} \${URL}${h.route === '/
 `;
 }
 
-/**
- * The Worker itself.
- *
- * The handler specs are embedded as a `const` rather than fetched at runtime so
- * the Worker is self-contained and offline-deployable, and so a developer editing
- * it sees their whole system in one file instead of a config it downloads.
- */
-function renderWorkerSource(ctx: MaterializeContext): string {
-  const manifests = ctx.connectors.map((m) => ({
-    key: m.key,
-    baseUrl: m.baseUrl,
-    auth: m.auth,
-    defaultHeaders: m.defaultHeaders,
-    actions: m.actions.map((a) => ({
-      key: a.key,
-      method: a.method,
-      path: a.path,
-      params: a.params,
-      required: a.required,
-      bodyFormat: a.bodyFormat,
-      bodyTemplate: a.bodyTemplate,
-      headers: a.headers,
-      resultPath: a.resultPath,
-    })),
-  }));
-
-  const authEnvMap: Record<string, Record<string, string>> = {};
-  for (const manifest of ctx.connectors) {
-    authEnvMap[manifest.key] = Object.fromEntries(
-      authFieldsFor(manifest).map((f) => [f.key, connectorEnvVar(manifest.key, f.key)]),
-    );
-  }
-
-  return `/**
- * ${ctx.projectName} — backend Worker.
- *
- * GENERATED by Builderforce from this project's handler specs, then yours to
- * edit. The semantics match what was already running on Builderforce-hosted
- * ingress: steps run in order, each binds its result to \`steps.<id>\` for the
- * templates after it, and a FAILING STEP DOES NOT ABORT THE REQUEST — it binds
- * empty and the reply is still well-formed. That last part is deliberate: a
- * Twilio webhook that 500s drops the call, so a degraded answer beats an error.
- *
- * Regenerating overwrites this file. If you have edited it, either stop
- * regenerating or move your changes into a module this file imports.
- */
-
-export interface Env {
-${requiredWorkerSecrets(ctx).map((n) => `  ${n}?: string;`).join('\n') || '  [key: string]: string | undefined;'}
-  [key: string]: string | undefined;
-}
-
-// ── Handler specs ───────────────────────────────────────────────────────────
-
-const HANDLERS = ${json(ctx.handlers)} as const;
-
-// ── Connector manifests (no credentials — those are Worker secrets) ─────────
-
-const CONNECTORS: Record<string, any> = Object.fromEntries(
-  (${json(manifests)} as any[]).map((m) => [m.key, m]),
-);
-
-/** Which Worker secret each connector auth field is read from. */
-const CONNECTOR_ENV: Record<string, Record<string, string>> = ${json(authEnvMap)};
-
-// ── Templates ───────────────────────────────────────────────────────────────
-
-const TEMPLATE_RE = /\\{\\{\\s*([a-zA-Z0-9_.\\[\\]]+)\\s*\\}\\}/g;
-const WHOLE_TEMPLATE_RE = /^\\{\\{\\s*([a-zA-Z0-9_.\\[\\]]+)\\s*\\}\\}$/;
-
-function resolvePath(scope: any, path: string): any {
-  return path
-    .replace(/\\[(\\d+)\\]/g, '.$1')
-    .split('.')
-    .reduce((acc: any, key: string) => (acc == null ? undefined : acc[key]), scope);
-}
-
-function stringify(value: any): string {
-  if (value === undefined || value === null) return '';
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  try { return JSON.stringify(value); } catch { return ''; }
-}
-
-function renderTemplate(template: string, scope: any): string {
-  return template.replace(TEMPLATE_RE, (_m, path: string) => stringify(resolvePath(scope, path)));
-}
-
-function renderValue(value: any, scope: any): any {
-  if (typeof value === 'string') {
-    const whole = value.match(WHOLE_TEMPLATE_RE);
-    if (whole) {
-      const resolved = resolvePath(scope, whole[1]);
-      return resolved === undefined ? '' : resolved;
-    }
-    return renderTemplate(value, scope);
-  }
-  if (Array.isArray(value)) return value.map((v) => renderValue(v, scope));
-  if (value && typeof value === 'object') {
-    const out: Record<string, any> = {};
-    for (const [k, v] of Object.entries(value)) out[k] = renderValue(v, scope);
-    return out;
-  }
-  return value;
-}
-
-const FALSEY = new Set(['', 'false', '0', 'null', 'undefined', 'no', 'off']);
-const evaluateWhen = (when: string | undefined, scope: any): boolean =>
-  !when || !FALSEY.has(renderTemplate(when, scope).trim().toLowerCase());
-
-// ── TwiML ───────────────────────────────────────────────────────────────────
-
-const escapeXml = (v: string): string =>
-  v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-   .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
-
-const attr = (name: string, value: any): string =>
-  value === undefined || value === null || value === '' ? '' : \` \${name}="\${escapeXml(String(value))}"\`;
-
-function renderPrompt(n: any): string {
-  if (n.play) return \`<Play\${attr('loop', n.loop)}>\${escapeXml(n.play)}</Play>\`;
-  return \`<Say\${attr('voice', n.voice)}\${attr('language', n.language)}>\${escapeXml(n.say ?? '')}</Say>\`;
-}
-
-function renderNode(n: any): string {
-  if (typeof n.message === 'string') {
-    const media = (n.media ?? []).map((m: string) => \`<Media>\${escapeXml(m)}</Media>\`).join('');
-    return media
-      ? \`<Message><Body>\${escapeXml(n.message)}</Body>\${media}</Message>\`
-      : \`<Message>\${escapeXml(n.message)}</Message>\`;
-  }
-  if (n.gather) {
-    const g = n.gather;
-    const inner = (g.prompts ?? []).map(renderPrompt).join('');
-    return \`<Gather\${attr('action', g.action)}\${attr('input', g.input)}\${attr('numDigits', g.numDigits)}\${attr('timeout', g.timeout)}>\${inner}</Gather>\`;
-  }
-  if (n.conversationRelay) {
-    const c = n.conversationRelay;
-    // Must be wrapped in <Connect> — bare <ConversationRelay> is rejected.
-    return \`<Connect><ConversationRelay\${attr('url', c.url)}\${attr('welcomeGreeting', c.welcomeGreeting)}\${attr('voice', c.voice)}\${attr('language', c.language)}\${attr('transcriptionProvider', c.transcriptionProvider)}\${attr('interruptible', c.interruptible)}\${attr('dtmfDetection', c.dtmfDetection)}/></Connect>\`;
-  }
-  if (typeof n.dial === 'string') {
-    return \`<Dial\${attr('callerId', n.callerId)}\${attr('timeout', n.timeout)}\${attr('action', n.action)}>\${escapeXml(n.dial)}</Dial>\`;
-  }
-  if (typeof n.redirect === 'string') return \`<Redirect>\${escapeXml(n.redirect)}</Redirect>\`;
-  if (n.hangup === true) return '<Hangup/>';
-  if (n.reject === true) return \`<Reject\${attr('reason', n.reason)}/>\`;
-  if (typeof n.pause === 'number') return \`<Pause\${attr('length', n.pause)}/>\`;
-  return renderPrompt(n);
-}
-
-const renderTwiml = (nodes: any[]): string =>
-  \`<?xml version="1.0" encoding="UTF-8"?><Response>\${nodes.map(renderNode).join('')}</Response>\`;
-
-// ── Verification ────────────────────────────────────────────────────────────
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-async function hmac(hash: 'SHA-1' | 'SHA-256', key: string, message: string): Promise<ArrayBuffer> {
-  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(key), { name: 'HMAC', hash }, false, ['sign']);
-  return crypto.subtle.sign('HMAC', k, new TextEncoder().encode(message));
-}
-
-const toBase64 = (b: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(b)));
-const toHex = (b: ArrayBuffer) => Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, '0')).join('');
-
-/**
- * Twilio signs the full request URL followed by every POST parameter appended as
- * key+value in sorted key order. The URL must be byte-identical to the one Twilio
- * called — if you put this Worker behind a proxy that rewrites the host, rebuild
- * it from the forwarded headers here or every signature will fail.
- */
-async function verifyTwilio(url: string, params: Array<[string, string]>, signature: string | null, token: string | undefined): Promise<string | null> {
-  if (!signature) return 'Missing X-Twilio-Signature header';
-  if (!token) return '${VERIFY_SECRET_NAME.twilio} is not set';
-  const sorted = [...params].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  const base = url + sorted.map(([k, v]) => k + v).join('');
-  const expected = toBase64(await hmac('SHA-1', token, base));
-  return timingSafeEqual(expected, signature) ? null : 'Signature does not match';
-}
-
-async function verifySharedSecret(rawBody: string, signature: string | null, secret: string | undefined): Promise<string | null> {
-  if (!signature) return 'Missing signature header';
-  if (!secret) return '${VERIFY_SECRET_NAME['shared-secret']} is not set';
-  const expected = toHex(await hmac('SHA-256', secret, rawBody));
-  const provided = signature.startsWith('sha256=') ? signature.slice(7) : signature;
-  return timingSafeEqual(expected, provided) ? null : 'Signature does not match';
-}
-
-/**
- * Stripe signs \`"<timestamp>.<rawBody>"\`, not the body — and the timestamp is
- * inside the MAC so a captured event cannot be replayed forever. Both halves are
- * required; checking the HMAC alone is the common mistake.
- */
-async function verifyStripe(rawBody: string, signature: string | null, secret: string | undefined): Promise<string | null> {
-  if (!signature) return 'Missing Stripe-Signature header';
-  if (!secret) return '${VERIFY_SECRET_NAME.stripe} is not set';
-  let timestamp = '';
-  const candidates: string[] = [];
-  for (const part of signature.split(',')) {
-    const [k, v] = part.trim().split('=');
-    if (k === 't' && v) timestamp = v;
-    else if (k === 'v1' && v) candidates.push(v);
-  }
-  if (!timestamp || !candidates.length) return 'Stripe-Signature is missing t= or v1=';
-  const age = Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp));
-  if (!Number.isFinite(age) || age > ${STRIPE_TIMESTAMP_TOLERANCE_SECONDS}) return 'Stripe signature timestamp is outside the tolerance window';
-  const expected = toHex(await hmac('SHA-256', secret, \`\${timestamp}.\${rawBody}\`));
-  let matched = false;
-  for (const candidate of candidates) matched = timingSafeEqual(expected, candidate) || matched;
-  return matched ? null : 'Signature does not match';
-}
-
-/** Shopify sends BASE64, not hex — comparing a hex digest to it never matches. */
-async function verifyShopify(rawBody: string, signature: string | null, secret: string | undefined): Promise<string | null> {
-  if (!signature) return 'Missing X-Shopify-Hmac-Sha256 header';
-  if (!secret) return '${VERIFY_SECRET_NAME.shopify} is not set';
-  const expected = toBase64(await hmac('SHA-256', secret, rawBody));
-  return timingSafeEqual(expected, signature.trim()) ? null : 'Signature does not match';
-}
-
-// ── Steps ───────────────────────────────────────────────────────────────────
-
-function setDeep(target: any, path: string, value: any): void {
-  const parts = path.split('.');
-  let cursor = target;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const key = parts[i];
-    const nextIsIndex = /^\\d+$/.test(parts[i + 1]);
-    if (cursor[key] == null) cursor[key] = nextIsIndex ? [] : {};
-    cursor = cursor[key];
-  }
-  cursor[parts[parts.length - 1]] = value;
-}
-
-function getDeep(source: any, path: string): any {
-  return path.split('.').reduce((acc: any, key: string) => (acc == null ? undefined : acc[key]), source);
-}
-
-function toFormBody(body: Record<string, any>): string {
-  const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(body)) {
-    if (v == null) continue;
-    if (Array.isArray(v)) v.forEach((item) => params.append(k, String(item)));
-    else params.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
-  }
-  return params.toString();
-}
-
-/** Assemble and send one connector action, mirroring Builderforce's runtime. */
-async function callConnector(env: Env, connectorKey: string, actionKey: string, input: Record<string, any>): Promise<{ ok: boolean; status: number; data: any; error?: string }> {
-  const manifest = CONNECTORS[connectorKey];
-  if (!manifest) return { ok: false, status: 0, data: null, error: \`Unknown connector "\${connectorKey}"\` };
-  const action = manifest.actions.find((a: any) => a.key === actionKey);
-  if (!action) return { ok: false, status: 0, data: null, error: \`Unknown action "\${actionKey}"\` };
-
-  const auth: Record<string, string> = {};
-  for (const [field, envName] of Object.entries(CONNECTOR_ENV[connectorKey] ?? {})) {
-    const value = env[envName];
-    if (value) auth[field] = value;
-  }
-  const fill = (s: string) => s.replace(/\\{\\{auth\\.([a-zA-Z0-9_]+)\\}\\}/g, (_m, k) => auth[k] ?? '');
-
-  let path: string = action.path;
-  const query = new URLSearchParams();
-  const headers: Record<string, string> = { Accept: 'application/json', ...(manifest.defaultHeaders ?? {}), ...(action.headers ?? {}) };
-  const body: Record<string, any> = action.bodyTemplate ? JSON.parse(JSON.stringify(action.bodyTemplate)) : {};
-
-  for (const [name, param] of Object.entries<any>(action.params ?? {})) {
-    const fallback = typeof param.default === 'string' ? fill(param.default) : param.default;
-    const value = input[name] === undefined || input[name] === '' ? fallback : input[name];
-    if (value === undefined || value === null) continue;
-    const wire = param.name ?? name;
-    if (param.in === 'path') path = path.split(\`{\${wire}}\`).join(encodeURIComponent(String(value)));
-    else if (param.in === 'query') query.append(wire, typeof value === 'object' ? JSON.stringify(value) : String(value));
-    else if (param.in === 'header') headers[wire] = String(value);
-    else if (param.bodyPath) setDeep(body, param.bodyPath, value);
-    else body[wire] = value;
-  }
-
-  const a = manifest.auth ?? { kind: 'none' };
-  if (a.kind === 'bearer' || a.kind === 'oauth2') {
-    const token = auth.token ?? auth.accessToken ?? '';
-    if (token) headers.Authorization = \`\${a.prefix ?? 'Bearer '}\${token}\`;
-  } else if (a.kind === 'api_key') {
-    const key = auth.apiKey ?? auth.token ?? '';
-    if (key) {
-      if (a.in === 'query') query.set(a.name || 'api_key', \`\${a.prefix ?? ''}\${key}\`);
-      else headers[a.name || 'Authorization'] = \`\${a.prefix ?? ''}\${key}\`;
-    }
-  } else if (a.kind === 'basic') {
-    headers.Authorization = \`Basic \${btoa(\`\${auth.username ?? ''}:\${auth.password ?? ''}\`)}\`;
-  }
-
-  const hasBody = action.method !== 'GET' && action.method !== 'DELETE' && Object.keys(body).length > 0;
-  if (hasBody) headers['Content-Type'] = action.bodyFormat === 'form' ? 'application/x-www-form-urlencoded' : 'application/json';
-
-  const qs = query.toString();
-  const url = \`\${fill(manifest.baseUrl).replace(/\\/$/, '')}\${fill(path)}\${qs ? \`?\${qs}\` : ''}\`;
-
-  try {
-    const res = await fetch(url, {
-      method: action.method,
-      headers,
-      redirect: 'manual',
-      signal: AbortSignal.timeout(20_000),
-      ...(hasBody ? { body: action.bodyFormat === 'form' ? toFormBody(body) : JSON.stringify(body) } : {}),
-    });
-    const text = await res.text();
-    let parsed: any;
-    try { parsed = text ? JSON.parse(text) : null; } catch { parsed = { text }; }
-    if (!res.ok) return { ok: false, status: res.status, data: parsed, error: text.slice(0, 600) };
-    return { ok: true, status: res.status, data: action.resultPath ? getDeep(parsed, action.resultPath) ?? parsed : parsed };
-  } catch (e) {
-    return { ok: false, status: 0, data: null, error: e instanceof Error ? e.message : 'Request failed' };
-  }
-}
-
-/** One model turn through the Builderforce gateway (OpenAI-compatible). */
-async function callLlm(env: Env, args: { system?: string; prompt: string; maxTokens?: number; temperature?: number }): Promise<string> {
-  const key = env.BUILDERFORCE_API_KEY;
-  if (!key) return '';
-  const messages = [
-    ...(args.system ? [{ role: 'system', content: args.system }] : []),
-    { role: 'user', content: args.prompt },
-  ];
-  try {
-    const res = await fetch('${ctx.apiOrigin}/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: \`Bearer \${key}\` },
-      body: JSON.stringify({ messages, max_tokens: args.maxTokens ?? 400, temperature: args.temperature ?? 0.4 }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!res.ok) return '';
-    const data: any = await res.json();
-    const content = data?.choices?.[0]?.message?.content;
-    return typeof content === 'string' ? content : '';
-  } catch {
-    return '';
-  }
-}
-
-/**
- * Which of the secrets this Worker expects are actually bound.
- *
- * NAMES AND BOOLEANS ONLY — never a value, never a prefix. Unauthenticated on
- * purpose: an unset verification secret means the endpoint already rejects every
- * request, so "TWILIO_AUTH_TOKEN is not set" tells an attacker nothing they could
- * not learn by sending one request, while it tells the OWNER the one thing that
- * is otherwise invisible until a provider reports a failure.
- */
-const EXPECTED_SECRETS = ${json(requiredWorkerSecrets(ctx))} as string[];
-
-/** Default secret name per verification kind. A handler's own \`verifySecret\` wins. */
-const VERIFY_SECRET_DEFAULT: Record<string, string> = ${json(VERIFY_SECRET_NAME)};
-
-// ── Cross-origin access ─────────────────────────────────────────────────────
-
-/**
- * A handler answers a BROWSER on another origin only if its spec named that
- * origin in \`cors\`. Never defaulted, for the same reason \`verify\` is not: this
- * Worker holds your connector credentials and your model budget, so an open
- * \`Access-Control-Allow-Origin\` has to be something you typed.
- *
- * Returns the header value for this caller, or null when it is not admitted.
- */
-function allowedOrigin(handler: any, requestOrigin: string | null): string | null {
-  const list: string[] = handler.cors ?? [];
-  if (!list.length || !requestOrigin) return null;
-  if (list.includes('*')) return '*';
-  return list.includes(requestOrigin.trim().toLowerCase()) ? requestOrigin : null;
-}
-
-/** \`Vary: Origin\` whenever the handler is origin-sensitive — including for a
- *  caller it refuses, so no cache can hand one origin's answer to another. */
-function corsHeaders(handler: any, request: Request): Record<string, string> {
-  if (!(handler.cors ?? []).length) return {};
-  const allow = allowedOrigin(handler, request.headers.get('origin'));
-  return { Vary: 'Origin', ...(allow ? { 'Access-Control-Allow-Origin': allow } : {}) };
-}
-
-// ── Request handling ────────────────────────────────────────────────────────
-
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-    const route = url.pathname.replace(/\\/+$/, '') || '/';
-    const method = request.method.toUpperCase();
-
-    if (route === '${WORKER_HEALTH_PATH}') {
-      return Response.json({
-        ok: true,
-        worker: ${JSON.stringify(ctx.projectName)},
-        secrets: Object.fromEntries(EXPECTED_SECRETS.map((n) => [n, Boolean(env[n])])),
-        handlers: HANDLERS.map((h: any) => ({ method: h.method, route: h.route, verify: h.verify })),
-      });
-    }
-
-    // A preflight asks about the method it INTENDS to use, so match on that one.
-    const preflightMethod = method === 'OPTIONS'
-      ? (request.headers.get('access-control-request-method') ?? '').trim().toUpperCase() || null
-      : null;
-
-    const candidates = HANDLERS.filter((h: any) => h.route === route);
-    const wanted = preflightMethod ?? method;
-    const handler: any = candidates.find((h: any) => h.method === wanted) ?? candidates.find((h: any) => h.method === 'ANY');
-    if (!handler) return new Response('Not found', { status: 404 });
-
-    // Answered before verification and before any step: a preflight carries
-    // neither a body nor a signature, and an \`ANY\` handler claims OPTIONS too —
-    // so running it would spend a model call to answer a permission question.
-    if (preflightMethod) {
-      const allow = allowedOrigin(handler, request.headers.get('origin'));
-      if (!allow) {
-        return new Response('Origin not allowed by this handler\\'s cors list', {
-          status: 403,
-          headers: { Vary: 'Origin' },
-        });
-      }
-      return new Response(null, {
-        status: 204,
-        headers: {
-          'Access-Control-Allow-Origin': allow,
-          'Access-Control-Allow-Methods': handler.method === 'ANY' ? preflightMethod : handler.method,
-          'Access-Control-Allow-Headers': (request.headers.get('access-control-request-headers') ?? '').trim() || 'content-type',
-          'Access-Control-Max-Age': '600',
-          Vary: 'Origin, Access-Control-Request-Headers',
-        },
-      });
-    }
-
-    const cors = corsHeaders(handler, request);
-
-    const rawBody = method === 'GET' || method === 'HEAD' ? '' : await request.text();
-    const contentType = request.headers.get('content-type') ?? '';
-    const isForm = contentType.includes('application/x-www-form-urlencoded');
-
-    let body: Record<string, any> = {};
-    let formParams: Array<[string, string]> = [];
-    if (isForm) {
-      formParams = [...new URLSearchParams(rawBody).entries()];
-      for (const [k, v] of formParams) body[k] = v;
-    } else if (rawBody) {
-      try { body = JSON.parse(rawBody); } catch { body = { raw: rawBody }; }
-    }
-
-    // A handler may name its OWN secret — Stripe issues one per ENDPOINT, so a
-    // single default name could only ever verify one of several Stripe routes.
-    const verifySecret = handler.verify === 'none' ? undefined : env[handler.verifySecret ?? VERIFY_SECRET_DEFAULT[handler.verify]];
-
-    if (handler.verify === 'twilio') {
-      const failure = await verifyTwilio(request.url, formParams, request.headers.get('${VERIFY_SIGNATURE_HEADER.twilio}'), verifySecret);
-      if (failure) return new Response(failure, { status: 403, headers: cors });
-    } else if (handler.verify === 'stripe') {
-      const failure = await verifyStripe(rawBody, request.headers.get('${VERIFY_SIGNATURE_HEADER.stripe}'), verifySecret);
-      if (failure) return new Response(failure, { status: 403, headers: cors });
-    } else if (handler.verify === 'shopify') {
-      const failure = await verifyShopify(rawBody, request.headers.get('${VERIFY_SIGNATURE_HEADER.shopify}'), verifySecret);
-      if (failure) return new Response(failure, { status: 403, headers: cors });
-    } else if (handler.verify === 'shared-secret') {
-      const signature = request.headers.get('${VERIFY_SIGNATURE_HEADER['shared-secret']}') ?? request.headers.get('x-hub-signature-256');
-      const failure = await verifySharedSecret(rawBody, signature, verifySecret);
-      if (failure) return new Response(failure, { status: 403, headers: cors });
-    }
-
-    const steps: Record<string, any> = {};
-    const scope: any = {
-      body,
-      query: Object.fromEntries(url.searchParams.entries()),
-      headers: Object.fromEntries([...request.headers.entries()].filter(([k]) => !/^(authorization|cookie|x-twilio-signature)$/i.test(k))),
-      project: { id: ${ctx.projectId}, name: ${JSON.stringify(ctx.projectName)}, ingressUrl: url.origin },
-      steps,
-    };
-
-    for (const step of handler.steps as any[]) {
-      if (!evaluateWhen(step.when, scope)) { steps[step.id] = ''; continue; }
-      try {
-        if (step.kind === 'set') {
-          steps[step.id] = renderTemplate(step.value, scope);
-        } else if (step.kind === 'llm') {
-          steps[step.id] = await callLlm(env, {
-            system: step.system ? renderTemplate(step.system, scope) : undefined,
-            prompt: renderTemplate(step.prompt, scope),
-            maxTokens: step.maxTokens,
-            temperature: step.temperature,
-          });
-        } else if (step.kind === 'connector') {
-          const result = await callConnector(env, step.connector, step.actionKey, renderValue(step.input ?? {}, scope));
-          steps[step.id] = result.data ?? '';
-          if (!result.ok) console.error(\`step \${step.id}: \${result.error}\`);
-        }
-      } catch (e) {
-        // A failing step must not drop the call — see the note at the top.
-        steps[step.id] = '';
-        console.error(\`step \${step.id} threw\`, e);
-      }
-    }
-
-    const respond = handler.respond;
-    if (respond.kind === 'twiml') {
-      return new Response(renderTwiml(renderValue(respond.nodes, scope)), {
-        headers: { 'Content-Type': 'text/xml; charset=utf-8', ...cors },
-      });
-    }
-    if (respond.kind === 'json') {
-      return Response.json(renderValue(respond.body, scope), { headers: cors });
-    }
-    if (respond.kind === 'text') {
-      return new Response(renderTemplate(respond.text, scope), {
-        headers: { 'Content-Type': respond.contentType ?? 'text/plain; charset=utf-8', ...cors },
-      });
-    }
-    return new Response(null, { status: respond.status ?? 204, headers: cors });
-  },
-};
-`;
-}
-
-/**
- * Path the generated Worker answers its own readiness on.
- *
- * The deployed URL round-trips back over OIDC, so the platform knows WHERE the
- * Worker landed — but not whether the customer ever added the repository secrets
- * the deploy workflow pushes. Without this, "deployed" and "will 403 every
- * request" look identical from our side, and the customer finds out when Twilio
- * does.
- */
-export const WORKER_HEALTH_PATH = '/__builderforce/health';
-
-/** DNS-safe Worker name derived from the project. */
-function workerNameFor(ctx: MaterializeContext): string {
-  const slug = ctx.projectName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40)
-    .replace(/-+$/g, '');
-  return `${slug || 'project'}-backend`;
-}
-
 export const githubWorkerStrategy: BackendHostingStrategy = {
   key: 'github-worker',
   label: 'Your own Cloudflare Worker (via GitHub)',
@@ -795,8 +248,8 @@ export const githubWorkerStrategy: BackendHostingStrategy = {
   zeroSetup: false,
 
   materialize(ctx: MaterializeContext): MaterializeResult {
-    const workerName = workerNameFor(ctx);
-    const secrets = requiredWorkerSecrets(ctx);
+    const workerName = backendNameFor(ctx);
+    const secrets = requiredBackendSecrets(ctx);
 
     const setupSteps: SetupStep[] = [
       ...missingSecretSteps(ctx),
@@ -829,8 +282,9 @@ export const githubWorkerStrategy: BackendHostingStrategy = {
       files: {
         [`${WORKER_DIR}wrangler.toml`]: renderWranglerToml(ctx, workerName),
         [`${WORKER_DIR}package.json`]: renderPackageJson(workerName),
-        [`${WORKER_DIR}src/index.ts`]: renderWorkerSource(ctx),
-        [WORKER_DEPLOY_WORKFLOW_PATH]: renderDeployWorkflow(ctx, workerName),
+        [`${WORKER_DIR}src/${ENGINE_FILE}`]: renderHandlerEngineSource(ctx),
+        [`${WORKER_DIR}src/index.js`]: renderWorkerEntry(ctx),
+        [WORKER_DEPLOY_WORKFLOW_PATH]: renderDeployWorkflow(ctx),
       },
       setupSteps,
       // Unknown until the first deploy prints it; the Action writes it to the job

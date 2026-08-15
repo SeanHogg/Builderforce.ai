@@ -22,8 +22,10 @@
  */
 
 import type {
-  AcademicObjectKind, DataScienceObjectKind, FounderObjectKind, HiringObjectKind, PeopleObjectKind, SharedObjectKind,
+  AcademicObjectKind, DataScienceObjectKind, FounderObjectKind, HiringObjectKind,
+  OperationsObjectKind, PeopleObjectKind, SharedObjectKind,
 } from '@builderforce/creation-canvas-contract';
+import { OPERATIONS_LABELS, OPERATIONS_OBJECT_SPECS, OPERATIONS_STATUSES } from '@/lib/operationsObjects';
 import { ACADEMIC_LABELS, ACADEMIC_OBJECT_SPECS, ACADEMIC_STATUSES } from '@/lib/academicObjects';
 import { DATA_SCIENCE_LABELS, DATA_SCIENCE_OBJECT_SPECS, DATA_SCIENCE_STATUSES } from '@/lib/dataScienceObjects';
 import { FOUNDER_OBJECT_SPECS } from '@/lib/founderObjects';
@@ -124,6 +126,10 @@ export const SHARED_REGISTRY = lower({ specs: SHARED_OBJECT_SPECS, labels: SHARE
  *  the reason the board can now hold a loss curve, a labelled eval set and a versioned
  *  prompt instead of describing them in a `document`. */
 export const DATA_SCIENCE_REGISTRY = lower({ specs: DATA_SCIENCE_OBJECT_SPECS, labels: DATA_SCIENCE_LABELS, statuses: DATA_SCIENCE_STATUSES });
+/** The operation a vertical company SELLS — thirteen kinds serving field service,
+ *  property, clinical, fleet, logistics, manufacturing and professional practice from
+ *  one vocabulary, because the industry is a value and not a kind. See `operations.ts`. */
+export const OPERATIONS_REGISTRY = lower({ specs: OPERATIONS_OBJECT_SPECS, labels: OPERATIONS_LABELS, statuses: OPERATIONS_STATUSES });
 
 /**
  * The authorable fields per vocabulary.
@@ -139,6 +145,7 @@ export const HIRING_MUTABLE_FIELDS = specMutableFieldMap<HiringObjectKind>(HIRIN
 export const PEOPLE_MUTABLE_FIELDS = specMutableFieldMap<PeopleObjectKind>(PEOPLE_OBJECT_SPECS);
 export const SHARED_MUTABLE_FIELDS = specMutableFieldMap<SharedObjectKind>(SHARED_OBJECT_SPECS);
 export const DATA_SCIENCE_MUTABLE_FIELDS = specMutableFieldMap<DataScienceObjectKind>(DATA_SCIENCE_OBJECT_SPECS);
+export const OPERATIONS_MUTABLE_FIELDS = specMutableFieldMap<OperationsObjectKind>(OPERATIONS_OBJECT_SPECS);
 
 /** Actions, from the same declaration that gives each kind its fields — so a kind cannot
  *  advertise an action its body has no affordance for. */
@@ -146,5 +153,6 @@ export const SPEC_ACTIONS: Readonly<Record<string, readonly string[]>> = Object.
   [
     ...FOUNDER_OBJECT_SPECS, ...ACADEMIC_OBJECT_SPECS, ...HIRING_OBJECT_SPECS,
     ...PEOPLE_OBJECT_SPECS, ...SHARED_OBJECT_SPECS, ...DATA_SCIENCE_OBJECT_SPECS,
+    ...OPERATIONS_OBJECT_SPECS,
   ].map((spec) => [spec.kind, spec.actions]),
 );

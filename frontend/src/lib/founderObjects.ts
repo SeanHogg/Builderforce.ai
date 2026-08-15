@@ -10,7 +10,9 @@
  * write a KPI's number onto the board and could never read it back. The card showed a
  * number the model was blind to.
  *
- * The seventeen founder kinds are declared ONCE, here. This module is the single source
+ * The founder kinds are declared ONCE, here — `FOUNDER_OBJECT_KINDS` in the contract is the
+ * list, and a test holds the two in step, which is why no count is written into this prose.
+ * This module is the single source
  * for:
  *   • the node body           — `SpecObjectBody` renders these sections generically
  *   • the AI field contract   — `founderFieldGuidance()` documents them to the model
@@ -23,7 +25,7 @@
  * Adding a founder kind is adding one entry below. There is no branch to forget.
  *
  * ── WHY THE RENDER STYLES ARE A CLOSED SET ───────────────────────────────────────
- * Seven styles cover all seventeen kinds, which is the point: a `capTable` and a
+ * Seven styles cover every kind in the set, which is the point: a `capTable` and a
  * `customerSegment` are the same shape of thing on a board — a few headline numbers and
  * a table of rows — and rendering them with one component is what keeps a founder's
  * canvas looking like one product. A new kind that genuinely cannot be expressed in

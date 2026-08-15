@@ -112,6 +112,35 @@ export interface SpecField {
    * `specRestrictedFields()` in one place rather than by each consumer remembering.
    */
   restricted?: boolean;
+  /**
+   * COMPUTED from the rest of the object, rather than stored on it.
+   *
+   * ── WHY THE `derived` FLAG WAS NOT ENOUGH ──────────────────────────────────────
+   * `derived` says only who may WRITE a field: a mark, an attempt record, a fee split —
+   * values a mechanism elsewhere puts on the object, which the model must be able to read
+   * and must never assert. That is the right rule and it leaves a second class of field
+   * with nowhere to live: a number that is pure arithmetic over fields already on the
+   * card. A work order's cost is its parts plus its labour. An estimate's total is the sum
+   * of its lines. A dispatch board's utilisation is assigned hours over capacity.
+   *
+   * Storing those is the 3NF violation the schema rule forbids one layer down — one fact
+   * in one place — and it fails in the way stored totals always fail: somebody edits a
+   * line, nothing recomputes, and the card shows a total that disagrees with the rows
+   * printed directly beneath it. Leaving them out instead means the board can hold a job's
+   * parts and labour and still cannot say what the job cost, which is the number the whole
+   * object exists to produce.
+   *
+   * So a field may declare HOW it is computed, once, beside the fields it reads. The node
+   * body renders it, the AI snapshot carries it, and `specMutableFields` omits it — a
+   * computed field is never authorable, because an authored total is exactly the drift
+   * this closes. Vocabulary-neutral by construction: it is a property of a field, so any
+   * set may use it.
+   *
+   * Return `undefined` (never a zero) when the inputs are missing. A margin computed
+   * against an absent cost reads as 100% and is the most dangerous wrong answer this
+   * layer can produce — the refusal `canvasMetricsDerived` already argues for metrics.
+   */
+  derive?: (data: Record<string, unknown>) => unknown;
 }
 
 export interface SpecObjectSpec {
@@ -242,7 +271,7 @@ export function specFieldNames(): readonly string[] {
  */
 export function specBookkeepingFields(): readonly string[] {
   return [...new Set(allSpecObjectSpecs()
-    .flatMap((spec) => spec.fields.filter((field) => field.bookkeeping || field.derived).map((field) => field.name)))];
+    .flatMap((spec) => spec.fields.filter((field) => field.bookkeeping || field.derived || field.derive).map((field) => field.name)))];
 }
 
 /**
@@ -255,8 +284,41 @@ export function specBookkeepingFields(): readonly string[] {
 export function specMutableFields(kind: string): readonly string[] {
   const spec = specObjectSpec(kind);
   return spec
-    ? ['content', ...spec.fields.filter((field) => !field.derived && !field.restricted).map((field) => field.name)]
+    ? ['content', ...spec.fields.filter((field) => !field.derived && !field.derive && !field.restricted).map((field) => field.name)]
     : ['content'];
+}
+
+/**
+ * The value a field RENDERS — computed where the field says how, stored otherwise.
+ *
+ * THE one resolver. The node body and the emptiness predicate both used to read
+ * `data[field.name]` directly, and a computed field added to only one of them is a card
+ * that either draws a section with nothing in it or hides a number it could have shown.
+ * See `SpecField.derive`.
+ */
+export function specFieldValue(field: SpecField, data: Record<string, unknown>): unknown {
+  return field.derive ? field.derive(data) : data[field.name];
+}
+
+/**
+ * Every computed field on one object, as a patch the AI snapshot merges.
+ *
+ * Without this the model reads a work order's parts and labour and cannot read what the
+ * job cost — a number the card shows it and the prompt does not — which is the
+ * authorable-but-unreadable drift in its exact mirror image, and just as damaging: asked
+ * "which jobs lost money" the model would answer from the fields it happens to have.
+ *
+ * Returns only the fields that actually resolved, so a half-filled object contributes
+ * nothing rather than a wall of nulls.
+ */
+export function specDerivedValues(kind: string, data: Record<string, unknown>): Record<string, unknown> {
+  const spec = specObjectSpec(kind);
+  if (!spec) return {};
+  return Object.fromEntries(spec.fields.flatMap((field) => {
+    if (!field.derive || field.restricted) return [];
+    const value = field.derive(data);
+    return value === undefined || value === null ? [] : [[field.name, value]];
+  }));
 }
 
 /**

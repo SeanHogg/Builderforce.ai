@@ -274,6 +274,99 @@ export const CREATION_TEMPLATES: readonly CreationTemplate[] = [
     ],
   },
   {
+    /**
+     * The board a service business runs its week from.
+     *
+     * Deliberately ONE pack rather than one per industry, for the reason `operations.ts`
+     * argues: the seeded values name a heating engineer's day because a template has to
+     * be concrete to be useful, and every kind on it is the same kind a property manager,
+     * a clinic or a workshop uses with a different `discipline`. A "field service" pack
+     * beside a "property" pack and a "fleet" pack would be three copies of this board.
+     */
+    id: 'field-operations', name: 'Field operations', category: 'Marketplace template',
+    description: 'Run the work you sell: the assets you look after, the jobs against them, the day they are dispatched on, the parts they consume, and the certificate that makes them lawful.',
+    objects: [
+      {
+        kind: 'serviceAsset', title: 'Boiler · Riverside House', x: 0, y: 0,
+        data: {
+          status: 'In service', discipline: 'fieldService', assetClass: 'Commercial gas boiler',
+          criticality: 'critical', site: 'Riverside House, plant room (key with concierge)',
+          summary: 'Every job, cost and certificate joins to this asset — which is what makes repair-or-replace answerable rather than argued.',
+        },
+      },
+      {
+        kind: 'workOrder', title: 'No heating · Riverside House', x: 520, y: 0,
+        data: {
+          status: 'Unscheduled', orderType: 'reactive', priority: 'urgent', discipline: 'fieldService',
+          reportedFault: 'Tenants report no heating on floors 3–5 since this morning. Pressure gauge reading low.',
+          tasks: [{ title: 'Diagnose pressure loss', detail: 'Check expansion vessel, PRV and system pressure before condemning anything.' }],
+        },
+      },
+      {
+        kind: 'visit', title: 'First attendance', x: 1040, y: 0,
+        data: { status: 'Not scheduled', arrivalWindow: '08:00–12:00', durationMinutes: 90, travelMinutes: 35 },
+      },
+      {
+        kind: 'dispatchBoard', title: 'Today · North patch', x: 0, y: 380,
+        data: {
+          status: 'Planning the day', discipline: 'fieldService', area: 'North',
+          constraints: ['Gas Safe registration for any boiler job', 'Two-person lift over 25kg', 'Congestion charge zone before 18:00'],
+        },
+      },
+      {
+        kind: 'estimate', title: 'Quote · pressure fault remedial', x: 520, y: 380,
+        data: {
+          status: 'Draft',
+          exclusions: ['Making good', 'Out-of-hours attendance', 'Asbestos survey'],
+          summary: 'Price what you will actually do. The lines total themselves — the card cannot show a figure that disagrees with them.',
+        },
+      },
+      {
+        kind: 'serviceAgreement', title: 'Riverside · annual cover', x: 1040, y: 380,
+        data: {
+          status: 'Draft', cadence: 'quarterly', billingCycle: 'annual', responseHours: 4, resolutionHours: 24,
+          summary: 'Planned work is generated from the cadence here rather than remembered into existence.',
+        },
+      },
+      {
+        kind: 'inspection', title: 'Annual gas safety check', x: 0, y: 760,
+        data: {
+          status: 'Not started', inspectionType: 'statutory certificate', standard: 'Gas Safety (Installation and Use) Regulations 1998',
+          summary: 'A failed statutory inspection usually means the asset stops being used today — the outcome has to be legible on the card.',
+        },
+      },
+      {
+        kind: 'certification', title: 'Engineer · Gas Safe registration', x: 520, y: 760,
+        data: {
+          status: 'Unverified', credentialType: 'trade registration', issuer: 'Gas Safe Register',
+          summary: 'An expired certificate does not announce itself. The validity here is computed from the expiry, never asserted.',
+        },
+      },
+      {
+        kind: 'inventoryItem', title: 'Expansion vessel · 24L', x: 1040, y: 760,
+        data: { status: 'Not counted', location: 'Van 4', leadTimeDays: 3, summary: 'Van stock and store stock are different balances; merging them is how a job leaves without its part.' },
+      },
+      { kind: 'supplier', title: 'Trade counter · heating parts', x: 0, y: 1140, data: { status: 'Prospective', leadTimeDays: 3 } },
+      { kind: 'purchaseOrder', title: 'Replenishment order', x: 520, y: 1140, data: { status: 'Draft' } },
+      { kind: 'shipment', title: 'Inbound delivery', x: 1040, y: 1140, data: { status: 'Not dispatched', destination: 'Store' } },
+      {
+        kind: 'incident', title: 'Near miss · plant room access', x: 520, y: 1520,
+        data: {
+          status: 'Reported', incidentType: 'near-miss', severity: 'major',
+          summary: 'Recorded for the same reason an injury is: the same event with a luckier ending. Restricted by default — it names a person.',
+        },
+      },
+    ],
+    connections: [
+      { source: 1, target: 0, label: 'is work on' }, { source: 1, target: 2, label: 'is attended by' },
+      { source: 3, target: 2, label: 'dispatches' }, { source: 4, target: 1, label: 'prices' },
+      { source: 5, target: 0, label: 'covers' }, { source: 6, target: 0, label: 'certifies' },
+      { source: 7, target: 2, label: 'permits' }, { source: 8, target: 1, label: 'is consumed by' },
+      { source: 9, target: 10, label: 'supplies' }, { source: 10, target: 11, label: 'ships as' },
+      { source: 11, target: 8, label: 'replenishes' }, { source: 12, target: 2, label: 'occurred during' },
+    ],
+  },
+  {
     id: 'research-programme', name: 'Research programme', category: 'Marketplace template',
     description: 'The scholarly lifecycle in the order it is actually gated: funding, ethics, pre-registration, method, consent, participants, data plan, manuscript and peer review.',
     objects: [

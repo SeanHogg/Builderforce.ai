@@ -1550,6 +1550,55 @@ export const challenges = pgTable('challenges', {
   index('idx_challenges_project').on(t.projectId),
 ]);
 
+/**
+ * One act of making an idea REAL, in one particular way.
+ *
+ * An idea has many proofs over its life — a demo video, then a smoke test, then
+ * a wizard-of-oz, then the system — and each is a separate act with its own
+ * outcome. That is why this is a table and not a column on `challenges`: a
+ * `realization_key` column there could hold exactly one, which would make the
+ * question the whole feature exists to answer ("what have we already tried, and
+ * what did it tell us?") unanswerable.
+ *
+ * `challengeId` is nullable because a realization does not require a pasted
+ * brief — an idea typed straight into the Realize page has a spec and no
+ * challenge row, and refusing to record its proof would be the tail wagging the
+ * dog.
+ *
+ * `plan` and `result` persist for the same reason the challenge's do: so "why
+ * did it build that?" and "what did it actually write?" are answerable without
+ * re-running anything.
+ */
+export const realizations = pgTable('realizations', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** The brief this proof is of, when it came from one. */
+  challengeId:   uuid('challenge_id').references(() => challenges.id, { onDelete: 'set null' }),
+  /** Set once BUILT; null while the realization is only planned. */
+  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  /** A RealizationKey — `demo-video`, `smoke-test`, `live-system`, … */
+  targetKey:     varchar('target_key', { length: 48 }).notNull(),
+  title:         varchar('title', { length: 255 }).notNull(),
+  /** Where the backend runs. Only `live-system` may be anything but its default. */
+  strategy:      varchar('strategy', { length: 32 }).notNull().default('declarative'),
+  spec:          jsonb('spec').notNull().default(sql`'{}'::jsonb`),
+  plan:          jsonb('plan').notNull().default(sql`'{}'::jsonb`),
+  /** What the build actually produced — files, tickets, readiness, live URL. */
+  result:        jsonb('result').notNull().default(sql`'{}'::jsonb`),
+  /** The address a person can open. Null until it has been built and published. */
+  liveUrl:       varchar('live_url', { length: 500 }),
+  /** 'planned' → 'building' → 'built' → 'failed' */
+  status:        varchar('status', { length: 16 }).notNull().default('planned'),
+  error:         text('error'),
+  createdByUserId: varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_realizations_tenant_time').on(t.tenantId, t.createdAt),
+  index('idx_realizations_challenge').on(t.challengeId),
+  index('idx_realizations_project').on(t.projectId),
+]);
+
 
 // ═══ from pmo.ts ═══
 /**

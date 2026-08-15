@@ -27,7 +27,12 @@
 import type { CreationNodeData } from './types';
 import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
 import { DATA_ARCHITECTURE_FIELD_NAMES } from '@/lib/dataArchitectureObjects';
-import { specFieldNames } from '@/lib/specObjects';
+import { specDerivedValues, specFieldNames } from '@/lib/specObjects';
+// The vocabularies register themselves as an import SIDE EFFECT, and this module asks
+// the registry two questions — which fields are readable, and what the computed ones
+// resolve to. Depending on somebody else having imported the sets first is the accident
+// `specObjectSets.ts` exists to end.
+import '@/lib/specObjectSets';
 
 const CONTEXT_FIELDS = [
   'kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus',
@@ -334,11 +339,22 @@ function safeContextValue(
 }
 
 export function creationObjectAiContext(data: CreationNodeData): Record<string, unknown> {
+  /**
+   * COMPUTED fields, resolved before the snapshot is cut.
+   *
+   * A `derive`d field is never stored on the object — that is the whole point, one fact
+   * in one place — so reading `data[field]` finds nothing and the model is blind to the
+   * number the card is showing the user. Asked "which of these jobs lost money" it would
+   * answer from parts and labour it has to add up itself, or decline. Merged UNDER the
+   * stored values, never over them: a stale total somebody once wrote onto an object must
+   * not survive a recomputation, and a computed field is not authorable anyway.
+   */
+  const resolved = { ...data, ...specDerivedValues(data.kind, data) };
   return Object.fromEntries(CONTEXT_FIELDS.flatMap((field) => {
     // The snapshot boundary, enforced once — see NEVER_IN_CONTEXT.
     if (NEVER_IN_CONTEXT.has(field)) return [];
     const value = safeContextValue(
-      data[field],
+      resolved[field],
       0,
       CONTEXT_ARRAY_LIMITS[field] ?? DEFAULT_CONTEXT_ARRAY_LIMIT,
       CONTEXT_DEPTH_LIMITS[field] ?? DEFAULT_CONTEXT_DEPTH_LIMIT,

@@ -355,7 +355,7 @@ export function canInvokeCreationObjectAction(kind: CreationObjectKind, action: 
 }
 const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
   Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', Quality: '⛉', Teaching: '◈', Research: '⌕',
-  Pitch: '◈', People: '●', Hiring: '◐', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
+  Pitch: '◈', People: '●', Hiring: '◐', Operations: '⬢', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
 };
 export type ProposedCanvasChange =
   | { id: string; type: 'object.add'; label: string; node: CreationFlowNode }

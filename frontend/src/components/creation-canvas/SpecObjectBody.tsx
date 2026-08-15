@@ -2,7 +2,7 @@
 // already declares the client boundary, so the directive would be redundant — and the
 // architecture ratchet counts every one of them for a reason.
 import { useTranslations } from 'next-intl';
-import { specObjectNamespace, specObjectSpec, type SpecField } from '@/lib/specObjects';
+import { specFieldValue, specObjectNamespace, specObjectSpec, type SpecField } from '@/lib/specObjects';
 // The vocabularies register themselves as an import SIDE EFFECT, so this component only
 // renders a kind whose set has already been imported by SOMEONE. In the app that
 // happened by accident — `CreationNode` pulls in `creationObjectRegistry`, which pulls in
@@ -207,7 +207,7 @@ function FieldSection({ field, data, t }: {
   data: CreationNodeData;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const raw = data[field.name];
+  const raw = specFieldValue(field, data);
   const label = t(`field.${field.label}`);
 
   // RESTRICTED, before the per-style switch: what the field would have drawn is exactly
@@ -393,7 +393,7 @@ function FieldSection({ field, data, t }: {
  * a section is present exactly when this says its value is non-empty.
  */
 function sectionHasContent(field: SpecField, data: CreationNodeData): boolean {
-  const value = data[field.name];
+  const value = specFieldValue(field, data);
   // Restricted first, matching `FieldSection`: the section exists when the data was
   // collected, whatever style the field declared for values nobody here will see.
   if (field.restricted) return restrictedCount(value) > 0;

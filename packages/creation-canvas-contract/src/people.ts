@@ -97,8 +97,15 @@ export const PEOPLE_OBJECT_KINDS = [
   'case',
   // A STATUTORY commitment, as against `contract.obligations`, which are commitments to a
   // counterparty. "We just hired in California and Ontario — what changes?" had no object
-  // at all; `trigger` binds to this one's `dueAt` and warns before the deadline instead
-  // of after it.
+  // at all.
+  //
+  // NOT YET WATCHABLE. This comment used to claim `trigger` binds to this object's `dueAt`
+  // and warns before the deadline. It does not: `canvasTriggers.ts` parses a NUMBER out of
+  // a `liveMetric` on the same board and compares it with below/above/equals/changes-by,
+  // so there is no date comparator and no binding to a non-metric object — and
+  // `canvas_evaluate_triggers` is a frontend tool with no server sweep, so nothing
+  // evaluates while the board is closed. A statutory deadline is therefore recorded here
+  // and noticed by a person. See the Gap Register entry "date-bearing triggers".
   'obligation',
   // ── THE COLLECTION PRIMITIVE ──────────────────────────────────────────────────
   // A structured question set that a REAL HUMAN answers, and the responses that come back.
@@ -185,6 +192,12 @@ export const RESTRICTED_BY_DEFAULT_KINDS: readonly string[] = [
   'case', 'compBand', 'performanceReview', 'employee',
   // Hiring (declared in HIRING_OBJECT_KINDS; classified here, where the rule lives).
   'candidate', 'scorecard', 'offer', 'shortlist', 'placement',
+  // Operations (declared in OPERATIONS_OBJECT_KINDS; classified here for the same
+  // reason the hiring kinds are — confidentiality is a property of what an object
+  // HOLDS, not of which set declared it). An `incident` is an injury, a near miss or a
+  // service failure: it names the person it happened to, records their harm, and is
+  // routinely the subject of a claim. Sharing a board must not share it by default.
+  'incident',
 ];
 
 /**

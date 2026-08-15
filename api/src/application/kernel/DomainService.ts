@@ -36,9 +36,15 @@ import { DOMAINS, type Domain } from './ObjectRegistry';
 /**
  * The roster as data (PRD 20 §3, §7).
  *
- * The fifteen domains and the fifteen seats are the same list, and neither may
- * drift from the other — so there is one list, here, and the navigation, the
- * permission modules and the schema's `domain` column all read it.
+ * The domains and the seats are the same list, and neither may drift from the
+ * other — so there is one list, here, and the navigation, the permission
+ * modules and the schema's `domain` column all read it.
+ *
+ * Adding the sixteenth seat is this one entry plus its name in `DOMAINS`: the
+ * four use cases below are identical across domains and the per-domain
+ * difference is DATA, which is exactly the open/closed claim this file's header
+ * makes. It is worth noting that the claim held — `operations` needed no
+ * service, no route and no surface, only a row.
  *
  * `rung` is the progressive-disclosure level at which a seat's scope chips are
  * earned. The seat itself is ALWAYS listed: progressive disclosure gates state,
@@ -75,6 +81,17 @@ export const DOMAIN_MANIFEST: Readonly<Record<Domain, DomainManifest>> = {
   support:      { domain: 'support',      seat: 'Support',    rootKind: 'ticket',           kinds: ['ticket', 'article'],                                          metrics: ['support.open_tickets', 'support.first_response_min', 'support.csat'], rung: 1 },
   canvas:       { domain: 'canvas',       seat: 'Brain',      rootKind: 'creation_session', kinds: ['creation_session', 'artifact', 'thread'],                     metrics: ['canvas.sessions', 'canvas.artifacts', 'canvas.shipped'], rung: 0 },
   integrations: { domain: 'integrations', seat: 'Platform',   rootKind: 'connection',       kinds: ['connection'],                                                 metrics: ['integrations.connected', 'integrations.sync_errors'], rung: 1 },
+  /**
+   * The sixteenth seat, and the only one that holds what a company SELLS rather
+   * than how it runs itself — see the note on `DOMAINS`. Its kinds are the four
+   * a person navigates to directly; the satellites (visits, estimates,
+   * inspections, parts, shipments) are reached through them, which is the same
+   * split `hiring` draws between an application and its scorecards.
+   *
+   * `rung: 1` rather than 3: a field business's very first session is a job and
+   * an asset, not a mature-company concern like governance or headcount.
+   */
+  operations:   { domain: 'operations',   seat: 'Operations', rootKind: 'work_order',       kinds: ['work_order', 'service_asset', 'service_agreement', 'incident'], metrics: ['operations.open_work_orders', 'operations.first_time_fix', 'operations.sla_breaches'], rung: 1 },
 };
 
 /**

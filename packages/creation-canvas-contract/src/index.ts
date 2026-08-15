@@ -7,6 +7,7 @@ export * from './academic';
 export * from './qa';
 export * from './people';
 export * from './dataScience';
+export * from './operations';
 // `export *` re-exports a binding; it does not bring it INTO scope here, and the
 // kind list below spreads it — without this import the whole contract module
 // throws `PEOPLE_OBJECT_KINDS is not defined` at import time, which takes every
@@ -14,6 +15,7 @@ export * from './dataScience';
 import { PEOPLE_OBJECT_KINDS } from './people';
 import { ACADEMIC_OBJECT_KINDS } from './academic';
 import { DATA_SCIENCE_OBJECT_KINDS } from './dataScience';
+import { OPERATIONS_OBJECT_KINDS } from './operations';
 
 /**
  * The FOUNDER objects — the half of "idea to real" that is not a made artifact.
@@ -350,6 +352,12 @@ export const CREATION_OBJECT_KINDS = [
   // it, the comparison that chose between runs, the labelled set an evaluation is
   // legitimately built from, and the versioned prompt. See `dataScience.ts`.
   ...DATA_SCIENCE_OBJECT_KINDS,
+  // The work a vertical company SELLS: an asset, the order against it, the visit that
+  // executes it, the evidence, the certificate that permits it, the parts it consumes,
+  // and the incident when it goes wrong. Every other vocabulary on this list models how
+  // a company runs ITSELF; this is the first that models what it does for a customer.
+  // See `operations.ts` for why it is one vocabulary and not one pack per industry.
+  ...OPERATIONS_OBJECT_KINDS,
 ] as const;
 
 export type CreationObjectKind = typeof CREATION_OBJECT_KINDS[number];

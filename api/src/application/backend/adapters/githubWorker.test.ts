@@ -12,13 +12,15 @@ import type { MaterializeContext } from '../hostingStrategy';
 import { parseHandlerSpec, type HandlerSpec } from '../handlerSpec';
 import { twilioOmnichannelBlueprint } from '../../challenge/blueprints/twilioOmnichannel';
 import {
-  connectorEnvVar,
   githubWorkerStrategy,
-  requiredWorkerSecrets,
-  screamingSnake,
   WORKER_DEPLOY_WORKFLOW_PATH,
   WORKER_DIR,
 } from './githubWorker';
+import {
+  connectorEnvVar,
+  requiredBackendSecrets,
+  screamingSnake,
+} from './handlerEngineSource';
 import { declarativeStrategy } from './declarative';
 
 function blueprintHandlers(): HandlerSpec[] {
@@ -51,8 +53,8 @@ describe('secret naming', () => {
   });
 });
 
-describe('requiredWorkerSecrets', () => {
-  const secrets = requiredWorkerSecrets(context());
+describe('requiredBackendSecrets', () => {
+  const secrets = requiredBackendSecrets(context());
 
   it('includes one per connector auth field', () => {
     expect(secrets).toEqual(expect.arrayContaining(['TWILIO_ACCOUNT_SID', 'TWILIO_USERNAME', 'TWILIO_PASSWORD', 'SENDGRID_TOKEN']));
@@ -64,7 +66,7 @@ describe('requiredWorkerSecrets', () => {
 
   it('includes the gateway key only when a handler calls a model', () => {
     expect(secrets).toContain('BUILDERFORCE_API_KEY');
-    const noLlm = requiredWorkerSecrets(context({
+    const noLlm = requiredBackendSecrets(context({
       handlers: [{ name: 'x', route: '/x', method: 'POST', verify: 'none', steps: [], respond: { kind: 'empty' } }],
       connectors: [],
     }));
@@ -75,11 +77,12 @@ describe('requiredWorkerSecrets', () => {
 describe('materialize', () => {
   const result = githubWorkerStrategy.materialize(context());
 
-  it('generates a wrangler config, a package.json, the Worker and the deploy workflow', () => {
+  it('generates a wrangler config, a package.json, the engine, the entrypoint and the deploy workflow', () => {
     expect(Object.keys(result.files).sort()).toEqual([
       WORKER_DEPLOY_WORKFLOW_PATH,
       `${WORKER_DIR}package.json`,
-      `${WORKER_DIR}src/index.ts`,
+      `${WORKER_DIR}src/engine.js`,
+      `${WORKER_DIR}src/index.js`,
       `${WORKER_DIR}wrangler.toml`,
     ].sort());
   });
@@ -88,52 +91,18 @@ describe('materialize', () => {
     expect(() => JSON.parse(result.files[`${WORKER_DIR}package.json`]!)).not.toThrow();
   });
 
-  it('embeds every handler so the Worker is self-contained', () => {
-    const source = result.files[`${WORKER_DIR}src/index.ts`]!;
-    for (const handler of blueprintHandlers()) {
-      expect(source).toContain(`"route": "${handler.route}"`);
-    }
+  it('keeps the entrypoint to the one thing that is Cloudflare-specific', () => {
+    // Everything else is the shared engine. An entrypoint that grew a second
+    // responsibility is an entrypoint that would have to be re-tested per cloud.
+    const entry = result.files[`${WORKER_DIR}src/index.js`]!;
+    expect(entry).toContain("import { handleRequest } from './engine.js'");
+    expect(entry).toContain('export default');
+    // Null means "no handler claims this path" — the entrypoint owns the 404.
+    expect(entry).toContain("new Response('Not found', { status: 404 })");
   });
 
-  it('embeds the connector manifests and reads every credential from env', () => {
-    const source = result.files[`${WORKER_DIR}src/index.ts`]!;
-    // The manifest travels — it is pure data (base URL, auth SHAPE, actions).
-    expect(source).toContain('https://api.twilio.com');
-    // The VALUES do not: each auth field is mapped to a Worker-secret NAME, and
-    // the generated callConnector resolves it from `env` at request time.
-    expect(source).toContain('"password": "TWILIO_PASSWORD"');
-    expect(source).toContain('const value = env[envName];');
-    // Nothing Builderforce holds may appear: no ciphertext, no decrypted blob, no
-    // connection row, no ingress token.
-    for (const leak of ['credentialsEnc', 'credentials_enc', 'connector_connections', 'hooks/tok']) {
-      expect(source, leak).not.toContain(leak);
-    }
-  });
-
-  it('points the generated model call at the configured API origin', () => {
-    expect(result.files[`${WORKER_DIR}src/index.ts`]).toContain("'https://api.test/v1/chat/completions'");
-  });
-
-  it('reproduces the failure posture — a thrown step must not abort the request', () => {
-    const source = result.files[`${WORKER_DIR}src/index.ts`]!;
-    expect(source).toContain('steps[step.id] = \'\';');
-    expect(source).toContain('console.error');
-  });
-
-  it('verifies signatures in the generated Worker too', () => {
-    const source = result.files[`${WORKER_DIR}src/index.ts`]!;
-    expect(source).toContain('x-twilio-signature');
-    expect(source).toContain('return new Response(failure, { status: 403, headers: cors })');
-  });
-
-  it('honours the same cors allow-list as the platform-hosted ingress', () => {
-    // The two hosting strategies run the SAME specs. If `cors` meant something
-    // different here, switching strategy would silently open or close a frontend.
-    const source = result.files[`${WORKER_DIR}src/index.ts`]!;
-    expect(source).toContain('access-control-request-method');
-    expect(source).toContain("if (list.includes('*')) return '*';");
-    // Answered before verification and before a single step runs.
-    expect(source.indexOf('if (preflightMethod) {')).toBeLessThan(source.indexOf("handler.verify === 'twilio'"));
+  it('points wrangler at the generated entrypoint', () => {
+    expect(result.files[`${WORKER_DIR}wrangler.toml`]).toContain('main = "src/index.js"');
   });
 
   it('derives a DNS-safe Worker name from the project', () => {

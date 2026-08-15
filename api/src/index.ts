@@ -171,6 +171,8 @@ import { maybeHandlePreviewIngress } from './application/runtime/previewIngress'
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createCompileRoutes }     from './presentation/routes/compileRoutes';
 import { createChallengeRoutes }   from './presentation/routes/challengeRoutes';
+import { createRealizationRoutes } from './presentation/routes/realizationRoutes';
+import { createBackendRuntimeRoutes } from './presentation/routes/backendRuntimeRoutes';
 import { createProjectBackendRoutes } from './presentation/routes/projectBackendRoutes';
 import { createGameRoutes } from './presentation/routes/gameRoutes';
 import { createHooksRoutes }       from './presentation/routes/hooksRoutes';
@@ -484,6 +486,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Shared (L2) semantic response cache — the web app and the agent runtime both
   // query it so a paraphrased answer from one surface is reusable by the other.
   app.route('/v1/semantic-cache', createSemanticCacheRoutes());
+
+  // The callback surface a self-hosted backend uses. Authenticated by the same
+  // tenant API key its model calls carry, NOT by a user JWT — the caller is a
+  // Lambda / Cloud Run / Function App, not a browser.
+  app.route('/api/backend-runtime', createBackendRuntimeRoutes(db));
 
   // Marketplace (no JWT required for read, required for write)
   app.route('/marketplace', createMarketplaceRoutes(db));
@@ -813,6 +820,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Paste a brief (a contest, an RFP, a hackathon prompt) → extracted requirements,
   // a matched blueprint, a plan, and — on an explicit second call — a built project.
   app.route('/api/challenges', createChallengeRoutes(db, runtimeService));
+  // Idea → REAL. Eight proof forms (demo video, clickable prototype, smoke test,
+  // wizard-of-oz, proof of concept, pilot, phone line, live system), each built,
+  // published to a URL and wired to its own forms. See application/realization.
+  app.route('/api/realizations', createRealizationRoutes(db, runtimeService));
   // Operating a project's server-side half: hosting strategy, live handlers, the
   // per-project secret vault, and the inbound-delivery log.
   app.route('/api/projects',  createProjectBackendRoutes(db));

@@ -25,14 +25,31 @@
  *
  * The port exists so the expensive, security-sensitive parts — the ingress, the
  * secret vault, signature verification, the handler spec itself — are written
- * ONCE and shared. Neither adapter is throwaway, and a third (a per-project
- * container) would land as an adapter rather than a rewrite.
+ * ONCE and shared. No adapter is throwaway.
+ *
+ * There are three more, and they exist for a reason that is not technical:
+ *
+ *   `aws-lambda`      — the same handlers AND the project's own site, deployed
+ *   `gcp-cloudrun`      into the customer's own AWS / Google Cloud / Azure
+ *   `azure-functions`   account. "It runs on our platform" is not an acceptable
+ *                       answer to a procurement question about data residency,
+ *                       an existing enterprise agreement, or a security review
+ *                       that only knows how to audit one provider. All four
+ *                       self-hosted adapters embed ONE generated engine
+ *                       (`handlerEngineSource.ts`), so the semantics cannot
+ *                       drift between clouds.
  */
 
 import type { ConnectorManifest } from '../connectors/connectorManifest';
 import type { HandlerSpec } from './handlerSpec';
 
-export const BACKEND_STRATEGIES = ['declarative', 'github-worker'] as const;
+export const BACKEND_STRATEGIES = [
+  'declarative',
+  'github-worker',
+  'aws-lambda',
+  'gcp-cloudrun',
+  'azure-functions',
+] as const;
 export type BackendStrategyKey = (typeof BACKEND_STRATEGIES)[number];
 
 export function isBackendStrategy(v: unknown): v is BackendStrategyKey {

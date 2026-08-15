@@ -182,6 +182,26 @@ export async function readWorkspaceFile(bucket: R2Bucket, projectId: number, pat
 }
 
 /**
+ * Read one file as BYTES, for a caller that has to move it somewhere else
+ * unchanged — publishing the workspace as a static site, chiefly.
+ *
+ * Separate from {@link readWorkspaceFile} rather than replacing it: text is what
+ * every editing path wants, and decoding an image to a string to re-encode it on
+ * the way out corrupts it silently. Returns the R2 body stream rather than a
+ * buffer so a large asset never has to be resident.
+ */
+export async function readWorkspaceObject(
+  bucket: R2Bucket,
+  projectId: number,
+  path: string,
+): Promise<{ body: ReadableStream; size: number } | null> {
+  if (!validateWorkspacePath(path).ok) return null;
+  const obj = await bucket.get(workspacePrefix(projectId) + path);
+  if (!obj) return null;
+  return { body: obj.body, size: obj.size };
+}
+
+/**
  * An editor autosaving while an agent writes the same file trips R2's
  * same-object rate limit routinely. Retried via the shared transient-retry
  * helper; every other failure still propagates on the first attempt.
