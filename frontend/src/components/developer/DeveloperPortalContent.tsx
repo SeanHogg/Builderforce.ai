@@ -50,16 +50,16 @@ const card: React.CSSProperties = {
 };
 
 const sectionTitle: React.CSSProperties = {
-  fontSize: 14,
+  fontSize: 'var(--font-size-body)',
   fontWeight: 700,
   color: 'var(--text-primary)',
 };
 
-const muted: React.CSSProperties = { fontSize: 12, color: 'var(--text-secondary)' };
+const muted: React.CSSProperties = { fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' };
 
 const buttonPrimary: React.CSSProperties = {
   padding: '8px 14px',
-  fontSize: 12,
+  fontSize: 'var(--font-size-small)',
   fontWeight: 600,
   background: 'var(--surface-interactive)',
   color: 'var(--text-primary)',
@@ -83,7 +83,7 @@ const buttonDanger: React.CSSProperties = {
 const input: React.CSSProperties = {
   width: '100%',
   padding: '8px 10px',
-  fontSize: 13,
+  fontSize: 'var(--font-size-small)',
   background: 'var(--bg-elevated, var(--bg-base))',
   color: 'var(--text-primary)',
   border: '1px solid var(--border-subtle)',
@@ -101,7 +101,7 @@ const grid: React.CSSProperties = {
 const chip = (tone: 'neutral' | 'good' | 'warn'): React.CSSProperties => ({
   display: 'inline-block',
   padding: '2px 8px',
-  fontSize: 11,
+  fontSize: 'var(--font-size-eyebrow)',
   fontWeight: 600,
   borderRadius: 'var(--radius-full)',
   border: '1px solid var(--border-subtle)',
@@ -217,7 +217,7 @@ export function DeveloperPortalContent() {
     <PageContainer>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <header style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+          <h1 className="ui-text-section" style={{ color: 'var(--text-primary)', margin: 0 }}>
             {t('title')}
           </h1>
           <p style={{ ...muted, maxWidth: '70ch' }}>{t('subtitle')}</p>
@@ -256,7 +256,7 @@ export function DeveloperPortalContent() {
                 {installs.map((i) => (
                   <article key={i.id} style={{ ...card, padding: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                      <strong style={{ color: 'var(--text-primary)', fontSize: 13 }}>{i.packageName}</strong>
+                      <strong style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-small)' }}>{i.packageName}</strong>
                       <span style={chip('neutral')}>{i.kind}</span>
                     </div>
                     <p style={muted}>
@@ -311,7 +311,7 @@ export function DeveloperPortalContent() {
                 {catalog.map((p) => (
                   <article key={p.id} style={{ ...card, padding: 16 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                      <strong style={{ color: 'var(--text-primary)', fontSize: 13 }}>{p.name}</strong>
+                      <strong style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-small)' }}>{p.name}</strong>
                       <span style={chip('neutral')}>{p.kind}</span>
                     </div>
                     <p style={muted}>{p.tagline}</p>
@@ -480,7 +480,7 @@ function PublishTab({ publisher, packages, versions, contract, busy, onRun, onLo
             {packages.map((p) => (
               <article key={p.id} style={{ ...card, padding: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                  <strong style={{ color: 'var(--text-primary)', fontSize: 13 }}>{p.name}</strong>
+                  <strong style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-small)' }}>{p.name}</strong>
                   <span style={chip(p.listingState === 'listed' ? 'good' : 'neutral')}>
                     {t(`publish.listing.${p.listingState}` as 'publish.listing.draft')}
                   </span>
@@ -566,7 +566,7 @@ function PublishTab({ publisher, packages, versions, contract, busy, onRun, onLo
 
           {submitResult && (
             <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
-              <p style={{ ...sectionTitle, fontSize: 13 }}>
+              <p style={{ ...sectionTitle, fontSize: 'var(--font-size-small)' }}>
                 {submitResult.reviewState === 'approved' ? t('publish.reviewPassed') : t('publish.reviewFailed')}
               </p>
               <ul style={{ margin: 0, paddingLeft: 18 }}>

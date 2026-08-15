@@ -9527,7 +9527,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {miroOpen && <CanvasMiroPanel
           onImport={importMiroBoard}
           onClose={() => setMiroOpen(false)}
-          connectHref="/settings/connectors"
+          // `/settings/integrations`, not `/settings/connectors` — the latter does not
+          // exist, and a "Connect Miro" button that 404s is worse than no button.
+          // `ConnectorsGallery` lives on the integrations page under the connectors
+          // category, which is where a `miro` connection is actually created.
+          connectHref="/settings/integrations?category=connectors&search=Miro"
         />}
         {socialOpen && <CanvasSocialPanel
           onAddFeed={addSocialFeedToBoard}

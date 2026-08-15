@@ -167,8 +167,8 @@ export default function FreelancerProfilePage() {
     <PageContainer width="readable" style={{ padding: '32px 40px' }}>
       <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{t('profile.title')}</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{t('profile.subtitle')}</p>
+          <h1 className="ui-text-section" style={{ color: 'var(--text-primary)', marginBottom: 4 }}>{t('profile.title')}</h1>
+          <p className="ui-text-small" style={{ color: 'var(--text-muted)', margin: 0 }}>{t('profile.subtitle')}</p>
         </div>
         <button type="button" onClick={() => setPreviewOpen(true)} className="ui-button ui-button--secondary ui-button--sm"><Icon source="👁" size="1em" /> {t('profile.preview')}</button>
       </div>
@@ -191,14 +191,14 @@ export default function FreelancerProfilePage() {
           <div>
             <label className="ui-field__label">{t('profile.alias')}</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '0 12px' }}>
-              <span style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>/talent/</span>
+              <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>/talent/</span>
               <input className="ui-input" style={{ border: 'none', background: 'transparent', padding: '9px 0' }} value={slugText} maxLength={40}
                 onChange={(e) => setSlugText(e.target.value)} placeholder={t('profile.aliasPlaceholder')} />
             </div>
-            {slugMsg && !slugCheck!.valid && <p style={{ fontSize: 11, color: 'var(--coral-bright)', margin: '6px 0 0' }}>{t('profile.aliasInvalid')}</p>}
-            {slugMsg && slugCheck!.valid && slugCheck!.available && <p style={{ fontSize: 11, color: 'rgba(34,197,94,0.9)', margin: '6px 0 0' }}><Icon source="✓" size="1em" /> {t('profile.aliasAvailable')}</p>}
+            {slugMsg && !slugCheck!.valid && <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--coral-bright)', margin: '6px 0 0' }}>{t('profile.aliasInvalid')}</p>}
+            {slugMsg && slugCheck!.valid && slugCheck!.available && <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--success-text)', margin: '6px 0 0' }}><Icon source="✓" size="1em" /> {t('profile.aliasAvailable')}</p>}
             {slugMsg && slugCheck!.valid && !slugCheck!.available && (
-              <p style={{ fontSize: 11, color: 'var(--coral-bright)', margin: '6px 0 0' }}>
+              <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--coral-bright)', margin: '6px 0 0' }}>
                 {t('profile.aliasTaken')}
                 {slugCheck!.suggestions.length > 0 && (
                   <> {t('profile.aliasTry')} {slugCheck!.suggestions.map((s) => (
@@ -208,7 +208,7 @@ export default function FreelancerProfilePage() {
                 )}
               </p>
             )}
-            {!slugMsg && <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>{t('profile.aliasHint')}</p>}
+            {!slugMsg && <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '6px 0 0' }}>{t('profile.aliasHint')}</p>}
           </div>
 
           <div>
@@ -336,7 +336,7 @@ export default function FreelancerProfilePage() {
                 {(['public', 'private'] as const).map((v) => (
                   <button key={v} type="button" onClick={() => set({ visibility: v })}
                     style={{
-                      padding: '7px 14px', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      padding: '7px 14px', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer',
                       background: profile.visibility === v ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',
                       border: `1px solid ${profile.visibility === v ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
                       color: 'var(--text-primary)',
@@ -345,9 +345,9 @@ export default function FreelancerProfilePage() {
                   </button>
                 ))}
               </div>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>{t(`visibility.${profile.visibility}Hint`)}</p>
+              <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '6px 0 0' }}>{t(`visibility.${profile.visibility}Hint`)}</p>
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', marginTop: 20 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginTop: 20 }}>
               <input type="checkbox" checked={!!profile.published} onChange={(e) => set({ published: e.target.checked })} style={{ accentColor: 'var(--coral-bright)' }} />
               {t('profile.publish')}
             </label>
@@ -355,8 +355,8 @@ export default function FreelancerProfilePage() {
 
           {/* Public URL */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingTop: 4, borderTop: '1px solid var(--border-subtle)' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('profile.publicUrl')}:</span>
-            <a href={publicPath} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: 'var(--coral-bright)', textDecoration: 'none', wordBreak: 'break-all' }}>{publicUrl}</a>
+            <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('profile.publicUrl')}:</span>
+            <a href={publicPath} target="_blank" rel="noopener noreferrer" style={{ fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)', textDecoration: 'none', wordBreak: 'break-all' }}>{publicUrl}</a>
             <Button type="button" variant="secondary" size="sm" onClick={copyLink}>{copied ? t('profile.copied') : t('profile.copyLink')}</Button>
           </div>
 
@@ -364,8 +364,8 @@ export default function FreelancerProfilePage() {
             <Button type="button" variant="primary" onClick={save} loading={saving}>
               {saving ? t('saving') : t('save')}
             </Button>
-            {ok && <span style={{ fontSize: 13, color: 'var(--success-text)' }}>{t('saved')}</span>}
-            {error && <span style={{ fontSize: 13, color: 'var(--error-text)' }}>{error}</span>}
+            {ok && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--success-text)' }}>{t('saved')}</span>}
+            {error && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)' }}>{error}</span>}
           </div>
         </Surface>
 

@@ -418,7 +418,7 @@ describe('sticky note', () => {
   const sticky: CreationNodeData = { kind: 'sticky', title: 'Onboarding is confusing', stickyColor: '#fde68a' };
 
   it('shows its text and nothing else — no title bar, no status pill', () => {
-    renderNode(sticky);
+    renderNode(sticky, { onEditData: vi.fn() });
     // The text is the whole card, and it is EDITABLE when the board can be edited:
     // a sticky you cannot type on is a picture of a sticky.
     expect((screen.getByLabelText('Sticky note text') as HTMLTextAreaElement).value).toBe('Onboarding is confusing');

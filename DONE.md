@@ -159,8 +159,17 @@ flagged as hardcoded user-facing text on every edit to `CreationNode.tsx`. A gua
 permanently red trains everyone to ignore it. Fixed with a lookbehind plus a code-shape
 rejection, and verified to still catch real strings.
 
-Frontend typecheck clean, 322 creation-canvas tests green, 57 connector tests green,
-architecture ratchet re-baselined 796 → 797 with its reason recorded in the script.
+**Coverage.** 20 mapper tests (`miroImport.test.ts`) over the text decoding, the colour
+match, the centre-origin conversion, the edge kinds, the skip reporting and the empty
+board; 4 render tests (`canvasArtifactViews.test.tsx`) over the sticky itself — that it
+draws its text and no heading, wears the author's pigment, writes keystrokes back to
+`title`, and falls to a read-only note with no `onEditData` (a viewer-role board), because
+a textarea there would accept keystrokes it could never save.
+
+Frontend and API typecheck clean, creation-canvas and connector suites green, architecture
+ratchet re-baselined 796 → 797 with its reason recorded in the script. Two ratchets are
+still red from a **concurrent session's** in-flight hired.video/visual-editor batch and are
+logged in the register with that as the named blocker — they are not this change's.
 
 ---
 
