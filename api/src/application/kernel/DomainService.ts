@@ -70,7 +70,7 @@ export const DOMAIN_MANIFEST: Readonly<Record<Domain, DomainManifest>> = {
   delivery:     { domain: 'delivery',     seat: 'Manager',    rootKind: 'work_item',        kinds: ['work_item', 'project', 'release', 'sprint'],                  metrics: ['delivery.throughput', 'delivery.cycle_time_hours', 'delivery.wip'], rung: 0 },
   agents:       { domain: 'agents',       seat: 'Platform',   rootKind: 'agent',            kinds: ['agent', 'run', 'workflow'],                                   metrics: ['agents.runs', 'agents.tokens', 'agents.cost_cents'], rung: 0 },
   hiring:       { domain: 'hiring',       seat: 'Recruiter',  rootKind: 'job_posting',      kinds: ['job_posting', 'application', 'interview', 'placement'],       metrics: ['hiring.applications', 'hiring.time_to_hire_days', 'hiring.offer_rate'], rung: 2 },
-  finance:      { domain: 'finance',      seat: 'CFO',        rootKind: 'ledger_entry',     kinds: ['invoice', 'expense', 'scenario', 'plan'],                     metrics: ['finance.mrr', 'finance.burn', 'finance.runway_months'], rung: 2 },
+  finance:      { domain: 'finance',      seat: 'CFO',        rootKind: 'ledger_entry',     kinds: ['invoice', 'bill', 'expense', 'scenario', 'plan'],             metrics: ['finance.mrr', 'finance.burn', 'finance.runway_months'], rung: 2 },
   revenue:      { domain: 'revenue',      seat: 'CRO',        rootKind: 'deal',             kinds: ['deal', 'contact', 'list', 'sequence'],                        metrics: ['revenue.pipeline', 'revenue.won', 'revenue.win_rate'], rung: 2 },
   commerce:     { domain: 'commerce',     seat: 'Platform',   rootKind: 'listing',          kinds: ['listing', 'order', 'gig', 'booking'],                         metrics: ['commerce.orders', 'commerce.gmv', 'commerce.refunds'], rung: 1 },
   identity:     { domain: 'identity',     seat: 'Platform',   rootKind: 'party',            kinds: ['user', 'team', 'workspace'],                                  metrics: ['identity.active_users', 'identity.signups'], rung: 0 },
@@ -80,7 +80,7 @@ export const DOMAIN_MANIFEST: Readonly<Record<Domain, DomainManifest>> = {
   investor:     { domain: 'investor',     seat: 'CEO',        rootKind: 'company',          kinds: ['company', 'product', 'data_room', 'opportunity'],             metrics: ['investor.portfolio_value', 'investor.opportunities'], rung: 3 },
   support:      { domain: 'support',      seat: 'Support',    rootKind: 'ticket',           kinds: ['ticket', 'article'],                                          metrics: ['support.open_tickets', 'support.first_response_min', 'support.csat'], rung: 1 },
   canvas:       { domain: 'canvas',       seat: 'Brain',      rootKind: 'creation_session', kinds: ['creation_session', 'artifact', 'thread'],                     metrics: ['canvas.sessions', 'canvas.artifacts', 'canvas.shipped'], rung: 0 },
-  integrations: { domain: 'integrations', seat: 'Platform',   rootKind: 'connection',       kinds: ['connection'],                                                 metrics: ['integrations.connected', 'integrations.sync_errors'], rung: 1 },
+  integrations: { domain: 'integrations', seat: 'Platform',   rootKind: 'connection',       kinds: ['connection', 'publisher', 'extension'],                       metrics: ['integrations.connected', 'integrations.sync_errors'], rung: 1 },
   /**
    * The sixteenth seat, and the only one that holds what a company SELLS rather
    * than how it runs itself — see the note on `DOMAINS`. Its kinds are the four

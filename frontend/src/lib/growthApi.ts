@@ -316,6 +316,20 @@ export const growthApi = {
     return apiRequest(`${GROWTH}/assets`, { method: 'POST', body: form });
   },
 
+  /**
+   * Store an image the caller does NOT hold as a `File` — a `data:` URI the
+   * board generated, or a stock `https` URL — and get its public token URL back.
+   *
+   * The same route as {@link uploadAsset}, in its JSON encoding, because it is
+   * the same act. A canvas creative object has pixels but no File, and Instagram
+   * fetches media itself with no session, so this is the step between "the board
+   * made a picture" and "the picture can be published".
+   */
+  createAssetFromSource: (body: { source: string; name?: string; kind?: 'logo' | 'image' }): Promise<MarketingAsset> =>
+    apiRequest(`${GROWTH}/assets`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
+
   generateLogo: (body: { description: string; style?: string; name?: string }): Promise<MarketingAsset> =>
     apiRequest(`${GROWTH}/assets/generate`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

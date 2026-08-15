@@ -1,0 +1,132 @@
+/**
+ * The signer's page. Tokens only: this renders to somebody outside the workspace
+ * in whatever theme their machine is in, and the terms they are agreeing to must
+ * be legible in both.
+ */
+
+.page {
+  min-height: 100vh;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  padding: clamp(16px, 5vw, 48px) clamp(12px, 4vw, 32px);
+}
+
+.sheet {
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: clamp(16px, 4vw, 32px);
+  box-shadow: var(--shadow-lg);
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.title { margin: 0 0 6px; font-size: var(--font-size-section); line-height: 1.25; color: var(--text-primary); }
+
+.addressed { margin: 0 0 20px; color: var(--text-secondary); font-size: var(--font-size-body); }
+
+/**
+ * The terms.
+ *
+ * Its own surface and its own scroll, so a long agreement does not push the
+ * decision controls off the end of a phone — and `pre-wrap`, because the body is
+ * held verbatim and must render as the text it is rather than as markup.
+ */
+.document {
+  display: block;
+  max-height: 46vh;
+  overflow: auto;
+  padding: 16px;
+  margin: 0 0 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.panel { display: flex; flex-direction: column; gap: 8px; }
+
+.label { font-size: var(--font-size-body); font-weight: 600; color: var(--text-primary); }
+
+.help { margin: 0; color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.5; }
+
+.input,
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  /* 16px minimum: below it iOS zooms the viewport on focus. */
+  font-size: max(16px, var(--font-size-body));
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.textarea { min-height: 100px; resize: vertical; line-height: 1.5; }
+
+.input:focus-visible,
+.textarea:focus-visible { outline: 2px solid var(--coral-bright); outline-offset: 1px; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+
+.primary,
+.danger,
+.ghost {
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.primary { background: var(--coral-bright); color: var(--bg-base); }
+.danger { background: var(--red-bright); color: var(--bg-base); }
+.ghost { background: transparent; color: var(--text-secondary); border-color: var(--border); }
+
+.primary:disabled,
+.danger:disabled,
+.ghost:disabled { opacity: .55; cursor: not-allowed; }
+
+.notice,
+.result {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: 1.6;
+}
+
+.result {
+  border-color: color-mix(in srgb, var(--emerald-bright) 40%, transparent);
+  background: color-mix(in srgb, var(--emerald-bright) 12%, transparent);
+  color: var(--text-primary);
+}
+
+.error {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--red-bright) 40%, transparent);
+  background: color-mix(in srgb, var(--red-bright) 12%, transparent);
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+}

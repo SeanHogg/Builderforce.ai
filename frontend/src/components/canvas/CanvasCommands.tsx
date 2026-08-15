@@ -40,6 +40,25 @@ export function ThreeDIcon() {
   </svg>;
 }
 
+/** The conversation surface: a speech bubble. Drawn on the same 16×16 grid as every
+ *  other rail command so the surface switcher reads as one control, not three fonts. */
+export function ChatSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M2 4.1a1.6 1.6 0 0 1 1.6-1.6h8.8A1.6 1.6 0 0 1 14 4.1v5.3a1.6 1.6 0 0 1-1.6 1.6H6.6L3.4 13.6v-2.6a1.6 1.6 0 0 1-1.4-1.6z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+    <path d="M5.2 6.1h5.6M5.2 8.4h3.4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+  </svg>;
+}
+
+/** The flat board: two connected nodes. The counterpart to `ThreeDIcon` — same objects,
+ *  read on a plane instead of in a space. */
+export function GraphSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="1.5" y="2" width="5.4" height="4" rx=".9" fill="none" stroke="currentColor" strokeWidth="1.25" />
+    <rect x="9.1" y="10" width="5.4" height="4" rx=".9" fill="none" stroke="currentColor" strokeWidth="1.25" />
+    <path d="M6.9 4h3.4a1.5 1.5 0 0 1 1.5 1.5V10" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+  </svg>;
+}
+
 export function DepthIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M8 1.6 14.4 5 8 8.4 1.6 5z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />

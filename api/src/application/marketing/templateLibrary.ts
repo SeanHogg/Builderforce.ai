@@ -29,6 +29,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { marketingAssets, marketingTemplates } from '../../infrastructure/database/schema';
 import { newChallengeToken } from '../shared/dnsVerification';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { assertSafeUrl, BlockedUrlError, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
 
 // ---------------------------------------------------------------------------
 // Sanitization
@@ -586,11 +587,7 @@ export async function fetchGeneratedImage(
 ): Promise<{ bytes: ArrayBuffer; mimeType: string } | null> {
   if (image.b64_json) {
     try {
-      const binary = atob(image.b64_json);
-      const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
-      // A Uint8Array view over a full ArrayBuffer — `.buffer` alone can be a
-      // larger pooled buffer, which would store trailing garbage.
-      return { bytes: bytes.slice().buffer, mimeType: 'image/png' };
+      return { bytes: decodeBase64(image.b64_json), mimeType: 'image/png' };
     } catch (error) {
       reportCaughtError(error, {
         source: 'application/marketing/templateLibrary.ts', operation: 'fetchGeneratedImage',
@@ -599,9 +596,135 @@ export async function fetchGeneratedImage(
     }
   }
   if (!image.url) return null;
-  const res = await fetch(image.url);
-  if (!res.ok) return null;
-  const mimeType = (res.headers.get('content-type') ?? 'image/png').split(';')[0]!.trim();
-  if (!(ALLOWED_ASSET_TYPES as readonly string[]).includes(mimeType)) return null;
-  return { bytes: await res.arrayBuffer(), mimeType };
+  const read = await readMediaSource(image.url);
+  return read.ok ? { bytes: read.bytes, mimeType: read.mimeType } : null;
+}
+
+/** Decode one base64 payload to a standalone ArrayBuffer. A `Uint8Array` view
+ *  over a pooled buffer would store trailing garbage, hence the copy. */
+function decodeBase64(base64: string): ArrayBuffer {
+  const binary = atob(base64);
+  return Uint8Array.from(binary, (ch) => ch.charCodeAt(0)).slice().buffer;
+}
+
+export type MediaSourceResult =
+  | { ok: true; bytes: ArrayBuffer; mimeType: string }
+  | { ok: false; status: 400 | 413 | 502; error: string };
+
+/**
+ * ONE reader for "wherever those pixels are now" → bytes this store can hold.
+ *
+ * ── WHY IT IS SHARED, AND WHY IT IS SSRF-GUARDED ────────────────────────────
+ * `fetchGeneratedImage` fetched its URL with a bare `fetch` and no guard. That
+ * looked acceptable while the only URL came from our own image route, and it is
+ * an SSRF the moment a second caller passes a URL a person or a model chose.
+ * The Creation Canvas is exactly that second caller: it hands over whatever an
+ * `image` object is holding so the picture can be published to a social network.
+ * So the guard lives here once and both callers get it.
+ *
+ * Three shapes, because those are the three a canvas creative object is ever in:
+ * a `data:` URI (generated in the browser), an `https:` URL (stock photography,
+ * an already-public asset), and raw base64 (what some image vendors return).
+ * Anything else — `blob:`, `file:`, a relative path — is refused by name rather
+ * than fetched, because none of them mean anything on a server.
+ */
+export async function readMediaSource(source: string): Promise<MediaSourceResult> {
+  const raw = source.trim();
+  if (!raw) return { ok: false, status: 400, error: 'No image was supplied.' };
+  const tooBig = { ok: false, status: 413, error: 'Images must be 2 MB or smaller.' } as const;
+  const rejectType = (mimeType: string): MediaSourceResult => ({
+    ok: false, status: 400,
+    error: `${mimeType || 'That file'} cannot be published — use a PNG, JPEG, GIF, WebP or SVG image.`,
+  });
+
+  if (raw.startsWith('data:')) {
+    const match = /^data:([^;,]+)(;base64)?,([\s\S]*)$/.exec(raw);
+    if (!match) return { ok: false, status: 400, error: 'That data URL could not be read.' };
+    const mimeType = match[1]!.trim().toLowerCase();
+    if (!(ALLOWED_ASSET_TYPES as readonly string[]).includes(mimeType)) return rejectType(mimeType);
+    let bytes: ArrayBuffer;
+    try {
+      bytes = match[2]
+        ? decodeBase64(match[3]!)
+        : new TextEncoder().encode(decodeURIComponent(match[3]!)).slice().buffer;
+    } catch {
+      return { ok: false, status: 400, error: 'That data URL could not be decoded.' };
+    }
+    if (bytes.byteLength === 0) return { ok: false, status: 400, error: 'That image is empty.' };
+    if (bytes.byteLength > MAX_ASSET_BYTES) return tooBig;
+    return { ok: true, bytes, mimeType };
+  }
+
+  let url: URL;
+  try {
+    url = assertSafeUrl(raw);
+  } catch (error) {
+    return { ok: false, status: 400, error: error instanceof Error ? error.message : 'That image URL cannot be read.' };
+  }
+  try {
+    await resolveAndAssertPublic(url.hostname);
+  } catch (error) {
+    if (error instanceof BlockedUrlError) {
+      return { ok: false, status: 400, error: 'That image URL resolves to a private address and will not be fetched.' };
+    }
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(url.toString());
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/marketing/templateLibrary.ts', operation: 'readMediaSource' });
+    return { ok: false, status: 502, error: 'That image could not be downloaded.' };
+  }
+  if (!res.ok) return { ok: false, status: 502, error: `That image could not be downloaded (${res.status}).` };
+
+  const mimeType = (res.headers.get('content-type') ?? 'image/png').split(';')[0]!.trim().toLowerCase();
+  if (!(ALLOWED_ASSET_TYPES as readonly string[]).includes(mimeType)) return rejectType(mimeType);
+  // Read from the header first, where the server was honest about it, so an
+  // oversized body is refused before it is buffered — and again after, because
+  // `content-length` is optional.
+  const declared = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > MAX_ASSET_BYTES) return tooBig;
+  const bytes = await res.arrayBuffer();
+  if (bytes.byteLength === 0) return { ok: false, status: 400, error: 'That image is empty.' };
+  if (bytes.byteLength > MAX_ASSET_BYTES) return tooBig;
+  return { ok: true, bytes, mimeType };
+}
+
+/**
+ * Store whatever a creative object is holding and hand back a PUBLIC url.
+ *
+ * ── THE GAP THIS CLOSES ─────────────────────────────────────────────────────
+ * `social_campaigns.media_urls` and `POST /api/social/publish` take public
+ * `https` URLs, because Instagram and TikTok FETCH the media themselves with no
+ * session — while the canvas's own generated pictures live in a `data:` URI or
+ * behind authenticated storage. So "post the image the board just made" meant
+ * uploading it somewhere else first, and an Instagram target was silently
+ * `skipped` with a blocker nobody could clear from the canvas.
+ *
+ * The asset store already solved this for EMAIL — a recipient's mail client is
+ * exactly as session-less as Instagram's fetcher — so this is that same store
+ * with that same public token, not a second one.
+ */
+export async function createAssetFromSource(
+  db: Db,
+  env: Env,
+  tenantId: number,
+  input: { source: string; name: string; kind?: 'logo' | 'image'; prompt?: string | null; createdBy?: string | null },
+): Promise<AssetResult> {
+  const read = await readMediaSource(input.source);
+  // A 502 from the reader is a bad INPUT url as far as the caller is concerned —
+  // the asset result type carries the statuses a caller can act on.
+  if (!read.ok) return { ok: false, status: read.status === 502 ? 400 : read.status, error: read.error };
+  return createAsset(db, env, tenantId, {
+    name: input.name,
+    bytes: read.bytes,
+    mimeType: read.mimeType,
+    kind: input.kind ?? 'image',
+    // `generated` is the truth for everything arriving this way: it was made on
+    // the board, not uploaded from a disk by a person.
+    source: 'generated',
+    prompt: input.prompt ?? null,
+    createdBy: input.createdBy ?? null,
+  });
 }

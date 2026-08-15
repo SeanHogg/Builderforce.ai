@@ -192,58 +192,22 @@ export const authTokens = pgTable('auth_tokens', {
 
 
 /**
- * Developer API keys (`bfai_*`) — the credential a PUBLISHER presents when calling
- * us from outside, on `/api/v1/*`.
+ * Tenant API keys (bfk_*) — the ONE credential presented by anything calling us
+ * from outside a browser session: a tenant app (hired.video, burnrateos), a
+ * customer's integration server, and — since 0471 — a PUBLISHER's CI shipping an
+ * extension version.
  *
- * The key itself is only shown once at creation; only the hash is stored.
+ * ── WHY THERE IS NO SECOND KEY TABLE ────────────────────────────────────────
+ * There was one. `developer_api_keys` (0042) sat twenty lines above this and was
+ * the same concept with a different owner: an outside caller, a hash, a scope
+ * list, a revocation. 0467 tried to keep them apart by REMOVING a column until
+ * `check-signature-duplication` stopped scoring them as one table — which dodges
+ * a threshold rather than answering it. A developer is a tenant (0471), so the
+ * credential a developer presents is a tenant key, and "what may this caller do"
+ * has one answer in one place.
  *
- * ── WHY THIS ROW MOVED (PRD 24 §5.1, migration 0467) ────────────────────────
- * It used to be parented to a USER and carry no scopes, while `tenant_api_keys`
- * sitting twenty lines below carried scopes AND an origin allowlist — two shapes
- * for one concept ("a credential calling us from outside"), with two middlewares
- * and two answers to "what may this key do". So the key now belongs to a
- * `developer_orgs` row: a vendor's key survives the departure of the engineer who
- * minted it, and its permissions are stated in the SAME vocabulary tenant keys
- * use (`application/shared/scopeList.ts`) rather than a second one.
- *
- * `userId` is retained and still populated — it is who minted the key, which is
- * an audit fact, not an ownership one. `developerOrgId` is nullable only because
- * migration 0467 backfills every legacy row into a personal publisher org and a
- * NOT NULL would fail the deploy if one slipped through; the mint path always
- * sets it.
- *
- * `developerOrgId` is a cross-domain id, deliberately NOT a foreign key: publishers
- * are the integrations context's, and importing that module here would be identity
- * reaching across a bounded context (`npm run check:domain-boundary`).
- */
-export const developerApiKeys = pgTable('developer_api_keys', {
-  id:          uuid('id').primaryKey().defaultRandom(),
-  /** Who minted it. Audit, not ownership — see the block comment. */
-  userId:      varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  /** The publisher the key acts for. Cross-domain id into `developer_orgs`. */
-  developerOrgId: uuid('developer_org_id'),
-  name:        varchar('name', { length: 255 }).notNull(),
-  keyHash:     varchar('key_hash', { length: 128 }).notNull().unique(),
-  /** JSON array of scopes from the shared vocabulary. NULL / empty = unrestricted
-   *  (the legacy read-only listing keys), non-empty = exactly these. Same
-   *  semantics as `tenant_api_keys.scopes`, because it is the same helper.
-   *
-   *  There is deliberately NO `allowed_origins` beside it. A `bfai_*` key is a
-   *  publisher's SERVER credential — their CI, their integration server — and a
-   *  browser origin allowlist would be a column that is always NULL, added for
-   *  symmetry with `tenant_api_keys` rather than for a caller. That symmetry is
-   *  what `check-signature-duplication` exists to refuse. */
-  scopes:      text('scopes'),
-  lastUsedAt:  timestamp('last_used_at', { withTimezone: true }),
-  revokedAt:   timestamp('revoked_at', { withTimezone: true }),
-  createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-
-/**
- * Tenant API keys (bfk_*) — gateway-facing credential for tenant apps
- * (hired.video, burnrateos, 3rd-party customers) calling /llm/v1/chat/completions.
- * Tenant-scoped, owner-issued, raw key shown once and only the hash stored.
+ * Migrated `bfai_*` keys still resolve: both tables stored `hashSecret()` and
+ * lookup is by hash, so the prefix is history rather than a routing decision.
  */
 export const tenantApiKeys = pgTable('tenant_api_keys', {
   id:               uuid('id').primaryKey().defaultRandom(),
@@ -402,6 +366,39 @@ export const tenants = pgTable('tenants', {
   /** Workspace emergency stop. RuntimeService.submit checks this canonical flag
    *  before creating any manual, scheduled, autonomous, or integration run. */
   agentExecutionEnabled:  boolean('agent_execution_enabled').notNull().default(true),
+  /**
+   * ── THE PUBLISHER FACET (migration 0471) ────────────────────────────────
+   * A developer IS a tenant. Publishing an extension is something a workspace
+   * DOES, not a second kind of party — so these nine columns replaced
+   * `developer_orgs` + `developer_org_members` outright rather than joining to
+   * them. Every one is functionally dependent on `tenants.id` and 1:1 with the
+   * row, which is what makes a facet a set of columns instead of a table.
+   *
+   * `publisherState` carries BOTH facts on one ordered scale — whether this
+   * workspace publishes at all ('none') and how far it is verified. Splitting
+   * "is a publisher" from "verification state" would permit the one combination
+   * nobody wants: not a publisher, yet identity-verified.
+   *
+   * The vocabulary and the ordering live in `application/developer
+   * /extensionContract.ts` (`PUBLISHER_STATES`), not here — a column is where a
+   * fact is stored, not where its meaning is decided.
+   */
+  publisherState:         varchar('publisher_state', { length: 32 }).notNull().default('none'),
+  publisherWebsite:       text('publisher_website'),
+  publisherSupportEmail:  varchar('publisher_support_email', { length: 255 }),
+  /** The domain being claimed, and the one-time token its DNS TXT record must
+   *  carry. The token is never projected to a client: it is a challenge, and one
+   *  readable from a listing would let anyone finish somebody else's claim. */
+  publisherDomain:        varchar('publisher_domain', { length: 255 }),
+  publisherVerificationToken: varchar('publisher_verification_token', { length: 64 }),
+  publisherVerifiedAt:    timestamp('publisher_verified_at', { withTimezone: true }),
+  /** Cross-domain id into `connections` (capability='payout'). Deliberately NOT a
+   *  foreign key — payouts are the commerce domain's. */
+  publisherPayoutConnectionId: uuid('publisher_payout_connection_id'),
+  /** Standing a PUBLISHER down hides its listings everywhere at once. It is not
+   *  `status`: a vendor whose listing broke a rule must not lose their own board. */
+  publisherSuspendedAt:   timestamp('publisher_suspended_at', { withTimezone: true }),
+  publisherSuspendedReason: text('publisher_suspended_reason'),
   settings:               text('settings'),   // JSON-as-text (jsonb avoided per existing convention)
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),

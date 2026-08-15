@@ -29,6 +29,7 @@ import {
   type SocialNetworkOption,
 } from '@/lib/socialApi';
 import { authFieldsFor, connectorsApi, type ConnectorAuthField } from '@/lib/connectorsApi';
+import { resolvePublicMediaUrls } from '@/lib/canvasPublicMedia';
 
 /** One glyph per network. Brand marks, so they stay literal. */
 const NETWORK_GLYPH: Readonly<Record<SocialNetwork, string>> = {
@@ -40,12 +41,21 @@ export interface CanvasSocialPanelProps {
   onAddFeed: (filter: SocialFeedFilter) => Promise<void> | void;
   /** Put a campaign tile on the board once it has been drafted. */
   onAddCampaign: (campaign: SocialCampaign) => void;
+  /**
+   * The pictures already on this board, offered as attachments.
+   *
+   * Passed in rather than read here because the panel does not own the canvas —
+   * the same reason `onAddFeed` is a callback. What it fixes is a URL box: the
+   * board's own generated image lives in a `data:` URI, so composing "post this
+   * picture" meant hosting it somewhere else first and pasting the result back.
+   */
+  boardMedia: ReadonlyArray<{ id: string; title: string; source: string; thumbnailUrl: string | null }>;
   onClose: () => void;
 }
 
 type Mode = 'accounts' | 'compose';
 
-export function CanvasSocialPanel({ onAddFeed, onAddCampaign, onClose }: CanvasSocialPanelProps) {
+export function CanvasSocialPanel({ onAddFeed, onAddCampaign, boardMedia, onClose }: CanvasSocialPanelProps) {
   const t = useTranslations('creationCanvas.social');
   const [mode, setMode] = useState<Mode>('accounts');
   const [networks, setNetworks] = useState<SocialNetworkOption[]>([]);
@@ -65,6 +75,9 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, onClose }: CanvasS
   const [text, setText] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const [mediaUrl, setMediaUrl] = useState('');
+  /** Board objects whose picture rides along. Ids, not URLs — the URL is minted
+   *  at publish time by the shared resolver, so it is never stale in this form. */
+  const [mediaObjectIds, setMediaObjectIds] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [scheduledAt, setScheduledAt] = useState('');
 
@@ -164,7 +177,20 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, onClose }: CanvasS
     setBusy(true);
     setError(null);
     try {
-      const media = mediaUrl.trim() ? [mediaUrl.trim()] : [];
+      // The SAME resolver `canvas_create_social_campaign` uses, so a post a person
+      // composes and one a model drafts attach the identical URL. A picked board
+      // object contributes its own source; the URL box still works for something
+      // already hosted elsewhere.
+      const resolved = await resolvePublicMediaUrls([
+        ...mediaObjectIds.map((id) => boardMedia.find((item) => item.id === id)?.source ?? ''),
+        ...(mediaUrl.trim() ? [mediaUrl.trim()] : []),
+      ], { name: copy.slice(0, 60) });
+      if (resolved.problems.length && resolved.urls.length === 0) {
+        setError(resolved.problems[0]!.reason);
+        return;
+      }
+      if (resolved.problems.length) setNotice(resolved.problems[0]!.reason);
+      const media = resolved.urls;
       if (selected.length === 1 && !scheduledAt) {
         const result = await socialApi.publish({
           text: copy,
@@ -194,23 +220,35 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, onClose }: CanvasS
       setText('');
       setLinkUrl('');
       setMediaUrl('');
+      setMediaObjectIds([]);
       setScheduledAt('');
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : t('publishFailed'));
     } finally {
       setBusy(false);
     }
-  }, [linkUrl, mediaUrl, onAddCampaign, scheduledAt, selected, t, text]);
+  }, [boardMedia, linkUrl, mediaObjectIds, mediaUrl, onAddCampaign, scheduledAt, selected, t, text]);
 
   const toggleAccount = useCallback((id: string) => {
     setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
   }, []);
 
+  const toggleMedia = useCallback((id: string) => {
+    setMediaObjectIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  }, []);
+
   /** Networks that still need media are named up front — Instagram silently
    *  refusing a text post at publish time is the failure this prevents. */
   const mediaBlocked = useMemo(
-    () => accounts.filter((a) => selected.includes(a.id) && a.requiresMedia && !mediaUrl.trim()),
-    [accounts, mediaUrl, selected],
+    () => accounts.filter((a) => selected.includes(a.id) && a.publishMode === 'media' && !mediaUrl.trim() && mediaObjectIds.length === 0),
+    [accounts, mediaObjectIds, mediaUrl, selected],
+  );
+
+  /** Selected accounts that can never be published to at all. Distinct from
+   *  `mediaBlocked`, which attaching an image fixes — this one nothing fixes. */
+  const publishBlocked = useMemo(
+    () => accounts.filter((a) => selected.includes(a.id) && a.publishMode === 'none'),
+    [accounts, selected],
   );
 
   return (
@@ -292,6 +330,19 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, onClose }: CanvasS
           <span>{t('link')}</span>
           <input value={linkUrl} onChange={(event) => setLinkUrl(event.target.value)} placeholder="https://" />
         </label>
+        {boardMedia.length > 0 && <fieldset className={styles.socialTargetPicker}>
+          <legend>{t('boardMedia')}</legend>
+          {boardMedia.map((item) => <label key={item.id}>
+            <input type="checkbox" checked={mediaObjectIds.includes(item.id)} onChange={() => toggleMedia(item.id)} />
+            {/* The thumbnail is the point of a picker — a list of titles is a list
+                of guesses about which picture is which. `alt` is empty because the
+                label beside it already names the object; announcing it twice is
+                noise to a screen reader. */}
+            {item.thumbnailUrl && <img src={item.thumbnailUrl} alt="" className={styles.socialMediaThumb} />}
+            <span>{item.title}</span>
+          </label>)}
+          <small>{t('boardMediaHelp')}</small>
+        </fieldset>}
         <label>
           <span>{t('media')}</span>
           <input value={mediaUrl} onChange={(event) => setMediaUrl(event.target.value)} placeholder="https://" />
@@ -312,8 +363,11 @@ export function CanvasSocialPanel({ onAddFeed, onAddCampaign, onClose }: CanvasS
         {mediaBlocked.length > 0 && <p className={styles.driveNotice} role="status">
           {t('mediaRequired', { networks: mediaBlocked.map((a) => a.networkLabel).join(', ') })}
         </p>}
+        {publishBlocked.length > 0 && <p className={styles.driveNotice} role="status">
+          {t('cannotPublish', { networks: publishBlocked.map((a) => a.networkLabel).join(', ') })}
+        </p>}
         <div className={styles.socialFormActions}>
-          <button type="submit" disabled={busy || ready.length === 0}>
+          <button type="submit" disabled={busy || ready.length === 0 || publishBlocked.length > 0}>
             {busy ? t('publishing') : scheduledAt ? t('scheduleAction') : selected.length > 1 ? t('publishAll', { count: selected.length }) : t('publishAction')}
           </button>
         </div>

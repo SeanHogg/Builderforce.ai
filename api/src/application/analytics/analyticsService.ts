@@ -109,7 +109,7 @@ export async function listAnalyticsSources(db: Db, env: Env, tenantId: number): 
     source: provider.source,
     label: provider.label,
     connectorKey: provider.connectorKey,
-    propertyFields: provider.propertyFields,
+    propertyFields: provider.accountFields,
     measures: provider.measures,
     dimensions: provider.dimensions,
     connectedCount: connected.filter((p) => p.source === provider.source).length,

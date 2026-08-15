@@ -16,9 +16,10 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { developerOrgs, extensionPackages, extensionVersions } from '../../infrastructure/database/schema';
+import { extensionPackages, extensionVersions, tenants } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { DeveloperOrgError, requireMembership, slugify } from './developerOrgs';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { PublisherError, requirePublisher } from './publishers';
 import {
   isExtensionKind,
   SUBMITTABLE_KINDS,
@@ -29,8 +30,9 @@ import { reviewVersion, type ReviewFinding } from './packageReview';
 
 export interface PackageView {
   id: string;
-  developerOrgId: string;
-  publisher: { slug: string; legalName: string; verificationState: string } | null;
+  /** The PUBLISHER's workspace. There is no separate publisher id — see `publishers.ts`. */
+  tenantId: number;
+  publisher: { slug: string; name: string; state: string } | null;
   slug: string;
   kind: ExtensionKind | string;
   name: string;
@@ -61,14 +63,14 @@ export interface VersionView {
 
 type PackageRow = typeof extensionPackages.$inferSelect;
 type VersionRow = typeof extensionVersions.$inferSelect;
-type OrgRow = typeof developerOrgs.$inferSelect;
+type PublisherRow = typeof tenants.$inferSelect;
 
-function toPackageView(row: PackageRow, org?: OrgRow | null): PackageView {
+function toPackageView(row: PackageRow, publisher?: PublisherRow | null): PackageView {
   return {
     id: row.id,
-    developerOrgId: row.developerOrgId,
-    publisher: org
-      ? { slug: org.slug, legalName: org.legalName, verificationState: org.verificationState }
+    tenantId: row.tenantId,
+    publisher: publisher
+      ? { slug: publisher.slug, name: publisher.name, state: publisher.publisherState }
       : null,
     slug: row.slug,
     kind: row.kind,
@@ -116,7 +118,7 @@ export async function createPackage(
   db: Db,
   env: Env,
   input: {
-    orgId: string;
+    tenantId: number;
     actorUserId: string;
     kind: string;
     name: string;
@@ -127,22 +129,22 @@ export async function createPackage(
     docsUrl?: string | null;
   },
 ): Promise<PackageView> {
-  const { org } = await requireMembership(db, input.orgId, input.actorUserId, 'publisher');
+  const { tenant } = await requirePublisher(db, input.tenantId, input.actorUserId, 'developer');
 
   if (!isExtensionKind(input.kind) || !SUBMITTABLE_KINDS.includes(input.kind)) {
-    throw new DeveloperOrgError(`kind must be one of: ${SUBMITTABLE_KINDS.join(', ')}`);
+    throw new PublisherError(`kind must be one of: ${SUBMITTABLE_KINDS.join(', ')}`);
   }
   const name = input.name.trim();
-  if (name.length < 2) throw new DeveloperOrgError('name is required');
+  if (name.length < 2) throw new PublisherError('name is required');
 
   const slug = slugify(input.slug?.trim() || name);
   const [taken] = await db.select({ id: extensionPackages.id }).from(extensionPackages).where(eq(extensionPackages.slug, slug)).limit(1);
-  if (taken) throw new DeveloperOrgError(`the slug "${slug}" is taken`, 409);
+  if (taken) throw new PublisherError(`the slug "${slug}" is taken`, 409);
 
   const [row] = await db
     .insert(extensionPackages)
     .values({
-      developerOrgId: input.orgId,
+      tenantId: input.tenantId,
       slug,
       kind: input.kind,
       name,
@@ -152,25 +154,25 @@ export async function createPackage(
       docsUrl: input.docsUrl?.trim() || null,
     })
     .returning();
-  if (!row) throw new DeveloperOrgError('failed to create package', 409);
+  if (!row) throw new PublisherError('failed to create package', 409);
 
-  return toPackageView(row, org);
+  return toPackageView(row, tenant);
 }
 
 /** Every package a publisher owns, drafts included. */
-export async function listPackagesForOrg(db: Db, orgId: string, actorUserId: string): Promise<PackageView[]> {
-  const { org } = await requireMembership(db, orgId, actorUserId, 'publisher');
+export async function listPackagesForPublisher(db: Db, tenantId: number, actorUserId: string): Promise<PackageView[]> {
+  const { tenant } = await requirePublisher(db, tenantId, actorUserId, 'developer');
   const rows = await db
     .select()
     .from(extensionPackages)
-    .where(eq(extensionPackages.developerOrgId, orgId))
+    .where(scopedToTenant(extensionPackages, tenantId))
     .orderBy(desc(extensionPackages.updatedAt));
-  return rows.map((r) => toPackageView(r, org));
+  return rows.map((r) => toPackageView(r, tenant));
 }
 
 export async function listVersions(db: Db, packageId: string, actorUserId: string): Promise<VersionView[]> {
   const pkg = await loadPackage(db, packageId);
-  await requireMembership(db, pkg.developerOrgId, actorUserId, 'publisher');
+  await requirePublisher(db, pkg.tenantId, actorUserId, 'developer');
   const rows = await db
     .select()
     .from(extensionVersions)
@@ -200,18 +202,18 @@ export async function submitVersion(
   },
 ): Promise<{ version: VersionView; approved: boolean }> {
   const pkg = await loadPackage(db, input.packageId);
-  const { org } = await requireMembership(db, pkg.developerOrgId, input.actorUserId, 'publisher');
+  const { tenant } = await requirePublisher(db, pkg.tenantId, input.actorUserId, 'developer');
 
   const semver = input.semver.trim();
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(semver)) {
-    throw new DeveloperOrgError('semver must look like 1.0.0');
+    throw new PublisherError('semver must look like 1.0.0');
   }
   const [dupe] = await db
     .select({ id: extensionVersions.id })
     .from(extensionVersions)
     .where(and(eq(extensionVersions.packageId, input.packageId), eq(extensionVersions.semver, semver)))
     .limit(1);
-  if (dupe) throw new DeveloperOrgError(`version ${semver} already exists — versions are immutable`, 409);
+  if (dupe) throw new PublisherError(`version ${semver} already exists — versions are immutable`, 409);
 
   const previous = pkg.currentVersionId ? await loadVersion(db, pkg.currentVersionId) : null;
 
@@ -219,7 +221,7 @@ export async function submitVersion(
     kind: pkg.kind as ExtensionKind,
     spec: input.spec,
     requestedScopes: input.requestedScopes,
-    verificationState: org.verificationState,
+    verificationState: tenant.publisherState,
     paid: pkg.catalogItemId !== null,
     previousScopes: previous?.requestedScopes ?? null,
   });
@@ -237,7 +239,7 @@ export async function submitVersion(
       reviewedAt: new Date(),
     })
     .returning();
-  if (!row) throw new DeveloperOrgError('failed to record version', 409);
+  if (!row) throw new PublisherError('failed to record version', 409);
 
   return { version: toVersionView(row), approved: outcome.approved };
 }
@@ -256,11 +258,11 @@ export async function publishVersion(
   input: { packageId: string; versionId: string; actorUserId: string },
 ): Promise<PackageView> {
   const pkg = await loadPackage(db, input.packageId);
-  await requireMembership(db, pkg.developerOrgId, input.actorUserId, 'publisher');
+  await requirePublisher(db, pkg.tenantId, input.actorUserId, 'developer');
 
   const version = await loadVersion(db, input.versionId);
-  if (version.packageId !== pkg.id) throw new DeveloperOrgError('that version belongs to another package', 400);
-  if (version.reviewState !== 'approved') throw new DeveloperOrgError('only an approved version can be published', 409);
+  if (version.packageId !== pkg.id) throw new PublisherError('that version belongs to another package', 400);
+  if (version.reviewState !== 'approved') throw new PublisherError('only an approved version can be published', 409);
 
   await db
     .update(extensionVersions)
@@ -272,7 +274,7 @@ export async function publishVersion(
     .set({ currentVersionId: version.id, listingState: 'listed', updatedAt: new Date() })
     .where(eq(extensionPackages.id, pkg.id))
     .returning();
-  if (!row) throw new DeveloperOrgError('package not found', 404);
+  if (!row) throw new PublisherError('package not found', 404);
 
   await invalidatePublicCatalog(env);
   return toPackageView(row);
@@ -285,16 +287,16 @@ export async function setListingState(
   input: { packageId: string; actorUserId: string; state: ListingState },
 ): Promise<PackageView> {
   const pkg = await loadPackage(db, input.packageId);
-  await requireMembership(db, pkg.developerOrgId, input.actorUserId, 'admin');
+  await requirePublisher(db, pkg.tenantId, input.actorUserId, 'manager');
   if (input.state === 'listed' && !pkg.currentVersionId) {
-    throw new DeveloperOrgError('publish an approved version before listing', 409);
+    throw new PublisherError('publish an approved version before listing', 409);
   }
   const [row] = await db
     .update(extensionPackages)
     .set({ listingState: input.state, updatedAt: new Date() })
     .where(eq(extensionPackages.id, pkg.id))
     .returning();
-  if (!row) throw new DeveloperOrgError('package not found', 404);
+  if (!row) throw new PublisherError('package not found', 404);
   await invalidatePublicCatalog(env);
   return toPackageView(row);
 }
@@ -321,12 +323,17 @@ export async function listPublicCatalog(db: Db, env: Env): Promise<PackageView[]
     CATALOG_CACHE_KEY,
     async () => {
       const rows = await db
-        .select({ pkg: extensionPackages, org: developerOrgs })
+        .select({ pkg: extensionPackages, publisher: tenants })
         .from(extensionPackages)
-        .innerJoin(developerOrgs, eq(developerOrgs.id, extensionPackages.developerOrgId))
-        .where(and(eq(extensionPackages.listingState, 'listed'), sql`${developerOrgs.suspendedAt} is null`))
+        .innerJoin(tenants, eq(tenants.id, extensionPackages.tenantId))
+        .where(acrossTenants(
+          extensionPackages,
+          'public_catalogue',
+          eq(extensionPackages.listingState, 'listed'),
+          sql`${tenants.publisherSuspendedAt} is null`,
+        ))
         .orderBy(desc(extensionPackages.installCount));
-      return rows.map((r) => toPackageView(r.pkg, r.org));
+      return rows.map((r) => toPackageView(r.pkg, r.publisher));
     },
     { kvTtlSeconds: 300, l1TtlMs: 60_000 },
   );
@@ -343,23 +350,37 @@ export async function getPublicPackage(db: Db, env: Env, slug: string): Promise<
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Loaders shared by every path above
+//
+// A package is addressed by its PRIMARY KEY and is not filtered by the caller's
+// tenant, because the two callers who load one are the publisher (who owns it)
+// and an installing tenant (who does not) — the whole point of a catalogue. So
+// the read declares itself cross-tenant and the AUTHORITY check follows it:
+// `requirePublisher(db, pkg.tenantId, …)` for a write, `listingState = 'listed'`
+// for an install. Filtering here instead would break installing altogether.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function loadPackage(db: Db, packageId: string): Promise<PackageRow> {
-  const [row] = await db.select().from(extensionPackages).where(eq(extensionPackages.id, packageId)).limit(1);
-  if (!row) throw new DeveloperOrgError('package not found', 404);
+  const [row] = await db
+    .select()
+    .from(extensionPackages)
+    .where(acrossTenants(extensionPackages, 'public_catalogue', eq(extensionPackages.id, packageId)))
+    .limit(1);
+  if (!row) throw new PublisherError('package not found', 404);
   return row;
 }
 
 export async function loadVersion(db: Db, versionId: string): Promise<VersionRow> {
   const [row] = await db.select().from(extensionVersions).where(eq(extensionVersions.id, versionId)).limit(1);
-  if (!row) throw new DeveloperOrgError('version not found', 404);
+  if (!row) throw new PublisherError('version not found', 404);
   return row;
 }
 
 /** Load many packages by id in one round-trip. Used by the install list. */
 export async function loadPackagesByIds(db: Db, ids: string[]): Promise<Map<string, PackageRow>> {
   if (ids.length === 0) return new Map();
-  const rows = await db.select().from(extensionPackages).where(inArray(extensionPackages.id, ids));
+  const rows = await db
+    .select()
+    .from(extensionPackages)
+    .where(acrossTenants(extensionPackages, 'public_catalogue', inArray(extensionPackages.id, ids)));
   return new Map(rows.map((r) => [r.id, r]));
 }

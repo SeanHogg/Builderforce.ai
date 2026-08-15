@@ -27,9 +27,18 @@ import {
 // (host → BuilderForce). The BI burn-rate pull goes the other way (BuilderForce
 // → host) and uses a host-issued token stored as BI config, so its scope is not
 // part of this registry.
+// The PUBLISHER scopes below arrived with migration 0471, when `developer_api_keys`
+// was folded into this table. They are in the SAME list rather than a second one
+// because a developer is a tenant: one credential, one vocabulary, one answer to
+// "what may this caller do". A key that carries none of them simply cannot reach
+// `/api/v1` — the scope list is what separates a gateway key from a publisher's,
+// and that separation is now data instead of a second table.
 export const TENANT_API_SCOPES = [
   'ingest:feedback',   // BurnRateOS → POST /v1/ingest/feedback
   'webhooks:manage',   // host manages its outbound webhook subscriptions
+  'read:catalog',      // GET /api/v1/agents, /skills, /personas
+  'read:installs',     // how many workspaces run this publisher's packages
+  'write:packages',    // submit and publish extension versions from CI
 ] as const;
 
 export type TenantApiScope = (typeof TENANT_API_SCOPES)[number];
@@ -152,6 +161,69 @@ export async function mintTenantApiKey(
     scopes: deserializeScopes(row.scopes),
     createdAt: row.createdAt,
   };
+}
+
+export interface ResolvedTenantApiKey {
+  keyId:    string;
+  tenantId: number;
+  /** Null / empty = unrestricted (a legacy full-tenant key). */
+  scopes:   string[] | null;
+  /** Null = server-only. Callers that accept browser traffic must run `originAllowed`. */
+  allowedOrigins: string[] | null;
+}
+
+/**
+ * Resolve a raw `bfk_*` key, enforcing `required` if given.
+ *
+ * The ONE place a non-gateway route decides whether a key-bearing caller is
+ * allowed in. Before migration 0471 the public developer API had its own copy of
+ * "hash it, look it up, is it revoked" against its own table, and it asked about
+ * neither scopes nor origins — which is how a second credential model always
+ * starts, and why there is now only one.
+ *
+ * Returns `null` for every failure — unknown, revoked, or insufficiently scoped —
+ * so the caller cannot accidentally tell an attacker which of the three it was.
+ *
+ * Deliberately NOT read through `resolveKeyCached`: that cache stores the
+ * GATEWAY's auth envelope (plan, limits, membership) under the same key, and
+ * teaching it to hold two different shapes for one hash is how a cache starts
+ * answering the wrong question. This is one indexed lookup on a unique column.
+ */
+export async function resolveTenantApiKey(
+  db: Db,
+  rawKey: string,
+  required?: TenantApiScope,
+): Promise<ResolvedTenantApiKey | null> {
+  const raw = rawKey?.trim();
+  if (!raw) return null;
+  const keyHash = await hashSecret(raw);
+
+  const [row] = await db
+    .select({
+      id:             tenantApiKeys.id,
+      tenantId:       tenantApiKeys.tenantId,
+      scopes:         tenantApiKeys.scopes,
+      allowedOrigins: tenantApiKeys.allowedOrigins,
+    })
+    .from(tenantApiKeys)
+    .where(and(eq(tenantApiKeys.keyHash, keyHash), isNull(tenantApiKeys.revokedAt)))
+    .limit(1);
+  if (!row) return null;
+
+  const scopes = deserializeScopes(row.scopes);
+  if (required && !keyHasScope(scopes, required)) return null;
+
+  return {
+    keyId: row.id,
+    tenantId: row.tenantId,
+    scopes,
+    allowedOrigins: deserializeOrigins(row.allowedOrigins),
+  };
+}
+
+/** Stamp a key as used. Fire-and-forget from the caller's `waitUntil`. */
+export async function touchTenantApiKey(db: Db, keyId: string): Promise<void> {
+  await db.update(tenantApiKeys).set({ lastUsedAt: new Date() }).where(eq(tenantApiKeys.id, keyId));
 }
 
 /** List every key for a tenant, newest first. Raw key is never returned. */

@@ -13,10 +13,24 @@ import { apiRequest } from './apiClient';
  * Rides the ONE transport (`apiRequest`) for the reasons documented in `apiClient.ts`.
  */
 
-export type SocialNetwork = 'x' | 'linkedin' | 'facebook' | 'instagram' | 'tiktok';
+export type SocialNetwork =
+  | 'x' | 'linkedin' | 'facebook' | 'instagram' | 'tiktok'
+  | 'youtube' | 'reddit' | 'pinterest' | 'threads' | 'bluesky' | 'googleBusiness';
+
+/**
+ * What a network accepts from a publish.
+ *
+ * `media` REFUSES a text-only post; `none` is read-and-measure only (YouTube, whose
+ * publishing is a resumable byte upload). One field rather than two booleans, because
+ * "can it publish" and "does it need media" are the same question asked twice.
+ */
+export type SocialPublishMode = 'text' | 'media' | 'none';
 
 /** The canonical order the UI lists networks in. */
-export const SOCIAL_NETWORKS: readonly SocialNetwork[] = ['x', 'linkedin', 'facebook', 'instagram', 'tiktok'];
+export const SOCIAL_NETWORKS: readonly SocialNetwork[] = [
+  'x', 'linkedin', 'facebook', 'instagram', 'tiktok',
+  'youtube', 'reddit', 'pinterest', 'threads', 'bluesky', 'googleBusiness',
+];
 
 export interface SocialAccountField {
   key: string;
@@ -34,7 +48,7 @@ export interface SocialAccount {
   /** False when a required account-scope field (Page id, author URN…) is missing. */
   ready: boolean;
   missingFields: SocialAccountField[];
-  requiresMedia: boolean;
+  publishMode: SocialPublishMode;
   lastTestOk: boolean | null;
   lastUsedAt: string | null;
 }
@@ -45,7 +59,7 @@ export interface SocialNetworkOption {
   /** The built-in connector this network runs on — what /connectors is filtered by. */
   connectorKey: string;
   accountFields: SocialAccountField[];
-  requiresMedia: boolean;
+  publishMode: SocialPublishMode;
   connectedCount: number;
 }
 

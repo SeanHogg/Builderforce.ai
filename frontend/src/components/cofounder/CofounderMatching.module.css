@@ -1,0 +1,145 @@
+/** Co-founder matching. Tokens only, and fluid at every width. */
+
+.page {
+  max-width: var(--content-wide);
+  margin: 0 auto;
+  padding: clamp(16px, 4vw, 40px) clamp(12px, 4vw, 32px) 64px;
+  color: var(--text-primary);
+}
+
+.header { margin-bottom: 28px; }
+.title { margin: 0 0 8px; font-size: var(--font-size-page-title); line-height: 1.2; }
+.lede { margin: 0; max-width: 60ch; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.6; }
+
+.sectionTitle { margin: 28px 0 12px; font-size: var(--font-size-section); color: var(--text-primary); }
+
+.card,
+.summary,
+.match {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: clamp(14px, 3vw, 24px);
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.summaryTitle { margin: 0 0 4px; font-size: var(--font-size-card-title); color: var(--text-primary); }
+.summaryMeta { margin: 0 0 6px; color: var(--text-secondary); font-size: var(--font-size-small); }
+
+.visible { margin: 0; color: var(--emerald-bright); font-size: var(--font-size-small); }
+.hidden { margin: 0; color: var(--amber-bright); font-size: var(--font-size-small); }
+
+/* auto-fit, so the grid collapses to one column on a phone without a breakpoint
+   somebody has to remember to move when a field is added. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 16px;
+}
+
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.label { font-size: var(--font-size-body); font-weight: 600; color: var(--text-primary); }
+.help { margin: 0; color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.5; }
+
+.input,
+.textarea,
+.select {
+  width: 100%;
+  box-sizing: border-box;
+  /* 16px minimum: below it iOS zooms the viewport on focus. */
+  font-size: max(16px, var(--font-size-body));
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
+
+/* A native <option> inherits nothing useful from its <select>, so it needs its
+   own opaque pair or half the list is invisible in one theme. */
+.select option { background: var(--surface); color: var(--text-primary); }
+
+.input:focus-visible,
+.textarea:focus-visible,
+.select:focus-visible { outline: 2px solid var(--coral-bright); outline-offset: 1px; }
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  cursor: pointer;
+}
+
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+
+.primary,
+.ghost {
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.primary { background: var(--coral-bright); color: var(--bg-base); }
+.ghost { background: transparent; color: var(--text-secondary); border-color: var(--border); }
+.primary:disabled, .ghost:disabled { opacity: .55; cursor: not-allowed; }
+
+.matchList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+
+.matchHead { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; justify-content: space-between; }
+.matchTitle { margin: 0 0 4px; font-size: var(--font-size-card-title); color: var(--text-primary); }
+.matchMeta { margin: 0; color: var(--text-secondary); font-size: var(--font-size-small); }
+.matchBio { margin: 12px 0 0; color: var(--text-secondary); font-size: var(--font-size-body); line-height: 1.6; }
+
+.score { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 120px; }
+.scoreValue { font-size: var(--font-size-section); font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.scoreBar { display: block; width: 120px; height: 6px; border-radius: var(--radius-full); background: var(--border); overflow: hidden; }
+.scoreBar > span { display: block; height: 100%; background: var(--coral-bright); }
+
+.reasons { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.reasonFor,
+.reasonAgainst {
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+  border-left: 3px solid transparent;
+}
+
+.reasonFor { background: var(--surface-raised); color: var(--text-secondary); border-left-color: var(--emerald-bright); }
+/* A reason AGAINST is shown as prominently as a reason for — those are the
+   findings, and a matcher that hides them is one nobody should use. */
+.reasonAgainst {
+  background: color-mix(in srgb, var(--amber-bright) 12%, transparent);
+  color: var(--text-primary);
+  border-left-color: var(--amber-bright);
+}
+
+.notice { margin: 14px 0 0; color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.6; }
+
+.error {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--red-bright) 40%, transparent);
+  background: color-mix(in srgb, var(--red-bright) 12%, transparent);
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+}

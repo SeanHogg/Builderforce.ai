@@ -251,6 +251,22 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   // — the same relationship `canvas_add_diagnostic` has to `GET /api/tools` — not a
   // second way to read a tenant's company.
   'canvas_sync_company_profile',
+  // ── Founder operations (0469) ────────────────────────────────────────────────
+  // Every one reads or writes a TENANT record, which is what makes them
+  // account-required rather than guest-gated: a counterparty register, a CRM's
+  // deals, and a stage change that moves a real deal. A guest has none of the
+  // three, and unlike an image or a test run there is no true one-sentence answer
+  // that turns into a capability on sign-up — an empty workspace has no
+  // counterparties either. Advertising them to a guest would spend the model's
+  // attention on three routes it cannot take, on the surface where first
+  // impressions are formed.
+  //
+  // `canvas_move_deal` is the one that matters structurally: it writes the deal
+  // AND rewrites the board from the same response, which is what replaces the
+  // mirroring instruction in the canvas system prompt with a mechanism.
+  'canvas_sync_account',
+  'canvas_sync_sales_pipeline',
+  'canvas_move_deal',
   // Re-reads the domain metric series a `liveMetric` object was bound to. This is the
   // LIVE half the finance and investor answers never had: without it every runway, burn
   // and pipeline number on a board is a snapshot with an as-of date and no way to ask

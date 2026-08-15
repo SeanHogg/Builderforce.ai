@@ -204,9 +204,9 @@ export const mailboxAutomationReplies = pgTable('mailbox_automation_replies', {
 // argument against the table rather than a note beside it.
 
 
-// ═══ developer portal / extension marketplace (PRD 24, migration 0467) ═══
+// ═══ developer portal / extension marketplace (PRD 24, migrations 0467 + 0471) ═══
 //
-// ── WHY THESE FIVE TABLES AND NOT MORE ──────────────────────────────────────
+// ── WHY THESE THREE TABLES AND NOT MORE ─────────────────────────────────────
 // Everything a third party could build for this platform lands in one of two
 // buckets today: TENANT-PRIVATE (a tenant's own `connectors` row, its own
 // `tenant_mcp_extensions` row) or CODE-OWNED (`defaults/`, `BOARD_PROVIDERS`,
@@ -223,6 +223,15 @@ export const mailboxAutomationReplies = pgTable('mailbox_automation_replies', {
 // here?") would become three queries that disagree. So `kind` is a VALUE, exactly
 // as `discipline` is on `field_jobs` and `builtin_kind` is on `ide_agents`.
 //
+// ── AND THE PUBLISHER IS A TENANT (0471) ────────────────────────────────────
+// 0467 shipped `developer_orgs` + `developer_org_members` as a party model beside
+// the one that already existed, on the argument that a vendor is not necessarily a
+// customer. That was rejected: a developer IS a tenant. The publisher's identity,
+// verification state and suspension are now a FACET on `tenants` (nine columns,
+// all 1:1 with the row), its staff are `tenant_members`, and its credential is a
+// `tenant_api_keys` row. Two of the five tables here went away as a result, and so
+// did the third answer to "who may act for this vendor?".
+//
 // ── WHAT IS DELIBERATELY *NOT* HERE ─────────────────────────────────────────
 // No price column, no order table, no payout row: a package sells as a
 // `catalog_items` row through the rails `orders`/`payout` already own, and
@@ -231,69 +240,15 @@ export const mailboxAutomationReplies = pgTable('mailbox_automation_replies', {
 // second scope vocabulary — a grant names scopes from the list `tenant_api_keys`
 // already uses (`application/shared/scopeList.ts`).
 //
-// ── NOT TENANT-SCOPED, ON PURPOSE ───────────────────────────────────────────
-// A publisher is not our customer, and the four publisher-side tables carry no
-// `tenant_id` because there is no tenant that owns a published package — it is
-// the same row for every tenant, which is the definition of a global catalogue.
-// The tenancy lives on `tenant_extension_installs`, where the grant is. Both
-// halves are declared in `check-tenant-column.mjs`'s TENANT_INDEPENDENT map, so
-// this is a decision on the record rather than a missing column.
-
-/**
- * A PUBLISHER — the vendor, agency or individual who ships extensions.
- *
- * A first-class party, deliberately distinct from a tenant: the company that
- * builds a payroll connector for us is not necessarily a customer of ours, and
- * their engineers are not members of anybody's workspace. Membership
- * (`developer_org_members`) is how a human reaches one, which is also why there
- * is no `tenant_id` here.
- *
- * `verificationState` is load-bearing rather than cosmetic. It gates the badge on
- * a listing AND the right to charge money, which is the trust half the open MCP
- * registries do not have — 10,000 public servers and no way to tell which one is
- * safe to install.
- */
-export const developerOrgs = pgTable('developer_orgs', {
-  id:                 uuid('id').primaryKey().defaultRandom(),
-  /** URL identity — `/developers/<slug>` and the listing byline. Immutable once published. */
-  slug:               varchar('slug', { length: 80 }).notNull().unique(),
-  legalName:          varchar('legal_name', { length: 200 }).notNull(),
-  website:            text('website'),
-  supportEmail:       varchar('support_email', { length: 255 }),
-  /** `unverified` → `domain_verified` → `identity_verified`. See DEVELOPER_VERIFICATION_STATES. */
-  verificationState:  varchar('verification_state', { length: 32 }).notNull().default('unverified'),
-  /** The domain being claimed, and the one-time token the DNS TXT record must carry. */
-  verificationDomain: varchar('verification_domain', { length: 255 }),
-  verificationToken:  varchar('verification_token', { length: 64 }),
-  verifiedAt:         timestamp('verified_at', { withTimezone: true }),
-  /** Cross-domain id into `connections` (capability='payout'). Deliberately NOT a
-   *  foreign key: payouts are the commerce domain's, and a schema import here
-   *  would be this module reaching across a bounded context for a nullable link. */
-  payoutConnectionId: uuid('payout_connection_id'),
-  /** Set when we stand a publisher down. Suspension hides every listing at once. */
-  suspendedAt:        timestamp('suspended_at', { withTimezone: true }),
-  suspendedReason:    text('suspended_reason'),
-  createdAt:          timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt:          timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [
-  index('idx_developer_orgs_state').on(t.verificationState),
-]);
-
-/**
- * Who may act for a publisher. `user_id` is a cross-domain id, not a foreign key
- * — identity owns `users`, and a membership row is how this context refers to one.
- */
-export const developerOrgMembers = pgTable('developer_org_members', {
-  id:              uuid('id').primaryKey().defaultRandom(),
-  developerOrgId:  uuid('developer_org_id').notNull().references(() => developerOrgs.id, { onDelete: 'cascade' }),
-  userId:          varchar('user_id', { length: 36 }).notNull(),
-  /** `owner` (billing + suspension) · `admin` (members) · `publisher` (ship versions). */
-  role:            varchar('role', { length: 24 }).notNull().default('publisher'),
-  createdAt:       timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [
-  uniqueIndex('uq_developer_org_member').on(t.developerOrgId, t.userId),
-  index('idx_developer_org_members_user').on(t.userId),
-]);
+// ── TENANCY: OWNER vs AUDIENCE ──────────────────────────────────────────────
+// `extension_packages.tenant_id` is the PUBLISHER's workspace — who owns and may
+// edit the listing — not who may see it. A listed package is readable by every
+// tenant, which is what publishing means, so the catalogue reads declare
+// themselves with `acrossTenants(..., 'public_catalogue', ...)` rather than
+// filtering by the caller's tenant. `extension_versions` inherits tenancy through
+// its package (declared in `check-tenant-column.mjs`), and
+// `tenant_extension_installs` is scoped to the INSTALLING tenant, which is a
+// different tenant from the publisher's and the reason both columns exist.
 
 /**
  * A PACKAGE — the thing a tenant installs, and the stable identity across versions.
@@ -308,7 +263,8 @@ export const developerOrgMembers = pgTable('developer_org_members', {
  */
 export const extensionPackages = pgTable('extension_packages', {
   id:               uuid('id').primaryKey().defaultRandom(),
-  developerOrgId:   uuid('developer_org_id').notNull().references(() => developerOrgs.id, { onDelete: 'cascade' }),
+  /** The PUBLISHER's workspace — who owns the listing. Not who may install it. */
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   slug:             varchar('slug', { length: 100 }).notNull().unique(),
   /** `connector` · `mcp_server` · `canvas_kind` · `agent` · `skill` · `template`.
    *  A VALUE, not a table — see the block comment above. */
@@ -330,7 +286,7 @@ export const extensionPackages = pgTable('extension_packages', {
   createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
-  index('idx_extension_packages_org').on(t.developerOrgId),
+  index('idx_extension_packages_tenant').on(t.tenantId),
   index('idx_extension_packages_listed').on(t.listingState, t.kind),
 ]);
 

@@ -34,8 +34,7 @@ import {
   type ResumeOrientation,
   type ResumePageSize,
 } from '@/lib/canvasResume';
-import { renderCanvasResumeRevision, resumePageDimensions } from '@/lib/canvasResumeRenderer';
-import { ResumeDocumentStyles } from './ResumeDocumentStyles';
+import { RESUME_DOCUMENT_STYLES, renderCanvasResumeRevision, resumePageDimensions } from '@/lib/canvasResumeRenderer';
 import { compareResumeDocuments, mergeResumeAsNewVersion, type ResumeDiffSection } from '@/lib/canvasResumeDiff';
 import { analyzeResumeAgainstJob, resumeFieldRewritePrompt, resumeTailorPrompt, type ResumeAiField } from '@/lib/canvasResumeAts';
 import { applyResumeBulletConsolidation, suggestResumeBulletConsolidation } from '@/lib/canvasResumeConsolidate';
@@ -44,6 +43,40 @@ import type { CanvasResumeShare } from '@/lib/builderforceApi';
 type ResumeView = 'edit' | 'preview' | 'compare';
 type ImportStage = 'review' | 'uploading' | 'extracting' | 'ocr' | 'structuring' | 'ready';
 type PendingLifecycleAction = { kind: 'promote' | 'delete'; revisionId: string } | null;
+
+const RESUME_STYLE_ELEMENT_ID = 'canvas-resume-document-styles';
+let mountedResumeEditors = 0;
+
+/**
+ * The résumé document stylesheet, mounted ONCE for the whole page.
+ *
+ * It used to be an inline `<style>` beside every rendering: one in the preview, one in
+ * the compare pane, and one per template thumbnail — thirteen copies of the same four
+ * kilobytes inside a single open editor, multiplied again by every résumé card on the
+ * board. Each copy is a stylesheet the browser parses and re-matches against the
+ * document on mount, and that cost lands exactly when the board is busiest: right after
+ * a template fan-out drops ten résumés onto it.
+ *
+ * The rules are global class selectors, so one copy styles every résumé on the page.
+ * Reference-counted rather than mounted-and-left, so a board with no résumé on it does
+ * not carry résumé CSS.
+ */
+function ResumeDocumentStyles() {
+  useEffect(() => {
+    mountedResumeEditors += 1;
+    if (!document.getElementById(RESUME_STYLE_ELEMENT_ID)) {
+      const element = document.createElement('style');
+      element.id = RESUME_STYLE_ELEMENT_ID;
+      element.textContent = RESUME_DOCUMENT_STYLES;
+      document.head.append(element);
+    }
+    return () => {
+      mountedResumeEditors -= 1;
+      if (mountedResumeEditors <= 0) document.getElementById(RESUME_STYLE_ELEMENT_ID)?.remove();
+    };
+  }, []);
+  return null;
+}
 
 function ImportReview({ file, stage, onImport, onCancel }: { file: File; stage: ImportStage; onImport: () => void; onCancel: () => void }) {
   const t = useTranslations('creationCanvas.resumeEditor');

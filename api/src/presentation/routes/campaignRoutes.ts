@@ -40,6 +40,7 @@ import {
 import { isCampaignTransport } from '../../application/marketing/campaignTransports';
 import {
   createAsset,
+  createAssetFromSource,
   createTemplate,
   deleteAsset,
   deleteTemplate,
@@ -229,9 +230,30 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
     });
   });
 
-  /** Upload an image. multipart/form-data because the payload is binary — a
-   *  base64 JSON body would inflate a 2 MB logo to 2.7 MB on the wire. */
+  /**
+   * Upload an image. multipart/form-data because the payload is binary — a
+   * base64 JSON body would inflate a 2 MB logo to 2.7 MB on the wire.
+   *
+   * A JSON body `{ source }` is the SECOND encoding of the same act, for a
+   * caller that does not hold a `File`: the Creation Canvas, whose generated
+   * pictures live in a `data:` URI or at a stock URL. It is the same route
+   * because it is the same concept — "store this image and give me its public
+   * URL" — and a second endpoint would be a second place for the size, type and
+   * tenant rules to drift apart from each other.
+   */
   router.post('/assets', manager, async (c) => {
+    if ((c.req.header('content-type') ?? '').includes('application/json')) {
+      const body = await c.req.json<{ source?: string; name?: string; kind?: string }>().catch(() => ({}) as never);
+      if (!body.source?.trim()) return c.json({ error: 'Supply the image as a data URL or an https URL.' }, 400);
+      const stored = await createAssetFromSource(db, c.env as Env, c.get('tenantId') as number, {
+        source: body.source,
+        name: String(body.name ?? 'Image'),
+        kind: body.kind === 'logo' ? 'logo' : 'image',
+        createdBy: c.get('userId') as string,
+      });
+      if (!stored.ok) return c.json({ error: stored.error }, stored.status);
+      return c.json(stored.asset, 201);
+    }
     const form = await c.req.formData().catch(() => null);
     const file = form?.get('file') as File | null;
     if (!file || typeof file.arrayBuffer !== 'function') {

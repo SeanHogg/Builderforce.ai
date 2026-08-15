@@ -34,6 +34,8 @@ import {
   unverifiedCreationClaim,
 } from '@/lib/canvasTurnOutcome';
 import { founderCanvasSystemPrompt } from '@/lib/founderCanvasPrompt';
+import { CANVAS_STREAM_STALL_MS, CanvasStreamStalledError, streamBoundedByActivity } from '@/lib/canvasStreamWatchdog';
+import { canvasModeDirective } from '@/lib/canvasModeDirective';
 import type { CanvasNotices } from '@/lib/canvasNotices';
 
 type CanvasAiOptions = {
@@ -132,32 +134,6 @@ export interface CanvasAiCompletion {
   finishReason: string | null;
 }
 
-/**
- * The MODE block for a canvas turn.
- *
- * The Canvas is not a Brain chat — it has no `chatId`, so it cannot use the shared
- * `chatModeDirective` (whose whole contract is "tie this to chat #N"). What carries
- * over is the DISTINCTION: chat authors on the board and answers; work leaves a
- * tracked, dispatched ticket behind. Tool names are the ADVERTISED `builtin_*` names
- * the model is actually given — a catalog id here would name a tool that appears
- * nowhere in its tool list (see api/scripts/check-prompt-tool-names.mjs).
- */
-function canvasModeDirective(mode: ChatMode, projectId: number | null | undefined): string {
-  if (mode !== 'work') {
-    return 'MODE: CHAT. This session is a working conversation on the canvas. Author, refine and explain the objects the user asks for, and answer their questions. Do NOT create board tickets, assign owners, or dispatch agent runs as a side effect — unless the user explicitly asks for that in this message. If something clearly ought to be tracked as work, say so in one line and leave the decision to them.';
-  }
-  const target = projectId != null
-    ? `Use project ${projectId} unless the user names another.`
-    : 'This session is not bound to a project yet — ask which project the work belongs to before creating anything, and do not guess.';
-  return (
-    'MODE: WORK. This session exists to get something DONE, not only to draw it. Carry the work through to a running agent.\n'
-    + `• When the canvas work implies something that must actually happen, create the ticket with builtin_tasks_create (exactly one assignee, taskType "task", "epic" or "gap"). ${target}\n`
-    + '• Scope it before reporting success: builtin_kanban_participants for the template manifest, builtin_kanban_assess_resource for each role the description implies, then builtin_kanban_accountability, and report any unstaffed gaps plainly.\n'
-    + '• FINISH BY DISPATCHING. builtin_tasks_create and builtin_tasks_update return an `autoRun` verdict — read it. If `autoRun.dispatched` is true, name the agent that picked the work up. If it is false, start the work yourself with builtin_kanban_coordinate, which dispatches the next required role-capable participant. If dispatch is refused, report the EXACT reason the tool returned and what would clear it.\n'
-    + '• Never imply work has begun when nothing was dispatched, and never describe a tool call you did not make. Mirror the created ticket back onto the canvas with canvas_add_object so the board and the canvas agree.'
-  );
-}
-
 function specsFor(actions: BrainAction[]): BrainToolSpec[] {
   return actions.map((action) => ({
     type: 'function',
@@ -252,69 +228,6 @@ export function isCanvasRunAborted(error: unknown): boolean {
   if (error instanceof CanvasRunAbortedError) return true;
   if (error instanceof CanvasStreamStalledError) return false;
   return error instanceof Error && error.name === 'AbortError';
-}
-
-/**
- * A provider that accepted the request and then went silent.
- *
- * Distinct from {@link CanvasRunAbortedError} because the abort that ends it is OURS,
- * not the user's: both surface as an `AbortError` from the fetch layer, and treating a
- * stall as "you pressed Stop" would tell the user they cancelled a turn they were
- * waiting on.
- */
-class CanvasStreamStalledError extends Error {
-  constructor() {
-    super('canvas-stream-stalled');
-    this.name = 'CanvasStreamStalledError';
-  }
-}
-
-/**
- * No token, and no completion, for this long.
- *
- * A canvas turn had NO time bound of any kind — the only thing that could end an
- * in-flight request was the user pressing Stop. Measured 2026-08-15: a provider took
- * 134 seconds to return an empty completion, the loop dutifully asked it again, and the
- * board sat on "Reading" for four minutes with a spinner and no way to know anything
- * was wrong. The ceiling is generous because a long authoring response legitimately
- * streams for a while — but a stream that has produced NOTHING for over a minute is not
- * slow, it is gone.
- */
-const CANVAS_STREAM_STALL_MS = 75_000;
-
-/**
- * One model round-trip, bounded by inactivity.
- *
- * The timer is re-armed by every token, so length is never punished — only silence is.
- * The user's own signal is chained through so Stop keeps working exactly as before, and
- * is checked when the request rejects so a user stop is never reported as a stall.
- */
-async function streamBoundedByActivity(
-  request: Parameters<typeof streamChatCompletion>[0],
-  onTextDelta: (delta: string) => void,
-  userSignal: AbortSignal | undefined,
-): Promise<Awaited<ReturnType<typeof streamChatCompletion>>> {
-  const controller = new AbortController();
-  const stopRun = () => controller.abort();
-  userSignal?.addEventListener('abort', stopRun);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const arm = () => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(stopRun, CANVAS_STREAM_STALL_MS);
-  };
-  arm();
-  try {
-    return await streamChatCompletion({ ...request, signal: controller.signal }, {
-      onTextDelta: (delta) => { arm(); onTextDelta(delta); },
-    });
-  } catch (error) {
-    if (userSignal?.aborted) throw error;
-    if (controller.signal.aborted) throw new CanvasStreamStalledError();
-    throw error;
-  } finally {
-    if (timer) clearTimeout(timer);
-    userSignal?.removeEventListener('abort', stopRun);
-  }
 }
 
 export class GuestAiUnavailableError extends Error {
@@ -608,7 +521,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       : actions;
     let result: Awaited<ReturnType<typeof streamChatCompletion>>;
     try {
-      result = await streamBoundedByActivity({
+      result = await streamBoundedByActivity(streamChatCompletion, {
         transport,
         messages,
         tools: specsFor(availableActions),

@@ -170,6 +170,13 @@
      there, 7vw on the deck), so the page breathed unevenly as you scrolled. */
   --marketing-section-padding: clamp(76px, 9vw, 120px);
   --content-narrow: 720px;
+  /* The wide half of the same family. A reading column is 720; a page whose
+     content is a GRID of cards (co-founder matching) needs the room for three
+     of them and was reaching for `--content-wide` before it existed, which the
+     design-token guard catches as painting nothing at all. Narrower than
+     `--marketing-max` on purpose: that measure belongs to the marketing bands,
+     and an app page adopting it would inherit a marketing decision. */
+  --content-wide: 1080px;
   /* How much of the bottom of the screen the fixed mobile bar owns — zero above
      the breakpoint, where the bar is not rendered at all. Anything that has to
      clear it subtracts this unconditionally instead of repeating the media

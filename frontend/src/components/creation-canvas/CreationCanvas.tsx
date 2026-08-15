@@ -19,9 +19,14 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasDriveIcon, CanvasFilesIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, ThreeDIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasDriveIcon, CanvasFilesIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
-import { Canvas3DControlsProvider, useCanvas3DControls, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
+import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
+import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
+import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
+import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
+import { CanvasChatSurface } from './CanvasChatSurface';
+import { CanvasSurfaceProvider } from './canvasSurfaceContext';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
@@ -87,6 +92,7 @@ import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
 import { describeSocialFilter, socialApi, totalEngagement, type SocialCampaign, type SocialFeedFilter, type SocialFeedItem, type SocialNetwork } from '@/lib/socialApi';
 import { canvasSocialToolRedirect, isSocialNetworkName, socialCampaignNodeData, socialFeedPatch, socialPostNodeData, socialPostProjection } from '@/lib/canvasSocial';
+import { canvasMediaSource, isCanvasMediaKind, resolvePublicMediaUrls } from '@/lib/canvasPublicMedia';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
@@ -211,6 +217,8 @@ import { generateFixture } from '@/lib/canvasTestData';
 import * as qaApi from '@/lib/qa/api';
 import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
 import { canvasBuildActions, type BoundCanvasBuild } from '@/lib/canvasBuildTools';
+import { canvasFounderOpsActions } from '@/lib/canvasFounderOpsTools';
+import { sendInvestorUpdate } from '@/lib/founderOpsApi';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
 import { canvasWebPageUrl, isWebPageKind, normalizeWebPageUrl, webPageHost, webPageViewport } from '@/lib/canvasWebPage';
 import { deleteIdeProject, listIdeProjects } from '@/lib/api';
@@ -325,6 +333,12 @@ const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly stri
   // running a suite is `canvas_publish_tests`, and a kind that advertised `run` here
   // would produce the honest-but-useless "no delivery adapter" answer forever.
   testPlan: ['gate', 'export'], testCase: ['export'], testRun: ['export'], defect: ['export'],
+  // The monthly update, actually sent — over the SAME transports a campaign uses
+  // (platform sender, the tenant's connected mailbox, or their SendGrid
+  // connection). It stays a GATED action in `canvasApprovalGate`, so a model
+  // cannot fire it: what changed is that a human who approves it now gets a send
+  // instead of "no delivery adapter is connected".
+  investorUpdate: ['send'],
 };
 const WEBSITE_SECTION_SCHEMA = {
   type: 'object', required: ['id', 'kind'], additionalProperties: false,
@@ -866,12 +880,29 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [minimapOpen, setMinimapOpen] = useState(true);
   /**
-   * The 3D reading of this canvas. It replaces the flat board rather than
-   * floating over it — two live views of the same objects would compete for the
-   * same pointer, and the point of the mode is to read depth without distraction.
+   * WHICH SURFACE this canvas is being read through — the board, the 3D space, or the
+   * conversation. Every surface but the board replaces the flat view rather than
+   * floating over it: two live views of the same objects would compete for the same
+   * pointer, and the point of a surface is to read the work one way without distraction.
+   *
+   * ONE state, because it is one question. 3D used to keep its own boolean beside this
+   * (`useCanvasThreeD`, which the four other spatial canvases still use), and a second
+   * answer to "what am I looking at?" is a second control that can disagree with the
+   * first. The rail and the phone stack both drive THIS, and `data-view` publishes it to
+   * the stylesheet — see `lib/canvasSurfaces.ts`.
+   *
+   * A model comparison opens straight into the space: the whole point of running two
+   * models side by side is to read the results in depth.
    */
   const comparisonModelIds = useMemo(() => normalizeModelComparisonIds(initialModelComparisonIds), [initialModelComparisonIds]);
-  const threeD = useCanvasThreeD(comparisonModelIds.length >= 2);
+  const [surface, setSurfaceState] = useState<CanvasSurfaceId>(comparisonModelIds.length >= 2 ? 'scene3d' : 'graph');
+  const surfaceDef = canvasSurfaceDefinition(surface);
+  const setSurface = useCallback((next: CanvasSurfaceId) => {
+    setSurfaceState(next);
+    // The registry decides what is worth remembering — a PLACE the user chose, never a
+    // projection of the board they were already on.
+    writeCanvasSurface(next);
+  }, []);
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
   const [accountGate, setAccountGate] = useState<AccountGate | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -1305,6 +1336,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, []);
 
   useEffect(() => { setBrainDock(readBrainDockPreferences()); }, []);
+  /**
+   * The surface the visitor last chose to work on, restored after hydration rather than
+   * in the initial state — `localStorage` does not exist on the server, and a first
+   * render that disagreed with the markup would flash the wrong surface. A canvas opened
+   * FOR a model comparison keeps the space it was opened into; the stored preference is
+   * about where someone works, not about what a link asked for.
+   */
+  useEffect(() => {
+    if (comparisonModelIds.length >= 2) return;
+    setSurfaceState(readCanvasSurface());
+    // Mount only: this restores a preference, and re-running it would drag the visitor
+    // back out of whatever surface they have since switched to.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /**
    * Persist AND report the layout the user chose. The signal is what lets the
@@ -2623,6 +2668,27 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(t('objectAdded', { title: built.node.data.title }));
   }, [buildSocialFeedNode, canEdit, setNodes, t]);
 
+  /**
+   * The pictures on this board, for the composer's attachment picker.
+   *
+   * Derived here rather than inside the panel because the canvas owns the nodes —
+   * the same reason adding a tile is a callback. Only objects that actually HOLD a
+   * picture are offered: an `image` card whose generation has not finished has no
+   * source yet, and listing it would produce a post with nothing attached.
+   */
+  const boardMedia = useMemo(() => nodes.flatMap((node) => {
+    if (!isCanvasMediaKind(node.data.kind)) return [];
+    const source = canvasMediaSource(node.data);
+    if (!source) return [];
+    const thumbnail = typeof node.data.thumbnailUrl === 'string' && node.data.thumbnailUrl ? node.data.thumbnailUrl : source;
+    return [{
+      id: node.id,
+      title: String(node.data.title || node.data.kind),
+      source,
+      thumbnailUrl: thumbnail.startsWith('data:') || /^https?:\/\//i.test(thumbnail) ? thumbnail : null,
+    }];
+  }), [nodes]);
+
   const addSocialCampaignToBoard = useCallback((campaign: SocialCampaign) => {
     if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
     const data = socialCampaignNodeData(campaign);
@@ -3415,6 +3481,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * being a dependency of the memo that builds them — otherwise every object added
    * to the board would re-register all seven tools mid-turn.
    */
+  /** The board as the tool modules read it. Same reason as `boundBuildsRef`
+   *  directly below: a tool that closed over `nodes` would make every object
+   *  added to the board re-register the whole vocabulary mid-turn. */
+  const nodesRef = useRef<CreationFlowNode[]>([]);
+  nodesRef.current = nodes;
+
   const boundBuildsRef = useRef<BoundCanvasBuild[]>([]);
   boundBuildsRef.current = useMemo(() => {
     const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
@@ -3453,6 +3525,42 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     createBuild: createBuildForTool,
     onFilesChanged: notifyWorkspaceFilesChanged,
   }), [createBuildForTool]);
+
+  /**
+   * The founder-operations vocabulary — the counterparty and the one pipeline.
+   *
+   * Staged as PROPOSALS like every other authoring tool (unlike the build tools
+   * above, which commit): nothing here provisions a durable resource that a
+   * rejected proposal would orphan. `canvas_move_deal` is the exception worth
+   * naming — it writes a real deal — but the write it performs is in the CRM and
+   * is the user's stated intent; what gets staged is the board's redraw of it.
+   */
+  const canvasFounderOpsActionList = useMemo<BrainAction[]>(() => canvasFounderOpsActions({
+    hasTenant: persistence === 'server',
+    canEdit,
+    objects: () => {
+      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      return [...nodesRef.current, ...staged].map((node) => ({
+        id: node.id, kind: node.data.kind, title: node.data.title,
+        data: node.data as unknown as Record<string, unknown>,
+      }));
+    },
+    addObject: (kind, fields, at) => {
+      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const node = newNode(kind as CreationObjectKind, nextCanvasObjectPosition([...nodesRef.current, ...staged], at ?? {}, narrowViewport, kind as CreationObjectKind));
+      node.data = { ...node.data, ...sanitizeCreationObjectPatch(kind as CreationObjectKind, fields) } as CreationNodeData;
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: String(fields.title ?? node.data.title), node });
+      return { objectId: node.id };
+    },
+    updateObject: (objectId, patch, label) => {
+      const kind = nodesRef.current.find((node) => node.id === objectId)?.data.kind;
+      proposalBuffer.current.push({
+        id: crypto.randomUUID(), type: 'object.update', label, objectId,
+        patch: sanitizeCreationObjectPatch((kind ?? 'account') as CreationObjectKind, patch),
+      });
+    },
+  }), [canEdit, persistence]);
 
   const canvasActions = useMemo<BrainAction[]>(() => ([{
     name: 'canvas_prepare_executive_use_case',
@@ -5855,7 +5963,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           network: option.network,
           label: option.label,
           connected: option.connectedCount,
-          requiresMedia: option.requiresMedia,
+          publishMode: option.publishMode,
           // The non-secret ids three networks cannot post without. Naming them up
           // front is what stops a connection that looks fine from failing at publish.
           alsoNeeds: option.accountFields.map((field) => `${field.label} — ${field.help}`),
@@ -5998,7 +6106,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
      * post to a company's channels as a side effect of being asked to "write" a post.
      */
     name: 'canvas_create_social_campaign',
-    description: 'Draft a SOCIAL CAMPAIGN on the canvas — one announcement to be published to every connected account. This does NOT publish it; the tile shows the copy, each target account and any blockers, and canvas_publish_social_campaign is what makes it public. Use `variants` for per-network copy ({"x":"280 characters","linkedin":"a paragraph"}); an absent network falls back to `body`. Instagram and TikTok need `mediaUrls` (public https URLs) or they are skipped. Pass `scheduledAt` (ISO) to publish it later automatically.',
+    description: 'Draft a SOCIAL CAMPAIGN on the canvas — one announcement to be published to every connected account. This does NOT publish it; the tile shows the copy, each target account and any blockers, and canvas_publish_social_campaign is what makes it public. Use `variants` for per-network copy ({"x":"280 characters","linkedin":"a paragraph"}); an absent network falls back to `body`. Instagram cannot publish text alone: attach the picture with `mediaObjectIds` (canvas objects — the image this board already made) or `mediaUrls` (public https), or that account is skipped. Pass `scheduledAt` (ISO) to publish it later automatically.',
     parameters: {
       type: 'object', required: ['name', 'body'], additionalProperties: false,
       properties: {
@@ -6006,7 +6114,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         body: { type: 'string', description: 'The shared copy every network gets unless a variant overrides it.' },
         variants: { type: 'object', description: 'Per-network copy keyed by network id.' },
         linkUrl: { type: 'string', description: 'Destination URL appended to networks with no link field.' },
-        mediaUrls: { type: 'array', items: { type: 'string' }, description: 'Public https image or video URLs the networks fetch themselves.' },
+        mediaUrls: { type: 'array', items: { type: 'string' }, description: 'Public https image URLs the networks fetch themselves.' },
+        mediaObjectIds: { type: 'array', items: { type: 'string' }, description: 'Canvas objects whose picture should be attached — an image, mockup, chart or drawing already on this board. Prefer this over mediaUrls for anything the canvas made: the picture is published to a public URL for you, which is what Instagram needs.' },
         networks: { type: 'array', items: { type: 'string' }, description: 'Restrict targets to these networks. Omit to target every ready account.' },
         scheduledAt: { type: 'string', description: 'ISO instant to publish at. Omit to leave it a draft.' },
         x: { type: 'number' }, y: { type: 'number' },
@@ -6019,7 +6128,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (gated) return gated;
       const args = raw as {
         name?: string; body?: string; variants?: Record<string, string>; linkUrl?: string;
-        mediaUrls?: string[]; networks?: string[]; scheduledAt?: string; x?: number; y?: number;
+        mediaUrls?: string[]; mediaObjectIds?: string[]; networks?: string[]; scheduledAt?: string; x?: number; y?: number;
       };
       let accounts: Awaited<ReturnType<typeof socialApi.accounts>>;
       try {
@@ -6048,6 +6157,28 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         };
       }
 
+      // THE PICTURE THE BOARD ALREADY MADE, MADE FETCHABLE.
+      //
+      // Instagram does not receive media, it FETCHES it — with no session — so a
+      // campaign carrying the `data:` URI a generated image lives in was a target
+      // silently `skipped` with a blocker nobody could clear from the canvas. Both
+      // named objects and hand-passed urls go through the SAME resolver the social
+      // panel uses, so a campaign a model drafts and one a person composes attach
+      // the identical URL.
+      const mediaSources = [
+        ...(args.mediaObjectIds ?? []).map((id) => {
+          const node = nodes.find((candidate) => candidate.id === id)
+            ?? proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []).find((candidate) => candidate.id === id);
+          return node ? canvasMediaSource(node.data) : null;
+        }),
+        ...(Array.isArray(args.mediaUrls) ? args.mediaUrls.map(String) : []),
+      ].filter((value): value is string => !!value);
+      const missingObjects = (args.mediaObjectIds ?? []).filter((id) => {
+        const node = nodes.find((candidate) => candidate.id === id);
+        return !node || !canvasMediaSource(node.data);
+      });
+      const media = await resolvePublicMediaUrls(mediaSources, { name: String(args.name ?? 'Campaign image') });
+
       let created: Awaited<ReturnType<typeof socialApi.createCampaign>>;
       try {
         created = await socialApi.createCampaign({
@@ -6056,7 +6187,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           connectionIds: targets,
           ...(args.variants ? { variants: args.variants as Partial<Record<SocialNetwork, string>> } : {}),
           ...(args.linkUrl ? { linkUrl: args.linkUrl } : {}),
-          ...(Array.isArray(args.mediaUrls) ? { mediaUrls: args.mediaUrls.map(String) } : {}),
+          ...(media.urls.length ? { mediaUrls: media.urls } : {}),
           ...(args.scheduledAt ? { scheduledAt: args.scheduledAt } : {}),
           // ONLY A SAVED SESSION. `social_campaigns.session_id` is a uuid FK to
           // `creation_sessions`, and an unsaved board's id is the literal string
@@ -6086,6 +6217,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         accounts: created.campaign.posts.map((post) => `${post.network} · ${post.accountName}`),
         blockers: created.campaign.blockers,
         scheduled: created.campaign.scheduledAtISO,
+        ...(media.urls.length ? { mediaUrls: media.urls } : {}),
+        // Reported rather than thrown: one unusable picture must not lose the
+        // campaign, and the model has to be able to say WHICH one and why —
+        // "Instagram was skipped" with no reason is the answer this replaces.
+        ...(media.problems.length ? { mediaProblems: media.problems } : {}),
+        ...(missingObjects.length ? { mediaObjectsWithoutPictures: missingObjects } : {}),
       };
     },
   }, {
@@ -7029,8 +7166,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(projectId == null ? { note: 'Published without a project. Add a project object to the canvas to file these under it, which is what gives them a run target and a persona.' } : {}),
       };
     },
-  }, ...canvasBuildActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [canEdit, canvasBuildActionList, convertObjectToDrawio, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
+  }, ...canvasBuildActionList, ...canvasFounderOpsActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
+  [canEdit, canvasBuildActionList, canvasFounderOpsActionList, convertObjectToDrawio, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -8232,6 +8369,60 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(t('noticeGateEvaluated', { score: verdict.score }));
   }, [edges, nodes, setNodes, t]);
 
+  /**
+   * `investorUpdate.send`, with a delivery behind it.
+   *
+   * The act stays GATED (`canvasApprovalGate.GATED_ACTIONS`), so a model still
+   * cannot fire it — what changed is that a human who approves it now gets a send
+   * rather than "no delivery adapter is connected".
+   *
+   * Recipients come from the object's own `recipients` rows and from NOWHERE
+   * else. Harvesting addresses out of a `fundingRound`'s investor table would be
+   * the convenient version and the wrong one: those rows carry firm names, not
+   * consent to be emailed, and the failure mode of guessing is a private update
+   * reaching a stranger. An update with no recipients says so and sends nothing.
+   */
+  const sendUpdateToInvestors = useCallback(async (objectId: string) => {
+    const target = nodesRef.current.find((node) => node.id === objectId && node.data.kind === 'investorUpdate');
+    if (!target) return;
+    if (persistence !== 'server') { setNotice(t('noticeInvestorUpdateNeedsAccount')); return; }
+
+    const recipients = (Array.isArray(target.data.recipients) ? target.data.recipients : [])
+      .flatMap((row) => {
+        const entry = row as { name?: unknown; email?: unknown };
+        const email = typeof entry.email === 'string' ? entry.email.trim() : '';
+        return email.includes('@') ? [{ email, name: typeof entry.name === 'string' ? entry.name : null }] : [];
+      });
+    if (!recipients.length) { setNotice(t('noticeInvestorUpdateNoRecipients')); return; }
+
+    try {
+      const result = await sendInvestorUpdate({
+        content: {
+          title: target.data.title,
+          period: target.data.period ?? null,
+          highlights: target.data.highlights ?? [],
+          lowlights: target.data.lowlights ?? [],
+          metrics: target.data.metrics ?? [],
+          asks: target.data.asks ?? [],
+          summary: target.data.summary ?? null,
+        },
+        recipients,
+        objectId: null,
+      });
+      // Stamped onto the card, so "did this go out, and to how many" survives the
+      // notice being dismissed — the register's complaint about an act that ends
+      // at a card applies just as well to an act that ends at a toast.
+      setNodes((current) => current.map((node) => node.id === objectId
+        ? { ...node, data: { ...node.data, status: `Sent to ${result.sent}`, sentAt: new Date().toISOString() } }
+        : node));
+      setNotice(result.failed.length
+        ? t('noticeInvestorUpdatePartial', { sent: result.sent, failed: result.failed.length })
+        : t('noticeInvestorUpdateSent', { sent: result.sent, from: result.fromLabel }));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : t('noticeInvestorUpdateFailed'));
+    }
+  }, [persistence, setNodes, t]);
+
   useEffect(() => {
     const pending = pendingBrainActions[0];
     if (!pending) return;
@@ -8260,6 +8451,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else if (target.data.kind === 'evermind' && pending.action === 'train') openEvermindTraining();
     else if (target.data.kind === 'evermind' && pending.action === 'evaluate') evaluateEvermind(target.id);
     else if (target.data.kind === 'testPlan' && pending.action === 'gate') evaluateReleaseGate(target.id);
+    else if (target.data.kind === 'investorUpdate' && pending.action === 'send') void sendUpdateToInvestors(target.id);
     else if (pending.action === 'export') void exportArtifact(target.id, defaultExportAction(target.data.kind)).then(setNotice);
     else if (target.data.kind === 'slides' && pending.action === 'present') setPresentMode(true);
     else if (target.data.kind === 'evermind' && pending.action === 'publish') {
@@ -8270,7 +8462,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('noticeNoDeliveryAdapter', { action: pending.action, kind: creationObjectDefinition(target.data.kind).label }));
     }
     finish();
-  }, [compareProjects, compileWorkflow, deliverMockup, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
+  }, [compareProjects, compileWorkflow, deliverMockup, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, sendUpdateToInvestors, setEdges, setNodes, startStandup, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
@@ -8664,15 +8856,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   /**
    * Where the ONE Brain surface actually renders.
    *
-   * Inline means "inside the Brain Object on the graph" — and the 3D view replaces
-   * the flat board rather than floating over it, so while it is up there is no
-   * Object to render into and an inline Brain simply vanished: no transcript, no
-   * tabs, no controls, and nothing on screen offering a way back to it. The 3D
-   * reading therefore places the surface on the edge, which is the placement that
-   * survives losing the board. The stored preference is untouched, so leaving 3D
+   * Inline means "inside the Brain Object on the graph" — and every surface but the
+   * board replaces the flat view rather than floating over it, so while one is up there
+   * is no Object to render into and an inline Brain simply vanished: no transcript, no
+   * tabs, no controls, and nothing on screen offering a way back to it. A boardless
+   * surface therefore places Brain on the edge, which is the placement that survives
+   * losing the board. The stored preference is untouched, so coming back to the board
    * puts Brain back in its Object.
+   *
+   * The exception is the surface that IS the conversation: it renders the transcript
+   * itself, so the edge dock stands down entirely rather than putting the same live
+   * conversation on screen twice — see `brainIsSurface` below.
    */
-  const brainPlacement: BrainDockMode = threeD.active ? 'docked' : brainDock.mode;
+  const brainPlacement: BrainDockMode = surfaceDef.showsBoard ? brainDock.mode : 'docked';
   // An inline Brain IS an Object on the board, so only a docked one is reserved.
   const brainDockReserved = brainDockReservedWidth({ ...brainDock, mode: brainPlacement });
   const brainMessages = useMemo<BrainMessage[]>(() => timeline.map((message, index) => ({
@@ -8883,6 +9079,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   </div>;
 
   return (
+    // Published to the whole shell, not just the board: the Brain surface's controls
+    // render in three places and each needs the same answer to "is there a board to move
+    // this conversation into?". One provider, read where it is needed.
+    <CanvasSurfaceProvider value={surface}>
     <div
       ref={shellRef}
       className={`${styles.canvasShell} app-full-height`}
@@ -9043,7 +9243,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // board controls off that edge from this, not from the side. An inline Brain
         // is an Object on the board and takes no edge, so it must not set this.
         data-brain-open={brainSurfaceOpen && brainPlacement === 'docked' ? 'true' : 'false'}
-        data-view={threeD.active ? '3d' : 'flat'}
+        // The active surface, published to the stylesheet. It keys on "not the board"
+        // rather than on any single id, so a new runtime suppresses the flat viewport,
+        // the palette and the remote cursors without a new rule being written for it.
+        data-view={surface}
         data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragEnter={onCanvasDragEnter} onDragLeave={onCanvasDragLeave} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
         {fileDragging && <div className={styles.fileDropOverlay} role="status" aria-live="polite">
           <div>
@@ -9122,14 +9325,25 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             showInteractive={false}
             minimapNodeColor={minimapColor as (node: Node) => string}
             minimapMaskColor="var(--creation-minimap-mask, rgba(244,248,253,.72))"
-            {...threeD.commandProps}
+            // What this prop actually gates on the shared rail is "the flat board is not
+            // what is being drawn": it stands the zoom / fit / interactive commands and
+            // the mini map down, and lets whatever surface IS drawn publish its own
+            // commands in their place (the 3D scene does; the conversation has none). So
+            // it reads the board flag, not the 3D id — which is what makes the rail
+            // correct on the chat surface without a second rule.
+            threeDActive={!surfaceDef.showsBoard}
+            // `onToggleThreeD` is deliberately NOT passed: it would draw a second control
+            // for the decision the surface switcher below already owns.
             extraControls={<>
+              {/* Which surface this canvas is read through. One control for one
+                  decision — the same component drives the phone-sized stack. */}
+              <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="rail" />
               {/* Pan vs marquee. A one-finger (or left-button) drag can only do one of
                   them, so the choice is explicit rather than inferred — and making it
                   explicit is what gives touch a marquee at all, since the modifier-key
-                  route it used to need does not exist on a phone. Hidden in 3D, where
-                  the scene owns its own navigation. */}
-              {!threeD.active && <CanvasRailToggle
+                  route it used to need does not exist on a phone. Offered only on the
+                  flat board: every other surface owns its own navigation. */}
+              {surfaceDef.showsBoard && <CanvasRailToggle
                 pressed={canvasGesture === 'select'}
                 onClick={() => setCanvasGesture((current) => (current === 'select' ? 'pan' : 'select'))}
                 label={t('canvasGestureToggle')}
@@ -9172,7 +9386,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button type="button" onClick={zoomOutAction} aria-label={t('zoomOut')}><ZoomOutIcon /></button>
           <button type="button" onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>{threeDControls ? <ResetViewIcon /> : <FitViewIcon />}</button>
           <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')}><CleanLayoutIcon /></button>
-          <button type="button" onClick={threeD.toggle} aria-pressed={threeD.active} aria-label={tCommands('threeD.toggle')}><ThreeDIcon /></button>
+          <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="mobile" />
           {threeDControls && <button type="button" onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')}><DepthIcon /></button>}
           {threeDControls && <button type="button" onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')}><LayerGuidesIcon /></button>}
           {threeDControls?.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
@@ -9182,17 +9396,48 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button type="button" onClick={() => setOutlineOpen((value) => !value)} aria-pressed={outlineOpen} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
         </div>
 
-        {threeD.active && <Canvas3DView
-          nodes={threeDNodes}
-          edges={edges}
-          describe={describeThreeD}
-          measure={canvasNodeDimensions}
-          selectedIds={effectiveSelectedIds}
-          onSelect={selectThreeDObject}
-          onMove={canEdit ? moveThreeDObjects : undefined}
-          onExit={threeD.exit}
-          initialDepthMode={comparisonModelIds.length >= 2 ? 'group' : 'flow'}
-        />}
+        {/* The runtime that takes the centre. The board itself is not in the map — it is
+            the React Flow tree above, rendered unconditionally so the viewport, the
+            selection and every node's state survive a trip through another surface and
+            back. Adding a runtime is a key here plus an entry in `canvasSurfaces.ts`. */}
+        <CanvasSurfaceRouter
+          surface={surface}
+          surfaces={{
+            scene3d: <Canvas3DView
+              nodes={threeDNodes}
+              edges={edges}
+              describe={describeThreeD}
+              measure={canvasNodeDimensions}
+              selectedIds={effectiveSelectedIds}
+              onSelect={selectThreeDObject}
+              onMove={canEdit ? moveThreeDObjects : undefined}
+              onExit={() => setSurface('graph')}
+              initialDepthMode={comparisonModelIds.length >= 2 ? 'group' : 'flow'}
+            />,
+            // The zero-object case of this canvas: the same transcript, the same
+            // composer, no board. Objects Brain creates during the conversation land on
+            // the board behind it, which is what the footer's live count offers.
+            chat: <CanvasChatSurface
+              showExecutionDetail={brainDock.showExecutionDetail}
+              onExecutionDetailChange={(showExecutionDetail) => updateBrainDock({ showExecutionDetail })}
+              onOpenBoard={() => setSurface('graph')}
+              objectCount={nodes.length}
+              messages={brainMessages}
+              trace={brainTrace}
+              running={thinking}
+              runStartedAt={brainRunStartedAt}
+              node={brainNode}
+              nodes={nodes}
+              edges={edges}
+              collaborators={brainCollaborators}
+              joinedCollaborator={joinedCollaborator}
+              onReplayMessage={replayBrainMessage}
+              onRateMessage={brainSurface.onRateMessage}
+              ratings={brainSurface.ratings}
+              guestSignup={guestSignupPrompt}
+            />,
+          }}
+        />
 
         <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />
         {filesOpen && <CanvasFilesPanel
@@ -9230,6 +9475,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {socialOpen && <CanvasSocialPanel
           onAddFeed={addSocialFeedToBoard}
           onAddCampaign={addSocialCampaignToBoard}
+          boardMedia={boardMedia}
           onClose={() => setSocialOpen(false)}
         />}
         {outlineOpen && <CanvasOutlinePanel
@@ -9323,10 +9569,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>{t('reviewBrainChanges')}</strong><small>{t('reviewBrainChangesHint')}</small></div><button onClick={rejectProposedChanges} aria-label={t('closeChangeSet')}>×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>{t('rejectAll')}</button><button className={styles.secondaryButton} disabled={!acceptedProposalIds.size} onClick={applyAndEnableAutoApply} title={t('applyAutoApplyHint')}>{t('applyAutoApply')}</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>{t('applySelected', { count: acceptedProposalIds.size })}</button></footer></aside>}
         {mergeReview && <aside className={styles.mergePanel}><header><div><strong>{t('mergeBranch')}</strong><p>{t('mergeBranchHint')}</p></div><button onClick={() => setMergeReview(null)} aria-label={t('closeMergeReview')}>×</button></header>{mergeReview.items.map((item) => <label key={item.key}><b>{item.source.data.title}</b><small>{item.target ? t('mergeBothContain', { kind: item.source.data.kind }) : t('mergeNewFromBranch', { kind: item.source.data.kind })}</small>{item.target && <span><select aria-label={t('mergeChoiceFor', { title: item.source.data.title })} value={item.choice} onChange={(event) => setMergeReview((current) => current ? { ...current, items: current.items.map((candidate) => candidate.key === item.key ? { ...candidate, choice: event.target.value as 'branch' | 'parent' } : candidate) } : current)}><option value="branch">{t('useBranchVersion')}</option><option value="parent">{t('keepParentVersion')}</option></select></span>}</label>)}<button className={styles.primaryButton} onClick={applyMerge}>{t('applyReviewedMerge')}</button></aside>}
 
-        {/* Docked ONLY. An inline Brain renders inside its Object on the graph, so
-            rendering the edge panel here too would put the same live conversation on
-            screen twice — the duplicate this placement model exists to prevent. */}
-        {brainSurfaceOpen && brainPlacement === 'docked' && <BrainDock
+        {/* Docked ONLY. An inline Brain renders inside its Object on the graph, and a
+            surface that IS the conversation renders it full-bleed, so rendering the edge
+            panel alongside either would put the same live conversation on screen twice —
+            the duplicate this placement model exists to prevent. */}
+        {brainSurfaceOpen && brainPlacement === 'docked' && !surfaceDef.brainIsSurface && <BrainDock
           mode={brainPlacement}
           side={brainDock.side}
           size={brainDock.size}
@@ -9358,7 +9605,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             the board already offers one ("Open Brain chat"), so the pill would be a
             second control for the same thing — it appears only when there is no Object
             to click, which is exactly when the board has no other route back. */}
-        {!presentMode && !brainDock.open && (brainPlacement === 'docked' || !brainNode) && <button
+        {!presentMode && !brainDock.open && !surfaceDef.brainIsSurface && (brainPlacement === 'docked' || !brainNode) && <button
           type="button"
           className={styles.brainDockLauncher}
           data-side={brainDock.side}
@@ -9388,6 +9635,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         onStepChange={prepareTourStep}
       />
     </div>
+    </CanvasSurfaceProvider>
   );
 }
 

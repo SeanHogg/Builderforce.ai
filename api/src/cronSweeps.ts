@@ -40,6 +40,7 @@ import { runReleaseDigest } from './application/email/releaseDigest';
 import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { runCampaignSendSweep } from './application/marketing/campaignEngine';
+import { runAdInsightsSweep } from './application/advertising/adInsightsSync';
 import { runSocialCampaignSweep } from './application/social/socialCampaignService';
 import { runMailboxAutomationSweep } from './application/mailbox/mailboxAutomationService';
 import { runCustomDomainSweep } from './application/ide/customDomain';
@@ -344,6 +345,17 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       const r = await runSocialCampaignSweep(env, buildDatabase(env));
       return r.published > 0 || r.failed > 0
         ? `campaigns=${r.campaigns} published=${r.published} failed=${r.failed}`
+        : null;
+    },
+  },
+  {
+    key: 'ad-insights',
+    cadence: 'daily',
+    description: 'Pull campaigns and daily spend/result delivery from every connected ad network.',
+    run: async ({ env }) => {
+      const r = await runAdInsightsSweep(env, buildDatabase(env));
+      return r.daysWritten > 0 || r.failed > 0
+        ? `tenants=${r.tenants} accounts=${r.accounts} days=${r.daysWritten} failed=${r.failed}`
         : null;
     },
   },

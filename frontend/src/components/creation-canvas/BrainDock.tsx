@@ -7,7 +7,6 @@ import '@seanhogg/builderforce-brain-ui/styles.css';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
-import { useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { useModelIdentity } from '@/lib/useLlmModels';
 import { Icon } from '@/components/ui/Icon';
 import type { Edge } from '@xyflow/react';
@@ -16,6 +15,7 @@ import { creationObjectDefinition } from './creationObjectRegistry';
 import type { CreationFlowNode } from './CreationNode';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
 import type { BrainSurfaceCollaborator } from './brainSurfaceContext';
+import { useCanvasSurfaceDefinition } from './canvasSurfaceContext';
 import {
   BRAIN_DOCK_MAX_WIDTH,
   BRAIN_DOCK_MIN_WIDTH,
@@ -203,12 +203,12 @@ export function BrainSurfaceActions({
   const inline = mode === 'inline';
   const expanded = size === 'expanded';
   const docked = !inline && !!side && !!onSideChange && !!onSizeChange;
-  // Read, not passed in: the scene publishes its commands here for as long as it is
-  // on screen, so the surface can tell for itself that the board it would move INTO
-  // is not being drawn. Offering "show this in the Brain Object" while the 3D view
-  // has replaced the board is a control that hides the conversation and gives back
-  // nothing, so it is simply not offered until the board is there again.
-  const spatial = useCanvas3DControls() != null;
+  // Read, not passed in: the canvas publishes which surface it is drawing, so this
+  // control can tell for itself that the board it would move INTO is not on screen.
+  // Offering "show this in the Brain Object" while a 3D scene — or the conversation
+  // surface itself — has taken the centre is a control that hides the chat and gives
+  // back nothing, so it is simply not offered until the board is there again.
+  const boardAvailable = useCanvasSurfaceDefinition().showsBoard;
 
   return (
     <div className={styles.brainDockActions}>
@@ -219,7 +219,7 @@ export function BrainSurfaceActions({
         title={showExecutionDetail ? t('hideExecutionSteps') : t('showExecutionSteps')}
         onClick={() => onExecutionDetailChange(!showExecutionDetail)}
       >⋮⋮</button>
-      {!spatial && <button
+      {boardAvailable && <button
         type="button"
         aria-pressed={inline}
         aria-label={inline ? t('dockBrainToEdge') : t('showBrainInObject')}

@@ -164,7 +164,7 @@ describe('Instagram', () => {
     const { call } = calls({});
     await expect(instagram.publish(call, { igUserId: '42' }, { text: 'No picture' }, identity()))
       .rejects.toMatchObject({ retryable: false, status: 400 });
-    expect(instagram.requiresMedia).toBe(true);
+    expect(instagram.publishMode).toBe('media');
   });
 });
 

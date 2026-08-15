@@ -20,7 +20,7 @@ const read = (items: SocialFeedItem[]): SocialFeedRead => ({
   items,
   accounts: [{
     id: 'c1', network: 'x', networkLabel: 'X', name: 'Acme X', enabled: true, ready: true,
-    missingFields: [], requiresMedia: false, lastTestOk: true, lastUsedAt: null,
+    missingFields: [], publishMode: 'text', lastTestOk: true, lastUsedAt: null,
   }],
   errors: [],
   fetchedAtISO: '2026-08-12T10:00:00.000Z',

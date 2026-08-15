@@ -415,6 +415,13 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       { name: 'lowlights', render: 'list', label: 'lowlights', hint: 'What did not. An update with no lowlights is not read as good news, it is read as unreliable.' },
       { name: 'metrics', render: 'rows', label: 'metrics', columns: ['metric', 'value', 'previous', 'change'], hint: 'The standing numbers: {metric, value, previous, change}. Same metrics every period, including the ones that got worse.' },
       { name: 'asks', render: 'chips', label: 'asks', hint: 'Specific, actionable requests — an intro to a named company, a hire, a customer reference.' },
+      {
+        name: 'recipients',
+        render: 'rows',
+        label: 'recipients',
+        columns: ['name', 'email'],
+        hint: 'Who this goes to: {name, email}. REQUIRED for `send` to do anything — an update with no addresses is a document. Take them from the `fundingRound` investors on this board; never invent an address, because the failure mode is a private update reaching a stranger.',
+      },
       SUMMARY_FIELD,
     ],
   },
@@ -593,14 +600,13 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
         columns: ['name', 'role', 'email', 'notes'],
         hint: 'The people at this account: {name, role, email, notes}. `role` is what they DO in a deal — economic buyer, champion, blocker, user — not their job title, because the title is on their business card and the role is what a next step depends on.',
       },
-      {
-        name: 'history',
-        render: 'rows',
-        label: 'history',
-        columns: ['record', 'reference', 'status', 'amount', 'date'],
-        derived: true,
-        hint: 'This account\'s own record from the workspace — open invoices, unpaid bills, the live contract and its renewal — written by canvas_sync_account from the domains that already hold them. READ-ONLY: never author a row here, because an invented receivable is a number somebody will chase a real company for.',
-      },
+      // NOT DECLARED: `history` — this account's open invoices, live contract and
+      // renewal, projected from the domains that already hold them. It is the
+      // obvious next field and it is deliberately absent, because declaring one
+      // with no producer is the defect this vocabulary is meant to avoid: the
+      // academic set has nineteen `derived: true` cells that nothing ever writes,
+      // and the card shows the section only when a human types into it. A field
+      // arrives with its writer or it does not arrive.
       SUMMARY_FIELD,
       SOURCES_FIELD,
     ],

@@ -76,11 +76,13 @@ export interface AnalyticsProvider {
   source: AnalyticsSource;
   label: string;
   connectorKey: string;
-  propertyFields: readonly AnalyticsPropertyField[];
   /** The measures this platform actually reports. */
   measures: readonly AnalyticsMeasure[];
   /** The dimensions this platform can break down by. */
   dimensions: readonly AnalyticsDimension[];
+  /** Named `accountFields` rather than `propertyFields` because that is the contract
+   *  `connectedAccounts` reads; the public view still calls them property fields. */
+  accountFields: readonly AnalyticsPropertyField[];
   /** Totals over the window. */
   summary(call: AnalyticsCall, fields: Record<string, string>, query: AnalyticsQuery): Promise<AnalyticsMeasures>;
   /** The window, day by day. */
@@ -200,7 +202,7 @@ const ga4: AnalyticsProvider = {
   source: 'ga4', label: 'Google Analytics 4', connectorKey: 'google-analytics-4',
   measures: ['sessions', 'users', 'pageviews', 'conversions', 'revenueCents'],
   dimensions: ['channel', 'campaign', 'page', 'country'],
-  propertyFields: [{ key: 'propertyId', label: 'GA4 property ID', help: 'The numeric property this connection reports on.' }],
+  accountFields: [{ key: 'propertyId', label: 'GA4 property ID', help: 'The numeric property this connection reports on.' }],
 
   async summary(call, fields, query) {
     const propertyId = requireField(fields, 'propertyId', 'the GA4 property ID');
@@ -270,7 +272,7 @@ const searchConsole: AnalyticsProvider = {
   // conversion, and saying so is more useful than reporting zero for both.
   measures: ['clicks', 'impressions'],
   dimensions: ['query', 'page', 'country'],
-  propertyFields: [{ key: 'siteUrl', label: 'Property URL', help: 'sc-domain:example.com, or the exact https://example.com/ URL prefix.' }],
+  accountFields: [{ key: 'siteUrl', label: 'Property URL', help: 'sc-domain:example.com, or the exact https://example.com/ URL prefix.' }],
 
   async summary(call, fields, query) {
     const siteUrl = requireField(fields, 'siteUrl', 'the property URL');
@@ -334,7 +336,7 @@ const plausible: AnalyticsProvider = {
   source: 'plausible', label: 'Plausible Analytics', connectorKey: 'plausible',
   measures: ['sessions', 'users', 'pageviews', 'conversions'],
   dimensions: ['channel', 'campaign', 'page', 'country'],
-  propertyFields: [{ key: 'siteId', label: 'Site ID', help: 'The domain exactly as it is registered in Plausible.' }],
+  accountFields: [{ key: 'siteId', label: 'Site ID', help: 'The domain exactly as it is registered in Plausible.' }],
 
   async summary(call, fields, query) {
     const siteId = requireField(fields, 'siteId', 'the site ID');
@@ -410,7 +412,7 @@ const posthog: AnalyticsProvider = {
   // PostHog counts events and people, not sessions in the GA sense.
   measures: ['users', 'pageviews', 'conversions'],
   dimensions: ['channel', 'campaign', 'page', 'country'],
-  propertyFields: [{ key: 'projectId', label: 'Project ID', help: 'The numeric PostHog project this connection reads.' }],
+  accountFields: [{ key: 'projectId', label: 'Project ID', help: 'The numeric PostHog project this connection reads.' }],
 
   async summary(call, fields, query) {
     const projectId = requireField(fields, 'projectId', 'the project ID');

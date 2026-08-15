@@ -27,13 +27,15 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { adCampaigns, adInsights } from '../../infrastructure/database/schema';
+import { adCampaigns, adInsights, connectorConnections } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
   readAccountCampaignsLive, readAdInsights, resolveSpendableAccounts, type ResolvedAdAccount,
 } from './adsService';
-import { AdsProviderError, type AdCampaignRemote, type AdNetwork } from './adsProviders';
+import {
+  ADS_CONNECTOR_KEYS, AdsProviderError, type AdCampaignRemote, type AdNetwork,
+} from './adsProviders';
 
 /**
  * How many days back each sweep re-reads.
@@ -205,4 +207,41 @@ export async function syncTenantAdInsights(
     results.push(await syncAdAccount(db, env, tenantId, account, now));
   }
   return results;
+}
+
+/**
+ * The scheduled sweep: sync every workspace that has a connected ad account.
+ *
+ * DAILY rather than frequent, deliberately. Ad networks report on a daily grain and
+ * restate for days afterwards, so a five-minute cadence would re-read the same
+ * unchanged days ~288 times, spending upstream rate limit and Neon writes against a
+ * budget that has to stay under $5/month — for numbers that cannot have moved.
+ *
+ * Tenants are discovered from the connections themselves rather than from a tenant
+ * list: a workspace with no ad account is not work, and iterating every tenant to
+ * discover that would be the expensive half of the sweep.
+ */
+export async function runAdInsightsSweep(
+  env: Env, db: Db, now = new Date(),
+): Promise<{ tenants: number; accounts: number; daysWritten: number; failed: number }> {
+  const rows = await db
+    .selectDistinct({ tenantId: connectorConnections.tenantId })
+    .from(connectorConnections)
+    .where(and(
+      inArray(connectorConnections.connectorKey, [...ADS_CONNECTOR_KEYS]),
+      eq(connectorConnections.enabled, true),
+    ));
+
+  let accounts = 0;
+  let daysWritten = 0;
+  let failed = 0;
+  for (const row of rows) {
+    // Serial across tenants for the same reason it is serial within one: a Worker has
+    // a bounded subrequest allowance, and a fan-out would spend it in the first tenant.
+    const results = await syncTenantAdInsights(db, env, row.tenantId, now);
+    accounts += results.length;
+    daysWritten += results.reduce((total, result) => total + result.daysWritten, 0);
+    failed += results.filter((result) => result.error).length;
+  }
+  return { tenants: rows.length, accounts, daysWritten, failed };
 }

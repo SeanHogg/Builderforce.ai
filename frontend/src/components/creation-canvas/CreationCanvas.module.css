@@ -298,15 +298,15 @@
    (and the mini map close) clickable. Remote cursors are hidden too:they are
    projected from the 2D viewport and would float over the scene pointing at
    nothing. */
-.flowWrap[data-view='3d'] :global(.react-flow) { z-index:9 !important; pointer-events:none; background:transparent; }
-/* The palette drops objects onto the flat board, so it stands down in 3D rather
-   than sitting on top of the scene's own heading. */
-.flowWrap[data-view='3d'] .paletteToggle,
-.flowWrap[data-view='3d'] .palette { display:none; }
-.flowWrap[data-view='3d'] :global(.react-flow__viewport),
-.flowWrap[data-view='3d'] :global(.react-flow__background),
-.flowWrap[data-view='3d'] .remoteCursors { display:none; }
-.flowWrap[data-view='3d'] :global(.react-flow__controls) { pointer-events:auto; }
+.flowWrap:not([data-view='graph']) :global(.react-flow) { z-index:9 !important; pointer-events:none; background:transparent; }
+/* The palette drops objects onto the flat board, so it stands down whenever a surface
+   has taken the centre rather than sitting on top of that surface's own heading. */
+.flowWrap:not([data-view='graph']) .paletteToggle,
+.flowWrap:not([data-view='graph']) .palette { display:none; }
+.flowWrap:not([data-view='graph']) :global(.react-flow__viewport),
+.flowWrap:not([data-view='graph']) :global(.react-flow__background),
+.flowWrap:not([data-view='graph']) .remoteCursors { display:none; }
+.flowWrap:not([data-view='graph']) :global(.react-flow__controls) { pointer-events:auto; }
 /* Centred on the OPEN board, not on the viewport:with Brain docked to one edge a
    plain 50% puts the actions for the thing you just selected underneath it. Same
    arithmetic as the composer, which centres on the board the dock leaves behind. */
@@ -1513,6 +1513,14 @@
 .socialTargetPicker legend { padding:0 4px; color:var(--canvas-ink-soft); font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
 .socialTargetPicker label { display:flex; align-items:center; gap:6px; color:var(--canvas-ink); font-size:11px; }
 .socialTargetPicker input { width:auto; min-height:0; }
+.socialTargetPicker small { color:var(--canvas-muted); font-size:10px; }
+/* The picker's whole point is seeing WHICH picture. Sized so a row stays one
+   line at the panel's narrowest, and `object-fit` so a wide render is cropped
+   rather than squashed into something that no longer looks like itself. */
+.socialMediaThumb {
+  width:26px; height:26px; flex:none; object-fit:cover;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel);
+}
 
 .filesList { margin:0; padding:6px; list-style:none; display:grid; gap:3px; }
 .fileRow { display:flex; align-items:center; gap:4px; border-radius:var(--radius-md); }
@@ -1554,6 +1562,27 @@
    right) so no other panel can sit underneath it. Floating it is a small card ON the
    canvas that reserves nothing. Either way the user drags it to any width, which
    arrives as an inline --brain-dock-size. */
+/* The conversation AS the canvas — the zero-object surface.
+   z-index 7 puts it exactly where the 3D scene sits: under the React Flow root, which
+   the rule above raises to 9 with pointer events off so the command rail inside it
+   (and therefore the surface switcher that gets you back) stays on top and clickable.
+   The bottom band is the composer's, read from the same measured `--composer-space`
+   every other low-sitting panel clears, so the transcript can never scroll underneath
+   the prompt. Colours are the Brain surface tokens the board declares for BOTH themes
+   (see `canvasOwnsItsPalette`), so nothing here is theme-specific. */
+.chatSurface { position:absolute; z-index:7; inset:0; box-sizing:border-box; display:flex; flex-direction:column; padding-bottom:var(--composer-space); background:var(--canvas-board-background); color:var(--canvas-ink); }
+.chatSurfaceHeader { display:flex; flex:none; align-items:center; gap:8px; width:min(100%,var(--chat-surface-width,760px)); margin:0 auto; padding:12px 16px 10px; }
+.chatSurfaceHeader strong { flex:1; min-width:0; overflow:hidden; color:var(--canvas-ink); font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+/* One measure for the reading column, so the transcript, the header and the footer are
+   the same width and the eye has one left edge to return to. */
+.chatSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; width:min(100%,var(--chat-surface-width,760px)); margin:0 auto; padding:0 6px; }
+.chatSurfaceFooter { flex:none; display:flex; justify-content:center; width:min(100%,var(--chat-surface-width,760px)); margin:0 auto; padding:6px 16px 10px; }
+.chatSurfaceFooter button { display:inline-flex; align-items:center; gap:7px; min-height:34px; padding:7px 14px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); background:var(--canvas-brain-surface); color:var(--canvas-brain-accent); font:650 11px var(--font-sans); cursor:pointer; }
+.chatSurfaceFooter button:hover,.chatSurfaceFooter button:focus-visible { border-color:var(--canvas-brain-accent); background:var(--canvas-hover); outline:none; }
+/* The phone-sized surface stack. Plain buttons rather than rail controls, sized by the
+   same rules as every other command in `.mobileCanvasActions`. */
+.surfaceSwitcherButton { display:grid; place-items:center; padding:0; border:0; background:transparent; color:inherit; cursor:pointer; }
+
 .brainDock { position:absolute; z-index:17; top:0; bottom:0; box-sizing:border-box; display:flex; flex-direction:column; width:var(--brain-dock-size,330px); border:1px solid var(--canvas-brain-border); background:var(--canvas-brain-surface); color:var(--canvas-ink); box-shadow:0 0 44px var(--canvas-shadow); }
 .brainDock[data-side='left'] { left:0; border-left:0; border-radius:0 var(--radius-lg) var(--radius-lg) 0; }
 .brainDock[data-side='right'] { right:0; border-right:0; border-radius:var(--radius-lg) 0 0 var(--radius-lg); }
@@ -1676,10 +1705,16 @@
   .brainDockResizer { display:none; }
   .canvasOutline { left:8px; right:8px; width:auto; max-height:min(46%,300px); }
   /* The bottom sheet claims no side (the side insets zero out with the dock width
-     above), so the 3D scene gives up the bottom edge instead. */
-  .flowWrap[data-view='3d'] {
+     above), so a surface that has taken the centre gives up the bottom edge instead. */
+  .flowWrap:not([data-view='graph']) {
     --canvas-reserved-bottom:var(--composer-space, 0px);
   }
+  /* A phone has no room for a reading measure — the column IS the viewport. The rail
+     still owns the left edge, so the transcript starts clear of it. */
+  .chatSurface { --chat-surface-width:100%; }
+  .chatSurfaceHeader { padding:10px 12px 8px; }
+  .chatSurfaceBody { padding:0 2px 0 54px; }
+  .chatSurfaceFooter { padding:4px 12px 8px; }
   /* The rail grows upward from above the prompt. `--composer-space` is measured
      (see `useComposerSpace`), so the execution chip that appears in the prompt's
      utility row pushes the rail up instead of landing on its last two commands.

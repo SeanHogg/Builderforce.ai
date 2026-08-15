@@ -50,6 +50,7 @@ import ts from 'typescript';
 const CANVAS_FILES = [
   path.resolve('..', 'frontend', 'src', 'components', 'creation-canvas', 'CreationCanvas.tsx'),
   path.resolve('..', 'frontend', 'src', 'lib', 'canvasBuildTools.ts'),
+  path.resolve('..', 'frontend', 'src', 'lib', 'canvasFounderOpsTools.ts'),
 ];
 const CONTRACT_FILE = path.resolve('..', 'packages', 'creation-canvas-contract', 'src', 'canvasTools.ts');
 

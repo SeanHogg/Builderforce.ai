@@ -177,6 +177,8 @@ import { createGrowthRoutes, createCampaignTrackRoutes, createMarketingAssetRout
 import { createMailboxRoutes }      from './presentation/routes/mailboxRoutes';
 import { createDriveRoutes }        from './presentation/routes/driveRoutes';
 import { createSocialRoutes }       from './presentation/routes/socialRoutes';
+import { createAdsRoutes }         from './presentation/routes/adsRoutes';
+import { createMeasurementRoutes } from './presentation/routes/measurementRoutes';
 import { createYouTubeRoutes }      from './presentation/routes/youtubeRoutes';
 import { maybeHandlePreviewIngress } from './application/runtime/previewIngress';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
@@ -738,6 +740,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // social campaign publishes to. Accounts themselves are connector connections,
   // so connecting one still happens through /api/connectors.
   app.route('/api/social',   createSocialRoutes(db));
+  // Paid media and its measurement — the other two thirds of the CMO's surface.
+  app.route('/api/ads',         createAdsRoutes(db));
+  // `/api/analytics` is TEAM performance; marketing measurement is its own surface.
+  app.route('/api/measurement', createMeasurementRoutes(db));
   app.route('/api/youtube',  createYouTubeRoutes(db));
   app.route('/api/roi',      createRoiRoutes(db));
   app.route('/api/pmo',      createPmoRoutes(db));

@@ -35,15 +35,19 @@
 
 import { ACADEMIC_OBJECT_KINDS, type AcademicObjectKind } from '@builderforce/creation-canvas-contract';
 import {
-  deriveNumber, derivePercent, deriveRows, registerSpecObjectSet, specRefKey, sumColumn,
-  SOURCES_FIELD, SUMMARY_FIELD,
-  type SpecDeriveBoard, type SpecField, type SpecObjectSpec,
+  registerSpecObjectSet, SOURCES_FIELD, SUMMARY_FIELD,
+  type SpecField, type SpecObjectSpec,
 } from './specObjects';
+// The arithmetic the computed fields resolve through. A DERIVATION, not a declaration —
+// see the header of that module for why the two are not in one file.
 import {
-  buildGradebook, columnFromAssignment, gradebookStats, learnersFromCohort, markFromSubmission,
-  type GradebookColumn, type GradebookLearner, type GradebookMatrix, type LearnerMark,
-} from './academic/gradebook';
-import { gradeBandsFromNode, hoursLate, type GradeBand } from './academic/marking';
+  deriveAssignmentMarkedCount, deriveAssignmentSubmissionCount, deriveBibliographyEntryCount,
+  deriveCohortProgress, deriveCurriculumMapCoverage, deriveCurriculumMapGaps,
+  deriveGradebookDistribution, deriveGradebookMarks, deriveGradebookMean, deriveGradebookMedian,
+  deriveGradebookPassRate, deriveLectureAttendanceRate, deriveOfficeHoursUtilisation,
+  deriveParticipantPoolConsentRate, derivePollCorrectRate, derivePollResponseCount,
+  deriveSubmissionLateBy,
+} from './academic/derivations';
 
 /** i18n namespace for every academic label, status, field and column. */
 export const ACADEMIC_NAMESPACE = 'creationCanvas.academic';
@@ -52,156 +56,6 @@ export const ACADEMIC_NAMESPACE = 'creationCanvas.academic';
  *  places and a paraphrase of it is how two objects come to disagree about a date. */
 const ISO_DATE = 'ISO 8601 date (or date-time where the hour matters). Never a relative phrase like "next Friday" — the board computes lateness from this.';
 const OUTCOME_HINT = 'Learning-outcome codes this maps to, exactly as the curriculumMap writes them, e.g. ["LO3", "LO7"]. Matching codes is what makes accreditation coverage computable instead of asserted.';
-
-// ---------------------------------------------------------------------------
-// The derivations — the half this vocabulary declared and never produced
-// ---------------------------------------------------------------------------
-//
-// ── WHAT WAS WRONG ─────────────────────────────────────────────────────────────
-// Nineteen fields here were flagged `derived: true`, which is the right rule — it
-// stops a model asserting a grade nobody earned — and it says only who may not WRITE
-// a value. Nothing on the platform ever produced one, so a `gradebook` sitting beside
-// two hundred marked submissions reported no mean, no median and no pass rate, and a
-// late submission reported no lateness. `lib/academic/gradebook.ts` and `marking.ts`
-// had computed all of it correctly, with tests, since the day the vocabulary landed;
-// what was missing was one wire.
-//
-// This is that wire. Nothing below re-implements the engines: `buildGradebook`,
-// `gradebookStats`, `hoursLate` and the three canvas adapters are used exactly as
-// written, because a second implementation of a weighted module mark is how two
-// screens come to disagree about whether a student passed.
-//
-// ── WHAT IS STILL `derived: true`, AND WHY THAT IS CORRECT ─────────────────────
-// A mark, a mark breakdown, feedback, an integrity ledger, an attendance count, a
-// poll's responses, a moderation record and a feedback bank's usage count are all
-// EVIDENCE of something that happened off the board. They cannot be computed from it
-// and must not be invented: they stay `derived` and wait for the action that records
-// them. The distinction this pass draws is exactly the useful one — a field that is
-// arithmetic is now computed, and a field that is testimony still is not.
-
-/** Does `ref` name THIS object? The mirror of `board.byRef` — an assignment carries a
- *  `cohortRef` and the cohort has to recognise itself in it. Uses the same
- *  normalisation the board indexes with, so the two cannot disagree. */
-function identifies(data: Record<string, unknown>, ref: unknown): boolean {
-  const key = specRefKey(ref);
-  return !!key && [data.title, data.courseCode].some((value) => specRefKey(value) === key);
-}
-
-/** Every submission on the board that answers this assignment. */
-function submissionsFor(data: Record<string, unknown>, board: SpecDeriveBoard): readonly Record<string, unknown>[] {
-  const title = specRefKey(data.title);
-  return title ? board.ofKind('submission').filter((submission) => specRefKey(submission.assignmentRef) === title) : [];
-}
-
-/**
- * One row per programme outcome, with whether anything ASSURES it.
- *
- * `introduced` and `developed` deliberately do not count: an accreditor asks where an
- * outcome is ASSURED, and a coverage figure that counts a mention would report a
- * programme as complete on the strength of having introduced everything and assured
- * nothing — which is the exact submission that fails a review.
- */
-function mappingRows(data: Record<string, unknown>): Array<{ code: string; assured: boolean }> {
-  const mapping = data.mapping;
-  if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) return [];
-  const rows = deriveRows((mapping as Record<string, unknown>).rows);
-  return rows.flatMap((row) => {
-    const code = String(row.label ?? row.code ?? '').trim();
-    if (!code) return [];
-    const cells = Array.isArray(row.cells) ? row.cells : [];
-    return [{ code, assured: cells.some((cell) => String(cell ?? '').trim().toLowerCase() === 'assured') }];
-  });
-}
-
-/** The assignment titles a gradebook aggregates, in the order it lists them. */
-function gradebookColumns(data: Record<string, unknown>, board: SpecDeriveBoard): GradebookColumn[] {
-  const titles = Array.isArray(data.assignments)
-    ? data.assignments.map((entry) => String(entry ?? '').trim()).filter(Boolean)
-    // A gradebook that names no assignments still aggregates the board's, because an
-    // empty `assignments` list is far more often "nobody typed them" than "deliberately
-    // none" — and a gradebook with no columns is the empty card this closes.
-    : [];
-  const fallback = titles.length
-    ? []
-    : board.ofKind('assignment').map((assignment) => String(assignment.title ?? '').trim()).filter(Boolean);
-
-  return [...titles, ...fallback].flatMap((title) => {
-    const assignment = board.byRef('assignment', title);
-    // An assignment named on the gradebook and absent from the board contributes a
-    // column with no weight rather than being dropped: the column is what tells the
-    // reader the mark is missing, and dropping it hides the gap it exists to show.
-    return [assignment ? columnFromAssignment(assignment) : { title, weight: 0, maxMarks: 100 }];
-  });
-}
-
-/** Every learner a gradebook has rows for — its cohort's roster, or whoever submitted. */
-function gradebookLearners(data: Record<string, unknown>, board: SpecDeriveBoard): GradebookLearner[] {
-  const cohort = board.byRef('cohort', data.cohortRef);
-  const roster = cohort ? learnersFromCohort(cohort) : [];
-  if (roster.length) return [...roster];
-
-  // No roster: fall back to the learners who actually submitted. A cohort of "everyone
-  // who handed something in" flatters the pass rate — every non-submitter is invisible —
-  // so it is the fallback and never the preference, and `gradebookStats` computes its
-  // pass rate over rows rather than over marked rows for the same reason.
-  const seen = new Map<string, GradebookLearner>();
-  for (const submission of board.ofKind('submission')) {
-    const ref = String(submission.learnerRef ?? '').trim();
-    if (!ref || seen.has(ref)) continue;
-    seen.set(ref, { ref, name: String(submission.learnerName ?? '').trim() || ref });
-  }
-  return [...seen.values()];
-}
-
-/** Every mark on the board that belongs to one of these columns. */
-function gradebookMarks(board: SpecDeriveBoard, columns: readonly GradebookColumn[]): LearnerMark[] {
-  const wanted = new Set(columns.map((column) => column.title));
-  return board.ofKind('submission')
-    .flatMap((submission) => {
-      const mark = markFromSubmission(submission);
-      return mark && wanted.has(mark.assignmentTitle) ? [mark] : [];
-    });
-}
-
-/**
- * The whole gradebook, built once per derivation.
- *
- * Six fields on the card read this — the matrix, the mean, the median, the pass rate,
- * the distribution and the marked count — and each one calling `buildGradebook` would
- * rebuild a 300 × 6 matrix six times per render. The board object is stable for the
- * life of a render, so the result is cached against it by identity: a WeakMap keyed on
- * the board keeps nothing alive and costs one lookup.
- */
-const gradebookCache = new WeakMap<SpecDeriveBoard, Map<string, { matrix: GradebookMatrix; bands: readonly GradeBand[] }>>();
-
-function gradebookOf(data: Record<string, unknown>, board: SpecDeriveBoard) {
-  let perBoard = gradebookCache.get(board);
-  if (!perBoard) {
-    perBoard = new Map();
-    gradebookCache.set(board, perBoard);
-  }
-  // Keyed on the two fields that decide what this gradebook covers, so two gradebooks
-  // on one board (two cohorts, or a running one and a final one) do not share a matrix.
-  const key = `${String(data.cohortRef ?? '')}::${JSON.stringify(data.assignments ?? '')}`;
-  const cached = perBoard.get(key);
-  if (cached) return cached;
-
-  const columns = gradebookColumns(data, board);
-  const learners = gradebookLearners(data, board);
-  const bands = gradeBandsFromNode(data.gradeBands);
-  const matrix = buildGradebook(learners, columns, gradebookMarks(board, columns), bands);
-  const built = { matrix, bands };
-  perBoard.set(key, built);
-  return built;
-}
-
-/** The stats, or null when there is nothing to aggregate — a gradebook with no learners
- *  and no columns must report nothing rather than a mean of zero. */
-function statsOf(data: Record<string, unknown>, board: SpecDeriveBoard) {
-  const { matrix, bands } = gradebookOf(data, board);
-  if (!matrix.rows.length || !matrix.columns.length) return null;
-  return gradebookStats(matrix, bands);
-}
 
 /**
  * A reference to a person on the roster.
@@ -245,28 +99,7 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         // Measured against work that is actually DUE, never against the whole module: a
         // cohort in week 2 is not 90% behind, and a progress bar that says so is one
         // nobody looks at again.
-        derive: (data, board) => {
-          const roster = learnersFromCohort(data);
-          if (!roster.length) return undefined;
-          const now = Date.now();
-          const due = board.ofKind('assignment')
-            .filter((assignment) => {
-              // An assignment with no `cohortRef` is counted: a single-cohort board is the
-              // common case and refusing to count its work would report 0% forever.
-              if (assignment.cohortRef && !identifies(data, assignment.cohortRef)) return false;
-              const deadline = Date.parse(String(assignment.dueAt ?? ''));
-              return Number.isFinite(deadline) && deadline <= now;
-            })
-            .map((assignment) => String(assignment.title ?? '').trim())
-            .filter(Boolean);
-          if (!due.length) return undefined;
-
-          const handedIn = new Set(board.ofKind('submission')
-            .filter((submission) => String(submission.submittedAt ?? '').trim())
-            .map((submission) => `${String(submission.learnerRef ?? '').trim()}::${String(submission.assignmentRef ?? '').trim()}`));
-          const complete = roster.filter((learner) => due.every((title) => handedIn.has(`${learner.ref}::${title}`))).length;
-          return derivePercent(complete, roster.length);
-        },
+        derive: deriveCohortProgress,
       },
       SUMMARY_FIELD,
     ],
@@ -298,10 +131,7 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         render: 'stat',
         label: 'submissionCount',
         hint: 'Submissions received so far. Counted from the submission objects on the board that name this assignment.',
-        derive: (data, board) => {
-          const count = submissionsFor(data, board).filter((submission) => String(submission.submittedAt ?? '').trim()).length;
-          return count > 0 ? count : undefined;
-        },
+        derive: deriveAssignmentSubmissionCount,
       },
       {
         name: 'markedCount',
@@ -310,10 +140,7 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         // Deliberately NOT a share: "12 of 40" is two numbers a marker acts on and a
         // percentage is one they have to reverse-engineer before they can.
         hint: 'Submissions marked so far. Counted from the submissions on the board that carry a mark.',
-        derive: (data, board) => {
-          const count = submissionsFor(data, board).filter((submission) => deriveNumber(submission.mark) !== undefined).length;
-          return count > 0 ? count : undefined;
-        },
+        derive: deriveAssignmentMarkedCount,
       },
       SOURCES_FIELD,
     ],
@@ -369,13 +196,7 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         hint: 'How late the submission was, computed from the deadline on the assignment it answers. Absent when it was on time — an on-time submission has nothing to report.',
         // `hoursLate` is the same function the late-policy engine applies, so the number
         // the card shows and the number a penalty is calculated from cannot disagree.
-        derive: (data, board) => {
-          const assignment = board.byRef('assignment', data.assignmentRef);
-          if (!assignment || !String(data.submittedAt ?? '').trim()) return undefined;
-          const hours = hoursLate(data.submittedAt, assignment.dueAt);
-          if (hours <= 0) return undefined;
-          return hours < 48 ? `${Math.round(hours)}h late` : `${Math.round(hours / 24)}d late`;
-        },
+        derive: deriveSubmissionLateBy,
       },
     ],
   },
@@ -394,17 +215,14 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         render: 'matrix',
         label: 'marks',
         hint: 'The marks matrix: `columns` are assignment titles and each row is {label, ref, cells} for one learner. Computed from the submission objects on the board, never stored — a mark changed on appeal updates its submission, and a stored matrix would keep quoting the old number to the exam board.',
-        derive: (data, board) => {
-          const { matrix } = gradebookOf(data, board);
-          return matrix.rows.length && matrix.columns.length ? matrix : undefined;
-        },
+        derive: deriveGradebookMarks,
       },
       {
         name: 'distribution',
         render: 'bars',
         label: 'distribution',
         hint: 'Count of learners per grade band, computed from the marks and the bands above.',
-        derive: (data, board) => statsOf(data, board)?.distribution,
+        derive: deriveGradebookDistribution,
       },
       {
         name: 'mean',
@@ -414,14 +232,14 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         // zeros in week 3 reads as a catastrophe and is an artefact of the calendar —
         // `gradebookStats` argues this at length and this field simply reads it.
         hint: 'Cohort mean, as a percentage of marked work. Computed.',
-        derive: (data, board) => statsOf(data, board)?.mean ?? undefined,
+        derive: deriveGradebookMean,
       },
       {
         name: 'median',
         render: 'stat',
         label: 'median',
         hint: 'Cohort median, as a percentage of marked work. Computed.',
-        derive: (data, board) => statsOf(data, board)?.median ?? undefined,
+        derive: deriveGradebookMedian,
       },
       {
         name: 'passRate',
@@ -431,7 +249,7 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         // over EVERY enrolled learner, because "what share of the class is on track to
         // pass" must not improve by excluding the people who submitted nothing.
         hint: 'Share of the whole cohort at or above the pass band, 0-100. Computed — non-submitters are counted, which is what makes the number honest.',
-        derive: (data, board) => (statsOf(data, board) ? statsOf(data, board)!.passRate : undefined),
+        derive: deriveGradebookPassRate,
       },
       { name: 'moderation', render: 'rows', label: 'moderation', columns: ['learnerRef', 'firstMark', 'secondMark', 'gap', 'agreed'], hint: 'Double-marking record: {learnerRef, firstMark, secondMark, gap, agreed}. The gap column is what a moderation meeting actually works through.', derived: true },
       SUMMARY_FIELD,
@@ -497,13 +315,7 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         // Needs `cohortRef`: a rate has to have a denominator, and until this field
         // existed a lecture had no way to say WHOSE class it was — which is why the
         // ref was added beside it rather than the rate being left uncomputable.
-        derive: (data, board) => {
-          const cohort = board.byRef('cohort', data.cohortRef);
-          const enrolled = cohort
-            ? deriveNumber(cohort.enrolledCount) ?? learnersFromCohort(cohort).length
-            : undefined;
-          return derivePercent(deriveNumber(data.attendanceCount), enrolled || undefined);
-        },
+        derive: deriveLectureAttendanceRate,
       },
       SUMMARY_FIELD,
     ],
@@ -527,20 +339,14 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         render: 'stat',
         label: 'responseCount',
         hint: 'Total responses received, summed from the per-choice counts above.',
-        derive: (data) => sumColumn(data.responses, 'value'),
+        derive: derivePollResponseCount,
       },
       {
         name: 'correctRate',
         render: 'meter',
         label: 'correctRate',
         hint: 'Share answering correctly, 0-100, computed from the responses and `correctIndex`. Under about 30% means re-teach now, not next week. Absent on an opinion poll, which has no right answer to be right about.',
-        derive: (data) => {
-          const index = deriveNumber(data.correctIndex);
-          if (index === undefined) return undefined;
-          const bars = deriveRows(data.responses);
-          const correct = deriveNumber(bars[index]?.value ?? bars[index]?.count);
-          return derivePercent(correct, sumColumn(data.responses, 'value'));
-        },
+        derive: derivePollCorrectRate,
       },
     ],
   },
@@ -559,11 +365,7 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         render: 'meter',
         label: 'utilisation',
         hint: 'Share of slots booked, 0-100. Computed from the slots above.',
-        derive: (data) => {
-          const slots = deriveRows(data.slots);
-          if (!slots.length) return undefined;
-          return derivePercent(slots.filter((slot) => String(slot.bookedBy ?? '').trim()).length, slots.length);
-        },
+        derive: deriveOfficeHoursUtilisation,
       },
     ],
   },
@@ -587,21 +389,14 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         render: 'meter',
         label: 'coverage',
         hint: 'Share of outcomes with at least one ASSURED assessment, 0-100. Computed from the mapping grid — introduced and developed do not count, because an accreditor asks where an outcome is assured.',
-        derive: (data) => {
-          const rows = mappingRows(data);
-          if (!rows.length) return undefined;
-          return derivePercent(rows.filter((row) => row.assured).length, rows.length);
-        },
+        derive: deriveCurriculumMapCoverage,
       },
       {
         name: 'gaps',
         render: 'chips',
         label: 'gaps',
         hint: 'Outcome codes with no assured evidence. The list a review will open at — computed from the grid, so it cannot quietly omit one.',
-        derive: (data) => {
-          const missing = mappingRows(data).filter((row) => !row.assured).map((row) => row.code);
-          return missing.length ? missing : undefined;
-        },
+        derive: deriveCurriculumMapGaps,
       },
       SOURCES_FIELD,
     ],
@@ -730,7 +525,7 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         render: 'meter',
         label: 'consentRate',
         hint: 'Consented as a share of recruited, 0-100. Computed from the two counts above.',
-        derive: (data) => derivePercent(deriveNumber(data.consentedN), deriveNumber(data.recruitedN)),
+        derive: deriveParticipantPoolConsentRate,
       },
     ],
   },
@@ -879,7 +674,7 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         render: 'stat',
         label: 'entryCount',
         hint: 'Number of references in the list. Counted from the entries above.',
-        derive: (data) => deriveRows(data.entries).length || undefined,
+        derive: deriveBibliographyEntryCount,
       },
       { name: 'formatted', render: 'reference', label: 'formatted', hint: 'The rendered reference list, in the chosen style and sort order.', derived: true },
     ],

@@ -307,6 +307,13 @@ export const NAV_GROUPS: NavGroup[] = [
   // have a business" — and both end in a company you run. Public, so rung 0.
   // Agents are a FAMILY inside it, never a destination of their own (§11.5).
   { id: 'marketplace', labelKey: 'group.marketplace', icon: '🛒', href: '/marketplace', match: ['/marketplace', '/talent'], seat: 'platform', stage: 'market', rung: RUNG.PUBLIC },
+  // The SUPPLY side of that same door (PRD 24). `/marketplace` is where you buy
+  // what the platform and its sellers made; `/developers` is where a vendor
+  // becomes one of those sellers, and where an admin sees what this workspace has
+  // installed. A separate destination rather than a marketplace tab because its
+  // audience is a company that may not be a customer at all — which is the whole
+  // premise of a publisher being distinct from a tenant.
+  { id: 'developers', labelKey: 'group.developers', icon: '🧩', href: '/developers', match: ['/developers'], seat: 'platform', stage: 'market', rung: RUNG.SIGNED_IN },
   // ── ADMIN ────────────────────────────────────────────────────────────────
   {
     id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings',

@@ -1,3 +1,90 @@
+## ✅ RESOLVED 2026-08-15 — "Ten résumé versions" now goes through the template engine, and a silent provider can no longer hang the canvas
+
+A user uploaded a JSON Resume (the standard hired.video export) and asked for ten visual
+versions of it. The canvas sat on **"Reading" for four minutes and produced nothing** —
+not one résumé, let alone ten. The session diagnostics named the shape of it: one
+`brain.turn` started and never completed, iteration 3 returned an empty completion after
+134 seconds, and iteration 4 was still in flight when the report was captured. Four
+separate defects stacked into that one failure, and all four are closed.
+
+### 1. A JSON Resume imported as a Dataset, so the template engine was unreachable
+
+`parseTabularText` reads a minified top-level JSON object as ONE record, so the résumé
+landed as a 1-row × 12-column Dataset whose cells were stringified sections — queryable
+in principle, renderable by nothing. `canvasFileImport.ts` now recognises a JSON Resume
+BEFORE the tabular branch (`isJsonResume`) and produces a real `resume` object with a
+résumé family the renderer already knows how to draw. An ordinary JSON data export still
+becomes a Dataset; the recogniser requires an identifiable `basics` or two schema array
+sections, so it does not claim files that are not résumés.
+
+### 2. The export is PascalCase and every reader is camelCase
+
+Hired.VIDEO writes `Basics.StartDate`; the schema and every function in `canvasResume.ts`
+read `basics.startDate`. The document therefore parsed, passed an "is it an object"
+check, and rendered **completely blank** — the silent half of the failure. Key
+normalisation is now folded into `resumeDocumentFromJson`, so it is applied once at the
+single point a résumé document enters the system rather than guessed at per caller
+(identity on already-camelCase keys, so every existing path is unaffected).
+
+### 3. Brain had no route to the template engine
+
+`RESUME_TEMPLATES` + `renderCanvasResumeRevision` have rendered twelve styles from one
+document since the résumé builder shipped, and **no tool exposed them**. The only path
+available to the model was ten `canvas_add_object` calls, each retyping the whole
+document — which is what spent the four minutes. New `canvas_render_resume_variants`
+renders every requested style in ONE deterministic call: no model round-trip per version,
+and no opportunity for version 7 to state a job the person never had (asserted: all
+variants share one body). Guest-safe, per the classification already declared in
+`packages/creation-canvas-contract`. The canvas system prompt now says a résumé is
+restyled, never retyped.
+
+Two latent bugs surfaced while wiring it and were fixed in the same pass:
+
+- `createResumeFamily` hard-coded `templateId: 'hired-default'` and `resumeNodePatch` then
+  stamped it back over the caller's choice — so an agent authoring a résumé with an
+  explicit template silently got the default one.
+- `canvas_screen_resumes` read `node.data.resumeDocument`, a field that is consumed when
+  the family is built and never persisted. A board full of real CVs screened as "none of
+  those resume objects carries a parsed resume document". Both now read the one shared
+  accessor, `resumeDocumentFromNode`, which also recovers a résumé from the legacy
+  one-row Dataset shape so boards that imported before this change still work.
+
+### 4. A canvas turn had NO time bound of any kind
+
+The only thing that could end an in-flight request was the user pressing Stop. A provider
+that accepts a request and goes silent left the board spinning indefinitely.
+`canvasStreamWatchdog.ts` bounds each round-trip by **inactivity** — the timer is re-armed
+by every token, so a long authoring response is never punished, but 75 seconds of total
+silence abandons the request. Two stalls route around the model; after that the turn ends
+and says *the provider stopped responding*, distinct from "I couldn't prepare any canvas
+changes", because blaming the request makes the user rewrite a prompt that was fine. A
+stall is deliberately NOT reported as a user Stop, though both arrive as an `AbortError`.
+The suite that covers this went from a 191-second timeout to 14 seconds.
+
+### Canvas rendering performance
+
+`CanvasResumeEditor` recomputed everything on every React render: two full document
+renders (deep clone → Markdown → HTML → section split → per-template re-order), an ATS
+analysis, a structural diff, a duplicate-bullet scan, and — with the gallery open —
+twelve more full renders for the thumbnails. None of it depends on the state that
+actually changes, so typing one character into the job description, or nudging the zoom
+slider, redid all of it, once per résumé card on the board. Everything is now memoised on
+`data.resumeFamily`; `family` had to be memoised first because it is rebuilt by a
+validating parse, which made every downstream memo (and the Escape-key effect) miss on
+every render regardless. Gallery thumbnails are additionally gated on the gallery being
+open, so a closed gallery costs nothing rather than twelve renders nobody can see.
+
+The document stylesheet was an inline `<style>` beside every rendering — thirteen copies
+of the same 4 KB inside one open editor, multiplied by every résumé on the board. It is
+now mounted once per page and reference-counted, so a board with no résumé carries no
+résumé CSS.
+
+Tests: `canvasResume.test.ts` (PascalCase recognition, negative cases, legacy-dataset
+recovery, fan-out determinism, per-variant template binding), `canvasFileImport.test.ts`
+(résumé vs dataset routing), `creationCanvasAi.test.ts` (stall abandonment, honest
+notice, stall ≠ Stop, and that a slowly-streaming answer is never tripped). Five i18n
+catalogs updated. `check-canvas-tool-contract` and `check-prompt-tool-names` pass.
+
 ## ✅ RESOLVED 2026-08-15 — The academic vocabulary's derived fields finally have a producer
 
 Logged the same day it was found, and closed in the next pass. Nineteen fields on the
@@ -67,6 +154,78 @@ one.
 The original entry, for the record:
 
 - **The academic vocabulary's `derived` fields have no producer, so nineteen declared cells are permanently empty.** *(identified 2026-08-15 while adding `SpecField.derive` for the operations vocabulary)* `academicObjects.ts` flags `submission.mark`, `submission.markBreakdown`, `submission.lateBy`, `gradebook.marks`, `gradebook.mean`, `gradebook.passRate`, `cohort.progress`, `poll.responses`, `lecture.attendanceRate` and their siblings `derived: true`, which correctly stops the model asserting a grade nobody earned — and nothing on the platform ever WRITES one, so the card shows the section only when a human types into it. The new `derive` hook (`lib/specObjects.ts`) closes the arithmetic half and cannot close this one: `lateBy` needs the ASSIGNMENT's deadline and `gradebook.mean` needs every SUBMISSION on the board, and `derive(data)` sees one object. Fix = either the canvas action adapters this group's third bullet already tracks (`submission.mark`, `gradebook.compute`), or widening the hook to `derive(data, board)` so a cross-object computation is declarable the same way. **Not blocked.** Unblocks: a gradebook that aggregates the submissions sitting next to it.
+
+
+## ✅ RESOLVED 2026-08-15 — Developer Portal Phase 1: the third bucket exists (PRD 24)
+
+**The finding.** Everything a third party could build for the platform landed in one of two buckets:
+TENANT-PRIVATE (a `connectors` row, a `tenant_mcp_extensions` row — real capability, one workspace) or
+CODE-OWNED (the 40 `defaults/` manifests, `BOARD_PROVIDERS`, `dataProviderCatalog`, the drive/mailbox/
+payout/ledger ports, `builtinMcpService` — reachable by everyone, addable only by us via a PR and a
+deploy). Neither reaches another customer, so a vendor's only routes were "get us to merge your adapter"
+or "build a workspace of one". That is why the integration catalogue was entirely our own work.
+
+**What shipped** (migration `0467_developer_portal.sql`):
+
+- **`developer_orgs` + `developer_org_members`** — a PUBLISHER as a first-class party, deliberately not a
+  tenant. Verification runs `unverified → domain_verified → identity_verified`; the tier gates the listing
+  badge AND the right to charge. Four publisher-side tables carry no `tenant_id` and say so in
+  `check-tenant-column.mjs`'s TENANT_INDEPENDENT map.
+- **ONE publishable artifact** — `extension_packages` / `extension_versions` / `tenant_extension_installs`,
+  with `kind` as a column value (`connector` · `mcp_server` · `canvas_kind` · `agent` · `skill` · `template` ·
+  `seat_pack`), the same argument `discipline` makes on `field_jobs` (0464). `SUBMITTABLE_KINDS` opens two
+  today; `reviewVersion` FAILS CLOSED on the rest rather than waving an unvalidatable kind through.
+- **The grant is the security boundary** — `granted_scopes` is a snapshot of what an admin approved, not a
+  pointer at the version's request, so a publisher shipping a wider version cannot silently widen an
+  existing install. `scopeUpgrade` decides auto-update vs re-prompt in ONE place, so the button and the
+  endpoint cannot disagree. Install grants use the STRICT rule (empty grants nothing) while legacy API keys
+  keep the lenient one — the two populations differ, so the two rules do.
+- **Static review** (`packageReview.ts`) — manifest parse, reserved-key collision, credential-shaped-literal
+  scan, SSRF-checked MCP URL, scope vocabulary, sensitive-scope and widening warnings, and the
+  paid-requires-identity gate. Every check records a finding, pass or fail, onto `review_findings`: an
+  approval nobody can reconstruct is not an audit trail. 24 tests.
+- **The seam that makes it live** — `connectorRegistry` now merges THREE sources (built-in, tenant-authored,
+  marketplace install) instead of two, so a published connector becomes callable by agents, the workflow
+  action picker and the runtime without any consumer learning what a marketplace is. Precedence is
+  built-in → tenant → installed, applied identically in `listConnectorsForTenant` and `resolveConnector`.
+- **`/api/developer`** (18 endpoints) + **`/developers`** — one page for both audiences, fully localised in
+  all five catalogs, token-driven in both themes, fluid at 360px. The scope vocabulary is FETCHED from
+  `/api/developer/contract` rather than hardcoded, so a consent screen cannot render a drifted copy.
+
+**Drift closed along the way:**
+
+- **`developer_api_keys` was parented to a USER** and carried no scopes — and was CASCADE-deleted with its
+  minter's user row, so an offboarding could remove a vendor's production integration. Now owned by a
+  publisher, with scopes; `userId` remains as the audit fact it always was. Migration backfills every
+  legacy row into a personal publisher org, so no key stops working, and `/api/v1` mints one on demand for
+  a caller who has never registered.
+- **Two key models for one concept.** `check-signature-duplication` scored `developer_api_keys` ≈
+  `tenant_api_keys` at 0.68 the moment both carried scopes + origins, and it was right. Resolved by
+  REMOVING `allowed_origins` from publisher keys rather than baselining the pair: a `bfai_*` key is a
+  server credential (CI, integration server) and the column would have been permanently NULL, copied for
+  symmetry. The guard working as intended, not a threshold dodged.
+- **The scope-list mechanics were about to be written a third time.** Extracted to
+  `application/shared/scopeList.ts` (serialize/deserialize/hasScope/requireScope/widenedScopes) and
+  MIGRATED `tenantApiKeyService.ts` onto it in the same pass. Only the vocabulary stays per-credential.
+- **`isReservedConnectorKey` moved to `connectors/defaults/`**, beside the set it tests — routing the
+  review path through `connectorRegistry` would have put
+  `connectorRegistry → extensionInstalls → packageReview → connectorRegistry` in the module graph. The
+  cycle was the hint that the predicate belonged with its data.
+- **`scopedToNullableTenant`** added to `tenantScope.ts` for tables whose `tenant_id` is nullable, where
+  NULL means "no tenant" rather than "any tenant". `llm_action_ratings` had that predicate as an inline
+  ternary — correct, but easy to get backwards and invisible to `check-tenant-scope`, which reads the
+  statement rather than the local it was assigned from.
+- **The learned-router's global scope now DECLARES itself** (`acrossTenants(…, 'platform_aggregate', …)`) at
+  both call sites in `routingTable.ts`, instead of dropping the tenant filter inside a helper where no
+  reader of the query would see it.
+- **`PreviewFrame.tsx` referenced `--accent-primary`**, declared in neither theme — so the literal `#2563eb`
+  fallback was always what painted, one hardcoded blue in light AND dark. Now `--accent`.
+
+**Adjudicated, with arguments, in `check-shape-lint.mjs` rather than baselined:** `developer_org_members`
+(the `memberships` primitive is tenant-scoped twice over, and the absence of a tenant is the whole point of
+a publisher) and `extension_versions` (an installable artifact an `ON DELETE RESTRICT` foreign key points
+at, not a step in one tenant's edit history — the same argument `agent_definition_versions` makes, one
+layer out).
 
 ## ✅ RESOLVED 2026-08-15 — The free plan announced an upstream model it would not let you pick; the thumbs it collected taught nothing
 
@@ -10567,4 +10726,5 @@ not a reason to add nullable tenant ownership or a directory table.
 validate-only reports 344 source tables and 114 one-to-one targets; tenancy audit validate-only
 confirms the existing-shape/no-DDL contract. The production account map and ETL execution remain the
 Identity/Data gates and were not fabricated without read-only production credentials.
+
 

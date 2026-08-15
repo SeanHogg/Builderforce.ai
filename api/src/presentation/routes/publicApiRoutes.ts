@@ -1,10 +1,23 @@
 /**
- * Public Developer API – /api/v1/*
+ * Public Developer API — `/api/v1/*`
  *
- * Read-only endpoints accessible with a Developer API key.
- * External sites use this to embed Builderforce.ai agent listings.
+ * Read-only endpoints an external site calls with a tenant API key, to embed
+ * Builderforce.ai listings.
  *
- * Auth: Bearer <developer_api_key> (unhashed key generated at creation time).
+ * ── ONE CREDENTIAL (migration 0471) ─────────────────────────────────────────
+ * These used to authenticate with a `bfai_*` key from `developer_api_keys` — a
+ * second key table with a second middleware and a second answer to "what may this
+ * caller do". A developer is a tenant, so the key is a `tenant_api_keys` row and
+ * the resolver is the shared one. Existing `bfai_*` keys still work: both tables
+ * stored a SHA-256 digest and resolution is by hash, so the migration copied them
+ * across unchanged.
+ *
+ * Minting, listing and revoking moved out of this file entirely. They live where
+ * every other tenant key is managed — `/api/tenants/:tenantId/api-keys`, owner-only,
+ * with the usage trail and the origin allowlist that path already has. A publisher
+ * needs `read:catalog` on the key.
+ *
+ * Auth: `Authorization: Bearer <bfk_… | bfai_…>`.
  * Rate limiting: applied upstream via the shared rate limiter middleware.
  */
 import { Hono } from 'hono';
@@ -12,39 +25,45 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
-import { DeveloperOrgError } from '../../application/developer/developerOrgs';
 import {
-  listDeveloperApiKeys,
-  mintDeveloperApiKey,
-  resolveDeveloperApiKey,
-  revokeDeveloperApiKey,
-  type DeveloperApiScope,
-} from '../../application/developer/developerApiKeys';
+  originAllowed,
+  resolveTenantApiKey,
+  touchTenantApiKey,
+  type TenantApiScope,
+} from '../../application/llm/tenantApiKeyService';
 
 // ---------------------------------------------------------------------------
 // Auth middleware
 // ---------------------------------------------------------------------------
 
+interface ApiCaller { keyId: string; tenantId: number }
+
 /**
- * Resolve the `bfai_*` key on the request, and check it carries `required`.
+ * Resolve the key on the request, check it carries `required`, and check the
+ * browser origin if there is one.
  *
- * The hash/lookup/revoked triple moved to
- * `application/developer/developerApiKeys.ts` (PRD 24 §5.1) so that the key's
- * OWNER, its scopes and its origin allowlist are decided in one place rather than
- * re-derived per endpoint. This wrapper is what is left: header parsing, which is
- * genuinely the presentation layer's job.
+ * Header parsing is genuinely the presentation layer's job; the hash/lookup/
+ * revoked/scope triple is not, and lives in the shared service. The ORIGIN check
+ * is new to this surface and is the reason migration 0471 grandfathered every
+ * copied key onto the any-origin allowlist: these endpoints exist to be called
+ * from an external site's page, and inheriting the tenant default of server-only
+ * would have revoked exactly that usage on deploy day.
  */
-async function requireDevApiKey(
+async function requireApiKey(
   db: Db,
   authHeader: string | undefined,
-  required: DeveloperApiScope,
-): Promise<{ ok: false; error: string; status: number } | { ok: true; userId: string; keyId: string; developerOrgId: string | null }> {
+  origin: string | null,
+  required: TenantApiScope,
+): Promise<{ ok: false; error: string; status: 401 | 403 } | ({ ok: true } & ApiCaller)> {
   if (!authHeader?.startsWith('Bearer ')) {
     return { ok: false, error: 'Missing or malformed Authorization header', status: 401 };
   }
-  const resolved = await resolveDeveloperApiKey(db, authHeader.slice(7), required);
+  const resolved = await resolveTenantApiKey(db, authHeader.slice(7), required);
   if (!resolved) return { ok: false, error: 'Invalid or revoked API key', status: 401 };
-  return { ok: true, userId: resolved.userId, keyId: resolved.keyId, developerOrgId: resolved.developerOrgId };
+  if (!originAllowed(resolved.allowedOrigins, origin)) {
+    return { ok: false, error: 'This key is not allowed from this origin', status: 403 };
+  }
+  return { ok: true, keyId: resolved.keyId, tenantId: resolved.tenantId };
 }
 
 // ---------------------------------------------------------------------------
@@ -54,78 +73,18 @@ async function requireDevApiKey(
 export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  // ── Developer key management (authenticated with main web JWT) ─────────────
-
-  /**
-   * POST /api/v1/developer/keys – mint a key for the caller's publisher
-   * Requires main Tenant JWT (Authorization: Bearer <tenant_jwt>).
-   * Returns the raw key once — it is not stored, only its hash is.
-   *
-   * The key belongs to a `developer_orgs` row (PRD 24 §5.1), created on demand
-   * for a caller who has never registered one — so a developer who has never
-   * heard of the portal gets exactly the behaviour they had before.
-   */
-  router.post('/developer/keys', async (c) => {
-    const userId = c.get('userId') as string | undefined;
-    if (!userId) return c.json({ error: 'Authentication required' }, 401);
-
-    type Body = { name?: string; developerOrgId?: string; scopes?: string[] };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
-
-    try {
-      const minted = await mintDeveloperApiKey(db, c.env, {
-        userId,
-        name: body.name ?? '',
-        developerOrgId: body.developerOrgId ?? null,
-        scopes: body.scopes ?? null,
-      });
-      return c.json(minted, 201);
-    } catch (error) {
-      const status = error instanceof DeveloperOrgError ? error.status : 500;
-      return c.json({ error: error instanceof Error ? error.message : 'failed to mint key' }, status);
-    }
-  });
-
-  /**
-   * GET /api/v1/developer/keys – keys the caller can see (theirs, and their
-   * publishers'). Never returns a raw key.
-   */
-  router.get('/developer/keys', async (c) => {
-    const userId = c.get('userId') as string | undefined;
-    if (!userId) return c.json({ error: 'Authentication required' }, 401);
-    return c.json({ keys: await listDeveloperApiKeys(db, userId) });
-  });
-
-  /**
-   * DELETE /api/v1/developer/keys/:id – revoke a key.
-   * Any admin of the owning publisher may, not only the engineer who minted it.
-   */
-  router.delete('/developer/keys/:id', async (c) => {
-    const userId = c.get('userId') as string | undefined;
-    if (!userId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      await revokeDeveloperApiKey(db, c.req.param('id'), userId);
-      return c.json({ ok: true });
-    } catch (error) {
-      const status = error instanceof DeveloperOrgError ? error.status : 500;
-      return c.json({ error: error instanceof Error ? error.message : 'failed to revoke key' }, status);
-    }
-  });
-
-  // ── Public read endpoints (Developer API key auth) ─────────────────────────
+  // ── Public read endpoints (tenant API key, `read:catalog`) ────────────────
 
   /**
    * GET /api/v1/agents – list published agents
    * Query: ?q=&skill=&page=1&limit=24
    */
   router.get('/agents', async (c) => {
-    const auth = await requireDevApiKey(db, c.req.header('Authorization'), 'read:catalog');
-    if (!auth.ok) return c.json({ error: auth.error }, auth.status as 401 | 403);
+    const auth = await requireApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
+    if (!auth.ok) return c.json({ error: auth.error }, auth.status);
 
     // Update last_used_at (fire-and-forget)
-    c.executionCtx.waitUntil(
-      db.update(schema.developerApiKeys).set({ lastUsedAt: new Date() }).where(eq(schema.developerApiKeys.id, auth.keyId)),
-    );
+    c.executionCtx.waitUntil(touchTenantApiKey(db, auth.keyId));
 
     const { page = '1', limit = '24' } = c.req.query();
     const pageNum  = Math.max(1, Number(page));
@@ -158,12 +117,10 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
    * GET /api/v1/agents/:id – get a single agent
    */
   router.get('/agents/:id', async (c) => {
-    const auth = await requireDevApiKey(db, c.req.header('Authorization'), 'read:catalog');
-    if (!auth.ok) return c.json({ error: auth.error }, auth.status as 401 | 403);
+    const auth = await requireApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
+    if (!auth.ok) return c.json({ error: auth.error }, auth.status);
 
-    c.executionCtx.waitUntil(
-      db.update(schema.developerApiKeys).set({ lastUsedAt: new Date() }).where(eq(schema.developerApiKeys.id, auth.keyId)),
-    );
+    c.executionCtx.waitUntil(touchTenantApiKey(db, auth.keyId));
 
     const agentId = parseInt(c.req.param('id'), 10);
     if (isNaN(agentId)) return c.json({ error: 'Invalid agent ID' }, 400);
@@ -189,12 +146,10 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
    * Query: ?q=&category=&page=1&limit=24
    */
   router.get('/skills', async (c) => {
-    const auth = await requireDevApiKey(db, c.req.header('Authorization'), 'read:catalog');
-    if (!auth.ok) return c.json({ error: auth.error }, auth.status as 401 | 403);
+    const auth = await requireApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
+    if (!auth.ok) return c.json({ error: auth.error }, auth.status);
 
-    c.executionCtx.waitUntil(
-      db.update(schema.developerApiKeys).set({ lastUsedAt: new Date() }).where(eq(schema.developerApiKeys.id, auth.keyId)),
-    );
+    c.executionCtx.waitUntil(touchTenantApiKey(db, auth.keyId));
 
     const { q, category, page = '1', limit = '24' } = c.req.query();
     const pageNum  = Math.max(1, Number(page));
@@ -267,8 +222,8 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
    * Returns the canonical list — no auth required.
    */
   router.get('/personas', async (c) => {
-    const auth = await requireDevApiKey(db, c.req.header('Authorization'), 'read:catalog');
-    if (!auth.ok) return c.json({ error: auth.error }, auth.status as 401 | 403);
+    const auth = await requireApiKey(db, c.req.header('Authorization'), c.req.header('Origin') ?? null, 'read:catalog');
+    if (!auth.ok) return c.json({ error: auth.error }, auth.status);
 
     // Platform personas from DB (admin-managed)
     const rows = await db.select().from(schema.platformPersonas).where(eq(schema.platformPersonas.active, true));

@@ -2647,7 +2647,7 @@ const CATALOG: BuiltinTool[] = [
   // skip the campaign ledger that makes a post idempotent and reportable.
   {
     tool: 'social.list_accounts', mutates: false,
-    description: 'List the social accounts connected to this workspace (X, LinkedIn, Facebook Pages, Instagram, TikTok) with the network, the connection name, whether it is `ready` to publish, and `missingFields` naming anything still needed (a Page id, an author URN, an Instagram account id). Call this FIRST when asked to read a feed or post to "our socials" — it is what tells you which accounts exist and whether you must ask. `requiresMedia` marks the networks that cannot publish text alone.',
+    description: 'List the social accounts connected to this workspace (X, LinkedIn, Facebook Pages, Instagram, TikTok, YouTube, Reddit, Pinterest, Threads, Bluesky, Google Business Profile) with the network, the connection name, whether it is `ready` to publish, and `missingFields` naming anything still needed (a Page id, an author URN, an Instagram account id). Call this FIRST when asked to read a feed or post to "our socials" — it is what tells you which accounts exist and whether you must ask. `publishMode` says what each network accepts: `text` posts anything, `media` REFUSES a text-only post (Instagram, TikTok, Pinterest), and `none` is read-and-measure only (YouTube).',
     parameters: obj({}),
     run: async (ctx) => {
       if (!ctx.env) throw new Error('reading social accounts needs the platform environment');
@@ -2716,6 +2716,144 @@ const CATALOG: BuiltinTool[] = [
     description: 'List this workspace\'s social campaigns with their status, per-account posts and permalinks. The counters are maintained by the publisher, so they are what actually went out rather than what was intended.',
     parameters: obj({ projectId: N }, []),
     run: (ctx, a) => replayRoute(ctx, 'GET', a.projectId != null ? `/api/social/campaigns?projectId=${num(a.projectId)}` : '/api/social/campaigns'),
+  },
+
+  // ---- PAID ADVERTISING -----------------------------------------------------
+  //
+  // The same split as email and social, drawn in the same place and for a sharper
+  // reason. Reading what is running and what it cost is safe; `ads.create_campaign`,
+  // `ads.update_campaign` and `ads.sync` all move money or the ledger money is judged
+  // by, so they are absent from CLOUD_AGENT_PLATFORM_TOOLS and go through the
+  // manager-gated route rather than calling the service directly.
+  //
+  // A wrong budget is worse than a wrong post: a post can be deleted, while a campaign
+  // keeps spending until somebody notices.
+  {
+    tool: 'ads.list_accounts', mutates: false,
+    description: 'List the ad accounts connected to this workspace (Google Ads, Meta, LinkedIn, TikTok, X, Reddit, Pinterest, Snapchat) with the network, whether it is `ready` to spend, `missingFields` naming anything still needed (an ad account id, a customer id), and `objectives` listing what that network can actually buy. Call this FIRST when asked about paid media — it is what tells you which accounts exist and whether you must ask which one.',
+    parameters: obj({}),
+    run: async (ctx) => {
+      if (!ctx.env) throw new Error('reading ad accounts needs the platform environment');
+      const { listAdAccounts } = await import('../advertising/adsService');
+      return { accounts: await listAdAccounts(ctx.db, ctx.env, ctx.tenantId) };
+    },
+  },
+  {
+    tool: 'ads.list_campaigns', mutates: false,
+    description: 'READ what is actually running right now, live from every connected ad network, with each campaign\'s status, objective, daily and total budget (in cents of the account currency) and schedule. This is the truth from the networks, as opposed to what our ledger last recorded — use it before changing anything. Narrow with `networks` (comma list such as "meta,google") or `accounts` (connection ids). Per-account failures come back in `errors` rather than blanking the list; an account listed there needs reconnecting.',
+    parameters: obj({ networks: S, accounts: S }, []),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('reading ad campaigns needs the platform environment');
+      const { readAdCampaigns, adCampaignQueryFrom } = await import('../advertising/adsService');
+      // The SAME parser the REST route uses — a second copy is how "networks=meta"
+      // comes to mean one thing on the canvas and another to an agent.
+      const query = adCampaignQueryFrom({
+        networks: a.networks != null ? str(a.networks) : null,
+        accounts: a.accounts != null ? str(a.accounts) : null,
+      });
+      return readAdCampaigns(ctx.db, ctx.env, ctx.tenantId, query, 'agent');
+    },
+  },
+  {
+    tool: 'ads.insights', mutates: false,
+    description: 'READ the daily paid-media ledger — spend, impressions, clicks and conversions per campaign per day — plus totals with cost-per-click, cost-per-conversion and click-through rate derived from them. Money is in CENTS of the account currency. This reads our own stored ledger rather than the networks, so it is fast and still answers when a grant has expired; `ads.sync` is what refreshes it. Defaults to the last 28 days; narrow with `since`/`until` (YYYY-MM-DD) or `networks`.',
+    parameters: obj({ since: S, until: S, networks: S }, []),
+    run: (ctx, a) => {
+      const query = new URLSearchParams();
+      if (a.since != null) query.set('since', str(a.since));
+      if (a.until != null) query.set('until', str(a.until));
+      if (a.networks != null) query.set('networks', str(a.networks));
+      const qs = query.toString();
+      return replayRoute(ctx, 'GET', qs ? `/api/ads/insights?${qs}` : '/api/ads/insights');
+    },
+  },
+  {
+    tool: 'ads.create_campaign', mutates: true,
+    description: 'Create a paid campaign on ONE ad network. THIS SPENDS REAL MONEY — confirm the network, the objective and the budget with the user before calling it, and never call it to "test". It is created PAUSED unless you pass `launch: true`, so writing it down is not the same act as starting to spend. Budgets are decimals in the account currency (`dailyBudget: 50` is fifty dollars), and one of dailyBudget or totalBudget is required. `objective` must be one of awareness, traffic, engagement, leads, conversions, app_installs, video_views — call ads.list_accounts first to see which the target network supports, because it will refuse one it cannot serve.',
+    parameters: obj({
+      name: S, objective: S, connectionId: S, network: S,
+      dailyBudget: N, totalBudget: N, startsAt: S, endsAt: S,
+      launch: { type: 'boolean' },
+    }, ['name', 'objective']),
+    run: (ctx, a) => replayRoute(ctx, 'POST', '/api/ads/campaigns', {
+      name: str(a.name),
+      objective: str(a.objective),
+      ...(a.connectionId != null ? { connectionId: str(a.connectionId) } : {}),
+      ...(a.network != null ? { network: str(a.network) } : {}),
+      ...(a.dailyBudget != null ? { dailyBudget: num(a.dailyBudget) } : {}),
+      ...(a.totalBudget != null ? { totalBudget: num(a.totalBudget) } : {}),
+      ...(a.startsAt != null ? { startsAt: str(a.startsAt) } : {}),
+      ...(a.endsAt != null ? { endsAt: str(a.endsAt) } : {}),
+      ...(a.launch === true ? { launch: true } : {}),
+    }),
+  },
+  {
+    tool: 'ads.update_campaign', mutates: true,
+    description: 'Change a live paid campaign — rename it, re-budget it, PAUSE it or resume it. THIS MOVES MONEY: setting `status: "active"` starts spending and changing a budget changes the rate. Pausing is the safe direction and is what to reach for when a campaign is underperforming or the user asks you to stop something. Identify the campaign by the network\'s own id (`externalId` from ads.list_campaigns) plus the account (`connectionId`, or `network` when the workspace has one account there). Budgets are decimals in the account currency.',
+    parameters: obj({
+      externalId: S, connectionId: S, network: S, name: S, status: S,
+      dailyBudget: N, totalBudget: N,
+    }, ['externalId']),
+    run: (ctx, a) => replayRoute(ctx, 'PATCH', `/api/ads/campaigns/${encodeURIComponent(str(a.externalId))}`, {
+      ...(a.connectionId != null ? { connectionId: str(a.connectionId) } : {}),
+      ...(a.network != null ? { network: str(a.network) } : {}),
+      ...(a.name != null ? { name: str(a.name) } : {}),
+      ...(a.status != null ? { status: str(a.status) } : {}),
+      ...(a.dailyBudget != null ? { dailyBudget: num(a.dailyBudget) } : {}),
+      ...(a.totalBudget != null ? { totalBudget: num(a.totalBudget) } : {}),
+    }),
+  },
+  {
+    tool: 'ads.sync', mutates: true,
+    description: 'Pull campaigns and daily delivery from every connected ad network into the workspace ledger now, instead of waiting for the scheduled sweep. Safe to repeat — each day is upserted, never appended, so spend cannot compound. Re-reads a trailing window because networks RESTATE history as conversions attribute late. Use it when the user says the numbers look stale, or right after a change you want reflected.',
+    parameters: obj({}),
+    run: (ctx) => replayRoute(ctx, 'POST', '/api/ads/sync'),
+  },
+
+  // ---- MEASUREMENT (site + product analytics) --------------------------------
+  //
+  // Entirely read-only, so all of it is safe for an autonomous run. This is the half
+  // of a campaign the paying network cannot report: an ad platform knows what it
+  // charged, only these know whether anything came of it.
+  {
+    tool: 'measurement.list_properties', mutates: false,
+    description: 'List the analytics properties connected to this workspace (Google Analytics 4, Google Search Console, Plausible, PostHog) with whether each is `ready`, and — importantly — `measures` and `dimensions` naming what that platform can actually report. Search Console has no concept of a session and PostHog has no organic search position, so check this before promising a number that cannot exist.',
+    parameters: obj({}),
+    run: async (ctx) => {
+      if (!ctx.env) throw new Error('reading analytics properties needs the platform environment');
+      const { listAnalyticsProperties } = await import('../analytics/analyticsService');
+      return { properties: await listAnalyticsProperties(ctx.db, ctx.env, ctx.tenantId) };
+    },
+  },
+  {
+    tool: 'measurement.overview', mutates: false,
+    description: 'READ site and product analytics over a window — totals plus a daily series, per connected property. Each property answers for ITSELF and the numbers are deliberately NOT summed across platforms: adding GA4 sessions to Plausible visits would describe nothing. A measure a platform does not report is ABSENT rather than zero, so a missing key means "cannot know", not "none". Defaults to the last 28 days (four whole weeks, so weekly seasonality does not read as a trend); pass `days`, or `since`/`until` as YYYY-MM-DD.',
+    parameters: obj({ days: N, since: S, until: S, properties: S }, []),
+    run: (ctx, a) => {
+      const query = new URLSearchParams();
+      if (a.days != null) query.set('days', String(num(a.days)));
+      if (a.since != null) query.set('since', str(a.since));
+      if (a.until != null) query.set('until', str(a.until));
+      if (a.properties != null) query.set('properties', str(a.properties));
+      const qs = query.toString();
+      return replayRoute(ctx, 'GET', qs ? `/api/measurement/overview?${qs}` : '/api/measurement/overview');
+    },
+  },
+  {
+    tool: 'measurement.breakdown', mutates: false,
+    description: 'READ one analytics property cut by a dimension: `channel` (the one attribution needs — it says whether paid spend produced any of these sessions), `campaign`, `page`, `query` (Search Console only) or `country`. Pair it with ads.insights to answer "did the spend work": ads.insights gives what was charged, this gives what arrived. Name the property with `property` (connection id) or `source` (ga4, search_console, plausible, posthog) when there is one of that kind. A platform that cannot serve the dimension says so and names the ones it can.',
+    parameters: obj({ dimension: S, property: S, source: S, days: N, since: S, until: S, limit: N }, []),
+    run: (ctx, a) => {
+      const query = new URLSearchParams();
+      query.set('dimension', a.dimension != null ? str(a.dimension) : 'channel');
+      if (a.property != null) query.set('property', str(a.property));
+      if (a.source != null) query.set('source', str(a.source));
+      if (a.days != null) query.set('days', String(num(a.days)));
+      if (a.since != null) query.set('since', str(a.since));
+      if (a.until != null) query.set('until', str(a.until));
+      if (a.limit != null) query.set('limit', String(num(a.limit)));
+      return replayRoute(ctx, 'GET', `/api/measurement/breakdown?${query.toString()}`);
+    },
   },
 
   // ---- Integrations + Platform migration (Jira/Monday/Rally/GitLab/Bitbucket/GitHub → BuilderForce) ----
@@ -3702,6 +3840,12 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // and draft a campaign; `social.publish` and `social_campaign.publish` speak in
   // public as the brand with nobody in the loop to stop them, so they stay off.
   'social.list_accounts', 'social.read_feed', 'social_campaign.list', 'social_campaign.create',
+  // Paid media: an autonomous run may LOOK at what is running and what it cost, but
+  // `ads.create_campaign`, `ads.update_campaign` and `ads.sync` are absent — the first
+  // two move real money and the third rewrites the ledger the first two are judged by.
+  'ads.list_accounts', 'ads.list_campaigns', 'ads.insights',
+  // Measurement is entirely read-only, so all of it is safe here.
+  'measurement.list_properties', 'measurement.overview', 'measurement.breakdown',
   // Project knowledge, files, review
   'project_facts.recall', 'project_facts.remember',
   'project_files.list', 'project_files.read', 'project_files.save',

@@ -20,16 +20,16 @@ import { desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
-  developerOrgs,
   extensionPackages,
   extensionVersions,
   tenantExtensionInstalls,
+  tenants,
 } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseConnectorManifest, type ConnectorManifest } from '../connectors/connectorManifest';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { DeveloperOrgError } from './developerOrgs';
+import { PublisherError } from './publishers';
 import { isExtensionScope, scopeUpgrade, SENSITIVE_SCOPES } from './extensionContract';
 import { loadPackage, loadVersion } from './extensionPackages';
 
@@ -89,12 +89,18 @@ export async function previewInstall(
   alreadyInstalled: boolean;
 }> {
   const pkg = await loadPackage(db, input.packageId);
-  if (pkg.listingState !== 'listed') throw new DeveloperOrgError('this package is not available', 404);
-  if (!pkg.currentVersionId) throw new DeveloperOrgError('this package has no published version', 409);
+  if (pkg.listingState !== 'listed') throw new PublisherError('this package is not available', 404);
+  if (!pkg.currentVersionId) throw new PublisherError('this package has no published version', 409);
 
   const version = await loadVersion(db, pkg.currentVersionId);
-  const [org] = await db.select().from(developerOrgs).where(eq(developerOrgs.id, pkg.developerOrgId)).limit(1);
-  if (org?.suspendedAt) throw new DeveloperOrgError('this package is not available', 404);
+  // The PUBLISHER's workspace, not the installing one — a declared cross-tenant
+  // read, and the reason a suspension hides a listing from everybody at once.
+  const [publisher] = await db
+    .select()
+    .from(tenants)
+    .where(acrossTenants(tenants, 'public_catalogue', eq(tenants.id, pkg.tenantId)))
+    .limit(1);
+  if (publisher?.publisherSuspendedAt) throw new PublisherError('this package is not available', 404);
 
   const [existing] = await db
     .select({ id: tenantExtensionInstalls.id })
@@ -105,8 +111,8 @@ export async function previewInstall(
   const scopes = version.requestedScopes ?? [];
   return {
     packageName: pkg.name,
-    publisherName: org?.legalName ?? null,
-    verificationState: org?.verificationState ?? null,
+    publisherName: publisher?.name ?? null,
+    verificationState: publisher?.publisherState ?? null,
     semver: version.semver,
     scopes,
     sensitiveScopes: scopes.filter((s) => isExtensionScope(s) && SENSITIVE_SCOPES.includes(s)),
@@ -135,7 +141,7 @@ export async function installPackage(
 ): Promise<InstallView> {
   const pkg = await loadPackage(db, input.packageId);
   if (pkg.listingState !== 'listed' || !pkg.currentVersionId) {
-    throw new DeveloperOrgError('this package is not available', 404);
+    throw new PublisherError('this package is not available', 404);
   }
   const version = await loadVersion(db, pkg.currentVersionId);
 
@@ -145,7 +151,7 @@ export async function installPackage(
     // Partial consent is not a supported state: an extension whose manifest says
     // it needs `write:tickets` and is granted only `read:projects` fails at call
     // time in a way the installer cannot debug. Refusing here is the honest answer.
-    throw new DeveloperOrgError('approve every scope the extension requests, or do not install it', 400);
+    throw new PublisherError('approve every scope the extension requests, or do not install it', 400);
   }
 
   // Whether a row already exists decides whether `install_count` moves. The
@@ -179,7 +185,7 @@ export async function installPackage(
       },
     })
     .returning({ id: tenantExtensionInstalls.id });
-  if (!row) throw new DeveloperOrgError('failed to install', 409);
+  if (!row) throw new PublisherError('failed to install', 409);
 
   if (!prior) {
     await db
@@ -190,7 +196,7 @@ export async function installPackage(
 
   await invalidateInstalls(env, input.tenantId);
   const view = (await listInstalls(db, env, input.tenantId)).find((i) => i.id === row.id);
-  if (!view) throw new DeveloperOrgError('install not found', 404);
+  if (!view) throw new PublisherError('install not found', 404);
   return view;
 }
 
@@ -210,16 +216,16 @@ export async function updateInstall(
     .from(tenantExtensionInstalls)
     .where(scopedToTenant(tenantExtensionInstalls, input.tenantId, eq(tenantExtensionInstalls.id, input.installId)))
     .limit(1);
-  if (!install) throw new DeveloperOrgError('install not found', 404);
+  if (!install) throw new PublisherError('install not found', 404);
 
   const pkg = await loadPackage(db, install.packageId);
   if (!pkg.currentVersionId || pkg.currentVersionId === install.versionId) {
-    throw new DeveloperOrgError('already on the current version', 409);
+    throw new PublisherError('already on the current version', 409);
   }
   const head = await loadVersion(db, pkg.currentVersionId);
   const { auto, added } = scopeUpgrade(install.grantedScopes, head.requestedScopes);
   if (!auto) {
-    throw new DeveloperOrgError(`this update requests new permissions (${added.join(', ')}) — re-install to approve them`, 409);
+    throw new PublisherError(`this update requests new permissions (${added.join(', ')}) — re-install to approve them`, 409);
   }
 
   // Scoped even though `install.id` was already resolved under this tenant: the
@@ -233,7 +239,7 @@ export async function updateInstall(
 
   await invalidateInstalls(env, input.tenantId);
   const refreshed = (await listInstalls(db, env, input.tenantId)).find((i) => i.id === install.id);
-  if (!refreshed) throw new DeveloperOrgError('install not found', 404);
+  if (!refreshed) throw new PublisherError('install not found', 404);
   return refreshed;
 }
 
@@ -248,7 +254,7 @@ export async function uninstallPackage(
     .set({ disabledAt: new Date(), updatedAt: new Date() })
     .where(scopedToTenant(tenantExtensionInstalls, input.tenantId, eq(tenantExtensionInstalls.id, input.installId)))
     .returning({ id: tenantExtensionInstalls.id });
-  if (result.length === 0) throw new DeveloperOrgError('install not found', 404);
+  if (result.length === 0) throw new PublisherError('install not found', 404);
   await invalidateInstalls(env, input.tenantId);
 }
 
@@ -256,7 +262,7 @@ interface LoadedInstall {
   install: typeof tenantExtensionInstalls.$inferSelect;
   version: typeof extensionVersions.$inferSelect;
   pkg: typeof extensionPackages.$inferSelect;
-  org: typeof developerOrgs.$inferSelect;
+  publisher: typeof tenants.$inferSelect;
 }
 
 /**
@@ -272,18 +278,21 @@ async function loadInstalls(db: Db, tenantId: number): Promise<LoadedInstall[]> 
       install: tenantExtensionInstalls,
       version: extensionVersions,
       pkg: extensionPackages,
-      org: developerOrgs,
+      publisher: tenants,
     })
     .from(tenantExtensionInstalls)
     .innerJoin(extensionVersions, eq(extensionVersions.id, tenantExtensionInstalls.versionId))
     .innerJoin(extensionPackages, eq(extensionPackages.id, tenantExtensionInstalls.packageId))
-    .innerJoin(developerOrgs, eq(developerOrgs.id, extensionPackages.developerOrgId))
+    // The publisher's workspace, joined for its name and its suspension. The
+    // SCOPE below is still the installing tenant's — the join reaches ACROSS
+    // tenants by design, which is what installing somebody else's package is.
+    .innerJoin(tenants, eq(tenants.id, extensionPackages.tenantId))
     .where(
       scopedToTenant(
         tenantExtensionInstalls,
         tenantId,
         sql`${tenantExtensionInstalls.disabledAt} is null`,
-        sql`${developerOrgs.suspendedAt} is null`,
+        sql`${tenants.publisherSuspendedAt} is null`,
       ),
     )
     .orderBy(desc(tenantExtensionInstalls.createdAt));

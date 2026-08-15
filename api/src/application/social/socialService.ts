@@ -29,7 +29,8 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import {
-  cacheVersionOf, createConnectedAccountsPort, type } from '../integrations/connectedAccounts';
+  cacheVersionOf, createConnectedAccountsPort, type ResolvedAccount,
+} from '../integrations/connectedAccounts';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
   allSocialProviders,
@@ -38,6 +39,7 @@ import {
   MAX_FEED_LIMIT,
   socialProviderForConnector,
   SOCIAL_CONNECTOR_KEYS,
+  type SocialPublishMode,
   SocialProviderError,
   type SocialAccountField,
   type SocialFeedItem,
@@ -60,8 +62,8 @@ export interface SocialAccountView {
   /** False when a required account-scope field is still missing. */
   ready: boolean;
   missingFields: SocialAccountField[];
-  /** True when this network refuses text-only posts. */
-  requiresMedia: boolean;
+  /** What this network accepts from a publish — `none` means read and measure only. */
+  publishMode: SocialPublishMode;
   lastTestOk: boolean | null;
   lastUsedAt: string | null;
 }
@@ -72,7 +74,7 @@ export interface SocialNetworkOption {
   label: string;
   connectorKey: string;
   accountFields: readonly SocialAccountField[];
-  requiresMedia: boolean;
+  publishMode: SocialPublishMode;
   connectedCount: number;
 }
 
@@ -117,8 +119,9 @@ const accounts = createConnectedAccountsPort<SocialProvider>({
 
 type ResolvedAccount_ = ResolvedAccount<SocialProvider>;
 
-/** The base view plus what a SOCIAL caller additionally needs to know. */
-function toAccountView(account: ResolvedAccount_): SocialAccountView {
+/** The base view plus what a SOCIAL caller additionally needs to know. Exported under
+ *  its domain name so the campaign service does not reach into `account.base` itself. */
+export function socialAccountView(account: ResolvedAccount_): SocialAccountView {
   return {
     ...account.base,
     network: account.provider.network,
@@ -129,7 +132,7 @@ function toAccountView(account: ResolvedAccount_): SocialAccountView {
 
 /** Every connected social account for the workspace. */
 export async function listSocialAccounts(db: Db, env: Env, tenantId: number): Promise<SocialAccountView[]> {
-  return (await accounts.resolveAll(db, env, tenantId)).map(toAccountView);
+  return (await accounts.resolveAll(db, env, tenantId)).map(socialAccountView);
 }
 
 /** The catalog + how many of each is connected. One query, not one per network. */
@@ -178,7 +181,7 @@ const callerFor = (db: Db, env: Env, tenantId: number, account: ResolvedAccount_
 
 /** Who this account is, cached — every feed read and publish needs it and it is stable. */
 export async function socialIdentity(
-  db: Db, env: Env, tenantId: number, account: ResolvedAccount, actorKind: 'agent' | 'user' = 'user',
+  db: Db, env: Env, tenantId: number, account: ResolvedAccount_, actorKind: 'agent' | 'user' = 'user',
 ): Promise<SocialIdentity> {
   return getOrSetCached(
     env,
@@ -234,7 +237,7 @@ export function socialFeedQueryFrom(input: {
  * Errors are RETURNED, not thrown: a merged feed must survive one revoked grant.
  */
 async function readAccountFeed(
-  db: Db, env: Env, tenantId: number, account: ResolvedAccount, limit: number, actorKind: 'agent' | 'user',
+  db: Db, env: Env, tenantId: number, account: ResolvedAccount_, limit: number, actorKind: 'agent' | 'user',
 ): Promise<{ items: SocialFeedItem[]; error?: string }> {
   try {
     const identity = await socialIdentity(db, env, tenantId, account, actorKind);
@@ -291,7 +294,7 @@ export async function readSocialFeed(
 
   return {
     items,
-    accounts: all.map(toAccountView),
+    accounts: all.map(socialAccountView),
     errors: reads.flatMap((read, index) => {
       const account = selected[index];
       return read.error && account
@@ -309,7 +312,7 @@ export async function readSocialFeed(
  * feed they look at next. A CONNECTION change needs nothing, because the cache key
  * carries the connection's version — see {@link cacheVersion}.
  */
-export async function invalidateSocialFeed(env: Env, tenantId: number, account: ResolvedAccount): Promise<void> {
+export async function invalidateSocialFeed(env: Env, tenantId: number, account: ResolvedAccount_): Promise<void> {
   await invalidateCached(env, feedKey(tenantId, account.row.id, cacheVersionOf(account.row)));
 }
 
@@ -341,7 +344,7 @@ export async function publishSocialPost(
       callerFor(db, env, tenantId, account, actorKind), account.fields, draft, identity,
     );
     await invalidateSocialFeed(env, tenantId, account);
-    return { ok: true, account: toAccountView(account), result };
+    return { ok: true, account: socialAccountView(account), result };
   } catch (error) {
     const retryable = error instanceof SocialProviderError ? error.retryable : false;
     const message = error instanceof Error ? error.message : 'That post could not be published.';
@@ -349,7 +352,7 @@ export async function publishSocialPost(
       source: 'application/social/socialService.ts',
       operation: `publish:${account.provider.network}`,
     });
-    return { ok: false, account: toAccountView(account), error: message, retryable };
+    return { ok: false, account: socialAccountView(account), error: message, retryable };
   }
 }
 

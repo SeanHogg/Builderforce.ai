@@ -60,39 +60,55 @@ export const REVIEW_STATES = ['pending', 'approved', 'rejected'] as const;
 export type ReviewState = (typeof REVIEW_STATES)[number];
 
 /**
- * A publisher's trust tier, in ascending order.
+ * A workspace's PUBLISHER state, in ascending order of trust.
+ *
+ * One scale, not two facts. `'none'` — the default for every workspace — means
+ * this tenant does not publish; the rest are its trust tier once it does.
+ * Splitting "is a publisher" from "how verified" into two columns would permit the
+ * one combination nobody wants (not a publisher, yet identity-verified), and would
+ * put the same question in two places for a reader to reconcile.
  *
  * `identity_verified` is what gates charging money (PRD 24 §9). The ORDER matters
  * and is expressed by the array index, so a caller asks "at least this tier?"
  * rather than enumerating states — one comparison that cannot drift from the list.
+ *
+ * Stored on `tenants.publisher_state` (migration 0471). Before that it was
+ * `developer_orgs.verification_state`, on a party model that no longer exists:
+ * a developer is a tenant.
  */
-export const DEVELOPER_VERIFICATION_STATES = ['unverified', 'domain_verified', 'identity_verified'] as const;
-export type DeveloperVerificationState = (typeof DEVELOPER_VERIFICATION_STATES)[number];
+export const PUBLISHER_STATES = ['none', 'unverified', 'domain_verified', 'identity_verified'] as const;
+export type PublisherState = (typeof PUBLISHER_STATES)[number];
 
-export function isVerificationState(v: unknown): v is DeveloperVerificationState {
-  return typeof v === 'string' && (DEVELOPER_VERIFICATION_STATES as readonly string[]).includes(v);
+export function isPublisherState(v: unknown): v is PublisherState {
+  return typeof v === 'string' && (PUBLISHER_STATES as readonly string[]).includes(v);
+}
+
+/** Does this workspace publish at all? The one place `'none'` is interpreted. */
+export function publishes(state: string): boolean {
+  return isPublisherState(state) && state !== 'none';
 }
 
 /** True when `state` is at or above `minimum` in the trust order. */
 export function meetsVerification(
   state: string,
-  minimum: DeveloperVerificationState,
+  minimum: PublisherState,
 ): boolean {
-  const have = DEVELOPER_VERIFICATION_STATES.indexOf(state as DeveloperVerificationState);
-  const need = DEVELOPER_VERIFICATION_STATES.indexOf(minimum);
+  const have = PUBLISHER_STATES.indexOf(state as PublisherState);
+  const need = PUBLISHER_STATES.indexOf(minimum);
   return have >= 0 && have >= need;
 }
 
-export const DEVELOPER_ROLES = ['owner', 'admin', 'publisher'] as const;
-export type DeveloperRole = (typeof DEVELOPER_ROLES)[number];
-
-/** Role order, so "may this member do X?" is one comparison rather than a switch. */
-const ROLE_RANK: Record<DeveloperRole, number> = { publisher: 1, admin: 2, owner: 3 };
-
-export function roleAtLeast(role: string, minimum: DeveloperRole): boolean {
-  const have = ROLE_RANK[role as DeveloperRole];
-  return have !== undefined && have >= ROLE_RANK[minimum];
-}
+/**
+ * Authority over a publisher is authority over its WORKSPACE — see
+ * `application/tenant/tenantRoles.ts`. There is deliberately no role ladder here:
+ * this context had its own three-value one (`owner`/`admin`/`publisher`) beside
+ * the tenant's four-value one, so "may this person ship a version?" had two
+ * answers that were free to disagree. Migration 0471 kept the ladder that already
+ * governed everything else.
+ *
+ *   ship a version, create a package  → at least `developer`
+ *   list / delist, claim a domain     → at least `manager`
+ */
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scopes

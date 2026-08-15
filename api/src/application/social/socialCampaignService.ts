@@ -34,6 +34,7 @@ import {
 } from './socialProviders';
 import {
   publishSocialPost,
+  socialAccountView,
   resolvePublishableAccounts,
   type ResolvedAccount,
   type SocialAccountView,
@@ -65,7 +66,9 @@ export interface SocialCampaignPostView {
 
 /** A reason a campaign cannot fully publish. Rendered by the client, in its language. */
 export interface SocialCampaignBlocker {
-  code: 'noCopy' | 'noAccounts' | 'needsMedia' | 'accountNotReady' | 'accountMissing';
+  /** `cannotPublish` is a read-and-measure-only network (YouTube) selected as a target —
+   *  distinct from `needsMedia`, which is fixable by attaching an image. */
+  code: 'noCopy' | 'noAccounts' | 'needsMedia' | 'cannotPublish' | 'accountNotReady' | 'accountMissing';
   network?: string;
   account?: string;
   fields?: string;
@@ -164,7 +167,9 @@ function blockersFor(campaign: CampaignRow, posts: PostRow[], accounts: readonly
       });
       continue;
     }
-    if (account.requiresMedia && (campaign.mediaUrls ?? []).length === 0) {
+    if (account.publishMode === 'none') {
+      blockers.push({ code: 'cannotPublish', network: post.network, account: `${account.networkLabel} · ${account.name}` });
+    } else if (account.publishMode === 'media' && (campaign.mediaUrls ?? []).length === 0) {
       blockers.push({ code: 'needsMedia', network: post.network, account: `${account.networkLabel} · ${account.name}` });
     }
   }
@@ -349,9 +354,9 @@ export async function createSocialCampaign(
   // sit until the floor sweep and publish late.
   if (scheduledAt) await signalPendingWork(env);
 
-  const view = await getSocialCampaign(db, tenantId, campaign.id, targets.map((a) => a.view));
+  const view = await getSocialCampaign(db, tenantId, campaign.id, targets.map(socialAccountView));
   if (!view) throw new SocialCampaignError('The campaign could not be read back.', 500);
-  return { campaign: view, accounts: targets.map((a) => a.view) };
+  return { campaign: view, accounts: targets.map(socialAccountView) };
 }
 
 /** Edit a draft. Published campaigns are HISTORY and are not rewritten. */
@@ -480,7 +485,7 @@ export async function runSocialCampaignBatch(
 
     // Not a failure: a text announcement can NEVER be an Instagram post, so calling
     // it failed would raise the same false alarm on every campaign.
-    if (account.provider.requiresMedia && (campaign.mediaUrls ?? []).length === 0) {
+    if (account.provider.publishMode === 'media' && (campaign.mediaUrls ?? []).length === 0) {
       await markPost(db, tenantId, post.id, {
         status: 'skipped',
         error: `${account.provider.label} needs an image or video — this campaign has no media.`,
