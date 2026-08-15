@@ -1457,9 +1457,18 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
   visual-editor/site-release work that is still in flight. `literalHexFiles` is the one that matters: its baseline
   is deliberately 0 so a literal cannot land quietly, and a literal renders the SAME in both themes. Fix = tokens
   (or a `COLOUR_EXEMPT` entry with its reason, if these are author-picked colours the product persists — which for
-  a visual editor is plausible and is exactly what the exemption list is for). **Blocker: a concurrent session
-  owns those four files right now**, and a second writer re-tokenising them mid-edit would collide. Unblocks: the
-  ratchet going green, which is what lets it catch the NEXT regression instead of being ignored.
+  a visual editor is plausible and is exactly what the exemption list is for).
+
+  The **architecture** ratchet is red from the same batch and for the same reason: `'use client' files` reads 800
+  against a baseline of 797, and the three additions (`components/freelance/TalentProfileView.tsx`,
+  `components/freelance/ProfileResumePanel.tsx`, `components/onboarding/HiredWizardSteps.tsx`, alongside a rewrite
+  of `components/developer/DeveloperPortalContent.tsx` and `components/resume/ResumeDocumentView.tsx`) were all
+  written at 15:02 by the hired.video work. That ratchet is deliberately not self-bumping — the baseline moves only
+  with a written reason in `check-frontend-architecture.mjs`, and the reason has to come from whoever chose the
+  client boundary. **Blocker for both counters: a concurrent session owns those files right now**, and a second
+  writer re-tokenising or re-baselining them mid-edit would collide and would be recording a justification it does
+  not have. Unblocks: both ratchets going green, which is what lets them catch the NEXT regression instead of being
+  ignored — the failure mode [[build-guard-ratchets]] exists to prevent.
 - **`taskStatusLabel` is an English-only label map outside next-intl** *(found 2026-07-25 while fixing the accountability banner)* — `frontend/src/lib/taskStatus.ts` `TASK_STATUS_LABELS` ("Backlog"/"In Review"/…) plus the `humanizeStatus` fallback are plain constants consumed by the board, the lane editor and now the Sign-off gap lines, so every lane/status name renders English in zh/es/fr/de. Fix: move the labels to a `taskStatus.*` catalog namespace and expose a `useTaskStatusLabel()` hook (plus a `getTranslations` variant for server callers), then migrate the call sites. Unblocks: a fully-localized board, which is the largest remaining English surface after the marketing copy.
 
 ---

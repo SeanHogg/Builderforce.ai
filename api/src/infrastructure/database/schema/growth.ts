@@ -115,6 +115,19 @@ export const siteCollections = pgTable('site_collections', {
    * option among three is how it eventually gets chosen.
    */
   readPolicy:           varchar('read_policy', { length: 16 }).notNull().default('none'),
+  /**
+   * Does a submission here become a TICKET on the project's board? (0473)
+   *
+   * This is what closes the loop "the project is the app" opens: the agent
+   * workforce maintains the code and, without this, never hears from the people
+   * using it — a bug reported by an end user landed in a row no ticket, no
+   * manager and no agent would ever read.
+   *
+   * Configuration on the collection, never a hardcoded collection name: which
+   * collection means "feedback" is the creator's decision, and a magic string
+   * would make it ours.
+   */
+  raisesTickets:        boolean('raises_tickets').notNull().default(false),
   recordCount:          integer('record_count').notNull().default(0),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
@@ -228,6 +241,56 @@ export const siteUserSessions = pgTable('site_user_sessions', {
   uniqueIndex('site_user_sessions_token_unique').on(t.tokenHash),
   index('site_user_sessions_user_idx').on(t.siteUserId),
   index('site_user_sessions_site_idx').on(t.siteId),
+]);
+
+/**
+ * A recurring relationship between ONE end user and ONE app (0473).
+ *
+ * The genuinely new fact in the embedded-apps arc, and the one thing the
+ * existing commerce rails could not express: `template_licenses` records a
+ * standing right with no renewal and `orders` records a moment. Neither says
+ * "this person is paying $4 a month and their period ends on the 12th".
+ *
+ * MONEY IS DELIBERATELY NOT HERE. Settlement runs through the same `orders`,
+ * `order_line_items` and `ledger_entries` a one-time sale writes — same
+ * reference-keyed idempotency, same rate stamped per sale. A second money path
+ * is how a seller's balance and the platform's books stop agreeing.
+ */
+export const siteSubscriptions = pgTable('site_subscriptions', {
+  id:           serial('id').primaryKey(),
+  siteId:       integer('site_id').notNull().references(() => projectSites.id, { onDelete: 'cascade' }),
+  /** The SELLER's tenant. Every row here belongs to the workspace that owns the
+   *  app, never to the consumer — a consumer has no tenant at all, which is the
+   *  entire point of {@link siteUsers}. */
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  siteUserId:   integer('site_user_id').notNull().references(() => siteUsers.id, { onDelete: 'cascade' }),
+  /** The listing this is against. No FK: a listing may be withdrawn while the
+   *  people already paying for it keep working — the same rule that makes a
+   *  licence outlive an unpublish. */
+  catalogItemId: text('catalog_item_id'),
+  /** 'active' | 'past_due' | 'cancelled'. A cancelled row is KEPT: it is the
+   *  record that somebody used to pay. */
+  status:       varchar('status', { length: 16 }).notNull().default('active'),
+  priceCents:   integer('price_cents').notNull().default(0),
+  currency:     varchar('currency', { length: 8 }).notNull().default('USD'),
+  providerRef:  varchar('provider_ref', { length: 255 }),
+  /** WHICH VERSION THEY HOLD — the same pin as `template_licenses.snapshot_id`,
+   *  and load-bearing for the same reason: a buyer is offered an update and is
+   *  never moved without accepting, so a seller who ships a bad release cannot
+   *  take every existing subscriber with them. */
+  snapshotId:   uuid('snapshot_id'),
+  currentPeriodEnd: timestamp('current_period_end'),
+  cancelledAt:  timestamp('cancelled_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  // One live subscription per person per app. The database is the arbiter
+  // rather than a check somebody remembered to write: a double-clicked checkout
+  // and a replayed webhook both collide here.
+  uniqueIndex('site_subscriptions_site_user_unique').on(t.siteId, t.siteUserId),
+  index('site_subscriptions_tenant_idx').on(t.tenantId),
+  index('site_subscriptions_status_idx').on(t.siteId, t.status),
+  index('site_subscriptions_period_idx').on(t.status, t.currentPeriodEnd),
 ]);
 
 // ---------------------------------------------------------------------------

@@ -188,6 +188,16 @@ export const projectSites = pgTable('project_sites', {
   /** Cloudflare for SaaS custom-hostname id, once the cert has been requested. */
   customDomainHostnameId:  varchar('custom_domain_hostname_id', { length: 64 }),
   customDomainError:       text('custom_domain_error'),
+  /** The `website` canvas card published as this site's LANDING PAGE (0473) —
+   *  the creator's own shop window, in their own brand, on their own address.
+   *
+   *  A column and not a table: a site has exactly one landing page. Referenced
+   *  by id rather than by a foreign key into `creation_session_objects` because
+   *  the canvas is a different bounded context, and a published landing page
+   *  must survive its source card being deleted (the bytes are already in R2)
+   *  rather than cascade a live site to nothing. NULL = the site serves the app
+   *  at `/`, exactly as before this existed. */
+  landingObjectId:         uuid('landing_object_id'),
   assetCount:    integer('asset_count').notNull().default(0),
   totalBytes:    bigint('total_bytes', { mode: 'number' }).notNull().default(0),
   publishedAt:   timestamp('published_at'),

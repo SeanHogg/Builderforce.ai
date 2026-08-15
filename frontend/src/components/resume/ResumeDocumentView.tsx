@@ -1,5 +1,3 @@
-'use client';
-
 import type { CSSProperties } from 'react';
 import {
   masterResumeRevision,
@@ -22,6 +20,14 @@ import { RESUME_DOCUMENT_STYLES, renderCanvasResumeRevision, resumePageCss } fro
  * The DOCUMENT keeps its own palette — a résumé is paper, and its template's
  * accent/paper/ink are the author's choice. Everything AROUND it is our UI, so the
  * desk it sits on follows the viewer's theme through tokens.
+ *
+ * ── AND WHY IT IS NOT A CLIENT COMPONENT ─────────────────────────────────────────
+ * Deliberately no `'use client'`: there is no state, no handler and no browser API
+ * here, only props in and paper out. Its three interactive hosts are client
+ * components already and pull it into their bundle by importing it, so the directive
+ * bought them nothing — while {@link PublicResumeView}, an async Server Component
+ * serving the public share link, was forced to ship a client bundle to render a
+ * document that cannot change. That page is the one that most wants to be static.
  */
 export function ResumeDocumentView({
   family,

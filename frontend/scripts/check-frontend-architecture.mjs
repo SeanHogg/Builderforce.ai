@@ -40,6 +40,22 @@
  *   that on the server, which is the boundary this ratchet exists to keep
  *   somebody thinking about.
  *
+ *   797 → 799 (`useClientFiles`, 2026-08-15) — two of the three the résumé and
+ *   paid-media work added. `components/freelance/ProfileResumePanel.tsx` uploads a
+ *   file, previews a template on hover and saves on a different cadence from the
+ *   profile around it, none of which a server render can do.
+ *   `components/widgets/registry-modules/paidMediaWidgets.tsx` is four widget
+ *   bodies over `useSharedSource`, whose entire purpose is that the four pinned
+ *   together cost one request — a hook, and therefore client.
+ *
+ *   The THIRD, `components/resume/ResumeDocumentView.tsx`, is why this is +2 and
+ *   not +3: it had the directive and needed none. Props in, paper out, no hook and
+ *   no handler. Its interactive hosts pull it into their bundle by importing it,
+ *   and removing it lets `PublicResumeView` — an async Server Component serving the
+ *   public share link — render the document on the server, which is where a page
+ *   whose whole job is to be shared and indexed wants to be. Check for that shape
+ *   before raising this number: the directive is sometimes the bug.
+ *
  *   796 → 797 (`useClientFiles`, 2026-08-15) — `CanvasMiroPanel.tsx`, the Miro
  *   import browser. It has no server form: every interesting thing it does is a
  *   round trip driven by a click (list the boards, then WALK a cursor to the end

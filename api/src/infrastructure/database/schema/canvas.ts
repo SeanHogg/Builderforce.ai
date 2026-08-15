@@ -1406,8 +1406,22 @@ export const creationSessions = pgTable('creation_sessions', {
   archivedAt:     timestamp('archived_at'),
   branchParentSessionId: uuid('branch_parent_session_id').references((): AnyPgColumn => creationSessions.id, { onDelete: 'set null' }),
   branchBaseRevision: bigint('branch_base_revision', { mode: 'number' }),
+  /** THE JOIN BETWEEN A BOARD AND THE APP IT BECAME (0473).
+   *
+   *  The canvas and the delivery side of the platform had no join, so a person
+   *  who had designed something on a board had no action that turned it into a
+   *  project — and the whole build → publish → deploy → staff pipeline was
+   *  unreachable from the canvas. Setting this is the ONLY structural change in
+   *  the "idea to sell" arc; everything downstream is configuration on the
+   *  project row it points at.
+   *
+   *  Nullable because most boards are never apps, and SET NULL because deleting
+   *  the project a board became must not delete the board. Unique where present
+   *  (partial index) so "which board is this app" has exactly one answer. */
+  projectId:      integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
 }, (t) => ({
   byTenantActivity: index('idx_creation_sessions_tenant_activity').on(t.tenantId, t.status, t.lastActivityAt),
+  byProject: index('creation_sessions_project_idx').on(t.projectId),
   byCreator: index('idx_creation_sessions_creator').on(t.createdBy, t.lastActivityAt),
   bySegment: index('idx_creation_sessions_segment').on(t.tenantId, t.segmentId, t.lastActivityAt),
   byFolder: index('idx_creation_sessions_tenant_folder').on(t.tenantId, t.segmentId, t.folder, t.lastActivityAt),

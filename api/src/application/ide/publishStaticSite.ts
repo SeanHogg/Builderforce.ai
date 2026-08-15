@@ -22,7 +22,7 @@ import { projectSites, qaTargets } from '../../infrastructure/database/schema';
 import {
   SITES_PREFIX,
   HOSTING_APEX,
-  normalizeSubdomain,
+  checkSubdomainAvailability,
   newVersionToken,
   invalidateSite,
   contentTypeFor,
@@ -97,24 +97,24 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
   const oldSub = current?.subdomain;
 
   const requested = requestedSubdomain?.trim() || oldSub || projectName || `app-${projectId}`;
-  const subdomain = normalizeSubdomain(requested);
-  if (!subdomain) {
+  // ONE uniqueness rule, shared with the availability endpoint and the
+  // conversion path (`checkSubdomainAvailability`). This used to normalise and
+  // check ownership inline; three copies of that rule is how one of them starts
+  // accepting a reserved label that the serving side then refuses to route.
+  const availability = await checkSubdomainAvailability(db, requested, projectId);
+  if (!availability.label) {
     return {
       ok: false,
       status: 400,
-      error: 'Invalid or reserved subdomain. Use lowercase letters, numbers and hyphens.',
+      error: availability.reason === 'reserved'
+        ? `"${requested}" is reserved by the platform. Choose another address.`
+        : 'Invalid subdomain. Use lowercase letters, numbers and hyphens.',
     };
   }
-
-  // Global uniqueness — a subdomain can't be claimed by another project.
-  const [owner] = await db
-    .select({ projectId: projectSites.projectId })
-    .from(projectSites)
-    .where(eq(projectSites.subdomain, subdomain))
-    .limit(1);
-  if (owner && Number(owner.projectId) !== projectId) {
-    return { ok: false, status: 409, error: `Subdomain "${subdomain}" is taken.` };
+  if (!availability.available) {
+    return { ok: false, status: 409, error: `Subdomain "${availability.label}" is taken.` };
   }
+  const subdomain = availability.label;
 
   // Each build lands under its OWN version prefix rather than overwriting the
   // subdomain root. Publishing used to delete every object under the subdomain

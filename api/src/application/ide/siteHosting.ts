@@ -207,6 +207,74 @@ export async function invalidateSite(env: Env, subdomain: string): Promise<void>
   await invalidateCached(env, siteCacheKey(subdomain));
 }
 
+/** Why a candidate address cannot be used. `ok` means it is free right now. */
+export type SubdomainAvailabilityReason = 'ok' | 'invalid' | 'reserved' | 'taken';
+
+export interface SubdomainAvailability {
+  /** The normalised DNS label, or null when the input cannot become one. */
+  label: string | null;
+  available: boolean;
+  reason: SubdomainAvailabilityReason;
+  /** The full host the site would answer on, when the label is usable. */
+  host: string | null;
+}
+
+/**
+ * IS THIS ADDRESS FREE?
+ *
+ * ── WHY THIS EXISTS AS A PRIMITIVE ──────────────────────────────────────────
+ * `publishStaticSite` has always been able to answer this — it normalises the
+ * requested label, checks global ownership and returns a 409 — but only at the
+ * moment of publishing. So a creator found out what their app was called by
+ * shipping it, and there was no way to ask beforehand or to change it after.
+ *
+ * Extracted rather than duplicated: the conversion path (claiming an address for
+ * a brand-new app), the availability endpoint the creator types into, and the
+ * publish path all have to answer this question identically. Three copies of a
+ * uniqueness rule is how one of them starts accepting a reserved label.
+ *
+ * ── DELIBERATELY NOT CACHED ─────────────────────────────────────────────────
+ * This is a live uniqueness check typed a character at a time, and the answer it
+ * gives is acted on immediately. A cached "available" that survives somebody
+ * else claiming the name is worse than no check at all — the creator is told
+ * they have it and the publish then fails. Same reasoning as the licence gate in
+ * `listingCommerce`: a cache in front of an authorising read is a stale answer
+ * with consequences. The query itself is one indexed lookup on a unique column.
+ *
+ * `forProjectId` excludes the caller's own site, so re-checking the address you
+ * already hold reports `ok` rather than `taken`.
+ */
+export async function checkSubdomainAvailability(
+  db: { select: ReturnType<typeof buildDatabase>['select'] },
+  raw: string,
+  forProjectId?: number | null,
+): Promise<SubdomainAvailability> {
+  const trimmed = (raw ?? '').trim();
+  const label = normalizeSubdomain(trimmed);
+  if (!label) {
+    // `normalizeSubdomain` folds "unusable" and "reserved" into one null, but the
+    // creator needs to know which: "pick different characters" and "that name
+    // belongs to the platform" are different instructions.
+    const bare = trimmed.toLowerCase().replace(/[\s_]+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const reason: SubdomainAvailabilityReason = RESERVED_SUBDOMAINS.has(bare) ? 'reserved' : 'invalid';
+    return { label: null, available: false, reason, host: null };
+  }
+
+  const [owner] = await db
+    .select({ projectId: projectSites.projectId })
+    .from(projectSites)
+    .where(eq(projectSites.subdomain, label))
+    .limit(1);
+
+  const takenByAnother = owner != null && Number(owner.projectId) !== Number(forProjectId ?? -1);
+  return {
+    label,
+    available: !takenByAnother,
+    reason: takenByAnother ? 'taken' : 'ok',
+    host: takenByAnother ? null : `${label}.${HOSTING_APEX}`,
+  };
+}
+
 /** Drop the cached custom-hostname lookup (call on claim / verify / release). */
 export async function invalidateCustomDomain(env: Env, hostname: string): Promise<void> {
   await invalidateCached(env, customDomainCacheKey(hostname));
