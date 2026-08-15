@@ -44,6 +44,17 @@ CREATE INDEX IF NOT EXISTS idx_freelancer_profiles_resume_object
   ON freelancer_profiles (resume_object_id)
   WHERE resume_object_id IS NOT NULL;
 
+-- THE EMPLOYER'S HALF
+-- ------------------------------------------------------------------------------
+-- `candidate_resumes` landed with migration 0419 (the PRD 20 hiring domain) and has had
+-- no writer since — the ATS had a table for a résumé and no way to get one. Applying now
+-- PROJECTS the applicant's master revision into the employer's tenant, which is what
+-- keeps a private variant history out of a recruiter's inbox while still giving the
+-- matcher something tenant-scoped to read. One snapshot per candidate per employer:
+-- re-applying refreshes it rather than appending a near-identical row.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_candidate_resumes_tenant_candidate
+  ON candidate_resumes (tenant_id, candidate_ref);
+
 ALTER TABLE freelancer_profiles
   DROP COLUMN IF EXISTS hired_video_user_id,
   DROP COLUMN IF EXISTS hired_video_connection_id,

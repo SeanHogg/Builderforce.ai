@@ -7,7 +7,6 @@ ab_test_variants
 ab_tests
 action_items
 activity_feed
-ad_campaigns
 ad_sets
 ads
 affiliate_referrals
@@ -35,7 +34,6 @@ brand_kits
 break_even_scenarios
 business_pricing_models
 candidate_interactions
-candidate_resumes
 capacity_heatmaps
 card_decks
 churn_predictions
@@ -62,15 +60,12 @@ course_lessons
 course_modules
 courses
 creator_youtube_ingests
-credentials
 custom_kpis
 customer_engagement_feedback_widgets
 customer_journeys
 dashboard_layouts
 data_rooms
 deal_flow_opportunities
-deals
-deliveries
 due_diligence_checklists
 due_diligence_documents
 email_campaigns
@@ -83,7 +78,6 @@ event_matchmaking
 event_reminders_sent
 event_waitlist
 exclusive_boards
-expenses
 experiments
 extension_sessions
 feed_features
@@ -103,17 +97,13 @@ hr_employment_records
 inbound_shipments
 inbox_actions
 inbox_seat_addons
-interview_kit_stages
 interview_kits
 interview_question_sets
-interviews
 inventory_items
 investment_opportunities
 investor_peer_comparables
-invoice_line_items
 job_applications
 job_items
-job_pipeline_entries
 job_websites
 journey_touchpoints
 kanban_columns
@@ -122,7 +112,6 @@ landing_page_blocks
 landing_pages
 learn_videos
 learning_cohorts
-ledger_entries
 legal_document_acceptances
 list_items
 lists
@@ -135,7 +124,6 @@ marketing_heatmap_pages
 marketing_heatmap_screenshots
 marketing_leads
 marketing_seo_pages
-messages
 metric_thresholds
 model_locks
 modules
@@ -159,8 +147,6 @@ people_headcount_plans
 people_objective_outcomes
 people_tenants
 people_workflow_triggers
-pipeline_stages
-pipeline_touchpoints
 placement_documents
 placement_splits
 placements
@@ -175,7 +161,6 @@ product_ideas
 products
 promo_projects
 purchase_orders
-question_sets
 queue_job_to_process
 queue_job_to_resume
 ramp_times
@@ -186,7 +171,6 @@ region_waitlist
 relations
 release_plans
 report_approvals
-responses
 retained_search_firms
 ri_icps
 ri_ids
@@ -206,7 +190,7 @@ service_assets
 session_discussions
 sessions
 sign_offs
-snapshots
+site_subscriptions
 sprint_financial_impact
 stage_lookup
 stock_media_assets
@@ -218,7 +202,6 @@ sync_states
 system_features
 task_effort_estimates
 task_time_entries
-template_licenses
 timesheets
 uptime_checks
 uptime_monitors

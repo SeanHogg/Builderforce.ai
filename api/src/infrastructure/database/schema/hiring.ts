@@ -83,6 +83,10 @@ export const candidateResumes = pgTable('candidate_resumes', {
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_candidate_resumes_candidate').on(t.tenantId, t.candidateRef, t.isPrimary),
+  // One snapshot per candidate per employer (0471). Applying REFRESHES what this person
+  // applies with rather than appending a near-identical copy per application, which is
+  // also what makes the projection safely idempotent.
+  uniqueIndex('uq_candidate_resumes_tenant_candidate').on(t.tenantId, t.candidateRef),
 ]);
 
 /** Every touch with a candidate, whoever made it — recruiter, agent or automation. */

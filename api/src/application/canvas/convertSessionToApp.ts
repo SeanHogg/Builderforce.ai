@@ -43,6 +43,7 @@ import {
   projectSites,
   projects,
 } from '../../infrastructure/database/schema';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { buildProjectKey } from '../project/projectKey';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
@@ -92,10 +93,13 @@ async function allocateProjectKey(db: Db, tenantId: number, name: string): Promi
   const base = buildProjectKey(tenantId, name);
   for (let attempt = 0; attempt < 6; attempt++) {
     const key = attempt === 0 ? base : `${base.slice(0, 46)}-${attempt + 1}`;
+    // DELIBERATELY cross-tenant: `projects.key` is unique across the deployment,
+    // so a tenant-scoped "is it taken?" answers free for a key another tenant
+    // already holds and the insert below then trips the unique constraint.
     const [taken] = await db
       .select({ id: projects.id })
       .from(projects)
-      .where(eq(projects.key, key))
+      .where(acrossTenants(projects, 'global_uniqueness', eq(projects.key, key)))
       .limit(1);
     if (!taken) return key;
   }

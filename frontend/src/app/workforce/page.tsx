@@ -58,7 +58,7 @@ function WorkforcePageInner() {
       <div className="page-header" style={{ marginBottom: 16, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 className="page-title" style={{ margin: 0 }}>{t('title')}</h1>
-          <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>{subtitle}</p>
+          <p className="page-sub" style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', margin: '4px 0 0' }}>{subtitle}</p>
         </div>
         {/* Message the broader team — the tenant-wide team chat (humans + agents). */}
         <TeamChatButton variant="labeled" />

@@ -54,7 +54,7 @@ export function ResumeDocumentView({
         padding: 'clamp(8px, 2vw, 20px)',
         background: 'var(--bg-base)',
         border: '1px solid var(--border)',
-        borderRadius: 10,
+        borderRadius: 'var(--radius-lg)',
       }
     : { padding: 0, background: 'transparent' };
 

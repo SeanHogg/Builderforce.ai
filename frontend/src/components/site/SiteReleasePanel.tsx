@@ -94,8 +94,8 @@ export function SiteReleasePanel({ projectId, onBuild }: SiteReleasePanelProps) 
   return (
     <div style={{ borderTop: '1px solid var(--chat-input-border)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div>
-        <div style={{ fontWeight: 600, fontSize: 14 }}><Icon source="↩️" size="1em" /> {t('releases.title')}</div>
-        <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>{t('releases.description')}</div>
+        <div style={{ fontWeight: 600, fontSize: 'var(--font-size-body)' }}><Icon source="↩️" size="1em" /> {t('releases.title')}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', marginTop: 2 }}>{t('releases.description')}</div>
       </div>
 
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -108,23 +108,23 @@ export function SiteReleasePanel({ projectId, onBuild }: SiteReleasePanelProps) 
               background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
             }}
           >
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono, monospace)' }}>
+            <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono, monospace)' }}>
               {release.versionToken.slice(0, 8)}
             </span>
-            <span style={{ fontSize: 11.5, color: 'var(--text-muted)', flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', flex: 1, minWidth: 0 }}>
               {release.publishedAt ? new Date(release.publishedAt).toLocaleString() : '—'}
               {' · '}{formatBytes(release.totalBytes)}
               {' · '}{release.source}
             </span>
             {release.current ? (
-              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--emerald-bright, #059669)' }}>{t('releases.current')}</span>
+              <span style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, color: 'var(--emerald-bright)' }}>{t('releases.current')}</span>
             ) : (
               <button
                 type="button"
                 onClick={() => { void restore(release.versionToken); }}
                 disabled={busy !== null}
                 style={{
-                  padding: '4px 10px', fontSize: 11.5, fontWeight: 600, minHeight: 28,
+                  padding: '4px 10px', fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, minHeight: 28,
                   borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
                   background: 'var(--bg-deep)', color: 'var(--text-secondary)',
                   cursor: busy ? 'wait' : 'pointer',
@@ -138,8 +138,8 @@ export function SiteReleasePanel({ projectId, onBuild }: SiteReleasePanelProps) 
       </ul>
 
       <div>
-        <div style={{ fontWeight: 600, fontSize: 14 }}><Icon source="📱" size="1em" /> {t('packaging.title')}</div>
-        <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>{t('packaging.description')}</div>
+        <div style={{ fontWeight: 600, fontSize: 'var(--font-size-body)' }}><Icon source="📱" size="1em" /> {t('packaging.title')}</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', marginTop: 2 }}>{t('packaging.description')}</div>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {APP_PACKAGE_TARGETS.map((target) => (
@@ -149,7 +149,7 @@ export function SiteReleasePanel({ projectId, onBuild }: SiteReleasePanelProps) 
             onClick={() => { void pack(target); }}
             disabled={busy !== null}
             style={{
-              padding: '7px 14px', fontSize: 12.5, fontWeight: 600, minHeight: 32,
+              padding: '7px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, minHeight: 32,
               borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
               background: 'var(--bg-deep)', color: 'var(--text-primary)',
               cursor: busy ? 'wait' : 'pointer',
@@ -160,8 +160,8 @@ export function SiteReleasePanel({ projectId, onBuild }: SiteReleasePanelProps) 
         ))}
       </div>
 
-      {notice && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{notice}</div>}
-      {error && <div role="alert" style={{ fontSize: 12, color: 'var(--error-text, #dc2626)', whiteSpace: 'pre-wrap' }}>{error}</div>}
+      {notice && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>{notice}</div>}
+      {error && <div role="alert" style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)', whiteSpace: 'pre-wrap' }}>{error}</div>}
     </div>
   );
 }

@@ -379,6 +379,10 @@ export interface Env {
    * stamped onto the order line, so changing it never re-prices a past sale.
    */
   MARKETPLACE_TAKE_RATE_BPS?: string;
+  /** Lifetime seller earnings, in cents, before the take rate applies at all.
+   *  Defaults to $200,000 — free until it is material, then generous, which is
+   *  the shape monday.com / Square / Atlassian all use. */
+  MARKETPLACE_TAKE_RATE_THRESHOLD_CENTS?: string;
   /** Pro plan flat-rate prices */
   STRIPE_PRICE_PRO_MONTHLY?: string;    // price_... for $29/mo
   STRIPE_PRICE_PRO_YEARLY?: string;     // price_... for $290/yr

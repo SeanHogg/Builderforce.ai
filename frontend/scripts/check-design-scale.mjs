@@ -52,9 +52,16 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { printDelta, readTallies, tallyByFile, writeTallies } from './lib/ratchetDelta.mjs';
 
 const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const srcDir = resolve(here, '../src');
+/**
+ * Per-file tallies beside the counts below. The count is the gate; this is the only thing
+ * that can say WHICH file moved it — a `.slice(0, 12)` of 3,793 offenders is the same
+ * twelve lines every time and never the one that broke the build. See `lib/ratchetDelta`.
+ */
+const TALLY_PATH = resolve(here, '.design-scale-tally.json');
 
 /**
  * The high-water marks. LOWER THESE as call sites migrate; never raise them.
@@ -89,8 +96,18 @@ const BASELINE = {
    * `ShoppingCart`, `ToolRunner`, `NavigationFeaturesSettings`,
    * `StakeholderAlignmentPanel`, `RecommendationsLens`, `CanvasVideoEditor`, and the
    * pricing / dashboard / phone modules.
+   *
+   * 3,818 → 3,793: the surfaces that landed after that baseline named their roles.
+   * Six were new files that had never been on the scale at all — the developer
+   * portal, the freelancer profile and its résumé panel, the hired.video wizard
+   * steps, the LLM-ratings panel and the site-release panel — and the last two are
+   * why this went DOWN rather than up. The pattern in every one of them was the
+   * same: a number was typed because a role was never named, so `11` meant eyebrow,
+   * `12`/`13` meant small, `14` meant body and `26` meant section. Two headings
+   * that had nothing else to say took the `.ui-text-*` class instead of the token,
+   * which is what the guard's own message asks for.
    */
-  offScaleFontSizes: 3818,
+  offScaleFontSizes: 3793,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.
@@ -181,6 +198,12 @@ const COLOUR_EXEMPT = [
   // Generated PROJECT source — the user's own app files, not our UI. React
   // Native takes a number for `borderRadius`; a `var()` is not one.
   /^lib\/vanillaDefaults\.ts$/,
+  // The click-to-source overlay, injected as a `<script>` into the USER'S dev-server
+  // document. It draws a selection outline over THEIR app, where none of our tokens
+  // are declared, so `var(--accent)` there resolves to nothing and the outline — the
+  // one thing the feature renders — becomes invisible. Its blue is the overlay's own,
+  // for the same reason `DevicePreview`'s bezel is the phone's.
+  /^lib\/visualEditor\.ts$/,
 
   // ---- Colour that is not ours to theme ---------------------------------
   // A consumer that cannot read a variable: `<input type="color">` takes a
@@ -302,6 +325,9 @@ const RADIUS_EXEMPT = [
   // and leaving it there had broken the scaffold's card and button corners.
   /^lib\/vanillaDefaults\.ts$/,
   /^lib\/printDocument\.ts$/,
+  // The selection outline drawn into the user's own dev-server document — see
+  // COLOUR_EXEMPT. Same document, same reason: a `var()` does not resolve there.
+  /^lib\/visualEditor\.ts$/,
   // The résumé document again — its corners are stated in `mm`, because the sheet it
   // is laid out on is measured in millimetres. A `px` scale is not the right unit and
   // `var(--radius-sm)` resolves to nothing where this HTML is opened.
@@ -405,6 +431,14 @@ const measured = {
   offScaleFontSizes: offScaleType.length,
   publicColumnLiterals: columnLiterals.length,
 };
+/** Per-file tallies for the same four ratchets, keyed identically to `measured`. */
+const tallies = {
+  literalHexFiles: tallyByFile(hexFiles),
+  offScaleRadii: tallyByFile(offScale),
+  offScaleFontSizes: tallyByFile(offScaleType),
+  publicColumnLiterals: tallyByFile(columnLiterals),
+};
+const recorded = readTallies(TALLY_PATH);
 const failures = [];
 const slack = [];
 
@@ -419,8 +453,8 @@ if (failures.length > 0) {
     console.error(`  - ${key}: ${now} (baseline ${baseline}, +${now - baseline})`);
   }
   if (measured.literalHexFiles > BASELINE.literalHexFiles) {
-    console.error('\n  Files carrying a literal hex (sample):');
-    for (const f of hexFiles.slice(0, 12)) console.error(`    • ${f}`);
+    printDelta('literalHexFiles', recorded.literalHexFiles, tallies.literalHexFiles);
+    console.error('');
     console.error('    A literal renders the SAME in both themes. Use a token — and if the');
     console.error('    name you want does not exist, declare it in globals.css under BOTH');
     console.error("    :root and html[data-theme='light'].");
@@ -432,13 +466,14 @@ if (failures.length > 0) {
     console.error('    COLOUR_EXEMPT above WITH ITS REASON. The list is the review.');
   }
   if (measured.offScaleRadii > BASELINE.offScaleRadii) {
-    console.error('\n  Off-scale radii (sample):');
-    for (const r of offScale.slice(0, 12)) console.error(`    • ${r}`);
+    printDelta('offScaleRadii', recorded.offScaleRadii, tallies.offScaleRadii);
+    console.error('\n  Every off-scale radius, with its line:');
+    for (const r of offScale) console.error(`    • ${r}`);
     console.error('    The scale is --radius-sm/md/lg/xl/full (6 / 8 / 12 / 16 / pill).');
   }
   if (measured.offScaleFontSizes > BASELINE.offScaleFontSizes) {
-    console.error('\n  Literal font sizes (sample):');
-    for (const f of offScaleType.slice(0, 12)) console.error(`    • ${f}`);
+    printDelta('offScaleFontSizes', recorded.offScaleFontSizes, tallies.offScaleFontSizes);
+    console.error('');
     console.error('    Name the ROLE, do not type the size. The nine roles are');
     console.error('    --font-size-hero / page-title / section / lede / card-title /');
     console.error('    body / small / eyebrow / field-label, and each has a matching');
@@ -452,8 +487,9 @@ if (failures.length > 0) {
     console.error('    ITS REASON. The list is the review.');
   }
   if (measured.publicColumnLiterals > BASELINE.publicColumnLiterals) {
-    console.error('\n  Page-column literals on the public surface:');
-    for (const c of columnLiterals.slice(0, 12)) console.error(`    • ${c}`);
+    printDelta('publicColumnLiterals', recorded.publicColumnLiterals, tallies.publicColumnLiterals);
+    console.error('\n  Every page-column literal, with its line:');
+    for (const c of columnLiterals) console.error(`    • ${c}`);
     console.error('    The public content column is ONE measure, declared in globals.css:');
     console.error('    --marketing-max (the outer box, gutter included — the header reads');
     console.error('    the same token), --marketing-gutter, and --marketing-column (the');
@@ -469,9 +505,17 @@ if (slack.length > 0) {
   console.error('❌  A ratchet is slack — lower its baseline in scripts/check-design-scale.mjs:\n');
   for (const { key, baseline, now } of slack) {
     console.error(`  - ${key}: ${now}, baseline still ${baseline}. Set it to ${now}.`);
+    // Which files got BETTER. Lowering a floor should be a decision somebody can see the
+    // reason for, not a number typed to make a guard stop talking.
+    printDelta(key, recorded[key], tallies[key]);
   }
   console.error('\n   The point of shrink-only is that the floor follows the work down.\n');
   process.exit(1);
+}
+
+// Green: this tree is a legitimate reference point, so it is the one worth recording.
+if (writeTallies(TALLY_PATH, tallies)) {
+  console.log(`   Recorded per-file tallies to ${relative(resolve(here, '..'), TALLY_PATH).split('\\').join('/')}.`);
 }
 
 console.log(

@@ -32,7 +32,7 @@ export function PreviewFrame({ url, frameRef }: PreviewFrameProps) {
   }
 
   return (
-    <div className="h-full flex flex-col" style={{ background: 'var(--surface, #ffffff)' }}>
+    <div className="h-full flex flex-col" style={{ background: 'var(--surface)' }}>
       <div
         className="flex items-center gap-2 px-3 py-1.5"
         style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border-subtle)' }}

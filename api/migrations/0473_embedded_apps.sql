@@ -6,28 +6,35 @@
 -- landing page, a landing page with no consumer has nobody to sell to, and a
 -- consumer with no subscription cannot pay.
 --
--- ── creation_sessions.project_id ────────────────────────────────────────────
--- THE ONLY STRUCTURAL CHANGE IN THE WHOLE ARC. The canvas and the delivery side
--- of the platform had no join between them: `creation_sessions` carried no
--- project, and `POST /api/realizations` accepted an idea, a challenge or a
--- project id but never a session — so a person who had just designed something
--- on a board had no action that turned it into a project, and the entire
--- build → publish → deploy → staff pipeline was unreachable from the canvas.
+-- ── creation_session_project_links.link_kind ────────────────────────────────
+-- THE ONLY STRUCTURAL CHANGE IN THE WHOLE ARC, and it is one column on a table
+-- that already exists. The canvas and the delivery side of the platform had no
+-- join that meant IDENTITY: `creation_session_project_links` records that a
+-- board REFERENCES a project (context, many-to-many, copied when a board is
+-- branched), and nothing recorded that a board BECAME one — so a person who had
+-- just designed something on a board had no action that turned it into a
+-- project, and the entire build → publish → deploy → staff pipeline was
+-- unreachable from the canvas.
 --
--- Nullable, and ON DELETE SET NULL, for the same reason: most boards are never
--- apps, and deleting the project a board became must not delete the board.
-ALTER TABLE creation_sessions
-  ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL;
+-- WHY NOT `creation_sessions.project_id`. That was the first draft and it is
+-- wrong: a session's project id would then live in two places free to disagree,
+-- which is the exact per-feature copy of an existing shape 3NF forbids. The
+-- relationship already has a home; what it lacked was a ROLE. A new kind is a
+-- column value.
+--
+--   'reference' — today's behaviour, unchanged and the default, so every
+--                 existing row and every existing reader keeps working.
+--   'app'       — this board IS this project. The identity link.
+ALTER TABLE creation_session_project_links
+  ADD COLUMN IF NOT EXISTS link_kind VARCHAR(16) NOT NULL DEFAULT 'reference';
 
-CREATE INDEX IF NOT EXISTS creation_sessions_project_idx
-  ON creation_sessions (project_id);
-
--- One board per project on the app path. A project may be reached from at most
--- one converted session, so "which board is this app" has exactly one answer;
--- without it a second conversion silently forks the source of truth. Partial, so
--- the unconverted majority (project_id NULL) is unconstrained.
-CREATE UNIQUE INDEX IF NOT EXISTS creation_sessions_project_unique
-  ON creation_sessions (project_id) WHERE project_id IS NOT NULL;
+-- One app per board, and one board per app — enforced on both sides, because
+-- either direction being ambiguous makes "which board is this app" unanswerable.
+-- PARTIAL, so the many-to-many reference links they sit beside are untouched.
+CREATE UNIQUE INDEX IF NOT EXISTS creation_session_project_links_app_session_unique
+  ON creation_session_project_links (session_id) WHERE link_kind = 'app';
+CREATE UNIQUE INDEX IF NOT EXISTS creation_session_project_links_app_project_unique
+  ON creation_session_project_links (project_id) WHERE link_kind = 'app';
 
 -- ── project_sites.landing_object_id ─────────────────────────────────────────
 -- Which `website` canvas card is this site's landing page — the creator's own

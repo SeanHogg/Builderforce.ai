@@ -25,12 +25,21 @@ import {
   jobPostings,
   jobProposals,
   proposalEvaluations,
+  savedSearches,
   tasks,
   tenants,
   users,
 } from '../../infrastructure/database/schema';
+import { masterResumeRevision } from '@builderforce/creation-canvas-contract';
+import { extractResumeText } from '../../application/career/resumeExtract';
+import { jobDocumentFromText } from '../../application/career/jobDocument';
+import { compareResumeToJob, tailorResume } from '../../application/career/jobMatch';
+import { readProfileResume, resolvePersonalTenantId } from '../../application/resume/profileResume';
+import { ensurePersonalWorkspace } from '../../application/tenant/starterWorkspace';
+import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
+import { admitCandidate } from '../../application/hiring/candidateIntake';
 import { parseJsonArray } from '../../domain/shared/json';
 import { resolveTenantPlan } from './llmRoutes';
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
@@ -142,8 +151,238 @@ const mapProposal = (r: Record<string, unknown>) => ({
   createdAt: r.created_at ?? null,
 });
 
+/** Upload ceiling for a job description, matching the résumé upload. */
+const JOB_EXTRACT_MAX_BYTES = 10 * 1024 * 1024;
+
+/** A job alert on the wire. `enabled` lives inside `filters` so turning one off does
+ *  not need a column the other four saved-search scopes would carry unused. */
+function mapAlert(row: { id: number; name: string; filters: unknown; last_run_at: Date | null; result_count: number | null }) {
+  const filters = (row.filters ?? {}) as Record<string, unknown>;
+  const { enabled, ...criteria } = filters;
+  return {
+    id: String(row.id),
+    name: row.name,
+    filters: criteria,
+    enabled: enabled !== false,
+    lastRunAt: row.last_run_at ?? null,
+    resultCount: row.result_count ?? null,
+  };
+}
+
+/**
+ * The workspace a job seeker's own records live in, provisioning it if missing.
+ *
+ * A saved search is tenant-scoped and a for-hire account is not a member of any
+ * employer's workspace, so their alerts belong to the personal workspace 0471 gives
+ * them. Self-heals accounts created before that existed.
+ */
+async function seekerTenantId(db: Db, env: Env, userId: string): Promise<number | null> {
+  const existing = await resolvePersonalTenantId(db, userId);
+  if (existing !== null) return existing;
+  const [user] = await db.select({ email: users.email, displayName: users.displayName })
+    .from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) return null;
+  await ensurePersonalWorkspace(env, db, {
+    id: userId, email: user.email, displayName: user.displayName, accountType: 'freelancer',
+  });
+  return resolvePersonalTenantId(db, userId);
+}
+
 export function createJobRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  // ---- Job seeker: saved jobs -------------------------------------------------
+  //
+  // A saved job is a proposal in the `saved` state, NOT a second table. hired.video
+  // modelled bookmarks separately, which then needed its own join to answer "did I
+  // already apply to this?" and could disagree with the answer the proposals table
+  // gave. Saving and applying are two points on one lifecycle — save → submitted →
+  // shortlisted → accepted — so they are one row whose status moves, which is the
+  // register's rule that a new KIND is a column value rather than a new table.
+
+  // GET /saved — the seeker's shortlist.
+  router.get('/saved', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const rows = await db
+      .select({ ...proposalColumns, job_title: jobPostings.title })
+      .from(jobProposals)
+      .innerJoin(jobPostings, eq(jobPostings.id, jobProposals.jobId))
+      .where(and(
+        eq(jobProposals.freelancerUserId, c.get('userId') as string),
+        eq(jobProposals.status, 'saved'),
+      ))
+      .orderBy(desc(jobProposals.createdAt))
+      .limit(200);
+    return c.json(rows.map(mapProposal));
+  });
+
+  // POST /:id/save — bookmark a job. Never downgrades a real bid back to `saved`:
+  // saving something you already applied to is a no-op, not a withdrawal.
+  router.post('/:id/save', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const userId = c.get('userId') as string;
+    const id = c.req.param('id');
+    const [job] = await db.select({ id: jobPostings.id }).from(jobPostings).where(eq(jobPostings.id, id));
+    if (!job) return c.json({ error: 'Not found' }, 404);
+    const pid = crypto.randomUUID();
+    await db.insert(jobProposals)
+      .values({ id: pid, jobId: id, freelancerUserId: userId, status: 'saved' })
+      .onConflictDoUpdate({
+        target: [jobProposals.jobId, jobProposals.freelancerUserId],
+        set: { updatedAt: sql`NOW()` },
+      });
+    return c.json({ ok: true });
+  });
+
+  // DELETE /:id/save — unsave. Only ever removes a `saved` row, so this can never
+  // silently delete a submitted bid.
+  router.delete('/:id/save', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    await db.delete(jobProposals).where(and(
+      eq(jobProposals.jobId, c.req.param('id')),
+      eq(jobProposals.freelancerUserId, c.get('userId') as string),
+      eq(jobProposals.status, 'saved'),
+    ));
+    return c.json({ ok: true });
+  });
+
+  // ---- Job seeker: job alerts -------------------------------------------------
+  //
+  // An alert is a SAVED SEARCH with `scope='listing'`, not a new table: it is the same
+  // {name, filters, owner, last run} shape `saved_searches` already holds for contacts,
+  // companies, deals and candidates, and that table's `scope` column exists precisely
+  // so the fifth one does not add DDL.
+
+  router.get('/alerts', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = await seekerTenantId(db, c.env as Env, c.get('userId') as string);
+    if (tenantId === null) return c.json([]);
+    const rows = await db.select({
+      id: savedSearches.id, name: savedSearches.name, filters: savedSearches.filters,
+      last_run_at: savedSearches.lastRunAt, result_count: savedSearches.resultCount,
+    }).from(savedSearches)
+      .where(and(
+        eq(savedSearches.tenantId, tenantId),
+        eq(savedSearches.ownerRef, c.get('userId') as string),
+        eq(savedSearches.scope, 'listing'),
+      ))
+      .orderBy(desc(savedSearches.createdAt))
+      .limit(50);
+    return c.json(rows.map(mapAlert));
+  });
+
+  router.post('/alerts', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const userId = c.get('userId') as string;
+    const body = await c.req.json<{ name?: string; filters?: Record<string, unknown>; enabled?: boolean }>();
+    const name = String(body.name ?? '').trim().slice(0, 200);
+    if (!name) return c.json({ error: 'name is required' }, 400);
+    const tenantId = await seekerTenantId(db, c.env as Env, userId);
+    if (tenantId === null) return c.json({ error: 'Alerts unavailable' }, 503);
+    const [row] = await db.insert(savedSearches)
+      .values({
+        tenantId, ownerRef: userId, scope: 'listing', name,
+        filters: { ...(body.filters ?? {}), enabled: body.enabled !== false },
+      })
+      .onConflictDoUpdate({
+        target: [savedSearches.tenantId, savedSearches.ownerRef, savedSearches.scope, savedSearches.name],
+        set: { filters: sql`excluded.filters`, updatedAt: sql`NOW()` },
+      })
+      .returning({ id: savedSearches.id, name: savedSearches.name, filters: savedSearches.filters,
+        last_run_at: savedSearches.lastRunAt, result_count: savedSearches.resultCount });
+    return c.json(mapAlert(row!), 201);
+  });
+
+  // PATCH /alerts/:id — rename, re-filter, or turn it on and off. One route rather
+  // than a separate /toggle, because "enabled" is a field like any other.
+  router.patch('/alerts/:id', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const userId = c.get('userId') as string;
+    const body = await c.req.json<{ name?: string; filters?: Record<string, unknown>; enabled?: boolean }>();
+    const tenantId = await seekerTenantId(db, c.env as Env, userId);
+    if (tenantId === null) return c.json({ error: 'Not found' }, 404);
+    const [existing] = await db.select({ filters: savedSearches.filters })
+      .from(savedSearches)
+      .where(and(
+        eq(savedSearches.id, Number(c.req.param('id'))),
+        eq(savedSearches.tenantId, tenantId),
+        eq(savedSearches.ownerRef, userId),
+        eq(savedSearches.scope, 'listing'),
+      ));
+    if (!existing) return c.json({ error: 'Not found' }, 404);
+    const current = (existing.filters ?? {}) as Record<string, unknown>;
+    const filters = {
+      ...current,
+      ...(body.filters ?? {}),
+      ...(body.enabled === undefined ? {} : { enabled: body.enabled }),
+    };
+    const [row] = await db.update(savedSearches)
+      .set({ ...(body.name ? { name: body.name.slice(0, 200) } : {}), filters, updatedAt: sql`NOW()` })
+      .where(and(
+        eq(savedSearches.id, Number(c.req.param('id'))),
+        eq(savedSearches.tenantId, tenantId),
+        eq(savedSearches.ownerRef, userId),
+      ))
+      .returning({ id: savedSearches.id, name: savedSearches.name, filters: savedSearches.filters,
+        last_run_at: savedSearches.lastRunAt, result_count: savedSearches.resultCount });
+    return row ? c.json(mapAlert(row)) : c.json({ error: 'Not found' }, 404);
+  });
+
+  router.delete('/alerts/:id', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const userId = c.get('userId') as string;
+    const tenantId = await seekerTenantId(db, c.env as Env, userId);
+    if (tenantId === null) return c.json({ ok: true });
+    await db.delete(savedSearches).where(and(
+      eq(savedSearches.id, Number(c.req.param('id'))),
+      eq(savedSearches.tenantId, tenantId),
+      eq(savedSearches.ownerRef, userId),
+      eq(savedSearches.scope, 'listing'),
+    ));
+    return c.json({ ok: true });
+  });
+
+  // POST /extract — read a job description out of a pasted body OR an uploaded file,
+  // and (when the caller has a résumé) score it against theirs in the same call.
+  //
+  // Deterministic: the same server-side extractor the résumé upload uses reads the
+  // file, and the same `career/` comparison the Recruiter agent uses does the scoring.
+  // No model, no tenant plan, no provider outage — which is what makes this usable by
+  // a job seeker looking at a posting on their phone.
+  router.post('/extract', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const userId = c.get('userId') as string;
+    const contentType = c.req.header('content-type') ?? '';
+
+    let text = '';
+    if (contentType.includes('multipart/form-data')) {
+      const form = await c.req.formData();
+      const entry = form.get('file');
+      if (!entry || typeof entry === 'string') return c.json({ error: 'file is required' }, 400);
+      const file = entry as unknown as File;
+      if (file.size > JOB_EXTRACT_MAX_BYTES) return c.json({ error: 'File too large (max 10MB)' }, 413);
+      const extracted = await extractResumeText(new Uint8Array(await file.arrayBuffer()), {
+        contentType: file.type, filename: file.name,
+      });
+      if (!extracted.ok) return c.json({ error: extracted.message, code: extracted.code }, 422);
+      text = extracted.text;
+    } else {
+      const body = await c.req.json<{ text?: string }>().catch(() => ({} as { text?: string }));
+      text = String(body.text ?? '').slice(0, 200_000);
+    }
+    if (text.trim().length < 40) return c.json({ error: 'That job description is too short to read' }, 400);
+
+    const job = jobDocumentFromText(text);
+    // The comparison is the reason a seeker extracts a JD at all, so it rides along
+    // rather than forcing a second round trip.
+    const resume = await readProfileResume(db, userId);
+    const resumeText = resume ? masterResumeRevision(resume.family).markdown : '';
+    return c.json({
+      job,
+      match: resumeText ? compareResumeToJob(resumeText, job.text) : null,
+      tailor: resumeText ? tailorResume(resumeText, job.text) : null,
+    });
+  });
 
   // ---- Freelancer: my proposals (registered before /:id so it isn't swallowed) ----
   router.get('/proposals/mine', webAuthMiddleware, async (c) => {
@@ -562,10 +801,19 @@ export function createJobRoutes(): Hono<HonoEnv> {
           updatedAt: sql`NOW()`,
         },
       });
+    // Applying makes this person a CANDIDATE of the hiring workspace: it registers the
+    // party role every consent/retention/diversity read is keyed on, and snapshots the
+    // résumé they applied with into the employer's own tenant. Never throws — the bid
+    // is what the person asked for; this is the employer's record of it.
+    const intake = await admitCandidate(db, {
+      userId,
+      tenantId: Number(job.tenant_id),
+      source: 'job_proposal',
+    });
     if (job.created_by_user_id) {
       await notify(db, c.env, { userId: job.created_by_user_id, tenantId: Number(job.tenant_id), kind: 'proposal', title: `${me.display_name ?? 'A freelancer'} bid on "${job.title}"`, ref: id });
     }
-    return c.json({ id: pid }, 201);
+    return c.json({ id: pid, resumeAttached: intake.resumeProjected }, 201);
   });
 
   return router;

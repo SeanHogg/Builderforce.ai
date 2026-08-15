@@ -1576,9 +1576,9 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                       style={{
                         padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
                         borderRadius: 'var(--radius-md)', minHeight: 32,
-                        border: `1px solid ${visualArmed ? 'var(--accent-primary, #2563eb)' : 'var(--border-subtle)'}`,
-                        background: visualArmed ? 'var(--accent-primary, #2563eb)' : 'var(--bg-deep)',
-                        color: visualArmed ? 'var(--text-on-accent, #fff)' : 'var(--text-secondary)',
+                        border: `1px solid ${visualArmed ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                        background: visualArmed ? 'var(--accent)' : 'var(--bg-deep)',
+                        color: visualArmed ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                       }}
                     >
                       {visualArmed ? t('visualEditOn') : t('visualEdit')}
@@ -1620,7 +1620,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                         {t('visualCancel')}
                       </button>
                       {visualError && (
-                        <span role="alert" style={{ fontSize: '0.72rem', color: 'var(--error, #dc2626)' }}>{visualError}</span>
+                        <span role="alert" style={{ fontSize: '0.72rem', color: 'var(--error)' }}>{visualError}</span>
                       )}
                     </div>
                   )}
@@ -1775,7 +1775,7 @@ const visualFieldStyle: React.CSSProperties = {
 const visualPrimaryButton: React.CSSProperties = {
   padding: '6px 14px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', minHeight: 32,
   borderRadius: 'var(--radius-md)', border: 'none',
-  background: 'var(--accent-primary, #2563eb)', color: 'var(--text-on-accent, #ffffff)',
+  background: 'var(--accent)', color: 'var(--text-on-accent)',
 };
 
 const visualSecondaryButton: React.CSSProperties = {

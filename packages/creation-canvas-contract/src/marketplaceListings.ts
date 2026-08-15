@@ -118,6 +118,40 @@ export const LISTING_TRIAL_POLICIES = ['full', 'preview'] as const;
 export type ListingTrialPolicy = (typeof LISTING_TRIAL_POLICIES)[number];
 
 /**
+ * WHAT THE BUYER ACTUALLY RECEIVES.
+ *
+ * ── THE DISTINCTION THIS DRAWS ───────────────────────────────────────────────
+ * `launch` says what a buyer DOES with a listing. It does not say what they GET,
+ * and until this existed those two questions had one answer — which is how an
+ * `app` came to be sold as a hyperlink. `siteUrl()` scraped a URL out of the
+ * snapshot and handed it over, so buying an app gave you a link to the SELLER's
+ * running instance: nothing provisioned, nothing isolated, and the one field
+ * that could have connected the listing back to a deployable project stripped on
+ * the way out (correctly — it is the seller's binding).
+ *
+ * Two honest shapes had been collapsed into one that was neither:
+ *
+ *  - `copy`   the buyer receives THE THING. It lands on a board in their own
+ *             workspace, they own it, and the seller can never reach it again.
+ *             This is every creative, every book, every pack — and it is why a
+ *             copy purchase still needs an account: there is nowhere else to put
+ *             twelve cards.
+ *  - `hosted` the buyer receives ACCESS. The seller keeps running it; the buyer
+ *             gets an account on that app and a subscription. No workspace, no
+ *             install, and — the whole point — no second signup and no second
+ *             invoice.
+ *
+ * ── WHY A LIST AND NOT A VALUE ───────────────────────────────────────────────
+ * One listing can legitimately offer both: "use it for $4 a month, or own the
+ * build for $89" is one product page with two doors, not two products. So the
+ * KIND declares what it may offer and the seller picks from that set — exactly
+ * how `trial` already works. A kind that lists only `copy` cannot be sold as a
+ * subscription no matter what a client posts.
+ */
+export const LISTING_DELIVERIES = ['copy', 'hosted'] as const;
+export type ListingDelivery = (typeof LISTING_DELIVERIES)[number];
+
+/**
  * The marketplace family a kind files under.
  *
  * The same four families the marketplace already groups its tabs by
@@ -151,6 +185,16 @@ export interface MarketplaceListingKindSpec {
    * by the server, so what was tested and what was gated cannot drift.
    */
   readonly harness: ListingHarness;
+  /**
+   * What this kind MAY hand over, most specific first.
+   *
+   * Almost everything is `['copy']` — the buyer gets the thing. Only a kind that
+   * is a running system can be `hosted`, because only a running system has
+   * anything to give access TO. A kind offering both means one listing may open
+   * two doors; the seller chooses, and `resolveDelivery` decides the effective
+   * value so the panel and the server cannot disagree.
+   */
+  readonly deliveries: readonly ListingDelivery[];
   /** May the seller charge for it? `free` exists for kinds where a price would be
    *  a lie — nothing is transferred that the buyer keeps. */
   readonly pricing: 'free' | 'either';
@@ -179,6 +223,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     from: ['game'],
     family: 'asset',
     harness: 'runtime',
+    deliveries: ['copy'],
     pricing: 'either',
     trial: 'full',
     icon: '🎮',
@@ -191,6 +236,9 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     from: ['website', 'prototype', 'build', 'project', 'service'],
     family: 'asset',
     harness: 'runtime',
+    // The only kind that IS a running system on an address somebody keeps
+    // operating — so the only kind there is anything to give ACCESS to.
+    deliveries: ['hosted', 'copy'],
     pricing: 'either',
     trial: 'full',
     icon: '🚀',
@@ -201,6 +249,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     from: ['workflow'],
     family: 'asset',
     harness: 'system',
+    deliveries: ['copy'],
     pricing: 'either',
     trial: 'preview',
     icon: '⚙️',
@@ -213,6 +262,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     from: ['agent', 'staff'],
     family: 'agent',
     harness: 'system',
+    deliveries: ['copy'],
     pricing: 'either',
     trial: 'preview',
     icon: '🤖',
@@ -223,6 +273,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     from: ['template', 'frame'],
     family: 'asset',
     harness: 'system',
+    deliveries: ['copy'],
     pricing: 'either',
     trial: 'preview',
     icon: '🧩',
@@ -235,6 +286,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     from: [],
     family: 'asset',
     harness: 'system',
+    deliveries: ['copy'],
     pricing: 'either',
     trial: 'preview',
     icon: '📦',
@@ -245,6 +297,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     from: ['dashboard', 'chart', 'kpi', 'report', 'metric', 'liveMetric'],
     family: 'asset',
     harness: 'system',
+    deliveries: ['copy'],
     pricing: 'either',
     trial: 'preview',
     icon: '📊',
@@ -255,6 +308,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     from: ['document', 'knowledge', 'prd', 'slides', 'diagram', 'roadmap', 'pitch', 'testPlan'],
     family: 'asset',
     harness: 'paged',
+    deliveries: ['copy'],
     pricing: 'either',
     trial: 'preview',
     icon: '📘',
@@ -265,6 +319,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     from: ['course', 'practice', 'guidedTour'],
     family: 'asset',
     harness: 'instrument',
+    deliveries: ['copy'],
     pricing: 'either',
     trial: 'preview',
     icon: '🎓',
@@ -275,6 +330,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     from: ['dataset', 'table', 'spreadsheet', 'datasource'],
     family: 'asset',
     harness: 'system',
+    deliveries: ['copy'],
     pricing: 'either',
     trial: 'preview',
     icon: '🗂️',
@@ -285,6 +341,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     from: ['diagnostics', 'mcp', 'code', 'evaluation'],
     family: 'asset',
     harness: 'instrument',
+    deliveries: ['copy'],
     pricing: 'either',
     trial: 'preview',
     icon: '🛠️',
@@ -298,6 +355,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     // time-based, a comic is paged and a 3D model is dimensioned, and all three are
     // legitimately `creative`. `resolveListingHarness` reads the source object first.
     harness: 'media',
+    deliveries: ['copy'],
     pricing: 'either',
     trial: 'full',
     icon: '🎨',
@@ -312,6 +370,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     from: ['form'],
     family: 'asset',
     harness: 'instrument',
+    deliveries: ['copy'],
     pricing: 'either',
     // `preview` even when free: an instrument someone can read in full is one they can
     // copy, and the sample is the sales pitch.
@@ -327,6 +386,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     from: ['book'],
     family: 'asset',
     harness: 'paged',
+    deliveries: ['copy'],
     pricing: 'either',
     trial: 'preview',
     icon: '📖',

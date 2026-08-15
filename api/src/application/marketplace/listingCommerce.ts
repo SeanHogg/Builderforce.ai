@@ -49,11 +49,18 @@ import { ListingError, invalidateListingCaches, recordInstall } from './creation
 
 const USD_CENTS = 'usd_cents';
 
-/** The platform's default cut. 15%, overridable per deployment. */
+/** The platform's cut ONCE A SELLER IS PAST THE THRESHOLD. 15%, overridable. */
 const DEFAULT_TAKE_RATE_BPS = 1500;
 
 /**
- * The take rate in effect right now.
+ * Lifetime earnings a seller must pass before the platform takes anything.
+ * $200,000 by default — the monday.com shape, and the same order of magnitude
+ * Square and Atlassian use.
+ */
+const DEFAULT_TAKE_RATE_THRESHOLD_CENTS = 20_000_000;
+
+/**
+ * The configured rate for sellers who are past the threshold.
  *
  * Clamped to 0–5000 bps: a misconfigured env var that reads `"50%"` must not become
  * a 5000% commission that inverts the seller's earning into a debt. A rate outside
@@ -63,6 +70,109 @@ export function platformTakeRateBps(env: Env): number {
   const raw = Number.parseInt(String(env.MARKETPLACE_TAKE_RATE_BPS ?? ''), 10);
   if (!Number.isFinite(raw) || raw < 0 || raw > 5000) return DEFAULT_TAKE_RATE_BPS;
   return raw;
+}
+
+/** The lifetime total a seller must cross before any fee applies. */
+export function takeRateThresholdCents(env: Env): number {
+  const raw = Number.parseInt(String(env.MARKETPLACE_TAKE_RATE_THRESHOLD_CENTS ?? ''), 10);
+  if (!Number.isFinite(raw) || raw < 0) return DEFAULT_TAKE_RATE_THRESHOLD_CENTS;
+  return raw;
+}
+
+/**
+ * WHAT THIS SELLER HAS EARNED, EVER — net of refunds.
+ *
+ * ONE indexed SUM over the account index, never a fetch-and-add: a seller with
+ * three thousand sales must not pull three thousand rows to price one checkout.
+ * `commission` and `refund` are summed TOGETHER because a refund is written as a
+ * negative entry — the balance IS the sum of the account, and a separate
+ * subtraction would eventually disagree with it.
+ *
+ * Extracted so the take-rate resolver and the earnings page read the same
+ * number. Two queries answering "what has this seller earned" is how the rate a
+ * buyer is charged and the figure the seller is shown drift apart.
+ */
+export async function lifetimeSellerCents(
+  db: Db,
+  tenantId: number,
+  userId: string,
+): Promise<{ earnedCents: number; salesCount: number }> {
+  const [row] = await db
+    .select({
+      total: sql<string>`coalesce(sum(${ledgerEntries.amount}), 0)`,
+      sales: sql<string>`count(*) filter (where ${ledgerEntries.entryKind} = 'commission')`,
+    })
+    .from(ledgerEntries)
+    .where(and(
+      eq(ledgerEntries.tenantId, tenantId),
+      eq(ledgerEntries.accountKind, 'user'),
+      eq(ledgerEntries.accountRef, userId),
+      eq(ledgerEntries.denomination, USD_CENTS),
+      sql`${ledgerEntries.entryKind} in ('commission', 'refund')`,
+    ));
+  return {
+    earnedCents: Math.round(Number(row?.total ?? 0)),
+    salesCount: Number(row?.sales ?? 0),
+  };
+}
+
+export interface ResolvedTakeRate {
+  bps: number;
+  /** What this seller has earned so far, and what they must pass. */
+  lifetimeCents: number;
+  thresholdCents: number;
+  /** True while the platform is taking nothing. */
+  underThreshold: boolean;
+}
+
+/**
+ * THE RATE THIS SELLER PAYS RIGHT NOW.
+ *
+ * ── WHY THIS IS NOT A CONSTANT ───────────────────────────────────────────────
+ * It used to be: one env var, the same 15% for everybody, charged from a
+ * creator's first dollar. That is a fee for the privilege of trying, and every
+ * comparable marketplace worth copying refuses to charge it — monday.com pays
+ * 85/15 in the developer's favour but only past $200k lifetime, and Square and
+ * Atlassian run the same shape. In year one the scarce resource is listings,
+ * not margin.
+ *
+ * ── WHY IT IS STILL STAMPED ONTO THE ORDER LINE ──────────────────────────────
+ * Resolving a rate per seller makes it a MOVING number, which makes stamping it
+ * more important rather than less: the sale that carries a seller over the
+ * threshold must not retroactively re-price the four hundred before it. The
+ * stamp on `order_line_items.commissionCents` is what makes crossing the
+ * threshold a change to future sales only.
+ *
+ * ── DELIBERATELY NOT CACHED ──────────────────────────────────────────────────
+ * This is priced into a real charge and then written into an immutable ledger
+ * row. A stale total either charges a fee that is not owed or misses one that
+ * is, and both are wrong permanently. It costs one indexed SUM per purchase —
+ * a purchase is not a hot path, and being correct at the instant of sale is the
+ * whole job.
+ */
+export async function resolveTakeRateBps(
+  db: Db,
+  env: Env,
+  seller: { tenantId: number | null; ref: string | null },
+): Promise<ResolvedTakeRate> {
+  const thresholdCents = takeRateThresholdCents(env);
+  const configured = platformTakeRateBps(env);
+
+  // A platform-owned listing has nobody to credit and nobody to exempt. The
+  // configured rate applies so the platform's own cut of its own listing is
+  // still recorded rather than silently zero.
+  if (seller.tenantId == null || !seller.ref) {
+    return { bps: configured, lifetimeCents: 0, thresholdCents, underThreshold: false };
+  }
+
+  const { earnedCents } = await lifetimeSellerCents(db, seller.tenantId, seller.ref);
+  const underThreshold = earnedCents < thresholdCents;
+  return {
+    bps: underThreshold ? 0 : configured,
+    lifetimeCents: earnedCents,
+    thresholdCents,
+    underThreshold,
+  };
 }
 
 export interface AcquisitionResult {
@@ -159,7 +269,13 @@ async function grantListing(
     };
   }
 
-  const takeRateBps = platformTakeRateBps(env);
+  // Resolved per seller, not read from a constant: a creator under the lifetime
+  // threshold pays nothing. Stamped onto the line below, so the sale that
+  // carries them over never re-prices the ones before it.
+  const { bps: takeRateBps } = await resolveTakeRateBps(db, env, {
+    tenantId: sellerTenantId,
+    ref: sellerRef,
+  });
   const commissionCents = Math.round((priceCents * takeRateBps) / 10_000);
   const sellerCents = Math.max(0, priceCents - commissionCents);
   const orderNumber = `MP-${Date.now().toString(36).toUpperCase()}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
@@ -660,6 +776,10 @@ export interface SellerEarnings {
   paidCents: number;
   availableCents: number;
   salesCount: number;
+  /** The rate this seller pays on their NEXT sale, and how far they are from
+   *  the threshold. Returned with the balance because a creator reading their
+   *  earnings is exactly the person asking "when does the fee start". */
+  takeRate: ResolvedTakeRate;
 }
 
 /**
@@ -677,22 +797,15 @@ export async function sellerEarnings(
   tenantId: number,
   userId: string,
 ): Promise<SellerEarnings> {
-  const [row] = await db
-    .select({
-      total: sql<string>`coalesce(sum(${ledgerEntries.amount}), 0)`,
-      sales: sql<string>`count(*) filter (where ${ledgerEntries.entryKind} = 'commission')`,
-    })
-    .from(ledgerEntries)
-    .where(and(
-      eq(ledgerEntries.tenantId, tenantId),
-      eq(ledgerEntries.accountKind, 'user'),
-      eq(ledgerEntries.accountRef, userId),
-      eq(ledgerEntries.denomination, USD_CENTS),
-      sql`${ledgerEntries.entryKind} in ('commission', 'refund')`,
-    ));
-  const earnedCents = Math.round(Number(row?.total ?? 0));
-  const balance = await new PayoutAccountService(db, env).balance(tenantId, userId, earnedCents);
-  return { ...balance, salesCount: Number(row?.sales ?? 0) };
+  // The SAME sum the take-rate resolver reads. Two queries answering "what has
+  // this seller earned" is how the rate a buyer is charged and the figure the
+  // seller is shown come to disagree.
+  const { earnedCents, salesCount } = await lifetimeSellerCents(db, tenantId, userId);
+  const [balance, takeRate] = await Promise.all([
+    new PayoutAccountService(db, env).balance(tenantId, userId, earnedCents),
+    resolveTakeRateBps(db, env, { tenantId, ref: userId }),
+  ]);
+  return { ...balance, salesCount, takeRate };
 }
 
 /**

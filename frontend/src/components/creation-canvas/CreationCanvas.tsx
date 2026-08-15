@@ -9529,9 +9529,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onClose={() => setMiroOpen(false)}
           // `/settings/integrations`, not `/settings/connectors` — the latter does not
           // exist, and a "Connect Miro" button that 404s is worse than no button.
-          // `ConnectorsGallery` lives on the integrations page under the connectors
-          // category, which is where a `miro` connection is actually created.
-          connectHref="/settings/integrations?category=connectors&search=Miro"
+          // `ConnectorsGallery` lives on this page under the connectors category, which
+          // is where a `miro` connection is actually created. No deep-link query here:
+          // the page keeps its category and search in local state and reads no params,
+          // so `?category=connectors` would be a promise the destination does not keep.
+          connectHref="/settings/integrations"
         />}
         {socialOpen && <CanvasSocialPanel
           onAddFeed={addSocialFeedToBoard}
@@ -10102,11 +10104,11 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         />
       )}
       {tab === 'details' && canvasExportActionsFor(node.data).length > 0 && <section aria-label={t('copyAndDownload')} style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
-        <strong style={{ fontSize: 12 }}>{t('copyAndDownload')}</strong>
+        <strong style={{ fontSize: 'var(--font-size-small)' }}>{t('copyAndDownload')}</strong>
         <CanvasExportActions data={node.data} onExport={(action) => void runArtifactAction(action)} className={styles.panelActions} />
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
       </section>}
-      {tab === 'details' && deliverables.length > 0 && <section aria-label={t('deliverables')} style={{ display: 'grid', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}><strong style={{ fontSize: 12 }}>{t('deliveredOutputs')}</strong>{deliverables.slice(0, 6).map((deliverable) => <div key={deliverable.id} style={{ display: 'grid', gap: 2, fontSize: 12 }}><span><b>{deliverable.artifactKind}</b> · {deliverable.status}</span><small>{deliverable.provider || 'Builderforce'} · {new Date(deliverable.completedAt || deliverable.createdAt).toLocaleString()}</small>{deliverable.url && !deliverable.url.startsWith('data:') && <a href={deliverable.url} target="_blank" rel="noreferrer">{t('openDeliverable')}</a>}{deliverable.error && <small style={{ color: 'var(--error-text)' }}>{deliverable.error}</small>}</div>)}</section>}
+      {tab === 'details' && deliverables.length > 0 && <section aria-label={t('deliverables')} style={{ display: 'grid', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}><strong style={{ fontSize: 'var(--font-size-small)' }}>{t('deliveredOutputs')}</strong>{deliverables.slice(0, 6).map((deliverable) => <div key={deliverable.id} style={{ display: 'grid', gap: 2, fontSize: 'var(--font-size-small)' }}><span><b>{deliverable.artifactKind}</b> · {deliverable.status}</span><small>{deliverable.provider || 'Builderforce'} · {new Date(deliverable.completedAt || deliverable.createdAt).toLocaleString()}</small>{deliverable.url && !deliverable.url.startsWith('data:') && <a href={deliverable.url} target="_blank" rel="noreferrer">{t('openDeliverable')}</a>}{deliverable.error && <small style={{ color: 'var(--error-text)' }}>{deliverable.error}</small>}</div>)}</section>}
     </div>
     <footer><span>{t('resourceRole', { role })}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => kind === 'task' ? setActionStatus(t('taskDetailsSaved')) : onChange({ status: 'Saved' })}>{kind === 'task' ? t('saveTaskDetails') : t('saveChanges')}</button></footer>
   </aside>;

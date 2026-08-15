@@ -107,8 +107,8 @@ export function ProfileResumePanel({ onAutofill, onLoaded }: {
   return (
     <Surface style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
-        <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>{t('title')}</h2>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('subtitle')}</p>
+        <h2 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>{t('title')}</h2>
+        <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>{t('subtitle')}</p>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -129,14 +129,14 @@ export function ProfileResumePanel({ onAutofill, onLoaded }: {
         )}
       </div>
 
-      {loading && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('loading')}</p>}
-      {notice && <p style={{ fontSize: 12, color: 'var(--success-text)', margin: 0 }}>{notice}</p>}
-      {error && <p role="alert" style={{ fontSize: 12, color: 'var(--error-text)', margin: 0 }}>{error}</p>}
+      {loading && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>{t('loading')}</p>}
+      {notice && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--success-text)', margin: 0 }}>{notice}</p>}
+      {error && <p role="alert" style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)', margin: 0 }}>{error}</p>}
 
       {!loading && !resume && (
         <div style={{
           padding: 20, borderRadius: 'var(--radius-lg)', border: '1px dashed var(--border-subtle)',
-          background: 'var(--bg-elevated)', fontSize: 13, color: 'var(--text-muted)', textAlign: 'center',
+          background: 'var(--bg-elevated)', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', textAlign: 'center',
         }}>
           {t('empty')}
         </div>
@@ -147,7 +147,7 @@ export function ProfileResumePanel({ onAutofill, onLoaded }: {
           {/* The controls that decide what an employer actually sees. Each saves on
               change — there is no second "save résumé" step to forget. */}
           <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-            <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+            <label style={{ display: 'grid', gap: 4, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
               {t('styleLabel')}
               <Select
                 value={master.templateId}
@@ -167,7 +167,7 @@ export function ProfileResumePanel({ onAutofill, onLoaded }: {
               </Select>
             </label>
 
-            <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+            <label style={{ display: 'grid', gap: 4, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
               {t('privacyLabel')}
               <Select
                 value={resume.family.privacy === 'draft' ? 'private' : resume.family.privacy}
@@ -183,7 +183,7 @@ export function ProfileResumePanel({ onAutofill, onLoaded }: {
 
             {/* Only meaningful once there is more than one version to choose between. */}
             {resume.family.revisions.length > 1 && (
-              <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+              <label style={{ display: 'grid', gap: 4, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
                 {t('versionLabel')}
                 <Select
                   value={resume.family.masterRevisionId}
@@ -199,7 +199,7 @@ export function ProfileResumePanel({ onAutofill, onLoaded }: {
             )}
           </div>
 
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+          <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>
             {t('versionCount', { count: resume.family.revisions.length })}
           </p>
 

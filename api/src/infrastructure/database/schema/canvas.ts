@@ -1406,22 +1406,8 @@ export const creationSessions = pgTable('creation_sessions', {
   archivedAt:     timestamp('archived_at'),
   branchParentSessionId: uuid('branch_parent_session_id').references((): AnyPgColumn => creationSessions.id, { onDelete: 'set null' }),
   branchBaseRevision: bigint('branch_base_revision', { mode: 'number' }),
-  /** THE JOIN BETWEEN A BOARD AND THE APP IT BECAME (0473).
-   *
-   *  The canvas and the delivery side of the platform had no join, so a person
-   *  who had designed something on a board had no action that turned it into a
-   *  project — and the whole build → publish → deploy → staff pipeline was
-   *  unreachable from the canvas. Setting this is the ONLY structural change in
-   *  the "idea to sell" arc; everything downstream is configuration on the
-   *  project row it points at.
-   *
-   *  Nullable because most boards are never apps, and SET NULL because deleting
-   *  the project a board became must not delete the board. Unique where present
-   *  (partial index) so "which board is this app" has exactly one answer. */
-  projectId:      integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
 }, (t) => ({
   byTenantActivity: index('idx_creation_sessions_tenant_activity').on(t.tenantId, t.status, t.lastActivityAt),
-  byProject: index('creation_sessions_project_idx').on(t.projectId),
   byCreator: index('idx_creation_sessions_creator').on(t.createdBy, t.lastActivityAt),
   bySegment: index('idx_creation_sessions_segment').on(t.tenantId, t.segmentId, t.lastActivityAt),
   byFolder: index('idx_creation_sessions_tenant_folder').on(t.tenantId, t.segmentId, t.folder, t.lastActivityAt),
@@ -1590,12 +1576,32 @@ export const creationSessionComments = pgTable('creation_session_comments', {
 export const creationSessionProjectLinks = pgTable('creation_session_project_links', {
   sessionId: uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
   projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  /**
+   * WHAT THIS LINK MEANS (0473).
+   *
+   * `reference` — the original behaviour and the default: this board mentions
+   *   that project. Many-to-many, and copied when a board is branched or copied.
+   * `app` — this board IS that project. The identity link written when a board
+   *   is converted into an app, unique on BOTH sides (partial indexes), and
+   *   deliberately NOT copied by branch/copy: a copy of a board is a new board,
+   *   not a second claim on somebody's running app.
+   *
+   * A role on the existing association rather than a `project_id` column on
+   * `creation_sessions`: the relationship already had a home, and storing it
+   * twice is two facts free to disagree.
+   */
+  linkKind:  varchar('link_kind', { length: 16 }).notNull().default('reference'),
   addedBy:   varchar('added_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.sessionId, t.projectId] }),
   byProject: index('idx_creation_project_links_project').on(t.projectId, t.createdAt),
 }));
+
+/** The two roles a session↔project link can carry. Shared so the conversion
+ *  path, the branch/copy filter and the readers cannot drift on the spelling. */
+export const SESSION_PROJECT_LINK_REFERENCE = 'reference';
+export const SESSION_PROJECT_LINK_APP = 'app';
 
 /** Tenant-authored reusable Session graphs. Built-in Marketplace packs remain
  * code-signed catalog entries; private/tenant variants persist here. */

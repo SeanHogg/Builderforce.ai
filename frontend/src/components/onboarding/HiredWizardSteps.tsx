@@ -20,15 +20,15 @@ import { TALENT_DISCIPLINES, TALENT_AVAILABILITIES } from '@/components/freelanc
 import { useMyTalentProfile, invalidateMyTalentProfile } from '@/components/freelance/useMyTalentProfile';
 import { uploadMyResume, getResumeSuggestions } from '@/lib/freelancerApi';
 
-const intro: React.CSSProperties = { margin: '0 0 14px', fontSize: 13, color: 'var(--text-muted)' };
-const okText: React.CSSProperties = { fontSize: 13, color: 'rgba(34,197,94,0.9)' };
-const errText: React.CSSProperties = { fontSize: 13, color: 'var(--coral-bright)' };
+const intro: React.CSSProperties = { margin: '0 0 14px', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' };
+const okText: React.CSSProperties = { fontSize: 'var(--font-size-small)', color: 'var(--success-text)' };
+const errText: React.CSSProperties = { fontSize: 'var(--font-size-small)', color: 'var(--coral-bright)' };
 
 /** Shared status line so every hired step reports save state identically. */
 function StatusLine({ saving, saved, error }: { saving: boolean; saved: boolean; error: string | null }) {
   const tf = useTranslations('freelancer');
   if (error) return <span style={errText}>{error}</span>;
-  if (saving) return <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{tf('saving')}</span>;
+  if (saving) return <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{tf('saving')}</span>;
   if (saved) return <span style={okText}>{tf('saved')}</span>;
   return null;
 }
@@ -175,7 +175,7 @@ export function WizardResumeStep() {
           </button>
         )}
       </div>
-      {currentFile && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}><Icon source="📄" size="1em" /> {currentFile}</p>}
+      {currentFile && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', margin: '0 0 8px' }}><Icon source="📄" size="1em" /> {currentFile}</p>}
       {autofilled && <p style={{ ...okText, margin: '0 0 8px' }}>{tf('profile.autofilled')}</p>}
       <StatusLine saving={saving} saved={saved && !autofilled} error={uploadError ?? error} />
       <p style={{ ...intro, marginTop: 14, marginBottom: 0 }}>{t('resumeStep.skipHint')}</p>
@@ -205,7 +205,7 @@ export function WizardPublishStep() {
           {(['public', 'private'] as const).map((v) => (
             <button key={v} type="button" onClick={() => patch({ visibility: v })}
               style={{
-                padding: '7px 14px', borderRadius: 'var(--radius-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                padding: '7px 14px', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer',
                 background: profile.visibility === v ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',
                 border: `1px solid ${profile.visibility === v ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
                 color: 'var(--text-primary)',
@@ -214,10 +214,10 @@ export function WizardPublishStep() {
             </button>
           ))}
         </div>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '6px 0 0' }}>{tf(`visibility.${profile.visibility}Hint`)}</p>
+        <p style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', margin: '6px 0 0' }}>{tf(`visibility.${profile.visibility}Hint`)}</p>
       </div>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginBottom: 14 }}>
         <input type="checkbox" checked={!!profile.published} onChange={(e) => patch({ published: e.target.checked })}
           style={{ accentColor: 'var(--coral-bright)' }} />
         {tf('profile.publish')}
@@ -258,10 +258,10 @@ export function WizardFindWorkStep() {
               border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)',
             }}>
             <Icon source={emoji} size={22} />
-            <span style={{ display: 'block', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', marginTop: 6 }}>
+            <span style={{ display: 'block', fontWeight: 700, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)', marginTop: 6 }}>
               {t(`findWorkStep.${key}`)}
             </span>
-            <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+            <span style={{ display: 'block', fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4 }}>
               {t(`findWorkStep.${key}Hint`)}
             </span>
           </Link>

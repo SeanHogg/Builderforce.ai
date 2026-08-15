@@ -26,6 +26,7 @@ export * from './resumeDocument';
 export * from './resumeExtract';
 export * from './resumeAnalysis';
 export * from './jobMatch';
+export * from './jobDocument';
 export * from './interviewKit';
 export * from './compensation';
 export * from './career360';

@@ -38,6 +38,12 @@ import {
   tenants,
   users,
 } from '../../infrastructure/database/schema';
+import {
+  appForSession,
+  convertSessionToApp,
+  copyableLinkFilter,
+} from '../canvas/convertSessionToApp';
+import { checkSubdomainAvailability } from '../ide/siteHosting';
 import type { Db } from '../../infrastructure/database/connection';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env, HonoEnv } from '../../env';
@@ -834,6 +840,46 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ session: { id: sessionId, title, revision: 1, claimed: true } }, 201);
   });
 
+  /**
+   * IS THIS ADDRESS FREE? — the check a creator types into before committing.
+   *
+   * Declared before `/:id` because Hono matches in registration order and a
+   * later literal route loses to an earlier parameterised one.
+   *
+   * Deliberately uncached: it is a live uniqueness question whose answer is
+   * acted on immediately, and a cached "available" that survives somebody else
+   * claiming the name tells the creator they have it and then fails the publish.
+   */
+  router.get('/address-available', async (c) => {
+    const label = (c.req.query('label') ?? '').slice(0, 80);
+    if (!label.trim()) return c.json({ error: 'A label is required.' }, 400);
+    const availability = await checkSubdomainAvailability(db, label, null);
+    return c.json(availability);
+  });
+
+  /**
+   * MAKE THIS BOARD AN APP.
+   *
+   * Editor+ because it changes what the board IS, not merely what it contains.
+   * Idempotent: a board that is already an app returns that app rather than
+   * making a second one, so a double-clicked button costs nothing.
+   */
+  router.post('/:id/convert-to-app', async (c) => {
+    const access = await requireSession(c, 'editor');
+    if (!access) return c.json({ error: 'Session not found or not editable' }, 404);
+    const body = await c.req.json<{ label?: unknown }>().catch(() => ({}) as never);
+    const result = await convertSessionToApp(db, c.env, {
+      tenantId: access.session.tenantId,
+      userId: c.get('userId') as string,
+      sessionId: access.session.id,
+      label: typeof body.label === 'string' ? body.label : null,
+    });
+    if (!result.ok) {
+      return c.json({ error: result.error, availability: result.availability ?? null }, result.status);
+    }
+    return c.json({ app: result.app }, result.app.created ? 201 : 200);
+  });
+
   router.post('/', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
@@ -927,15 +973,20 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   router.get('/:id', async (c) => {
     const access = await requireSession(c);
     if (!access) return c.json({ error: 'Session not found' }, 404);
-    const [graph, projectLinks, members] = await Promise.all([
+    const [graph, projectLinks, members, app] = await Promise.all([
       visibleGraph(access.session.id, access.session.tenantId, access.session.segmentId, c.get('userId') as string),
+      // Every link, both kinds: this is a READ of what the board relates to, not
+      // a copy, so the app link belongs in it.
       db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, access.session.id)),
       db.select({ userId: creationSessionMembers.userId, role: creationSessionMembers.role, displayName: users.displayName, lastSeenAt: creationSessionMembers.lastSeenAt, viewport: creationSessionMembers.viewport, cursor: creationSessionMembers.cursor, selection: creationSessionMembers.selection, typing: creationSessionMembers.typing, watchState: creationSessionMembers.watchState, followingUserId: creationSessionMembers.followingUserId })
         .from(creationSessionMembers).leftJoin(users, eq(users.id, creationSessionMembers.userId))
         .where(eq(creationSessionMembers.sessionId, access.session.id)),
+      // The app this board became, if it became one. Rides the session read so
+      // the convert action can decide its own state without a second request.
+      appForSession(db, access.session.tenantId, access.session.id),
     ]);
     const currentMember = members.find((member) => member.userId === c.get('userId'));
-    return c.json({ session: access.session, role: access.role, currentUserId: c.get('userId'), objects: graph.objects, connections: graph.connections, projectIds: projectLinks.map((p) => p.projectId), members, personalViewport: currentMember?.viewport ?? access.session.viewport });
+    return c.json({ session: access.session, role: access.role, currentUserId: c.get('userId'), objects: graph.objects, connections: graph.connections, projectIds: projectLinks.map((p) => p.projectId), app, members, personalViewport: currentMember?.viewport ?? access.session.viewport });
   });
 
   router.post('/:id/outcomes', async (c) => {
@@ -1576,7 +1627,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (copiedObjects.length) statements.push(db.insert(creationSessionObjects).values(copiedObjects.map(({ createdAt: _createdAt, updatedAt: _updatedAt, ...object }) => object)));
     if (copiedConnections.length) statements.push(db.insert(creationSessionConnections).values(copiedConnections.map(({ createdAt: _createdAt, ...edge }) => edge)));
     if (timeline.length) statements.push(db.insert(creationSessionTimeline).values(timeline.map((message) => ({ sessionId, clientMessageId: message.clientMessageId, messageRole: message.messageRole, body: message.body, metadata: message.metadata, createdBy: userId }))));
-    const projectLinks = await db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, access.session.id));
+    const projectLinks = await db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(and(eq(creationSessionProjectLinks.sessionId, access.session.id), copyableLinkFilter));
     if (projectLinks.length) statements.push(db.insert(creationSessionProjectLinks).values(projectLinks.map(({ projectId }) => ({ sessionId, projectId, addedBy: userId }))));
     await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
     return c.json({ session: { id: sessionId, title: cleanTitle(`Copy of ${access.session.title}`), revision: 1 } }, 201);
@@ -1601,8 +1652,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, sourceId)),
       db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, sourceId)),
       db.select().from(creationSessionTimeline).where(eq(creationSessionTimeline.sessionId, sourceId)).orderBy(asc(creationSessionTimeline.id)),
-      db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, targetAccess.session.id)),
-      db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, sourceId)),
+      db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(and(eq(creationSessionProjectLinks.sessionId, targetAccess.session.id), copyableLinkFilter)),
+      db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(and(eq(creationSessionProjectLinks.sessionId, sourceId), copyableLinkFilter)),
     ]);
     const targetResources = new Set(targetObjects.flatMap((object) => object.resourceType && object.resourceId ? [`${object.resourceType}:${object.resourceId}`] : []));
     const acceptedSourceObjects = sourceObjects.filter((object) => !object.resourceType || !object.resourceId || !targetResources.has(`${object.resourceType}:${object.resourceId}`));
@@ -1653,7 +1704,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const [objects, connections, projectLinks, timeline] = await Promise.all([
       db.select().from(creationSessionObjects).where(eq(creationSessionObjects.sessionId, access.session.id)),
       db.select().from(creationSessionConnections).where(eq(creationSessionConnections.sessionId, access.session.id)),
-      db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(eq(creationSessionProjectLinks.sessionId, access.session.id)),
+      db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(and(eq(creationSessionProjectLinks.sessionId, access.session.id), copyableLinkFilter)),
       db.select().from(creationSessionTimeline).where(eq(creationSessionTimeline.sessionId, access.session.id)).orderBy(asc(creationSessionTimeline.id)),
     ]);
     const sessionId = crypto.randomUUID();
