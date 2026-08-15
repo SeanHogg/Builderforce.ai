@@ -133,12 +133,12 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
 | 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 37 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 159 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 162 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
 | 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 37 |
-| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 28 |
+| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 29 |
 Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
 
 | Group | Exact open bullets |
@@ -153,12 +153,12 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 7 | 25 |
 | 8 | 3 |
 | 9 | 37 |
-| 10 | 159 |
+| 10 | 162 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
 | 14 | 37 |
-| 15 | 28 |
+| 15 | 29 |
 ---
 
 
@@ -1451,6 +1451,8 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
 ---
 
 ## 15 · 🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt
+
+- **`siteSubscriptions.ts` does not compile, and it is the only thing red on `main`.** *(observed 2026-08-15 after the tenant-scope / table-adoption fixes went green)* Run 31911920213's `Deploy API` job fails `tsgo` and `tsc` on six errors in `application/marketplace/siteSubscriptions.ts` alone — five `TS2769 No overload matches this call` at its insert/update statements (260, 284, 300, 336, 347) and one `TS2322 Type 'number | null' is not assignable to type 'number'` at 276, which together read as a nullable-column mismatch against the `site_subscriptions` shape rather than six separate mistakes. Every other guard in the chain now passes, so this single file is what stands between `main` and a deploy. **Blocker: it is another session's file, committed at `f924867e4` and still modified in the working tree as this was logged** — the author is mid-fix on the same lines, and a second edit from here would collide rather than help. Unblocks: the API deploying at all.
 
 ### 🛡️ Cloudflare serves a managed challenge to every datacenter caller of the whole `builderforce.ai` zone *(found 2026-08-08)*
 
