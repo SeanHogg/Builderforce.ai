@@ -1,3 +1,136 @@
+## ✅ RESOLVED 2026-08-15 — The canvas threw away the answer it had already written, and an email had no body
+
+Diagnostics from a public Creation Canvas session (ui 2026.8.15, `local-5bcdff45`): "help me write an
+email to my boss asking for a raise. Provide coaching on how to get a raise". The turn ran 71 seconds,
+made four model round-trips, and showed the user one line — *"I couldn't prepare any canvas changes from
+that request."*
+
+The model had not failed. It answered twice, with the drafted email and the coaching, at iterations 2
+and 4 (both `finishReason: "stop"`). Both answers were deleted. Four defects in one path, plus two the
+report surfaced next to it.
+
+### 1 · A real answer was destroyed to make room for a failure notice
+
+`runCreationCanvasAi` classified the request as a canvas MUTATION (correctly — `help me write…` and
+`Provide coaching…` both match `requestsCanvasMutation`), and the give-up path for "model would not
+execute the command" did `finalText = ''; break`. The tail of the function then had nothing left and
+returned the notice. For a drafting request the prose IS the deliverable, and it was the only copy.
+
+Fixed by holding `lastSpokenAnswer` across iterations — the recovery paths deliberately clear
+`finalText`, so without it the answer is unrecoverable by the time the loop ends — and delivering it,
+still subject to the unverified-creation check (which replaces an answer *claiming* a change nobody
+made), with an appended line saying the board is unchanged. A tool error still outranks prose: its
+message names what blocked the turn and what would clear it, which the model's narration routinely gets
+wrong. `onUnanswered` is NOT fired, because a real answer belongs in the transcript.
+
+### 2 · The forced authoring phase was unreachable for the failure it exists to stop
+
+`RESERVED_AUTHORING_TURNS` withdraws research tools for the last 2 of 8 turns so a model that keeps
+searching still has to author. It arms at turn 6 — and the stall path gave up at turn 4, three turns
+early, every time. The escalation ladder is now explicit and ordered hardest-remedy-first: re-state the
+command → hand the turn to a model that already emitted valid tool calls → **if there is no such model**
+(the measured case: the only tool-calling model WAS the stalled one, so this rung was a no-op),
+re-state once more under authoring-only tools → stop and deliver what was said. Ignoring one act-now
+directive now arms the authoring phase by itself.
+
+### 3 · A stalled model spent the turn re-reading the board
+
+Two `canvas_read_snapshot` calls returned byte-identical payloads. The snapshot already travels in the
+turn's context; re-reading it is the safest-looking action available to a model that does not want to
+commit. `NON_AUTHORING_TOOL_NAMES` withdraws it alongside research during authoring, and its refusal is
+excluded from `lastToolError` so a withdrawn tool cannot masquerade as a turn-ending failure.
+
+### 4 · An email object was exempt from the empty-shell guard — and a subject alone satisfied it anyway
+
+`email` sat in `SHELL_IS_LEGITIMATE` on the reasoning that a message is READ from a mailbox. But the read
+path (`canvas_pin_email`) builds its node directly and never reaches `emptyShellProblem`; the only path
+that does is `canvas_add_object`, the authored one. The exemption protected nothing and excused the one
+case it should have caught. Removing it was still not enough — the guard passes on ANY populated content
+field, and for a message that field is reliably the `subject`. `ESSENTIAL_CONTENT_FIELDS` (registry DATA,
+not a branch) now names the field that IS the work: `email` → `bodyText`, `emailTemplate` → `bodyHtml`,
+`emailCampaign` → `bodyHtml` or `templateId`. The 2026-08-12 sweep had already recorded "an emailTemplate
+with no body" among its eight title-only objects; that shape is now caught. The palette's email also
+stopped stamping every hand-made draft "Pinned from inbox".
+
+### 5 · The email details panel showed one field: the subject
+
+There was no inspector section for `email` at all, so the panel fell through to the common header and
+showed the name — which holds the subject. No To, no From, no body, and no indication of where a send
+would come from. `CanvasEmailComposer` renders the whole message, and puts the CONNECTOR first: which
+connected mailbox this would leave from, resolved through the same `resolveMailboxConnection` the canvas
+tools and the server use, so the panel cannot name a different mailbox than a send would use. No mailbox
+connected → the reason, per-provider Connect buttons, and integration settings. A mailbox connected but
+not allowed to send → said plainly, Send stays disabled. A local board → it needs an account, and the
+mailbox API is never called. Sending writes the provider id back so the object becomes the record of what
+was sent rather than a draft that looks unsent. A pinned message renders read-only with the provider link.
+`htmlFromText` and `replyAddress` moved to `lib/mailboxApi.ts` — escaping order is an injection bug when
+it drifts, so both senders now share one copy.
+
+### 6 · Every runtime notice was hardcoded English
+
+A canvas turn hands its result straight to the transcript, so these read as Brain speaking — and a French
+or Chinese visitor on the public landing canvas got an English system line inside their own conversation,
+on the surface most likely to be their first contact with the product. `lib/canvasNotices.ts` defines the
+eight of them as an injected object; the English lives in `en.json` with its four translations and nowhere
+else, so there is no module default to drift from the catalogs. The turn runner is not a component and
+cannot translate for itself, which is exactly why the surface builds and passes them. The suite binds the
+real `en.json` through `createTranslator`, so a missing key or broken ICU message fails in tests instead
+of reaching a user.
+
+### Also cleaned up in the same pass
+
+- `creationCanvasAi.ts` crossed the 800-line ratchet, so the turn-CLASSIFICATION rules (what was asked,
+  whether the answer honours it — pure predicates, no transport) became `lib/canvasTurnOutcome.ts`.
+  Extraction, not a baseline entry.
+- Two stale expectations were failing before this pass and hiding the rest of the file: the guest tool
+  list had been re-typed by hand and went stale when the career pack landed (now asserts the prefix the
+  board owns, not the server's list), and `toolsAdvertised` was a literal (now counted relative to the
+  first iteration).
+- `.inspectorSection` / `.inspectorSectionHeading` compose `.agentWorkbench` — the box was never
+  agent-specific, and new sections should not have to say "agent" to inherit it.
+
+Guards: 11/11. Tests: 245 files, 2495 passing, including 7 new for the composer and one that reproduces
+the measured turn end-to-end.
+
+---
+## RESOLVED 2026-08-15 — A self-hosted backend that disappears is now noticed by us, not by the provider's retry log
+
+Logged the same day the three cloud adapters landed, and closed in the same pass. `POST /api/deploy/worker`
+recorded where a deployment landed and then nothing ever asked again: `probeWorkerHealth` only runs while
+a panel is open. A CloudFormation stack deleted from the console, a Cloud Run service scaled to zero
+revisions, an Azure app stopped for billing — all three left the platform showing a stale address as the
+place to point provider webhooks at, and the first anyone would hear of it is a provider's retry log.
+Worse than the platform-hosted case, precisely because the thing that broke is somewhere we cannot see.
+
+**A row, not a mechanism.** `runMonitorSweep` already evaluates `http_check` monitors every five minutes,
+opens an incident on breach, pages on-call and dispatches triage. A second sweep would have been a second
+set of rules about what "down" means and who gets woken up. So `MonitoringService.watchDeployedBackend`
+creates one `http_check` monitor per self-hosted project, pointed at the generated engine's own readiness
+route, and everything downstream is machinery that already existed.
+
+- **`bodyMatch`, not the status code.** A Function URL whose Lambda has been deleted can still answer 200
+  from an edge, and a Cloud Run revision that failed to start answers 503 through a load balancer that is
+  itself perfectly healthy. The monitor matches `BACKEND_HEALTH_MARKER` — a substring only the generated
+  engine emits, and only when it is the thing replying. Exported from `handlerEngineSource.ts` so the
+  matcher and the generator read one string: a second copy would keep matching until the day the health
+  payload changed shape, and then report every healthy deployment as down. `selfHosted.test.ts` asserts
+  the contract in both directions.
+- **`affectedSystem` is the identity, not the label.** A label is editable by anyone with the board open,
+  and matching on one would make a redeploy create a second monitor the moment somebody renamed the first.
+  A redeploy updates the URL in place and re-activates.
+- **Switching back to the platform ingress unwatches it.** Left running, the monitor would page on-call
+  for a backend the customer deliberately stopped using. Deactivated rather than deleted, so a project
+  that returns to a self-hosted strategy resumes with its breach history intact.
+- **One board per workspace** (`Deployed backends`), created on first use. A customer with six projects in
+  their own cloud wants one page answering "is any of it down"; six boards holding one monitor each is a
+  directory, not a view.
+- Severity `sev2`: every webhook aimed at a customer-facing backend is failing while it is down.
+
+Both call sites are best-effort — the deployment IS live, and failing the report would turn a successful
+deploy into a reported failure.
+
+---
+
 ## RESOLVED 2026-08-15 — Idea → REAL: eight proof forms, and a backend that runs in the customer's own cloud
 
 The platform could take a pasted brief and produce exactly ONE thing: a working webhook system on a
