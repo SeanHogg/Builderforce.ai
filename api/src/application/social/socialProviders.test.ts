@@ -7,6 +7,7 @@ import {
   socialProviderForConnector,
   SocialProviderError,
   SOCIAL_CONNECTOR_KEYS,
+  SOCIAL_NETWORKS,
   type SocialCall,
   type SocialCallResult,
   type SocialIdentity,
@@ -35,16 +36,30 @@ const identity = (over: Partial<SocialIdentity> = {}): SocialIdentity =>
   ({ externalId: '1', handle: 'acme', displayName: 'Acme', ...over });
 
 describe('registry', () => {
+  /**
+   * Counted against SOCIAL_NETWORKS, not against a literal.
+   *
+   * This asserted `toHaveLength(5)` and duly failed the day a sixth network was
+   * added — for being RIGHT. A test whose only claim is "there are five of these"
+   * has to be edited every time the thing it guards grows, and a test that is
+   * routinely edited to make it pass stops guarding anything. What is actually
+   * worth pinning is the BIJECTION: every network has a connector key, and every
+   * connector key resolves back to the network it came from.
+   */
   it('maps every social connector key back to exactly one provider', () => {
-    expect(SOCIAL_CONNECTOR_KEYS).toHaveLength(5);
+    expect(SOCIAL_CONNECTOR_KEYS).toHaveLength(SOCIAL_NETWORKS.length);
+    expect(new Set(SOCIAL_CONNECTOR_KEYS).size).toBe(SOCIAL_CONNECTOR_KEYS.length);
     for (const key of SOCIAL_CONNECTOR_KEYS) {
       expect(socialProviderForConnector(key)?.connectorKey).toBe(key);
+    }
+    for (const network of SOCIAL_NETWORKS) {
+      expect(getSocialProvider(network)?.network, network).toBe(network);
     }
     expect(socialProviderForConnector('slack')).toBeNull();
   });
 
-  it('only recognises the five networks', () => {
-    expect(isSocialNetwork('x')).toBe(true);
+  it('recognises the declared networks and nothing else', () => {
+    for (const network of SOCIAL_NETWORKS) expect(isSocialNetwork(network), network).toBe(true);
     expect(isSocialNetwork('mastodon')).toBe(false);
     expect(getSocialProvider('mastodon')).toBeNull();
   });

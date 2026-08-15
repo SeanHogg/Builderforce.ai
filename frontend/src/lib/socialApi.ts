@@ -115,7 +115,7 @@ export interface SocialCampaignPost {
  * a server-authored English string would be untranslatable by the time it arrived.
  */
 export interface SocialCampaignBlocker {
-  code: 'noCopy' | 'noAccounts' | 'needsMedia' | 'accountNotReady' | 'accountMissing';
+  code: 'noCopy' | 'noAccounts' | 'needsMedia' | 'cannotPublish' | 'accountNotReady' | 'accountMissing';
   network?: string;
   account?: string;
   fields?: string;

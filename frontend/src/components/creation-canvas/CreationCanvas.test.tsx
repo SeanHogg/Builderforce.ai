@@ -130,15 +130,17 @@ describe('CreationCanvas', () => {
    * one: this is what a real user's first entry into 3D does.
    */
   const enterThreeD = async () => {
-    fireEvent.click(screen.getAllByRole('button', { name: 'Toggle 3D view' })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: '3D space' })[0]!);
     return screen.findByTestId('canvas-3d-view');
   };
 
   it('opens the 3D view from the canvas rail, then hands the board back', async () => {
     render(<CreationCanvas sessionId="three-d-controls-test" persistence="local" />);
 
-    // The rail and the phone-sized action stack both offer the mode.
-    const [toggle] = screen.getAllByRole('button', { name: 'Toggle 3D view' });
+    // The rail and the phone-sized action stack both offer the surface. It is named
+    // for the surface, not for the act of toggling, because it is one entry in the
+    // surface switcher rather than a mode of its own — see `canvasSurfaces.ts`.
+    const [toggle] = screen.getAllByRole('button', { name: '3D space' });
     expect(screen.queryByTestId('canvas-3d-view')).not.toBeInTheDocument();
 
     const scene = await enterThreeD();

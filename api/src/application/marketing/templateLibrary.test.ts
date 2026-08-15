@@ -4,6 +4,7 @@ import {
   extractMergeFields,
   logoPrompt,
   resolveAssetOrigin,
+  readMediaSource,
   sanitizeTemplateHtml,
 } from './templateLibrary';
 
@@ -136,5 +137,67 @@ describe('logoPrompt', () => {
     const prompt = logoPrompt('x'.repeat(1_000), 'y'.repeat(500));
     expect(prompt).not.toContain('x'.repeat(401));
     expect(prompt).not.toContain('y'.repeat(121));
+  });
+});
+
+/**
+ * `readMediaSource` is the step between "the board made a picture" and "a social
+ * network can fetch it", and it is a SECURITY BOUNDARY for the same reason
+ * `sanitizeTemplateHtml` is: the URL it is handed comes from a person or a model,
+ * and it is fetched server-side from inside the Workers runtime. The function it
+ * replaced (`fetchGeneratedImage`) called bare `fetch` with no guard at all.
+ */
+describe('readMediaSource', () => {
+  const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+  it('decodes a base64 data URL — the shape a generated canvas image is in', async () => {
+    const read = await readMediaSource(PNG_1PX);
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.mimeType).toBe('image/png');
+    expect(read.bytes.byteLength).toBeGreaterThan(0);
+  });
+
+  it('refuses an internal host rather than fetching it', async () => {
+    for (const url of [
+      'https://127.0.0.1/logo.png',
+      'https://169.254.169.254/latest/meta-data/',
+      'https://localhost/logo.png',
+      'https://build.internal/logo.png',
+    ]) {
+      const read = await readMediaSource(url);
+      expect(read.ok, url).toBe(false);
+    }
+  });
+
+  it('refuses a protocol a server cannot read, by name', async () => {
+    // A blob: URL exists only inside the tab that minted it, and a bare `fetch`
+    // of one would fail deep in the runtime with nothing a user could act on.
+    const blob = await readMediaSource('blob:https://builderforce.ai/8f2c');
+    expect(blob.ok).toBe(false);
+    const relative = await readMediaSource('/api/ide/projects/1/files/logo.png');
+    expect(relative.ok).toBe(false);
+  });
+
+  it('refuses a type no network will render, before storing it', async () => {
+    const read = await readMediaSource('data:application/pdf;base64,JVBERi0=');
+    expect(read.ok).toBe(false);
+    if (read.ok) return;
+    expect(read.status).toBe(400);
+    expect(read.error).toContain('application/pdf');
+  });
+
+  it('refuses an oversized inline image with the size as the reason', async () => {
+    // Base64 of ~3 MB of zero bytes — over the 2 MB ceiling the mail-client
+    // limit set, which social publishing inherits.
+    const oversized = `data:image/png;base64,${'A'.repeat(4 * 1024 * 1024)}`;
+    const read = await readMediaSource(oversized);
+    expect(read.ok).toBe(false);
+    if (read.ok) return;
+    expect(read.status).toBe(413);
+  });
+
+  it('rejects an empty source instead of storing a zero-byte asset', async () => {
+    expect((await readMediaSource('   ')).ok).toBe(false);
   });
 });

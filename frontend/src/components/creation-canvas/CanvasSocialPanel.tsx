@@ -31,9 +31,12 @@ import {
 import { authFieldsFor, connectorsApi, type ConnectorAuthField } from '@/lib/connectorsApi';
 import { resolvePublicMediaUrls } from '@/lib/canvasPublicMedia';
 
-/** One glyph per network. Brand marks, so they stay literal. */
+/** One glyph per network. Brand marks, so they stay literal — and the record is
+ *  exhaustive by TYPE, so an eleventh network fails to compile here rather than
+ *  rendering a blank square beside an account nobody can identify. */
 const NETWORK_GLYPH: Readonly<Record<SocialNetwork, string>> = {
   x: '𝕏', linkedin: 'in', facebook: 'f', instagram: '◎', tiktok: '♪',
+  youtube: '▶', reddit: '◕', pinterest: 'P', threads: '@', bluesky: '☁', googleBusiness: 'G',
 };
 
 export interface CanvasSocialPanelProps {

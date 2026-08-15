@@ -8695,29 +8695,31 @@ export const projectBackendApi = {
 // Developer Portal (PRD 24)
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type DeveloperVerificationState = 'unverified' | 'domain_verified' | 'identity_verified';
-export type DeveloperRole = 'owner' | 'admin' | 'publisher';
+/**
+ * A publisher's state — 'none' means this workspace does not publish. One ordered
+ * scale rather than a boolean plus a tier, so "not a publisher, yet verified" is
+ * unrepresentable. See migration 0471: a developer is a tenant.
+ */
+export type PublisherState = 'none' | 'unverified' | 'domain_verified' | 'identity_verified';
 export type ExtensionListingState = 'draft' | 'listed' | 'delisted';
 
-export type DeveloperOrg = {
-  id: string;
+/** The caller's WORKSPACE, as a publisher. There is no separate publisher id. */
+export type Publisher = {
+  tenantId: number;
   slug: string;
-  legalName: string;
+  name: string;
   website: string | null;
   supportEmail: string | null;
-  verificationState: DeveloperVerificationState | string;
-  verificationDomain: string | null;
+  state: PublisherState | string;
+  domain: string | null;
   verifiedAt: string | null;
   suspended: boolean;
-  createdAt: string | null;
 };
-
-export type DeveloperMembership = { org: DeveloperOrg; role: DeveloperRole | string };
 
 export type ExtensionPackage = {
   id: string;
-  developerOrgId: string;
-  publisher: { slug: string; legalName: string; verificationState: string } | null;
+  tenantId: number;
+  publisher: { slug: string; name: string; state: string } | null;
   slug: string;
   kind: string;
   name: string;
@@ -8792,31 +8794,32 @@ export type ExtensionContract = { kinds: string[]; scopes: string[] };
 export const developerApi = {
   contract: (): Promise<ExtensionContract> => request<ExtensionContract>('/api/developer/contract'),
 
-  // ── Publisher ──────────────────────────────────────────────────────────
-  memberships: (): Promise<DeveloperMembership[]> =>
-    request<{ memberships: DeveloperMembership[] }>('/api/developer/orgs').then((r) => r.memberships ?? []),
+  // ── Publisher — the caller's workspace, resolved from the JWT ──────────
+  // No id in any path: the token already settles which workspace this is, and a
+  // second answer in the URL would be a forgeable one.
+  publisher: (): Promise<Publisher | null> =>
+    request<{ publisher: Publisher | null }>('/api/developer/publisher').then((r) => r.publisher ?? null),
 
-  registerOrg: (input: { legalName: string; slug?: string; website?: string; supportEmail?: string }): Promise<DeveloperOrg> =>
-    request<{ org: DeveloperOrg }>('/api/developer/orgs', {
+  register: (input: { website?: string; supportEmail?: string } = {}): Promise<Publisher> =>
+    request<{ publisher: Publisher }>('/api/developer/publisher', {
       method: 'POST',
       body: JSON.stringify(input),
-    }).then((r) => r.org),
+    }).then((r) => r.publisher),
 
-  verifyDomain: (orgId: string, domain: string): Promise<{ domain: string; recordName: string; recordValue: string }> =>
+  verifyDomain: (domain: string): Promise<{ domain: string; recordName: string; recordValue: string }> =>
     request<{ challenge: { domain: string; recordName: string; recordValue: string } }>(
-      `/api/developer/orgs/${orgId}/verify-domain`,
+      '/api/developer/publisher/verify-domain',
       { method: 'POST', body: JSON.stringify({ domain }) },
     ).then((r) => r.challenge),
 
   // ── Packages ───────────────────────────────────────────────────────────
-  packages: (orgId: string): Promise<ExtensionPackage[]> =>
-    request<{ packages: ExtensionPackage[] }>(`/api/developer/orgs/${orgId}/packages`).then((r) => r.packages ?? []),
+  packages: (): Promise<ExtensionPackage[]> =>
+    request<{ packages: ExtensionPackage[] }>('/api/developer/packages').then((r) => r.packages ?? []),
 
   createPackage: (
-    orgId: string,
     input: { kind: string; name: string; slug?: string; tagline?: string; description?: string; categories?: string[]; docsUrl?: string },
   ): Promise<ExtensionPackage> =>
-    request<{ package: ExtensionPackage }>(`/api/developer/orgs/${orgId}/packages`, {
+    request<{ package: ExtensionPackage }>('/api/developer/packages', {
       method: 'POST',
       body: JSON.stringify(input),
     }).then((r) => r.package),

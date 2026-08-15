@@ -27,7 +27,27 @@
 type Messages = Record<string, unknown>;
 type Values = Record<string, unknown>;
 
-const PLURAL = /\{(\w+),\s*plural,\s*one \{([^}]*)\} other \{([^}]*)\}\}/g;
+/**
+ * An ICU `plural` argument, with ALL of its arms rather than just `one`/`other`.
+ *
+ * The previous pattern hard-coded `one {…} other {…}` in that order, so a catalog entry
+ * that opens with an exact match — `{count, plural, =0 {Open the board} one {…} other {…}}`,
+ * which is how a real empty state is written — did not match at all and the raw ICU
+ * source was asserted against as if it were copy. A resolver standing in for next-intl
+ * has to be at least as capable as next-intl; the header above says so, and this is the
+ * second time that has been the bug.
+ */
+const PLURAL = /\{(\w+),\s*plural,\s*((?:\s*(?:=\d+|zero|one|two|few|many|other)\s*\{[^{}]*\})+)\s*\}/g;
+const PLURAL_ARM = /(=\d+|zero|one|two|few|many|other)\s*\{([^{}]*)\}/g;
+
+/** The arm ICU would pick for `count`: an exact `=N` wins, then the category. */
+function selectPluralArm(body: string, count: number): string {
+  const arms = new Map([...body.matchAll(PLURAL_ARM)].map((arm) => [arm[1]!, arm[2]!]));
+  return arms.get(`=${count}`)
+    ?? (count === 1 ? arms.get('one') : undefined)
+    ?? arms.get('other')
+    ?? '';
+}
 
 function lookup(messages: Messages, namespace: string | undefined, key: string): unknown {
   return (namespace ? `${namespace}.${key}` : key)
@@ -46,9 +66,9 @@ function build(messages: Messages, namespace: string | undefined): RealCatalogTr
   const translate = (key: string, values?: Values) => {
     const value = lookup(messages, namespace, key);
     const copy = typeof value === 'string' ? value : namespace ? `${namespace}.${key}` : key;
-    const pluralized = copy.replace(PLURAL, (_match, name: string, one: string, other: string) => {
+    const pluralized = copy.replace(PLURAL, (_match, name: string, body: string) => {
       const count = Number(values?.[name]);
-      return (count === 1 ? one : other).replace('#', String(count));
+      return selectPluralArm(body, count).replaceAll('#', String(count));
     });
     return Object.entries(values ?? {}).reduce(
       (result, [name, replacement]) => result.replaceAll(`{${name}}`, String(replacement)),

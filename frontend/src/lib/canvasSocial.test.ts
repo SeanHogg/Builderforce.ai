@@ -7,7 +7,7 @@ import {
   socialPostNodeData,
   socialPostProjection,
 } from './canvasSocial';
-import type { SocialCampaign, SocialFeedItem, SocialFeedRead } from './socialApi';
+import { SOCIAL_NETWORKS, type SocialCampaign, type SocialFeedItem, type SocialFeedRead } from './socialApi';
 
 const post = (over: Partial<SocialFeedItem> = {}): SocialFeedItem => ({
   id: 'p1', network: 'x', connectionId: 'c1', accountName: 'Acme X', authorName: '@acme',
@@ -100,10 +100,21 @@ describe('socialCampaignNodeData', () => {
 });
 
 describe('isSocialNetworkName', () => {
-  it('accepts the five networks and rejects anything else', () => {
-    expect(isSocialNetworkName('linkedin')).toBe(true);
-    expect(isSocialNetworkName('threads')).toBe(false);
+  /**
+   * Driven off SOCIAL_NETWORKS rather than a hand-typed list. The hand-typed one
+   * asserted "threads is not a network", which was true until Threads was added
+   * and then failed for being RIGHT — a test that has to be edited every time the
+   * thing it guards grows is a test that will eventually be edited carelessly.
+   */
+  it('accepts every declared network', () => {
+    for (const network of SOCIAL_NETWORKS) expect(isSocialNetworkName(network), network).toBe(true);
+  });
+
+  it('rejects a name that is not one, and anything that is not a string', () => {
+    expect(isSocialNetworkName('myspace')).toBe(false);
+    expect(isSocialNetworkName('')).toBe(false);
     expect(isSocialNetworkName(null)).toBe(false);
+    expect(isSocialNetworkName(7)).toBe(false);
   });
 });
 

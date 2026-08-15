@@ -25,7 +25,7 @@ import {
   meetsVerification,
   SENSITIVE_SCOPES,
   SUBMITTABLE_KINDS,
-  type DeveloperVerificationState,
+  type PublisherState,
   type ExtensionKind,
 } from './extensionContract';
 import { parseConnectorManifest, type ConnectorManifest } from '../connectors/connectorManifest';
@@ -172,7 +172,7 @@ export interface ReviewInput {
   spec: unknown;
   requestedScopes: readonly string[];
   /** The publisher's trust tier at submit time. */
-  verificationState: DeveloperVerificationState | string;
+  verificationState: PublisherState | string;
   /** True when the package is (or is becoming) a PAID listing. */
   paid: boolean;
   /** The previously approved version's scopes, when there is one. */

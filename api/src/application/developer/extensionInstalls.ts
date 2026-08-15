@@ -93,13 +93,10 @@ export async function previewInstall(
   if (!pkg.currentVersionId) throw new PublisherError('this package has no published version', 409);
 
   const version = await loadVersion(db, pkg.currentVersionId);
-  // The PUBLISHER's workspace, not the installing one — a declared cross-tenant
-  // read, and the reason a suspension hides a listing from everybody at once.
-  const [publisher] = await db
-    .select()
-    .from(tenants)
-    .where(acrossTenants(tenants, 'public_catalogue', eq(tenants.id, pkg.tenantId)))
-    .limit(1);
+  // The PUBLISHER's workspace, not the installing one — read by primary key, and
+  // the reason a suspension hides a listing from everybody at once. `tenants` is
+  // the tenant, so the id IS the scope; there is no wider set to narrow.
+  const [publisher] = await db.select().from(tenants).where(eq(tenants.id, pkg.tenantId)).limit(1);
   if (publisher?.publisherSuspendedAt) throw new PublisherError('this package is not available', 404);
 
   const [existing] = await db
@@ -324,7 +321,7 @@ export async function listInstalls(db: Db, env: Env, tenantId: number): Promise<
           )
         : new Map<string, typeof extensionVersions.$inferSelect>();
 
-      return rows.map(({ install, version, pkg, org }) => {
+      return rows.map(({ install, version, pkg, publisher }) => {
         const head = pkg.currentVersionId ? heads.get(pkg.currentVersionId) : undefined;
         // The scope diff is computed against what this tenant was GRANTED, so the
         // banner can say "this update needs write:canvas" rather than just "update
@@ -337,7 +334,7 @@ export async function listInstalls(db: Db, env: Env, tenantId: number): Promise<
           packageSlug: pkg.slug,
           packageName: pkg.name,
           kind: pkg.kind,
-          publisherName: org.legalName,
+          publisherName: publisher.name,
           versionId: version.id,
           semver: version.semver,
           grantedScopes: install.grantedScopes ?? [],

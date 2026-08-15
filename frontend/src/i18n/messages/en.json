@@ -14509,6 +14509,7 @@
         "noCopy": "No copy written yet.",
         "noAccounts": "No accounts selected.",
         "needsMedia": "{account} needs an image or video — it cannot publish text alone.",
+        "cannotPublish": "{account} can only be read and measured — it cannot be published to.",
         "accountNotReady": "{account} is not ready ({fields}).",
         "accountMissing": "A {network} account this campaign targets is no longer connected."
       },
@@ -16333,6 +16334,7 @@
       "targets": "Publish to",
       "noReadyAccounts": "No connected account is ready to publish yet.",
       "mediaRequired": "{networks} cannot publish text alone and will be skipped without media.",
+      "cannotPublish": "{networks} can only be read and measured here — remove it to publish.",
       "needsText": "Write the post copy first.",
       "needsAccount": "Choose at least one account.",
       "publishing": "Publishing…",
@@ -19890,11 +19892,9 @@
     },
     "publish": {
       "registerTitle": "Register as a publisher",
-      "registerBody": "A publisher is your company, not your workspace. Register once, then ship packages any workspace can install.",
-      "legalName": "Company name",
-      "legalNamePlaceholder": "Acme Payroll, Inc.",
-      "register": "Register",
-      "publisherTitle": "Your publisher",
+      "registerBody": "Publishing is something this workspace does. Register it once, then ship packages any other workspace can install — your workspace name and URL become your publisher identity, and your workspace members are the people who may ship.",
+      "register": "Register this workspace",
+      "publisherTitle": "This workspace publishes as",
       "verificationHint": "Verify your domain to show a badge on your listings. Identity verification is required before you can charge for a package.",
       "verification": {
         "unverified": "Unverified",

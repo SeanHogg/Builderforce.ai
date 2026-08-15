@@ -15,6 +15,14 @@
  * rather than hardcoded here — a client-side copy of the scope list would drift
  * from the server's the first time one was added, and the drifted copy is exactly
  * what a consent screen would render.
+ *
+ * ── THE PUBLISHER IS THIS WORKSPACE (migration 0471) ────────────────────────
+ * There is no publisher picker and no registration form asking for a name and a
+ * slug, because a developer is a tenant: the workspace already has both, and
+ * asking again is how `/developers/acme` ends up owned by a workspace called
+ * something else. Becoming a publisher is one button, and the staff who may act
+ * for it are the workspace's members — managed where workspace members have
+ * always been managed, not duplicated here.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -23,11 +31,11 @@ import PageContainer from '@/components/PageContainer';
 import { useConfirm } from '@/components/ConfirmProvider';
 import {
   developerApi,
-  type DeveloperMembership,
   type ExtensionContract,
   type ExtensionInstall,
   type ExtensionPackage,
   type ExtensionVersion,
+  type Publisher,
 } from '@/lib/builderforceApi';
 
 // ── Tokens only. Every colour here resolves in both themes. ─────────────────
@@ -113,7 +121,7 @@ export function DeveloperPortalContent() {
 
   const [tab, setTab] = useState<Tab>('installed');
   const [contract, setContract] = useState<ExtensionContract | null>(null);
-  const [memberships, setMemberships] = useState<DeveloperMembership[]>([]);
+  const [publisher, setPublisher] = useState<Publisher | null>(null);
   const [installs, setInstalls] = useState<ExtensionInstall[]>([]);
   const [catalog, setCatalog] = useState<ExtensionPackage[]>([]);
   const [packages, setPackages] = useState<ExtensionPackage[]>([]);
@@ -122,26 +130,23 @@ export function DeveloperPortalContent() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const org = memberships[0]?.org ?? null;
-
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       // One round of parallel reads rather than a waterfall — the portal's four
       // lists are independent, and serialising them would show four spinners.
-      const [c, m, i, cat] = await Promise.all([
+      const [c, p, i, cat] = await Promise.all([
         developerApi.contract(),
-        developerApi.memberships(),
+        developerApi.publisher(),
         developerApi.installs(),
         developerApi.catalog(),
       ]);
       setContract(c);
-      setMemberships(m);
+      setPublisher(p);
       setInstalls(i);
       setCatalog(cat);
-      const first = m[0]?.org;
-      setPackages(first ? await developerApi.packages(first.id) : []);
+      setPackages(p ? await developerApi.packages() : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('errors.load'));
     } finally {
@@ -311,8 +316,8 @@ export function DeveloperPortalContent() {
                     </div>
                     <p style={muted}>{p.tagline}</p>
                     <p style={muted}>
-                      {t('catalog.publisher', { publisher: p.publisher?.legalName ?? '—' })}{' '}
-                      {p.publisher?.verificationState === 'identity_verified' && (
+                      {t('catalog.publisher', { publisher: p.publisher?.name ?? '—' })}{' '}
+                      {p.publisher?.state === 'identity_verified' && (
                         <span style={chip('good')}>{t('catalog.verified')}</span>
                       )}
                     </p>
@@ -335,7 +340,7 @@ export function DeveloperPortalContent() {
         {/* ── Publish ────────────────────────────────────────────────── */}
         {tab === 'publish' && (
           <PublishTab
-            org={org}
+            publisher={publisher}
             packages={packages}
             versions={versions}
             contract={contract}
@@ -357,7 +362,7 @@ export function DeveloperPortalContent() {
 // ---------------------------------------------------------------------------
 
 type PublishTabProps = {
-  org: DeveloperMembership['org'] | null;
+  publisher: Publisher | null;
   packages: ExtensionPackage[];
   versions: Record<string, ExtensionVersion[]>;
   contract: ExtensionContract | null;
@@ -373,9 +378,8 @@ type PublishTabProps = {
  * knows whether the caller is a member of a publisher, so the consumer does not
  * have to compute it.
  */
-function PublishTab({ org, packages, versions, contract, busy, onRun, onLoadVersions }: PublishTabProps) {
+function PublishTab({ publisher, packages, versions, contract, busy, onRun, onLoadVersions }: PublishTabProps) {
   const t = useTranslations('developerPortal');
-  const [legalName, setLegalName] = useState('');
   const [pkgName, setPkgName] = useState('');
   const [pkgKind, setPkgKind] = useState('connector');
   const [specText, setSpecText] = useState('');
@@ -385,24 +389,16 @@ function PublishTab({ org, packages, versions, contract, busy, onRun, onLoadVers
   const [submitResult, setSubmitResult] = useState<ExtensionVersion | null>(null);
   const [specError, setSpecError] = useState<string | null>(null);
 
-  if (!org) {
+  if (!publisher) {
     return (
       <section style={card}>
         <h2 style={sectionTitle}>{t('publish.registerTitle')}</h2>
         <p style={{ ...muted, maxWidth: '70ch' }}>{t('publish.registerBody')}</p>
-        <label style={muted} htmlFor="dev-legal-name">{t('publish.legalName')}</label>
-        <input
-          id="dev-legal-name"
-          style={input}
-          value={legalName}
-          onChange={(e) => setLegalName(e.target.value)}
-          placeholder={t('publish.legalNamePlaceholder')}
-        />
         <button
           type="button"
           style={buttonPrimary}
-          disabled={legalName.trim().length < 2 || busy === 'register'}
-          onClick={() => void onRun('register', () => developerApi.registerOrg({ legalName: legalName.trim() }))}
+          disabled={busy === 'register'}
+          onClick={() => void onRun('register', () => developerApi.register())}
         >
           {t('publish.register')}
         </button>
@@ -433,9 +429,9 @@ function PublishTab({ org, packages, versions, contract, busy, onRun, onLoadVers
       <section style={card}>
         <h2 style={sectionTitle}>{t('publish.publisherTitle')}</h2>
         <p style={muted}>
-          {org.legalName} · <code>{org.slug}</code>{' '}
-          <span style={chip(org.verificationState === 'identity_verified' ? 'good' : 'neutral')}>
-            {t(`publish.verification.${org.verificationState}` as 'publish.verification.unverified')}
+          {publisher.name} · <code>{publisher.slug}</code>{' '}
+          <span style={chip(publisher.state === 'identity_verified' ? 'good' : 'neutral')}>
+            {t(`publish.verification.${publisher.state}` as 'publish.verification.unverified')}
           </span>
         </p>
         <p style={{ ...muted, maxWidth: '70ch' }}>{t('publish.verificationHint')}</p>
@@ -467,7 +463,7 @@ function PublishTab({ org, packages, versions, contract, busy, onRun, onLoadVers
           disabled={pkgName.trim().length < 2 || busy === 'create-package'}
           onClick={() =>
             void onRun('create-package', () =>
-              developerApi.createPackage(org.id, { kind: pkgKind, name: pkgName.trim() }),
+              developerApi.createPackage({ kind: pkgKind, name: pkgName.trim() }),
             )
           }
         >

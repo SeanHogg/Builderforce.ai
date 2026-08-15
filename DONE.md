@@ -670,6 +670,50 @@ real capability one free account away.
 67 canvas tools classified (39 guest-safe, 7 guest-gated, 21 account-required), the prompt
 cross-checked, and the social gate copy localized across all five catalogs.
 
+### The picture the board just made can now be posted
+
+`social_campaigns.media_urls` takes public `https` URLs because Instagram and TikTok FETCH media
+themselves with no session, while a generated canvas image lives in a `data:` URI. The two halves
+never met: "post this image everywhere" meant downloading it, hosting it somewhere public and pasting
+the URL back — and until someone did, the Instagram target was `skipped` with a blocker nobody could
+clear from the canvas.
+
+The email side had already solved exactly this (a recipient's mail client is as session-less as
+Instagram's fetcher), so this is that same asset store with that same public token, not a second one:
+
+- **`createAssetFromSource`** (`marketing/templateLibrary.ts`) — store what a creative object is
+  holding, return its public URL. Underneath it, **`readMediaSource`** is now the ONE reader for
+  "wherever those pixels are": a `data:` URI, an `https` URL, or raw base64. `fetchGeneratedImage`
+  was migrated onto it, which is what finally gives that path an **SSRF guard** — it had been
+  calling bare `fetch` on a URL, defensible while the only caller was our own image route and a hole
+  the moment a second caller passes a URL a person or a model chose.
+- **`POST /api/campaigns/assets`** gained a JSON `{ source }` encoding beside its multipart one. The
+  same route because it is the same act; a second endpoint would be a second place for the size,
+  type and tenant rules to drift.
+- **`lib/canvasPublicMedia.ts`** — one resolver, used by BOTH `canvas_create_social_campaign` (which
+  gained `mediaObjectIds`, so the model names a board object rather than a URL) and the composer, so
+  a campaign a model drafts and one a person composes attach the identical URL. An already-public
+  `https` URL is passed through untouched — re-hosting stock photography buys nothing.
+- **The composer's URL box became a picker** over the board's own pictures, with thumbnails.
+- Media that cannot be made public is **reported by name with its reason** rather than dropping the
+  campaign: one unusable picture must not lose the post, and "Instagram was skipped" with no reason
+  is the answer this replaces.
+
+TikTok stays open, precisely scoped, in the register: that store is images by construction (five
+image MIME types, a 2 MB ceiling chosen so a mail client renders a logo inline), and video needs a
+MIME set, its own much larger ceiling, a `kind` value and a migration.
+
+### Three entries this pass opened, and how they closed
+
+`llmApi.rateAction` with no module, the half-written ratings feature across five files, and
+`MethodologySection.test.tsx`'s missing import were all finished by the concurrent work in the tree —
+`tsgo --noEmit` is clean. The abort-signal tests broken by the stall-retry refactor now pass. Two
+things this pass did close on the way past: `SpecObjectSpec.group` (above), and six **undeclared
+design tokens** in four files that were reddening the `check-design-tokens` ratchet —
+`--font-size-section-title` (five references, an alias of the real `--font-size-section`) and
+`--content-wide`, a genuine gap in the `--content-narrow` family, now declared. One red guard hides
+the rest, so a ratchet left red is a ratchet switched off.
+
 ### The second gap in the same report: Brain was looking at the chat, not the board
 
 The diagnostics also said *"Brain turns ran against 1 of 2 objects (scope: selection). An answer

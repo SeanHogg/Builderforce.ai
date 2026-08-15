@@ -103,6 +103,21 @@ export function toVersionView(row: VersionRow): VersionView {
   };
 }
 
+/**
+ * `Acme Payroll, Inc.` → `acme-payroll-inc`.
+ *
+ * Lives beside its only caller. It used to sit in the publisher module, where it
+ * also named publisher orgs — but a publisher is a workspace now and inherits the
+ * workspace's slug, so a package slug is the last thing that needs deriving.
+ */
+export function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 100);
+}
+
 const CATALOG_CACHE_KEY = 'developer:catalog:listed';
 
 /** The public catalog goes stale on any publish, delist or suspension. */

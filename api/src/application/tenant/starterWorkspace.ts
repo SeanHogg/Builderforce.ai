@@ -54,9 +54,24 @@ export function starterWorkspaceName(user: { displayName?: string | null; userna
   return /workspace$/i.test(identity) ? identity : `${identity}'s Workspace`;
 }
 
-/** Only a builder gets a workspace — a hired/sales account has a different shell. */
+/** Only a builder gets a STARTER workspace — one seeded with a project to work in. */
 export function accountTypeGetsWorkspace(accountType: string | null | undefined): boolean {
   return (accountType ?? 'standard') === 'standard';
+}
+
+/**
+ * A for-hire account gets a workspace too — it just doesn't get a project.
+ *
+ * Their résumé is a Canvas object (PRD 18 T1 / PRD 20: an authored, shareable thing
+ * IS the canvas), and every canvas object is tenant-scoped. Without a tenant of their
+ * own a job seeker cannot own the one artefact the whole for-hire account exists to
+ * produce — and `POST /api/creative/resume/import` (tenant-scoped) 401s for them.
+ * So they get a workspace to HOLD things, not to build in: no starter project, and
+ * `navGroupsForAccountType` still gives them the restricted shell. Owning a tenant
+ * and being shown builder navigation are two different questions.
+ */
+export function accountTypeGetsPersonalWorkspace(accountType: string | null | undefined): boolean {
+  return accountType === 'freelancer';
 }
 
 /**
@@ -72,7 +87,35 @@ export async function ensureStarterWorkspace(
   user: { id: string; email?: string | null; username?: string | null; displayName?: string | null; accountType?: string | null },
 ): Promise<StarterWorkspaceOutcome> {
   if (!accountTypeGetsWorkspace(user.accountType)) return { created: false, reason: 'not-a-builder' };
+  return provisionOwnedWorkspace(env, db, user, { seedProject: true });
+}
 
+/**
+ * Ensure a for-hire user owns a workspace to keep their own artefacts in.
+ *
+ * Same guarantees as {@link ensureStarterWorkspace} — idempotent, claim-guarded,
+ * never throws — differing only in that it seeds no project.
+ */
+export async function ensurePersonalWorkspace(
+  env: Env,
+  db: Db,
+  user: { id: string; email?: string | null; username?: string | null; displayName?: string | null; accountType?: string | null },
+): Promise<StarterWorkspaceOutcome> {
+  if (!accountTypeGetsPersonalWorkspace(user.accountType)) return { created: false, reason: 'not-a-builder' };
+  return provisionOwnedWorkspace(env, db, user, { seedProject: false });
+}
+
+/**
+ * The one provisioning path both entry points share. Kept private so "does this
+ * account get a workspace" stays a question the two exported predicates answer,
+ * and never a boolean a caller can pass in wrong.
+ */
+async function provisionOwnedWorkspace(
+  env: Env,
+  db: Db,
+  user: { id: string; email?: string | null; username?: string | null; displayName?: string | null; accountType?: string | null },
+  opts: { seedProject: boolean },
+): Promise<StarterWorkspaceOutcome> {
   try {
     const tenantRepo = new TenantRepository(db);
     const existing = await tenantRepo.findByUserId(user.id);
@@ -91,34 +134,37 @@ export async function ensureStarterWorkspace(
     });
     const tenantId = tenant.id as number;
 
-    // A workspace with no project is only half a landing place, so seed the
+    // A builder's workspace with no project is only half a landing place, so seed the
     // starter project through the same use case the REST create path uses (files
     // + board + Evermind). Best-effort: an empty workspace is still a workspace,
     // and the dashboard build prompt can create a project — so a project failure
-    // must not roll back the workspace we just guaranteed.
+    // must not roll back the workspace we just guaranteed. A for-hire account skips
+    // this entirely: it holds a résumé, not a codebase.
     let projectCreated = false;
-    try {
-      const projectService = new ProjectService(new ProjectRepository(db));
-      const project = await projectService.createProject({
-        tenantId,
-        key: await projectService.buildUniqueKey(tenantId, STARTER_PROJECT_NAME),
-        name: STARTER_PROJECT_NAME,
-      });
-      await provisionProject(env, db, tenantId, project);
-      projectCreated = true;
-    } catch (error) {
-      reportCaughtError(error, {
-        source: 'application/tenant/starterWorkspace.ts',
-        operation: 'ensureStarterWorkspace.project',
-        context: { userId: user.id, tenantId },
-      });
+    if (opts.seedProject) {
+      try {
+        const projectService = new ProjectService(new ProjectRepository(db));
+        const project = await projectService.createProject({
+          tenantId,
+          key: await projectService.buildUniqueKey(tenantId, STARTER_PROJECT_NAME),
+          name: STARTER_PROJECT_NAME,
+        });
+        await provisionProject(env, db, tenantId, project);
+        projectCreated = true;
+      } catch (error) {
+        reportCaughtError(error, {
+          source: 'application/tenant/starterWorkspace.ts',
+          operation: 'provisionOwnedWorkspace.project',
+          context: { userId: user.id, tenantId },
+        });
+      }
     }
 
     return { created: true, tenantId, projectCreated };
   } catch (error) {
     reportCaughtError(error, {
       source: 'application/tenant/starterWorkspace.ts',
-      operation: 'ensureStarterWorkspace',
+      operation: 'provisionOwnedWorkspace',
       context: { userId: user.id },
     });
     return { created: false, reason: 'failed' };

@@ -14508,6 +14508,7 @@
         "noCopy": "Todavía no hay texto escrito.",
         "noAccounts": "No se ha seleccionado ninguna cuenta.",
         "needsMedia": "{account} necesita una imagen o un vídeo: no puede publicar solo texto.",
+        "cannotPublish": "{account} solo se puede leer y medir: no admite publicaciones.",
         "accountNotReady": "{account} no está lista ({fields}).",
         "accountMissing": "Una cuenta de {network} a la que apunta esta campaña ya no está conectada."
       },
@@ -16332,6 +16333,7 @@
       "targets": "Publicar en",
       "noReadyAccounts": "Ninguna cuenta conectada está lista para publicar.",
       "mediaRequired": "{networks} no pueden publicar solo texto y se omitirán sin contenido multimedia.",
+      "cannotPublish": "{networks} aquí solo se puede leer y medir: quítalo para publicar.",
       "needsText": "Escribe primero el texto de la publicación.",
       "needsAccount": "Elige al menos una cuenta.",
       "publishing": "Publicando…",
@@ -19889,11 +19891,9 @@
     },
     "publish": {
       "registerTitle": "Regístrate como editor",
-      "registerBody": "Un editor es tu empresa, no tu espacio de trabajo. Regístrate una vez y publica paquetes que cualquier espacio pueda instalar.",
-      "legalName": "Nombre de la empresa",
-      "legalNamePlaceholder": "Acme Payroll, S.L.",
-      "register": "Registrarse",
-      "publisherTitle": "Tu perfil de editor",
+      "registerBody": "Publicar es algo que hace este espacio de trabajo. Regístralo una vez y publica paquetes que cualquier otro espacio pueda instalar: el nombre y la URL de tu espacio se convierten en tu identidad de publicador, y sus miembros son quienes pueden publicar.",
+      "register": "Registrar este espacio",
+      "publisherTitle": "Este espacio publica como",
       "verificationHint": "Verifica tu dominio para mostrar un distintivo en tus fichas. La verificación de identidad es obligatoria para cobrar por un paquete.",
       "verification": {
         "unverified": "Sin verificar",

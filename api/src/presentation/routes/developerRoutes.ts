@@ -1,16 +1,14 @@
 /**
  * `/api/developer` — the Developer Portal (PRD 24 Phase 1).
  *
- *   Publisher
- *     GET    /orgs                          publishers this user may act for
- *     POST   /orgs                          register one (caller becomes owner)
- *     POST   /orgs/:id/members              add a member
- *     DELETE /orgs/:id/members/:userId      remove one
- *     POST   /orgs/:id/verify-domain        start a domain claim → the TXT record
+ *   Publisher — the caller's WORKSPACE, because a developer is a tenant (0471)
+ *     GET    /publisher                     this workspace as a publisher, or null
+ *     POST   /publisher                     register it as one
+ *     POST   /publisher/verify-domain       start a domain claim → the TXT record
  *
  *   Packages
- *     GET    /orgs/:id/packages             everything this publisher owns, drafts included
- *     POST   /orgs/:id/packages             create one
+ *     GET    /packages                      everything this publisher owns, drafts included
+ *     POST   /packages                      create one
  *     GET    /packages/:id/versions         its submission history, with review findings
  *     POST   /packages/:id/versions         submit — static review runs synchronously
  *     POST   /packages/:id/publish          make an approved version the head, and list it
@@ -29,6 +27,13 @@
  * are separate on realizations: showing somebody what they are about to approve
  * must not itself approve it.
  *
+ * There are no member endpoints, and their absence is the point of migration 0471.
+ * A publisher's staff are its WORKSPACE's members, managed where workspace members
+ * have always been managed. Publishing gained no second membership to keep in sync.
+ * For the same reason no publisher id appears in a path: the caller's workspace is
+ * on the JWT, so an id in the URL would be a second, forgeable answer to a question
+ * the token has already settled.
+ *
  * This module holds no SQL. Every handler calls an application service, which is
  * what `npm run check:layering` requires of a new route and what makes the scope
  * rules testable without an HTTP server.
@@ -39,23 +44,20 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import type { DbHandle as Db } from '../../application/shared/dbHandle';
 import type { Env, HonoEnv } from '../../env';
 import {
-  addMember,
+  becomePublisher,
   beginDomainVerification,
-  createDeveloperOrg,
-  DeveloperOrgError,
-  listMembershipsForUser,
-  removeMember,
-} from '../../application/developer/developerOrgs';
+  publisherFor,
+  PublisherError,
+} from '../../application/developer/publishers';
 import {
   EXTENSION_SCOPES,
   SUBMITTABLE_KINDS,
-  type DeveloperRole,
   type ListingState,
 } from '../../application/developer/extensionContract';
 import {
   createPackage,
   getPublicPackage,
-  listPackagesForOrg,
+  listPackagesForPublisher,
   listPublicCatalog,
   listVersions,
   publishVersion,
@@ -72,7 +74,7 @@ import {
 
 /** Map an application error onto its status once, rather than in fifteen handlers. */
 function fail(error: unknown): { body: { error: string }; status: 400 | 403 | 404 | 409 | 500 } {
-  if (error instanceof DeveloperOrgError) return { body: { error: error.message }, status: error.status };
+  if (error instanceof PublisherError) return { body: { error: error.message }, status: error.status };
   return { body: { error: error instanceof Error ? error.message : 'unexpected error' }, status: 500 };
 }
 
@@ -96,79 +98,42 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
     c.json({ kinds: SUBMITTABLE_KINDS, scopes: EXTENSION_SCOPES }),
   );
 
-  // ── Publishers ────────────────────────────────────────────────────────────
+  // ── Publisher ─────────────────────────────────────────────────────────────
 
-  router.get('/orgs', async (c) => {
-    const { userId, env } = ctx(c);
-    if (!userId) return c.json({ error: 'Authentication required' }, 401);
-    return c.json({ memberships: await listMembershipsForUser(db, env, userId) });
+  router.get('/publisher', async (c) => {
+    const { tenantId, env } = ctx(c);
+    if (!tenantId) return c.json({ error: 'Authentication required' }, 401);
+    return c.json({ publisher: await publisherFor(db, env, tenantId) });
   });
 
-  router.post('/orgs', async (c) => {
-    const { userId, env } = ctx(c);
-    if (!userId) return c.json({ error: 'Authentication required' }, 401);
-    type Body = { legalName?: string; slug?: string; website?: string; supportEmail?: string };
+  router.post('/publisher', async (c) => {
+    const { userId, tenantId, env } = ctx(c);
+    if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
+    type Body = { website?: string; supportEmail?: string };
     const body = await c.req.json<Body>().catch((): Body => ({}));
     try {
-      const org = await createDeveloperOrg(db, env, {
+      const publisher = await becomePublisher(db, env, {
+        tenantId,
         userId,
-        legalName: body.legalName ?? '',
-        slug: body.slug,
         website: body.website ?? null,
         supportEmail: body.supportEmail ?? null,
       });
-      return c.json({ org }, 201);
+      return c.json({ publisher }, 201);
     } catch (error) {
       const { body: b, status } = fail(error);
       return c.json(b, status);
     }
   });
 
-  router.post('/orgs/:id/members', async (c) => {
-    const { userId, env } = ctx(c);
-    if (!userId) return c.json({ error: 'Authentication required' }, 401);
-    type Body = { userId?: string; role?: DeveloperRole };
-    const body = await c.req.json<Body>().catch((): Body => ({}));
-    if (!body.userId) return c.json({ error: 'userId is required' }, 400);
-    try {
-      await addMember(db, env, {
-        orgId: c.req.param('id'),
-        actorUserId: userId,
-        userId: body.userId,
-        role: body.role ?? 'publisher',
-      });
-      return c.json({ ok: true });
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
-  });
-
-  router.delete('/orgs/:id/members/:userId', async (c) => {
-    const { userId, env } = ctx(c);
-    if (!userId) return c.json({ error: 'Authentication required' }, 401);
-    try {
-      await removeMember(db, env, {
-        orgId: c.req.param('id'),
-        actorUserId: userId,
-        userId: c.req.param('userId'),
-      });
-      return c.json({ ok: true });
-    } catch (error) {
-      const { body: b, status } = fail(error);
-      return c.json(b, status);
-    }
-  });
-
-  router.post('/orgs/:id/verify-domain', async (c) => {
-    const { userId, env } = ctx(c);
-    if (!userId) return c.json({ error: 'Authentication required' }, 401);
+  router.post('/publisher/verify-domain', async (c) => {
+    const { userId, tenantId, env } = ctx(c);
+    if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
     type Body = { domain?: string };
     const body = await c.req.json<Body>().catch((): Body => ({}));
     try {
       const challenge = await beginDomainVerification(db, env, {
-        orgId: c.req.param('id'),
-        actorUserId: userId,
+        tenantId,
+        userId,
         domain: body.domain ?? '',
       });
       return c.json({ challenge });
@@ -180,20 +145,20 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
 
   // ── Packages ──────────────────────────────────────────────────────────────
 
-  router.get('/orgs/:id/packages', async (c) => {
-    const { userId } = ctx(c);
-    if (!userId) return c.json({ error: 'Authentication required' }, 401);
+  router.get('/packages', async (c) => {
+    const { userId, tenantId } = ctx(c);
+    if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
     try {
-      return c.json({ packages: await listPackagesForOrg(db, c.req.param('id'), userId) });
+      return c.json({ packages: await listPackagesForPublisher(db, tenantId, userId) });
     } catch (error) {
       const { body, status } = fail(error);
       return c.json(body, status);
     }
   });
 
-  router.post('/orgs/:id/packages', async (c) => {
-    const { userId, env } = ctx(c);
-    if (!userId) return c.json({ error: 'Authentication required' }, 401);
+  router.post('/packages', async (c) => {
+    const { userId, tenantId, env } = ctx(c);
+    if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
     type Body = {
       kind?: string; name?: string; slug?: string; tagline?: string;
       description?: string; categories?: string[]; docsUrl?: string;
@@ -201,7 +166,7 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
     const body = await c.req.json<Body>().catch((): Body => ({}));
     try {
       const pkg = await createPackage(db, env, {
-        orgId: c.req.param('id'),
+        tenantId,
         actorUserId: userId,
         kind: body.kind ?? '',
         name: body.name ?? '',

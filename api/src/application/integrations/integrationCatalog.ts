@@ -45,6 +45,8 @@
 import { BOARD_PROVIDERS, type BoardProviderCategory } from '../boardsync/providerCatalog';
 import { BUILTIN_CONNECTOR_LIST } from '../connectors/defaults';
 import type { ConnectorCategory, ConnectorManifest } from '../connectors/connectorManifest';
+import { allAdsProviders } from '../advertising/adsProviders';
+import { allAnalyticsProviders } from '../analytics/analyticsProviders';
 import { MAILBOX_PROVIDER_NAMES } from '../mailbox/mailboxProviders';
 import { describePayoutProviders } from '../payouts/payoutProviders';
 import { describeAccountingProviders } from '../finance/accountingProviders';
@@ -73,7 +75,7 @@ export const INTEGRATION_CATEGORIES = [
 export type IntegrationCategory = (typeof INTEGRATION_CATEGORIES)[number];
 
 /** Which port backs an entry. An entry may have several. */
-export type IntegrationSurface = 'connector' | 'board' | 'data' | 'drive' | 'mailbox' | 'payout' | 'ledger';
+export type IntegrationSurface = 'connector' | 'board' | 'data' | 'drive' | 'mailbox' | 'payout' | 'ledger' | 'ads' | 'measurement';
 
 /** What moves, and which way. Derived per surface — never asserted by hand. */
 export type IntegrationDirection = 'import' | 'export' | 'two-way' | 'event-ingest';
@@ -220,6 +222,37 @@ function build(): IntegrationCatalogEntry[] {
       surfaces: ['mailbox'],
       direction: 'two-way',
       capabilities: ['oauth'],
+    });
+  }
+
+  // Paid media. Every one of these is ALSO a connector manifest, so the merge rule
+  // turns the two into ONE entry carrying both surfaces — which is the honest answer
+  // to "can you run our ads": yes through a managed campaign object, and yes as raw
+  // actions in a workflow. `two-way` is not asserted here: it is derived from the
+  // manifests like every other connector, and the ads port only ever reads campaigns
+  // it can also write.
+  for (const provider of allAdsProviders()) {
+    merge(byId, {
+      id: provider.connectorKey,
+      name: provider.label,
+      category: 'marketing',
+      surfaces: ['ads'],
+      direction: 'two-way',
+      capabilities: [],
+    });
+  }
+
+  // Measurement. Deliberately `import`: nothing here is ever written to. Claiming
+  // two-way on an analytics property would be the overclaim this projection exists
+  // to prevent.
+  for (const provider of allAnalyticsProviders()) {
+    merge(byId, {
+      id: provider.connectorKey,
+      name: provider.label,
+      category: 'data',
+      surfaces: ['measurement'],
+      direction: 'import',
+      capabilities: [],
     });
   }
 

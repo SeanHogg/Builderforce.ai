@@ -14508,6 +14508,7 @@
         "noCopy": "Es wurde noch kein Text geschrieben.",
         "noAccounts": "Keine Konten ausgewählt.",
         "needsMedia": "{account} benötigt ein Bild oder Video — reiner Text ist dort nicht möglich.",
+        "cannotPublish": "{account} kann nur gelesen und gemessen werden — dorthin kann nicht veröffentlicht werden.",
         "accountNotReady": "{account} ist nicht bereit ({fields}).",
         "accountMissing": "Ein {network}-Konto dieser Kampagne ist nicht mehr verbunden."
       },
@@ -16332,6 +16333,7 @@
       "targets": "Veröffentlichen auf",
       "noReadyAccounts": "Kein verbundenes Konto ist bereit zum Veröffentlichen.",
       "mediaRequired": "{networks} können keinen reinen Text veröffentlichen und werden ohne Medien übersprungen.",
+      "cannotPublish": "{networks} kann hier nur gelesen und gemessen werden — entfernen, um zu veröffentlichen.",
       "needsText": "Schreibe zuerst den Beitragstext.",
       "needsAccount": "Wähle mindestens ein Konto aus.",
       "publishing": "Wird veröffentlicht…",
@@ -19889,11 +19891,9 @@
     },
     "publish": {
       "registerTitle": "Als Anbieter registrieren",
-      "registerBody": "Ein Anbieter ist dein Unternehmen, nicht dein Arbeitsbereich. Einmal registrieren, dann Pakete veröffentlichen, die jeder Arbeitsbereich installieren kann.",
-      "legalName": "Firmenname",
-      "legalNamePlaceholder": "Acme Payroll GmbH",
-      "register": "Registrieren",
-      "publisherTitle": "Dein Anbieterprofil",
+      "registerBody": "Veröffentlichen ist etwas, das dieser Arbeitsbereich tut. Registrieren Sie ihn einmal und liefern Sie Pakete aus, die jeder andere Arbeitsbereich installieren kann — Name und URL Ihres Arbeitsbereichs werden zu Ihrer Herausgeber-Identität, und seine Mitglieder sind die Personen, die veröffentlichen dürfen.",
+      "register": "Diesen Arbeitsbereich registrieren",
+      "publisherTitle": "Dieser Arbeitsbereich veröffentlicht als",
       "verificationHint": "Verifiziere deine Domain, um ein Abzeichen auf deinen Einträgen zu zeigen. Für kostenpflichtige Pakete ist eine Identitätsprüfung erforderlich.",
       "verification": {
         "unverified": "Nicht verifiziert",

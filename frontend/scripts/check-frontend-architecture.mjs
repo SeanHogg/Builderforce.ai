@@ -16,6 +16,18 @@
  *   this the file that finds out whether that works is not a trade worth taking
  *   for one ratchet point. The alternative was two copies of the same markup,
  *   which is the drift the component exists to prevent.
+ *
+ *   789 → 792 (`useClientFiles`, migration 0469) — the three surfaces founder
+ *   operations added, each of which is a FORM somebody fills in and submits:
+ *   `components/forms/PublicFormResponder.tsx` (the public form responder),
+ *   `components/signature/SignerConsole.tsx` (the signer) and
+ *   `components/cofounder/CofounderMatching.tsx` (co-founder matching).
+ *   The two public ones were the case worth arguing and the argument goes the
+ *   other way from the usual: rendering them on the server and submitting from
+ *   the client would be two components maintaining one shape, and the shape —
+ *   which questions exist, which are required, what a signer was shown — is
+ *   precisely the part that must not drift. Their `page.tsx` wrappers stay
+ *   Server Components, so the route boundary is unchanged.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';

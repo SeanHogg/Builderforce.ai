@@ -14508,6 +14508,7 @@
         "noCopy": "Aucun texte n’a encore été rédigé.",
         "noAccounts": "Aucun compte sélectionné.",
         "needsMedia": "{account} a besoin d’une image ou d’une vidéo : ce réseau ne publie pas de texte seul.",
+        "cannotPublish": "{account} ne peut être que lu et mesuré : il n'accepte pas de publication.",
         "accountNotReady": "{account} n’est pas prêt ({fields}).",
         "accountMissing": "Un compte {network} visé par cette campagne n’est plus connecté."
       },
@@ -16332,6 +16333,7 @@
       "targets": "Publier sur",
       "noReadyAccounts": "Aucun compte connecté n’est prêt à publier.",
       "mediaRequired": "{networks} ne peuvent pas publier de texte seul et seront ignorés sans média.",
+      "cannotPublish": "{networks} ne peut être que lu et mesuré ici — retirez-le pour publier.",
       "needsText": "Rédigez d’abord le texte de la publication.",
       "needsAccount": "Choisissez au moins un compte.",
       "publishing": "Publication…",
@@ -19889,11 +19891,9 @@
     },
     "publish": {
       "registerTitle": "Inscrivez-vous comme éditeur",
-      "registerBody": "Un éditeur, c'est votre entreprise, pas votre espace de travail. Inscrivez-vous une fois, puis publiez des paquets que n'importe quel espace peut installer.",
-      "legalName": "Nom de l'entreprise",
-      "legalNamePlaceholder": "Acme Payroll, SAS",
-      "register": "S'inscrire",
-      "publisherTitle": "Votre profil d'éditeur",
+      "registerBody": "Publier est une chose que fait cet espace de travail. Enregistrez-le une fois, puis livrez des paquets que n'importe quel autre espace peut installer : le nom et l'URL de votre espace deviennent votre identité d'éditeur, et ses membres sont les personnes habilitées à publier.",
+      "register": "Enregistrer cet espace",
+      "publisherTitle": "Cet espace publie sous le nom de",
       "verificationHint": "Vérifiez votre domaine pour afficher un badge sur vos fiches. La vérification d'identité est obligatoire pour faire payer un paquet.",
       "verification": {
         "unverified": "Non vérifié",

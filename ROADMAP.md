@@ -132,13 +132,13 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 6 | [Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 31 |
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
-| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 33 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 140 |
+| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 31 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 157 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
 | 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 37 |
-| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 31 |
+| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 32 |
 
 Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
 
@@ -153,13 +153,13 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 6 | 31 |
 | 7 | 25 |
 | 8 | 3 |
-| 9 | 33 |
-| 10 | 140 |
+| 9 | 31 |
+| 10 | 157 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
 | 14 | 37 |
-| 15 | 31 |
+| 15 | 32 |
 ---
 
 
@@ -658,9 +658,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 > The connect → read → compose → publish slice shipped 2026-08-12 (migration 0458, `/api/social`, canvas `socialFeed` / `socialPost` / `socialCampaign`; see [DONE.md](./DONE.md)). These are the parts deliberately left out of that pass.
 
 - **Connecting a social account is a PASTED TOKEN, not a consent flow.** A social account is a `connector_connections` row on the built-in X / LinkedIn / Facebook / Instagram / TikTok manifests, so connecting means pasting an access token (plus a Page id, author URN or IG account id) rather than clicking through the network's own consent screen. `application/shared/providerOAuthConnect.ts` already generalises the round trip for mailbox / drive / calendar and each social network satisfies `OAuthProviderConfig` structurally, so the code side is a registry entry per network plus `/api/social/callback/:network`. **Blocked on operator action, not code:** each network needs its own developer app (client id + secret in the deployment's secrets, `/api/social/callback/*` as a registered redirect URI) and each one gates PUBLISHING permissions behind its own app review — X needs an elevated user-context token, LinkedIn needs approved Community Management access, Meta needs `pages_manage_posts` / `instagram_content_publish` reviewed, and TikTok needs Content Posting API approval. Until those exist a consent flow would dead-end after the user grants it. Unblocks: a CMO connecting their own accounts without visiting five developer portals.
-- **The in-flight canvas stall-retry refactor left two abort tests asserting the old contract.** *(found 2026-08-15, same pass; not mine to finish)* `creationCanvasAi.ts` now wraps the caller's `AbortSignal` in its own `AbortController` and retries once on a `CanvasStreamStalledError`, so `streamChatCompletion` no longer receives `options.signal` by identity and a stalled turn makes a second round-trip. Two tests under `when the user stops the run` still assert the old contract (`toBe(options.signal)`, and exactly one call). **Verified not caused by this pass:** HEAD's own copy of the test file fails the same way against the current source. **Blocked on an explicit decision, not on code:** whether a stall retry may follow a user stop is the refactor author's design call, and rewriting the tests to match whatever the code currently does would mask a regression rather than confirm the intent. Unblocks: a green canvas suite, which is what makes the next real break visible.
-- **Two in-flight features in the working tree do not compile, so `tsgo --noEmit` is red for reasons unrelated to any shipped surface.** *(found 2026-08-15 while fixing the social tool-vocabulary gap; not mine to finish)* `CreationCanvas.tsx` calls `llmApi.rateAction(...)` and `src/lib/llmApi.ts` does not exist; `LlmRatingsPanel.tsx` imports `LlmRatingBucket` / `LlmRatingSummary` / `adminApi.llmRatings`, and `BrainTimelineProps` has no `onRateMessage` — the action-rating feature is half-written across five files. Separately `MethodologySection.test.tsx` uses `NextIntlClientProvider` without importing it. **Blocked on an explicit decision, not on code:** completing someone else's uncommitted feature means inventing the client contract for `llmApi`, and guessing it wrong is worse than leaving it visible. Unblocks: a green typecheck, which is what makes the next real type error findable.
-- **Social media must already be a public URL — the canvas cannot publish its own images.** `social_campaigns.media_urls` and `POST /api/social/publish` take public `https` URLs because Instagram and TikTok FETCH the media themselves with no session, and the canvas's own creative artifacts (image / video studio outputs) live behind authenticated storage. Marketing assets already have a public token URL (`/api/campaign-assets/:token`, built for email), so the fix is a path from a canvas creative object to that asset store plus a picker in the social composer instead of a URL box. Until then "post this image everywhere" means uploading it somewhere else first, and an Instagram or TikTok target is `skipped` with its reason. Unblocks: publishing a picture the board just generated.
+- **A social post cannot carry the board's own VIDEO, so TikTok is still unreachable from the canvas.** *(2026-08-15, opened as the images half closed)* Canvas images now publish through the marketing asset store (`createAssetFromSource` → `/api/campaign-assets/:token`), which closes Instagram. TikTok publishes video only, and that store is images by construction: `ALLOWED_ASSET_TYPES` lists five image MIME types and `MAX_ASSET_BYTES` is 2 MB — a ceiling chosen so a mail client renders a logo inline, which is the wrong constraint for a video and the right one for the thing the table was built for. Widening it is a real decision, not a line: a video MIME set, a separate and much larger size ceiling, `marketing_assets.kind` (currently `logo | image`) gaining a value, and a migration. Until then a canvas `video` object attached to a campaign is reported by name with its reason rather than silently skipped. Unblocks: "post this clip to TikTok" from the board that rendered the clip.
 
 ### 📥 Google connectors — storage backend + inbound trigger
 
@@ -703,6 +701,28 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 ---
 
 ## 10 · 🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas
+
+### Embedded apps — "idea to sell" (R1–R9, identified 2026-08-15 during the flow-design pass)
+
+> All nine are **blocked on ONE explicit user decision**: whether to adopt the architecture proposed in the Idea-to-Sell mockup — specifically (a) `delivery: 'copy' | 'hosted'` as spec data on the listing kind, (b) `site_users` as the consumer identity instead of a third `account_type`, and (c) an `AppDataStore` port with a platform default rather than provisioning a Neon/Supabase per app. R1–R9 are mutually dependent on that answer; building any of them before it is chosen would hard-code a shape the others contradict.
+
+- **A canvas board cannot become an app — the arc is severed at exactly one joint.** `api/src/infrastructure/database/schema/canvas.ts:1385` (`creation_sessions` has no `project_id`) and `api/src/presentation/routes/realizationRoutes.ts:113` (accepts `idea` / `challengeId` / `projectId`, never `sessionId`). The realization pipeline builds, publishes and wires forms correctly but cannot be handed a board as input, so a creator who designed something on the canvas has no action that turns it into a project. Fix = nullable `creation_sessions.project_id` (ON DELETE SET NULL) + accept `sessionId` on `POST /api/realizations`, deriving the spec from the board's objects. Unblocks: the entire idea → app → sell arc. **(R1)**
+
+- **An `app` marketplace listing sells a hyperlink, not an application.** `api/src/application/marketplace/creationListings.ts:934` (`siteUrl()` scrapes `canvasData.siteUrl` from the snapshot) while `packages/creation-canvas-contract/src/marketplaceListings.ts:494` strips `projectId` as a seller binding — correctly. Consequence: buying an app hands the buyer a link to the SELLER's running instance; nothing is provisioned and nothing is isolated. Two legitimate product shapes (transferable copy vs hosted service) are collapsed into one that is neither. Fix = `delivery: 'copy' | 'hosted'` on `MarketplaceListingKindSpec`, spec data in the shared contract, never a call-site branch. Unblocks: selling a working app at all. **(R2)**
+
+- **There is no consumer — every buyer must be provisioned a workspace.** `api/src/infrastructure/database/schema/identity.ts:87` (`account_type` is `standard | freelancer`), `api/src/presentation/routes/creationListingRoutes.ts:66` (every buy route behind `authMiddleware`), `api/src/application/marketplace/listingCommerce.ts:504` (entitlement requires a JWT carrying a tenant). Someone who only wants to USE a $4 app must create a Builderforce account and get a tenant. Fix = do NOT add a `consumer` account type; `site_users` (`growth.ts:192`) already IS that identity — own space, passwordless, reach limited to one site. Route a `hosted` purchase to a `site_user`; leave `copy` requiring a workspace because installing needs a canvas. One derivation off `delivery`. Unblocks: buying without an account. **(R3)**
+
+- **A creator cannot charge their own app's end users.** `site_users` carries no entitlement column and `listingCommerce.ts` offers only `createOneTimeCheckoutSession`. The sole money path is a one-time marketplace purchase by another workspace, so the people using a builder's app on the builder's own domain cannot pay them. Fix = `site_subscriptions` keyed `(site_id, site_user_id)` + `createSubscriptionCheckoutSession` on the existing `PaymentProvider` port, settling through the SAME orders / order_line_items / ledger_entries with the same take-rate stamping and reference-keyed idempotency — a second money path is how the seller's balance and the platform's books stop agreeing. Unblocks: recurring revenue for creators; the "sell" half of idea-to-sell. **(R4)**
+
+- **Per-app database provisioning does not exist and the datastore is not a port.** Nothing provisions Neon/Supabase anywhere in `api/src`. `site_collections` / `site_records` (`growth.ts:93`, `read_policy` ∈ `none | owner`, deliberately no `all`) already IS the app database, but the choice is not expressible and an app that outgrows it has no exit. Fix = an `AppDataStore` port with two real adapters — `platform` (collections, default, zero setup) and `external` (connection string in `project_secrets`, which already has no read path) — recorded as `project_sites.data_store` mirroring the existing `mode` column, same escape-hatch shape as `declarative → github-worker`. Explicitly NOT one Postgres per app: that is a credential set, migration history, bill and blast radius per app. Unblocks: BYO-database apps without inventing per-app infrastructure. **(R5)**
+
+- **The published address is a side effect of publishing, with no availability check and no way to change it.** `api/src/application/ide/publishStaticSite.ts:48` takes `requestedSubdomain` but falls back to the project name; `siteManageRoutes.ts` exposes the full custom-domain lifecycle and NOTHING for the subdomain label. A creator discovers what their app is called by publishing it. Fix = `GET /api/projects/:id/site/address/available?label=` over the existing `normalizeSubdomain` + `RESERVED_SUBDOMAINS`, plus a claim step at conversion so the address is chosen before the first publish. Unblocks: a creator picking `XXXX.builderforce.ai` deliberately. **(R6)**
+
+- **A published app has no storefront — the marketing page has nowhere to live.** `api/src/application/realization/realizeService.ts:21` — publishing REPLACES the whole site and serves the app at `/`. `site_users` sign-in is an API with no UI in front of it, and every generated form writes a `site_records` row rather than creating an account. So an app with accounts has no way for anyone to reach them. Fix = a path convention, not a feature: storefront at `/`, app at `/app`; generate the storefront from `api/src/application/marketing/templateLibrary.ts` at conversion time and make its sign-up create a `site_user`. Unblocks: "users see the app and sign up". **(R7)**
+
+- **Stage exercises the canvas snapshot and never the deployment, so an app whose address 404s passes.** `packages/creation-canvas-contract/src/marketplaceListings.ts:450` — `resolveListingHarness` picks one of six runners over the captured payload, which is right for a game/book/pack and wrong for a service, where the product IS the running system. Fix = a seventh `deployment` harness selected when `delivery === 'hosted'`: fetch the live address, assert `BACKEND_HEALTH_MARKER` rather than a status code (a deleted function still answers 200 from an edge) and confirm something is served at `/`. `MonitoringService.watchDeployedBackend` already does this and is simply not consulted at publish time. Unblocks: not shipping dead listings. **(R8)**
+
+- **Withdrawal has no defined meaning for a hosted app.** `api/src/application/marketplace/creationListings.ts:657` — `unpublishCreationListing` flips visibility and licences deliberately outlive it, which is correct for a `copy` (the buyer holds their own cards) and unenforceable for a hosted app: the seller still runs the only instance every subscriber depends on. Nothing states what happens when they stop paying, delete the project, or let the domain lapse. Fix = write the hosted lifecycle (grace → read-only → subscriber-takeable export) BEFORE the first hosted listing is sold. Unblocks: selling hosted apps without an unfixable obligation to strangers' customers. **(R9)**
 
 - **Three frontend guards are red on work that is mid-flight in the tree, and one of them hides the rest.** *(observed 2026-08-15 while closing the résumé template-engine / canvas-stall pass)* Running `frontend` `npm test` stops at `check:architecture`, which reports `'use client' files: 791 exceeds baseline 789` and `production files over 800 lines: new violation lib/academicObjects.ts`; `check:design-scale` then reports `literalHexFiles 4 (baseline 0)`, `offScaleRadii 4 (baseline 1)` and `offScaleFontSizes 3865 (baseline 3818)` naming `components/BuilderWorkspace.tsx`, `components/PreviewFrame.tsx`, `components/site/SiteReleasePanel.tsx`, `lib/visualEditor.ts`, `components/admin/panels/LlmRatingsPanel.tsx`, `components/developer/DeveloperPortalContent.tsx`, `components/UnreadBadge.tsx` and `app/challenges/page.tsx`. Separately, `tsc` currently fails on `CreationCanvas.tsx` (`Cannot find name 'threeD'` — a 3D-surface refactor that has introduced `threeD.active` / `threeD.commandProps` / `threeD.toggle` call sites without the binding) and on `lib/academicObjects.ts` (`identifies`, `submissionsFor`, `gradebookOf`, `statsOf`, `mappingRows` all undefined), which red-lines every `CreationCanvas.*.test.tsx` suite with `ReferenceError: threeD is not defined`. **Blocked on the owner of that in-flight refactor**: none of these files were touched by this pass, the same files were observed changing under it mid-run (`brainSurfaceContext.tsx` → `canvasSurfaceContext.tsx`, and the architecture baseline itself moving 788 → 789), and editing a half-finished refactor from a second direction would collide rather than fix. Needed to clear it: the `threeD` binding and the five `academicObjects` helpers landed, then a baseline decision on the two ratchets. Unblocks: `frontend` `npm test` running to the vitest stage at all, and the canvas component suites being trustworthy again.
 
@@ -1206,6 +1226,45 @@ FO-D and the rest of FO-E should not start until Track 1 lands, and FO-G2/FO-G3 
   `applicationPipeline` → `interviewPrep` → `offer` — which depends on the object kinds above. Unblocks: the
   visitor being addressed before they type, not after.
 
+#### Canvas — competitive gaps against Miro *(logged 2026-08-15 during a Miro market-research pass)*
+
+> Every bullet below is a **product prioritisation decision**, not a defect: the canvas works as designed and
+> nothing here is broken. They are recorded because a buyer comparing the two surfaces will ask about each one.
+> **Blocker for all eight: an explicit product decision on which of these we chase and which we deliberately cede.**
+
+- **The canvas has no facilitation layer, so a workshop cannot be RUN on it.** Miro shipped Engage (live polls,
+  voting, word clouds, ranking, scales, Q&A, 2×2, quiz — joinable from a phone with no account) as a 2026 headline.
+  Our whole facilitation surface is the `timer` and `comment` kinds; `grep -i poll|vote` over `creation-canvas/`
+  returns only HTTP polling. Fix = a `poll` spec-object kind with a per-participant response set and a guest join
+  path reusing the existing guest-board plumbing. Unblocks: the meeting use case, which is Miro's whole funnel.
+- **There is no board presentation mode.** `slides` objects and the `presentation` connection kind exist, but
+  nothing drives other members' viewports through an ordered frame sequence — the presence channel already carries
+  `viewport` and `followingUserId`, so the transport is there and the mode is not. Unblocks: reviews and demos run
+  on the board instead of exported to a deck.
+- **There is no board-level version history or restore.** `canvasActionJournal` records every action and
+  `CanvasReleasesPanel` snapshots releases, but nothing answers "put this board back to Tuesday", and export is
+  per-OBJECT (`canvasExports`) with no whole-board archive. Miro has both, on every paid plan. Fix = a restore
+  built over the journal + a board-archive export. Unblocks: table-stakes parity and the "safe to let an agent
+  edit my board" argument.
+- **The canvas has no freeform primitives, so there is no zero-training way onto it.** ~180 typed kinds and no
+  sticky note, no shape library, no arrow styling, no mind map, no wireframe stencil, no cloud-architecture pack.
+  `drawing`, `frame` and `note` are the nearest and are thin. This is a deliberate position (typed objects are the
+  product) and it is also the single reason a Miro user cannot start the way they know how.
+- **There is no public canvas API, no webhooks and no third-party widget runtime.** `/api/v1/*`
+  (`publicApiRoutes.ts`) is read-only catalog listings against a tenant key; Miro has board/item CRUD, webhooks and
+  a Web SDK that lets third parties render live widgets ON the board — which is how they got 250+ integrations
+  without building them. Fix = item CRUD + webhooks over `creationSessions`, then a sandboxed widget host.
+- **Nothing records a narrated walkthrough of the board.** We have a video EDITOR (`CanvasVideoEditor`) and a
+  render pipeline; Miro's Talktrack records across any browser tab, transcribes, surfaces key moments and posts to
+  Slack. Fix = capture over the existing media store + the transcript object we already have (`canvasTranscript`).
+- **There is no content-level governance on boards.** `activity_log`, RBAC, the security agent and the privacy
+  diagnostic cover ACTORS; Miro Enterprise Guard covers CONTENT — sensitive-data discovery across boards, board
+  classification and sensitivity labels, classification-driven guardrails, retention/lifecycle automation, and
+  eDiscovery with legal holds and bulk board export. Unblocks: regulated-buyer procurement.
+- **There is no cross-board container.** Miro Spaces holds many boards plus external documents as one initiative
+  hub; our scope is project-level (`ProjectScopeContext`) and board-centric, so "everything about this launch"
+  has no home. Fix = a Space entity over the PRD-20 kernel, not a new per-feature table.
+
 - **Two elements are labelled "Model" on the Creation Canvas, so the participant editor's model control is ambiguous.** *(found 2026-08-13 during the career-tool pass)* `CreationCanvas.test.tsx:632` fails with `getMultipleElementsFoundError` on `getByLabelText('Model')`: both `creationCanvas.node.model` and `chatInput.model` render the string, and after opening a participant card both are in the tree. That is the [[prompt-options-menu-single-model-control]] convention being violated in the DOM — a person using a screen reader hears two identical "Model" controls and cannot tell which one governs the run. **Blocker: a concurrent session is actively editing this surface** (the frontend package version moved 2026.8.13 → 2026.8.14 mid-run and the participant editor is part of that change), so the fix belongs to whoever owns that edit rather than to a second writer racing them. Fix = give the node-body field a distinct label (the object's own "Model" attribute is not the run's model control) or route both through the one shared control. Unblocks: the frontend suite going green, which currently hides any further regression in that file.
 
 ---
@@ -1343,6 +1402,7 @@ FO-D and the rest of FO-E should not start until Track 1 lands, and FO-G2/FO-G3 
 
 ## 15 · 🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt
 
+- **`developer_orgs` and `developer_org_members` are migrated but undeclared, so the whole api entity layer fails at IMPORT.** *(observed 2026-08-15)* `domains/integrations/entities.ts` imports both from `schema/integrations.ts` and neither is declared there, so `getTableName(undefined)` throws inside `defineDomainEntities` — which takes `entityCatalog.test.ts`, `entityQueries.test.ts` and `EntityService.test.ts` down before a single test runs, and fails `tableAdoption.test.ts`'s "every migrated table has a Drizzle declaration". This is not a ratchet; it is the api's generic read/write layer not loading at all. **Blocker: the two tables are another session's in-flight developer-portal work (PRD 24)** — writing the `pgTable` declarations would mean inventing a column set whose migration is already applied and whose shape is theirs to choose. Needed to clear it: the two declarations, matching the migration that created them. Unblocks: `api npm test` running at all, and therefore the deploy.
 - **Seven consolidated tables have no entity-catalog entry, so `entityCatalog.test.ts` is red on `main`.** *(observed 2026-08-15)* `social_campaigns`, `social_campaign_posts`, `realizations`, `site_releases`, `site_users`, `site_user_sessions` and `llm_action_ratings` were created by migrations and never declared in a domain's `entities.ts`, so nothing can read or write them through the generic layer and the adoption meter cannot see them. The fix is one line each — the question is WHICH SEAT owns them, and that is a bounded-context decision, not a lookup: `social_campaigns` is plausibly `growth` (which already owns `campaign`), `llm_action_ratings` plausibly `agents`, and `realizations` / `site_*` belong to whichever seat the realization and self-hosted-site features are being filed under. **Blocker: all seven are another session's actively-landing work** — `socialService.ts` and `socialProviders.test.ts` were being edited in the tree while this was logged — so assigning an owner now would file a table under a seat its author is still choosing. Unblocks: `api npm test` green, and those rows being reachable at all.
 - **`socialProviders.test.ts` expects five social connector keys and the registry now has eleven.** *(observed 2026-08-15)* `maps every social connector key back to exactly one provider` fails with `expected [ 'x-social', 'linkedin-social', …(9) ] to have a length of 5`. Either six connectors were added without the test being moved, or the test is asserting a count where it means to assert uniqueness — the same weakness the roster tests had before they were changed to name their members. **Blocker: the file is another session's uncommitted, in-flight work** (modified in the tree as this was logged). Unblocks: `api npm test` green.
 

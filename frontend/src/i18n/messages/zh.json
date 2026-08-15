@@ -14508,6 +14508,7 @@
         "noCopy": "还没有撰写文案。",
         "noAccounts": "尚未选择账号。",
         "needsMedia": "{account} 需要图片或视频，无法只发布文字。",
+        "cannotPublish": "{account} 仅支持读取和衡量，无法向其发布。",
         "accountNotReady": "{account} 尚未就绪（{fields}）。",
         "accountMissing": "该活动指向的 {network} 账号已不再连接。"
       },
@@ -16332,6 +16333,7 @@
       "targets": "发布到",
       "noReadyAccounts": "还没有可以发布的已连接账号。",
       "mediaRequired": "{networks} 无法只发布文字，缺少媒体时将被跳过。",
+      "cannotPublish": "{networks} 在此仅支持读取和衡量 — 请移除后再发布。",
       "needsText": "请先撰写帖子文案。",
       "needsAccount": "请至少选择一个账号。",
       "publishing": "发布中…",
@@ -19889,11 +19891,9 @@
     },
     "publish": {
       "registerTitle": "注册成为发布者",
-      "registerBody": "发布者是你的公司，而不是你的工作区。注册一次后，即可发布任何工作区都能安装的扩展包。",
-      "legalName": "公司名称",
-      "legalNamePlaceholder": "Acme Payroll, Inc.",
-      "register": "注册",
-      "publisherTitle": "你的发布者身份",
+      "registerBody": "发布是本工作区可以做的事。注册一次，即可发布任何其他工作区都能安装的扩展包——工作区名称和网址即为你的发布者身份，工作区成员即为有权发布的人。",
+      "register": "注册本工作区",
+      "publisherTitle": "本工作区的发布者身份",
       "verificationHint": "验证域名可在列表中显示徽章。收费扩展包必须先完成身份验证。",
       "verification": {
         "unverified": "未验证",

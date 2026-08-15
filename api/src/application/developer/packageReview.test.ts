@@ -8,9 +8,10 @@ import { reviewVersion } from './packageReview';
 import {
   installGrants,
   meetsVerification,
-  roleAtLeast,
+  publishes,
   scopeUpgrade,
 } from './extensionContract';
+import { tenantRoleAtLeast } from '../tenant/tenantRoles';
 import { deserializeScopes, hasScope, requireScope, serializeScopes, widenedScopes } from '../shared/scopeList';
 
 /** A minimal manifest that passes the connector parser. */
@@ -216,9 +217,26 @@ describe('ordered vocabularies', () => {
     expect(meetsVerification('nonsense', 'unverified')).toBe(false);
   });
 
-  it('compares publisher roles by rank', () => {
-    expect(roleAtLeast('owner', 'publisher')).toBe(true);
-    expect(roleAtLeast('publisher', 'admin')).toBe(false);
-    expect(roleAtLeast('nonsense', 'publisher')).toBe(false);
+  it('reads "does this workspace publish?" off the same scale as the tier', () => {
+    // 'none' is a state on the SAME ordered list, not a second boolean column.
+    // That is what makes the impossible combination — not a publisher, yet
+    // identity-verified — unrepresentable rather than merely unlikely.
+    expect(publishes('none')).toBe(false);
+    expect(publishes('unverified')).toBe(true);
+    expect(publishes('identity_verified')).toBe(true);
+    expect(publishes('nonsense')).toBe(false);
+    expect(meetsVerification('none', 'unverified')).toBe(false);
+  });
+
+  it('gates publisher actions on the TENANT role ladder, not a second one', () => {
+    // Migration 0471 deleted this context's own owner/admin/publisher ladder.
+    // A publisher's staff are workspace members, so "may they ship a version?"
+    // is answered by the ladder that already governs every other action.
+    expect(tenantRoleAtLeast('owner', 'developer')).toBe(true);
+    expect(tenantRoleAtLeast('manager', 'developer')).toBe(true);
+    expect(tenantRoleAtLeast('developer', 'manager')).toBe(false);
+    expect(tenantRoleAtLeast('viewer', 'developer')).toBe(false);
+    expect(tenantRoleAtLeast('nonsense', 'viewer')).toBe(false);
+    expect(tenantRoleAtLeast(null, 'viewer')).toBe(false);
   });
 });
