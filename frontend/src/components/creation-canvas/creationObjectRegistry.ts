@@ -63,7 +63,6 @@ export interface CreationObjectDefinition {
    *  gradebook's mean comes from the submissions beside it — and is optional so a
    *  single-object read stays a one-argument call. See `creationObjectContext`. */
   contextAdapter: (data: CreationNodeData, board?: SpecDeriveBoard) => Record<string, unknown>;
-  previewAdapter: (data: CreationNodeData) => { kind: CreationObjectKind; title: string; status?: string };
 }
 type BaseCreationObjectDefinition = Pick<CreationObjectDefinition, 'kind' | 'label' | 'icon' | 'group' | 'createData'>;
 
@@ -739,7 +738,6 @@ export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
   mutableFields: creationObjectMutableFields(definition.kind),
   allowedConnections: CREATION_CONNECTION_KINDS,
   contextAdapter: creationObjectAiContext,
-  previewAdapter: (data: CreationNodeData) => ({ kind: data.kind, title: creationObjectName(data), ...(data.status ? { status: data.status } : {}) }),
 }));
 
 const byKind = new Map(CREATION_OBJECT_REGISTRY.map((definition) => [definition.kind, definition]));

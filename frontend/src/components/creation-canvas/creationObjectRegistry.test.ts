@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationObjectAiContext, creationObjectDefinition, creationObjectMutableFields, emptyShellProblem, sanitizeCreationObjectPatch, TITLE_IS_CONTENT_KINDS } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationObjectAiContext, creationObjectDefinition, creationObjectMutableFields, creationObjectName, emptyShellProblem, sanitizeCreationObjectPatch, TITLE_IS_CONTENT_KINDS } from './creationObjectRegistry';
 import { CREATION_CONNECTION_KINDS, CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
 
 describe('creation object registry', () => {
@@ -28,7 +28,11 @@ describe('creation object registry', () => {
       // failure in a file that has nothing to do with connections.
       expect(definition.allowedConnections.length).toBe(CREATION_CONNECTION_KINDS.length);
       expect(definition.contextAdapter({ ...data, secret: 'must-not-leak' })).not.toHaveProperty('secret');
-      expect(definition.previewAdapter(data)).toMatchObject({ kind: definition.kind, title: data.title });
+      // What to CALL an object where it is referred to rather than drawn. A kind whose
+      // title is legitimately blank still has to be nameable, or the accessible outline
+      // renders "Focus " and the Brain's roster of connected work draws an empty line.
+      expect(creationObjectName(data).trim()).not.toBe('');
+      if (TITLE_IS_CONTENT_KINDS.has(definition.kind)) expect(creationObjectName(data)).toBe(definition.label);
     }
   });
 

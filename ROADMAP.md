@@ -132,12 +132,12 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 6 | [Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 31 |
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
-| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 32 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 160 |
+| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 38 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 163 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
-| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 37 |
+| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 38 |
 | 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 30 |
 Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
 
@@ -152,12 +152,12 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 6 | 31 |
 | 7 | 25 |
 | 8 | 3 |
-| 9 | 32 |
-| 10 | 160 |
+| 9 | 38 |
+| 10 | 163 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
-| 14 | 37 |
+| 14 | 38 |
 | 15 | 30 |
 ---
 
@@ -654,6 +654,21 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 
 - **The `check:design-scale` ratchet is red: +4 literal-hex files, +3 off-scale radii and +47 literal font sizes landed with the challenges / developer-portal / visual-editor work.** *(found 2026-08-15 while closing the social gaps)* `literalHexFiles` 0 → 4 (`BuilderWorkspace.tsx`, `PreviewFrame.tsx`, `site/SiteReleasePanel.tsx`, `lib/visualEditor.ts`), `offScaleRadii` 1 → 4 (`LlmRatingsPanel.tsx:37` and `DeveloperPortalContent.tsx:81` both `border-radius: 999` → `--radius-full`; `UnreadBadge.tsx:24`; `visualEditor.ts:33` `3px`), and `offScaleFontSizes` 3818 → 3865, ~28 of them inline `fontSize` in the 478-line `app/challenges/page.tsx`. The radii are mechanical. The other two are NOT: the guard's own text says a value read by something that never sees our CSS — a preview iframe's document, styles the visual editor writes into the page it is editing — belongs in `COLOUR_EXEMPT` / `FONT_SIZE_EXEMPT` **with its reason**, and `PreviewFrame` and `visualEditor` are exactly that shape while `challenges/page.tsx` is exactly not. **Blocked on the authors of those files, not on code:** deciding which of the four is an exemption and which is a migration is the review the exemption list exists to record, and bumping the baseline instead would switch the ratchet off for everyone. Unblocks: a green `npm test` in frontend, which is what makes the next style regression visible.
 
+### 💸 Paid advertising & measurement — residuals
+
+> The connect → launch → steer → measure slice shipped 2026-08-15 (migration **0470**,
+> `/api/ads` + `/api/measurement`, the `AdsProvider` and `AnalyticsProvider` ports, eight
+> ad networks, four measurement platforms, six new organic social networks and the
+> `ad-insights` daily sweep; see [DONE.md](./DONE.md)). These are the parts deliberately
+> left out of that pass.
+
+- **No adapter has ever run against a live ad account, so no spend path is proven.** *(identified 2026-08-15 while building the ports)* All eight adapters are asserted against recorded provider payloads in `adsProviders.test.ts` — the unit conversions, the objective refusals, TikTok's 200-with-an-error envelope, Google's budget-before-campaign ordering — but a payload that parses is not a campaign that runs. The failure modes that remain are exactly the ones a unit test cannot see: a Google developer token without Basic access, a Meta app whose `ads_management` was never reviewed, an X account with no funding instrument, a LinkedIn tenant without approved Advertising API access. **Blocker: one sandbox or live ad account per network, plus the developer app behind it — neither is available in this environment.** Until one full create → launch → pause → sync cycle is recorded per network, the honest description is "written and structurally verified", not "proven". Unblocks: telling a customer we run their paid media and meaning it.
+- **`ad_sets` and `ads` have a schema and still have no application code.** The 0470 pass wired the CAMPAIGN level end to end — port, service, ledger, sweep, routes, MCP tools, canvas panel — and left the two tables beneath it exactly as migration 0432 created them: reachable only as inert generic CRUD, which is the same defect this pass was opened to fix, one level down. The consequence is concrete: a campaign can be created and funded, but its TARGETING and its CREATIVE cannot, so every campaign this platform makes must be finished in the network's own console before it can deliver. Two adapters already create an ad set as a side effect (Reddit, because its daily budget lives there; X, because a campaign with no line item is inert), which is the seam to generalise rather than a pattern to copy. Fix = `AdsProvider.listAdSets`/`createAdSet`/`createAd` on the same port, an `adSetService` beside `adsService`, and the targeting spec normalised the way objectives already are. Unblocks: a campaign that can actually deliver without leaving the product.
+- **Nothing joins spend to outcome, so "did the paid media work" is still two answers.** `ad_insights` holds what each network charged and `/api/measurement/breakdown?dimension=channel` holds what arrived, and no code anywhere puts them side by side — a person reads two panels and does the division in their head. The join is not free: matching a `sessionCampaignName` from GA4 to an `ad_campaigns.name` is string-shaped and wrong the moment somebody renames a campaign, so the real fix is UTM ownership — the platform generating the `utm_campaign` it later reads, stored on the campaign row. Fix = a `utm_campaign` column written at create time, appended to every destination URL the ads port sets, and a rollup that groups `ad_insights` by it against the measurement breakdown. Unblocks: cost per signup, which is the number the whole `measure` stage exists to produce.
+- **Microsoft Advertising is absent, and cannot be added as manifest data.** Every other network here is a REST API a `ConnectorManifest` can describe. Microsoft's Campaign Management API is **SOAP**, with no REST equivalent for campaign CRUD, so it cannot be expressed as a manifest at all — a `microsoft-ads` entry would be a card that could never make a call. Fix = either a SOAP envelope mode in the connector runtime (a real feature, not a manifest), or their Bulk API over file upload. Unblocks: Bing search inventory, which is the one meaningful search alternative to Google.
+- **Connecting an ad account is a PASTED TOKEN, not a consent flow** — the same gap the social accounts have, for the same reason. `application/shared/providerOAuthConnect.ts` already generalises the round trip and each network satisfies `OAuthProviderConfig` structurally, so the code side is a registry entry per network plus `/api/ads/callback/:network`. **Blocked on operator action, not code:** each network needs its own developer app with `/api/ads/callback/*` registered, and every one of them gates SPEND permissions behind its own review. Until those exist a consent flow would dead-end after the user granted it. Unblocks: a CMO connecting their own ad accounts without visiting eight developer portals.
+- **YouTube, and only YouTube, cannot be published to.** `publishMode: 'none'` is declared and honoured end to end — the campaign composer blocks it, the panel names it, the MCP tool description says so — because publishing a video is a resumable multipart upload of the bytes, which a declarative HTTP manifest cannot express and a Worker should not proxy. Fix = a real upload path (R2 → resumable session → poll), which is a storage feature rather than a connector one. Unblocks: "post the launch video everywhere" including the one network where video is the point.
+
 ### 📣 Connected social accounts & social campaigns — residuals
 
 > The connect → read → compose → publish slice shipped 2026-08-12 (migration 0458, `/api/social`, canvas `socialFeed` / `socialPost` / `socialCampaign`; see [DONE.md](./DONE.md)). These are the parts deliberately left out of that pass.
@@ -764,8 +779,6 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 - **Six new canvas object kinds ship with no label in any of the five catalogs, so `messages.test.ts` is red.** *(observed 2026-08-13 while landing the `/sales` panel)* `npx vitest run` fails only in `src/i18n/messages.test.ts` — "en/zh/es/fr/de labels every creation canvas object kind" — with `missing = ['notebook', 'model', 'trainingRun', 'runComparison', 'labelSet', 'prompt']`. The kinds come from the untracked data-science object family (`lib/dataScienceObjects.ts`, `canvasNotebook.ts`, `canvasTrainingRun.ts`, `canvasRunComparison.ts`); the test is the localization rule enforced as a guard, so the catalogs must gain `creationCanvas.object.<kind>` in all five locales with real translations. **Blocker: the same in-flight branch as the entries above** — those files are being written as this is logged (`CreationCanvas.tsx` changed mid-session), and the i18n pass belongs to whoever is landing the kinds, or the two passes will collide in the same five JSON files. Unblocks: `npx vitest run` green, which is currently hiding any other frontend regression behind one red file.
 - **A `/api/creation-sessions/claim` 500 on `creation_session_objects_pkey` is fixed by inference, not by trace** *(seen 2026-08-10 in an operator screenshot)*. One provable cause of that exact error was found and closed this pass: `validCreationGraph` compared object/connection ids with a case-SENSITIVE `Set` while `UUID_RE` accepts either case and the `uuid` column is case-insensitive, so two ids differing only in case validated as distinct and then collided on the primary key (see DONE.md; `durableCreationGraph` had the mirror bug on edge endpoints). Whether the screenshotted request took that path is unconfirmed. **Blocker: the failing request's payload and the server-side stack are a live production trace I cannot obtain** — `db.batch` on neon-http reports only the PG message, and the route's catch rethrows without logging which statement failed. Fix = attach the failing statement index + object-id count to the claim's catch via `reportCaughtError` before rethrowing, then re-check. Unblocks: knowing whether anonymous boards still fail to claim.
 
-
-- **`api` `npm test` is red on four tables and one syntax error, none of them from migration 0469.** *(observed 2026-08-15 while closing the ten unblocked founder-operations gaps)* Four suites fail and every failure belongs to a migration landed by a different pass: `entityCatalog.test.ts` reports nine tables with no entity-layer entry (`social_campaigns`, `social_campaign_posts` from 0458; `realizations` from 0463; `site_releases`, `site_users`, `site_user_sessions` from 0465; `developer_orgs`, `developer_org_members` from 0467; `llm_action_ratings` from 0468) against a threshold of five; `tableAdoption.test.ts` reports `developer_orgs` and `developer_org_members` with no `pgTable` export at all, which is the worse of the two — unreachable from typed code rather than merely unregistered; `socialProviders.test.ts` asserts five social connector keys and finds eleven; and `application/social/socialService.ts:334` is a **syntax error** (`account:   draft: SocialPostDraft,` — a parameter list mid-edit) that also fails `tsgo`. Every 0469 table is declared, registered and covered. **Blocker: all five are another session's uncommitted, in-flight work**, and the two that are one-line fixes (the connector-count assertion, the parameter list) sit inside files that were observed changing under this pass. Needed to clear it: the owner of the social/advertising and developer-portal branches lands their entity declarations and finishes the parameter list. Unblocks: `api` `npm test` reaching a green vitest stage, which currently hides any other API regression behind four red files.
 
 - **Two frontend type errors and twenty off-scale font sizes are red from the same in-flight branches.** *(same pass)* `tsgo --noEmit` in `frontend` reports `components/creation-canvas/CanvasAdsPanel.tsx:153` (a `ConnectorDetail` passed where a `ConnectorManifest` is required) and `:187` (`deleteConnection` does not exist on the connector client — the client has `createConnection`), and `check:design-scale` reports twenty literal `font-size` values, all in `app/challenges/page.tsx`. **Blocker: both files belong to other passes running concurrently** — the advertising panel is mid-wiring against a connector client that does not yet have the method it calls, and the challenges page was not touched here. Needed to clear it: the ads panel's owner adds `deleteConnection` (or calls the method that exists) and resolves the manifest/detail type, and the challenges page moves its sizes onto the nine roles. Unblocks: `frontend` `type-check` and `npm test` running clean end to end.
 
@@ -1244,19 +1257,49 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
   Our whole facilitation surface is the `timer` and `comment` kinds; `grep -i poll|vote` over `creation-canvas/`
   returns only HTTP polling. Fix = a `poll` spec-object kind with a per-participant response set and a guest join
   path reusing the existing guest-board plumbing. Unblocks: the meeting use case, which is Miro's whole funnel.
-- **There is no board presentation mode.** `slides` objects and the `presentation` connection kind exist, but
-  nothing drives other members' viewports through an ordered frame sequence — the presence channel already carries
-  `viewport` and `followingUserId`, so the transport is there and the mode is not. Unblocks: reviews and demos run
-  on the board instead of exported to a deck.
+- **Presentation mode has no ORDERED SEQUENCE.** *(corrected 2026-08-15 — the original entry claimed there was no
+  presentation mode at all, which was wrong: `presentMode` exists, is shared through `liveSession.setPresentMode`,
+  and is reachable from a `slides` object's `present` action and the ••• menu. Follow-mode ships beside it.)* What
+  is genuinely absent is the sequence: Miro walks a numbered list of frames and pulls every viewer's viewport
+  along, while ours toggles the chrome off and leaves navigation to whoever is driving. Fix = an ordered frame list
+  on the session + next/previous that writes `viewport` through the presence channel that already carries it.
+  Unblocks: a review that runs on the board rather than being exported to a deck first.
 - **There is no board-level version history or restore.** `canvasActionJournal` records every action and
   `CanvasReleasesPanel` snapshots releases, but nothing answers "put this board back to Tuesday", and export is
   per-OBJECT (`canvasExports`) with no whole-board archive. Miro has both, on every paid plan. Fix = a restore
   built over the journal + a board-archive export. Unblocks: table-stakes parity and the "safe to let an agent
   edit my board" argument.
-- **The canvas has no freeform primitives, so there is no zero-training way onto it.** ~180 typed kinds and no
-  sticky note, no shape library, no arrow styling, no mind map, no wireframe stencil, no cloud-architecture pack.
-  `drawing`, `frame` and `note` are the nearest and are thin. This is a deliberate position (typed objects are the
-  product) and it is also the single reason a Miro user cannot start the way they know how.
+- **The freeform primitives are still thin above the sticky.** *(narrowed 2026-08-15 — a `sticky` kind now ships on
+  the Creation Canvas and the Miro importer maps `sticky_note`, `text` and `shape` onto it; see DONE.md. The
+  original entry also claimed the product had no sticky note at all, which was wrong: the KNOWLEDGE board
+  (`components/canvas/canvasModel.ts`) has had them, with pigments, timers and stopwatches, since it shipped.)*
+  What remains absent is everything above one coloured card: no shape library, no arrow styling, no mind map, no
+  wireframe stencil, no cloud-architecture pack. An imported Miro ellipse becomes a sticky that REMEMBERS it was an
+  ellipse (`stickyShape`) rather than a drawn one. Fix = a `shape` renderer reading `stickyShape`, which is the
+  reason that field is written today. Unblocks: an imported diagram looking like the diagram it was.
+- **Two canvases own overlapping primitives, and only one of them is the front door.**
+  `components/canvas/canvasModel.ts` (`<CanvasBoard>`, used only by `/knowledge/[id]` and `/knowledge/new`) has
+  eight block types — text, sticky, image, video, file, embed, timer, stopwatch — with its own serialisation, its
+  own collaborative timer, and its own store inside the knowledge `content` string. `creation-canvas` has ~180
+  kinds and a different persistence model entirely. The sticky pigment palette is now shared rather than copied
+  (`STICKY_COLORS` is imported, not re-declared), which is the seam this entry says should keep widening: the
+  stopwatch and the transcluded-document block have no equivalent on the canvas that is actually the front door,
+  and a person who builds a board in one place cannot move it to the other. **Blocker: an explicit product decision
+  on whether the knowledge board folds into the Creation Canvas or stays a deliberately simpler surface.**
+- **A Miroverse-scale template import is not legally available, and should not be attempted.**
+  *(researched 2026-08-15)* The 3,000–7,000 community templates are third-party creators' work published under
+  Miro's Online Community Terms, which license reuse *within Miro boards*; there is no bulk-export API, and
+  scraping the gallery into a competing canvas is an IP exposure rather than a feature. The path that IS open and
+  is now built: a person copies a Miroverse template into their own Miro account — which Miro's terms explicitly
+  permit — and imports THAT board (`CanvasMiroPanel`). The panel says so, in five languages. Recorded here so the
+  question is not re-opened as if it were merely unbuilt. **Blocker: none — this is a decision, not a gap.**
+- **The Miro connector authenticates with a personal token, not OAuth.** `defaults/whiteboard.ts` ships
+  `auth.kind: 'bearer'` because an OAuth connector cannot be connected at all until someone registers a
+  Builderforce app with Miro and puts its client id and secret in this deployment's secrets — shipping OAuth-first
+  would have shipped a connector nobody could use. A token takes a person about a minute to mint, so the migration
+  works today; a one-click "Connect Miro" does not. **Blocker: a registered Miro developer app plus
+  `MIRO_CLIENT_ID`/`MIRO_CLIENT_SECRET` in the deployment secrets, neither of which can be created from here.**
+  Unblocks: connect-in-one-click, and `providerOAuthConnect` covering the whiteboard port like every other.
 - **There is no public canvas API, no webhooks and no third-party widget runtime.** `/api/v1/*`
   (`publicApiRoutes.ts`) is read-only catalog listings against a tenant key; Miro has board/item CRUD, webhooks and
   a Web SDK that lets third parties render live widgets ON the board — which is how they got 250+ integrations
@@ -1272,6 +1315,7 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
   hub; our scope is project-level (`ProjectScopeContext`) and board-centric, so "everything about this launch"
   has no home. Fix = a Space entity over the PRD-20 kernel, not a new per-feature table.
 
+- **`CreationObjectDefinition.previewAdapter` is dead, and its test is the only thing keeping it alive.** *(found 2026-08-15 during the canvas-surface pass)* It is declared on the interface (`creationObjectRegistry.ts:66`), built for all ~95 definitions (`:748`), and consumed by **nothing** in `api/`, `frontend/`, `packages/`, `clients/` or `shared/` — the sole reader repo-wide is one assertion in `creationObjectRegistry.test.ts:31`, i.e. a test asserting the shape of dead code. (`specs/builderforce/17-prd-creation-canvas-sessions.md:356` sketches a *different* `previewAdapter(ref)` for session previews; that is a spec, not a caller.) Removing the field, its implementation and that assertion is the whole fix. **Blocker: a concurrent session is actively rewriting `creationObjectRegistry.ts` and `creationObjectRegistry.test.ts`** — it added `sticky` + `TITLE_IS_CONTENT_KINDS` mid-pass and reverted an edit to these two files once already, so a second writer deleting a field from them races a live edit. Belongs to whoever owns that change. Unblocks: one fewer field every one of ~95 definitions has to satisfy, and a test that asserts live behaviour.
 - **Three canvas runtimes are declared as a plan but not built: `page`, `timeline`, `play`.** *(scope cut, 2026-08-15, during the surface-seam pass)* The surface axis now exists — `frontend/src/lib/canvasSurfaces.ts` + `CanvasSurfaceRouter.tsx`, shipping `graph` / `scene3d` / `chat` — but the three runtimes that make a *creation type* feel native are not in it, so a resume, a podcast and a playable build are all still authored as nodes on a DAG. `page` and `play` are PROMOTIONS of code that already exists in the wrong place: `DocumentEditor.tsx` / `CanvasResumeEditor.tsx` render a paged document inside a ~340px node body, and `CanvasGamePanel.tsx` is already a full-surface runtime wearing a `gameFocus` overlay rather than a surface id. `timeline` is the only genuinely new build, and it must be a STORYBOARD that hands the render to hired.video through the existing `api/src/application/integrations/hiredVideo.ts` port — not a second NLE, which is a product we already own. Deliberately not built in the same pass (the seam plus one runtime was the agreed slice); nothing is blocked, and the registry is open/closed so each is an entry plus a ReactNode. Unblocks: a video game / podcast / promo-video / resume session that reads as its own medium instead of as a generic idea board.
 - **Two elements are labelled "Model" on the Creation Canvas, so the participant editor's model control is ambiguous.** *(found 2026-08-13 during the career-tool pass)* `CreationCanvas.test.tsx:632` fails with `getMultipleElementsFoundError` on `getByLabelText('Model')`: both `creationCanvas.node.model` and `chatInput.model` render the string, and after opening a participant card both are in the tree. That is the [[prompt-options-menu-single-model-control]] convention being violated in the DOM — a person using a screen reader hears two identical "Model" controls and cannot tell which one governs the run. **Blocker: a concurrent session is actively editing this surface** (the frontend package version moved 2026.8.13 → 2026.8.14 mid-run and the participant editor is part of that change), so the fix belongs to whoever owns that edit rather than to a second writer racing them. Fix = give the node-body field a distinct label (the object's own "Model" attribute is not the run's model control) or route both through the one shared control. Unblocks: the frontend suite going green, which currently hides any further regression in that file.
 
@@ -1404,6 +1448,18 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
 - **Standing rule:** any page/component ADDED or MODIFIED must be localized (all 5 catalogs en/zh/es/fr/de), dark+light, and mobile-friendly in the same pass — see [[i18n-localization]], [[theme-and-responsive-ui]].
 - **Date/number formatting bypasses next-intl at 180 call sites** *(architecture review 2026-07-26)* — `frontend/src` has **180** `toLocaleDateString`/`toLocaleString`/`toLocaleTimeString` calls: **157** pass **no locale argument** (so they render in the *browser/OS* language, not the locale the user picked — a zh user on an en-US machine sees English dates inside a Chinese UI) and **10** hardcode `'en-US'` (`adminShared.tsx`, `ArticleCard`, `BlogPostClient`, `RfpDetailClient`, `tools/[id]/page.tsx`). Only 1 `Intl.NumberFormat` and 16 `Intl.DateTimeFormat` instances exist, none locale-bound. Fix: a `useFormat()` hook (+ `getFormat()` server variant) that reads the active next-intl locale and exposes `date`/`dateTime`/`number`/`currency`/`relative`, then codemod the 180 sites. Unblocks: locale-correct dates/numbers, which no amount of catalog translation reaches. Related: the `taskStatusLabel` item below.
 - **RSC is effectively unused and i18n coverage is ~58%** *(architecture review 2026-07-26)* — **571 of 660** `.tsx` components carry `'use client'` (86%), so the App Router ships a SPA and the server-component data path is unavailable to almost every screen; **384 of 660** use `useTranslations`/`getTranslations`, leaving ~276 components with hardcoded English (consistent with the ~330 figure above, measured differently). No fix proposed as a single item — this is the size of the i18n backlog above plus a note that any "move this fetch to the server" plan is blocked until the client boundary is pushed down.
+- **The design-scale ratchet is RED and hiding every other design regression behind it.** *(measured 2026-08-15
+  during the Miro-import pass; `npm run check:design-scale`)* Three counters moved the wrong way:
+  `literalHexFiles` 4 against a baseline of **0**, `offScaleRadii` 4 against 1, `offScaleFontSizes` 3,865 against
+  3,818. The files carrying them — `components/BuilderWorkspace.tsx`, `components/PreviewFrame.tsx`,
+  `components/site/SiteReleasePanel.tsx`, `lib/visualEditor.ts`, plus off-scale radii in `LlmRatingsPanel`,
+  `DeveloperPortalContent` and `UnreadBadge` — were all written today between 11:26 and 12:53, i.e. by the
+  visual-editor/site-release work that is still in flight. `literalHexFiles` is the one that matters: its baseline
+  is deliberately 0 so a literal cannot land quietly, and a literal renders the SAME in both themes. Fix = tokens
+  (or a `COLOUR_EXEMPT` entry with its reason, if these are author-picked colours the product persists — which for
+  a visual editor is plausible and is exactly what the exemption list is for). **Blocker: a concurrent session
+  owns those four files right now**, and a second writer re-tokenising them mid-edit would collide. Unblocks: the
+  ratchet going green, which is what lets it catch the NEXT regression instead of being ignored.
 - **`taskStatusLabel` is an English-only label map outside next-intl** *(found 2026-07-25 while fixing the accountability banner)* — `frontend/src/lib/taskStatus.ts` `TASK_STATUS_LABELS` ("Backlog"/"In Review"/…) plus the `humanizeStatus` fallback are plain constants consumed by the board, the lane editor and now the Sign-off gap lines, so every lane/status name renders English in zh/es/fr/de. Fix: move the labels to a `taskStatus.*` catalog namespace and expose a `useTaskStatusLabel()` hook (plus a `getTranslations` variant for server callers), then migrate the call sites. Unblocks: a fully-localized board, which is the largest remaining English surface after the marketing copy.
 
 ---

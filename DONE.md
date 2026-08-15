@@ -69,8 +69,19 @@ Register entry for the `page` / `timeline` / `play` runtimes, deliberately not i
 - **A blank-by-design object was an unnamed control.** A new `sticky` starts with an empty
   title on purpose (its text *is* its title), which is right on the board and wrong
   everywhere it is only referred to: the accessible outline rendered
-  `aria-label="Focus "` and the Brain's connected-work roster drew an empty line. One
-  shared rule now decides — `creationObjectName()` — and all three consumers read it.
+  `aria-label="Focus "` — a control with nothing to distinguish it from the next blank
+  note — and the Brain's connected-work roster drew an empty line. One shared rule now
+  decides, `creationObjectName()`, and both display sites read it. It is deliberately a
+  PRESENTATION rule and not a data one: nothing that stores or reasons about an object
+  gets a title the author did not write.
+
+### One dead export dropped
+
+`CreationObjectDefinition.previewAdapter` was declared on the interface, built for all ~95
+definitions, and consumed by **nothing** — one assertion in its own test was its only
+reader repo-wide. It was also the thing that made the naming fix look like a data change,
+because a test asserting a projection nobody projects is a test asserting the shape of
+dead code. Interface field, implementation and assertion all removed.
 
 ### One test primitive was quietly less capable than what it stood in for
 
@@ -79,6 +90,149 @@ entry opening with an exact match (`{count, plural, =0 {Open the board} one {…
 — how a real empty state is written) did not match at all and the raw ICU source was
 asserted against as if it were copy. It now parses every arm, exact matches first. That
 file's own header warns about exactly this class of drift; this was the second instance.
+
+---
+
+## ✅ RESOLVED 2026-08-15 — A Miro board can be brought onto the canvas, and the canvas finally has a sticky note.
+
+The migration path off the whiteboard, built as one connector, one pure mapper and one
+panel — plus the untyped object an imported board is mostly made of.
+
+### What was wrong
+
+A competitive read against Miro found the canvas had no answer to the only question a
+Miro team actually asks, which is "can I bring my boards". Underneath that, two smaller
+things were true and one thing we believed was false:
+
+- **No whiteboard connector existed.** `grep -i miro` over the repo returned one comment.
+- **The Creation Canvas had no untyped card.** 180 kinds, every one a claim about what a
+  thing IS, and nowhere to put "customers hate the onboarding" before you know what it is.
+  A workshop starts before the objects are known, and an import that cannot hold a sticky
+  note cannot claim to have imported a Miro board.
+- **We believed the product had no sticky notes at all. It did** — the KNOWLEDGE board
+  (`components/canvas/canvasModel.ts`) has had them, with pigments, a collaborative timer
+  and a stopwatch, since it shipped. They were on the wrong canvas, which is a different
+  and more embarrassing problem than absence. The residual seam is in the register.
+
+### What shipped
+
+**One connector.** `defaults/whiteboard.ts` — `miro`, bearer-token auth (a personal token
+takes a minute to mint and needs no client secret held by this deployment, which is why it
+is not OAuth; see the register entry), four read actions: `list_boards`, `get_board`,
+`get_items`, `get_connectors`. It goes through the same runtime, SSRF guard, credential
+decryption, redaction and call log as every other connector — this is a browser over the
+connector platform, not a second integration. Built-in catalog validation passes.
+
+**One pure mapper.** `lib/miroImport.ts` + 20 tests. `sticky_note`/`text`/`shape`/
+`mindmap_node` → `sticky`, `card`/`app_card` → `task`, `frame` → `frame`, `image` →
+`image`, `document` → `file`, `embed`/`preview` → `url`, connectors → `reference` edges,
+`parent` → `membership` edges. The decisions worth naming:
+
+- **Connectors import as `reference`, never `data`.** A drawn arrow asserts a relationship
+  and nothing about a value moving, so a `data` edge would let a lineage or coverage
+  rollup read an imported doodle as a pipeline.
+- **Centre-origin → top-left, then translated to the canvas origin.** A Miro board's
+  coordinates are routinely in the tens of thousands; importing them verbatim drops the
+  board off-screen and the person concludes nothing was imported.
+- **A shape remembers it was a shape** (`stickyShape`), so an ellipse is a sticky that
+  knows it was an ellipse rather than a silent downgrade.
+- **Skipped types are REPORTED.** Miro groups what it does not model as `unsupported`;
+  dropping those quietly is what makes an import look complete when it is not.
+
+**One panel.** `CanvasMiroPanel.tsx`, beside `CanvasDrivePanel` on the rail and the phone
+toolbar, localized in all five catalogs. It **walks the cursor to the end** of both
+endpoints before mapping — Miro caps a page at 50 items and a real workshop board has
+hundreds, so importing page one and calling it done is the failure that makes a migration
+tool untrustworthy. It also says the one honest thing about Miroverse: copy a community
+template into your own Miro account first, and it appears here.
+
+**One new kind.** `sticky` — the untyped escape hatch, and the only one on the list. Its
+`title` IS its text, it starts blank on purpose, and it draws no chrome at all (the header
+is hidden in CSS rather than branched around, so the card keeps one structure). The pigment
+palette is **imported** from the knowledge board rather than re-declared, so the two boards
+cannot drift a shade apart. `TITLE_IS_CONTENT_KINDS` is exported so the registry's
+"every kind arrives named" invariant has one place to read its one exception from.
+
+**One guard bug fixed.** `.claude/hooks/localize-guard.mjs` read the `>` of an arrow
+function as a JSX tag close, so `list.find((s) => s.kind === 'hero')?.cta && <button` was
+flagged as hardcoded user-facing text on every edit to `CreationNode.tsx`. A guard that is
+permanently red trains everyone to ignore it. Fixed with a lookbehind plus a code-shape
+rejection, and verified to still catch real strings.
+
+Frontend typecheck clean, 322 creation-canvas tests green, 57 connector tests green,
+architecture ratchet re-baselined 796 → 797 with its reason recorded in the script.
+
+---
+
+## ✅ RESOLVED 2026-08-15 — Marketing is three surfaces, not one. All three now exist.
+
+Migration **0470**. Paid advertising, organic breadth and measurement, built as three
+ports on the connector platform that was already there.
+
+### What was wrong
+
+`ad_campaigns`, `ad_sets` and `ads` shipped in migration 0432 as PRD 20 growth targets
+owned by the CMO — and had **zero application code, zero providers, zero routes and zero
+UI**. They were reachable only as inert generic CRUD, so a paid campaign could be typed
+into the product, never reach a network, and never report a number. Alongside them:
+
+- **No ad-network connectors at all.** `defaults/social.ts` was organic-only.
+- **No table held spend.** Nothing anywhere stored what a campaign cost or returned, so
+  the `measure` stage of idea → make → run → measure → market had no paid-media input.
+- **No measurement port.** An ad network reports what it charged; only site analytics
+  reports what happened after the click, and neither was connected.
+- **`stage: 'market'` had two destinations**, both pointing at `/marketplace` — the
+  emptiest rung of the methodology, and the CMO's own.
+
+### What shipped
+
+**Three ports, one storage model.** `advertising/adsProviders.ts` (Google, Meta, LinkedIn,
+TikTok, X, Reddit, Pinterest, Snapchat), `analytics/analyticsProviders.ts` (GA4, Search
+Console, Plausible, PostHog) and the existing social port all sit on
+`connector_connections`. **15 new connector manifests** — 8 advertising, 4 measurement,
+3 lifecycle (Mailchimp, Klaviyo, Brevo) — plus **6 new organic social networks**
+(YouTube, Reddit, Pinterest, Threads, Bluesky, Google Business Profile).
+
+**`integrations/connectedAccounts.ts` is the DRY answer.** Social, ads and analytics had
+begun to be three copies of the same four rules — sealed credentials in, non-secret scope
+fields out; an account that cannot act says so first; naming a platform resolves when
+there is one and ASKS when there are several; `updated_at` is the cache version. All
+three were migrated onto the one primitive in this pass.
+
+**Money has one unit.** Every network bills differently — micros (Google, X, Reddit,
+Pinterest), currency minor units (Meta budgets), major units (TikTok, and Meta's own
+reported spend). `toCents` converts once, at the adapter edge, to the integer cents the
+columns hold. Reading one with another's scale is a 100x error in a money column, in the
+direction that still looks plausible.
+
+**`ad_insights` is daily, and its UNIQUE key is the point.** Networks RESTATE history as
+conversions attribute late, so the sweep re-reads a 7-day trailing window and upserts on
+`(tenant, campaign, date)`. Without that constraint every sweep would append another copy
+of the same day and reported spend would compound on a schedule while nothing was being
+bought — a number that grows on its own is worse than one that is missing.
+
+**Spending is gated the way sending is.** `ads.create_campaign`, `ads.update_campaign`
+and `ads.sync` are MANAGER-gated and OFF `CLOUD_AGENT_PLATFORM_TOOLS` — the same line
+already drawn for `campaign.send` and `social.publish`. Autonomous runs may read what is
+running and what it cost; a human approves the spend. Campaigns are created PAUSED unless
+explicitly launched, so writing one down is never the same act as starting to spend.
+
+**Two bugs found and fixed on the way:**
+- A doc comment closed early in `schema/kernel.ts` left the rest of the block as orphaned
+  syntax, which failed to parse and took the **whole vitest suite** down with it.
+- `ADS_CONNECTOR_KEYS` evaluated `PROVIDERS` at module scope while the adapter imports
+  were still in the temporal dead zone — caught by the new tests, fixed by splitting the
+  shared primitives into `adsNormalize.ts` so the adapter cycle is types-only.
+
+**`publishMode` replaced `requiresMedia`** across the social port and all its consumers.
+Three states, not two booleans that could disagree: `text`, `media` (Instagram, TikTok,
+Pinterest) and `none` (YouTube, which cannot be published to at all).
+
+`ad-insights` runs as a DAILY cron sweep — networks report on a daily grain, so a frequent
+cadence would re-read unchanged days ~288 times against a Neon-Free budget.
+
+Residuals — no live-account verification, the `ad_sets`/`ads` level, the spend↔outcome
+join, and Microsoft Advertising's SOAP-only API — are in ROADMAP group 9.
 
 ---
 
