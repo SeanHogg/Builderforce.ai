@@ -235,6 +235,66 @@ export class StripeProvider implements PaymentProvider {
   }
 
   /**
+   * A RECURRING purchase of somebody else's app.
+   *
+   * `mode=subscription` with inline `price_data` carrying a `recurring[interval]`
+   * — no pre-created Price object, because the seller sets the price on their
+   * listing and changes it whenever they like; a Price per listing per change is
+   * a catalogue we would then have to reconcile.
+   *
+   * The metadata is stamped on the SESSION and on the `subscription_data`, so it
+   * survives onto the subscription object itself: the renewal invoices arrive
+   * months later carrying no session, and without it there is nothing on them
+   * saying which app or which subscriber they belong to.
+   */
+  async createSubscriptionCheckoutSession(opts: {
+    amountCents: number;
+    currency: string;
+    productName: string;
+    billingEmail?: string | null;
+    interval: 'month' | 'year';
+    successUrl: string;
+    cancelUrl: string;
+    metadata: Record<string, string>;
+    idempotencyKey: string;
+  }): Promise<{ sessionId: string; checkoutUrl: string }> {
+    this.requireConfigured();
+    const params = new URLSearchParams({
+      mode: 'subscription',
+      success_url: opts.successUrl,
+      cancel_url: opts.cancelUrl,
+      'line_items[0][quantity]': '1',
+      'line_items[0][price_data][currency]': opts.currency.toLowerCase(),
+      'line_items[0][price_data][unit_amount]': String(opts.amountCents),
+      'line_items[0][price_data][recurring][interval]': opts.interval,
+      'line_items[0][price_data][product_data][name]': opts.productName.slice(0, 250),
+    });
+    if (opts.billingEmail) params.set('customer_email', opts.billingEmail);
+    for (const [key, value] of Object.entries(opts.metadata)) {
+      params.set(`metadata[${key}]`, value);
+      // Carried onto the subscription so a renewal invoice — which arrives with
+      // no session id at all — still says what it is for.
+      params.set(`subscription_data[metadata][${key}]`, value);
+    }
+
+    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.config.secretKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Idempotency-Key': opts.idempotencyKey,
+      },
+      body: params.toString(),
+    });
+    if (!res.ok) {
+      const err = await res.json() as { error?: { message?: string } };
+      throw new Error(`Stripe subscription checkout error: ${err.error?.message ?? res.status}`);
+    }
+    const session = await res.json() as { id: string; url: string };
+    return { sessionId: session.id, checkoutUrl: session.url };
+  }
+
+  /**
    * Read a checkout session back from Stripe.
    *
    * This is the ONLY thing that may authorise a paid grant. A `session_id` in a
@@ -247,6 +307,7 @@ export class StripeProvider implements PaymentProvider {
     amountTotalCents: number;
     currency: string;
     paymentIntentId: string | null;
+    subscriptionId: string | null;
     customerEmail: string | null;
     metadata: Record<string, string>;
   } | null> {
@@ -262,16 +323,22 @@ export class StripeProvider implements PaymentProvider {
       amount_total?: number;
       currency?: string;
       payment_intent?: string | { id?: string } | null;
+      subscription?: string | { id?: string } | null;
       customer_details?: { email?: string | null } | null;
       metadata?: Record<string, string> | null;
     };
     const intent = session.payment_intent;
+    // A `mode=subscription` session carries no payment intent — it carries a
+    // subscription. Reading only the intent is why a recurring purchase looked
+    // unpaid to a caller that had just been told the money moved.
+    const subscription = session.subscription;
     return {
       id: session.id,
       paymentStatus: session.payment_status ?? 'unpaid',
       amountTotalCents: session.amount_total ?? 0,
       currency: (session.currency ?? 'usd').toUpperCase(),
       paymentIntentId: typeof intent === 'string' ? intent : intent?.id ?? null,
+      subscriptionId: typeof subscription === 'string' ? subscription : subscription?.id ?? null,
       customerEmail: session.customer_details?.email ?? null,
       metadata: session.metadata ?? {},
     };

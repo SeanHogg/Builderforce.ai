@@ -9,8 +9,10 @@ import { useAuth } from '@/lib/AuthContext';
 import {
   listMyEngagements, respondEngagement,
   listJobs, bidJob, listMyProposals, withdrawProposal,
+  listSavedJobs, saveJob, unsaveJob,
   type Engagement, type JobPosting, type JobProposal,
 } from '@/lib/freelancerApi';
+import { JobAlertsPanel } from '@/components/freelance/JobAlertsPanel';
 
 // The "Find work" surface (open jobs to bid on, my proposals, my engagements) is now
 // a category of the marketplace rather than a standalone /freelancer/gigs page — same
@@ -42,7 +44,7 @@ const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
   declined: { bg: 'var(--bg-elevated)', fg: 'var(--text-muted)' },
 };
 
-type Tab = 'work' | 'proposals' | 'engagements';
+type Tab = 'work' | 'saved' | 'proposals' | 'engagements' | 'alerts';
 
 export default function MarketplaceGigsSection({ search }: { search: string }) {
   const t = useTranslations('freelancer');
@@ -50,6 +52,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
   const [tab, setTab] = useState<Tab>('work');
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [proposals, setProposals] = useState<JobProposal[]>([]);
+  const [saved, setSaved] = useState<JobProposal[]>([]);
   const [engagements, setEngagements] = useState<Engagement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,12 +66,13 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
       // Open jobs for everyone; the two "mine" reads only when there is a token to
       // send. Asking for them signed-out is not a read that comes back empty — it is
       // a 401 that files a support ticket about somebody who is only browsing.
-      const [j, p, e] = await Promise.all([
+      const [j, p, e, sv] = await Promise.all([
         listJobs().catch(() => []),
         isAuthenticated ? listMyProposals().catch(() => []) : Promise.resolve([]),
         isAuthenticated ? listMyEngagements().catch(() => []) : Promise.resolve([]),
+        isAuthenticated ? listSavedJobs().catch(() => []) : Promise.resolve([]),
       ]);
-      setJobs(j); setProposals(p); setEngagements(e);
+      setJobs(j); setProposals(p); setEngagements(e); setSaved(sv);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
@@ -122,9 +126,17 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'work', label: t('gigs.tabWork') },
+    { id: 'saved', label: t('gigs.tabSaved') },
     { id: 'proposals', label: t('gigs.tabProposals') },
     { id: 'engagements', label: t('gigs.tabEngagements') },
+    { id: 'alerts', label: t('gigs.tabAlerts') },
   ];
+
+  /** Ids the seeker shortlisted — drives the save toggle on every job card. */
+  const savedIds = new Set(saved.map((row) => String(row.jobId)));
+  const filteredSaved = q
+    ? saved.filter((row) => (row.jobTitle ?? '').toLowerCase().includes(q))
+    : saved;
 
   const pill = (s: string) => {
     const c = STATUS_COLORS[s] ?? { bg: 'var(--bg-elevated)', fg: 'var(--text-muted)' };
@@ -187,7 +199,22 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                     {j.skills.slice(0, 5).map((s) => <span key={s} style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{s}</span>)}
                   </div>
                 )}
-                <div style={{ marginTop: 12 }}>
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {/* Shortlisting is available to anyone signed in, including before
+                      they are ready to bid — which is the whole point of a shortlist. */}
+                  {isAuthenticated && !j.myProposal && (
+                    <button type="button" disabled={busy === `save:${j.id}`}
+                      aria-pressed={savedIds.has(j.id)}
+                      onClick={() => act(`save:${j.id}`, () => (savedIds.has(j.id) ? unsaveJob(j.id) : saveJob(j.id)))}
+                      title={savedIds.has(j.id) ? t('jobs.unsave') : t('jobs.save')}
+                      style={{ padding: '7px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                        border: `1px solid ${savedIds.has(j.id) ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
+                        background: savedIds.has(j.id) ? 'var(--surface-coral-soft)' : 'var(--bg-elevated)',
+                        color: savedIds.has(j.id) ? 'var(--coral-bright)' : 'var(--text-secondary)',
+                        fontSize: 'var(--font-size-small)', fontWeight: 600 }}>
+                      {savedIds.has(j.id) ? t('jobs.saved') : t('jobs.save')}
+                    </button>
+                  )}
                   {j.myProposal ? (
                     <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('jobs.alreadyBid')}</span>
                   ) : bidFor === j.id ? (
@@ -210,6 +237,32 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
           </div>
         )
       )}
+
+      {/* Shortlisted jobs */}
+      {!loading && !guestWall && tab === 'saved' && (
+        filteredSaved.length === 0
+          ? <div style={{ ...card, textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>{t('jobs.emptySaved')}</div>
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {filteredSaved.map((row) => (
+                <div key={row.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)' }}>{row.jobTitle ?? '—'}</div>
+                    <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4 }}>{t('jobs.savedOn', { date: row.createdAt ? new Date(row.createdAt).toLocaleDateString() : '—' })}</div>
+                  </div>
+                  <button type="button" disabled={busy === `unsave:${row.jobId}`}
+                    onClick={() => act(`unsave:${row.jobId}`, () => unsaveJob(String(row.jobId)))}
+                    style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer' }}>
+                    {t('jobs.unsave')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )
+      )}
+
+      {/* Standing searches. Self-contained: it owns its own reads and writes. */}
+      {!loading && !guestWall && tab === 'alerts' && <JobAlertsPanel />}
 
       {/* My proposals */}
       {!loading && !guestWall && tab === 'proposals' && (

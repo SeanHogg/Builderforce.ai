@@ -8458,13 +8458,7 @@
       "privacyLabel": "谁可以查看",
       "versionLabel": "展示的版本",
       "versionOriginal": "原件",
-      "versionCount": "{count} 个版本",
-      "privacy": {
-        "public": "所有人",
-        "recruiter_only": "招聘方",
-        "connections": "我的人脉",
-        "private": "仅自己"
-      }
+      "versionCount": "{count} 个版本"
     },
     "gigs": {
       "title": "寻找工作",
@@ -8480,7 +8474,9 @@
       "decline": "拒绝",
       "clientRatingTip": "来自曾合作自由职业者的客户评分",
       "signedOutTitle": "你的提案保存在你的账户中",
-      "signedOutBody": "浏览公开职位无需账户。免费创建一个账户即可投标，并在此跟踪你的提案与合作项目。"
+      "signedOutBody": "浏览公开职位无需账户。免费创建一个账户即可投标，并在此跟踪你的提案与合作项目。",
+      "tabSaved": "已收藏",
+      "tabAlerts": "提醒"
     },
     "timecard": {
       "title": "工时卡",
@@ -8535,7 +8531,12 @@
       "coverNote": "附言（可选）",
       "yourRate": "您的费率（每小时）",
       "alreadyBid": "已提交提案",
-      "emptyOpen": "目前没有开放职位。"
+      "emptyOpen": "目前没有开放职位。",
+      "save": "收藏",
+      "saved": "已收藏",
+      "unsave": "移除",
+      "emptySaved": "尚未收藏任何职位。可在“寻找工作”中收藏。",
+      "savedOn": "收藏于 {date}"
     },
     "proposals": {
       "empty": "您尚未提交任何提案。",
@@ -8561,6 +8562,24 @@
       "principal": "首席",
       "director": "总监",
       "executive": "高管"
+    },
+    "alerts": {
+      "newTitle": "新建职位提醒",
+      "newSubtitle": "告诉我们您想找什么，我们会提示匹配的工作。",
+      "namePlaceholder": "提醒名称",
+      "keywordsPlaceholder": "关键词",
+      "disciplinePlaceholder": "专业方向",
+      "create": "创建提醒",
+      "creating": "正在创建…",
+      "loading": "正在加载提醒…",
+      "empty": "尚无提醒。",
+      "anyJob": "任意职位",
+      "on": "已开启",
+      "off": "已关闭",
+      "delete": "删除",
+      "nameRequired": "请为提醒命名。",
+      "loadFailed": "无法加载您的提醒。",
+      "actionFailed": "无法保存该更改。"
     }
   },
   "marketplace": {

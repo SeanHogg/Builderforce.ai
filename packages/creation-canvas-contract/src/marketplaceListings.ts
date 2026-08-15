@@ -456,6 +456,52 @@ export function allowsPricing(kindId: string): boolean {
   return listingKindSpec(kindId)?.pricing === 'either';
 }
 
+/** Everything this kind may hand over. Empty for an unknown kind, so a stored
+ *  row whose kind was renamed degrades rather than claiming to be hosted. */
+export function deliveriesForKind(kindId: string): readonly ListingDelivery[] {
+  return listingKindSpec(kindId)?.deliveries ?? [];
+}
+
+/** Can this kind be sold as access to something the seller keeps running? */
+export function allowsHostedDelivery(kindId: string): boolean {
+  return deliveriesForKind(kindId).includes('hosted');
+}
+
+/**
+ * THE DELIVERY A LISTING ACTUALLY USES.
+ *
+ * ONE derivation, called by the publish panel (to show the seller which doors
+ * their listing opens), by the storefront (to decide what the buy button does)
+ * and by the server (to decide what a purchase grants). Two copies of this rule
+ * is how a listing offers a subscription for something that cannot be hosted.
+ *
+ * A requested value the kind does not permit falls back to the kind's FIRST
+ * declared delivery rather than throwing: the request came from a client, the
+ * kind list is the authority, and refusing a publish over it would be a 400 for
+ * something the server can answer correctly.
+ */
+export function resolveDelivery(kindId: string, requested?: string | null): ListingDelivery {
+  const allowed = deliveriesForKind(kindId);
+  if (allowed.length === 0) return 'copy';
+  const wanted = requested as ListingDelivery | null | undefined;
+  return wanted && allowed.includes(wanted) ? wanted : allowed[0]!;
+}
+
+/**
+ * Does a purchase of this listing need a Builderforce workspace?
+ *
+ * THE CONSUMER RULE, in one place. A `copy` lands twelve cards on a board, so
+ * there has to be a board — that genuinely needs an account. A `hosted`
+ * purchase grants access to something already running and issues a `site_user`,
+ * which is a separate identity space with no workspace, no tenant membership and
+ * no platform permissions. Deriving it from `delivery` rather than storing a
+ * second flag is what stops the storefront and the checkout disagreeing about
+ * whether somebody has to sign up.
+ */
+export function requiresWorkspace(delivery: ListingDelivery): boolean {
+  return delivery === 'copy';
+}
+
 /**
  * OBJECT KINDS WHOSE OUTPUT SHAPE OVERRIDES THEIR LISTING KIND'S DEFAULT.
  *

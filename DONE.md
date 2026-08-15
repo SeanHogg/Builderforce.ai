@@ -1,3 +1,71 @@
+## ✅ RESOLVED 2026-08-15 — Both frontend ratchets green, and the guard that could not say what broke it
+
+Six Gap Register entries, logged across three passes, were one situation: `check:architecture`
+and `check:design-scale` were red, everybody could see the number and nobody could see the file.
+A red guard hides every guard behind it, so this was also the reason nothing else in the chain
+was being read.
+
+**`check:architecture` — 800 against a baseline of 797.** The three came from one commit. Two are
+genuinely client and are now argued by name in the guard's header: `ProfileResumePanel.tsx`
+uploads a file, previews a template on hover, and saves on a different cadence from the profile
+around it; `paidMediaWidgets.tsx` is four widget bodies over `useSharedSource`, whose whole
+purpose is that four pinned tiles cost one request.
+
+The third was the interesting one and is why the baseline moved +2 and not +3.
+`ResumeDocumentView.tsx` carried `'use client'` and needed none — no state, no handler, no
+browser API, props in and paper out. Its three interactive hosts pull it into their bundle by
+importing it, so the directive bought them nothing, while `PublicResumeView` — an async Server
+Component serving the public résumé share link — was forced to ship a client bundle to render a
+document that cannot change. That is the page that most wants to be static and indexable. The
+directive was the bug, not the baseline, and the header now says to check for that shape before
+raising the number.
+
+**`check:design-scale` — 4 literal-hex files, 4 off-scale radii, 3,865 literal font sizes.**
+
+The font sizes were six files that had never been on the scale at all: the developer portal, the
+freelancer profile and its résumé panel, the hired.video wizard steps, the LLM-ratings panel and
+the site-release panel. The pattern was identical in every one — a number typed because a role
+was never named, so `11` meant eyebrow, `12`/`13` meant small, `14` meant body and `26` meant
+section. Two headings that had nothing else to say took the `.ui-text-*` class rather than the
+token, which is what the guard's own message asks for. The count went **down**, 3,818 → 3,793,
+and the baseline followed it.
+
+Three earlier entries blamed `app/challenges/page.tsx` for "twenty off-scale font sizes". That
+was a misreading: the guard prints a `.slice(0, 12)` **sample of every offender**, not the delta,
+so the same grandfathered file appeared at the top of the list every time and looked like the
+cause. It was never the regression. That misreading is itself the argument for the delta work
+below.
+
+The hexes were not decoration. Three were `var(--token, #hex)` fallbacks where the token
+resolves, so the literal was dead — dropped. The fourth was not: **`--accent-primary` is
+declared nowhere in the tree**, so `var(--accent-primary, #2563eb)` in `BuilderWorkspace.tsx` had
+always rendered that fixed blue, in both themes, on the visual-edit control. One file had
+invented the name; the token is `--accent`. `check:design-tokens` cannot catch this class — a
+`var()` with a fallback is valid CSS and resolves to something — which is precisely why the hex
+ratchet is a separate guard.
+
+`lib/visualEditor.ts` went to `COLOUR_EXEMPT` and `RADIUS_EXEMPT` rather than being migrated,
+with its reason: its overlay is a `<script>` injected into the **user's own dev-server
+document**, where none of our tokens are declared, so `var(--accent)` there resolves to nothing
+and the selection outline — the one thing the feature draws — disappears. That is the guard's
+documented case 2, and the exemption list is where that judgement is supposed to be recorded.
+
+**And the half that stops this recurring.** `lib/ratchetDelta.mjs` had landed with a header
+naming both guards as its consumers, but was wired into `check-design-scale` only — so the
+architecture guard still failed with a bare number, and recovering the three files meant walking
+commits by hand. It is now wired into both. Finishing it also surfaced that the migration had
+left `check-frontend-architecture` mid-edit: `ratchetCount` had grown a `key` parameter while
+both call sites still passed three arguments, so `maximum` was `undefined`, `actual > undefined`
+was always false, and **the `'use client'` ratchet was silently switched off**. A guard that
+cannot fail is worse than no guard, because the baseline beside it still reads like a promise.
+Both call sites now pass the key, and the green path records the tally — without that write the
+sidecar is never created and `printDelta` can only ever report that no tally exists.
+
+Verified: `api` 24/24 guards, 522 files / 5,899 tests. `frontend` 8/8 guards, 257 files / 2,702
+tests, `tsgo --noEmit` clean. The four type errors two of these entries were blocked on
+(`CanvasAdsPanel.tsx`, `creation-canvas-contract/src/index.ts`) were cleared by their own
+sessions; re-verified here rather than assumed.
+
 ## ✅ RESOLVED 2026-08-15 — File history lost a version whenever two writes shared a millisecond
 
 `workspaceStore.test.ts`'s "restores an earlier version, and archives the restore so it can be

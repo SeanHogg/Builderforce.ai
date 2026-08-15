@@ -58,6 +58,13 @@ import {
   visitorSalt,
 } from './siteTraffic';
 import { buildDatabase } from '../../infrastructure/database/connection';
+import { ListingError } from '../marketplace/creationListings';
+import {
+  activeSiteSubscription,
+  cancelSiteSubscription,
+  completeSiteSubscription,
+  startSiteSubscriptionCheckout,
+} from '../marketplace/siteSubscriptions';
 
 /** Path prefix reserved for the site's datastore. A published site cannot use
  *  it for assets — enforced by checking it before R2 is consulted. */
@@ -251,6 +258,14 @@ async function handleSiteApi(
   // what lets a generated app be something other than a brochure with a form.
   if (rest.startsWith('auth/')) return handleSiteAuth(env, site, request, rest.slice('auth/'.length));
 
+  // ── Paying the person who built this app ──────────────────────────────────
+  // The consumer is a `site_user` — no Builderforce account, no workspace, no
+  // second signup and no second invoice. Served on the app's OWN origin because
+  // that is where they already are.
+  if (rest.startsWith('billing/')) {
+    return handleSiteBilling(env, site, request, rest.slice('billing/'.length));
+  }
+
   const match = /^collections\/([a-z0-9-]{1,64})\/?$/i.exec(rest);
   if (!match) return jsonResponse({ error: 'Unknown endpoint.' }, 404);
   const collectionName = match[1]!;
@@ -357,6 +372,83 @@ async function handleSiteAuth(
       200,
       { 'set-cookie': siteSessionCookieHeader(verified.token, Math.floor(SESSION_TTL_MS / 1000)) },
     );
+  }
+
+  return jsonResponse({ error: 'Unknown endpoint.' }, 404);
+}
+
+/**
+ * `/__api/billing/*` — subscribe, read your own subscription, cancel it.
+ *
+ * Every route here requires a SIGNED-IN end user, resolved from the site's own
+ * cookie. There is no anonymous subscribe: a payment with nobody attached is a
+ * charge nobody can be given access for, and nobody can cancel.
+ *
+ * The seller's tenant comes off the resolved SITE, never from the request — it
+ * decides whose ledger the money lands in, and taking it from a caller would let
+ * anyone direct a payment into their own books.
+ */
+async function handleSiteBilling(
+  env: Env,
+  site: SiteRecord,
+  request: Request,
+  action: string,
+): Promise<Response> {
+  const db = buildDatabase(env);
+  const identity = await resolveSiteUser(
+    db, site.siteId, site.tenantId, siteSessionCookie(request.headers.get('cookie')),
+  );
+  if (!identity) return jsonResponse({ error: 'Sign in first.' }, 401);
+
+  if (action === 'me' && request.method === 'GET') {
+    const subscription = await activeSiteSubscription(db, site.siteId, identity.userId);
+    return jsonResponse({ ok: true, subscription }, 200);
+  }
+
+  if (action === 'subscribe' && request.method === 'POST') {
+    const body = await readSubmission(request) as { slug?: unknown; returnUrl?: unknown } | null;
+    const slug = String(body?.slug ?? '').trim().slice(0, 160);
+    if (!slug) return jsonResponse({ error: 'Which app?' }, 400);
+    // The return URL is rebuilt from the REQUEST's own origin rather than taken
+    // from the body: a caller-supplied one is an open redirect that a processor
+    // would then send a paying customer to.
+    const returnUrl = new URL(request.url).origin + '/';
+    try {
+      const { checkoutUrl } = await startSiteSubscriptionCheckout(db, env, {
+        siteId: site.siteId,
+        tenantId: site.tenantId,
+        siteUserId: identity.userId,
+        slug,
+        returnUrl,
+      });
+      return jsonResponse({ ok: true, checkoutUrl }, 200);
+    } catch (error) {
+      const status = error instanceof ListingError ? error.status : 400;
+      return jsonResponse({ error: error instanceof Error ? error.message : 'Could not start checkout.' }, status);
+    }
+  }
+
+  if (action === 'complete' && request.method === 'POST') {
+    const body = await readSubmission(request) as { checkoutSessionId?: unknown } | null;
+    const checkoutSessionId = String(body?.checkoutSessionId ?? '').trim().slice(0, 255);
+    if (!checkoutSessionId) return jsonResponse({ error: 'Which checkout?' }, 400);
+    try {
+      const subscription = await completeSiteSubscription(db, env, {
+        siteId: site.siteId,
+        tenantId: site.tenantId,
+        siteUserId: identity.userId,
+        checkoutSessionId,
+      });
+      return jsonResponse({ ok: true, subscription }, 200);
+    } catch (error) {
+      const status = error instanceof ListingError ? error.status : 400;
+      return jsonResponse({ error: error instanceof Error ? error.message : 'Could not complete checkout.' }, status);
+    }
+  }
+
+  if (action === 'cancel' && request.method === 'POST') {
+    const result = await cancelSiteSubscription(db, site.siteId, identity.userId);
+    return jsonResponse({ ok: result.ok }, result.ok ? 200 : 404);
   }
 
   return jsonResponse({ error: 'Unknown endpoint.' }, 404);

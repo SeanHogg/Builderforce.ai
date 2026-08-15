@@ -19,6 +19,7 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { buildDatabase } from '../../infrastructure/database/connection';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import {
   freelancerEngagements,
   freelancerNotifications,
@@ -222,7 +223,13 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const [job] = await db.select({ id: jobPostings.id }).from(jobPostings).where(eq(jobPostings.id, id));
+    // The marketplace is the cross-tenant surface: a freelancer has no tenant of
+    // their own, so bookmarking an employer's posting reads past the tenant filter
+    // by design. Declared rather than baselined, and the id is the access predicate.
+    const [job] = await db
+      .select({ id: jobPostings.id })
+      .from(jobPostings)
+      .where(acrossTenants(jobPostings, 'public_catalogue', eq(jobPostings.id, id)));
     if (!job) return c.json({ error: 'Not found' }, 404);
     const pid = crypto.randomUUID();
     await db.insert(jobProposals)

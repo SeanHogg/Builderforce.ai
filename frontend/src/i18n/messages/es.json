@@ -8458,13 +8458,7 @@
       "privacyLabel": "Quién puede verlo",
       "versionLabel": "Versión mostrada",
       "versionOriginal": "original",
-      "versionCount": "{count, plural, one {# versión} other {# versiones}}",
-      "privacy": {
-        "public": "Cualquiera",
-        "recruiter_only": "Reclutadores",
-        "connections": "Mis contactos",
-        "private": "Solo yo"
-      }
+      "versionCount": "{count, plural, one {# versión} other {# versiones}}"
     },
     "gigs": {
       "title": "Buscar trabajo",
@@ -8480,7 +8474,9 @@
       "decline": "Rechazar",
       "clientRatingTip": "Valoración del cliente por freelancers que trabajaron con él",
       "signedOutTitle": "Tus propuestas están en tu cuenta",
-      "signedOutBody": "Explorar los empleos abiertos no requiere cuenta. Crea una gratis para postularte y seguir aquí tus propuestas y contrataciones."
+      "signedOutBody": "Explorar los empleos abiertos no requiere cuenta. Crea una gratis para postularte y seguir aquí tus propuestas y contrataciones.",
+      "tabSaved": "Guardados",
+      "tabAlerts": "Alertas"
     },
     "timecard": {
       "title": "Hoja de horas",
@@ -8535,7 +8531,12 @@
       "coverNote": "Nota (opcional)",
       "yourRate": "Tu tarifa ($/h)",
       "alreadyBid": "Propuesta enviada",
-      "emptyOpen": "No hay trabajos abiertos ahora."
+      "emptyOpen": "No hay trabajos abiertos ahora.",
+      "save": "Guardar",
+      "saved": "Guardado",
+      "unsave": "Quitar",
+      "emptySaved": "Aún no hay empleos guardados. Guarda uno desde Buscar trabajo.",
+      "savedOn": "Guardado el {date}"
     },
     "proposals": {
       "empty": "Aún no has enviado propuestas.",
@@ -8561,6 +8562,24 @@
       "principal": "Principal",
       "director": "Director",
       "executive": "Directivo"
+    },
+    "alerts": {
+      "newTitle": "Nueva alerta de empleo",
+      "newSubtitle": "Dinos qué buscas y te avisaremos del trabajo que coincida.",
+      "namePlaceholder": "Nombre de la alerta",
+      "keywordsPlaceholder": "Palabras clave",
+      "disciplinePlaceholder": "Disciplina",
+      "create": "Crear alerta",
+      "creating": "Creando…",
+      "loading": "Cargando alertas…",
+      "empty": "Aún no hay alertas.",
+      "anyJob": "Cualquier empleo",
+      "on": "Activa",
+      "off": "Inactiva",
+      "delete": "Eliminar",
+      "nameRequired": "Ponle un nombre a la alerta.",
+      "loadFailed": "No se pudieron cargar tus alertas.",
+      "actionFailed": "No se pudo guardar el cambio."
     }
   },
   "marketplace": {

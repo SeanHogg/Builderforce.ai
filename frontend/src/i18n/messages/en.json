@@ -8459,13 +8459,7 @@
       "privacyLabel": "Who can see it",
       "versionLabel": "Version shown",
       "versionOriginal": "original",
-      "versionCount": "{count, plural, one {# version} other {# versions}}",
-      "privacy": {
-        "public": "Anyone",
-        "recruiter_only": "Recruiters",
-        "connections": "My connections",
-        "private": "Only me"
-      }
+      "versionCount": "{count, plural, one {# version} other {# versions}}"
     },
     "gigs": {
       "title": "Find work",
@@ -8481,7 +8475,9 @@
       "decline": "Decline",
       "clientRatingTip": "Client rating from freelancers who worked with them",
       "signedOutTitle": "Your proposals live in your account",
-      "signedOutBody": "Browsing open jobs needs no account. Create a free one to bid, and to track your proposals and engagements here."
+      "signedOutBody": "Browsing open jobs needs no account. Create a free one to bid, and to track your proposals and engagements here.",
+      "tabSaved": "Saved",
+      "tabAlerts": "Alerts"
     },
     "timecard": {
       "title": "Timecard",
@@ -8536,7 +8532,12 @@
       "coverNote": "Cover note (optional)",
       "yourRate": "Your rate ($/hr)",
       "alreadyBid": "Proposal submitted",
-      "emptyOpen": "No open jobs right now."
+      "emptyOpen": "No open jobs right now.",
+      "save": "Save",
+      "saved": "Saved",
+      "unsave": "Remove",
+      "emptySaved": "No saved jobs yet. Save one from Find work to shortlist it.",
+      "savedOn": "Saved {date}"
     },
     "proposals": {
       "empty": "You haven’t submitted any proposals yet.",
@@ -8562,6 +8563,24 @@
       "principal": "Principal",
       "director": "Director",
       "executive": "Executive"
+    },
+    "alerts": {
+      "newTitle": "New job alert",
+      "newSubtitle": "Tell us what you are looking for and we will flag matching work.",
+      "namePlaceholder": "Alert name",
+      "keywordsPlaceholder": "Keywords",
+      "disciplinePlaceholder": "Discipline",
+      "create": "Create alert",
+      "creating": "Creating…",
+      "loading": "Loading alerts…",
+      "empty": "No alerts yet.",
+      "anyJob": "Any job",
+      "on": "On",
+      "off": "Off",
+      "delete": "Delete",
+      "nameRequired": "Give the alert a name.",
+      "loadFailed": "Your alerts could not be loaded.",
+      "actionFailed": "That change could not be saved."
     }
   },
   "marketplace": {

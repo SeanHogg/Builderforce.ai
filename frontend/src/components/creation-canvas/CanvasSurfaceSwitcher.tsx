@@ -8,7 +8,7 @@ import {
   ThreeDIcon,
 } from '@/components/canvas/CanvasCommands';
 import {
-  CANVAS_SURFACES,
+  boardCanvasSurfaces,
   DEFAULT_CANVAS_SURFACE,
   type CanvasSurfaceId,
 } from '@/lib/canvasSurfaces';

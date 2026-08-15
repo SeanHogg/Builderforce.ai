@@ -8458,13 +8458,7 @@
       "privacyLabel": "Qui peut le voir",
       "versionLabel": "Version affichée",
       "versionOriginal": "original",
-      "versionCount": "{count, plural, one {# version} other {# versions}}",
-      "privacy": {
-        "public": "Tout le monde",
-        "recruiter_only": "Les recruteurs",
-        "connections": "Mes contacts",
-        "private": "Moi uniquement"
-      }
+      "versionCount": "{count, plural, one {# version} other {# versions}}"
     },
     "gigs": {
       "title": "Trouver du travail",
@@ -8480,7 +8474,9 @@
       "decline": "Refuser",
       "clientRatingTip": "Note du client par les freelances ayant travaillé avec lui",
       "signedOutTitle": "Vos propositions sont dans votre compte",
-      "signedOutBody": "Parcourir les offres ouvertes ne nécessite aucun compte. Créez-en un gratuitement pour postuler et suivre ici vos propositions et vos missions."
+      "signedOutBody": "Parcourir les offres ouvertes ne nécessite aucun compte. Créez-en un gratuitement pour postuler et suivre ici vos propositions et vos missions.",
+      "tabSaved": "Enregistrés",
+      "tabAlerts": "Alertes"
     },
     "timecard": {
       "title": "Feuille de temps",
@@ -8535,7 +8531,12 @@
       "coverNote": "Note (facultatif)",
       "yourRate": "Votre tarif ($/h)",
       "alreadyBid": "Proposition envoyée",
-      "emptyOpen": "Aucune offre ouverte pour le moment."
+      "emptyOpen": "Aucune offre ouverte pour le moment.",
+      "save": "Enregistrer",
+      "saved": "Enregistré",
+      "unsave": "Retirer",
+      "emptySaved": "Aucune offre enregistrée. Enregistrez-en une depuis Trouver du travail.",
+      "savedOn": "Enregistré le {date}"
     },
     "proposals": {
       "empty": "Vous n’avez encore envoyé aucune proposition.",
@@ -8561,6 +8562,24 @@
       "principal": "Principal",
       "director": "Directeur",
       "executive": "Dirigeant"
+    },
+    "alerts": {
+      "newTitle": "Nouvelle alerte emploi",
+      "newSubtitle": "Dites-nous ce que vous cherchez et nous signalerons les offres correspondantes.",
+      "namePlaceholder": "Nom de l'alerte",
+      "keywordsPlaceholder": "Mots-clés",
+      "disciplinePlaceholder": "Discipline",
+      "create": "Créer l'alerte",
+      "creating": "Création…",
+      "loading": "Chargement des alertes…",
+      "empty": "Aucune alerte pour le moment.",
+      "anyJob": "N'importe quelle offre",
+      "on": "Activée",
+      "off": "Désactivée",
+      "delete": "Supprimer",
+      "nameRequired": "Donnez un nom à l'alerte.",
+      "loadFailed": "Vos alertes n'ont pas pu être chargées.",
+      "actionFailed": "La modification n'a pas pu être enregistrée."
     }
   },
   "marketplace": {

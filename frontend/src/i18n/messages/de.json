@@ -8458,13 +8458,7 @@
       "privacyLabel": "Wer ihn sehen darf",
       "versionLabel": "Angezeigte Version",
       "versionOriginal": "Original",
-      "versionCount": "{count, plural, one {# Version} other {# Versionen}}",
-      "privacy": {
-        "public": "Alle",
-        "recruiter_only": "Recruiter",
-        "connections": "Meine Kontakte",
-        "private": "Nur ich"
-      }
+      "versionCount": "{count, plural, one {# Version} other {# Versionen}}"
     },
     "gigs": {
       "title": "Arbeit finden",
@@ -8480,7 +8474,9 @@
       "decline": "Ablehnen",
       "clientRatingTip": "Kundenbewertung von Freelancern, die mit ihm gearbeitet haben",
       "signedOutTitle": "Deine Angebote liegen in deinem Konto",
-      "signedOutBody": "Offene Jobs kannst du ohne Konto durchsuchen. Erstelle ein kostenloses Konto, um zu bieten und deine Angebote und Engagements hier zu verfolgen."
+      "signedOutBody": "Offene Jobs kannst du ohne Konto durchsuchen. Erstelle ein kostenloses Konto, um zu bieten und deine Angebote und Engagements hier zu verfolgen.",
+      "tabSaved": "Gemerkt",
+      "tabAlerts": "Benachrichtigungen"
     },
     "timecard": {
       "title": "Zeiterfassung",
@@ -8535,7 +8531,12 @@
       "coverNote": "Anschreiben (optional)",
       "yourRate": "Ihr Satz ($/Std)",
       "alreadyBid": "Angebot abgegeben",
-      "emptyOpen": "Derzeit keine offenen Jobs."
+      "emptyOpen": "Derzeit keine offenen Jobs.",
+      "save": "Merken",
+      "saved": "Gemerkt",
+      "unsave": "Entfernen",
+      "emptySaved": "Noch keine gemerkten Jobs. Merken Sie sich einen unter „Arbeit finden“.",
+      "savedOn": "Gemerkt am {date}"
     },
     "proposals": {
       "empty": "Sie haben noch keine Angebote abgegeben.",
@@ -8561,6 +8562,24 @@
       "principal": "Principal",
       "director": "Director",
       "executive": "Führungsebene"
+    },
+    "alerts": {
+      "newTitle": "Neue Job-Benachrichtigung",
+      "newSubtitle": "Sagen Sie uns, wonach Sie suchen — wir melden passende Angebote.",
+      "namePlaceholder": "Name der Benachrichtigung",
+      "keywordsPlaceholder": "Stichwörter",
+      "disciplinePlaceholder": "Fachgebiet",
+      "create": "Anlegen",
+      "creating": "Wird angelegt…",
+      "loading": "Benachrichtigungen werden geladen…",
+      "empty": "Noch keine Benachrichtigungen.",
+      "anyJob": "Jeder Job",
+      "on": "Ein",
+      "off": "Aus",
+      "delete": "Löschen",
+      "nameRequired": "Bitte einen Namen vergeben.",
+      "loadFailed": "Ihre Benachrichtigungen konnten nicht geladen werden.",
+      "actionFailed": "Die Änderung konnte nicht gespeichert werden."
     }
   },
   "marketplace": {

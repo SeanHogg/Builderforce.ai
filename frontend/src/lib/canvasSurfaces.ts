@@ -34,10 +34,24 @@
  * preference all read the flags.
  */
 
-export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d';
+export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'page' | 'play' | 'timeline';
+
+/**
+ * What a surface is ABOUT.
+ *
+ * `board` surfaces read the whole session — the graph, the space, the conversation — and
+ * you switch to one from the rail with nothing selected.
+ *
+ * `object` surfaces read ONE object at full size, because a resume, a playable build and a
+ * multi-track edit are all things a ~340px card can only preview. They are entered FROM an
+ * object and are meaningless without one, which is why they never appear in the rail's
+ * switcher and why losing their target returns you to the board.
+ */
+export type CanvasSurfaceScope = 'board' | 'object';
 
 export interface CanvasSurfaceDef {
   id: CanvasSurfaceId;
+  scope: CanvasSurfaceScope;
   /** Order on the command rail and the phone-sized action stack. */
   order: number;
   /**
@@ -76,10 +90,28 @@ export interface CanvasSurfaceDef {
 export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // Chat first: it is the zero-object case of the canvas and the surface a visitor
   // arriving from any other assistant already knows how to use.
-  { id: 'chat', order: 0, showsBoard: false, showsObjects: false, brainIsSurface: true, persist: true },
-  { id: 'graph', order: 1, showsBoard: true, showsObjects: true, brainIsSurface: false, persist: true },
-  { id: 'scene3d', order: 2, showsBoard: false, showsObjects: true, brainIsSurface: false, persist: false },
+  { id: 'chat', scope: 'board', order: 0, showsBoard: false, showsObjects: false, brainIsSurface: true, persist: true },
+  { id: 'graph', scope: 'board', order: 1, showsBoard: true, showsObjects: true, brainIsSurface: false, persist: true },
+  { id: 'scene3d', scope: 'board', order: 2, showsBoard: false, showsObjects: true, brainIsSurface: false, persist: false },
+  // The three medium runtimes. Each is a PROMOTION: the editor already existed, squeezed
+  // into a node body where the medium's own axis had nowhere to go — a paged document in a
+  // card, a playable build behind a bespoke `gameFocus` boolean, and a multi-track edit
+  // with no room for a second track. None of them persists, because a surface bound to one
+  // object cannot be restored without it.
+  { id: 'page', scope: 'object', order: 3, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'play', scope: 'object', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'timeline', scope: 'object', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
 ];
+
+/**
+ * The surfaces the rail offers. Object-scoped ones are excluded because pressing "page"
+ * with nothing selected has no answer — they are entered from the object that IS the page.
+ * The switcher reads this rather than filtering on `scope` itself, so "what belongs in the
+ * rail" is decided once, here, beside the entries.
+ */
+export function boardCanvasSurfaces(): readonly CanvasSurfaceDef[] {
+  return CANVAS_SURFACES.filter((def) => def.scope === 'board').sort((a, b) => a.order - b.order);
+}
 
 export const DEFAULT_CANVAS_SURFACE: CanvasSurfaceId = 'graph';
 

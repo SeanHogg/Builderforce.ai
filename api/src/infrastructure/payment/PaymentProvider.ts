@@ -184,6 +184,34 @@ export interface OneTimeCheckoutOpts {
   idempotencyKey: string;
 }
 
+/**
+ * A RECURRING purchase of somebody else's app, hosted by the processor.
+ *
+ * Separate from {@link CheckoutSessionOpts} — which is a Builderforce PLAN — for
+ * a reason that matters: the payer here is a `site_user`, a person with no
+ * Builderforce account, no tenant and no workspace. Reusing the plan path would
+ * mean inventing a tenant for a consumer who is deliberately not one.
+ *
+ * The price is passed as an amount rather than a pre-created provider Price ID
+ * because the seller sets it on their listing and changes it when they like; a
+ * Price object per listing per change is a catalogue we would have to reconcile.
+ */
+export interface SubscriptionCheckoutOpts {
+  amountCents: number;
+  currency: string;
+  /** Shown on the processor's page — the app's own name, not ours. */
+  productName: string;
+  billingEmail?: string | null;
+  /** 'month' | 'year'. Monthly is the default a listing offers. */
+  interval: 'month' | 'year';
+  successUrl: string;
+  cancelUrl: string;
+  /** Stamped on the session and read back to authorise. Never trusted from a client. */
+  metadata: Record<string, string>;
+  /** Same key for the same subscriber + listing, so a double-click is one session. */
+  idempotencyKey: string;
+}
+
 /** What the processor says about a session, as opposed to what a redirect claims. */
 export interface RetrievedCheckoutSession {
   id: string;
@@ -192,6 +220,10 @@ export interface RetrievedCheckoutSession {
   amountTotalCents: number;
   currency: string;
   paymentIntentId: string | null;
+  /** Present only for a `mode=subscription` session. Reading only the payment
+   *  intent is why a recurring purchase looked unpaid to a caller that had just
+   *  been told the money moved. */
+  subscriptionId: string | null;
   customerEmail: string | null;
   metadata: Record<string, string>;
 }
@@ -212,6 +244,16 @@ export interface PaymentProvider {
    * Grants nothing; pair it with {@link retrieveCheckoutSession}.
    */
   createOneTimeCheckoutSession(opts: OneTimeCheckoutOpts): Promise<{ sessionId: string; checkoutUrl: string }>;
+
+  /**
+   * A RECURRING hosted payment for access to somebody else's app.
+   *
+   * Grants nothing on its own; pair it with {@link retrieveCheckoutSession},
+   * exactly like the one-time path. The distinction from
+   * {@link createCheckoutSession} is the payer: a consumer with no Builderforce
+   * account, billed for a creator's product rather than for a platform plan.
+   */
+  createSubscriptionCheckoutSession(opts: SubscriptionCheckoutOpts): Promise<{ sessionId: string; checkoutUrl: string }>;
 
   /**
    * Read a checkout session back FROM THE PROCESSOR.

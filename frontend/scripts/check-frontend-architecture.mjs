@@ -40,6 +40,13 @@
  *   that on the server, which is the boundary this ratchet exists to keep
  *   somebody thinking about.
  *
+ *   796 → 797 (`useClientFiles`, 2026-08-15) — `CanvasMiroPanel.tsx`, the Miro
+ *   import browser. It has no server form: every interesting thing it does is a
+ *   round trip driven by a click (list the boards, then WALK a cursor to the end
+ *   of one, reporting progress as it goes), and a server component cannot report
+ *   progress on work it has already finished. It sits beside `CanvasDrivePanel`
+ *   in every respect including this one.
+ *
  *   797 → 799 (`useClientFiles`, 2026-08-15) — two of the three the résumé and
  *   paid-media work added. `components/freelance/ProfileResumePanel.tsx` uploads a
  *   file, previews a template on hover and saves on a different cadence from the
@@ -55,17 +62,11 @@
  *   public share link — render the document on the server, which is where a page
  *   whose whole job is to be shared and indexed wants to be. Check for that shape
  *   before raising this number: the directive is sometimes the bug.
- *
- *   796 → 797 (`useClientFiles`, 2026-08-15) — `CanvasMiroPanel.tsx`, the Miro
- *   import browser. It has no server form: every interesting thing it does is a
- *   round trip driven by a click (list the boards, then WALK a cursor to the end
- *   of one, reporting progress as it goes), and a server component cannot report
- *   progress on work it has already finished. It sits beside `CanvasDrivePanel`
- *   in every respect including this one.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { printDelta, readTallies, tallyByFile, writeTallies } from './lib/ratchetDelta.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = resolve(here, '../src');
@@ -199,17 +200,36 @@ function visit(root) {
 }
 for (const file of files) if (!order.has(file)) visit(file);
 
+/**
+ * Per-file tallies beside the counts. A count ratchet that fails with a number and
+ * nothing else sends whoever hit it to reconstruct the delta by hand — for these two that
+ * is ~800 paths compared against the last green commit. The set ratchets below never had
+ * the problem because they name their offender; the count ratchets now borrow the same
+ * courtesy from `lib/ratchetDelta`.
+ */
+const TALLY_PATH = resolve(here, '.frontend-architecture-tally.json');
+const tallies = {
+  useClientFiles: tallyByFile(client.map(rel)),
+  useClientPages: tallyByFile(clientPages.map(rel)),
+};
+const recorded = readTallies(TALLY_PATH);
+
 const violations = [];
-function ratchetCount(label, actual, maximum) {
-  if (actual > maximum) violations.push(`${label}: ${actual} exceeds baseline ${maximum}`);
+/** Ratchets whose failure the tally can explain, in the order they were checked. */
+const countFailures = [];
+function ratchetCount(label, key, actual, maximum) {
+  if (actual > maximum) {
+    violations.push(`${label}: ${actual} exceeds baseline ${maximum}`);
+    countFailures.push({ label, key });
+  }
 }
 function ratchetSet(label, actual, allowed) {
   const permitted = new Set(allowed);
   for (const item of actual) if (!permitted.has(item)) violations.push(`${label}: new violation ${item}`);
 }
 
-ratchetCount("'use client' files", client.length, baseline.useClientFiles);
-ratchetCount("client-rooted pages", clientPages.length, baseline.useClientPages);
+ratchetCount("'use client' files", 'useClientFiles', client.length, baseline.useClientFiles);
+ratchetCount("client-rooted pages", 'useClientPages', clientPages.length, baseline.useClientPages);
 ratchetSet('presentation -> infrastructure', presentationInfrastructureImports, baseline.presentationInfrastructureImports);
 ratchetSet('presentation engine construction', directEngineConstruction, baseline.directEngineConstruction);
 ratchetSet('production files over 800 lines', oversizedProductionFiles, baseline.oversizedProductionFiles);
@@ -217,6 +237,9 @@ ratchetSet('circular static imports', importCycles, baseline.importCycles);
 
 if (violations.length) {
   console.error('❌  Frontend architecture ratchet failed:\n\n  - ' + violations.join('\n  - '));
+  // Which files moved it. A raise is legitimate — the header above is where it is argued —
+  // but it has to be argued for NAMED files, and until now the guard would not say which.
+  for (const { label, key } of countFailures) printDelta(label, recorded[key], tallies[key]);
   if (violations.some((entry) => entry.startsWith('circular static imports'))) {
     console.error(
       '\n  A static import cycle crashes the page it is bundled into with\n' +
@@ -229,4 +252,14 @@ if (violations.length) {
   }
   process.exit(1);
 }
+
+// Green: this tree is a legitimate reference point, so it is the one worth recording.
+// Without this the sidecar is never written and `printDelta` can only ever report that no
+// tally exists — the explanation would be wired up and permanently empty.
+if (writeTallies(TALLY_PATH, tallies)) {
+  console.log(`   Recorded per-file tallies to ${relative(resolve(here, '..'), TALLY_PATH).split('\\').join('/')}.`);
+}
+
 console.log(`✅  Frontend architecture ratchet passed (${client.length} client files, ${clientPages.length} client pages, ${oversizedProductionFiles.length} grandfathered large files, 0 import cycles).`);
+// Green: a legitimate reference point, and therefore the one worth recording.
+if (writeTallies(TALLY_PATH, tallies)) console.log('   Recorded per-file tallies to scripts/.frontend-architecture-tally.json.');
