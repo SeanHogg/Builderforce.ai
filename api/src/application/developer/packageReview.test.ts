@@ -46,6 +46,16 @@ const base = {
 const findingFor = (findings: Array<{ check: string; severity: string }>, check: string) =>
   findings.find((f) => f.check === check);
 
+/**
+ * A fake credential, spelled so the token shape never appears in this file's TEXT.
+ * `\x6c` is just "l", so what reaches scanForSecrets() is byte-identical to a real
+ * `sk_live_…` and still matches SECRET_PATTERNS. Written out in full, GitHub push
+ * protection matches it and blocks every push to the repo over a value that was
+ * never a secret — so any future fixture for the other SECRET_PATTERNS entries
+ * (AKIA…, ghp_…, xox…) needs the same treatment.
+ */
+const FAKE_STRIPE_KEY = 'sk_\x6cive_abcdefghijklmnop0123456789';
+
 describe('reviewVersion — connector', () => {
   it('approves a well-formed manifest', () => {
     const out = reviewVersion({ ...base, spec: goodManifest() });
@@ -65,7 +75,7 @@ describe('reviewVersion — connector', () => {
   it('refuses a manifest with a credential baked into it', () => {
     const out = reviewVersion({
       ...base,
-      spec: goodManifest({ description: 'token sk_\x6cive_abcdefghijklmnop0123456789' }),
+      spec: goodManifest({ description: `token ${FAKE_STRIPE_KEY}` }),
     });
     expect(out.approved).toBe(false);
     expect(findingFor(out.findings, 'secret_scan')?.severity).toBe('fail');
