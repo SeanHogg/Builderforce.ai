@@ -37,6 +37,9 @@ describe('canvas surface registry', () => {
     // The board is the default, and it is the only surface that draws one.
     expect(canvasSurfaceDefinition(DEFAULT_CANVAS_SURFACE).showsBoard).toBe(true);
     expect(CANVAS_SURFACES.filter((def) => def.showsBoard).map((def) => def.id)).toEqual(['graph']);
+    // "no flat board" and "no objects" are different questions — the 3D space answers
+    // them differently, which is why the chrome that asks them reads two flags.
+    expect(CANVAS_SURFACES.filter((def) => def.showsObjects).map((def) => def.id)).toEqual(['graph', 'scene3d']);
   });
 
   it('degrades an unknown surface to the board rather than to a blank centre', () => {

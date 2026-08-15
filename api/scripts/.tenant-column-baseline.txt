@@ -2,7 +2,6 @@
 # Regenerate: node scripts/check-tenant-column.mjs --update
 admin_impersonation_role_switches
 agent_inference_logs
-agent_knowledge_chunks
 artifact_likes
 auth_user_sessions
 brain_chat_messages
@@ -47,8 +46,8 @@ newsletter_templates
 oauth_accounts
 pending_prompts
 platform_modules
-platform_pricing_configuration
 platform_personas
+platform_pricing_configuration
 privacy_requests
 prompt_library_stars
 prompt_library_versions

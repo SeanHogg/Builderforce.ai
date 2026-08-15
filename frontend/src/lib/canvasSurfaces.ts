@@ -48,6 +48,15 @@ export interface CanvasSurfaceDef {
    */
   showsBoard: boolean;
   /**
+   * Whether this canvas's OBJECTS are on screen at all. Distinct from `showsBoard`:
+   * the 3D space draws every object without drawing the flat board, so the two
+   * questions have different answers and the chrome that asks them is different chrome.
+   * This is the one the selection toolbar and the large-session notice read — floating
+   * "6 selected · Align · Frame" over a conversation that has no objects on it is a
+   * toolbar for something the reader cannot see.
+   */
+  showsObjects: boolean;
+  /**
    * Whether Brain IS this surface rather than a panel beside it. The canvas allows
    * exactly ONE live transcript on screen, so a surface that renders the conversation
    * itself is also what suppresses the edge dock and its launcher — the consumer reads
@@ -67,9 +76,9 @@ export interface CanvasSurfaceDef {
 export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // Chat first: it is the zero-object case of the canvas and the surface a visitor
   // arriving from any other assistant already knows how to use.
-  { id: 'chat', order: 0, showsBoard: false, brainIsSurface: true, persist: true },
-  { id: 'graph', order: 1, showsBoard: true, brainIsSurface: false, persist: true },
-  { id: 'scene3d', order: 2, showsBoard: false, brainIsSurface: false, persist: false },
+  { id: 'chat', order: 0, showsBoard: false, showsObjects: false, brainIsSurface: true, persist: true },
+  { id: 'graph', order: 1, showsBoard: true, showsObjects: true, brainIsSurface: false, persist: true },
+  { id: 'scene3d', order: 2, showsBoard: false, showsObjects: true, brainIsSurface: false, persist: false },
 ];
 
 export const DEFAULT_CANVAS_SURFACE: CanvasSurfaceId = 'graph';

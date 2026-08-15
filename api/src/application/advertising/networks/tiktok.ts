@@ -12,9 +12,10 @@
  */
 
 import {
-  ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay,
-  unmapObjective, AdsProviderError,
-  type AdCallResult, type AdInsightRow, type AdObjective, type AdsProvider, type AdStatus,
+  AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, unmapObjective,
+} from '../adsNormalize';
+import {
+  type AdCallResult, type AdInsightRow, type AdObjective, type AdStatus, type AdsProvider,
 } from '../adsProviders';
 
 const MAJOR = 1;

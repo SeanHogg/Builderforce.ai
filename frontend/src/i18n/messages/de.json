@@ -15198,7 +15198,8 @@
       "shipment": "Lieferung",
       "incident": "Vorfall",
       "book": "Buch",
-      "account": "Kundenkonto"
+      "account": "Kundenkonto",
+      "sticky": "Haftnotiz"
     },
     "twilioSetup": {
       "title": "Twilio-Integration",

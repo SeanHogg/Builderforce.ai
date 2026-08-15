@@ -138,8 +138,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
 | 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 37 |
-| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 32 |
-
+| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 31 |
 Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
 
 | Group | Exact open bullets |
@@ -159,7 +158,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 12 | 10 |
 | 13 | 11 |
 | 14 | 37 |
-| 15 | 32 |
+| 15 | 31 |
 ---
 
 
@@ -653,6 +652,8 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 - **A canvas inbox tile is pull-only — no push, no auto-refresh.** `canvas_refresh_inbox` re-reads on demand and the tile stamps `fetchedAt` so it never *claims* to be live, but nothing updates it on its own. Neither push mechanism is wired: Gmail needs `users.watch` + a Pub/Sub push endpoint, Graph needs a subscription with a renewal sweep, and both need a per-connection cursor plus a way to reach the open board (the creation-session WS relay). Deferred rather than polled because a background poll per open tile per tenant is a recurring cost against a Neon-Free budget for a feature nobody asked to be real-time. Unblocks: an inbox tile that updates while you watch it.
 - **Attachments are reported but not reachable.** `MailboxMessage.hasAttachments` is populated from both providers and the filter honours it, but there is no download path: Gmail needs `messages.attachments.get` by `attachmentId` and Graph needs `/messages/{id}/attachments`, and a pinned `email` object has nowhere to put the bytes without an R2 write and a size ceiling. So a user can find the message with the invoice on it and cannot open the invoice. Unblocks: pinning an email to the canvas and actually reading what came with it.
 
+- **The `check:design-scale` ratchet is red: +4 literal-hex files, +3 off-scale radii and +47 literal font sizes landed with the challenges / developer-portal / visual-editor work.** *(found 2026-08-15 while closing the social gaps)* `literalHexFiles` 0 → 4 (`BuilderWorkspace.tsx`, `PreviewFrame.tsx`, `site/SiteReleasePanel.tsx`, `lib/visualEditor.ts`), `offScaleRadii` 1 → 4 (`LlmRatingsPanel.tsx:37` and `DeveloperPortalContent.tsx:81` both `border-radius: 999` → `--radius-full`; `UnreadBadge.tsx:24`; `visualEditor.ts:33` `3px`), and `offScaleFontSizes` 3818 → 3865, ~28 of them inline `fontSize` in the 478-line `app/challenges/page.tsx`. The radii are mechanical. The other two are NOT: the guard's own text says a value read by something that never sees our CSS — a preview iframe's document, styles the visual editor writes into the page it is editing — belongs in `COLOUR_EXEMPT` / `FONT_SIZE_EXEMPT` **with its reason**, and `PreviewFrame` and `visualEditor` are exactly that shape while `challenges/page.tsx` is exactly not. **Blocked on the authors of those files, not on code:** deciding which of the four is an exemption and which is a migration is the review the exemption list exists to record, and bumping the baseline instead would switch the ratchet off for everyone. Unblocks: a green `npm test` in frontend, which is what makes the next style regression visible.
+
 ### 📣 Connected social accounts & social campaigns — residuals
 
 > The connect → read → compose → publish slice shipped 2026-08-12 (migration 0458, `/api/social`, canvas `socialFeed` / `socialPost` / `socialCampaign`; see [DONE.md](./DONE.md)). These are the parts deliberately left out of that pass.
@@ -702,11 +703,15 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 
 ## 10 · 🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas
 
-### Embedded apps — "idea to sell" (R1–R11, identified 2026-08-15 during the flow-design pass)
+### Embedded apps — "idea to sell" (R1–R13, identified 2026-08-15 during the flow-design pass)
 
-> **Operator decisions taken 2026-08-15** (rev 2 of the Idea-to-Sell mockup): **(1) the project IS the app** — no separate app entity, no provisioning subsystem; conversion is 1 click and the creator inherits the board, tickets, manager and agent workforce on the same `projects` row. **(2) The storefront IS the marketplace** — the existing listing page is the sales page; no generated landing pages and no `/` vs `/app` path convention.
+> **Operator decisions taken 2026-08-15** (rev 3 of the Idea-to-Sell mockup) — all NO LONGER BLOCKED, this set is ready to build:
+> 1. **The project IS the app.** No separate app entity, no provisioning subsystem; conversion is 1 click and the creator inherits the board, tickets, manager and agent workforce on the same `projects` row.
+> 2. **Two shop windows, one product.** The marketplace listing page sells it inside the marketplace; a creator-authored `website` canvas card, published to their subdomain/custom domain and edited WYSIWYG, sells it in their own brand. Both render their buttons off the same `delivery` field.
+> 3. **No choice of host and no choice of database.** An app runs on Builderforce and its data lives in Builderforce collections. Offering a cloud picker or bring-your-own-Postgres at conversion hands the creator the exit on the way in and leaves the platform carrying support for infrastructure it does not own. → **R5 is CLOSED as ruled out** (see below); it is kept in place rather than deleted because it records a decision, not outstanding work.
+> 4. **`delivery: 'copy' | 'hosted'` as spec data** on the listing kind, and **`site_users` as the consumer identity** rather than a third `account_type` — both adopted.
 >
-> Still **blocked on ONE remaining user decision** before any of R1–R11 can be built: whether to adopt the three primitives the mockup proposes on top of those two — (a) `delivery: 'copy' | 'hosted'` as spec data on the listing kind, (b) `site_users` as the consumer identity instead of a third `account_type`, (c) an `AppDataStore` port with a platform default rather than a per-app Neon/Supabase. R1–R11 are mutually dependent on that answer; building any one first hard-codes a shape the others contradict.
+> ⚠️ Confirm before move 01: an app project must be created with **`is_ide_storage = false`** (`schema/delivery.ts:144`) or it is hidden from the board and PMO list, which hands the creator the hosting and none of the agents.
 
 - **A canvas board cannot become a project — the arc is severed at exactly one joint.** `api/src/infrastructure/database/schema/canvas.ts:1385` (`creation_sessions` has no `project_id`) and `api/src/presentation/routes/realizationRoutes.ts:113` (accepts `idea` / `challengeId` / `projectId`, never `sessionId`). The realization pipeline builds, publishes and wires forms correctly but cannot be handed a board as input. Under "project = app" this is the ONLY structural change in the arc — everything downstream is configuration on a row that would then exist. Fix = nullable `creation_sessions.project_id` (ON DELETE SET NULL) + accept `sessionId` on `POST /api/realizations` deriving the spec from the board's objects + create the project with `modality = 'app'` and **`is_ide_storage = false`**. ⚠️ `schema/delivery.ts:144` — a projects row that is storage-backing for an `ide_project` (0224) is HIDDEN from the board and PMO list, which would hand the creator the hosting and none of the agents, i.e. exactly the leverage the decision is for. Unblocks: the entire idea → app → sell arc. **(R1)**
 
@@ -716,11 +721,11 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 
 - **A creator cannot charge their own app's end users.** `site_users` carries no entitlement column and `listingCommerce.ts` offers only `createOneTimeCheckoutSession`. The sole money path is a one-time marketplace purchase by another workspace, so the people using a builder's app on the builder's own domain cannot pay them. Fix = `site_subscriptions` keyed `(site_id, site_user_id)` + `createSubscriptionCheckoutSession` on the existing `PaymentProvider` port, settling through the SAME orders / order_line_items / ledger_entries with the same take-rate stamping and reference-keyed idempotency — a second money path is how the seller's balance and the platform's books stop agreeing. Unblocks: recurring revenue for creators; the "sell" half of idea-to-sell. **(R4)**
 
-- **Per-app database provisioning does not exist and the datastore is not a port.** Nothing provisions Neon/Supabase anywhere in `api/src`. `site_collections` / `site_records` (`growth.ts:93`, `read_policy` ∈ `none | owner`, deliberately no `all`) already IS the app database, but the choice is not expressible and an app that outgrows it has no exit. Fix = an `AppDataStore` port with two real adapters — `platform` (collections, default, zero setup) and `external` (connection string in `project_secrets`, which already has no read path) — recorded as `project_sites.data_store` mirroring the existing `mode` column, same escape-hatch shape as `declarative → github-worker`. Explicitly NOT one Postgres per app: that is a credential set, migration history, bill and blast radius per app. Unblocks: BYO-database apps without inventing per-app infrastructure. **(R5)**
+- **RULED OUT — per-app hosting and database choices.** *(operator decision 2026-08-15; kept here as the record of a decision, not as outstanding work)* The previous revision proposed an `AppDataStore` port with a bring-your-own-Postgres adapter plus `project_sites.data_store`, and kept a cloud picker on the conversion screen. **Both are removed**: an app runs on Builderforce and its data lives in Builderforce collections, with no choice offered at conversion or after. Rationale: a creator choosing AWS/Azure/their own Postgres at the moment they commit has been handed the exit on the way in, and every such choice is a support surface, credential set and migration history the platform carries without owning the customer. **This does NOT touch `application/backend/hostingStrategy.ts` or its self-hosted adapters** — they serve the `live-system` realization target, where a customer is deliberately proving a system inside their own cloud, which is a different product with a different buyer. The rule is narrow: *the app-conversion path offers no strategy choice and pins the platform adapter.* **(R5 — CLOSED, ruled out)**
 
 - **The published address is a side effect of publishing, with no availability check and no way to change it.** `api/src/application/ide/publishStaticSite.ts:48` takes `requestedSubdomain` but falls back to the project name; `siteManageRoutes.ts` exposes the full custom-domain lifecycle and NOTHING for the subdomain label. A creator discovers what their app is called by publishing it. Fix = `GET /api/projects/:id/site/address/available?label=` over the existing `normalizeSubdomain` + `RESERVED_SUBDOMAINS`, plus a claim step at conversion so the address is chosen before the first publish. Unblocks: a creator picking `XXXX.builderforce.ai` deliberately. **(R6)**
 
-- **The storefront cannot be reached on the app's own address.** *(REWRITTEN 2026-08-15 after the "storefront = marketplace" decision — the previous version of this entry proposed generating landing pages from `marketing/templateLibrary.ts` plus a `/` vs `/app` path convention; that scope is DELETED, not deferred.)* `frontend/src/app/marketplace/listing/[slug]/page.tsx` is already the storefront — public, edge-rendered for search, cached by slug — but it is only reachable at `builderforce.ai/marketplace/listing/<slug>`, so a creator's own address serves the app to visitors who have no idea what it is. Fix = one additive branch in `api/src/application/ide/siteServer.ts:493` (`tryServeHostedSite`): when the project has a PUBLISHED HOSTED listing and the visitor is NOT an entitled `site_user`, serve the listing page; otherwise serve the app exactly as today. **Proxy, not redirect**, so a custom domain keeps the creator's brand in the address bar. The fork must reuse the `entitled` derivation `launchListing` already owns — one rule, two hosts. An app with no listing is untouched. Unblocks: a visitor arriving at `sunday-rsvp.builderforce.ai` seeing what it is and being able to buy it. **(R7)**
+- **The creator's own address has nothing to sell with.** *(REVISED 2026-08-15 under the "two shop windows" decision — supersedes both earlier versions of this entry: the generated-storefront-from-`templateLibrary` version AND the proxy-the-marketplace-listing version. Neither is being built.)* A visitor arriving at a creator's subdomain or custom domain is served the app with no idea what it is and no way to buy it. The second shop window — the creator's own branded landing page — has no publish target and no routing rule. `packages/creation-canvas-contract/src/index.ts:287` already has `website` as a canvas object kind and already lists it as a `from` source for the `app` listing, so the authoring surface exists; nothing publishes it as the site's landing page. Fix = publish a `website` canvas card to the site root as the landing page, and add ONE additive fork in `api/src/application/ide/siteServer.ts:493` (`tryServeHostedSite`): when a landing page exists and the visitor is NOT an entitled `site_user`, serve it; otherwise serve the app exactly as today. The fork MUST reuse the `entitled` derivation `launchListing` already owns — one rule, both windows. No `/app` path convention; a site with no landing page is untouched. Unblocks: a creator selling in their own brand on their own domain. **(R7)**
 
 - **Stage exercises the canvas snapshot and never the deployment, so an app whose address 404s passes.** `packages/creation-canvas-contract/src/marketplaceListings.ts:450` — `resolveListingHarness` picks one of six runners over the captured payload, which is right for a game/book/pack and wrong for a service, where the product IS the running system. Fix = a seventh `deployment` harness selected when `delivery === 'hosted'`: fetch the live address, assert `BACKEND_HEALTH_MARKER` rather than a status code (a deleted function still answers 200 from an edge) and confirm something is served at `/`. `MonitoringService.watchDeployedBackend` already does this and is simply not consulted at publish time. Unblocks: not shipping dead listings. **(R8)**
 
@@ -728,15 +733,17 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 
 - **The app's own users cannot reach the board that maintains it.** *(new 2026-08-15, implied by the "project = app" decision)* `site_records` (`schema/growth.ts:129`) and `site_users` (`:192`) are referenced by exactly TWO files in `api/src/application` — `ide/siteData.ts` and `ide/siteAuth.ts` — and by nothing else. So the growth domain and the delivery domain do not speak: a bug reported by one of an app's end users lands in a `site_records` row that no ticket, no manager and no agent will ever read, and a shipped fix has no path back to the person who reported it. "Leverage all the AI agents" only pays off if the agents can hear from the people using the app; today the workforce maintains the code and never meets the customers. Fix = a `site_collections.raises_tickets` flag (configuration on the collection, never a hardcoded collection name) whose records write a `tasks` row through the existing seeding path so `maybeAutoRunOnLaneEntry` picks it up; cross-domain by id, never by importing the table. Return leg = the same link read backwards, notifying the `site_user` when the ticket reaches Done. Unblocks: the maintenance loop the "project = app" decision promises. **(R10)**
 
-- **Nothing relates what the agents cost to what the app earns.** *(new 2026-08-15, implied by the "project = app" decision)* Three independent economic controls now overlap and none knows about the others: the per-tenant dispatch caps (see [[superadmin-unlimited-dispatch-two-caps]]), the auto-run failure circuit-breaker (see [[autorun-failure-circuit-breaker]]), and `MARKETPLACE_TAKE_RATE_BPS` stamped per sale in `marketplace/listingCommerce.ts`. Once the project IS the app and agents maintain it, running a paid app spends the creator's run budget on work that produces revenue — so a creator whose app is doing well can be rate-limited by a cap that has never heard of their earnings, while the platform takes 15% of a sale whose maintenance is billed in a different subsystem. Fix = decide the model before hosted apps go on sale: maintenance spend comes out of the creator's plan, out of the app's own revenue, or as a line on the payout (only the third makes a hosted app self-financing) — and attribute it through the existing usage ledger rather than a second meter. **Blocked on the same operator decision as R1–R11.** Unblocks: pricing a hosted app without the platform absorbing unbounded maintenance cost. **(R11)**
+- **Nothing relates what the agents cost to what the app earns.** *(new 2026-08-15, implied by the "project = app" decision)* Three independent economic controls now overlap and none knows about the others: the per-tenant dispatch caps (see [[superadmin-unlimited-dispatch-two-caps]]), the auto-run failure circuit-breaker (see [[autorun-failure-circuit-breaker]]), and `MARKETPLACE_TAKE_RATE_BPS` stamped per sale in `marketplace/listingCommerce.ts`. Once the project IS the app and agents maintain it, running a paid app spends the creator's run budget on work that produces revenue — so a creator whose app is doing well can be rate-limited by a cap that has never heard of their earnings, while the platform takes 15% of a sale whose maintenance is billed in a different subsystem. Sharpened by the "no self-hosting" decision: the compute is now OURS, not a cloud bill the creator absorbs. Fix = decide the model before hosted apps go on sale: maintenance spend comes out of the creator's plan, out of the app's own revenue, or as a line on the payout (only the third makes a hosted app self-financing) — and attribute it through the existing usage ledger rather than a second meter. Unblocks: pricing a hosted app without the platform absorbing unbounded maintenance cost. **(R11)**
+
+- **The click-to-source visual editor is too narrow to author a landing page.** *(new 2026-08-15, from the "two shop windows" decision)* `frontend/src/lib/visualEditor.ts` resolves a clicked DOM node back to its React fiber and reads `__source`, so the file/line mapping is exact, free and works on projects that predate the feature — but it performs exactly TWO operations by design: the element's visible text and its `className`, both single-line single-attribute edits that either match the reported line or are refused. Everything structural (add a section, reorder, swap an image, change a link) is deliberately left to the model, which is the right ceiling for app code and the wrong one for a brand page whose entire purpose is to be rearranged by a non-developer. Fix = extend the editor with block-level operations for the landing page only — insert / move / delete / duplicate a section — against a DECLARED section vocabulary rather than arbitrary JSX, so an edit stays match-or-refuse and never becomes a regex rewriting a user's file. The dev-only injection rule must stay: the overlay is never present in a published build. Unblocks: a creator actually building their own landing page rather than describing it to an agent. **(R12)**
+
+- **The landing page and the app build collide in one R2 prefix.** *(new 2026-08-15, from the "two shop windows" decision)* `api/src/application/ide/publishStaticSite.ts` REPLACES the site's contents under a single prefix, and `application/realization/realizeService.ts:21` documents exactly this hazard for proofs ("publishing replaces the site … a project accumulates proofs", which is why it publishes the whole canvas rather than one pass's files). With a landing page added, two producers — a canvas-authored `website` card and the app's built output — both want the root of that one prefix, so publishing either with today's semantics silently deletes the other: a creator deploys a fix and their brand page is gone, or republishes their page and the app 404s. Fix = ONE publish with two sources — landing page renders to the site root, app build lands beneath it, written in a single `publishStaticSite` call so a release is atomic and rollback restores a coherent pair. A second publish path is how the two get out of step. Unblocks: shipping the landing page without a silent-data-loss defect. **(R13)**
 
 - **Three frontend guards are red on work that is mid-flight in the tree, and one of them hides the rest.** *(observed 2026-08-15 while closing the résumé template-engine / canvas-stall pass)* Running `frontend` `npm test` stops at `check:architecture`, which reports `'use client' files: 791 exceeds baseline 789` and `production files over 800 lines: new violation lib/academicObjects.ts`; `check:design-scale` then reports `literalHexFiles 4 (baseline 0)`, `offScaleRadii 4 (baseline 1)` and `offScaleFontSizes 3865 (baseline 3818)` naming `components/BuilderWorkspace.tsx`, `components/PreviewFrame.tsx`, `components/site/SiteReleasePanel.tsx`, `lib/visualEditor.ts`, `components/admin/panels/LlmRatingsPanel.tsx`, `components/developer/DeveloperPortalContent.tsx`, `components/UnreadBadge.tsx` and `app/challenges/page.tsx`. Separately, `tsc` currently fails on `CreationCanvas.tsx` (`Cannot find name 'threeD'` — a 3D-surface refactor that has introduced `threeD.active` / `threeD.commandProps` / `threeD.toggle` call sites without the binding) and on `lib/academicObjects.ts` (`identifies`, `submissionsFor`, `gradebookOf`, `statsOf`, `mappingRows` all undefined), which red-lines every `CreationCanvas.*.test.tsx` suite with `ReferenceError: threeD is not defined`. **Blocked on the owner of that in-flight refactor**: none of these files were touched by this pass, the same files were observed changing under it mid-run (`brainSurfaceContext.tsx` → `canvasSurfaceContext.tsx`, and the architecture baseline itself moving 788 → 789), and editing a half-finished refactor from a second direction would collide rather than fix. Needed to clear it: the `threeD` binding and the five `academicObjects` helpers landed, then a baseline decision on the two ratchets. Unblocks: `frontend` `npm test` running to the vitest stage at all, and the canvas component suites being trustworthy again.
 
 - **Stage's checks are STATIC ANALYSIS of the snapshot, not a run in a sandbox workspace.** *(identified 2026-08-15 while building the Build/Stage/Live release lifecycle)* `api/src/application/marketplace/stageChecks.ts` reads the staged snapshot payload — the copy a buyer actually receives, after `stripBindings` — and answers six harnesses' worth of questions about it (a CDN reference in a game document, an orphaned question id, an empty page, a mesh with no unit, a cloned voice that will not transfer). That catches the whole class of defect the seller cannot see on their own board, which is the point. What it does NOT do is what the proposal called for: install the snapshot into a throwaway tenant, boot it with every outbound step stubbed, and measure the result. So `runtime.touch` is a regex over the document rather than a driven play; `media.duration` reads a declared field rather than a render that finished; `system.outbound` reports that steps WOULD be stubbed rather than that they were. Consequence: a document that boots and then throws on frame 2 passes, and a workflow whose stubbed step would have failed is not caught. **Blocked on an infrastructure decision**: a disposable tenant needs a lifecycle (who creates it, who destroys it, what it costs per stage press) and a headless runner with an outbound interceptor — neither exists, and inventing either inside this pass would have shipped a sandbox nobody had agreed to pay for. Unblocks: the difference between "the payload looks right" and "it ran".
 
 - **Stage shows findings but does not yet render the staged payload as the buyer would receive it.** *(same pass)* `CanvasReleasesPanel.tsx` lists every version, its state and its holders, runs the harness and refuses the publish on a blocker. The "viewing as visitor / viewing as buyer" frame from the design — the staged snapshot rendered through the buyer's own launch mode, in a device frame — is not built, so a seller reads a verdict about their product without seeing it. The pieces exist (`launchListing` already returns the right shape per mode, and `ListingLaunch.tsx` already renders all five modes) but the launch path resolves by public SLUG and a staged version deliberately has none. Fix = a seller-authenticated launch that resolves by snapshot id under the same entitlement rule. **Not blocked.** Unblocks: the half of Stage that is a preview rather than a report.
-
-- **`developer_api_keys` duplicates `tenant_api_keys`, and the collision was hidden by a duplicate migration prefix.** *(found 2026-08-15 while renumbering `0465_llm_action_ratings.sql` → `0468`)* Two migrations had both claimed `0465`, and `check:schema` reads migrations into a map keyed by prefix — so one of the pair was silently dropped from the drift comparison and the developer-portal tables were never actually checked. With the collision resolved the guards report what was always true: `check:signature-duplication` finds `developer_api_keys = tenant_api_keys` at 0.68 weighted column overlap ("one of these is the other one"), `check:shape-lint` finds `developer_org_members` matching the kernel `membership` shape and `extension_versions` matching `revision`, and `check:schema` finds `developer_api_keys.allowed_origins` in the migration and absent from `schema.ts`. Fixing the drift by adding the column would deepen a table two other guards say should not exist. **Blocked on an owner decision**: which of `developer_api_keys` / `tenant_api_keys` survives, and whether org membership and extension versions become kinds on the kernel primitives. Once decided it is one migration and a schema edit. Unblocks: `npm test` in `api/` going green, which currently fails on the first of eleven chained guards and hides the other ten.
 
 - **SAML 2.0 / Shibboleth SSO is not implemented, so no institution can buy the academic vocabulary.** *(identified 2026-08-13 while landing LTI 1.3)* Universities authenticate through an institutional IdP (Shibboleth/InCommon, Azure AD, Okta) and procurement does not start without it — LTI 1.3 gets the tool into the LMS, SSO is what gets it past the security review. The tool half is straightforward (SP metadata, an `AuthnRequest` over HTTP-Redirect, an ACS endpoint); the part that is not is **verifying the signed SAML Response**, which needs exclusive XML canonicalisation (C14N) plus reference-digest validation before the RSA check. **Blocker: this is a security-critical component I will not hand-roll in one pass — a C14N or reference-resolution mistake is an XML signature-wrapping (XSW) authentication bypass, and it cannot be validated without a real institutional IdP to test against.** Needed to clear it: a decision on a vetted xmldsig implementation that runs on Workers (or a decision to terminate SAML at an identity provider that already speaks it, e.g. WorkOS/Auth0, and keep only OIDC in-process), plus one live IdP metadata document to integrate against. Unblocks: institutional procurement for the whole teaching vocabulary.
 - **LTI platform registrations live in the `LTI_REGISTRATIONS` secret with no admin surface.** *(landed 2026-08-13)* `presentation/routes/ltiRoutes.ts` reads registrations from a JSON secret, deliberately: a registration holds an RSA **private** key, and the generic entity layer serves every table it knows through one reader whose redaction is column-name-pattern based — a signing key should not be riding on a regex. The consequence is that adding a university is a `wrangler secret put`, not a screen, and key rotation is manual. Fix = a `lti_registrations` table with the private key in the existing `credentials` envelope (`credentialCrypto.ts`) plus a registration screen under /settings/security, or an explicit decision that this stays operator-managed. Unblocks: self-serve onboarding of an institution.
@@ -749,6 +756,14 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 - **Six new canvas object kinds ship with no label in any of the five catalogs, so `messages.test.ts` is red.** *(observed 2026-08-13 while landing the `/sales` panel)* `npx vitest run` fails only in `src/i18n/messages.test.ts` — "en/zh/es/fr/de labels every creation canvas object kind" — with `missing = ['notebook', 'model', 'trainingRun', 'runComparison', 'labelSet', 'prompt']`. The kinds come from the untracked data-science object family (`lib/dataScienceObjects.ts`, `canvasNotebook.ts`, `canvasTrainingRun.ts`, `canvasRunComparison.ts`); the test is the localization rule enforced as a guard, so the catalogs must gain `creationCanvas.object.<kind>` in all five locales with real translations. **Blocker: the same in-flight branch as the entries above** — those files are being written as this is logged (`CreationCanvas.tsx` changed mid-session), and the i18n pass belongs to whoever is landing the kinds, or the two passes will collide in the same five JSON files. Unblocks: `npx vitest run` green, which is currently hiding any other frontend regression behind one red file.
 - **A `/api/creation-sessions/claim` 500 on `creation_session_objects_pkey` is fixed by inference, not by trace** *(seen 2026-08-10 in an operator screenshot)*. One provable cause of that exact error was found and closed this pass: `validCreationGraph` compared object/connection ids with a case-SENSITIVE `Set` while `UUID_RE` accepts either case and the `uuid` column is case-insensitive, so two ids differing only in case validated as distinct and then collided on the primary key (see DONE.md; `durableCreationGraph` had the mirror bug on edge endpoints). Whether the screenshotted request took that path is unconfirmed. **Blocker: the failing request's payload and the server-side stack are a live production trace I cannot obtain** — `db.batch` on neon-http reports only the PG message, and the route's catch rethrows without logging which statement failed. Fix = attach the failing statement index + object-id count to the claim's catch via `reportCaughtError` before rethrowing, then re-check. Unblocks: knowing whether anonymous boards still fail to claim.
 
+
+- **`api` `npm test` is red on four tables and one syntax error, none of them from migration 0469.** *(observed 2026-08-15 while closing the ten unblocked founder-operations gaps)* Four suites fail and every failure belongs to a migration landed by a different pass: `entityCatalog.test.ts` reports nine tables with no entity-layer entry (`social_campaigns`, `social_campaign_posts` from 0458; `realizations` from 0463; `site_releases`, `site_users`, `site_user_sessions` from 0465; `developer_orgs`, `developer_org_members` from 0467; `llm_action_ratings` from 0468) against a threshold of five; `tableAdoption.test.ts` reports `developer_orgs` and `developer_org_members` with no `pgTable` export at all, which is the worse of the two — unreachable from typed code rather than merely unregistered; `socialProviders.test.ts` asserts five social connector keys and finds eleven; and `application/social/socialService.ts:334` is a **syntax error** (`account:   draft: SocialPostDraft,` — a parameter list mid-edit) that also fails `tsgo`. Every 0469 table is declared, registered and covered. **Blocker: all five are another session's uncommitted, in-flight work**, and the two that are one-line fixes (the connector-count assertion, the parameter list) sit inside files that were observed changing under this pass. Needed to clear it: the owner of the social/advertising and developer-portal branches lands their entity declarations and finishes the parameter list. Unblocks: `api` `npm test` reaching a green vitest stage, which currently hides any other API regression behind four red files.
+
+- **Two frontend type errors and twenty off-scale font sizes are red from the same in-flight branches.** *(same pass)* `tsgo --noEmit` in `frontend` reports `components/creation-canvas/CanvasAdsPanel.tsx:153` (a `ConnectorDetail` passed where a `ConnectorManifest` is required) and `:187` (`deleteConnection` does not exist on the connector client — the client has `createConnection`), and `check:design-scale` reports twenty literal `font-size` values, all in `app/challenges/page.tsx`. **Blocker: both files belong to other passes running concurrently** — the advertising panel is mid-wiring against a connector client that does not yet have the method it calls, and the challenges page was not touched here. Needed to clear it: the ads panel's owner adds `deleteConnection` (or calls the method that exists) and resolves the manifest/detail type, and the challenges page moves its sizes onto the nine roles. Unblocks: `frontend` `type-check` and `npm test` running clean end to end.
+
+- **A published form mints named-recipient credentials and nothing delivers them.** *(new 2026-08-15, the residual of FO-B1.)* `publishForm` returns each recipient's plaintext token exactly once — correctly, since only the hash is stored — and there is no sender behind it, so `audience: 'namedRecipients'` works only if the publisher copies each link out of the API response by hand. The signature engine has the same shape and got a sweep; the form did not, because a form has no equivalent of "who still owes us an answer" until a roster exists to compare against (which is FO-B3's `policy.acknowledge`). Fix = one transactional send per recipient at publish time through the same platform transport the signature reminder uses, plus a "chase the ones who have not answered" pass once FO-B3 lands. **Not blocked.** Unblocks: a named-audience form being usable without a person relaying links.
+
+- **The signature reminder cannot link to the signer's own page.** *(same pass)* `runSignatureReminderSweep` emails every party who still owes an answer and points them at `/sign` — the landing page — rather than at `/sign/<their token>`, because only the token's HASH is stored and a reminder that could quote the link would mean storing a live credential in plaintext so a cron job could read it. That trade is the wrong way round, so the reminder asks them to use the link they were sent. Fix = a short-lived signed re-issue (mint a fresh token on the party row at reminder time, invalidating the old one), which keeps the one-way property and still produces a working link. **Not blocked.** Unblocks: a reminder somebody can act on without going back through their inbox.
 
 ### 🎯 Realize (idea → REAL) — residuals
 
@@ -793,58 +808,47 @@ implementations. Both foundations are wiring, not modelling.
 
 ---
 
-#### Can these run in parallel? Partly — and the limit is not the one it looks like
+#### What is left, and what still gates it
 
-**Ten of the twenty-seven have no prerequisite** and can be dispatched today:
+**The ten unblocked items are CLOSED** — migration 0469, 2026-08-15, see
+[DONE.md](./DONE.md): FO-A1, FO-B1, FO-B2, FO-C1, FO-C3, FO-C6, FO-E3, FO-F1, FO-G1 and
+FO-D5's matching half. Seventeen remain, and three of them are unblocked by that pass:
+**FO-A2** now has an object to bind to, **FO-C2** now has a header to issue from, and
+**FO-B3** now has both primitives to route through. FO-D1 and FO-E1 have the
+`equity_holder` and `investor` roles they needed (`parties.ts`). FO-F2 is unblocked and
+should be taken with care — it deletes the mirroring paragraph that FO-F1 replaced.
 
-`FO-A1` · `FO-B1` · `FO-B2` · `FO-C1` · `FO-C3` · `FO-C6` · `FO-E3` · `FO-F1` · `FO-G1` · `FO-D5`(matching half)
-
-The other seventeen are gated, and the gating is real rather than tidy-mindedness. FO-A2 cannot bind a
-field to an object that does not exist. FO-B3 has nothing to route through. FO-D1 needs the
-`equity_holder` role FO-A1 introduces, and FO-E1 needs the `investor` one. FO-C2 has no header to issue
-from. FO-F2 deletes a prompt paragraph that must not be deleted before FO-F1 replaces what it does.
-
-**The tighter constraint is file collision, not logical dependency.** Six of the ten "independent" items
-edit the same four files, so dispatching them at once produces conflicts even though none of them
-depends on another's behaviour:
+**The tighter constraint is still file collision, not logical dependency.** The remaining
+items edit the same coordination files, so dispatching them at once produces conflicts even
+where none depends on another's behaviour:
 
 | File | Contended by |
 |---|---|
-| `packages/creation-canvas-contract/src/index.ts` (`FOUNDER_OBJECT_KINDS`) | FO-A1, FO-D1, FO-E1 |
-| `frontend/src/lib/founderObjects.ts` | FO-A1, FO-C1/C2, FO-C3, FO-D1, FO-E1, FO-G2 |
+| `packages/creation-canvas-contract/src/index.ts` (`FOUNDER_OBJECT_KINDS`) | FO-D1, FO-E1 |
+| `frontend/src/lib/founderObjects.ts` | FO-A2, FO-C2, FO-D1, FO-E1, FO-G2 |
 | `frontend/src/i18n/messages/{en,zh,es,fr,de}.json` | every item with a surface |
 | `frontend/src/components/creation-canvas/CreationCanvas.tsx` (tool registry) | every item with a tool |
-| `api/migrations/` | FO-A1, FO-B1, FO-B2, FO-C1, FO-C3, FO-D1, FO-G1 — draw from the owning track's reserved band |
+| `frontend/src/lib/canvasFounderOpsTools.ts` | the founder-ops tool family added by 0469 |
+| `api/migrations/` | FO-D1, FO-D2, FO-D3 — draw from the owning track's reserved band |
 
-Per the isolation-track rule at the foot of this file, shared coordination files are not file-disjoint
-and must be serialized and rebased before merge. In practice that means **three or four concurrent
-tracks, not ten**:
+Per the isolation-track rule at the foot of this file, shared coordination files are not
+file-disjoint and must be serialized and rebased before merge:
 
-**Track 1 — foundations, serialized:** FO-A1 → FO-A2 → FO-A3. Owns `founderObjects.ts` and the kind
-  list for the duration; everything else rebases onto it.
-**Track 2 — collection & signature:** FO-B1 ∥ FO-B2 → FO-B3 → FO-B4. Almost entirely new files
-  (tables, routes, a public responder surface), so it is the most genuinely isolated of the seven.
-**Track 3 — money headers:** FO-C1 ∥ FO-C3, then FO-C2 → FO-C5, then FO-C4. Schema-first, and its
-  canvas half rebases onto Track 1.
-**Track 4 — the disjoint singles:** FO-C6 (connector manifests — new files, touches nothing else),
-  FO-G1 (a new domain + seat), FO-F1 → FO-F2 (own module + one prompt), FO-E3 (a handler over an
-  existing transport). These are the ones a spare agent can take without coordinating.
+**Track 1 — the counterparty, serialized:** FO-A2 → FO-A3. Owns `founderObjects.ts` and
+  the kind list for the duration; everything else rebases onto it.
+**Track 2 — collection & signature consumers:** FO-B3 → FO-B4, over the primitives 0469
+  landed. Almost entirely handlers, so it is the most genuinely isolated.
+**Track 3 — money:** FO-C2 → FO-C5, then FO-C4. Its canvas half rebases onto Track 1.
+**Track 4 — the disjoint singles:** FO-F2 (one prompt deletion), FO-E2 (over FO-B2).
 
-FO-D and the rest of FO-E should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do.
+FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do.
 
 #### FO-A · The counterparty — one object every commercial reference points at
 
-- **FO-A1 — There is no CUSTOMER object, so every commercial reference is a string match.** `company` is
-  us, `competitor` is them, `salesContact` is a person, `customerSegment` is a cohort — nothing
-  represents an account you have won. It shows in the hints the model is handed: `invoice.customer` says
-  "Match it to a `company`, `salesContact` or `contract` on the board where one exists", `bill.vendor`
-  says "Match it to a `contract` on the board", `battlecard.againstCompetitor` wants "the exact title of
-  the competitor object". Joining a contract to its invoices, its support tickets and its renewal is
-  therefore a comparison of two typed strings. Fix = an `account` canvas kind in the founder vocabulary
-  whose `partyRef` binds to a `party_roles` row — NOT a new table: the kernel already holds exactly one
-  row per party-and-role, and a second customer store is the collision `finance_soc_controls` exists to
-  record. Unblocks: FO-C, FO-E and FO-G all naming the same buyer.
-- **FO-A2 — Bind the counterparty FIELDS to it.** Once `account` exists, `invoice.customer`,
+> FO-A1 landed 2026-08-15 (0469): the `account` kind, `parties.ts` and `canvas_sync_account`.
+
+- **FO-A2 — Bind the counterparty FIELDS to it.** *(unblocked 2026-08-15 — the object now
+  exists.)* Once `account` exists, `invoice.customer`,
   `bill.vendor`, `contract.counterparty` and `placement.client` stop being free text and carry an object
   id with the string kept as the display label. Needs ONE shared resolver over four call sites rather
   than each field inventing its own match, plus a read-time fallback that leaves existing string values
@@ -859,27 +863,13 @@ FO-D and the rest of FO-E should not start until Track 1 lands, and FO-G2/FO-G3 
 
 > `people.ts` calls `form` "the single largest 'idea to REAL' break the canvas had: it could author
 > anything and collect nothing, so every flow that needed an answer from a person terminated in a
-> document and finished its real work somewhere else". That is still true, and it is now load-bearing
-> for five other things.
+> document and finished its real work somewhere else". **Both primitives landed 2026-08-15 (0469)** —
+> the collection half on `question_sets` + `responses` (which already WERE the store; what was missing
+> was publication) plus `form_recipients`, and the signature half as `signature_requests` +
+> `signature_parties` with a public signer and a reminder sweep. What is left is the consumers.
 
-- **FO-B1 — `PublishedForm` is declared and implemented nowhere.** `people.ts` declares
-  `PublishedForm`, `FORM_FIELD_TYPES`, `FORM_AUDIENCES` and `FORM_STATUSES` with a careful argument for
-  each distinction — including why `anonymous` is a boolean and not an audience, since an anonymous
-  pulse must not record who answered while a policy acknowledgement is worthless unless it does. Grep
-  across `api/src`, `frontend/src`, `clients` and `packages` finds ZERO consumers of any of them. Fix =
-  a `form_responses` table, a publish action that mints the slug, and a PUBLIC responder route rendering
-  the nine declared question types; the `PublishedForm` projection (no tenant, no session, no responses)
-  is already the right shape to send to a browser outside the workspace. Unblocks: every flow that needs
-  an answer from a person who is not a member.
-- **FO-B2 — The signature engine is declared and implemented nowhere.** `SIGNATURE_PARTY_STATUSES`,
-  `SIGNATURE_REQUEST_STATUSES`, `SIGNATURE_INTENTS`, `isTerminalPartyStatus` and `isAgreedPartyStatus`
-  are all declared and all unused. `isTerminalPartyStatus` even documents the three call sites it was
-  written for — the request's completion check, the reminder job, the canvas progress meter — and none
-  of the three exists. Fix = `signature_requests` + `signature_parties`, a signer route, a reminder
-  sweep, and an audit record that keeps `signed` distinct from `acknowledged`, which is the distinction
-  the contract argues for and the one an auditor will later need. Unblocks: FO-B3, and it is the reason
-  `contract.sign` is a gated act with nothing behind the gate.
-- **FO-B3 — Route the five waiting consumers through them.** `contract.sign`; `policy.acknowledge` with
+- **FO-B3 — Route the five waiting consumers through them.** *(unblocked 2026-08-15 — both
+  primitives now exist.)* `contract.sign`; `policy.acknowledge` with
   its roster and its `acknowledgementRate` meter (declared `derived: true` and derived from nothing);
   `offer.send` / `offer.sign`; `jobPosting` applications; and the `data_rooms.nda_required` column. Each
   is a handler over FO-B1/FO-B2 rather than a new mechanism, and doing them in one pass is what stops
@@ -892,30 +882,21 @@ FO-D and the rest of FO-E should not start until Track 1 lands, and FO-G2/FO-G3 
 
 #### FO-C · Money — the founder cannot bill anyone, and cannot be paid
 
-- **FO-C1 — There is no invoice HEADER table.** `finance.invoice_line_items` exists and carries
-  `invoice_ref` as a bare `varchar(64)` pointing at nothing: the LINES exist and the invoice does not.
-  The only invoice table on the platform is `freelancer_invoices`, which is the marketplace paying its
-  own freelancers. Fix = an `invoices` header in the finance domain that `invoice_line_items.invoice_ref`
-  becomes a real reference to, with the canvas `invoice` kind as its projection. Doing this first also
-  hands `financeRollup.ts` its first real revenue source. Unblocks: FO-C2 … FO-C5.
+> **FO-C1 and FO-C3 landed 2026-08-15 (0469)**: an `invoices` header the line items are now a real
+> reference to, a `bills` header beside it, one line-item table serving both through a
+> `document_kind` discriminator, and the three payable acts (approve / schedule-payment / dispute)
+> with a separation-of-duties check on the approver. **FO-C6 landed** in the same pass — seven
+> payroll and tax connector manifests. See [DONE.md](./DONE.md).
+
 - **FO-C2 — `invoice.issue` / `record-payment` / `chase` are gated acts with no handler.**
+  *(unblocked 2026-08-15 — the header now exists, and `payables.ts` is where the three handlers
+  belong beside their payable siblings.)*
   `canvasApprovalGate.GATED_ACTIONS` correctly names them irreversible/attested and `founderObjects.ts`
   advertises all three; grep for the handlers returns the gate and its own test. There is no PDF render,
   no delivery, and `ageingDays` is documented as "computed from `dueAt`" by nothing. Fix = the three
   handlers over FO-C1 plus an ageing recompute in the daily sweep. Half-solved already: the `overdue-by`
   trigger comparator shipped 2026-08-15, so an invoice carrying `dueAt` can be WATCHED — what it cannot
   be is issued.
-- **FO-C3 — There is no payables HEADER either, and `bill.approve` / `schedule-payment` / `dispute` are
-  gated acts with no handler.** *(prerequisite corrected 2026-08-15: this was written as though it were a
-  sibling of FO-C2, and it is a sibling of FO-C1.)* The payable side has the same hole as the receivable
-  one and FO-C1 does NOT cover it: `finance.expenses` is an expense CLAIM — a person spent money and
-  wants it back, hence `submittedBy`, `category`, `incurredAt` — not a vendor bill with a counterparty, a
-  due date and an approval. `grep "pgTable('bills'"` returns nothing. Fix = a `bills` header alongside
-  FO-C1's `invoices`, reusing its line-item shape, and then the three handlers. Two kinds rather than one
-  signed number because "who owes us" and "who we owe" are asked separately, which the contract already
-  argues. `bill.approvedBy` must stay the one field no handler ever fills in on the requester's behalf —
-  the object's own hint calls it "the one field on this object that can cause real harm". Depends on:
-  nothing — a sibling of FO-C1, buildable beside it.
 - **FO-C4 — A tenant cannot take money from their own customers.**
   `infrastructure/payment/PaymentProvider.ts` states there is exactly one flow and it is Builderforce's
   own hosted subscription checkout; `marketplace/listingCommerce.ts` is the only other paid door and it
@@ -931,11 +912,14 @@ FO-D and the rest of FO-E should not start until Track 1 lands, and FO-G2/FO-G3 
   "collections work with no record is collections work that gets done twice or not at all". With FO-C2
   and the `overdue-by` trigger both live, the ladder is a small engine over parts that already exist.
   Unblocks: getting paid without a person remembering to chase.
-- **FO-C6 — No payroll and no tax, in any port.** `payroll` appears in the codebase only as a word in a
-  lexicon and a provider blurb; sales tax and VAT appear nowhere at all. `compensation_structures` and
-  `timesheets` exist; turning them into a pay run does not. Fix = manifest DATA in the connector platform
-  for Gusto / Rippling / Deel / ADP and Stripe Tax / Avalara. Unblocks: "pay the team" and "remit the
-  tax" being reachable at all, directly or through an integration.
+- **A pay run and a tax calculation are reachable through a connector and by nothing else.**
+  *(new 2026-08-15, the residual of FO-C6.)* The seven manifests are live and every one of them needs a
+  tenant to have connected a provider. A workspace with `compensation_structures` and `timesheets` and
+  no Gusto account still cannot answer "what did we pay last month", and `finance.burn` is still typed
+  rather than read. The honest next step is not a payroll engine — see the file's own note on why the
+  platform must never become one — it is a `payRun` canvas kind that a connector READ hydrates, so the
+  burn on a forecast is money that actually left. **Not blocked.** Unblocks: the forecast's largest
+  line being a fact.
 
 #### FO-D · Ownership — equity does not exist
 
@@ -958,12 +942,13 @@ FO-D and the rest of FO-E should not start until Track 1 lands, and FO-G2/FO-G3 
 - **FO-D4 — No SAFE, note or conversion modelling.** The instrument a pre-seed company actually issues
   cannot be represented, so `fundingRound.roundType: 'safe'` is a label over nothing and a priced round
   cannot be modelled against what came before it. Needs FO-D2.
-- **FO-D5 — There is no co-founder anything.** `grep -i 'co-?founder'` across the frontend returns no
-  matches: no matching or introduction surface, no founder agreement, no IP-assignment or founder-vesting
-  paperwork. The first artifact a company produces has no home. Split deliberately from FO-D3 because the
-  PAPERWORK half is FO-B3 (a signature flow over a template) and only the MATCHING half is genuinely new
-  — which also makes it the cheapest of the five to start. Unblocks: the "find a co-founder" use case,
-  which today has no answer at all.
+- **FO-D5 (paperwork half) — a co-founder agreement still has no template and no signature flow.**
+  *(matching half landed 2026-08-15 — `cofounder_profiles`, the scorer and `/cofounder`; see
+  [DONE.md](./DONE.md).)* Two founders can now find each other and have nowhere to record what they
+  agreed: no founders' agreement, no IP assignment, no founder vesting. The signature engine exists as
+  of the same pass, so this is a TEMPLATE plus a `contract` routed through it — i.e. it is FO-B3 and
+  FO-G3 applied to the one document that comes before every other document. **Not blocked.** Unblocks:
+  the first artifact a company produces having a home.
 
 #### FO-E · Raising — four cards and an unenforced data room
 
@@ -978,10 +963,6 @@ FO-D and the rest of FO-E should not start until Track 1 lands, and FO-G2/FO-G3 
   analytics to enforce or report any of the three — so the properties that make a data room safe to send
   are decoration. `dataRoom.share` is gated with nothing behind the gate. Needs FO-B2 for the NDA.
   Unblocks: sending a data room to a firm and knowing what they actually read.
-- **FO-E3 — `investorUpdate.send` has no delivery.** Gated, no handler. `campaignTransports.ts` already
-  sends to an audience with tracking; an investor update is that with a different audience, so this is
-  wiring rather than a second sender. Unblocks: the monthly update going out from the board that holds
-  the metrics it quotes.
 - **FO-E4 — QUESTION, not a task: the seat asymmetry itself.** The `investor` domain belongs to the CEO
   EVALUATING deals — root `company`, with `products`, `due_diligence_checklists`,
   `investment_opportunities` and `investor_peer_comparables`. The founder RAISING gets `funding_rounds`
@@ -991,37 +972,49 @@ FO-D and the rest of FO-E should not start until Track 1 lands, and FO-G2/FO-G3 
 
 #### FO-F · One pipeline — independent of everything above
 
-- **FO-F1 — The canvas pipeline and the real CRM are two systems of record synchronised by a language
-  model.** `lib/canvasSalesPipeline.ts` normalises authored JSON — `cards` with a title and
-  `valueCents`, in memory — while the `revenue` domain owns `deals`, `pipeline_stages`,
-  `pipeline_touchpoints`, contacts, sequences and enrichment provenance. The bridge is a PROMPT
-  instruction in `creationCanvasAi.ts`: use `builtin_sales_*`, then "mirror the returned canonical id and
-  current values into the matching salesContact/salesCampaign/salesGoal/salesPipeline canvas object". A
-  deal dragged on the board is not a deal moved in the CRM unless the model remembers. Fix = make the
-  canvas objects a projection of the revenue entities through the consolidated entity layer, the way the
-  founder `company` card already hydrates via `canvas_sync_company_profile`. Unblocks: one pipeline with
-  one number.
-- **FO-F2 — Then DELETE the mirroring instruction.** It is a long paragraph in the largest system prompt
-  on the platform, and leaving it after FO-F1 would tell the model to write back over a projection.
-  Named as its own item because a prompt deletion is exactly the step that gets forgotten, and the cost
-  of forgetting it is the same drift running in the opposite direction.
+> **FO-F1 landed 2026-08-15 (0469)**: `application/revenue/pipelineProjection.ts` reads the deals into
+> the exact shape the card already renders, and `canvas_move_deal` writes the deal and rewrites the
+> board from the same response — one call, no mirroring step to forget.
+
+- **FO-F2 — Then DELETE the mirroring instruction.** *(unblocked 2026-08-15 — FO-F1 has replaced what
+  it does.)* It is a long paragraph in the largest system prompt on the platform ("after a successful
+  sales mutation, mirror the returned canonical id and current values into the matching salesContact,
+  salesCampaign, salesGoal, or salesPipeline canvas object", `creationCanvasAi.ts`), and leaving it now
+  tells the model to write back over a projection. Replace it with the two sentences the tools already
+  carry: sync the pipeline to READ it, and `canvas_move_deal` to CHANGE it. Named as its own item
+  because a prompt deletion is exactly the step that gets forgotten, and the cost of forgetting it is
+  the same drift running in the opposite direction.
+- **The pipeline card is still read-only, so a deal cannot literally be dragged.** *(new 2026-08-15,
+  the residual of FO-F1.)* `SalesPipelineBody` draws the kanban and has no drag handler, so the "deal
+  dragged on the board" in FO-F1's own title is now possible through the MODEL (`canvas_move_deal`) and
+  not through a pointer. Every piece is in place — each card carries its `dealId`, and one call both
+  moves the deal and returns the redrawn board — so this is a drag-and-drop affordance over an existing
+  write, not new plumbing. **Not blocked.** Unblocks: the gesture the feature is named after.
 
 #### FO-G · Legal — a company's first ninety days are canvas cards
 
-- **FO-G1 — No legal/counsel domain exists.** The `DOMAIN_MANIFEST` roster gives `governance` to the
-  Security seat (controls, findings, policy — SOC 2), and nothing owns entity formation, registered
-  agent, jurisdiction registration, IP assignment or trademark. `contract` is one canvas kind whose
-  `obligations` are free text and whose `sign` is gated with no engine. Fix = a `legal` domain with its
-  own seat, OR an explicit decision that counsel belongs inside `governance` — the current state is
-  neither, which is how the first ninety days of a company came to have no home.
+> **FO-G1 landed 2026-08-15 (0469)**: the seventeenth seat — `legal`, owned by Counsel — with entity
+> formation, jurisdiction registrations, IP and matters, plus the rollup that makes its two declared
+> metrics real. See [DONE.md](./DONE.md).
+
+- **The legal seat has tables and no canvas vocabulary.** *(new 2026-08-15, the residual of FO-G1.)*
+  `legal_entities`, `legal_registrations`, `intellectual_property` and `legal_matters` are reachable
+  through the generic entity layer and through `canvas_read_domain`, and there is no `legalEntity`,
+  `ipAsset` or `matter` canvas kind — so the first ninety days can be RECORDED and not put on the board
+  beside the company they are about. The founder vocabulary is where they belong (they are inputs to
+  `contract` and to the cap table), and the spec-object primitive makes each one a declaration rather
+  than a render branch. **Not blocked.** Unblocks: a formation checklist that is objects rather than a
+  document.
 - **FO-G2 — A contract repository with live obligations.** `contract.obligations` is
   `{obligation, owner, due}` prose, and nothing binds a contract to the invoices it should generate or a
   `bill` to the contract it should be checked against (the hint tells the model to "match it to a
-  contract on the board" — by name). Needs FO-A2 and FO-C1. The renewal-warning half is already done:
-  `contract.renewsAt` is a declared deadline and the `due-within` comparator shipped 2026-08-15.
-- **FO-G3 — A template library.** Formation documents, NDAs, MSAs, SOWs, offer letters, IP assignments.
-  Worth nothing before FO-B2 — a template you cannot get signed is a `document` — and is mostly content
-  once the engine exists.
+  contract on the board" — by name). Needs FO-A2; FO-C1 landed 2026-08-15. The renewal-warning half is
+  already done: `contract.renewsAt` is a declared deadline and the `due-within` comparator shipped
+  2026-08-15.
+- **FO-G3 — A template library.** *(unblocked 2026-08-15 — the signature engine now exists.)* Formation
+  documents, NDAs, MSAs, SOWs, offer letters, IP assignments. A template you cannot get signed is a
+  `document`; with `signature_requests` live it is mostly content, and the founders' agreement
+  (FO-D5's paperwork half) is the one to write first because it comes before every other document.
 
 ### Canvas — the sell-Builderforce motion ("Idea to REAL")
 
@@ -1271,6 +1264,7 @@ FO-D and the rest of FO-E should not start until Track 1 lands, and FO-G2/FO-G3 
   hub; our scope is project-level (`ProjectScopeContext`) and board-centric, so "everything about this launch"
   has no home. Fix = a Space entity over the PRD-20 kernel, not a new per-feature table.
 
+- **Three canvas runtimes are declared as a plan but not built: `page`, `timeline`, `play`.** *(scope cut, 2026-08-15, during the surface-seam pass)* The surface axis now exists — `frontend/src/lib/canvasSurfaces.ts` + `CanvasSurfaceRouter.tsx`, shipping `graph` / `scene3d` / `chat` — but the three runtimes that make a *creation type* feel native are not in it, so a resume, a podcast and a playable build are all still authored as nodes on a DAG. `page` and `play` are PROMOTIONS of code that already exists in the wrong place: `DocumentEditor.tsx` / `CanvasResumeEditor.tsx` render a paged document inside a ~340px node body, and `CanvasGamePanel.tsx` is already a full-surface runtime wearing a `gameFocus` overlay rather than a surface id. `timeline` is the only genuinely new build, and it must be a STORYBOARD that hands the render to hired.video through the existing `api/src/application/integrations/hiredVideo.ts` port — not a second NLE, which is a product we already own. Deliberately not built in the same pass (the seam plus one runtime was the agreed slice); nothing is blocked, and the registry is open/closed so each is an entry plus a ReactNode. Unblocks: a video game / podcast / promo-video / resume session that reads as its own medium instead of as a generic idea board.
 - **Two elements are labelled "Model" on the Creation Canvas, so the participant editor's model control is ambiguous.** *(found 2026-08-13 during the career-tool pass)* `CreationCanvas.test.tsx:632` fails with `getMultipleElementsFoundError` on `getByLabelText('Model')`: both `creationCanvas.node.model` and `chatInput.model` render the string, and after opening a participant card both are in the tree. That is the [[prompt-options-menu-single-model-control]] convention being violated in the DOM — a person using a screen reader hears two identical "Model" controls and cannot tell which one governs the run. **Blocker: a concurrent session is actively editing this surface** (the frontend package version moved 2026.8.13 → 2026.8.14 mid-run and the participant editor is part of that change), so the fix belongs to whoever owns that edit rather than to a second writer racing them. Fix = give the node-body field a distinct label (the object's own "Model" attribute is not the run's model control) or route both through the one shared control. Unblocks: the frontend suite going green, which currently hides any further regression in that file.
 
 ---
@@ -1408,8 +1402,7 @@ FO-D and the rest of FO-E should not start until Track 1 lands, and FO-G2/FO-G3 
 
 ## 15 · 🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt
 
-- **`developer_orgs` and `developer_org_members` are migrated with no Drizzle declaration.** *(observed 2026-08-15; the import-level failure this started as has since been cleared by removing the bad imports)* `tableAdoption.test.ts`'s "gives every migrated table a Drizzle declaration" fails on both: the migration ran, so the tables exist in Postgres and no typed code can reach them. **Blocker: another session's in-flight developer-portal work (PRD 24)** — writing the `pgTable` declarations means matching a column set whose migration is already applied and whose shape is theirs. Needed to clear it: the two declarations plus their entity-catalog entries. Unblocks: `api npm test` green, and therefore the deploy.
-- **Nine consolidated tables have no entity-catalog entry, so `entityCatalog.test.ts` is red on `main`.** *(observed 2026-08-15)* `social_campaigns`, `social_campaign_posts`, `realizations`, `site_releases`, `site_users`, `site_user_sessions`, `developer_orgs`, `developer_org_members` and `llm_action_ratings` were created by migrations and never declared in a domain's `entities.ts`, so nothing can read or write them through the generic layer and the adoption meter cannot see them. The fix is one line each — the question is WHICH SEAT owns them, and that is a bounded-context decision, not a lookup: `social_campaigns` is plausibly `growth` (which already owns `campaign`), `llm_action_ratings` plausibly `agents`, and `realizations` / `site_*` belong to whichever seat the realization and self-hosted-site features are being filed under. **Blocker: all seven are another session's actively-landing work** — `socialService.ts` and `socialProviders.test.ts` were being edited in the tree while this was logged — so assigning an owner now would file a table under a seat its author is still choosing. Unblocks: `api npm test` green, and those rows being reachable at all.
+- **Seven consolidated tables have no entity-catalog entry, so `entityCatalog.test.ts` is red on `main`.** *(observed 2026-08-15; narrowed from nine on 2026-08-15 when migration 0471 dropped `developer_orgs` and `developer_org_members` outright — a publisher is a workspace, so neither table needs an owning seat)* `social_campaigns`, `social_campaign_posts`, `realizations`, `site_releases`, `site_users`, `site_user_sessions` and `llm_action_ratings` were created by migrations and never declared in a domain's `entities.ts`, so nothing can read or write them through the generic layer and the adoption meter cannot see them. The fix is one line each — the question is WHICH SEAT owns them, and that is a bounded-context decision, not a lookup: `social_campaigns` is plausibly `growth` (which already owns `campaign`), `llm_action_ratings` plausibly `agents`, and `realizations` / `site_*` belong to whichever seat the realization and self-hosted-site features are being filed under. **Blocker: all seven are another session's actively-landing work** — `socialService.ts` and `socialProviders.test.ts` were being edited in the tree while this was logged — so assigning an owner now would file a table under a seat its author is still choosing. Unblocks: `api npm test` green, and those rows being reachable at all.
 - **`socialProviders.test.ts` expects five social connector keys and the registry now has eleven.** *(observed 2026-08-15)* `maps every social connector key back to exactly one provider` fails with `expected [ 'x-social', 'linkedin-social', …(9) ] to have a length of 5`. Either six connectors were added without the test being moved, or the test is asserting a count where it means to assert uniqueness — the same weakness the roster tests had before they were changed to name their members. **Blocker: the file is another session's uncommitted, in-flight work** (modified in the tree as this was logged). Unblocks: `api npm test` green.
 
 ### 🛡️ Cloudflare serves a managed challenge to every datacenter caller of the whole `builderforce.ai` zone *(found 2026-08-08)*
@@ -1461,7 +1454,7 @@ FO-D and the rest of FO-E should not start until Track 1 lands, and FO-G2/FO-G3 
 - **Marketplace / freelance correctness residuals.** `jobRoutes`: `POST /proposals/:pid/accept` does 5 writes with no transaction AND never checks the job's current `status`, so an already-`filled` job can be accepted twice and mint a second engagement; `POST /:id/proposals` never checks `visibility`, so anyone with a UUID can bid on a `private` posting; `GET /` filters discipline/skill/q **in memory after `LIMIT 200`**; `/api/notifications` computes `unread` from a 100-row page. `gigMarketplaceRoutes`: `NaN` taskId reaches the query (and mints a `…:NaN` cache entry); re-publishing a ticket whose posting is `closed`/`filled` mints a second posting and orphans the first. `freelancerMessagingRoutes`: `getOrCreateConversation`'s untargeted `ON CONFLICT DO NOTHING` can yield `undefined` cast as a row → 500; the read watermark is stamped *after* the insert so a message arriving in between is marked read unseen; `POST /:id/read` returns `{ok:true}` on zero rows matched; `readSendPayload` silently drops attachments when `UPLOADS` is unbound (the declared 415 is unreachable). `freelancerRoutes`: `POST /me/resume`'s `canAutofill` reads `resume_extract`, which was never in the projection — that term has **always** been false.
 - **Dead/loose surface.** `createFreelancerMessagingRoutes(_db)` and `createGigMarketplaceRoutes(_db)` take a `Db` neither uses (both build their own per handler) — drop the param and its `src/index.ts` argument. `taskFileChanges.executionId` is nullable in schema but its only writer always supplies a number. `workforceRoutes` `DELETE /agents/:id` cascades `artifact_assignments` for `bridges[0]` only; `POST /agents/:id/feedback` always returns 201 even on the DO-UPDATE path. `getOrSetCached` returns `Date` on a miss and ISO strings on a KV hit — a cache-shape asymmetry that predates this work and interacts with the timestamp item above.
 
-- **Two frontend ratchets are red on `main`, and neither guard names its own offenders.** `npm test` in `frontend/` fails at `check:architecture` (`'use client'` files 785 vs baseline 784; client-rooted pages 66 vs 65) and `check:design-scale` (`offScaleFontSizes` 3859 vs baseline 3827, **+32**). Both baselines were last set 2026-08-13 (`d481aa6f3`); the regressions arrived with the 2026-08-14/15 marketplace, canvas and kernel components. Neither guard is in the **Deploy API** or **Deploy frontend** CI jobs, so both went red unnoticed while those two jobs stayed the only signal anyone reads. Two things to fix, not one: (a) the regressions — find the newly client-rooted page and give the ~32 new literal sizes one of the nine `--font-size-*` roles; (b) the guards themselves — each prints a COUNT and a `.slice()` sample of *all* offenders, so neither tells you which files moved the number, and diffing per-file counts against the last green commit is a manual reconstruction (~150 `git show` calls). Make them report the DELTA. Unblocks: `frontend npm test` green, and a ratchet that says what broke it. *(The temptation is to bump the baseline; that is the one fix that makes the ratchet worthless.)*
+- **`check:design-scale` is red on `main`, and neither size guard names its own offenders.** *(narrowed 2026-08-15: `check:architecture` is green again — its baseline moved 792 → 796 for the four canvas-surface client components, each argued in prose in `check-frontend-architecture.mjs`'s header, which is the raise path that file defines. `check:design-scale` is untouched and has since drifted further: `offScaleFontSizes` 3865 vs baseline 3818, **+47**, plus `literalHexFiles` 4 vs 0 and `offScaleRadii` 4 vs 1.)* The offenders are the 2026-08-14/15 marketplace, challenges and kernel components (`app/challenges/page.tsx` alone carries a dozen literal sizes); `CreationCanvas.module.css` is exempt, so canvas work is not what moved it. Neither guard is in the **Deploy API** or **Deploy frontend** CI jobs, so it went red unnoticed while those two jobs stayed the only signal anyone reads. Two things to fix, not one: (a) the regressions — give the ~47 new literal sizes one of the nine `--font-size-*` roles, the 4 hexes a both-theme token, and the 4 radii a `--radius-*` step; (b) the guards themselves — each prints a COUNT and a `.slice()` sample of *all* offenders, so neither tells you which files moved the number, and diffing per-file counts against the last green commit is a manual reconstruction (~150 `git show` calls). Make them report the DELTA. Unblocks: `frontend npm test` green, and a ratchet that says what broke it. *(The temptation is to bump the baseline; for a literal size that is the one fix that makes the ratchet worthless.)*
 - **Deferred residuals.** `/api/agent-runtime` claim/result + `/api/git-proxy` are tenant-JWT only (add a host-key auth branch so non-browser executors close the loop). PRD routes mount under `/api/prd` (confirm the intended `/api/specs/...` namespace). Cloud-coding changed-files are text-only (no card diff viewer); PR-open GitHub-only for the browser path. Rotate leaked credentials (NVIDIA 2026-05-10, Cloudflare 2026-05-23 — tracked in the gitignored `SECURITY-FINDINGS.local.md`; see [[security-findings-not-in-source-control]]). agentHost liveness: converge the `claws`/`agent-hosts`/`agentNodes` route triplication + bump `lastSeenAt` on the live socket. Two studio packages need (re)publishing + npm auth; builderforce-memory `/install` requires a local checkout (publish `@builderforce/memory-mcp` + `@builderforce/memory` so `npx` works anywhere); `/install` self-driving combo not activated locally; PWA install prompt + update banner can overlap (a `PwaToastStack`).
 
 ---

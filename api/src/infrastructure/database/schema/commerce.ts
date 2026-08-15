@@ -34,7 +34,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { creationSessions, freelancerEngagements, timecards } from './canvas';
+import { creationSessionObjects, creationSessions, freelancerEngagements, timecards } from './canvas';
 import { artifactTypeEnum, objects, pricingModelEnum } from './kernel';
 import { segments, tenants, users } from './identity';
 import { proposalEvaluations } from './agents';
@@ -263,13 +263,15 @@ export const freelancerProfiles = pgTable('freelancer_profiles', {
   availability:           varchar('availability', { length: 20 }).notNull().default('open'),  // open|limited|unavailable
   location:               varchar('location', { length: 120 }),
   timezone:               varchar('timezone', { length: 60 }),
-  hiredVideoUserId:       varchar('hired_video_user_id', { length: 120 }),
-  hiredVideoConnectionId: varchar('hired_video_connection_id', { length: 120 }),
-  hiredVideoResumeId:     varchar('hired_video_resume_id', { length: 120 }),
-  hiredVideoClaimUrl:     varchar('hired_video_claim_url', { length: 500 }),
-  resumeKey:              varchar('resume_key', { length: 300 }),
-  resumeFilename:         varchar('resume_filename', { length: 255 }),
-  resumeExtract:          text('resume_extract'),                  // cached hired.video getProfile JSON
+  /** The person's résumé — a `creation_session_objects` row of kind `resume` (0471).
+   *
+   *  It is a POINTER, not a copy. The résumé is the same Canvas object they edit on a
+   *  board, which is what makes the master/variant family, the chosen template and the
+   *  public link one document instead of three. This replaced four `hired_video_*`
+   *  columns plus a flat R2 key: the résumé used to be a file we stored and an iframe
+   *  we embedded from a third party, and is now a first-class object this platform owns.
+   *  See application/resume/profileResume.ts. */
+  resumeObjectId:         uuid('resume_object_id').references(() => creationSessionObjects.id, { onDelete: 'set null' }),
   /** Career intent (0462) — the SAME listing, offered to two kinds of demand.
    *
    *  `job_postings.posting_type` already accepts 'fte' and `job_proposals` already

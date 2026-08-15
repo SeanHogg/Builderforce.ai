@@ -199,16 +199,6 @@ export interface Env {
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
 
-  /** hired.video partner API key (@seanhogg/hired-video-sdk). Provisions job-seeker
-   *  accounts for freelancers, uploads/parses resumes, and mints embed tokens for
-   *  the embedded profile/resume viewer. When unset the freelance marketplace still
-   *  works with the NATIVE R2 resume fallback; the hired.video calls are skipped and
-   *  the provider reports `configured=false`. Set via `wrangler secret put HIRED_API_KEY`. */
-  HIRED_API_KEY?: string;
-  /** Optional override for the hired.video API base URL (defaults to the SDK default).
-   *  `wrangler secret put HIRED_API_BASE_URL`. */
-  HIRED_API_BASE_URL?: string;
-
   /** Freelancer payout provider webhook. When set, "Pay" on an approved freelancer
    *  invoice POSTs `{invoiceId, amountCents, currency, freelancerUserId, tenantId}`
    *  here (Bearer PAYOUT_WEBHOOK_KEY) and marks the invoice paid with the returned

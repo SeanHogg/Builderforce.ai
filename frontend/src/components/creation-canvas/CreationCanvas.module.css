@@ -1216,6 +1216,32 @@
 .drawingSurface text { fill:var(--canvas-muted); font:11px var(--font-sans); }
 .node_frame { width:520px; min-height:300px; border-width:2px; border-style:dashed; box-shadow:none; }
 .node_frame .nodeHeader { background:rgba(255,255,255,.72); }
+
+/* --- Sticky notes --------------------------------------------------------
+   A sticky is the one card that draws NO chrome:no icon, no title bar, no
+   status pill, no ••• button. That is what makes it a sticky rather than a
+   Note with a colour — the whole object is its text.
+
+   The header is hidden here rather than branched around in CreationNode so
+   the card keeps ONE structure; only the sticky declines to paint it. The
+   ••• affordance is not lost — the node's own context menu still opens on
+   right-click, which is where a person reaches for it on a board anyway.
+
+   The pigment is author-chosen and arrives as an inline background (see
+   `authoredColors.ts`), and every value in STICKY_COLORS is pale, so the ink
+   is `--canvas-ink-on-light` in BOTH themes: the surface is the author's, not
+   the theme's, so it does not flip when the board does. */
+.node_sticky { width:190px; min-height:170px; border:0; border-radius:var(--radius-sm); box-shadow:0 2px 6px rgba(16,32,58,.18); }
+.node_sticky .nodeHeader { display:none; }
+.node_sticky .nodeBody { padding:12px; }
+.stickyText,
+.stickyInput {
+  width:100%; min-height:132px; margin:0; padding:0; border:0; background:transparent;
+  color:var(--canvas-ink-on-light); font-family:inherit; font-size:13px; line-height:1.4;
+  overflow:auto; overflow-wrap:anywhere; white-space:pre-wrap; resize:none;
+}
+.stickyInput::placeholder { color:var(--canvas-ink-on-light); opacity:.45; }
+.stickyInput:focus-visible { outline:2px solid var(--canvas-accent); outline-offset:3px; }
 .frameBody { min-height:220px; display:grid; align-content:start; gap:5px; padding:4px; color:#5d527d; }
 .canvasToolActive { border-color:#5b5ce2!important; background:#eeebff!important; color:#503cc9!important; }
 .templateMenu { position:absolute; z-index:18; right:190px; top:42px; width:330px; max-height:70vh; overflow:auto; padding:12px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:#fff; box-shadow:0 18px 55px rgba(60,48,36,.18); }

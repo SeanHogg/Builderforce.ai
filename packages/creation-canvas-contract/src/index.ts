@@ -9,6 +9,7 @@ export * from './people';
 export * from './dataScience';
 export * from './triggers';
 export * from './operations';
+export * from './resume';
 // The counterparty vocabulary — `PARTY_ROLES`, `ACCOUNT_RELATIONSHIPS`, `partyRef`.
 // Declared in this package rather than in either consumer because the canvas `account`
 // kind, the API's `party_roles` writer and the kernel's own role column must mean the
@@ -288,6 +289,25 @@ export const CREATION_OBJECT_KINDS = [
   'table', 'spreadsheet', 'chart', 'map', 'report', 'kpi', 'prototype', 'code', 'browser', 'llm', 'voice', 'video',
   'image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template',
   'document', 'slides', 'diagram', 'knowledge', 'file', 'url', 'note', 'drawing', 'frame', 'comment', 'timer',
+  // The UNTYPED escape hatch, and the only one on this list.
+  //
+  // Every other kind here is a claim about what a thing IS, which is the whole
+  // argument for a typed canvas: a `task` has an assignee, a `testRun` has a verdict,
+  // and the board can compute over both. A sticky claims nothing. It is a coloured
+  // rectangle with words on it.
+  //
+  // It exists for two reasons that are really one reason. First, a workshop starts
+  // before anyone knows what the objects are — forcing a person to pick from 180 kinds
+  // to write down "customers hate the onboarding" is asking them to model a problem
+  // they are still discovering. Second, it is what a Miro board is MADE of, and an
+  // import that has nowhere to put a sticky note cannot claim to have imported the
+  // board. `miroImport` maps `sticky_note`, `text` and `shape` here.
+  //
+  // The knowledge board (`components/canvas/canvasModel.ts`) has had stickies since it
+  // shipped; this is the same object arriving on the canvas that is actually the front
+  // door, and it deliberately shares that board's pigment palette rather than choosing
+  // a second one.
+  'sticky',
   'roadmap', 'prd', 'release', 'task', 'mockup', 'mockupSet', 'featureSummary', 'team', 'role', 'mcp',
   'evermind', 'projectComparison', 'standup',
   'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication',

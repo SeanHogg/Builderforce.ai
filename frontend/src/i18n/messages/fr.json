@@ -15198,7 +15198,8 @@
       "shipment": "Expédition",
       "incident": "Incident",
       "book": "Livre",
-      "account": "Compte"
+      "account": "Compte",
+      "sticky": "Pense-bête"
     },
     "twilioSetup": {
       "title": "Intégration Twilio",

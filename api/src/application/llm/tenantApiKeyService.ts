@@ -10,6 +10,7 @@ import type { Env } from '../../env';
 import { llmUsageLog, tenantApiKeys } from '../../infrastructure/database/schema';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 import { invalidateKeyCache } from '../../infrastructure/auth/keyResolutionCache';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import {
   deserializeScopes as sharedDeserializeScopes,
   hasScope as sharedHasScope,
@@ -206,7 +207,15 @@ export async function resolveTenantApiKey(
       allowedOrigins: tenantApiKeys.allowedOrigins,
     })
     .from(tenantApiKeys)
-    .where(and(eq(tenantApiKeys.keyHash, keyHash), isNull(tenantApiKeys.revokedAt)))
+    // Not tenant-filtered, and cannot be: resolving the credential is HOW the
+    // tenant is learned. Possession of the secret is the access predicate, which
+    // is exactly what `share_token` names.
+    .where(acrossTenants(
+      tenantApiKeys,
+      'share_token',
+      eq(tenantApiKeys.keyHash, keyHash),
+      isNull(tenantApiKeys.revokedAt),
+    ))
     .limit(1);
   if (!row) return null;
 
@@ -221,9 +230,17 @@ export async function resolveTenantApiKey(
   };
 }
 
-/** Stamp a key as used. Fire-and-forget from the caller's `waitUntil`. */
+/**
+ * Stamp a key as used. Fire-and-forget from the caller's `waitUntil`.
+ *
+ * `keyId` only ever comes from a `resolveTenantApiKey` that just succeeded, so
+ * the same possession-of-the-secret predicate governs it.
+ */
 export async function touchTenantApiKey(db: Db, keyId: string): Promise<void> {
-  await db.update(tenantApiKeys).set({ lastUsedAt: new Date() }).where(eq(tenantApiKeys.id, keyId));
+  await db
+    .update(tenantApiKeys)
+    .set({ lastUsedAt: new Date() })
+    .where(acrossTenants(tenantApiKeys, 'share_token', eq(tenantApiKeys.id, keyId)));
 }
 
 /** List every key for a tenant, newest first. Raw key is never returned. */

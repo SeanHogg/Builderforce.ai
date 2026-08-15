@@ -149,8 +149,8 @@ export function CanvasAdsPanel({ onClose }: CanvasAdsPanelProps) {
     setBusy(true);
     setError(null);
     try {
-      const manifest = await connectorsApi.get(option.connectorKey);
-      setAuthFields(authFieldsFor(manifest));
+      const detail = await connectorsApi.get(option.connectorKey);
+      setAuthFields(authFieldsFor(detail.manifest));
       setAuthValues({});
       setConnectionName(option.label);
       setConnecting(option);
@@ -184,7 +184,7 @@ export function CanvasAdsPanel({ onClose }: CanvasAdsPanelProps) {
   const disconnect = useCallback(async (account: AdAccount) => {
     setBusy(true);
     try {
-      await connectorsApi.deleteConnection(account.id);
+      await connectorsApi.removeConnection(account.id);
       await refreshAccounts();
       setCampaigns([]);
     } catch (failure) {

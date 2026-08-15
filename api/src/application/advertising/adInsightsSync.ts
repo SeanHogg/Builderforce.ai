@@ -24,7 +24,7 @@
  * partial run leaves campaigns without their newest day, never days without a campaign.
  */
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lte } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { adCampaigns, adInsights, connectorConnections } from '../../infrastructure/database/schema';
@@ -34,7 +34,7 @@ import {
   readAccountCampaignsLive, readAdInsights, resolveSpendableAccounts, type ResolvedAdAccount,
 } from './adsService';
 import {
-  ADS_CONNECTOR_KEYS, AdsProviderError, type AdCampaignRemote, type AdNetwork,
+  ADS_CONNECTOR_KEYS, AdsProviderError, isAdNetwork, type AdCampaignRemote, type AdNetwork,
 } from './adsProviders';
 
 /**
@@ -244,4 +244,107 @@ export async function runAdInsightsSweep(
     failed += results.filter((result) => result.error).length;
   }
   return { tenants: rows.length, accounts, daysWritten, failed };
+}
+
+/** One day of one campaign, as the ledger holds it plus the parent's identity. */
+export interface AdInsightLedgerRow {
+  date: string;
+  platform: string;
+  campaignId: number;
+  campaignName: string;
+  /** Null when the network never told us what the campaign was for. */
+  objective: string | null;
+  status: string;
+  spendCents: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  currency: string;
+}
+
+export interface AdInsightLedgerRead {
+  window: { since: string; until: string };
+  rows: AdInsightLedgerRow[];
+  totals: {
+    spendCents: number;
+    impressions: number;
+    clicks: number;
+    conversions: number;
+    /** Derived, never stored — a stored rate is a number its own inputs can
+     *  contradict the moment a day is restated. Null rather than 0 when the
+     *  denominator is 0, because "no clicks yet" is not "£0.00 per click". */
+    costPerClickCents: number | null;
+    costPerConversionCents: number | null;
+    clickThroughRate: number | null;
+  };
+}
+
+/**
+ * Read the ad-spend LEDGER — what the sweep stored, not what the networks say now.
+ *
+ * ── WHY THIS IS AN APPLICATION USE CASE AND NOT A ROUTE HANDLER ──────────────
+ * It was a handler: `presentation/routes/adsRoutes.ts` imported `adInsights`,
+ * `adCampaigns` and `scopedToTenant` and assembled the join itself, which the
+ * layering guard caught as the first new presentation→infrastructure import in
+ * the frozen baseline. The rule it broke is not bookkeeping. A route that owns a
+ * query owns the tenant scoping in it, and `scopedToTenant` applied in a
+ * presentation file is a tenancy decision sitting where no other caller can reuse
+ * it and no test that exercises the use case will cover it.
+ *
+ * Reading our own ledger rather than the networks is what makes the panel fast,
+ * makes it work when a grant has expired, and makes the number on screen the same
+ * number every other rollup sees.
+ */
+export async function readAdInsightsLedger(
+  db: Db,
+  tenantId: number,
+  query: { since: string; until: string; networks?: readonly string[] },
+): Promise<AdInsightLedgerRead> {
+  const networks = (query.networks ?? []).filter(isAdNetwork);
+  const withinWindow = and(gte(adInsights.date, query.since), lte(adInsights.date, query.until));
+  const rows = await db
+    .select({
+      date: adInsights.date,
+      platform: adInsights.platform,
+      campaignId: adInsights.campaignId,
+      campaignName: adCampaigns.name,
+      objective: adCampaigns.objective,
+      status: adCampaigns.status,
+      spendCents: adInsights.spendCents,
+      impressions: adInsights.impressions,
+      clicks: adInsights.clicks,
+      conversions: adInsights.conversions,
+      currency: adInsights.currency,
+    })
+    .from(adInsights)
+    // The campaign name lives on the parent; joining here is what lets ONE query
+    // answer the whole panel instead of a lookup per row.
+    .innerJoin(adCampaigns, eq(adCampaigns.id, adInsights.campaignId))
+    .where(scopedToTenant(
+      adInsights,
+      tenantId,
+      networks.length ? and(withinWindow, inArray(adInsights.platform, networks)) : withinWindow,
+    ))
+    .orderBy(desc(adInsights.date));
+
+  const totals = rows.reduce(
+    (acc, row) => ({
+      spendCents: acc.spendCents + row.spendCents,
+      impressions: acc.impressions + row.impressions,
+      clicks: acc.clicks + row.clicks,
+      conversions: acc.conversions + row.conversions,
+    }),
+    { spendCents: 0, impressions: 0, clicks: 0, conversions: 0 },
+  );
+
+  return {
+    window: { since: query.since, until: query.until },
+    rows,
+    totals: {
+      ...totals,
+      costPerClickCents: totals.clicks > 0 ? Math.round(totals.spendCents / totals.clicks) : null,
+      costPerConversionCents: totals.conversions > 0 ? Math.round(totals.spendCents / totals.conversions) : null,
+      clickThroughRate: totals.impressions > 0 ? totals.clicks / totals.impressions : null,
+    },
+  };
 }

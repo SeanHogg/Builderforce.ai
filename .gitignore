@@ -47,6 +47,10 @@ worker/test-output/
 # Temporary Chrome profile created by local browser automation.
 .tmp-chrome-artifact/
 
+# Atomic-write scratch files (foo.ts.tmp.<pid>.<rand>) — renamed away mid-scan,
+# which otherwise aborts `git add -A` with "unable to index file".
+*.tmp.[0-9]*
+
 # Ignore local secrets
 worker/secrets.json
 # Cloudflare Workers local secrets (NEON_DATABASE_URL etc.) — never commit

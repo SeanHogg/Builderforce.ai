@@ -15199,7 +15199,8 @@
       "shipment": "Shipment",
       "incident": "Incident",
       "book": "Book",
-      "account": "Account"
+      "account": "Account",
+      "sticky": "Sticky note"
     },
     "twilioSetup": {
       "title": "Twilio integration",

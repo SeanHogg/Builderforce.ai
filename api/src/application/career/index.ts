@@ -22,6 +22,8 @@
 
 export * from './lexicon';
 export * from './resumeModel';
+export * from './resumeDocument';
+export * from './resumeExtract';
 export * from './resumeAnalysis';
 export * from './jobMatch';
 export * from './interviewKit';

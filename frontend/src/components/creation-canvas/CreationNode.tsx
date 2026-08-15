@@ -12,6 +12,7 @@ import {
   EMPTY_SPEC_BOARD, makeSpecDeriveBoard, specKindReadsBoard, type SpecDeriveBoard,
 } from '@/lib/specObjects';
 import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL } from './authoredColors';
+import { STICKY_COLORS } from '@/components/canvas/canvasModel';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
@@ -125,6 +126,30 @@ function asRecord(value: unknown, fallback: Record<string, unknown>): Record<str
 
 function AuthoredContent({ data, fallback }: { data: CreationNodeData; fallback: string }) {
   return <p className={styles.authoredContent}>{authoredText(data) || fallback}</p>;
+}
+
+/**
+ * A sticky note: its text, on its pigment, and nothing else.
+ *
+ * The text lives in `title` rather than `content` because a sticky HAS no second
+ * field — see the kind's note in the contract. The header is hidden by
+ * `.node_sticky` in CSS rather than branched around here, so the card keeps one
+ * structure and the sticky just declines to draw the chrome.
+ *
+ * `nodrag`/`nowheel` are what let a person select and scroll text inside a node
+ * React Flow would otherwise pan the board with.
+ */
+function StickyBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
+  const t = useTranslations('creationCanvas.sticky');
+  const text = typeof data.title === 'string' ? data.title : '';
+  if (!onEdit) return <p className={styles.stickyText}>{text || t('empty')}</p>;
+  return <textarea
+    className={`${styles.stickyInput} nodrag nowheel`}
+    value={text}
+    aria-label={t('label')}
+    placeholder={t('placeholder')}
+    onChange={(event) => onEdit({ title: event.target.value })}
+  />;
 }
 
 function CourseBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
@@ -2339,10 +2364,14 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   // creative kinds did: a studio tile followed by a second, redundant block
   // repeating the same authored text. They are folded in from the one set that
   // already lists them, so a new creative kind cannot reintroduce the same bug.
-  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','practice','game','resume','socialFeed','socialPost','socialCampaign','erd','datasource','dataContract','dataQuality','metric','lineage','testPlan','testCase','testRun','defect', ...SPEC_KINDS, ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
+  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','video','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','practice','game','resume','socialFeed','socialPost','socialCampaign','erd','datasource','dataContract','dataQuality','metric','lineage','testPlan','testCase','testRun','defect','sticky', ...SPEC_KINDS, ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
   const authoredSize = useAuthoredNodeSize(id);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || AUTHORED_FRAME_FILL), borderColor: String(data.frameBorder || AUTHORED_FRAME_BORDER) } : undefined;
-  const cardStyle = { ...frameStyle, ...authoredSize };
+  // The author's pigment, applied the same way the frame's is. Both are colours a
+  // PERSON chose and the board stores, which is why they arrive as inline style and
+  // not as a theme token — see `authoredColors.ts`.
+  const stickyStyle = data.kind === 'sticky' ? { background: String(data.stickyColor || STICKY_COLORS[0]) } : undefined;
+  const cardStyle = { ...frameStyle, ...stickyStyle, ...authoredSize };
   // `data-testid` is per KIND, not per instance: a test asks for "the testCase card",
   // and an id built from the node's uuid would change every run. The instance is
   // addressed by `data-node-id` when a test needs a specific one, and both are what
@@ -2411,6 +2440,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {CREATIVE_STUDIO_KINDS.has(data.kind) && <CreativeStudioBody data={data} />}
         {data.kind === 'game' && <GameBody data={data} />}
         {data.kind === 'note' && <AuthoredContent data={data} fallback={t('noteFallback')} />}
+        {data.kind === 'sticky' && <StickyBody data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} />}
         {data.kind === 'project' && <ProjectBody data={data} />}
         {data.kind === 'roadmap' && <div className={styles.roadmap}>{(Array.isArray(data.items) && data.items.length ? data.items.slice(0, 12) : [{ title: 'Validate narrative', phase: 'Now' }, { title: 'Executive review', phase: 'Next' }, { title: 'Measure adoption', phase: 'Later' }]).map((raw, index) => { const item = asRecord(raw, { title: raw, phase: index < 2 ? 'Now' : 'Next' }); return <div key={`${String(item.title)}-${index}`}><b>{String(item.phase || item.status || t('phaseIndex', { index: index + 1 }))}</b><span>{String(item.title || item.name || t('itemIndex', { index: index + 1 }))}</span>{item.description ? <span>{String(item.description)}</span> : null}</div>; })}</div>}
         {data.kind === 'inbox' && <InboxBody data={data} />}

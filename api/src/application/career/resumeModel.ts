@@ -124,6 +124,25 @@ export function normalizeDateToken(raw: string | undefined): string | null {
   return null;
 }
 
+/**
+ * The first date RANGE in one line, or null.
+ *
+ * Exported because two readers need the same answer about the same line: `parseResume`
+ * scans the whole document for tenure analysis, and `resumeDocument.ts` uses a date
+ * range as the ANCHOR that says "an employment entry starts here". Written twice, the
+ * scorer and the document builder would disagree about where a job began.
+ */
+export function matchDateRange(line: string): ResumeDateRange | null {
+  for (const [style, pattern] of DATE_PATTERNS) {
+    // A fresh RegExp per call: the module-level literals carry /g state.
+    const match = new RegExp(pattern.source, pattern.flags.replace('g', '')).exec(line);
+    if (match) {
+      return { raw: match[0], start: normalizeDateToken(match[1]), end: normalizeDateToken(match[2]), style };
+    }
+  }
+  return null;
+}
+
 function classifyHeading(line: string): ResumeSectionKind | null {
   const trimmed = line.replace(/[#*_:]/g, '').trim();
   if (!trimmed || trimmed.length > 60) return null;

@@ -29,6 +29,11 @@ import {
   type DataArchitectureKind,
 } from '@/lib/dataArchitectureObjects';
 import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
+// The sticky palette is the KNOWLEDGE board's, imported rather than re-declared: two
+// lists of the same six pigments is exactly the duplication that lets one board drift
+// a shade away from the other. creation-canvas already depends on components/canvas
+// (CanvasCommands, Canvas3DView), so this is the direction the graph already runs.
+import { STICKY_COLORS } from '@/components/canvas/canvasModel';
 import { DEFAULT_MODALITY } from '@/lib/modality';
 import { DEFAULT_PITCH_COMPETITION_ID } from '@/lib/pitchCompetition';
 import { COURSE_EXPORT_STANDARDS, emptyCourse } from '@/lib/courseLms';
@@ -195,6 +200,11 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'file', label: 'File', icon: '□', group: 'Knowledge', createData: () => ({ kind: 'file', title: 'Attached file' }) },
   { kind: 'url', label: 'URL', icon: '↗', group: 'Knowledge', createData: () => ({ kind: 'url', title: 'Web resource', url: '', viewport: 'desktop' }) },
   { kind: 'frame', label: 'Frame', icon: '□', group: 'Collaborate', createData: () => ({ kind: 'frame', title: 'Presentation frame', status: 'Canvas frame' }) },
+  // The untyped card. `title` IS the sticky's text — a sticky has no second field to
+  // put a subtitle in, and giving it one would be inventing structure the object is
+  // defined by not having. The pigment comes from the knowledge board's palette
+  // (`canvasModel.STICKY_COLORS`) rather than a second list of the same six colours.
+  { kind: 'sticky', label: 'Sticky note', icon: '▪', group: 'Collaborate', createData: () => ({ kind: 'sticky', title: '', stickyColor: STICKY_COLORS[0] }) },
   { kind: 'drawing', label: 'Drawing', icon: '⌁', group: 'Collaborate', createData: () => ({ kind: 'drawing', title: 'Sketch', subtitle: 'Draw and annotate an idea.' }) },
   { kind: 'comment', label: 'Comment', icon: '●', group: 'Collaborate', createData: () => ({ kind: 'comment', title: 'Comment thread' }) },
   { kind: 'timer', label: 'Timer', icon: '◷', group: 'Collaborate', createData: () => ({ kind: 'timer', title: 'Focus timer', status: '05:00' }) },
@@ -431,6 +441,11 @@ const BASE_MUTABLE_FIELDS = {
   file: ['content', 'fileName', 'mimeType', 'url', 'fileSize', 'summary'],
   url: ['content', 'url', 'sources', 'viewport', 'pageTitle'],
   frame: ['content', 'framePurpose', 'frameColor', 'frameBorder'],
+  // `stickyShape` records what the object was on the board it came FROM — a Miro
+  // `shape` imports as a sticky with its geometry remembered, so a re-export can put
+  // the rectangle back and a reader can see it was never a note. It is authorable
+  // because a person may legitimately turn a sticky into a rounded card.
+  sticky: ['content', 'stickyColor', 'stickyShape'],
   drawing: ['content', 'points', 'drawingWidth', 'drawingHeight', 'stroke', 'strokeWidth'],
   comment: ['content', 'resolved', 'mentions'],
   timer: ['content', 'duration', 'remaining', 'running'],
@@ -549,6 +564,10 @@ export function creationObjectMutableFields(kind: CreationObjectKind): readonly 
  * NOT listed here is an artifact whose whole value is its content.
  */
 const SHELL_IS_LEGITIMATE: ReadonlySet<CreationObjectKind> = new Set<CreationObjectKind>([
+  // A sticky is created empty BY DESIGN — you drag one out and then type on it, which
+  // is the entire interaction. It is the purest member of the "canvas furniture" set
+  // this exemption was written for.
+  'sticky',
   'build', 'chat', 'dataset', 'frame', 'comment', 'selection', 'timer', 'terminal',
   'browser', 'url', 'file', 'repository', 'service', 'diagnostics', 'inbox',
   // A social feed and a pinned post are READ from connected accounts, exactly as an

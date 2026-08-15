@@ -1,3 +1,302 @@
+## ✅ RESOLVED 2026-08-15 — A developer is a tenant. Only the tenant survives.
+
+Migration **0471** (`0471_publisher_is_a_tenant.sql`). Closes two Gap Register entries and
+narrows a third, on an explicit owner decision.
+
+### What was wrong
+
+Migration 0467 shipped the developer portal with a **second party model beside the one that
+already existed**: `developer_orgs` was a publisher, `developer_org_members` was its staff,
+and `developer_api_keys` was its credential. Three guards said so at the time and were
+argued with rather than listened to:
+
+- `check-signature-duplication` scored `developer_api_keys` against `tenant_api_keys` at
+  **0.68 weighted column overlap** — "one of these is the other one". 0467's answer was to
+  REMOVE a column (`allowed_origins`) until the score dropped, which dodges a threshold
+  rather than resolving a duplicate.
+- `check-shape-lint` said `developer_org_members` was the kernel `membership` shape with
+  the tenant taken out. It was.
+- `check-tenant-column` was told, in prose, that a publisher "is not a tenant".
+
+The collision had also been **hidden by a duplicate migration prefix**: two migrations both
+claimed `0465`, and `check:schema` reads migrations into a map keyed by prefix — so one of
+the pair was silently dropped from the drift comparison and the developer-portal tables were
+never actually checked. Renumbering to `0468` un-masked it.
+
+### The decision
+
+> *"a developer is a tenant. only tenant survives."*
+
+Publishing is something a **workspace does**, not a second kind of party.
+
+### What landed
+
+| Was | Is |
+|---|---|
+| `developer_orgs` | nine `publisher_*` columns on `tenants` |
+| `developer_org_members` | `tenant_members` |
+| `developer_api_keys` | `tenant_api_keys` |
+| `extension_packages.developer_org_id` | `extension_packages.tenant_id` |
+| `owner`/`admin`/`publisher` ladder | `application/tenant/tenantRoles.ts` |
+
+Three tables and one column removed; nine nullable columns added to the party that already
+existed. Every one is functionally dependent on `tenants.id` and 1:1 with the row — 3NF as
+columns, and never a separate entity. It is also how this platform already says "this party
+is also an X": `users.available_for_hire`, `field_jobs.discipline`, `ide_agents.builtin_kind`.
+
+`publisher_state` carries **both** facts on one ordered scale (`none` → `unverified` →
+`domain_verified` → `identity_verified`), so the combination nobody wants — not a publisher,
+yet identity-verified — is unrepresentable rather than merely unlikely.
+
+**Nothing stops working.** Issued `bfai_*` keys were copied into `tenant_api_keys` with
+their SHA-256 hash intact and still authenticate; resolution is by hash, so the prefix was
+only ever cosmetic. They are grandfathered onto the any-origin allowlist because `/api/v1`
+is documented as the endpoint external sites embed listings with, and inheriting the tenant
+default of server-only would have revoked exactly that usage on deploy day. New keys are
+minted `bfk_*` and default to server-only.
+
+The thing 0467 was actually protecting is **improved**, not lost:
+`developer_api_keys.user_id` was `ON DELETE CASCADE`, so a vendor's production key died with
+the offboarding of the engineer who minted it. `tenant_api_keys.created_by_user_id` is
+`ON DELETE SET NULL`. The key outlives its minter because the *workspace* owns it — the same
+answer 0467 wanted, and a weaker one than a whole parallel party model had to be built for.
+
+### What this deleted, and why that is the win
+
+- **No member endpoints.** `POST /orgs/:id/members` and its delete are gone. A publisher's
+  staff are workspace members, managed where workspace membership has always been managed.
+  No second membership to keep in sync, and no way for a vendor's engineer to be inside the
+  company but outside the publisher.
+- **No publisher id in any path.** `/api/developer/publisher`, `/packages` — the JWT already
+  settles which workspace this is, so an id in the URL would be a second, forgeable answer.
+- **No registration form.** The workspace already has a name and a slug; asking again is how
+  `/developers/acme` ends up owned by a workspace called something else.
+- **No `/api/v1/developer/keys`.** Minting, listing and revoking happen where every other
+  tenant key is managed, with the usage trail and origin allowlist that path already had.
+- **`generateApiKey`'s `'bfai'` prefix** — a prefix nothing can issue is not a parameter.
+
+### Along the way
+
+- `/api/v1` gained the **origin allowlist** it never had, and now requires `read:catalog`.
+- Four reads that had no tenant filter now DECLARE themselves rather than sitting unscoped:
+  `acrossTenants(extensionPackages, 'public_catalogue', …)` for the catalogue, the
+  platform-wide slug check and the install counter; `acrossTenants(tenantApiKeys,
+  'share_token', …)` for credential resolution, where possession of the secret IS the access
+  predicate. The two package UPDATEs became properly `scopedToTenant`.
+- `application/tenant/tenantRoles.ts` — the tenant role ladder, declared once. It had been an
+  ordered scale since the schema was written, with the order living only in people's heads.
+
+**Verified:** API typecheck clean; frontend typecheck clean; 85 tests across
+`developer`/`marketplace`/`tenant`; `check:schema` (which was RED before this pass),
+`check:signature-duplication`, `check:shape-lint`, `check:tenant-column`, `check:tenant-scope`,
+`check:migrations`, `check:domain-boundary`, `check:model-coverage`, `check:table-adoption`,
+`check:polymorphic-fk`, `check:db-access`, `check:roadmap` all green. Localized in all five
+catalogs. PRD 24 §5.1 rewritten with the superseded proposal kept visible above the line.
+
+---
+
+## ✅ RESOLVED 2026-08-15 — Founder operations: the ten unblocked gaps, and the seventeenth seat
+
+The founder review found twenty-seven gaps of one defect class — *an act that ends at a
+card* — and ten of them had no prerequisite. All ten are closed, in migration **0469**
+(`0469_founder_operations.sql`). The other seventeen were gated by something real and
+stay in the register; three of them are now unblocked by this pass and their entries say so.
+
+### FO-A1 · There is no CUSTOMER object
+
+`company` is us, `competitor` is them, `salesContact` is a person, `customerSegment` is a
+cohort — and nothing was an account you had **won**. So `invoice.customer`,
+`bill.vendor` and `contract.counterparty` each told the model to "match it to a `company`,
+`salesContact` or `contract` on the board", and joining a contract to its invoices was a
+comparison two spellings could break.
+
+**No new table.** `party_roles` (kernel) already holds exactly one row per (tenant, party
+kind, party ref, role) with a unique index proving it: the counterparty EXISTED and the
+canvas could not see it. A second customer store is the collision `finance_soc_controls`
+exists to record. What landed instead:
+
+- `packages/creation-canvas-contract/src/parties.ts` — `PARTY_ROLES`,
+  `ACCOUNT_RELATIONSHIPS` and `partyRef()`, declared in the package **both** the frontend
+  and the API already import, so the canvas kind, the API's writer and the kernel's own
+  column mean the same thing on purpose rather than by coincidence. `equity_holder` is
+  introduced here as a role VALUE (the one FO-D1 needs) with the argument for why it is
+  not `investor`: a founder holds equity and was never an investor; a fund that passed is
+  an investor with no equity, and one role for both would put every tyre-kicker in the
+  pipeline onto the cap table.
+- An `account` canvas kind whose `partyRef` binds to that row, and
+  `canvas_sync_account` — the write-to-board that projects the workspace's real
+  counterparties onto the canvas, matching on `partyRef` and never on a display name.
+
+`history` — the account's own open invoices and live contract — is deliberately **not**
+declared. A field with no writer is the defect the academic vocabulary already
+demonstrates (nineteen `derived: true` cells nothing ever writes); it arrives with FO-A3.
+
+### FO-B1 · `PublishedForm` was declared and implemented nowhere
+
+The contract argued nine question types, three audiences and an `anonymous` boolean
+distinction by distinction, and a grep across `api/src`, `frontend/src`, `clients` and
+`packages` found **zero consumers of any of it**.
+
+**And the store was never the missing half.** `question_sets` and `responses` had already
+absorbed twelve survey tables and thirteen answer tables — building `published_forms` +
+`form_responses` beside them would have been the third response store the contract's own
+note warns about. What was missing was PUBLICATION, and publication is columns:
+`slug` (globally unique, nullable), `anonymous`, `audience_kind`,
+`confirmation_message`, `object_id`. Plus `responses.submission_id`, without which
+"how many people responded" is unanswerable on exactly the forms that are anonymous.
+
+One genuinely new table: `form_recipients`, the per-recipient credential — without it
+`audience_kind = 'namedRecipients'` is a lie told by a column.
+
+`application/collection/formPublishing.ts` holds every rule, so no second caller can reach
+the store through a path that forgot one — including the one that matters: **an anonymous
+form discards the respondent even when the caller supplies one.** The public responder
+(`/f/<slug>`) renders one accessible control per declared type, and the switch is
+exhaustive over `FormFieldType`, so a tenth type fails to compile rather than silently
+becoming a text box.
+
+### FO-B2 · The signature engine was declared and implemented nowhere
+
+`SIGNATURE_PARTY_STATUSES`, `SIGNATURE_INTENTS`, `isTerminalPartyStatus` and
+`isAgreedPartyStatus` were all unused — and `isTerminalPartyStatus` documents the three
+call sites it was written for, none of which existed. All three are now in
+`application/signature/signatureEngine.ts` and they **call the contract's predicates**
+rather than re-testing statuses, which is the point of having them: `declined` is terminal
+and is NOT completion, which `=== 'signed'` gets right and `!== 'pending'` does not.
+
+`signature_requests` + `signature_parties`, a public signer at `/sign/<token>`, and a
+daily reminder sweep that expires first and chases second. The document body is **frozen
+onto the request** when it is sent: the evidence an auditor needs is what that person saw
+on that day, not what the document says now. Both entities are read-only through the
+generic layer — a generic PATCH that could set `status = 'signed'` would make the entity
+browser a machine for manufacturing agreements nobody gave.
+
+Checked for a collision and there is none: `delivery.sign_offs` is a workspace MEMBER
+approving version N of an internal subject, with no counterparty, no credential and no
+document.
+
+### FO-C1 · There was no invoice HEADER — and FO-C3 · no payables header either
+
+`invoice_line_items.invoice_ref` was a bare `varchar(64)` pointing at nothing: the lines
+existed and the invoice did not. `finance.expenses` does not cover the payable side — an
+expense is a reimbursement CLAIM, not a vendor's demand with a due date and an approval.
+
+Two headers (`invoices`, `bills`) and **one** line-item table serving both, discriminated
+by `document_kind` — because receivable and payable have different invariants (an invoice
+is issued and chased; a bill is APPROVED, scheduled and disputed) while a billed line has
+no invariant that differs by direction, so a `bill_line_items` table would be the
+shape-copy §0 forbids.
+
+The three payable acts have handlers, and `bills` is read-only through the generic layer
+for one reason: `approved_by` is, in the object's own words, "the one field on this object
+that can cause real harm". `approveBill` refuses when the approver is the person who
+entered the bill, and the approver comes from the SESSION — a route that accepted
+`{ approvedBy }` would make separation of duties a suggestion.
+
+No stored ageing and no stored total: ageing is `now() - due_at` and is computed on read,
+because a stale ageing is worse than none.
+
+### FO-C6 · No payroll and no tax, in any port
+
+`payroll` appeared only as a word in a lexicon; sales tax and VAT appeared nowhere at all.
+Seven manifests in `connectors/defaults/payroll.ts` — Gusto, Rippling, Deel, ADP, a
+vendor-neutral **payroll file** connector, Stripe Tax and Avalara — as DATA, validated by
+the same `parseConnectorManifest` gate tenant input passes.
+
+Every one leads with a READ. The platform must not become a payroll engine: withholding
+across jurisdictions is a regulated obligation with real liability, and a tax rate table
+that is out of date is worse than none because a wrong one gets used. What the platform
+owes a founder is the ability to read the run that happened, so the burn on the forecast
+is money that actually left.
+
+### FO-E3 · `investorUpdate.send` had no delivery
+
+Now sends through `campaignTransports` — the same platform / connected-mailbox / SendGrid
+resolution a campaign uses, including the `retryable` distinction that took the mailbox
+work three attempts to get right. A non-retryable failure stops the run rather than
+burning the rest of the list into `failed` rows.
+
+The act stays GATED, so a model still cannot fire it. Recipients come from the object's
+own `recipients` rows and from **nowhere else** — harvesting addresses out of a
+`fundingRound`'s investor table would be the convenient version and the wrong one, because
+those rows carry firm names, not consent to be emailed.
+
+### FO-F1 · The canvas pipeline and the real CRM were two systems of record
+
+The bridge between them was a **prompt instruction** — "mirror the returned canonical id
+and current values into the matching canvas object" — a synchronisation protocol whose
+only enforcement was a language model remembering a paragraph, failing in the direction
+nobody notices.
+
+The fix is a direction, not a better prompt. `application/revenue/pipelineProjection.ts`
+reads the deals and their stages and returns the exact shape `readPipelineModel` already
+consumes, so the card renders unchanged and its contents are no longer authored.
+`canvas_move_deal` writes the DEAL and rewrites the board from the same response, in one
+call — there is no "now mirror it" step to forget. `deals.outcome` moves with the stage,
+derived from `pipeline_stages.outcome`, so a deal cannot sit in a column called
+"Closed Won" while every report counts it as open.
+
+### FO-G1 · No legal/counsel domain existed
+
+`governance` belongs to Security and means SOC 2 — the compliance posture of a company
+that already exists. Nothing owned incorporating one, appointing a registered agent,
+qualifying in a second state, assigning the founders' IP or filing a mark. The register
+recorded the state as "neither", which is how the first ninety days of a company came to
+have no home.
+
+The seventeenth seat: `legal`, owned by **Counsel**, with `legal_entities`,
+`legal_registrations`, `intellectual_property` and `legal_matters`. Trademarks, patents,
+designs, copyrights and brand domains are ONE table, because six would be six copies of
+one renewal calendar. `assigned_from` is the founder-IP column, and it is why this belongs
+to the first ninety days rather than the fifth year.
+
+The seat arrives with its numbers real: `legalRollup.ts` writes `legal.open_matters` and
+`legal.renewals_due` — declaring metrics with no writer is exactly what `financeRollup`
+was built to stop doing.
+
+### FO-D5 · There was no co-founder anything (matching half)
+
+`grep -i 'co-?founder'` returned no matches anywhere in the frontend. `cofounder_profiles`
++ `cofounder_introductions`, a pure scorer, and a surface at `/cofounder` — reachable as a
+Workforce tab, not a URL only insiders know.
+
+The scorer is pure so it can be tested as a table and, more importantly, **explained**: a
+score with no reasons is a recommendation somebody takes on faith about the most
+consequential professional decision they will make. Complementarity dominates, and two
+people covering the same half of a company is reported as a reason AGAINST rather than as
+a missing positive. Equity expectations summing over 100 are called an impossibility, not
+a preference mismatch.
+
+It RANKS; a human ASKS; the other human answers. Manufacturing a mutual "match" out of a
+similarity score would assert an agreement neither party gave.
+
+Profiles are `private` by default: a profile that became discoverable by default would
+publish somebody's intention to leave their job.
+
+### Two primitives the pass added on the way past
+
+- **`acrossTenants(…, 'scheduled_sweep')`** — a cron sweep has no caller and therefore no
+  tenant to filter by. Several sweeps sit in the frozen tenant-scope baseline for a
+  decision nobody disagrees with, which makes the debt number report work that is not
+  owed. It is now a declared reason that still demands an access predicate.
+- **`--content-wide`** — the wide half of the `--content-narrow` family, which the
+  co-founder grid was reaching for before it existed.
+
+### Verified
+
+`api` `tsgo --noEmit` clean for every file this pass touched; `check:schema`,
+`check:migrations`, `check:shape-lint`, `check:tenant-column`, `check:polymorphic-fk`,
+`check:domain-boundary`, `check:tenant-scope`, `check:layering`, `check:table-adoption`,
+`check:canvas-tools` and `check:prompt-tools` all green. Frontend: 254 test files / 2657
+tests pass, `check:design-tokens`, `check:edge-runtime`, `check:destinations`,
+`check:api-transport` and `check:declared-deps` green. New tests: the pure co-founder
+scorer as a table, the form question reader as the boundary it is, and a cross-package
+contract holding the API's fallback stage ladder to the canvas's
+`DEFAULT_PIPELINE_STAGES` — a divergence there would draw a column the API refuses to move
+a deal into.
+
+---
+
 ## ✅ RESOLVED 2026-08-15 — "Ten résumé versions" now goes through the template engine, and a silent provider can no longer hang the canvas
 
 A user uploaded a JSON Resume (the standard hired.video export) and asked for ten visual

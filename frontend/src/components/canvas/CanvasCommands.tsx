@@ -147,6 +147,17 @@ export function CanvasDriveIcon() {
   </svg>;
 }
 
+/** An imported whiteboard: a board with sticky notes on it, and an arrow bringing
+ *  one across. Deliberately NOT a Miro logo — the glyph names what the panel does
+ *  (bring a board over) rather than borrowing another company's mark. */
+export function CanvasMiroIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="1.8" y="2.6" width="7.4" height="10.8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M3.9 5.2h3.2M3.9 7.6h3.2M3.9 10h1.8" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    <path d="M11 8h3.3m-1.5-1.6L14.4 8l-1.6 1.6" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
 /** Connected social accounts: a share node — one source, several destinations,
  *  which is exactly what the panel behind it does. */
 export function CanvasSocialIcon() {

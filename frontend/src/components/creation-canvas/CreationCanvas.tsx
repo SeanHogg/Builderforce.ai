@@ -19,7 +19,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasDriveIcon, CanvasFilesIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasDriveIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
@@ -31,6 +31,8 @@ import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
 import { CanvasDrivePanel } from './CanvasDrivePanel';
+import { CanvasMiroPanel } from './CanvasMiroPanel';
+import type { MiroBoardSummary, MiroImportResult } from '@/lib/miroImport';
 import { CanvasSocialPanel } from './CanvasSocialPanel';
 import { CanvasAdsPanel } from './CanvasAdsPanel';
 import { CanvasEmailComposer } from './CanvasEmailComposer';
@@ -826,6 +828,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const tCommands = useTranslations('canvasCommands');
   const tFiles = useTranslations('creationCanvas.files');
   const tDrive = useTranslations('creationCanvas.drive');
+  const tMiro = useTranslations('creationCanvas.miro');
   const tSocial = useTranslations('creationCanvas.social');
   const tAds = useTranslations('canvas.ads');
   const tImport = useTranslations('creationCanvas.import');
@@ -1231,6 +1234,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [driveOpen, setDriveOpen] = useState(false);
+  const [miroOpen, setMiroOpen] = useState(false);
   const [socialOpen, setSocialOpen] = useState(false);
   const [adsOpen, setAdsOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -2670,6 +2674,34 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedId(built.node.id); setSelectedIds([built.node.id]);
     setNotice(t('objectAdded', { title: built.node.data.title }));
   }, [buildSocialFeedNode, canEdit, setNodes, t]);
+
+  /**
+   * A Miro board, landed on this canvas.
+   *
+   * The mapper normalises the imported graph to its own origin, so the only thing
+   * left to decide is WHERE on this board it goes — and that has to be clear of
+   * whatever is already here. Dropping it at the viewport centre would overlay an
+   * imported 200-sticky workshop on top of the work in progress, which reads as
+   * corruption rather than as an import. It lands to the right of everything, the
+   * way a second page does.
+   */
+  const importMiroBoard = useCallback(async (result: MiroImportResult, board: MiroBoardSummary) => {
+    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
+    if (!result.nodes.length) { setNotice(tMiro('importedNothing', { name: board.name || board.id })); return; }
+    const rightEdge = nodes.reduce((widest, node) => {
+      const width = typeof node.style?.width === 'number' ? node.style.width : 320;
+      return Math.max(widest, node.position.x + width);
+    }, 0);
+    const offsetX = nodes.length ? rightEdge + IMPORT_COLUMN_GAP : 0;
+    const placed = result.nodes.map((node) => ({ ...node, position: { x: node.position.x + offsetX, y: node.position.y } }));
+    setNodes((current) => [...current, ...placed]);
+    setEdges((current) => [...current, ...result.edges]);
+    setSelectedId(placed[0]!.id);
+    setSelectedIds(placed.map((node) => node.id));
+    setNotice(result.skipped.length
+      ? tMiro('importedWithSkips', { name: board.name || board.id, count: placed.length, types: result.skipped.join(', ') })
+      : tMiro('imported', { name: board.name || board.id, count: placed.length }));
+  }, [canEdit, nodes, setEdges, setNodes, t, tMiro]);
 
   /**
    * The pictures on this board, for the composer's attachment picker.
@@ -9280,7 +9312,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           /></label>
           <button type="button" className={styles.drawingDone} onClick={() => setDrawing(null)}>{t('stopDrawing')}</button>
         </div>}
-        {!presentMode && effectiveSelectedIds.length > 0 && <div className={styles.selectionToolbar} aria-label={t('selectionActions')}>
+        {/* Both of these are chrome ABOUT the objects on this canvas — what is selected,
+            and how many there are. They gate on whether the objects are on screen at
+            all, not on which surface is drawn: the 3D space shows them and keeps both,
+            the conversation shows none and would otherwise float a toolbar for things
+            the reader cannot see. */}
+        {!presentMode && surfaceDef.showsObjects && effectiveSelectedIds.length > 0 && <div className={styles.selectionToolbar} aria-label={t('selectionActions')}>
           <span>{t('selectedCount', { count: effectiveSelectedIds.length })}</span>
           <button onClick={focusSelection}>{t('focus')}</button>
           <button onClick={duplicateSelection} disabled={!canEdit}>{t('duplicate')}</button>
@@ -9290,7 +9327,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button onClick={toggleHidden} disabled={!canEdit}>{t('hide')}</button>
         </div>}
         {loadingSession && <div className={styles.canvasSkeleton} role="status" aria-live="polite"><span /><span /><span /><b>{t('loadingSession')}</b></div>}
-        {nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>{t('largeSessionHint')}</span><button type="button" onClick={openPalette}>{t('frame')}</button></div>}
+        {surfaceDef.showsObjects && nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>{t('largeSessionHint')}</span><button type="button" onClick={openPalette}>{t('frame')}</button></div>}
         <BrainSurfaceProvider value={brainSurface}>
         <ReactFlow<CreationFlowNode, Edge>
           nodes={renderedNodes}
@@ -9367,6 +9404,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 label={tDrive('title')}
               ><CanvasDriveIcon /></CanvasRailToggle>
               <CanvasRailToggle
+                pressed={miroOpen}
+                onClick={() => setMiroOpen((value) => !value)}
+                label={tMiro('title')}
+              ><CanvasMiroIcon /></CanvasRailToggle>
+              <CanvasRailToggle
                 pressed={socialOpen}
                 onClick={() => setSocialOpen((value) => !value)}
                 label={tSocial('title')}
@@ -9400,6 +9442,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           {threeDControls?.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
           <button type="button" onClick={() => setFilesOpen((value) => !value)} aria-pressed={filesOpen} aria-label={tFiles('title')}><CanvasFilesIcon /></button>
           <button type="button" onClick={() => setDriveOpen((value) => !value)} aria-pressed={driveOpen} aria-label={tDrive('title')}><CanvasDriveIcon /></button>
+          <button type="button" onClick={() => setMiroOpen((value) => !value)} aria-pressed={miroOpen} aria-label={tMiro('title')}><CanvasMiroIcon /></button>
           <button type="button" onClick={() => setSocialOpen((value) => !value)} aria-pressed={socialOpen} aria-label={tSocial('title')}><CanvasSocialIcon /></button>
           <button type="button" onClick={() => setAdsOpen((value) => !value)} aria-pressed={adsOpen} aria-label={tAds('title')}><CanvasAdsIcon /></button>
           <button type="button" onClick={() => setOutlineOpen((value) => !value)} aria-pressed={outlineOpen} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
@@ -9480,6 +9523,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onImport={(file) => addFilesToCanvas([file], undefined, 'drive_import')}
           onClose={() => setDriveOpen(false)}
           returnTo={`/create/${sessionId}`}
+        />}
+        {miroOpen && <CanvasMiroPanel
+          onImport={importMiroBoard}
+          onClose={() => setMiroOpen(false)}
+          connectHref="/settings/connectors"
         />}
         {socialOpen && <CanvasSocialPanel
           onAddFeed={addSocialFeedToBoard}

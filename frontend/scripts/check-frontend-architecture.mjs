@@ -28,6 +28,17 @@
  *   which questions exist, which are required, what a signer was shown — is
  *   precisely the part that must not drift. Their `page.tsx` wrappers stay
  *   Server Components, so the route boundary is unchanged.
+ *
+ *   792 → 796 (`useClientFiles`, 2026-08-15) — the canvas SURFACE split.
+ *   `canvasSurfaceContext.tsx` is a React context provider, which has no
+ *   server form at all: a provider that does not run on the client provides
+ *   nothing. The three that consume it are interactive by definition —
+ *   `CanvasChatSurface.tsx` (a live transcript), `CanvasSurfaceSwitcher.tsx`
+ *   (the control that changes surface) and `CanvasAdsPanel.tsx` (a panel that
+ *   reads and mutates connected ad accounts). `CanvasSurfaceRouter.tsx` is
+ *   deliberately NOT among them: it chooses which surface to mount and does
+ *   that on the server, which is the boundary this ratchet exists to keep
+ *   somebody thinking about.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';

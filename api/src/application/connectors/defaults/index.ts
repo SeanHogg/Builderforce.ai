@@ -26,6 +26,9 @@ import { MARKETING_PLATFORM_CONNECTORS } from './marketing';
 // two that appeared nowhere in this codebase at all. Reads lead, deliberately:
 // see the file's own note on why the platform must not become a payroll engine.
 import { PAYROLL_CONNECTORS } from './payroll';
+// The whiteboard a team is leaving. Read-shaped, because the point of connecting
+// one is to bring its boards across once — see the file's own note.
+import { WHITEBOARD_CONNECTORS } from './whiteboard';
 
 const ALL: readonly ConnectorManifest[] = [
   ...COMMUNICATION_CONNECTORS,
@@ -40,6 +43,7 @@ const ALL: readonly ConnectorManifest[] = [
   ...ANALYTICS_CONNECTORS,
   ...HIRING_CONNECTORS,
   ...PAYROLL_CONNECTORS,
+  ...WHITEBOARD_CONNECTORS,
 ];
 
 /** Built-in manifests, keyed for O(1) resolution. */

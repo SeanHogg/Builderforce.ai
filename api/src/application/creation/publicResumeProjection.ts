@@ -1,4 +1,5 @@
 import { and, eq, sql } from 'drizzle-orm';
+import { projectPublicResumeFamily, type CanvasResumeFamily } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import { creationSessionObjects, objects } from '../../infrastructure/database/schema';
 import { resolveShareToken } from '../kernel/ObjectRegistry';
@@ -6,41 +7,18 @@ import { resolveShareToken } from '../kernel/ObjectRegistry';
 export type PublicResumeProjection = {
   objectId: string;
   title: string;
-  resumeFamily: Record<string, unknown>;
+  resumeFamily: CanvasResumeFamily;
 };
 
-type ResumeRevisionRecord = Record<string, unknown> & { id: string };
-
 /**
- * Public links expose one deliberate snapshot, never the private revision
- * history or the tenant-only R2 key of the uploaded source file.
+ * Public links expose one deliberate snapshot, never the private revision history or
+ * the tenant-only R2 key of the uploaded source file.
+ *
+ * The projection itself now lives in `@builderforce/creation-canvas-contract` — this
+ * module used to carry its own copy, which meant the server and the editor each
+ * decided independently which revision was "the live one" and could disagree.
  */
-export function projectPublicResumeFamily(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const family = value as Record<string, unknown>;
-  if (family.privacy !== 'public' || !Array.isArray(family.revisions)) return null;
-  const revisions = family.revisions.filter((item): item is ResumeRevisionRecord =>
-    !!item && typeof item === 'object' && !Array.isArray(item) && typeof (item as Record<string, unknown>).id === 'string');
-  const selectedId = [family.masterRevisionId, family.activeRevisionId, family.originalRevisionId]
-    .find((candidate) => typeof candidate === 'string' && revisions.some((revision) => revision.id === candidate));
-  const selected = revisions.find((revision) => revision.id === selectedId) ?? revisions[0];
-  if (!selected) return null;
-  const { sourceFile: _sourceFile, ...safeRevision } = selected;
-  const revision = { ...safeRevision, kind: 'original', sourceRevisionId: null };
-  return {
-    version: 1,
-    privacy: 'public',
-    archivedAt: null,
-    watched: false,
-    defaultTemplateId: family.defaultTemplateId,
-    viewZoom: family.viewZoom,
-    previewMode: family.previewMode,
-    originalRevisionId: selected.id,
-    activeRevisionId: selected.id,
-    masterRevisionId: selected.id,
-    revisions: [revision],
-  };
-}
+export { projectPublicResumeFamily };
 
 /** Resolve a hash-only share credential and expose only the resume projection. */
 export async function resolvePublicResume(db: Db, token: string): Promise<PublicResumeProjection | null> {

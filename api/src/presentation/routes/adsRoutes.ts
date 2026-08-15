@@ -29,8 +29,6 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { DbHandle as Db } from '../../application/shared/dbHandle';
-import { adCampaigns, adInsights } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   adCampaignQueryFrom,
   createAdCampaign,
@@ -40,7 +38,7 @@ import {
   resolveAdAccount,
   updateAdCampaign,
 } from '../../application/advertising/adsService';
-import { syncTenantAdInsights } from '../../application/advertising/adInsightsSync';
+import { readAdInsightsLedger, syncTenantAdInsights } from '../../application/advertising/adInsightsSync';
 import { isAdObjective, isAdNetwork, AD_STATUSES, type AdStatus } from '../../application/advertising/adsProviders';
 
 /** A budget arrives as a decimal in the account currency and is stored in cents. */
@@ -183,57 +181,15 @@ export function createAdsRoutes(db: Db): Hono<HonoEnv> {
   r.get('/insights', async (c) => {
     const { tenantId } = ctx(c);
     const window = insightsWindow(c.req.query('since') ?? null, c.req.query('until') ?? null);
-    const networks = (c.req.query('networks') ?? '').split(',').map((n) => n.trim()).filter(isAdNetwork);
-
-    const rows = await db
-      .select({
-        date: adInsights.date,
-        platform: adInsights.platform,
-        campaignId: adInsights.campaignId,
-        campaignName: adCampaigns.name,
-        objective: adCampaigns.objective,
-        status: adCampaigns.status,
-        spendCents: adInsights.spendCents,
-        impressions: adInsights.impressions,
-        clicks: adInsights.clicks,
-        conversions: adInsights.conversions,
-        currency: adInsights.currency,
-      })
-      .from(adInsights)
-      // The campaign name lives on the parent; joining here is what lets one query
-      // answer the whole panel instead of a lookup per row.
-      .innerJoin(adCampaigns, eq(adCampaigns.id, adInsights.campaignId))
-      .where(scopedToTenant(
-        adInsights,
-        tenantId,
-        networks.length
-          ? and(gte(adInsights.date, window.since), lte(adInsights.date, window.until), inArray(adInsights.platform, networks))
-          : and(gte(adInsights.date, window.since), lte(adInsights.date, window.until)),
-      ))
-      .orderBy(desc(adInsights.date));
-
-    const totals = rows.reduce(
-      (acc, row) => ({
-        spendCents: acc.spendCents + row.spendCents,
-        impressions: acc.impressions + row.impressions,
-        clicks: acc.clicks + row.clicks,
-        conversions: acc.conversions + row.conversions,
-      }),
-      { spendCents: 0, impressions: 0, clicks: 0, conversions: 0 },
-    );
-
-    return c.json({
-      window,
-      rows,
-      totals: {
-        ...totals,
-        // Derived here rather than stored, because a stored rate is a number its own
-        // inputs can contradict the moment a day is restated.
-        costPerClickCents: totals.clicks > 0 ? Math.round(totals.spendCents / totals.clicks) : null,
-        costPerConversionCents: totals.conversions > 0 ? Math.round(totals.spendCents / totals.conversions) : null,
-        clickThroughRate: totals.impressions > 0 ? totals.clicks / totals.impressions : null,
-      },
-    });
+    // The handler decides WHAT WAS ASKED FOR and nothing else. The join, the tenant
+    // scoping and the derived rates are `readAdInsightsLedger`, in the application
+    // layer, where every other caller can reach them and a test can exercise them
+    // without a request.
+    return c.json(await readAdInsightsLedger(db, tenantId, {
+      since: window.since,
+      until: window.until,
+      networks: (c.req.query('networks') ?? '').split(',').map((n) => n.trim()).filter(Boolean),
+    }));
   });
 
   // POST /sync — manager-gated because it writes the ledger every other panel reads.

@@ -26,7 +26,7 @@ import {
   tenants,
 } from '../../infrastructure/database/schema';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseConnectorManifest, type ConnectorManifest } from '../connectors/connectorManifest';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { PublisherError } from './publishers';
@@ -185,10 +185,13 @@ export async function installPackage(
   if (!row) throw new PublisherError('failed to install', 409);
 
   if (!prior) {
+    // A counter on somebody ELSE'S row, which is what installing a published
+    // package is: the install count is a public fact about a listing, not a fact
+    // about the installing workspace, so it cannot live tenant-scoped.
     await db
       .update(extensionPackages)
       .set({ installCount: sql`${extensionPackages.installCount} + 1` })
-      .where(eq(extensionPackages.id, pkg.id));
+      .where(acrossTenants(extensionPackages, 'public_catalogue', eq(extensionPackages.id, pkg.id)));
   }
 
   await invalidateInstalls(env, input.tenantId);

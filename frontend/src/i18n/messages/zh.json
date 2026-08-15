@@ -15198,7 +15198,8 @@
       "shipment": "发货",
       "incident": "事故事件",
       "book": "书籍",
-      "account": "客户"
+      "account": "客户",
+      "sticky": "便签"
     },
     "twilioSetup": {
       "title": "Twilio 集成",

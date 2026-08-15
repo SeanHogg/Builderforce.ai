@@ -9,10 +9,10 @@
  */
 
 import {
-  ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO,
-  unmapObjective,
-  type AdCampaignDraft, type AdCampaignPatch, type AdCampaignRemote, type AdInsightRow,
-  type AdObjective, type AdsProvider, type AdStatus,
+  ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
+} from '../adsNormalize';
+import {
+  type AdCampaignDraft, type AdCampaignPatch, type AdCampaignRemote, type AdInsightRow, type AdObjective, type AdStatus, type AdsProvider,
 } from '../adsProviders';
 
 /** Meta's Outcome-Driven objectives. `video_views` is absent on purpose: Meta retired it

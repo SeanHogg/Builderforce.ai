@@ -3,28 +3,44 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * Freelancer marketplace routes — /api/freelancers/* and /api/engagements/*.
  *
  * A freelancer (users.account_type='freelancer') owns ONE for-hire profile
- * (skills / resume / hourly rate) with a public-or-private visibility toggle,
- * backed by hired.video. Employers browse the marketplace and HIRE freelancers
+ * (skills / résumé / hourly rate) with a public-or-private visibility toggle.
+ * Employers browse the marketplace and HIRE freelancers
  * across many tenants/projects via engagements (invite → interview → active →
  * terminate). Public browse is world-readable for `visibility='public'` profiles;
  * `private` profiles require any signed-in user.
  *
  * Self-management uses the WEB JWT (a freelancer may not belong to a tenant).
  * Employer engagement actions use the TENANT JWT (the hiring workspace).
+ *
+ * ── THE RÉSUMÉ (0471) ────────────────────────────────────────────────────────────
+ * The résumé is a Canvas object this platform owns, not a third-party embed. Upload
+ * extracts text server-side (PDF/DOCX included), structures it into JSON Resume, and
+ * stores it as a revision family the person can name, restyle and branch. The routes
+ * below own the PROFILE's view of that object; `application/resume/profileResume.ts`
+ * owns its persistence.
  */
 import { Hono } from 'hono';
 import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
+import {
+  isResumeTemplateId,
+  masterResumeRevision,
+  projectPublicResumeFamily,
+  type CanvasResumeDocument,
+  type ResumePrivacy,
+} from '@builderforce/creation-canvas-contract';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { extractResumeText } from '../../application/career/resumeExtract';
+import { resumeDocumentFromText } from '../../application/career/resumeDocument';
 import {
-  uploadResume as hiredUploadResume,
-  getProfile as hiredGetProfile,
-  createEmbedToken as hiredCreateEmbedToken,
-  connectExisting as hiredConnectExisting,
-  getByExternalUserId as hiredGetByExternalUserId,
-} from '../../application/integrations/hiredVideo';
+  readProfileResume,
+  resolvePersonalTenantId,
+  saveImportedResume,
+  writeProfileResumeFamily,
+} from '../../application/resume/profileResume';
+import { ensurePersonalWorkspace } from '../../application/tenant/starterWorkspace';
 import { notify } from '../../application/notifications/notify';
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
 import { normalizeSeeking, normalizeWorkMode } from '../../application/career/listing';
@@ -58,13 +74,7 @@ const profileColumns = {
   availability: freelancerProfiles.availability,
   location: freelancerProfiles.location,
   timezone: freelancerProfiles.timezone,
-  hired_video_user_id: freelancerProfiles.hiredVideoUserId,
-  hired_video_connection_id: freelancerProfiles.hiredVideoConnectionId,
-  hired_video_resume_id: freelancerProfiles.hiredVideoResumeId,
-  hired_video_claim_url: freelancerProfiles.hiredVideoClaimUrl,
-  resume_key: freelancerProfiles.resumeKey,
-  resume_filename: freelancerProfiles.resumeFilename,
-  resume_extract: freelancerProfiles.resumeExtract,
+  resume_object_id: freelancerProfiles.resumeObjectId,
   // Career intent (0462) — the same listing offered to employment demand as well as
   // project demand. Selected in the ONE projection every profile surface reads, so the
   // browse card, the detail page and the tools cannot disagree about what someone wants.
@@ -300,43 +310,6 @@ function inferDiscipline(text: string): string | null {
   return null;
 }
 
-/** Best-effort heuristic extraction of {headline, summary, skills} from résumé TEXT.
- *  The native fallback when hired.video isn't linked. Binary résumés (PDF/DOCX) have
- *  no local text and yield nothing — those rely on hired.video parsing instead. */
-function parseResumeText(text: string): { headline: string | null; summary: string | null; skills: string[] } {
-  const lines = text.split(/\r?\n/).map((l) => l.trim());
-  const nonEmpty = lines.filter(Boolean);
-
-  // Headline: first line that looks like a role (has a role keyword), else the 2nd
-  // line (the 1st is usually the person's name).
-  const roleRe = /(engineer|developer|designer|manager|architect|analyst|consultant|specialist|administrator|scientist|lead|director)/i;
-  const headline = nonEmpty.find((l) => l.length <= 90 && roleRe.test(l)) ?? nonEmpty[1] ?? null;
-
-  // Section scan: collect lines under a Skills / Summary heading.
-  let section: 'skills' | 'summary' | null = null;
-  const skillLines: string[] = [];
-  const summaryLines: string[] = [];
-  for (const raw of lines) {
-    const l = raw.toLowerCase();
-    if (/^(technical )?skills?\s*:?$/.test(l) || /^(core )?competenc/.test(l) || /^technolog/.test(l)) { section = 'skills'; continue; }
-    if (/^(professional )?summary\s*:?$/.test(l) || /^(about|profile|objective)\s*:?$/.test(l)) { section = 'summary'; continue; }
-    if (/^(experience|education|employment|projects|work history|certifications)\b/.test(l)) { section = null; continue; }
-    if (!raw) { if (section === 'summary' && summaryLines.length) section = null; continue; }
-    if (section === 'skills') skillLines.push(raw);
-    else if (section === 'summary') summaryLines.push(raw);
-  }
-
-  // Split skill lines on common separators; also pick an inline "Skills: a, b, c".
-  const inline = nonEmpty.find((l) => /^(technical )?skills?\s*:/i.test(l));
-  const rawSkills = [...(inline ? [inline.replace(/^[^:]*:/, '')] : []), ...skillLines].join(',');
-  const skills = Array.from(new Set(
-    rawSkills.split(/[,•|/•\n]+/).map((s) => s.trim()).filter((s) => s.length >= 2 && s.length <= 40),
-  )).slice(0, 30);
-
-  const summary = summaryLines.join(' ').slice(0, 1200) || null;
-  return { headline: headline ? headline.slice(0, 200) : null, summary, skills };
-}
-
 /** Shape of a suggestion set the profile editor uses to prefill fields. */
 interface ResumeSuggestions {
   available: boolean;
@@ -346,7 +319,32 @@ interface ResumeSuggestions {
   discipline: string | null;
 }
 
-/** The PUBLIC projection — never leaks the R2 key or hired.video ids. */
+/**
+ * Prefill fields from a structured résumé document.
+ *
+ * Reads the SAME `CanvasResumeDocument` the editor renders, rather than a second text
+ * scan — the profile and the résumé must never disagree about what someone's headline
+ * is. (This replaced a private text heuristic that could only read `text/*` uploads,
+ * which is why a PDF résumé used to yield nothing without hired.video.)
+ */
+function suggestionsFromDocument(document: CanvasResumeDocument | undefined): ResumeSuggestions {
+  const basics = document?.basics ?? {};
+  const headline = typeof basics.label === 'string' && basics.label.trim() ? basics.label.trim().slice(0, 200) : null;
+  const summary = typeof basics.summary === 'string' && basics.summary.trim() ? basics.summary.trim().slice(0, 1200) : null;
+  const skills = (document?.skills ?? [])
+    .map((skill) => (typeof skill.name === 'string' ? skill.name.trim() : ''))
+    .filter((skill) => skill.length >= 2 && skill.length <= 40)
+    .slice(0, 30);
+  return {
+    available: Boolean(headline || summary || skills.length),
+    headline,
+    summary,
+    skills,
+    discipline: inferDiscipline(`${headline ?? ''} ${skills.join(' ')}`),
+  };
+}
+
+/** The PUBLIC projection — never leaks the résumé's private revision history. */
 function mapPublicProfile(row: Record<string, unknown>): Record<string, unknown> {
   return {
     userId: row.user_id,
@@ -374,7 +372,7 @@ function mapPublicProfile(row: Record<string, unknown>): Record<string, unknown>
     workMode: row.work_mode ?? null,
     noticePeriodDays: row.notice_period_days == null ? null : Number(row.notice_period_days),
     openToRelocation: Boolean(row.open_to_relocation),
-    hasResume: Boolean(row.hired_video_user_id) || Boolean(row.resume_key),
+    hasResume: Boolean(row.resume_object_id),
     rating: row.avg_rating == null ? null : Number(row.avg_rating),
     ratingCount: row.rating_count == null ? 0 : Number(row.rating_count),
     // Trust badge/JSS for the browse card — derived from the row's reputation inputs
@@ -437,22 +435,23 @@ async function optionalUserId(c: { req: { header(n: string): string | undefined 
 export function createFreelancerRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  /** Resolve a freelancer's hired.video userId — from the stored value, else
-   *  reconcile via getByExternalUserId and persist it (covers accounts that were
-   *  provisioned before the partner key was configured). ONE place so the résumé,
-   *  embed-token and profile paths share the linkage logic (DRY). */
-  async function resolveHiredUserId(db: Db, env: HonoEnv['Bindings'], userId: string, known?: string | null): Promise<string | null> {
-    if (known) return known;
-    const ref = await hiredGetByExternalUserId(env, userId);
-    if (ref.ref?.userId) {
-      await db.update(freelancerProfiles).set({
-        hiredVideoUserId: ref.ref.userId,
-        hiredVideoConnectionId: sql`COALESCE(${ref.ref.connectionId ?? null}, ${freelancerProfiles.hiredVideoConnectionId})`,
-        updatedAt: sql`NOW()`,
-      }).where(eq(freelancerProfiles.userId, userId));
-      return ref.ref.userId;
-    }
-    return null;
+  /**
+   * The workspace this person's résumé object lives in, provisioning it if missing.
+   *
+   * Self-heals accounts created before 0471 — a `freelancer` provisioned when for-hire
+   * accounts got no workspace has nowhere to put a résumé, and would otherwise be told
+   * "upload failed" forever with no way to fix it themselves.
+   */
+  async function resolveResumeTenantId(db: Db, env: Env, userId: string): Promise<number | null> {
+    const existing = await resolvePersonalTenantId(db, userId);
+    if (existing !== null) return existing;
+    const [user] = await db.select({ email: users.email, displayName: users.displayName })
+      .from(users).where(eq(users.id, userId)).limit(1);
+    if (!user) return null;
+    await ensurePersonalWorkspace(env, db, {
+      id: userId, email: user.email, displayName: user.displayName, accountType: 'freelancer',
+    });
+    return resolvePersonalTenantId(db, userId);
   }
 
   /** The owner's own profile row (profile + joined user fields + email). */
@@ -476,18 +475,26 @@ export function createFreelancerRoutes(): Hono<HonoEnv> {
       const [fresh] = await loadOwnProfile(db, userId);
       if (!fresh) return c.json({ error: 'Profile unavailable' }, 500);
       const stats = await computeFreelancerStats(db, c.env, userId, (fresh.currency as string) ?? 'USD');
-      return c.json({ ...mapPublicProfile(fresh), published: false, hiredVideoConnected: Boolean(fresh.hired_video_user_id), email: fresh.email, stats });
+      return c.json({ ...mapPublicProfile(fresh), published: false, email: fresh.email, stats });
     }
     const stats = await computeFreelancerStats(db, c.env, userId, (row.currency as string) ?? 'USD');
+    const resume = row.resume_object_id ? await readProfileResume(db, userId) : null;
+    const master = resume ? masterResumeRevision(resume.family) : null;
     return c.json({
       ...mapPublicProfile(row),
       published: Boolean(row.published),
-      hiredVideoConnected: Boolean(row.hired_video_user_id),
-      hiredVideoClaimUrl: row.hired_video_claim_url ?? null,
-      resumeFilename: row.resume_filename ?? null,
-      // The résumé auto-fill button lights up when we have something to extract from:
-      // a linked hired.video account or a cached native/hired extract.
-      canAutofill: Boolean(row.hired_video_user_id) || Boolean(row.resume_extract),
+      // The résumé summary the editor binds to. The FAMILY itself is fetched separately
+      // by `GET /me/resume` so the profile read stays small.
+      resume: resume && master ? {
+        objectId: resume.objectId,
+        title: resume.title,
+        privacy: resume.family.privacy,
+        templateId: master.templateId,
+        revisionCount: resume.family.revisions.length,
+        updatedAt: master.updatedAt,
+      } : null,
+      // Auto-fill lights up when the stored résumé actually parsed into something.
+      canAutofill: Boolean(master?.document),
       email: row.email,
       stats,
     });

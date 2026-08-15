@@ -54,15 +54,37 @@ function stripComments(text) {
   return text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
 }
 
-/** Every table created by the consolidation migrations, by name. */
+/**
+ * Every table the consolidation migrations create AND LEAVE BEHIND, by name.
+ *
+ * ── WHY DROPS ARE READ, NOT JUST CREATES ────────────────────────────────────
+ * A migration chain is replayed in order, so what matters is the state at the
+ * END of it — and a table can be created by one migration and dropped by a later
+ * one. Reading only `CREATE TABLE` made the guard fail on a table that no longer
+ * exists, then instruct the reader to "declare it in the matching schema module",
+ * which would have added a `pgTable` for a relation Postgres does not have.
+ *
+ * Measured 2026-08-15: 0467 created `developer_orgs` and `developer_org_members`
+ * as a publisher party distinct from a tenant; 0471 rejected that design and
+ * dropped all three of its tables into `tenants` / `tenant_members` /
+ * `tenant_api_keys`. The schema was RIGHT not to declare them, and the guard
+ * failed the build for it — the worst kind of guard, one that is louder about
+ * being obeyed than about being correct.
+ *
+ * Order matters: a table dropped and then re-created later is created, so this
+ * walks the files in sequence and lets the last statement win.
+ */
 export function collectCreatedTables(migrationsDir) {
   const created = new Map(); // table -> migration file that creates it
-  for (const file of readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'))) {
+  for (const file of readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort()) {
     const prefix = Number.parseInt(file.slice(0, 4), 10);
     if (!Number.isFinite(prefix) || prefix < CONSOLIDATION_FROM_PREFIX) continue;
     const text = stripSqlComments(readFileSync(resolve(migrationsDir, file), 'utf8'));
     for (const m of text.matchAll(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?"?([a-z0-9_]+)"?/gi)) {
       if (!created.has(m[1])) created.set(m[1], file);
+    }
+    for (const m of text.matchAll(/DROP TABLE\s+(?:IF EXISTS\s+)?"?([a-z0-9_]+)"?/gi)) {
+      created.delete(m[1]);
     }
   }
   return created;

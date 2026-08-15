@@ -152,8 +152,15 @@ export async function createPackage(
   const name = input.name.trim();
   if (name.length < 2) throw new PublisherError('name is required');
 
+  // Slug uniqueness is PLATFORM-WIDE, so this read deliberately does not filter by
+  // the publisher's tenant: two workspaces must not both own `stripe`, because the
+  // slug is what an install names and what a URL addresses.
   const slug = slugify(input.slug?.trim() || name);
-  const [taken] = await db.select({ id: extensionPackages.id }).from(extensionPackages).where(eq(extensionPackages.slug, slug)).limit(1);
+  const [taken] = await db
+    .select({ id: extensionPackages.id })
+    .from(extensionPackages)
+    .where(acrossTenants(extensionPackages, 'public_catalogue', eq(extensionPackages.slug, slug)))
+    .limit(1);
   if (taken) throw new PublisherError(`the slug "${slug}" is taken`, 409);
 
   const [row] = await db
@@ -287,7 +294,7 @@ export async function publishVersion(
   const [row] = await db
     .update(extensionPackages)
     .set({ currentVersionId: version.id, listingState: 'listed', updatedAt: new Date() })
-    .where(eq(extensionPackages.id, pkg.id))
+    .where(scopedToTenant(extensionPackages, pkg.tenantId, eq(extensionPackages.id, pkg.id)))
     .returning();
   if (!row) throw new PublisherError('package not found', 404);
 
@@ -309,7 +316,7 @@ export async function setListingState(
   const [row] = await db
     .update(extensionPackages)
     .set({ listingState: input.state, updatedAt: new Date() })
-    .where(eq(extensionPackages.id, pkg.id))
+    .where(scopedToTenant(extensionPackages, pkg.tenantId, eq(extensionPackages.id, pkg.id)))
     .returning();
   if (!row) throw new PublisherError('package not found', 404);
   await invalidatePublicCatalog(env);

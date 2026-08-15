@@ -1,24 +1,65 @@
 import type { CreationNodeData } from '@/components/creation-canvas/types';
+import {
+  RESUME_TEMPLATE_IDS,
+  RESUME_SECTION_ORDER,
+  activeResumeRevision,
+  createResumeFamily,
+  isResumeTemplateId,
+  masterResumeRevision,
+  projectPublicResumeFamily,
+  resumeFamilyFromValue,
+  type CanvasResumeBasics,
+  type CanvasResumeDocument,
+  type CanvasResumeEducation,
+  type CanvasResumeFamily,
+  type CanvasResumeLocation,
+  type CanvasResumeRevision,
+  type CanvasResumeSkill,
+  type CanvasResumeWork,
+  type ResumeOrientation,
+  type ResumePageSize,
+  type ResumePreviewMode,
+  type ResumePrivacy,
+  type ResumeRevisionKind,
+  type ResumeSectionId,
+  type ResumeTemplateId,
+} from '@builderforce/creation-canvas-contract';
 
-export const RESUME_TEMPLATE_IDS = [
-  'hired-default',
-  'payroll-iron-gray',
-  'risk-asphalt',
-  'executive-taupe',
-  'intern-education-first',
-  'hospitality-amber',
-  'creative-minimal',
-  'software-engineer-graphite',
-  'healthcare-clinical-blue',
-  'sales-growth-emerald',
-  'actor-headshot-hero',
-  'director-filmography-serif',
-] as const;
+/**
+ * The résumé DOCUMENT and FAMILY now live in `@builderforce/creation-canvas-contract`,
+ * because the server builds and projects them too (for-hire upload, public link, ATS
+ * projection). They are re-exported here so this module stays the one import every
+ * canvas component already reaches for. What remains local is presentation: template
+ * definitions, Markdown rendering and the node adapters.
+ */
+export {
+  RESUME_TEMPLATE_IDS,
+  RESUME_SECTION_ORDER,
+  activeResumeRevision,
+  createResumeFamily,
+  isResumeTemplateId,
+  masterResumeRevision,
+  projectPublicResumeFamily,
+  resumeFamilyFromValue,
+};
+export type {
+  CanvasResumeBasics,
+  CanvasResumeDocument,
+  CanvasResumeEducation,
+  CanvasResumeFamily,
+  CanvasResumeLocation,
+  CanvasResumeRevision,
+  CanvasResumeSkill,
+  CanvasResumeWork,
+  ResumeOrientation,
+  ResumePageSize,
+  ResumePreviewMode,
+  ResumePrivacy,
+  ResumeRevisionKind,
+  ResumeSectionId,
+  ResumeTemplateId,
+};
 
-export type ResumeTemplateId = (typeof RESUME_TEMPLATE_IDS)[number];
-export type ResumePageSize = 'letter' | 'legal' | 'a4';
-export type ResumeOrientation = 'portrait' | 'landscape';
-export type ResumePreviewMode = 'continuous' | 'paged' | 'spread';
 export type ResumeHeadingStyle = 'underlined' | 'divider' | 'caps' | 'plain';
 export type ResumeSectionLayout = 'timeline' | 'cards' | 'grid' | 'list' | 'compact';
 export type ResumeSortOrder = 'date_desc' | 'date_asc' | 'manual';
@@ -126,42 +167,9 @@ export function resumeTemplateFromDescriptor(value: unknown): ResumeTemplateDefi
   };
 }
 
-export interface CanvasResumeLocation extends Record<string, unknown> {
-  address?: string; postalCode?: string; city?: string; countryCode?: string; region?: string;
-}
-export interface CanvasResumeBasics extends Record<string, unknown> {
-  name?: string; label?: string; image?: string; email?: string; phone?: string; url?: string; summary?: string; location?: CanvasResumeLocation | null;
-}
-export interface CanvasResumeWork extends Record<string, unknown> {
-  id?: string; name?: string; position?: string; url?: string; summary?: string; startDate?: string; endDate?: string;
-  locationType?: string; employmentType?: string; highlights?: string[];
-}
-export interface CanvasResumeEducation extends Record<string, unknown> {
-  id?: string; institution?: string; area?: string; studyType?: string; startDate?: string; endDate?: string; score?: string; url?: string; courses?: string[];
-}
-export interface CanvasResumeSkill extends Record<string, unknown> {
-  id?: string; name?: string; level?: string; keywords?: string[]; yearsOfExperience?: number;
-}
-export interface CanvasResumeDocument extends Record<string, unknown> {
-  basics?: CanvasResumeBasics;
-  work?: CanvasResumeWork[];
-  education?: CanvasResumeEducation[];
-  skills?: CanvasResumeSkill[];
-  volunteer?: Array<Record<string, unknown>>;
-  awards?: Array<Record<string, unknown>>;
-  certificates?: Array<Record<string, unknown>>;
-  publications?: Array<Record<string, unknown>>;
-  languages?: Array<Record<string, unknown>>;
-  interests?: Array<Record<string, unknown>>;
-  references?: Array<Record<string, unknown>>;
-  projects?: Array<Record<string, unknown>>;
-  builderforceLayout?: { sectionOrder?: string[]; hiddenSections?: string[] };
-}
-
-export const RESUME_SECTION_ORDER = ['summary', 'work', 'education', 'skills', 'volunteer', 'projects', 'awards', 'certificates', 'publications', 'languages', 'interests', 'references'] as const;
-export type ResumeSectionId = (typeof RESUME_SECTION_ORDER)[number];
-
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+/** Default revision-id source. Overridable at every call site so tests are reproducible. */
+const id = () => crypto.randomUUID();
 const stringValue = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
 const stringArray = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && !!item.trim()) : [];
 
@@ -292,73 +300,6 @@ export function resumeDocumentFromMarkdown(markdown: string): CanvasResumeDocume
   const nextHeading = summaryStart >= 0 ? lines.findIndex((line, index) => index > summaryStart && /^##\s+/.test(line)) : -1;
   const summary = summaryStart >= 0 ? lines.slice(summaryStart + 1, nextHeading >= 0 ? nextHeading : undefined).join('\n').trim() : '';
   return { basics: { name, summary }, markdown };
-}
-
-export type ResumeRevisionKind = 'original' | 'derived';
-
-export interface CanvasResumeRevision {
-  id: string;
-  kind: ResumeRevisionKind;
-  title: string;
-  markdown: string;
-  document?: CanvasResumeDocument;
-  structuredStale?: boolean;
-  templateId: ResumeTemplateId;
-  pageSize: ResumePageSize;
-  orientation: ResumeOrientation;
-  sourceFile?: { key?: string | null; name: string; mimeType: string; size: number };
-  sourceRevisionId: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CanvasResumeFamily {
-  version: 1;
-  privacy: 'public' | 'recruiter_only' | 'connections' | 'private' | 'draft';
-  archivedAt: string | null;
-  watched: boolean;
-  defaultTemplateId: ResumeTemplateId;
-  viewZoom: number;
-  previewMode: ResumePreviewMode;
-  originalRevisionId: string;
-  activeRevisionId: string;
-  masterRevisionId: string;
-  revisions: CanvasResumeRevision[];
-}
-
-const id = () => crypto.randomUUID();
-
-export function createResumeFamily(args: { title: string; markdown: string; document?: CanvasResumeDocument; templateId?: ResumeTemplateId; sourceFile?: CanvasResumeRevision['sourceFile']; now?: string; idFactory?: () => string }): CanvasResumeFamily {
-  const now = args.now ?? new Date().toISOString();
-  const revisionId = (args.idFactory ?? id)();
-  // The template travels WITH the family it belongs to. It used to be hard-coded here
-  // and then re-stamped over the caller's choice by `resumeNodePatch`, so every résumé
-  // — imported, agent-authored, or fanned out by the template engine — rendered in
-  // hired-default no matter which template was asked for.
-  const templateId = RESUME_TEMPLATE_IDS.includes(args.templateId as ResumeTemplateId)
-    ? args.templateId as ResumeTemplateId
-    : 'hired-default';
-  const original: CanvasResumeRevision = {
-    id: revisionId,
-    kind: 'original',
-    title: args.title.trim(),
-    markdown: args.markdown.trim(),
-    ...(args.document ? { document: clone(args.document), structuredStale: false } : {}),
-    templateId,
-    pageSize: 'a4',
-    orientation: 'portrait',
-    ...(args.sourceFile ? { sourceFile: clone(args.sourceFile) } : {}),
-    sourceRevisionId: null,
-    createdAt: now,
-    updatedAt: now,
-  };
-  return { version: 1, privacy: 'private', archivedAt: null, watched: false, defaultTemplateId: templateId, viewZoom: 75, previewMode: 'continuous', originalRevisionId: revisionId, activeRevisionId: revisionId, masterRevisionId: revisionId, revisions: [original] };
-}
-
-export function activeResumeRevision(family: CanvasResumeFamily): CanvasResumeRevision {
-  return family.revisions.find((revision) => revision.id === family.activeRevisionId)
-    ?? family.revisions.find((revision) => revision.id === family.originalRevisionId)
-    ?? family.revisions[0]!;
 }
 
 export function originalResumeRevision(family: CanvasResumeFamily): CanvasResumeRevision {
