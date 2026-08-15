@@ -137,7 +137,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
-| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 36 |
+| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 37 |
 | 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 28 |
 
 Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
@@ -158,7 +158,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
-| 14 | 36 |
+| 14 | 37 |
 | 15 | 28 |
 ---
 
@@ -1010,6 +1010,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 
 ## 14 · 🖥️ Frontend, i18n, Theme & Marketing/SEO
 
+- **Every Creation Canvas runtime NOTICE is hardcoded English, and each one reaches the user as Brain's reply** *(found 2026-08-14 while fixing the discarded-answer defect)*. `frontend/src/lib/creationCanvasAi.ts` and the `canvasTurnOutcome.ts` module split out of it return user-facing prose as plain strings — "I couldn't prepare any canvas changes from that request.", the tool-error variant, `incompleteDocumentAnswer`, `unverifiedCreationClaim`, `answeredWithoutCanvasChange` — and `CreationCanvas.tsx` appends each verbatim to the session timeline. A French or Chinese visitor on the public landing canvas gets an English system line in the middle of their conversation. The file already proves the right shape one case over: `GuestAiUnavailableError` is thrown as a TYPE precisely so the surface can say it in the visitor's language. Fix = return a discriminated notice (`{ kind: 'no-answer' | 'tool-error' | 'incomplete-document' | 'unverified-creation' | 'answered-without-change', …data }`) instead of a string, translate at the one call site in `CreationCanvas.tsx`, and add the keys to all five catalogs. **Not blocked** — deliberately not bundled, because it changes `runCreationCanvasAi`'s return type and therefore every call site and all 32 tests in `creationCanvasAi.test.ts`, and doing half of it would leave two notice mechanisms where there is currently one. Unblocks: the canvas answering in the visitor's own language on the surface most likely to be their first contact with the product.
 - **Product Updates has no unread-since-last-open indicator** *(product-update/beta pass 2026-08-09)*. The changelog is now reachable everywhere — the marketing footer version and the app sidebar version both open the one app-wide `ProductUpdatesHost` (see [DONE.md](./DONE.md)) — but nothing tells a user there is something new behind it, so the affordance only pays off for someone who thinks to click a version number. Every ingredient exists: `release_notes.publishedAt` is the "new since" clock and `release_note_beta_enrollments` shows the per-user table pattern to copy. Fix = persist a per-user `product_updates_seen_at`, expose the count of notes published after it on the existing `/api/release-notes/betas` read (it is already the signed-in call), and badge both version triggers from one shared hook so the two cannot disagree. Unblocks: passive feature discovery rather than opt-in.
 - **Weekly release-digest audience query is an unbounded full-table scan** *(release-notes pass 2026-07-24)*. `runWeeklyReleaseDigest` (`api/src/application/email/releaseDigest.ts`) selects every verified, non-suspended user in one query and sends in 10-wide batches with no cursor/cap; fine at current scale (Neon Free, small base) but will exceed Worker CPU/subrequest limits and Resend rate windows as the user base grows. Fix = paginate the audience (keyset by user id), persist per-run progress so a Worker eviction resumes rather than re-sends, and honour a Resend batch/rate ceiling. Unblocks: safe digest sends at scale.
 - **Sales-deck slide-19 footnote is not yet seat-specific + the deck generator is missing.** The pricing-credibility decision landed (Teams = org-wide volume pricing, **5-seat minimum**, enforced live — see DONE.md 2026-07-24); the deck's slide-19 already carries a provisional "org-wide volume pricing" footnote (framing now *confirmed* correct), but it doesn't state the specific 5-seat minimum. Updating the rendered PNG/PDF/PPTX is blocked because the generator (`scratchpad/deck.py`, Pillow + Edge-headless SVG rasterization) referenced by `marketing/pitch-deck/README.md` no longer exists in the repo — it lived in an ephemeral scratchpad. Fix = reconstruct `deck.py` (or a committed replacement generator) under `marketing/pitch-deck/`, then re-render slide 19 to say "5-seat minimum" and rebuild the PDF/PPTX. Unblocks: a self-consistent deck + repeatable deck regeneration.
