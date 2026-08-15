@@ -185,10 +185,23 @@ ALTER TABLE developer_api_keys ADD COLUMN IF NOT EXISTS scopes           text;
 -- One personal publisher per user who already holds a key, named from the user
 -- so the portal shows something recognisable rather than a uuid. `ON CONFLICT DO
 -- NOTHING` on the slug makes the whole migration re-runnable.
+--
+-- The name column is `display_name`, NOT `name`: `users` has never had a `name`
+-- column (identity.ts — id, email, username, display_name, …), and the first
+-- draft of this line said `u.name`, which is not a typecheck error, not a test
+-- failure and not a lint finding — it is a red deploy at `db:migrate`, which is
+-- where it was found. `left(…, 200)` because `legal_name` is varchar(200) while
+-- both `display_name` and `email` are varchar(255): a long display name would
+-- abort the whole file on a value overflow the same way a missing column does.
 INSERT INTO developer_orgs (slug, legal_name, verification_state)
 SELECT
   'dev-' || substring(replace(u.id::text, '-', '') from 1 for 16),
-  COALESCE(NULLIF(TRIM(u.name), ''), u.email, 'Developer'),
+  left(COALESCE(
+    NULLIF(TRIM(u.display_name), ''),
+    NULLIF(TRIM(u.username), ''),
+    u.email,
+    'Developer'
+  ), 200),
   'unverified'
 FROM users u
 WHERE EXISTS (SELECT 1 FROM developer_api_keys k WHERE k.user_id = u.id)

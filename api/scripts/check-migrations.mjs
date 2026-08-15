@@ -362,6 +362,175 @@ if (fkTypeMismatches.length > 0) {
   failed = true;
 }
 
+// ---------------------------------------------------------------------------
+// FOURTH GUARD — a qualified column reference that does not exist.
+//
+// The FK guard above closes "the constraint cannot be built". This closes the
+// other half of the same hole: a migration's DML naming a column that was never
+// declared. `0467_developer_portal.sql` backfilled a publisher name from
+// `TRIM(u.name)` — but `users` has `display_name`, and has never had `name`.
+// tsgo does not read SQL, no test executes a migration, and `check-schema-drift`
+// only asks whether a Drizzle column exists in the DDL — never the reverse. So
+// the first and only signal was `NeonDbError: column u.name does not exist`,
+// mid-file, at deploy.
+//
+// The same failure is one typo away in any of the 419 files, and it costs a full
+// red deploy every time. This resolves each `alias.column` against the alias's
+// table, using the union of every column the migrations declare and everything
+// the Drizzle schema declares.
+//
+// CONSERVATIVE BY CONSTRUCTION — this guard blocks deploys, so every ambiguity
+// resolves to SILENCE rather than to a finding:
+//   - an alias bound to a derived table, a CTE or a LATERAL is skipped entirely,
+//     because its columns are computed and cannot be looked up;
+//   - an alias bound to two different tables in one statement is skipped;
+//   - a table neither the migrations nor the schema declare is skipped;
+//   - the column set is a UNION over ALL migrations, so a column that was later
+//     dropped or renamed still resolves for the migration that legitimately used
+//     it while it existed.
+// ---------------------------------------------------------------------------
+
+const transactionalDir = resolve(here, '../transactional-migrations');
+let transactionalTexts = [];
+try {
+  transactionalTexts = readdirSync(transactionalDir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort()
+    .map((f) => ({ file: `transactional-migrations/${f}`, text: readFileSync(join(transactionalDir, f), 'utf8') }));
+} catch { /* no transactional migrations — nothing to add */ }
+
+const allSqlTexts = [...sqlTexts, ...transactionalTexts];
+
+/** table -> Set<column>: every column any migration declares, plus the live schema. */
+function buildKnownColumns() {
+  const known = new Map();
+  const add = (table, column) => {
+    const t = table.toLowerCase();
+    if (!known.has(t)) known.set(t, new Set());
+    known.get(t).add(column.toLowerCase());
+  };
+  for (const [table, cols] of collectMigrationColumns(allSqlTexts).columns) {
+    for (const col of cols.keys()) add(table, col);
+  }
+  for (const [table, cols] of drizzleTypes) {
+    for (const col of cols.keys()) add(table, col);
+  }
+  // A renamed column is legitimately referenced under BOTH names — the old one by
+  // every migration before the rename, the new one by every migration after it.
+  const renameRe = /alter\s+table\s+(?:if\s+exists\s+)?["']?(\w+)["']?\s+rename\s+column\s+["']?(\w+)["']?\s+to\s+["']?(\w+)["']?/gi;
+  for (const { text } of allSqlTexts) {
+    for (const m of text.replace(/--[^\n]*/g, '').matchAll(renameRe)) {
+      add(m[1], m[2]);
+      add(m[1], m[3]);
+    }
+  }
+  return known;
+}
+
+const knownColumns = buildKnownColumns();
+
+/** Words that can follow a table name without being an alias. */
+const NOT_AN_ALIAS = new Set([
+  'as', 'on', 'using', 'where', 'set', 'select', 'from', 'join', 'inner', 'left', 'right',
+  'full', 'outer', 'cross', 'lateral', 'natural', 'group', 'order', 'having', 'limit',
+  'offset', 'fetch', 'for', 'union', 'except', 'intersect', 'window', 'returning', 'values',
+  'and', 'or', 'not', 'is', 'null', 'in', 'exists', 'when', 'then', 'else', 'end', 'case',
+  'add', 'drop', 'alter', 'rename', 'column', 'table', 'index', 'only', 'do', 'nothing',
+  'conflict', 'constraint', 'default', 'with', 'without', 'distinct', 'all', 'into',
+  'tablesample', 'ordinality', 'primary', 'key', 'unique', 'references', 'cascade', 'restrict',
+]);
+
+/** Split on top-level `;`, leaving `$tag$ … $tag$` bodies intact. */
+function splitStatements(sql) {
+  const out = [];
+  let current = '';
+  let i = 0;
+  let dollarTag = null;
+  while (i < sql.length) {
+    if (dollarTag) {
+      if (sql.startsWith(dollarTag, i)) { current += dollarTag; i += dollarTag.length; dollarTag = null; continue; }
+      current += sql[i++];
+      continue;
+    }
+    if (sql[i] === '$') {
+      const m = /^\$[A-Za-z0-9_]*\$/.exec(sql.slice(i));
+      if (m) { dollarTag = m[0]; current += dollarTag; i += dollarTag.length; continue; }
+    }
+    if (sql[i] === ';') { out.push(current); current = ''; i++; continue; }
+    current += sql[i++];
+  }
+  out.push(current);
+  return out.filter((s) => s.trim());
+}
+
+const BIND_RE = /\b(?:from|join|update|insert\s+into|into)\s+(?:only\s+)?["']?(\w+)["']?(?:\s+as\b)?(?:\s+(\w+))?/gi;
+/** `) alias` — a derived table, a LATERAL or a parenthesised set. Its columns are
+ *  computed, so any alias bound this way is unresolvable and must be left alone. */
+const DERIVED_RE = /\)\s*(?:as\s+)?(\w+)/gi;
+/** `name AS (` — a CTE. Same reasoning. */
+const CTE_RE = /\b(\w+)\s+as\s*\(/gi;
+const REF_RE = /\b(\w+)\.(\w+)\b/g;
+
+const unknownRefs = [];
+for (const { file, text } of allSqlTexts) {
+  const sql = text.replace(/--[^\n]*/g, '');
+  for (const statement of splitStatements(sql)) {
+    // Names that cannot be resolved to a real table, and are therefore off limits.
+    const opaque = new Set();
+    for (const m of statement.matchAll(DERIVED_RE)) opaque.add(m[1].toLowerCase());
+    for (const m of statement.matchAll(CTE_RE)) opaque.add(m[1].toLowerCase());
+
+    /** alias -> table, or null once the alias is ambiguous. */
+    const bound = new Map();
+    const bind = (alias, table) => {
+      const a = alias.toLowerCase();
+      if (bound.has(a) && bound.get(a) !== table) bound.set(a, null);
+      else bound.set(a, table);
+    };
+    for (const m of statement.matchAll(BIND_RE)) {
+      const table = m[1].toLowerCase();
+      bind(table, table); // an unaliased table is referenced by its own name
+      const alias = m[2];
+      if (alias && !NOT_AN_ALIAS.has(alias.toLowerCase())) bind(alias, table);
+    }
+
+    for (const m of statement.matchAll(REF_RE)) {
+      const alias = m[1].toLowerCase();
+      const column = m[2].toLowerCase();
+      if (opaque.has(alias)) continue;
+      const table = bound.get(alias);
+      if (!table) continue;
+      const cols = knownColumns.get(table);
+      // An empty column set means the parse failed, not that the table is empty.
+      if (!cols || cols.size === 0) continue;
+      if (cols.has(column)) continue;
+      const line = statement.slice(0, m.index).split('\n').length
+        + sql.slice(0, sql.indexOf(statement)).split('\n').length - 1;
+      unknownRefs.push({ file, line, alias, table, column });
+    }
+  }
+}
+
+if (unknownRefs.length > 0) {
+  console.error('\n❌  Migration references a column that does not exist — this is a red deploy at db:migrate, not a test failure:\n');
+  for (const r of unknownRefs) {
+    const near = [...(knownColumns.get(r.table) ?? [])]
+      .filter((c) => c.includes(r.column) || r.column.includes(c))
+      .slice(0, 4);
+    console.error(
+      `   ${r.file}:${r.line}: ${r.alias}.${r.column} — ${r.table} has no column '${r.column}'` +
+        (near.length ? `. Did you mean ${near.join(', ')}?` : '.'),
+    );
+  }
+  console.error(
+    '\n   The column set is the UNION of every column the migrations declare and\n' +
+      '   everything src/infrastructure/database/schema/ declares, so a column that\n' +
+      '   merely moved or was dropped later still resolves. A name reported here was\n' +
+      '   never declared anywhere.\n',
+  );
+  failed = true;
+}
+
 if (failed) process.exit(1);
 
 const allowed = [...collidingPrefixes].filter((p) => allowlist.has(p));
