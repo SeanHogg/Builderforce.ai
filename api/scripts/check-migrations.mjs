@@ -384,7 +384,12 @@ if (fkTypeMismatches.length > 0) {
 //   - an alias bound to a derived table, a CTE or a LATERAL is skipped entirely,
 //     because its columns are computed and cannot be looked up;
 //   - an alias bound to two different tables in one statement is skipped;
-//   - a table neither the migrations nor the schema declare is skipped;
+//   - only a table with a CREATE TABLE in the migrations, or a pgTable in the
+//     schema, is judged. A table known ONLY through `ALTER TABLE … ADD COLUMN`
+//     (the legacy `coderclaw_instances`, guarded behind `to_regclass(…)`) has an
+//     unknown base shape, and every column it already had would report as missing;
+//   - string literals are blanked, so prose inside a seeded prompt cannot be read
+//     as SQL — `e.g.` is not a reference to a column named `g`;
 //   - the column set is a UNION over ALL migrations, so a column that was later
 //     dropped or renamed still resolves for the migration that legitimately used
 //     it while it existed.
@@ -429,6 +434,80 @@ function buildKnownColumns() {
 
 const knownColumns = buildKnownColumns();
 
+/**
+ * The tables whose FULL shape is known — a `CREATE TABLE` in the migrations, or a
+ * `pgTable` in the schema. A table seen only through `ALTER TABLE … ADD COLUMN`
+ * is deliberately excluded: `knownColumns` would hold just the added column, and
+ * every pre-existing one it references would be reported as missing.
+ */
+const declaredTables = new Set(drizzleTypes.keys());
+for (const { text } of allSqlTexts) {
+  for (const m of text.replace(/--[^\n]*/g, '').matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?["']?(\w+)/gi)) {
+    declaredTables.add(m[1].toLowerCase());
+  }
+}
+
+/** After a `,`, a `(` or an `=`, a dollar-quoted block is a VALUE. Anywhere else
+ *  (`DO $$`, `AS $$`) it is executable code. */
+const VALUE_POSITION = new Set([',', '(', '=']);
+
+/**
+ * Blank the CONTENT of every literal, preserving length and newlines.
+ *
+ * Seed migrations insert English prose — `0210_seed_system_prompts.sql` ships a
+ * prompt variable described as "e.g. idea, pre-launch", which parses as `e.g`, a
+ * qualified reference to a column named `g` on whatever `e` is bound to in the
+ * same statement. Blanking is by content, not by removal, so reported line numbers
+ * still point at real source.
+ *
+ * Dollar-quoted blocks split by position. In VALUE position (`$v$[…]$v$` as an
+ * INSERT value) the body is prose and is blanked. Everywhere else it is plpgsql —
+ * `DO $$ … $$`, `CREATE FUNCTION … AS $$ … $$` — and is KEPT, because the
+ * segment_id backfills in `0056` live inside those blocks and are exactly the DML
+ * this guard exists to read. Their inner `'…'` literals are still blanked.
+ */
+function blankLiterals(text) {
+  const out = text.split('');
+  const blank = (from, to) => {
+    for (let k = from; k < to && k < out.length; k++) if (out[k] !== '\n') out[k] = ' ';
+  };
+  let i = 0;
+  let lastNonWs = '';
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === "'") {
+      let j = i + 1;
+      for (; j < text.length; j++) {
+        if (text[j] === "'") {
+          if (text[j + 1] === "'") { j++; continue; } // '' is an escaped quote
+          break;
+        }
+      }
+      blank(i + 1, j);
+      i = j + 1;
+      lastNonWs = "'";
+      continue;
+    }
+    const tag = ch === '$' ? /^\$[A-Za-z0-9_]*\$/.exec(text.slice(i))?.[0] : null;
+    if (tag) {
+      const close = text.indexOf(tag, i + tag.length);
+      const bodyEnd = close === -1 ? text.length : close;
+      if (VALUE_POSITION.has(lastNonWs)) {
+        blank(i + tag.length, bodyEnd);
+      } else {
+        const inner = blankLiterals(text.slice(i + tag.length, bodyEnd));
+        for (let k = 0; k < inner.length; k++) out[i + tag.length + k] = inner[k];
+      }
+      i = close === -1 ? text.length : close + tag.length;
+      lastNonWs = '$';
+      continue;
+    }
+    if (!/\s/.test(ch)) lastNonWs = ch;
+    i++;
+  }
+  return out.join('');
+}
+
 /** Words that can follow a table name without being an alias. */
 const NOT_AN_ALIAS = new Set([
   'as', 'on', 'using', 'where', 'set', 'select', 'from', 'join', 'inner', 'left', 'right',
@@ -440,27 +519,33 @@ const NOT_AN_ALIAS = new Set([
   'tablesample', 'ordinality', 'primary', 'key', 'unique', 'references', 'cascade', 'restrict',
 ]);
 
-/** Split on top-level `;`, leaving `$tag$ … $tag$` bodies intact. */
+/**
+ * Split on top-level `;`, leaving `$tag$ … $tag$` bodies intact, and return each
+ * statement with its offset so a finding can be reported at its real line.
+ *
+ * A `DO $$ … $$` block is ONE statement and keeps its body: the segment_id
+ * backfills in 0056 live inside those blocks, and dropping them would blind the
+ * guard to the exact shape of DML most likely to name a column wrong.
+ */
 function splitStatements(sql) {
   const out = [];
-  let current = '';
+  let start = 0;
   let i = 0;
   let dollarTag = null;
+  const push = (end) => { if (sql.slice(start, end).trim()) out.push({ text: sql.slice(start, end), offset: start }); };
   while (i < sql.length) {
     if (dollarTag) {
-      if (sql.startsWith(dollarTag, i)) { current += dollarTag; i += dollarTag.length; dollarTag = null; continue; }
-      current += sql[i++];
+      if (sql.startsWith(dollarTag, i)) { i += dollarTag.length; dollarTag = null; continue; }
+      i++;
       continue;
     }
-    if (sql[i] === '$') {
-      const m = /^\$[A-Za-z0-9_]*\$/.exec(sql.slice(i));
-      if (m) { dollarTag = m[0]; current += dollarTag; i += dollarTag.length; continue; }
-    }
-    if (sql[i] === ';') { out.push(current); current = ''; i++; continue; }
-    current += sql[i++];
+    const tag = sql[i] === '$' ? /^\$[A-Za-z0-9_]*\$/.exec(sql.slice(i)) : null;
+    if (tag) { dollarTag = tag[0]; i += tag[0].length; continue; }
+    if (sql[i] === ';') { push(i); start = i + 1; }
+    i++;
   }
-  out.push(current);
-  return out.filter((s) => s.trim());
+  push(sql.length);
+  return out;
 }
 
 const BIND_RE = /\b(?:from|join|update|insert\s+into|into)\s+(?:only\s+)?["']?(\w+)["']?(?:\s+as\b)?(?:\s+(\w+))?/gi;
@@ -473,8 +558,8 @@ const REF_RE = /\b(\w+)\.(\w+)\b/g;
 
 const unknownRefs = [];
 for (const { file, text } of allSqlTexts) {
-  const sql = text.replace(/--[^\n]*/g, '');
-  for (const statement of splitStatements(sql)) {
+  const sql = blankLiterals(text.replace(/--[^\n]*/g, ''));
+  for (const { text: statement, offset } of splitStatements(sql)) {
     // Names that cannot be resolved to a real table, and are therefore off limits.
     const opaque = new Set();
     for (const m of statement.matchAll(DERIVED_RE)) opaque.add(m[1].toLowerCase());
@@ -499,13 +584,12 @@ for (const { file, text } of allSqlTexts) {
       const column = m[2].toLowerCase();
       if (opaque.has(alias)) continue;
       const table = bound.get(alias);
-      if (!table) continue;
+      if (!table || !declaredTables.has(table)) continue;
       const cols = knownColumns.get(table);
       // An empty column set means the parse failed, not that the table is empty.
       if (!cols || cols.size === 0) continue;
       if (cols.has(column)) continue;
-      const line = statement.slice(0, m.index).split('\n').length
-        + sql.slice(0, sql.indexOf(statement)).split('\n').length - 1;
+      const line = sql.slice(0, offset + m.index).split('\n').length;
       unknownRefs.push({ file, line, alias, table, column });
     }
   }
