@@ -209,6 +209,11 @@ const MAX_MUTATION_RECOVERIES = 2;
  * which cannot author inside the ceiling fails over instead of looping. */
 const MAX_INTERRUPTED_TURN_RECOVERIES = 2;
 
+/** Silent round-trips tolerated on one model before the turn routes around it. Two:
+ *  a stall is usually a single bad connection, and a model that swallows two requests
+ *  in a row will swallow the third too. */
+const MAX_STALLED_STREAMS = 2;
+
 /** Truncation is an OUTPUT-SIZE failure, so the recovery is to author smaller —
  * the opposite of "answer again", which would truncate identically. The canvas
  * itself is the durable place for length, so splitting across calls costs nothing. */
@@ -245,7 +250,71 @@ export class CanvasRunAbortedError extends Error {
  */
 export function isCanvasRunAborted(error: unknown): boolean {
   if (error instanceof CanvasRunAbortedError) return true;
+  if (error instanceof CanvasStreamStalledError) return false;
   return error instanceof Error && error.name === 'AbortError';
+}
+
+/**
+ * A provider that accepted the request and then went silent.
+ *
+ * Distinct from {@link CanvasRunAbortedError} because the abort that ends it is OURS,
+ * not the user's: both surface as an `AbortError` from the fetch layer, and treating a
+ * stall as "you pressed Stop" would tell the user they cancelled a turn they were
+ * waiting on.
+ */
+class CanvasStreamStalledError extends Error {
+  constructor() {
+    super('canvas-stream-stalled');
+    this.name = 'CanvasStreamStalledError';
+  }
+}
+
+/**
+ * No token, and no completion, for this long.
+ *
+ * A canvas turn had NO time bound of any kind — the only thing that could end an
+ * in-flight request was the user pressing Stop. Measured 2026-08-15: a provider took
+ * 134 seconds to return an empty completion, the loop dutifully asked it again, and the
+ * board sat on "Reading" for four minutes with a spinner and no way to know anything
+ * was wrong. The ceiling is generous because a long authoring response legitimately
+ * streams for a while — but a stream that has produced NOTHING for over a minute is not
+ * slow, it is gone.
+ */
+const CANVAS_STREAM_STALL_MS = 75_000;
+
+/**
+ * One model round-trip, bounded by inactivity.
+ *
+ * The timer is re-armed by every token, so length is never punished — only silence is.
+ * The user's own signal is chained through so Stop keeps working exactly as before, and
+ * is checked when the request rejects so a user stop is never reported as a stall.
+ */
+async function streamBoundedByActivity(
+  request: Parameters<typeof streamChatCompletion>[0],
+  onTextDelta: (delta: string) => void,
+  userSignal: AbortSignal | undefined,
+): Promise<Awaited<ReturnType<typeof streamChatCompletion>>> {
+  const controller = new AbortController();
+  const stopRun = () => controller.abort();
+  userSignal?.addEventListener('abort', stopRun);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(stopRun, CANVAS_STREAM_STALL_MS);
+  };
+  arm();
+  try {
+    return await streamChatCompletion({ ...request, signal: controller.signal }, {
+      onTextDelta: (delta) => { arm(); onTextDelta(delta); },
+    });
+  } catch (error) {
+    if (userSignal?.aborted) throw error;
+    if (controller.signal.aborted) throw new CanvasStreamStalledError();
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+    userSignal?.removeEventListener('abort', stopRun);
+  }
 }
 
 export class GuestAiUnavailableError extends Error {
@@ -321,7 +390,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   const messages: ChatCompletionMessage[] = [
     {
       role: 'system',
-      content: 'Creative objects are first-class, provider-neutral Builderforce Canvas widgets. Use image, animation, podcast, comic, game, cad, model3d, resume, template, video, document, or slides according to the requested output. Author the brief and configuration into the widget first. Use the built-in builtin_creative_capabilities tool to discover the native contract and builtin_creative_compose to normalize a creative manifest, then mirror the returned fields into the same Canvas object with canvas_update_object. Do not require, name, or assume any external product or provider. Never claim a rendered or exported deliverable exists unless a native execution result confirms it.',
+      content: 'Creative objects are first-class, provider-neutral Builderforce Canvas widgets. Use image, animation, podcast, comic, game, cad, model3d, resume, template, video, document, or slides according to the requested output. Author the brief and configuration into the widget first. Use the built-in builtin_creative_capabilities tool to discover the native contract and builtin_creative_compose to normalize a creative manifest, then mirror the returned fields into the same Canvas object with canvas_update_object. Do not require, name, or assume any external product or provider. Never claim a rendered or exported deliverable exists unless a native execution result confirms it. A RESUME IS RESTYLED, NEVER RETYPED: when the user asks for their résumé in different styles, templates, designs or layouts, or for several versions of it, call canvas_render_resume_variants once — it re-renders the existing document through the built-in template engine in one step. Authoring versions by hand with canvas_add_object is wrong even when it looks possible: it is far slower and it lets each version state a different work history.',
     },
     {
       role: 'system',
@@ -449,6 +518,8 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   let mutationRecoveries = 0;
   let degenerateAnswerRecoveryUsed = false;
   let interruptedTurnRecoveries = 0;
+  /** Round-trips this turn abandoned because the provider went silent. */
+  let stalledStreams = 0;
   let authoringDirectiveIssued = false;
   let narrowSearches = 0;
   let lastToolError = '';
@@ -535,26 +606,48 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     const availableActions = authoringOnly
       ? actions.filter((action) => !NON_AUTHORING_TOOL_NAMES.has(action.name))
       : actions;
-    const result = await streamChatCompletion({
-      transport,
-      messages,
-      tools: specsFor(availableActions),
-      tool_choice: 'auto',
-      maxTokens: CANVAS_RESPONSE_TOKENS,
-      reasoning: { level: 'low' },
-      model: activeModel,
-      modelStrict: activeModelStrict,
-      routingMode: options.routingMode,
-      // Models this session (or this turn) already proved will not execute a Canvas
-      // command. Only meaningful while UNPINNED — with a pin the caller has made the
-      // choice — and the gateway ignores it rather than emptying the cascade, so this
-      // can steer routing without ever refusing to answer.
-      ...(!activeModel && (excludeModels.length || commandFailedModels.size)
-        ? { excludeModels: [...new Set([...excludeModels, ...commandFailedModels])] }
-        : {}),
-      metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
-      signal: options.signal,
-    }, { onTextDelta: (delta) => { finalText += delta; options.onText?.(finalText); } });
+    let result: Awaited<ReturnType<typeof streamChatCompletion>>;
+    try {
+      result = await streamBoundedByActivity({
+        transport,
+        messages,
+        tools: specsFor(availableActions),
+        tool_choice: 'auto',
+        maxTokens: CANVAS_RESPONSE_TOKENS,
+        reasoning: { level: 'low' },
+        model: activeModel,
+        modelStrict: activeModelStrict,
+        routingMode: options.routingMode,
+        // Models this session (or this turn) already proved will not execute a Canvas
+        // command. Only meaningful while UNPINNED — with a pin the caller has made the
+        // choice — and the gateway ignores it rather than emptying the cascade, so this
+        // can steer routing without ever refusing to answer.
+        ...(!activeModel && (excludeModels.length || commandFailedModels.size)
+          ? { excludeModels: [...new Set([...excludeModels, ...commandFailedModels])] }
+          : {}),
+        metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
+      }, (delta) => { finalText += delta; options.onText?.(finalText); }, options.signal);
+    } catch (error) {
+      // A STALLED provider is a routing problem, not a content problem, so the ladder is
+      // shorter than the interruption one: try again once (a stall is often a single bad
+      // connection), then hand the turn to a model that has already worked in it, then
+      // stop. Stopping is the point — the alternative is the four-minute spinner this
+      // exists to end, and by here the turn still delivers whatever it already has.
+      if (!(error instanceof CanvasStreamStalledError)) throw error;
+      throwIfStopped();
+      stalledStreams += 1;
+      options.onTrace?.({
+        ts: new Date().toISOString(), category: 'error', label: 'provider stopped responding', isError: true,
+        result: { model: activeModel ?? null, seconds: Math.round(CANVAS_STREAM_STALL_MS / 1_000), attempt: stalledStreams },
+      });
+      finalText = '';
+      if (stalledStreams < MAX_STALLED_STREAMS) continue;
+      if (switchToProvenModel(activeModel, 'The prior model stopped responding mid-request and has been disabled for this session.')) {
+        stalledStreams = 0;
+        continue;
+      }
+      break;
+    }
     throwIfStopped();
     options.onCompletion?.({
       at: new Date().toISOString(), iteration: turn + 1,
@@ -767,6 +860,12 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   if (lastSpokenAnswer) {
     const checked = verified(lastSpokenAnswer);
     return finish(checked === lastSpokenAnswer ? notices.answeredWithoutCanvasChange(checked) : checked);
+  }
+  // A turn that ran out of PROVIDERS is not a turn that had nothing to say. Reporting it
+  // as "no answer" blames the request, so the user rewrites a prompt that was fine.
+  if (stalledStreams) {
+    options.onUnanswered?.({ reason: 'no-answer', detail: 'provider-stalled' });
+    return notices.providerStalled;
   }
   options.onUnanswered?.({ reason: mutationRequested ? 'command-not-executed' : 'no-answer' });
   return notices.noAnswer;

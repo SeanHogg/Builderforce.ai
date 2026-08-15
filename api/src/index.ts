@@ -138,6 +138,16 @@ import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDe
 import { createCreationSessionRoutes } from './presentation/routes/creationSessionRoutes';
 import { createPublicResumeRoutes } from './presentation/routes/publicResumeRoutes';
 import { resolvePublicResume } from './application/creation/publicResumeProjection';
+// Founder operations (0469) — collection, signature, payables, and the founder's
+// own network. See the mounts below for why two of these carry no auth.
+import { createFormRoutes, createPublicFormRoutes } from './presentation/routes/formRoutes';
+import { createSignatureRoutes, createPublicSignatureRoutes } from './presentation/routes/signatureRoutes';
+import { createPayableRoutes } from './presentation/routes/payableRoutes';
+import {
+  createCofounderRoutes,
+  createInvestorUpdateRoutes,
+  createPipelineRoutes,
+} from './presentation/routes/founderNetworkRoutes';
 import { createCreativeRoutes } from './presentation/routes/creativeRoutes';
 import { createWorkflowTriggerRoutes } from './presentation/routes/workflowTriggerRoutes';
 import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
@@ -485,7 +495,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // the ref `tenant_model:<slug>` (cloud agents, on-prem hosts, the Designer Brain).
   app.route('/api/llm/models', createTenantModelRoutes(db));
 
-  // Human ratings of model output (migration 0465) — the thumbs every chat surface
+  // Human ratings of model output (migration 0468) — the thumbs every chat surface
   // shows, filed against (action / MCP tool) × model so the learned router can tell
   // which model is actually good at which kind of work.
   app.route('/api/llm/ratings', createLlmRatingRoutes(db));
@@ -771,6 +781,30 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/workflow-definitions', createWorkflowDefinitionRoutes(db));
   app.route('/api/creation-sessions', createCreationSessionRoutes(db));
   app.route('/api/public/resumes', createPublicResumeRoutes((token) => resolvePublicResume(db, token)));
+
+  // ── Founder operations (0469) ─────────────────────────────────────────────
+  //
+  // The two PUBLIC surfaces come first and carry no auth middleware, because
+  // both are reached by a human who is not in the workspace: a form is answered
+  // by people who are not members — that is the entire point of the primitive —
+  // and a signer holds a credential and no session. The row each token resolves
+  // to REPORTS its tenant rather than the caller asserting one, which is the
+  // `share_token` cross-tenant reason the scope helper declares. Mounting either
+  // under the authenticated tree would not make it stricter; it would make the
+  // feature impossible.
+  app.route('/api/public/forms',      createPublicFormRoutes(db));
+  app.route('/api/public/signatures', createPublicSignatureRoutes(db));
+  // The workspace halves.
+  app.route('/api/forms',             createFormRoutes(db));
+  app.route('/api/signatures',        createSignatureRoutes(db));
+  // Receivable and payable, and the three acts a bill has. The approver comes
+  // from the session inside the route — never from the body.
+  app.route('/api/payables',          createPayableRoutes(db));
+  // The sales board as a PROJECTION of the deals, and the one-call stage move
+  // that replaces the mirroring instruction in the canvas prompt.
+  app.route('/api/pipeline',          createPipelineRoutes(db));
+  app.route('/api/cofounder',         createCofounderRoutes(db));
+  app.route('/api/investor-updates',  createInvestorUpdateRoutes(db));
   app.route('/api/approvals',       createApprovalRoutes(db, runtimeService));
   app.route('/api/approval-rules',  createApprovalRuleRoutes(db));
   app.route('/api/telemetry',       createTelemetryRoutes(db));

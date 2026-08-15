@@ -62,11 +62,20 @@ import type { Env } from '../../env';
  * fatal for the verticals most companies actually are. `delivery` is the software
  * backlog and `support` is the ticket about the work, so neither could absorb it
  * without meaning something else. See `schema/operations.ts`.
+ *
+ * `legal` is the seventeenth, and it was added because a whole PHASE of a
+ * company's life had no owner. `governance` belongs to Security and means SOC 2 —
+ * controls, findings, policies, evidence: the compliance posture of a company
+ * that already exists. Incorporating one, appointing a registered agent,
+ * qualifying to trade in a second state, assigning the founders' IP and filing a
+ * mark are none of those, and they are the first ninety days. Filing them under
+ * `governance` would make that seat mean two things, which is exactly what a
+ * bounded context refuses. See `schema/legal.ts`.
  */
 export const DOMAINS = [
   'growth', 'delivery', 'agents', 'hiring', 'finance', 'revenue', 'commerce',
   'identity', 'people', 'platform', 'governance', 'investor', 'support',
-  'canvas', 'integrations', 'operations',
+  'canvas', 'integrations', 'operations', 'legal',
 ] as const;
 export type Domain = (typeof DOMAINS)[number];
 

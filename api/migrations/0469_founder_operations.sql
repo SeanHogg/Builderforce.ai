@@ -13,7 +13,11 @@
 --  · It could AUTHOR anything and COLLECT nothing. `PublishedForm`,
 --    `FORM_FIELD_TYPES`, `FORM_AUDIENCES` and `FORM_STATUSES` were declared in
 --    the contract with a careful argument for each distinction and ZERO
---    consumers anywhere in the repo.
+--    consumers anywhere in the repo. The STORE was never the missing half —
+--    `question_sets` and `responses` absorbed twelve survey tables and thirteen
+--    answer tables. What was missing was the PUBLICATION: no public address, no
+--    anonymity switch, no enforceable audience, so a set could be authored and
+--    never sent to anybody outside the workspace.
 --  · `SIGNATURE_PARTY_STATUSES`, `SIGNATURE_INTENTS` and
 --    `isTerminalPartyStatus` were likewise declared and unused —
 --    `isTerminalPartyStatus` even documents the three call sites it was written
@@ -48,84 +52,72 @@
 -- 1 — Collection: getting an answer from a human outside the workspace
 -- ---------------------------------------------------------------------------
 --
--- Kernel primitives, owned by no domain. The contract declares them in the
--- PEOPLE vocabulary because HR is the domain that exposed their absence, and
--- says in as many words that every field is domain NEUTRAL: support intake, a
--- research screener, a satisfaction round and an investor NDA are the same two
--- objects. Handing the domain that asked first a private copy is how a product
--- ends up with three response stores.
+-- NO `published_forms` AND NO `form_responses`, DELIBERATELY. `question_sets`
+-- and `responses` are already the kernel's form and response store — twelve
+-- survey tables and thirteen answer tables were consolidated into them. A
+-- parallel pair here would be the third response store the canvas contract's own
+-- note warns about, and a second answer to "what did this person answer".
 --
--- `slug` is globally unique, not unique per tenant: a public URL has no tenant
--- to disambiguate it with, and the row it resolves to REPORTS the tenant rather
--- than the caller asserting one.
+-- What was missing is PUBLICATION, and publication is columns:
+--
+--   slug                 the public address. Globally unique and NULLABLE — an
+--                        unpublished set has none, and a published one has no
+--                        tenant in its URL to disambiguate it with, so the row
+--                        reports the tenant rather than the caller asserting it.
+--   anonymous            whether a response records WHO answered. A boolean and
+--                        not an audience value: an anonymous pulse must not
+--                        record the responder even though they are signed in,
+--                        while a policy acknowledgement is worthless unless it
+--                        does. Conflating them is how an "anonymous" survey
+--                        comes to carry a user id.
+--   audience_kind        the ENFORCEABLE discriminator, beside the existing
+--                        `audience` jsonb which holds what it is parameterised
+--                        by. Neither restates the other.
+--   confirmation_message what to say afterwards. "Thanks" is rarely the useful
+--                        thing — an applicant wants to know what happens next.
+--   object_id            the canvas `form` object this set projects.
 
-CREATE TABLE IF NOT EXISTS published_forms (
-  id                   serial PRIMARY KEY,
-  tenant_id            integer NOT NULL,
-  object_id            uuid REFERENCES objects(id) ON DELETE SET NULL,
-  slug                 varchar(64) NOT NULL,
-  title                varchar(200) NOT NULL,
-  description          text,
-  -- FormQuestion[]: {id, type, label, help, required, options, max}. JSONB and
-  -- not a form_questions table because a question has no independent life — it
-  -- is never queried across forms and only ever read as the whole ordered set
-  -- that renders one page.
-  questions            jsonb NOT NULL DEFAULT '[]'::jsonb,
-  status               varchar(16) NOT NULL DEFAULT 'draft',
-  -- Not an audience value. An anonymous pulse must not record who answered even
-  -- though they are signed in, while a policy acknowledgement is worthless
-  -- unless it does — conflating them is how an "anonymous" survey comes to
-  -- carry a user id.
-  anonymous            boolean NOT NULL DEFAULT false,
-  audience             varchar(24) NOT NULL DEFAULT 'anyoneWithLink',
-  closes_at            timestamp,
-  confirmation_message text,
-  created_by           varchar(64),
-  created_at           timestamp NOT NULL DEFAULT now(),
-  updated_at           timestamp NOT NULL DEFAULT now()
-);
+ALTER TABLE question_sets
+  ADD COLUMN IF NOT EXISTS slug                 varchar(64),
+  ADD COLUMN IF NOT EXISTS anonymous            boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS audience_kind        varchar(24) NOT NULL DEFAULT 'anyoneWithLink',
+  ADD COLUMN IF NOT EXISTS confirmation_message text,
+  ADD COLUMN IF NOT EXISTS object_id            uuid REFERENCES objects(id) ON DELETE SET NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_published_forms_slug ON published_forms (slug);
-CREATE INDEX IF NOT EXISTS idx_published_forms_tenant ON published_forms (tenant_id, status, updated_at);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_question_sets_slug ON question_sets (slug);
 
--- The audience is ENFORCED here or it is decoration. A form whose audience says
--- "named recipients only" and whose route lets anyone with the slug answer is a
--- lie told by a column — the same defect the register logs against the data
--- room's unenforced nda_required.
+-- `responses` is one row per ANSWER, which is the right grain and left one
+-- question unanswerable: "how many people responded". Counting distinct
+-- respondents works only while there IS a respondent, and on an anonymous form
+-- there deliberately is not. A per-submission id closes that without identifying
+-- anybody — it groups one person's answers to each other and to nothing else.
+ALTER TABLE responses
+  ADD COLUMN IF NOT EXISTS submission_id uuid,
+  ADD COLUMN IF NOT EXISTS recipient_id  integer;
+
+CREATE INDEX IF NOT EXISTS idx_responses_submission ON responses (question_set_id, submission_id);
+
+-- The one genuinely new collection table: a per-recipient CREDENTIAL. Without
+-- it `audience_kind = 'namedRecipients'` is decoration — a form that says "named
+-- recipients only" and whose route lets anyone holding the slug answer is a lie
+-- told by a column, the same defect the register logs against the data room's
+-- unenforced nda_required.
 CREATE TABLE IF NOT EXISTS form_recipients (
-  id           serial PRIMARY KEY,
-  tenant_id    integer NOT NULL,
-  form_id      integer NOT NULL REFERENCES published_forms(id) ON DELETE CASCADE,
-  email        varchar(320) NOT NULL,
-  name         varchar(200),
+  id              serial PRIMARY KEY,
+  tenant_id       integer NOT NULL,
+  question_set_id uuid NOT NULL REFERENCES question_sets(id) ON DELETE CASCADE,
+  email           varchar(320) NOT NULL,
+  name            varchar(200),
   -- The token IS the credential, so only its hash is stored and the entity
   -- layer's redaction removes the column from every generic projection.
-  token_hash   varchar(64) NOT NULL,
-  invited_at   timestamp NOT NULL DEFAULT now(),
-  responded_at timestamp,
-  created_at   timestamp NOT NULL DEFAULT now()
+  token_hash      varchar(64) NOT NULL,
+  invited_at      timestamp NOT NULL DEFAULT now(),
+  responded_at    timestamp,
+  created_at      timestamp NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_form_recipients_email ON form_recipients (form_id, email);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_form_recipients_email ON form_recipients (question_set_id, email);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_form_recipients_token ON form_recipients (token_hash);
-
-CREATE TABLE IF NOT EXISTS form_responses (
-  id             serial PRIMARY KEY,
-  tenant_id      integer NOT NULL,
-  form_id        integer NOT NULL REFERENCES published_forms(id) ON DELETE CASCADE,
-  recipient_id   integer REFERENCES form_recipients(id) ON DELETE SET NULL,
-  -- NULL for an anonymous form. Not "anonymous", not a hashed id — absent. A
-  -- column holding a pseudonym on an anonymous survey is a column somebody will
-  -- eventually join, and the promise made to the person answering was that
-  -- there would be nothing to join.
-  respondent_ref varchar(64),
-  answers        jsonb NOT NULL DEFAULT '{}'::jsonb,
-  submitted_at   timestamp NOT NULL DEFAULT now(),
-  created_at     timestamp NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_form_responses_form ON form_responses (form_id, submitted_at);
-CREATE INDEX IF NOT EXISTS idx_form_responses_tenant ON form_responses (tenant_id, submitted_at);
 
 -- ---------------------------------------------------------------------------
 -- 2 — Signature: what turns a draft into a record
@@ -135,6 +127,14 @@ CREATE INDEX IF NOT EXISTS idx_form_responses_tenant ON form_responses (tenant_i
 -- and signing an offer are different acts with different evidentiary weight, and
 -- a product that records both as "signed" cannot later tell an auditor which one
 -- happened. Same table, same trail, different word.
+--
+-- CHECKED FOR A COLLISION AND THERE IS NONE. `delivery.sign_offs` is the nearest
+-- existing shape and it is a different fact: a workspace MEMBER approving version
+-- N of an internal subject, addressed by `approver_ref`, with no counterparty, no
+-- credential and no document. This is a person OUTSIDE the workspace agreeing to
+-- stated terms, reached by a token, with the terms held verbatim as evidence.
+-- Folding one into the other would make "an engineer approved the release" and
+-- "the customer signed the MSA" the same row.
 
 CREATE TABLE IF NOT EXISTS signature_requests (
   id                serial PRIMARY KEY,

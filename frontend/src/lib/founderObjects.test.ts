@@ -48,7 +48,16 @@ describe('the registry is derived, so the lists cannot drift', () => {
     for (const spec of FOUNDER_OBJECT_SPECS) {
       const mutable = creationObjectMutableFields(spec.kind);
       for (const field of spec.fields) {
-        expect(mutable, `${spec.kind}.${field.name} must be authorable`).toContain(field.name);
+        // A `derived` field is READABLE and deliberately NOT writable — the whole
+        // point of the flag. `account.history` is the case that made this explicit:
+        // it holds the account's real invoices, bills and contract, synced from the
+        // domains that own them, and an authored row there is an invented receivable
+        // somebody would chase a real company for. Asserting it authorable would
+        // demand exactly the hole `derived` exists to close, so the readability half
+        // below still runs for it and only the mutability half is skipped.
+        if (!field.derived) {
+          expect(mutable, `${spec.kind}.${field.name} must be authorable`).toContain(field.name);
+        }
         // Readability is checked through the adapter itself rather than the private
         // field list: a value written to the object must survive into the AI context.
         const context = creationObjectAiContext({ kind: spec.kind, title: 'x', [field.name]: 'probe' });

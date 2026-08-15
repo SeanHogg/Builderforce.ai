@@ -90,6 +90,13 @@ export const GUEST_SAFE_CANVAS_TOOLS = [
   // ranking come back with its evidence and its gaps, which is the strongest thing this
   // vocabulary can show without an account.
   'canvas_screen_resumes',
+  // Re-renders a résumé that is ALREADY on the board through the built-in template
+  // engine — pure function, no network, no tenant — so it is guest-safe on exactly the
+  // reasoning `canvas_screen_resumes` is, and for the same person: the visitor most
+  // likely to arrive logged out and ask for their CV in five styles is the one out of
+  // work. Gating it would leave `canvas_add_object` as the only route, which is the
+  // path that spent four minutes retyping the document and produced nothing.
+  'canvas_render_resume_variants',
   // The free diagnostics and calculators. `GET /api/tools`, `GET /api/tools/:id` and
   // `POST /api/tools/:id/compute` are unauthenticated by design (they power the
   // marketing surface), so a visitor asking "how mature is our delivery?" gets a real
@@ -298,6 +305,10 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   'canvas_write_build_file',
   'canvas_edit_build_file',
   'canvas_read_build_diagnostics',
+  // The undo. Same classification for the same reason: a workspace's history is
+  // tenant storage, and a guest has no workspace to roll back.
+  'canvas_list_build_file_history',
+  'canvas_restore_build_file',
 ] as const;
 
 /**

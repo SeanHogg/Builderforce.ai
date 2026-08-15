@@ -92,6 +92,18 @@ export const DOMAIN_MANIFEST: Readonly<Record<Domain, DomainManifest>> = {
    * an asset, not a mature-company concern like governance or headcount.
    */
   operations:   { domain: 'operations',   seat: 'Operations', rootKind: 'work_order',       kinds: ['work_order', 'service_asset', 'service_agreement', 'incident'], metrics: ['operations.open_work_orders', 'operations.first_time_fix', 'operations.sla_breaches'], rung: 1 },
+  /**
+   * The seventeenth seat, and the one the roster was missing at the START of a
+   * company rather than at scale. `governance` is Security's and means SOC 2;
+   * incorporation, registered agent, jurisdiction registration, IP assignment and
+   * trademark are none of those and had no owner at all. See `schema/legal.ts`.
+   *
+   * `rung: 1` and not 3: the first thing a founder does is form the company, so
+   * gating counsel behind maturity would hide it from precisely the session that
+   * needs it. A seat is always listed — progressive disclosure gates state, never
+   * capability.
+   */
+  legal:        { domain: 'legal',        seat: 'Counsel',    rootKind: 'legal_entity',     kinds: ['legal_entity', 'ip_asset', 'matter'],                          metrics: ['legal.open_matters', 'legal.renewals_due'], rung: 1 },
 };
 
 /**

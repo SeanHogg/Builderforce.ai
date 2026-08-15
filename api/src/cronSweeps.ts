@@ -66,6 +66,8 @@ import { runStakeholderDigestSweep, runStakeholderReminderSweep } from './applic
 import { runFinanceRollup } from './application/finance/financeRollup';
 import { runTriggerSweep } from './application/canvas/runTriggerSweep';
 import { runOperationsRollup } from './application/operations/operationsRollup';
+import { runSignatureReminderSweep } from './application/signature/runSignatureReminderSweep';
+import { runLegalRollup } from './application/legal/legalRollup';
 
 /**
  * `null` from a sweep's `run` = nothing worth a log line. Preserved verbatim from
@@ -150,6 +152,40 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
         r.unbound ? `unbound=${r.unbound}` : '',
         r.skipped ? `skipped=${r.skipped}` : '',
       ].filter(Boolean).join(' ');
+    },
+  },
+  {
+    key: 'legal-rollup',
+    cadence: 'daily',
+    // The seventeenth seat arrives with its numbers REAL rather than declared.
+    // `financeRollup` records what happens otherwise: a manifest naming metrics
+    // that three surfaces read by name and nothing ever wrote.
+    description:
+      'Compute open matters and the renewals falling due inside ninety days — across '
+      + 'entity standings, jurisdiction registrations and IP rights — into metric_facts. '
+      + 'The WRITER for the `legal.*` keys DOMAIN_MANIFEST declares.',
+    run: async ({ env }) => {
+      const r = await runLegalRollup(buildDatabase(env));
+      return r.facts > 0 ? `facts=${r.facts}${r.skipped.length ? ` skipped=${r.skipped.length}` : ''}` : null;
+    },
+  },
+  {
+    key: 'signature-reminders',
+    cadence: 'daily',
+    // The third of the three call sites the contract's `isTerminalPartyStatus`
+    // documents, and the one that could not exist while the signature engine did
+    // not. `declined` is terminal and is NOT completion, so a `!== 'pending'`
+    // test here would chase somebody who has already refused.
+    description:
+      'Expire signature requests past their date, then nudge every party who still owes '
+      + 'an answer on one that has gone quiet for longer than it declared. The half that '
+      + 'makes an unsigned contract chase itself instead of waiting for somebody to open '
+      + 'the board it is sitting on.',
+    run: async ({ env }) => {
+      const r = await runSignatureReminderSweep(env);
+      return r.expired || r.reminded || r.failed
+        ? `expired=${r.expired} reminded=${r.reminded}${r.failed ? ` failed=${r.failed}` : ''}`
+        : null;
     },
   },
   {

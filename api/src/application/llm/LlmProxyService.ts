@@ -2009,7 +2009,7 @@ export interface ActionModelRankStat {
   avgScore: number;
   avgCostMc: number;
   /** Human thumbs on this (action, model) — see `modelQualityScore.ts`. Optional:
-   *  absent on blobs written before migration 0465. */
+   *  absent on blobs written before migration 0468. */
   ratedUp?: number;
   ratedDown?: number;
 }

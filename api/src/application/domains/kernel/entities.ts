@@ -32,6 +32,7 @@ import {
   connections,
   credentials,
   deliveries,
+  formRecipients,
   invitations,
   ledgerEntries,
   memberships,
@@ -46,6 +47,8 @@ import {
   runs,
   settings,
   shareLinks,
+  signatureParties,
+  signatureRequests,
   snapshots,
   syncStates,
   threads,
@@ -78,4 +81,22 @@ export const KERNEL_ENTITIES = defineDomainEntities('kernel', [
   messages,
   questionSets,
   responses,
+  /**
+   * The signature engine (0469). Both are READ-ONLY through the generic path and
+   * the reason is the whole point of the primitive: a party's status is the
+   * RECORD of what a named human did at a moment, reached through a credential
+   * they alone held. A generic PATCH that could set `status = 'signed'` would
+   * make the entity browser a machine for manufacturing agreements nobody gave —
+   * strictly worse than having no signature engine at all, because the forged one
+   * is indistinguishable from a real record.
+   *
+   * The signer route is the one writer, and it stamps the evidence in the same
+   * statement as the status.
+   */
+  entity(signatureRequests, { kind: 'signature_request', readOnly: true }),
+  entity(signatureParties, { kind: 'signature_party', readOnly: true }),
+  /** A form's named-recipient credential. Read-only for the same reason
+   *  `invitations` is: the token hash is the grant, and issuing one is a use case
+   *  with one path, not a column somebody sets. */
+  entity(formRecipients, { kind: 'form_recipient', readOnly: true }),
 ]);

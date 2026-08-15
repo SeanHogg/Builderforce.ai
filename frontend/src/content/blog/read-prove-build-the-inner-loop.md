@@ -119,4 +119,4 @@ Three acts, run repeatedly, is what the method is. A single pass through them is
 
 ---
 
-*Try it on something real: [read an idea](/realize) and look at the ranking. Related: [Eight ways to make an idea real](/blog/eight-ways-to-make-an-idea-real) and [Idea to Real, the operating methodology](/blog/idea-to-real-the-operating-methodology).*
+*Try it on something real: [open a canvas](/create/new) and describe the idea; signed in, `/realize` reads it and shows you the ranking. Related: [Eight ways to make an idea real](/blog/eight-ways-to-make-an-idea-real) and [Idea to Real, the operating methodology](/blog/idea-to-real-the-operating-methodology).*

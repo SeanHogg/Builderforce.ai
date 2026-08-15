@@ -112,4 +112,4 @@ Match the proof to the asker, not to the axis.
 
 ---
 
-*[Read an idea and see all eight ranked against it](/realize) — reading builds nothing, so the ranking costs you nothing to look at. Or read the method they sit inside: [Idea to Real](/blog/idea-to-real-the-operating-methodology).*
+*[Start with a canvas](/create/new) and describe the idea — signed in, `/realize` reads it and ranks all eight against it, and reading builds nothing, so the ranking costs you nothing to look at. Or read the method they sit inside: [Idea to Real](/blog/idea-to-real-the-operating-methodology).*

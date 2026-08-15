@@ -13,6 +13,7 @@ import { useTranslations } from 'next-intl';
 import { fetchSite, publishSite, type SiteInfo } from '@/lib/api';
 import { GitHubDeployPanel } from './builder/GitHubDeployPanel';
 import { SiteDomainPanel, SiteFormsPanel, SiteTrafficPanel } from './site/SiteGrowthPanels';
+import { SiteReleasePanel } from './site/SiteReleasePanel';
 
 interface SitePublishPanelProps {
   projectId: number;
@@ -164,6 +165,9 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
 
       {/* Everything that happens AFTER the deploy. Each panel gates itself on
           there being a published site, so no condition is duplicated here. */}
+      {/* Going BACK, and going NATIVE. Both need the same build this panel already
+          knows how to produce, so they take the same `onBuild`. */}
+      <SiteReleasePanel projectId={projectId} onBuild={onBuild} />
       <SiteDomainPanel projectId={projectId} />
       <SiteFormsPanel projectId={projectId} />
       <SiteTrafficPanel projectId={projectId} />

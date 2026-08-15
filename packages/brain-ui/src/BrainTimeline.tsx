@@ -295,7 +295,7 @@ function CopyButton({ text, labels, icon = false }: { text: string; labels: Brai
  * The THUMBS moved here for the same reason, and because of what they are now for:
  * every press is filed against the model that served the turn and the MCP tool it
  * ran, so it teaches the learned router which model is good at which kind of work
- * (`llm_action_ratings`, migration 0465). While they lived in the web app's own
+ * (`llm_action_ratings`, migration 0468). While they lived in the web app's own
  * action bar, the Canvas and the editor — a large share of all model calls — could
  * not contribute a single rating.
  */

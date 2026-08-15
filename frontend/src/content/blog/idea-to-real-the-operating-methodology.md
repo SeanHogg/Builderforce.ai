@@ -120,4 +120,4 @@ And it does not make the expensive proof unnecessary. Sometimes the answer reall
 
 ---
 
-*Start anywhere: [read an idea and see the eight proofs ranked against it](/realize), or [open a canvas](/create/new) and describe what you are trying to make.*
+*[Open a canvas](/create/new) and describe what you are trying to make — no account needed, the board is real and local until you decide otherwise. Signed in, `/realize` reads the idea and ranks the eight proofs against it.*

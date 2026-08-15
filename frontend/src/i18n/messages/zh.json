@@ -1094,7 +1094,28 @@
     "visualApply": "应用",
     "visualCancel": "取消",
     "visualApplied": "已更新 {file}",
-    "visualNoPreview": "请先运行项目 — 点选编辑需要实时预览。"
+    "visualNoPreview": "请先运行项目 — 点选编辑需要实时预览。",
+    "releases": {
+      "title": "历史版本",
+      "description": "每次构建都会保留。可立即回退到较早的版本，无需重新构建。",
+      "current": "当前",
+      "restore": "恢复",
+      "restoring": "恢复中…",
+      "restored": "已恢复。站点已重新提供该版本。",
+      "restoreFailed": "无法恢复该版本。"
+    },
+    "packaging": {
+      "title": "安装到手机",
+      "description": "将本次构建打包为可安装的应用，与你刚刚预览的完全一致。",
+      "working": "打包中…",
+      "done": "项目已写入 {directory}。推送即可构建。",
+      "failed": "无法打包该应用。",
+      "target": {
+        "pwa": "可安装的网页应用",
+        "android": "Android 项目",
+        "ios": "iOS 项目"
+      }
+    }
   },
   "tools": {
     "outOf5": "满分 5.0",
@@ -14093,6 +14114,8 @@
       "pdfPages": "PDF · {pages} 页",
       "codeShape": "{lines} 行",
       "noticeDataset": "{name} 已作为数据集载入 — {rows} 行，{columns} 列",
+      "noticeResume": "{name} 已识别为简历 — 可用任意模板重新排版",
+      "resumeShape": "{sections, plural, other {# 个板块}}",
       "noticeWorkbook": "{name} 已作为工作簿载入 — {sheets} 个工作表",
       "noticeDeck": "{name} 已作为演示文稿载入 — {slides} 张幻灯片",
       "noticeDocument": "{name} 已作为文档载入 — {pages} 页",
@@ -14101,6 +14124,7 @@
       "failed": "无法读取 {name}",
       "tooManyFiles": "仅添加了前 {limit} 个文件",
       "promptData": "分析 {name}：有哪些值得注意的地方，异常值在哪里？",
+      "promptResume": "用每一种模板样式渲染 {name}，方便我对比。",
       "promptDeck": "审阅 {name}：叙事是否清晰，还缺少什么？",
       "promptDocument": "总结 {name}，并说明你会做哪些修改。",
       "promptImage": "{name} 里有什么，我该如何使用它？",
@@ -17718,6 +17742,7 @@
     "notice": {
       "addedToCanvas": "我已将所需内容添加到画布上。",
       "noAnswer": "我无法根据该请求准备任何画布改动。",
+      "providerStalled": "模型提供方接受了该请求后便停止响应，因此我不再继续等待。你的请求本身没有问题——可以重新发送，或在 / 菜单中另选一个模型。",
       "toolError": "我无法准备所请求的画布改动：{detail}",
       "answeredWithoutChange": "我在这里作了回答，但没有在画布上放置任何内容。让我把它添加到画布，我就会为它创建对象。",
       "unverifiedCreationPlain": "我描述了一处画布改动，但并没有真正执行，因此什么都没有创建。告诉我要创建哪个对象，我就会把它建在画布上。",
@@ -18371,7 +18396,8 @@
         "support": "支持",
         "canvas": "画布",
         "integrations": "集成",
-        "operations": "运营"
+        "operations": "运营",
+        "legal": "法务"
       }
     },
     "surface": {
@@ -18407,7 +18433,8 @@
         "support": "工单、知识库文章以及客户的反馈。",
         "canvas": "所有共同创作、分享和协作的内容。",
         "integrations": "已连接的账户及其同步内容。",
-        "operations": "工单、其所针对的资产、执行工单的上门服务，以及所消耗的备件。"
+        "operations": "工单、其所针对的资产、执行工单的上门服务，以及所消耗的备件。",
+        "legal": "法律主体、合同、知识产权，以及针对它们的在办事项。"
       },
       "kernelBlurb": "每个席位共享的二十五个基础组件。没有任何领域拥有它们，也不得分叉。"
     },
@@ -19654,8 +19681,7 @@
         "summary": "整套系统运行在真实地址上，配有运维控制台和值班手册。"
       }
     },
-    "ctaRealize": "让它成真 →",
-    "ctaCanvas": "打开画布"
+    "ctaRealize": "让它成真 →"
   },
   "sell": {
     "seo": {
@@ -19777,5 +19803,92 @@
   "relatedArticles": {
     "heading": "延伸阅读",
     "subtitle": "来自 Builderforce 博客、围绕本页主题的深度文章。"
+  },
+  "developerPortal": {
+    "title": "开发者门户",
+    "subtitle": "只需构建一次集成，每个工作区都能安装。注册成为发布者，发布带版本的扩展包，并查看自己工作区已安装的内容。",
+    "tabs": {
+      "label": "门户版块",
+      "installed": "已安装",
+      "catalog": "目录",
+      "publish": "发布"
+    },
+    "errors": {
+      "load": "无法加载开发者门户。",
+      "action": "该操作未能完成。"
+    },
+    "installed": {
+      "title": "本工作区已安装",
+      "empty": "尚未安装任何内容。浏览目录以添加扩展。",
+      "byPublisher": "由 {publisher} 发布 · 版本 {version}",
+      "grants": "已授权：{scopes}",
+      "updateAvailable": "版本 {version} 可用，且未请求任何新权限。",
+      "updateNeedsConsent": "版本 {version} 需要新权限（{scopes}）。请重新安装以授权。",
+      "update": "更新",
+      "uninstall": "卸载",
+      "uninstallTitle": "卸载 {name}？",
+      "uninstallBody": "其工具将立即停止提供给你的智能体。连接设置会保留，重新安装即可恢复。",
+      "uninstallAction": "卸载"
+    },
+    "catalog": {
+      "title": "可用扩展",
+      "empty": "暂无已发布的扩展。",
+      "publisher": "发布者：{publisher}",
+      "verified": "已验证",
+      "installs": "{count} 个工作区",
+      "install": "安装",
+      "installed": "已安装"
+    },
+    "install": {
+      "confirmTitle": "安装 {name}？",
+      "confirmPublisher": "由 {publisher} 发布。",
+      "confirmScopes": "它将被允许：{scopes}",
+      "confirmSensitive": "其中包括修改你的数据：{scopes}",
+      "confirmAction": "安装",
+      "unknownPublisher": "未验证的发布者",
+      "noScopes": "无"
+    },
+    "publish": {
+      "registerTitle": "注册成为发布者",
+      "registerBody": "发布者是你的公司，而不是你的工作区。注册一次后，即可发布任何工作区都能安装的扩展包。",
+      "legalName": "公司名称",
+      "legalNamePlaceholder": "Acme Payroll, Inc.",
+      "register": "注册",
+      "publisherTitle": "你的发布者身份",
+      "verificationHint": "验证域名可在列表中显示徽章。收费扩展包必须先完成身份验证。",
+      "verification": {
+        "unverified": "未验证",
+        "domain_verified": "域名已验证",
+        "identity_verified": "身份已验证"
+      },
+      "newPackageTitle": "新建扩展包",
+      "packageName": "扩展包名称",
+      "packageKind": "类型",
+      "createPackage": "创建扩展包",
+      "packagesTitle": "你的扩展包",
+      "packagesEmpty": "暂无扩展包。",
+      "listing": {
+        "draft": "草稿",
+        "listed": "已上架",
+        "delisted": "已下架"
+      },
+      "review": {
+        "pending": "审核中",
+        "approved": "已通过",
+        "rejected": "未通过"
+      },
+      "selectForSubmit": "提交版本",
+      "delist": "下架",
+      "publishVersion": "发布",
+      "submitTitle": "提交版本",
+      "semver": "版本号",
+      "scopes": "此版本需要的权限",
+      "spec": "规格说明（JSON）",
+      "specPlaceholder": "粘贴你的连接器清单或 MCP 服务器描述",
+      "specInvalidJson": "这不是有效的 JSON。",
+      "submit": "提交审核",
+      "reviewPassed": "审核通过 — 你可以发布此版本。",
+      "reviewFailed": "审核发现问题。请修复后提交新版本。"
+    }
   }
 }

@@ -1,9 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
-import { NextIntlClientProvider } from 'next-intl';
 import en from '@/i18n/messages/en.json';
 import MethodologySection, { type MethodologyVariant } from './MethodologySection';
 import { METHOD_STEPS, METHOD_STAGES, PROOF_FORMS } from '@/lib/methodology';
+
+// The suite's global next-intl mock returns the KEY for every message, which is
+// the right default everywhere else and useless here: what this file asserts is
+// that the real copy for every step, stage and proof actually resolves. The
+// shared real-catalog override swaps only `useTranslations`.
+vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations'))
+  .realCatalogIntlMock((await import('@/i18n/messages/en.json')).default as Record<string, unknown>));
 
 /**
  * The point of this component is that four marketing pages cannot describe the
@@ -20,11 +26,7 @@ import { METHOD_STEPS, METHOD_STAGES, PROOF_FORMS } from '@/lib/methodology';
  */
 
 function renderAt(variant: MethodologyVariant) {
-  return render(
-    <NextIntlClientProvider locale="en" messages={en}>
-      <MethodologySection variant={variant} />
-    </NextIntlClientProvider>,
-  );
+  return render(<MethodologySection variant={variant} />);
 }
 
 const stepTitle = (step: string) =>

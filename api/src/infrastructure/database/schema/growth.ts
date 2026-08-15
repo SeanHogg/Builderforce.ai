@@ -792,7 +792,15 @@ export const adCampaigns = pgTable('ad_campaigns', {
   platform:     varchar('platform', { length: 32 }).notNull(),
   externalId:   varchar('external_id', { length: 160 }),
   name:         varchar('name', { length: 200 }).notNull(),
+  /** OUR normalized objective — see `AdObjective`. Null when a campaign created in
+   *  the network's own console uses one our vocabulary has no name for. */
   objective:    varchar('objective', { length: 48 }),
+  /** What the NETWORK calls it, kept verbatim so an unmappable objective is still
+   *  reportable instead of silently becoming null on both sides. */
+  nativeObjective: varchar('native_objective', { length: 64 }),
+  /** When the network was last read for this campaign. A stale panel and a campaign
+   *  that genuinely spent nothing are otherwise the same picture. */
+  lastSyncedAt: timestamp('last_synced_at'),
   dailyBudgetCents: integer('daily_budget_cents'),
   totalBudgetCents: integer('total_budget_cents'),
   currency:     varchar('currency', { length: 8 }).notNull().default('USD'),
@@ -842,6 +850,42 @@ export const ads = pgTable('ads', {
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_ads_external').on(t.tenantId, t.externalId),
+]);
+
+/**
+ * One day of delivery for one ad campaign — the measurement half of `ad_campaigns`.
+ *
+ * Its identity is `(tenant, campaign, date)`, and that UNIQUE index is what makes the
+ * insights sweep idempotent: every network reports the last few days repeatedly as
+ * conversions attribute late, so a re-sync must UPDATE the day rather than append a
+ * second copy of it. Without the constraint, spend would compound on every sweep and
+ * the number a founder reads would grow while nothing was being bought.
+ *
+ * Stored per DAY rather than as a running total because a total cannot be corrected: a
+ * campaign's cost-per-lead over the last week is a question only daily rows can answer,
+ * and the networks themselves restate history.
+ */
+export const adInsights = pgTable('ad_insights', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  campaignId:   integer('campaign_id').notNull().references(() => adCampaigns.id, { onDelete: 'cascade' }),
+  /** Denormalized from the campaign ON PURPOSE: every rollup filters by network and
+   *  would otherwise join `ad_campaigns` for a value that can never change for a
+   *  given campaign. Single writer — the sync — so it cannot drift. */
+  platform:     varchar('platform', { length: 32 }).notNull(),
+  /** The day, in the ad account's own timezone — the grain every network bills on. */
+  date:         date('date').notNull(),
+  spendCents:   integer('spend_cents').notNull().default(0),
+  impressions:  integer('impressions').notNull().default(0),
+  clicks:       integer('clicks').notNull().default(0),
+  conversions:  integer('conversions').notNull().default(0),
+  currency:     varchar('currency', { length: 8 }).notNull().default('USD'),
+  /** When this row was last read from the network — a restated day is visible as a
+   *  fresh `synced_at` on an old `date`. */
+  syncedAt:     timestamp('synced_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_ad_insights_day').on(t.tenantId, t.campaignId, t.date),
+  index('idx_ad_insights_tenant_date').on(t.tenantId, t.date),
 ]);
 
 /** A paid boost of a listing or profile. */

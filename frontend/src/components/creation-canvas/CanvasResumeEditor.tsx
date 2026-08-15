@@ -15,6 +15,7 @@ import {
   deleteResumeRevision,
   detachResumeRevision,
   deriveResume,
+  isJsonResume,
   originalResumeRevision,
   promoteResumeToMaster,
   renderResumeMarkdown,
@@ -75,6 +76,15 @@ function ResumePreview({ html, page, zoom, mode, onClose }: { html: string; page
 }
 
 type ResumeShareActions = { create: (kind: 'view' | 'embed') => Promise<void>; list: () => Promise<CanvasResumeShare[]>; revoke: (shareId: string) => Promise<void> };
+
+/** A picked `.json` that is already a résumé, in the shape the server extractor returns
+ *  — so the caller has one code path whether the document was parsed here or there. */
+function localJsonResume(source: string): { document: unknown; sourceFileKey: string | null } | null {
+  try {
+    const parsed = JSON.parse(source.replace(/^﻿/, '')) as unknown;
+    return isJsonResume(parsed) ? { document: parsed, sourceFileKey: null } : null;
+  } catch { return null; }
+}
 
 export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActions }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void; onTailor?: (prompt: string) => void; onDetach?: (data: Partial<CreationNodeData>) => void; shareActions?: ResumeShareActions }) {
   const t = useTranslations('creationCanvas.resumeEditor');
@@ -176,7 +186,12 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
       }
       const needsOcr = !extractedText && /\.(pdf|doc|docx|png|jpe?g|webp)$/i.test(file.name);
       setImportStage(needsOcr ? 'ocr' : 'structuring');
-      const parsed = await importResumeSource(file, extractedText);
+      // A JSON Resume needs no server: it is ALREADY the structured document the
+      // extractor exists to recover. Uploading it to have it handed back was a round-trip
+      // that could fail — and it made this path behave differently from a drop on the
+      // board, which now reads the same file locally and instantly.
+      const local = /\.json$/i.test(file.name) ? localJsonResume(await file.text()) : null;
+      const parsed = local ?? await importResumeSource(file, extractedText);
       const document = resumeDocumentFromJson(parsed.document);
       const markdown = document ? renderResumeMarkdown(document) : '';
       if (!document || !markdown.trim()) throw new Error('invalid structured resume');

@@ -48,13 +48,13 @@ export interface ActionModelStat {
   /** Running mean per-run cost in millicents — the tie-break between equal scorers. */
   avgCostMc: number;
   /**
-   * HUMAN thumbs on this (action, model), from `llm_action_ratings` (migration 0465).
+   * HUMAN thumbs on this (action, model), from `llm_action_ratings` (migration 0468).
    *
    * Kept as raw counts rather than a pre-blended score because the blend depends on
    * how much evidence the OTHER side has, and that is a read-time decision
    * (`rankModelsForAction`). They are a genuinely independent signal: a chat or
    * canvas turn has no merge and no CI, so for most model calls these are the ONLY
-   * quality evidence that exists. Optional — blobs written before 0465 have none.
+   * quality evidence that exists. Optional — blobs written before 0468 have none.
    */
   ratedUp?: number;
   ratedDown?: number;

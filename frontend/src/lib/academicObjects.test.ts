@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { ACADEMIC_OBJECT_KINDS, CREATION_OBJECT_KINDS, isAcademicObjectKind } from '@builderforce/creation-canvas-contract';
 import { ACADEMIC_LABELS, ACADEMIC_NAMESPACE, ACADEMIC_OBJECT_SPECS, ACADEMIC_STATUSES } from './academicObjects';
 import {
-  allSpecObjectSpecs, isSpecObjectKind, specFieldGuidance, specMutableFields,
-  specObjectNamespace, specObjectSpec, specReadableFields, specSetGuidance,
+  allSpecObjectSpecs, isSpecObjectKind, makeSpecDeriveBoard, specFieldGuidance, specFieldValue,
+  specMutableFields, specObjectNamespace, specObjectSpec, specReadableFields, specSetGuidance,
 } from './specObjects';
 import {
   CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData,
@@ -259,5 +259,163 @@ describe('the spec primitive serves more than one vocabulary', () => {
     expect(specObjectSpec('dashboard')).toBeNull();
     expect(specObjectNamespace('dashboard')).toBeNull();
     expect(isSpecObjectKind('dashboard')).toBe(false);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// The derivations — the half this vocabulary declared and never produced
+// ---------------------------------------------------------------------------
+//
+// Nineteen fields were flagged `derived: true` and produced by nothing, so a gradebook
+// beside two hundred marked submissions reported no mean and a late submission reported
+// no lateness. These pin the two halves of the fix: what is now COMPUTED, and what is
+// still testimony and must never be.
+
+const value = (kind: string, name: string, data: Record<string, unknown>, board = makeSpecDeriveBoard([])) => {
+  const field = specObjectSpec(kind)?.fields.find((entry) => entry.name === name);
+  if (!field) throw new Error('no ' + name + ' field on ' + kind);
+  return specFieldValue(field, data, board);
+};
+
+describe('cross-object derivations', () => {
+  const board = (...objects: Array<Record<string, unknown>>) => makeSpecDeriveBoard(objects);
+
+  const ASSIGNMENT = { kind: 'assignment', title: 'Essay 1', dueAt: '2026-03-01T23:59:00Z', weight: 100, maxMarks: 100 };
+  const COHORT = {
+    kind: 'cohort', title: 'PHYS2041', courseCode: 'PHYS2041', enrolledCount: 2,
+    roster: [{ ref: 's1', name: 'Ada' }, { ref: 's2', name: 'Grace' }],
+  };
+  const submission = (ref: string, extra: Record<string, unknown>) =>
+    ({ kind: 'submission', title: ref + ' — Essay 1', learnerRef: ref, assignmentRef: 'Essay 1', ...extra });
+
+  it('counts an assignment’s submissions and marks from the board', () => {
+    const on = board(ASSIGNMENT, submission('s1', { submittedAt: '2026-02-28T10:00:00Z', mark: 72 }), submission('s2', { submittedAt: '2026-03-02T10:00:00Z' }));
+    expect(value('assignment', 'submissionCount', ASSIGNMENT, on)).toBe(2);
+    // Handed in and not yet marked is NOT marked — two different queues, two different
+    // people to chase.
+    expect(value('assignment', 'markedCount', ASSIGNMENT, on)).toBe(1);
+  });
+
+  it('reports lateness against the deadline on the assignment, and nothing when on time', () => {
+    const on = board(ASSIGNMENT);
+    expect(String(value('submission', 'lateBy', submission('s2', { submittedAt: '2026-03-03T23:59:00Z' }), on))).toContain('2d late');
+    expect(value('submission', 'lateBy', submission('s1', { submittedAt: '2026-02-28T10:00:00Z' }), on)).toBeUndefined();
+    // No assignment on the board is not "on time" — it is unknowable, and saying nothing
+    // is the only honest answer.
+    expect(value('submission', 'lateBy', submission('s1', { submittedAt: '2026-03-09T10:00:00Z' }))).toBeUndefined();
+  });
+
+  it('aggregates a gradebook from the submissions beside it', () => {
+    const gradebook = {
+      kind: 'gradebook', title: 'PHYS2041 gradebook', cohortRef: 'PHYS2041', assignments: ['Essay 1'],
+      gradeBands: [{ grade: 'F', minimum: 0, maximum: 49 }, { grade: 'P', minimum: 50, maximum: 100 }],
+    };
+    const on = board(
+      gradebook, COHORT, ASSIGNMENT,
+      submission('s1', { submittedAt: '2026-02-28T10:00:00Z', mark: 80 }),
+      submission('s2', { submittedAt: '2026-02-28T10:00:00Z', mark: 40 }),
+    );
+    expect(value('gradebook', 'mean', gradebook, on)).toBe(60);
+    expect(value('gradebook', 'median', gradebook, on)).toBe(60);
+    // The pass rate is over the WHOLE cohort — one of two learners cleared 50.
+    expect(value('gradebook', 'passRate', gradebook, on)).toBe(50);
+    // One learner in each band. Compared as a SET: the band ordering is
+    // `gradeBandsFromNode`'s decision and is pinned by its own tests, so restating it
+    // here would be a second place to update when it changes.
+    expect(value('gradebook', 'distribution', gradebook, on)).toEqual(
+      expect.arrayContaining([{ label: 'F', value: 1 }, { label: 'P', value: 1 }]),
+    );
+    const matrix = value('gradebook', 'marks', gradebook, on) as { columns: string[]; rows: unknown[] };
+    expect(matrix.columns).toEqual(['Essay 1']);
+    expect(matrix.rows).toHaveLength(2);
+  });
+
+  it('reports nothing for a gradebook with nothing to aggregate', () => {
+    // A mean of zero over an empty cohort reads as a class that failed.
+    const empty = { kind: 'gradebook', title: 'Empty', cohortRef: 'NOPE', assignments: [] };
+    expect(value('gradebook', 'mean', empty, board(empty))).toBeUndefined();
+    expect(value('gradebook', 'passRate', empty, board(empty))).toBeUndefined();
+    expect(value('gradebook', 'marks', empty, board(empty))).toBeUndefined();
+  });
+
+  it('measures cohort progress against work that is actually DUE', () => {
+    const past = { kind: 'assignment', title: 'Essay 1', dueAt: '2020-01-01T00:00:00Z' };
+    const future = { kind: 'assignment', title: 'Essay 2', dueAt: '2999-01-01T00:00:00Z' };
+    const on = board(COHORT, past, future, submission('s1', { submittedAt: '2019-12-30T10:00:00Z' }));
+    // One of two learners has handed in the one assignment that is due. Essay 2 is not
+    // yet due and must not drag the number down — a cohort in week 2 is not 50% behind.
+    expect(value('cohort', 'progress', COHORT, on)).toBe(50);
+  });
+
+  it('computes an attendance rate against the cohort it is taught to', () => {
+    const lecture = { kind: 'lecture', title: 'Week 1', cohortRef: 'PHYS2041', attendanceCount: 1 };
+    expect(value('lecture', 'attendanceRate', lecture, board(COHORT, lecture))).toBe(50);
+    // No cohort named: a rate with no denominator is not a rate.
+    expect(value('lecture', 'attendanceRate', { kind: 'lecture', title: 'Week 1', attendanceCount: 1 })).toBeUndefined();
+  });
+});
+
+describe('single-object derivations', () => {
+  it('reads a poll off its own responses', () => {
+    const poll = { kind: 'poll', title: 'Q1', correctIndex: 1, responses: [{ label: 'A', value: 3 }, { label: 'B', value: 9 }] };
+    expect(value('poll', 'responseCount', poll)).toBe(12);
+    expect(value('poll', 'correctRate', poll)).toBe(75);
+    // An opinion poll has no right answer to be right about.
+    expect(value('poll', 'correctRate', { kind: 'poll', title: 'Q1', responses: poll.responses })).toBeUndefined();
+  });
+
+  it('counts booked office-hours slots', () => {
+    expect(value('officeHours', 'utilisation', {
+      kind: 'officeHours', title: 'Tuesdays',
+      slots: [{ startsAt: '1', bookedBy: 's1' }, { startsAt: '2', bookedBy: '' }, { startsAt: '3' }],
+    })).toBe(33);
+  });
+
+  it('counts an outcome as covered only where it is ASSURED', () => {
+    const map = {
+      kind: 'curriculumMap', title: 'BEng',
+      mapping: {
+        columns: ['Essay 1', 'Exam'],
+        rows: [{ label: 'LO1', cells: ['introduced', 'assured'] }, { label: 'LO2', cells: ['developed', ''] }],
+      },
+    };
+    // LO2 is mentioned twice and assured nowhere — which is exactly the submission that
+    // fails a review, so it must read as a gap rather than as coverage.
+    expect(value('curriculumMap', 'coverage', map)).toBe(50);
+    expect(value('curriculumMap', 'gaps', map)).toEqual(['LO2']);
+  });
+
+  it('reads consent and reference counts off their own fields', () => {
+    expect(value('participantPool', 'consentRate', { kind: 'participantPool', title: 'Pool', recruitedN: 40, consentedN: 30 })).toBe(75);
+    expect(value('bibliography', 'entryCount', { kind: 'bibliography', title: 'Refs', entries: [{ citationKey: 'a' }, { citationKey: 'b' }] })).toBe(2);
+    expect(value('bibliography', 'entryCount', { kind: 'bibliography', title: 'Refs' })).toBeUndefined();
+  });
+});
+
+describe('what stays testimony', () => {
+  it('never computes a value that has to be recorded rather than derived', () => {
+    // A mark, a mark breakdown, feedback, an integrity ledger, an attendance COUNT, a
+    // poll's raw responses, a moderation record and a bank's usage count are evidence of
+    // something that happened off the board. Computing one would be inventing it.
+    for (const [kind, name] of [
+      ['submission', 'mark'], ['submission', 'markBreakdown'], ['submission', 'feedback'],
+      ['submission', 'integrity'], ['gradebook', 'moderation'], ['lecture', 'attendanceCount'],
+      ['poll', 'responses'], ['feedbackBank', 'usageCount'],
+    ] as const) {
+      const field = specObjectSpec(kind)?.fields.find((entry) => entry.name === name);
+      expect(field?.derive, kind + '.' + name + ' must not be computed').toBeUndefined();
+      expect(field?.derived, kind + '.' + name + ' must stay unauthorable').toBe(true);
+    }
+  });
+
+  it('keeps every computed field out of the authorable list', () => {
+    for (const [kind, name] of [
+      ['gradebook', 'mean'], ['gradebook', 'passRate'], ['gradebook', 'marks'],
+      ['assignment', 'submissionCount'], ['submission', 'lateBy'], ['cohort', 'progress'],
+      ['poll', 'correctRate'], ['curriculumMap', 'coverage'], ['officeHours', 'utilisation'],
+    ] as const) {
+      expect(specMutableFields(kind)).not.toContain(name);
+    }
   });
 });

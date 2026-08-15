@@ -365,46 +365,6 @@ const sendgrid: ConnectorManifest = {
   ],
 };
 
-const mailchimp: ConnectorManifest = {
-  key: 'mailchimp',
-  name: 'Mailchimp',
-  description: 'Manage audiences, subscribers and campaigns in Mailchimp.',
-  category: 'marketing',
-  icon: '🐵',
-  baseUrl: 'https://{{auth.dc}}.api.mailchimp.com/3.0',
-  docsUrl: 'https://mailchimp.com/developer/marketing/api/',
-  auth: {
-    kind: 'basic',
-    fields: [
-      { key: 'dc', label: 'Data centre', secret: false, required: true, placeholder: 'us21', help: 'The suffix of your API key, after the dash' },
-      { key: 'username', label: 'Username', secret: false, required: true, placeholder: 'anystring' },
-      { key: 'password', label: 'API key', secret: true, required: true },
-    ],
-  },
-  actions: [
-    {
-      key: 'list_audiences', label: 'List audiences', description: 'List audiences (lists) on the account.',
-      method: 'GET', path: '/lists', mutates: false, resultPath: 'lists',
-      params: { count: qn('Max results'), offset: qn('Offset for pagination') },
-    },
-    {
-      key: 'add_member', label: 'Add subscriber', description: 'Add or update a subscriber in an audience.',
-      method: 'POST', path: '/lists/{list_id}/members', mutates: true, required: ['list_id', 'email_address', 'status'],
-      params: {
-        list_id: p('Audience (list) id'),
-        email_address: b('Subscriber email'),
-        status: b('subscribed | pending | unsubscribed', { enum: ['subscribed', 'pending', 'unsubscribed'] }),
-        merge_fields: bo('Merge fields, e.g. { "FNAME": "Ada" }'),
-      },
-    },
-    {
-      key: 'list_campaigns', label: 'List campaigns', description: 'List campaigns and their send status.',
-      method: 'GET', path: '/campaigns', mutates: false, resultPath: 'campaigns',
-      params: { count: qn('Max results'), status: q('save | paused | schedule | sending | sent') },
-    },
-  ],
-};
-
 export const COMMUNICATION_CONNECTORS: readonly ConnectorManifest[] = [
   slack,
   discord,
@@ -412,5 +372,4 @@ export const COMMUNICATION_CONNECTORS: readonly ConnectorManifest[] = [
   twilioVerify,
   twilioLookup,
   sendgrid,
-  mailchimp,
 ];

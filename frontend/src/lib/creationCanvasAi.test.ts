@@ -796,16 +796,31 @@ describe('runCreationCanvasAi', () => {
   // stream, and the loop refuses to spend another round-trip or run another tool
   // after the user has said stop.
   describe('when the user stops the run', () => {
-    it('forwards the abort signal to the model stream', async () => {
-      mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Done.', toolCalls: [] });
+    // The stream receives the turn's OWN signal, not the caller's, because the stall
+    // watchdog has to be able to abandon a silent provider without the user pressing
+    // anything. What must survive that indirection is Stop itself: aborting the
+    // caller's signal has to abort the request that is actually in flight.
+    it('aborts the in-flight model stream when the caller stops the run', async () => {
       const controller = new AbortController();
+      let streamSignal: AbortSignal | undefined;
+      let inFlight: () => void = () => {};
+      const requestSent = new Promise<void>((resolve) => { inFlight = resolve; });
+      mocks.streamChatCompletion.mockImplementationOnce((request: { signal?: AbortSignal }) => new Promise((_resolve, reject) => {
+        streamSignal = request.signal;
+        request.signal?.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+        inFlight();
+      }));
 
-      await runTurn({
+      const turn = runTurn({
         prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local',
         canvasActions: [], signal: controller.signal,
       });
+      await requestSent;
+      expect(streamSignal?.aborted).toBe(false);
 
-      expect(mocks.streamChatCompletion.mock.calls[0][0].signal).toBe(controller.signal);
+      controller.abort();
+      await expect(turn).rejects.toSatisfy(isCanvasRunAborted);
+      expect(streamSignal?.aborted).toBe(true);
     });
 
     it('refuses to start a turn that was already stopped', async () => {
@@ -847,6 +862,85 @@ describe('runCreationCanvasAi', () => {
       aborted.name = 'AbortError';
       expect(isCanvasRunAborted(aborted)).toBe(true);
       expect(isCanvasRunAborted(new Error('gateway exploded'))).toBe(false);
+    });
+  });
+
+  /**
+   * A PROVIDER THAT GOES SILENT.
+   *
+   * Measured 2026-08-15: a completion took 134 seconds to return nothing, the loop asked
+   * again, and the canvas sat on "Reading" for four minutes with no ceiling of any kind.
+   * The turn must now abandon a silent request, route around the model, and END — saying
+   * the provider stopped responding rather than blaming the user's request.
+   */
+  describe('when the model provider stops responding', () => {
+    /** A provider that accepts the request and then says nothing — settling only when
+     *  the caller's signal aborts, exactly as the fetch transport does. */
+    const silentUntilAborted = (request: { signal?: AbortSignal }) => new Promise<never>((_resolve, reject) => {
+      request.signal?.addEventListener('abort', () => reject(Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' })));
+    });
+
+    it('abandons a silent request instead of waiting forever, and says why', async () => {
+      vi.useFakeTimers();
+      try {
+        mocks.streamChatCompletion.mockImplementation(silentUntilAborted);
+        const turn = runTurn({ prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [] });
+        // Each stalled round-trip burns its own watchdog; the ladder is bounded, so the
+        // turn ends rather than re-arming forever.
+        for (let attempt = 0; attempt < 6; attempt += 1) await vi.advanceTimersByTimeAsync(90_000);
+
+        await expect(turn).resolves.toBe(NOTICES.providerStalled);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('reports a stall as unanswered rather than storing it as an assistant reply', async () => {
+      vi.useFakeTimers();
+      try {
+        mocks.streamChatCompletion.mockImplementation(silentUntilAborted);
+        const onUnanswered = vi.fn();
+        const turn = runTurn({ prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [], onUnanswered });
+        for (let attempt = 0; attempt < 6; attempt += 1) await vi.advanceTimersByTimeAsync(90_000);
+        await turn;
+
+        expect(onUnanswered).toHaveBeenCalledWith({ reason: 'no-answer', detail: 'provider-stalled' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not report a stalled provider as the user having pressed Stop', async () => {
+      vi.useFakeTimers();
+      try {
+        mocks.streamChatCompletion.mockImplementation(silentUntilAborted);
+        const turn = runTurn({ prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [] });
+        for (let attempt = 0; attempt < 6; attempt += 1) await vi.advanceTimersByTimeAsync(90_000);
+
+        await expect(turn).resolves.not.toBe(NOTICES.noAnswer);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('leaves a streaming answer alone — length is never the thing that trips it', async () => {
+      vi.useFakeTimers();
+      try {
+        mocks.streamChatCompletion.mockImplementationOnce(async (_request: unknown, handlers: { onTextDelta: (delta: string) => void }) => {
+          for (let token = 0; token < 8; token += 1) {
+            handlers.onTextDelta('word ');
+            await vi.advanceTimersByTimeAsync(60_000);
+          }
+          return { text: 'word word word word word word word word', toolCalls: [] };
+        });
+
+        const turn = runTurn({ prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [] });
+        await vi.advanceTimersByTimeAsync(0);
+
+        await expect(turn).resolves.toContain('word');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

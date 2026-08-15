@@ -33,7 +33,8 @@
 import { OPERATIONS_OBJECT_KINDS, type OperationsObjectKind } from '@builderforce/creation-canvas-contract';
 import { formatMoney, sumRowColumn, type MoneyTotal } from './canvasMoney';
 import {
-  registerSpecObjectSet, SOURCES_FIELD, SUMMARY_FIELD,
+  deriveDaysBetween, deriveNumber, derivePercent, registerSpecObjectSet, sumColumn,
+  SOURCES_FIELD, SUMMARY_FIELD,
   type SpecField, type SpecObjectSpec,
 } from './specObjects';
 
@@ -51,36 +52,6 @@ const MONEY_HINT = 'A human-readable amount including its currency, e.g. "£420"
 /** A total, or nothing at all. Never a zero — see the header. */
 function totalText(total: MoneyTotal): string | undefined {
   return total.counted > 0 && total.total ? formatMoney(total.total) : undefined;
-}
-
-/** Sum one numeric column across a `rows` field, ignoring anything unparseable.
- *  Returns `undefined` when nothing summable was found, for the reason above. */
-function sumNumericColumn(rows: unknown, column: string): number | undefined {
-  if (!Array.isArray(rows)) return undefined;
-  let total = 0;
-  let counted = 0;
-  for (const row of rows) {
-    if (!row || typeof row !== 'object') continue;
-    const raw = (row as Record<string, unknown>)[column];
-    const numeric = typeof raw === 'number' ? raw : Number(String(raw ?? '').replace(/[^0-9.-]/g, ''));
-    if (!Number.isFinite(numeric)) continue;
-    total += numeric;
-    counted += 1;
-  }
-  return counted > 0 ? total : undefined;
-}
-
-const numberOf = (value: unknown): number | undefined => {
-  const numeric = typeof value === 'number' ? value : Number(String(value ?? '').replace(/[^0-9.-]/g, ''));
-  return Number.isFinite(numeric) && String(value ?? '').trim() !== '' ? numeric : undefined;
-};
-
-/** Whole days between two instants, or undefined when either is missing/unparseable. */
-function daysBetween(from: unknown, to: unknown): number | undefined {
-  const a = Date.parse(String(from ?? ''));
-  const b = Date.parse(String(to ?? ''));
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return undefined;
-  return Math.round((b - a) / 86_400_000);
 }
 
 /**
@@ -187,7 +158,7 @@ export const OPERATIONS_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         hint: 'Parts plus labour for this job. Computed from the rows above and never typed — an authored total that disagrees with the parts printed beneath it is the drift this field exists to make impossible.',
         derive: (data) => {
           const parts = sumRowColumn(data.partsUsed, 'cost');
-          const hours = numberOf(data.labourHours);
+          const hours = deriveNumber(data.labourHours);
           const rate = sumRowColumn([{ rate: data.labourRate }], 'rate');
           const labour = hours != null && rate.total?.amount != null ? hours * rate.total.amount : undefined;
           if (!parts.total && labour == null) return undefined;
@@ -271,12 +242,7 @@ export const OPERATIONS_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         render: 'meter',
         label: 'utilisation',
         hint: 'Assigned hours as a share of capacity, 0-100. Computed from the engineer rows — the one number that says whether today is full, and the one nobody should be able to type.',
-        derive: (data) => {
-          const capacity = sumNumericColumn(data.engineers, 'capacityHours');
-          const assigned = sumNumericColumn(data.engineers, 'assignedHours');
-          if (!capacity || assigned == null) return undefined;
-          return Math.round((assigned / capacity) * 100);
-        },
+        derive: (data) => derivePercent(sumColumn(data.engineers, 'assignedHours'), sumColumn(data.engineers, 'capacityHours')),
       },
       {
         name: 'atRisk',
@@ -328,12 +294,7 @@ export const OPERATIONS_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         render: 'meter',
         label: 'consumed',
         hint: 'Share of the entitlement used, 0-100. Computed from the table above — the number that says whether this contract is profitable before it renews.',
-        derive: (data) => {
-          const included = sumNumericColumn(data.entitlements, 'included');
-          const used = sumNumericColumn(data.entitlements, 'used');
-          if (!included || used == null) return undefined;
-          return Math.round((used / included) * 100);
-        },
+        derive: (data) => derivePercent(sumColumn(data.entitlements, 'used'), sumColumn(data.entitlements, 'included')),
       },
       { name: 'renewalRisk', render: 'verdict', label: 'renewalRisk', hint: 'Whether this will renew, with the reason. Grounded in the consumption and the incidents on the board, never a feeling.' },
       SUMMARY_FIELD,
@@ -403,8 +364,7 @@ export const OPERATIONS_OBJECT_SPECS: readonly SpecObjectSpec[] = [
           const applicable = data.lines
             .map((row) => String((row as Record<string, unknown>)?.result ?? '').trim().toLowerCase())
             .filter((result) => result === 'pass' || result === 'fail');
-          if (!applicable.length) return undefined;
-          return Math.round((applicable.filter((result) => result === 'pass').length / applicable.length) * 100);
+          return derivePercent(applicable.filter((result) => result === 'pass').length, applicable.length);
         },
       },
       { name: 'outcome', render: 'verdict', label: 'outcome', hint: 'pass | pass-with-actions | fail, with the sentence that says what happens next. A failed statutory inspection usually means the asset stops being used TODAY, and that must be legible on the card.' },
@@ -434,7 +394,7 @@ export const OPERATIONS_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         label: 'validity',
         hint: 'Whether it is currently valid, computed from the expiry. Never authored — a self-asserted "valid" is exactly the claim that turns out to be false at the worst moment.',
         derive: (data) => {
-          const days = daysBetween(new Date().toISOString(), data.expiresAt);
+          const days = deriveDaysBetween(new Date().toISOString(), data.expiresAt);
           if (days == null) return undefined;
           if (days < 0) return `expired ${Math.abs(days)}d ago`;
           if (days <= 30) return `expires in ${days}d`;
@@ -468,10 +428,10 @@ export const OPERATIONS_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         label: 'stockCoverage',
         hint: 'Whether stock covers the reorder point once what is on order arrives. Computed — the card says "order now" rather than making a reader compare three numbers.',
         derive: (data) => {
-          const onHand = numberOf(data.onHand);
-          const point = numberOf(data.reorderPoint);
+          const onHand = deriveNumber(data.onHand);
+          const point = deriveNumber(data.reorderPoint);
           if (onHand == null || point == null) return undefined;
-          const incoming = numberOf(data.onOrder) ?? 0;
+          const incoming = deriveNumber(data.onOrder) ?? 0;
           if (onHand <= 0) return 'out of stock';
           if (onHand + incoming <= point) return incoming > 0 ? 'below reorder point even with stock on order' : 'at or below reorder point — order now';
           return onHand <= point ? 'covered by stock on order' : 'in stock';
@@ -483,7 +443,7 @@ export const OPERATIONS_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         label: 'stockValue',
         hint: 'Units on hand at unit cost. Computed.',
         derive: (data) => {
-          const onHand = numberOf(data.onHand);
+          const onHand = deriveNumber(data.onHand);
           const cost = sumRowColumn([{ cost: data.unitCost }], 'cost');
           if (onHand == null || cost.total?.amount == null) return undefined;
           return formatMoney({
@@ -561,7 +521,7 @@ export const OPERATIONS_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         render: 'stat',
         label: 'daysLate',
         hint: 'Days between the promise and the delivery. Computed; negative means early.',
-        derive: (data) => daysBetween(data.promisedAt, data.deliveredAt),
+        derive: (data) => deriveDaysBetween(data.promisedAt, data.deliveredAt),
       },
       { name: 'destination', render: 'stat', label: 'destination', hint: 'Where it is going — the store, a van, or straight to site. Straight-to-site is the one that goes wrong.' },
       { name: 'contents', render: 'rows', label: 'contents', columns: ['sku', 'description', 'quantity'], hint: 'What is in it: {sku, description, quantity}. Short-shipments are the norm, so what SHIPPED and what was ORDERED are two different lists.' },

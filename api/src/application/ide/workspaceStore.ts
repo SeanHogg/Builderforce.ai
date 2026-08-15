@@ -288,10 +288,21 @@ function parseHistoryKey(key: string, prefix: string): WorkspaceVersion | null {
  * list claim a version that never existed.
  */
 export async function captureWorkspaceVersion(bucket: R2Bucket, projectId: number, path: string): Promise<void> {
-  const existing = await bucket.get(workspacePrefix(projectId) + path);
-  if (!existing) return;
-  await withSameObjectRetry(() => bucket.put(`${historyPrefix(projectId)}${Date.now()}/${path}`, existing.body));
-  await pruneWorkspaceHistory(bucket, projectId);
+  // BEST-EFFORT, deliberately. Archiving is a safety net for the save; it must
+  // never become a reason the save itself fails. A user whose edit is rejected
+  // because its undo copy could not be written has lost the very work the undo
+  // existed to protect.
+  try {
+    const existing = await bucket.get(workspacePrefix(projectId) + path);
+    if (!existing) return;
+    // The BODY, not the text: history has to round-trip an image or a font as
+    // faithfully as it does a source file, and decoding bytes to a string to
+    // re-encode them is how a binary asset gets silently corrupted.
+    await withSameObjectRetry(() => bucket.put(`${historyPrefix(projectId)}${Date.now()}/${path}`, existing.body));
+    await pruneWorkspaceHistory(bucket, projectId);
+  } catch (error) {
+    reportCaughtError(error, { source: 'application/ide/workspaceStore.ts', operation: 'captureWorkspaceVersion' });
+  }
 }
 
 /** Drop the oldest versions beyond {@link MAX_HISTORY_VERSIONS}. */

@@ -7,13 +7,16 @@ import {
   deleteResumeRevision,
   detachResumeRevision,
   initializeResumeFromPatch,
+  isJsonResume,
   originalResumeRevision,
   promoteResumeToMaster,
   preserveResumeSourceForPatch,
   restoreResumeAsNew,
   renderResumeMarkdown,
   resumeDocumentFromJson,
+  resumeDocumentFromNode,
   resumeTemplateFromDescriptor,
+  resumeTemplateVariants,
   selectResumeRevision,
   updateActiveResume,
   updateActiveResumePresentation,
@@ -196,5 +199,98 @@ describe('Canvas resume lineage', () => {
     expect(activeResumeRevision(updated).markdown).toContain('**Computing**: Algorithms');
     expect(activeResumeRevision(updated).structuredStale).toBe(false);
     expect(originalResumeRevision(updated).document?.skills?.[0]?.name).toBe('Mathematics');
+  });
+});
+
+/**
+ * THE HIRED.VIDEO EXPORT.
+ *
+ * Its JSON Resume is PascalCase. Every reader in this module is camelCase, so the
+ * document parsed, passed an "is it an object" check, and then rendered completely
+ * blank — which is what left a real résumé unrenderable and pushed the request onto a
+ * model that spent four minutes retyping it (2026-08-15).
+ */
+describe('JSON Resume recognition', () => {
+  const HIRED_EXPORT = {
+    Basics: { Name: 'Sean Hogg', Label: 'CTO and Technology Leader', Email: 'sean@example.com', Summary: 'Technology leader.' },
+    Work: [{ Name: 'Alliance', Position: 'VP of Technology', StartDate: '2021-08-01', EndDate: '2024-01-01', Highlights: ['Reduced operating costs by $1.79M.'] }],
+    Education: [{ Institution: 'University of Windsor', Area: 'Computer Science', StudyType: 'Bachelor' }],
+    Skills: [], Awards: [], Projects: [],
+  };
+
+  it('recognises a PascalCase export and a camelCase one alike', () => {
+    expect(isJsonResume(HIRED_EXPORT)).toBe(true);
+    expect(isJsonResume({ basics: { name: 'Ada' } })).toBe(true);
+  });
+
+  it('does not claim an ordinary data export is a résumé', () => {
+    expect(isJsonResume({ rows: [{ id: 1 }], total: 1 })).toBe(false);
+    expect(isJsonResume([{ id: 1 }])).toBe(false);
+    expect(isJsonResume({ basics: 'not an object' })).toBe(false);
+  });
+
+  it('renders every section of a PascalCase export', () => {
+    const document = resumeDocumentFromJson(HIRED_EXPORT)!;
+    expect(document.basics?.name).toBe('Sean Hogg');
+    const markdown = renderResumeMarkdown(document);
+    expect(markdown).toContain('# Sean Hogg');
+    expect(markdown).toContain('VP of Technology — Alliance');
+    expect(markdown).toContain('2021-08-01 – 2024-01-01');
+    expect(markdown).toContain('Reduced operating costs by $1.79M.');
+    expect(markdown).toContain('University of Windsor — Bachelor — Computer Science');
+  });
+
+  /** The résumé a JSON Resume import left behind BEFORE this shipped: a one-row dataset
+   *  whose cells are stringified sections. Those boards still exist, so the fan-out has
+   *  to read them rather than telling the user their résumé is not a résumé. */
+  it('reads a résumé back out of a legacy one-row dataset', () => {
+    const rows = [Object.fromEntries(Object.entries(HIRED_EXPORT).map(([key, value]) => [key, JSON.stringify(value)]))];
+    const document = resumeDocumentFromNode({ kind: 'dataset', title: 'JsonResume.json', rows });
+    expect(document?.basics?.name).toBe('Sean Hogg');
+    expect(document?.work?.[0]?.position).toBe('VP of Technology');
+  });
+
+  it('reads the document off a résumé object', () => {
+    const family = createResumeFamily({ title: 'Ada', markdown: '# Ada', document: { basics: { name: 'Ada' } } });
+    expect(resumeDocumentFromNode({ kind: 'resume', title: 'Ada', resumeFamily: family })?.basics?.name).toBe('Ada');
+  });
+
+  it('holds no résumé for an unrelated dataset', () => {
+    expect(resumeDocumentFromNode({ kind: 'dataset', title: 'Sales', rows: [{ region: 'EMEA', total: '12' }] })).toBeNull();
+  });
+});
+
+/**
+ * THE TEMPLATE ENGINE FAN-OUT — the whole point of the change. "Ten versions in ten
+ * styles" must be one deterministic transform of one document, not ten generations.
+ */
+describe('resumeTemplateVariants', () => {
+  const DOCUMENT = { basics: { name: 'Sean Hogg', summary: 'Technology leader.' }, work: [{ name: 'Alliance', position: 'VP of Technology' }] };
+
+  it('renders one document in every requested style, with no content drift', () => {
+    const variants = resumeTemplateVariants(DOCUMENT, ['executive-taupe', 'creative-minimal', 'software-engineer-graphite']);
+    expect(variants.map((variant) => variant.templateId)).toEqual(['executive-taupe', 'creative-minimal', 'software-engineer-graphite']);
+    // Same history in every one — the property authoring ten résumés cannot guarantee.
+    const bodies = variants.map((variant) => activeResumeRevision(variant.family).markdown);
+    expect(new Set(bodies).size).toBe(1);
+    expect(bodies[0]).toContain('VP of Technology — Alliance');
+  });
+
+  it('binds each variant to its own template rather than the default', () => {
+    for (const variant of resumeTemplateVariants(DOCUMENT, ['risk-asphalt', 'hospitality-amber'])) {
+      expect(activeResumeRevision(variant.family).templateId).toBe(variant.templateId);
+      expect(variant.family.defaultTemplateId).toBe(variant.templateId);
+    }
+  });
+
+  it('names each variant for the person and the style it serves', () => {
+    const [variant] = resumeTemplateVariants(DOCUMENT, ['healthcare-clinical-blue']);
+    expect(activeResumeRevision(variant!.family).title).toBe('Sean Hogg — Healthcare');
+  });
+
+  /** An agent-authored résumé asking for a template used to have it silently reset. */
+  it('keeps an authored template when a résumé object is created', () => {
+    const patch = initializeResumeFromPatch('Ada', { markdown: '# Ada', templateId: 'executive-taupe' });
+    expect(patch.templateId).toBe('executive-taupe');
   });
 });

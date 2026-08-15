@@ -1250,7 +1250,7 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
 
 
 // ---------------------------------------------------------------------------
-// Human ratings of model output (migration 0465).
+// Human ratings of model output (migration 0468).
 //
 // The SIBLING fact to `run_model_outcomes`: that table learns which model ships
 // working code from merges and CI; this one learns which model produces work a

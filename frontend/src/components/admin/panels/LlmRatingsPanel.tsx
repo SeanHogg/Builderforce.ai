@@ -11,7 +11,7 @@ import { AdminError, AdminLoading, AdminPanelHeader, fmtNum, useAdminData } from
  * The sibling of the Usage panel next door. That one answers "what did we spend and
  * where"; a cost table alone will happily recommend the cheapest model in the pool
  * even when every person who read its output pressed 👎. This panel is the other
- * half of that decision, built from `llm_action_ratings` (migration 0465): every
+ * half of that decision, built from `llm_action_ratings` (migration 0468): every
  * thumb pressed in the Brain panel, the Creation Canvas or the VS Code webview,
  * filed against the model that served the turn and the MCP tool it executed.
  *

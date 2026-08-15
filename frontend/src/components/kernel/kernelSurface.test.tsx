@@ -51,7 +51,7 @@ describe('the roster is one list', () => {
   const EXPECTED = [
     'growth', 'delivery', 'agents', 'hiring', 'finance', 'revenue', 'commerce',
     'identity', 'people', 'platform', 'governance', 'investor', 'support',
-    'canvas', 'integrations', 'operations',
+    'canvas', 'integrations', 'operations', 'legal',
   ];
 
   it('is exactly the roster, in order, with no duplicates', () => {

@@ -27,6 +27,10 @@ export interface CanvasNotices {
   addedToCanvas: string;
   /** The turn produced neither an answer nor a change. */
   noAnswer: string;
+  /** The model provider accepted the request and then went silent, so the turn was
+   *  abandoned rather than left spinning. Distinct from `noAnswer`: nothing is wrong
+   *  with what was asked, and retrying is the right next move. */
+  providerStalled: string;
   /** A tool failed, and its error is the most useful thing the turn can report. */
   toolError(detail: string): string;
   /** The model answered, but never executed the change the request asked for. Its answer
@@ -52,6 +56,7 @@ export function canvasNoticesFrom(t: CanvasNoticeTranslator): CanvasNotices {
   return {
     addedToCanvas: t('addedToCanvas'),
     noAnswer: t('noAnswer'),
+    providerStalled: t('providerStalled'),
     toolError: (detail) => t('toolError', { detail }),
     answeredWithoutCanvasChange: (answer) => `${answer}\n\n${t('answeredWithoutChange')}`,
     unverifiedCreation: (hasTabularData) => t(hasTabularData ? 'unverifiedCreationTabular' : 'unverifiedCreationPlain'),

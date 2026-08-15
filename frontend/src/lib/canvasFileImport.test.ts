@@ -79,6 +79,47 @@ describe('importCanvasFile', () => {
     expect(imported.suggestedPrompt).toContain('promptData');
   });
 
+  /**
+   * A JSON RESUME MUST NOT LAND AS A DATASET.
+   *
+   * The standard export is one top-level object, so the tabular reader turned it into a
+   * single row of stringified sections — nothing on the board could render it, and
+   * "put my résumé in ten styles" had no route to the template engine at all.
+   */
+  describe('a JSON Resume export', () => {
+    const HIRED_EXPORT = JSON.stringify({
+      Basics: { Name: 'Sean Hogg', Label: 'CTO and Technology Leader', Email: 'sean@example.com', Summary: 'Technology leader.' },
+      Work: [{ Name: 'Alliance', Position: 'VP of Technology', StartDate: '2021-08-01', EndDate: '2024-01-01', Highlights: ['Cut costs by $1.79M.'] }],
+      Education: [{ Institution: 'University of Windsor', Area: 'Computer Science', StudyType: 'Bachelor' }],
+      Skills: [], Projects: [],
+    });
+
+    it('lands as a renderable résumé, not a one-row dataset', async () => {
+      const imported = await importCanvasFile(file('JsonResume-Sean Hogg.json', HIRED_EXPORT, 'application/json'), t);
+      const [object] = imported.objects;
+      expect(object?.kind).toBe('resume');
+      // Titled by the person, not the file — the card the user recognises.
+      expect(object?.data.title).toBe('Sean Hogg');
+      expect(object?.data.markdown).toContain('VP of Technology — Alliance');
+      expect(imported.notice).toContain('noticeResume');
+      expect(imported.suggestedPrompt).toContain('promptResume');
+    });
+
+    it('arrives with a résumé family the template engine can restyle', async () => {
+      const imported = await importCanvasFile(file('JsonResume-Sean Hogg.json', HIRED_EXPORT, 'application/json'), t);
+      const family = imported.objects[0]?.data.resumeFamily as { revisions: Array<{ kind: string; document?: { basics?: { name?: string } } }> };
+      expect(family.revisions).toHaveLength(1);
+      expect(family.revisions[0]?.kind).toBe('original');
+      expect(family.revisions[0]?.document?.basics?.name).toBe('Sean Hogg');
+    });
+
+    it('still reads an ordinary JSON data export as a Dataset', async () => {
+      const imported = await importCanvasFile(file('pipeline.json', JSON.stringify([{ region: 'EMEA', deals: 12 }, { region: 'APAC', deals: 7 }]), 'application/json'), t);
+      expect(imported.objects[0]?.kind).toBe('dataset');
+      expect(imported.objects[0]?.data.rowCount).toBe(2);
+    });
+  });
+
   it('reads a Word file as a document with the pages its author declared', async () => {
     const bytes = makeZip({
       'word/document.xml': '<w:body>'

@@ -6,6 +6,10 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import {
+  captureWorkspaceVersion,
+  listWorkspaceHistory,
+  readWorkspaceVersion,
+  restoreWorkspaceVersion,
   validateWorkspacePath,
   validateWorkspaceContent,
   workspacePrefix,
@@ -25,7 +29,9 @@ function fakeR2() {
     async get(key: string) {
       if (!store.has(key)) return null;
       const value = store.get(key)!;
-      return { text: async () => value };
+      // `body` as well as `text`: the history capture copies the BODY, so a fake
+      // without one would let a bug that corrupts every archived version pass.
+      return { text: async () => value, body: value };
     },
     async put(key: string, value: string) { store.set(key, value); },
     async delete(key: string) { store.delete(key); },
@@ -249,5 +255,71 @@ describe('write-time content contract', () => {
     expect(validateWorkspaceContent('anything.js', '   ')).toEqual({ ok: true });
     expect(validateWorkspaceContent('data.jsonl', '{"a":1}\n{"b":2}')).toEqual({ ok: true });
     expect(validateWorkspaceContent('styles.css', 'body { color: red; }')).toEqual({ ok: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// File history — the undo behind every write
+// ---------------------------------------------------------------------------
+
+describe('workspace file history', () => {
+  it('archives the version a write replaces, and never the file being created', async () => {
+    const r2 = fakeR2();
+    await writeWorkspaceFile(asBucket(r2), 1, 'App.js', 'export const v1 = 1;');
+    // Creating a file destroys nothing, so there is nothing to keep — recording a
+    // phantom "before" would make the undo list claim a version that never existed.
+    expect(await listWorkspaceHistory(asBucket(r2), 1)).toHaveLength(0);
+
+    await writeWorkspaceFile(asBucket(r2), 1, 'App.js', 'export const v2 = 2;');
+    const versions = await listWorkspaceHistory(asBucket(r2), 1);
+    expect(versions).toHaveLength(1);
+    expect(versions[0]!.path).toBe('App.js');
+    expect(await readWorkspaceVersion(asBucket(r2), 1, 'App.js', versions[0]!.at)).toBe('export const v1 = 1;');
+  });
+
+  it('restores an earlier version, and archives the restore so it can be undone again', async () => {
+    const r2 = fakeR2();
+    await writeWorkspaceFile(asBucket(r2), 1, 'App.js', 'good');
+    await writeWorkspaceFile(asBucket(r2), 1, 'App.js', 'broken');
+
+    const [version] = await listWorkspaceHistory(asBucket(r2), 1, 'App.js');
+    expect((await restoreWorkspaceVersion(asBucket(r2), 1, 'App.js', version!.at)).ok).toBe(true);
+    expect(await readWorkspaceFile(asBucket(r2), 1, 'App.js')).toBe('good');
+    // The restore went through the write path, so 'broken' is now itself archived.
+    const after = await listWorkspaceHistory(asBucket(r2), 1, 'App.js');
+    expect(after.length).toBeGreaterThan(1);
+  });
+
+  it('refuses a version that is not there rather than writing nothing silently', async () => {
+    const r2 = fakeR2();
+    await writeWorkspaceFile(asBucket(r2), 1, 'App.js', 'x');
+    const result = await restoreWorkspaceVersion(asBucket(r2), 1, 'App.js', 123);
+    expect(result.ok).toBe(false);
+  });
+
+  it('narrows to one file, and keeps projects apart', async () => {
+    const r2 = fakeR2();
+    await writeWorkspaceFile(asBucket(r2), 1, 'App.js', 'a');
+    await writeWorkspaceFile(asBucket(r2), 1, 'App.js', 'b');
+    await writeWorkspaceFile(asBucket(r2), 1, 'other.js', 'a');
+    await writeWorkspaceFile(asBucket(r2), 1, 'other.js', 'b');
+    await writeWorkspaceFile(asBucket(r2), 2, 'App.js', 'a');
+    await writeWorkspaceFile(asBucket(r2), 2, 'App.js', 'b');
+
+    expect(await listWorkspaceHistory(asBucket(r2), 1, 'App.js')).toHaveLength(1);
+    expect(await listWorkspaceHistory(asBucket(r2), 1)).toHaveLength(2);
+    expect(await listWorkspaceHistory(asBucket(r2), 2)).toHaveLength(1);
+  });
+
+  // The archive is a safety net for the save. It must never be the reason a save
+  // fails — that would lose the very work the undo exists to protect.
+  it('never fails the write when archiving cannot be done', async () => {
+    const broken = {
+      get: async () => ({ text: async () => 'old', body: 'old' }),
+      put: async () => { throw new Error('R2 is having a bad day'); },
+      list: async () => ({ objects: [] }),
+      delete: async () => undefined,
+    } as unknown as R2Bucket;
+    await expect(captureWorkspaceVersion(broken, 1, 'App.js')).resolves.toBeUndefined();
   });
 });

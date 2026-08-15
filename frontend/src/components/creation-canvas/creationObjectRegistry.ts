@@ -16,7 +16,7 @@ import { SHARED_OBJECT_SPECS } from '@/lib/sharedCanvasObjects';
 // The field operation — the work a vertical company sells. Imported for the same
 // registration side effect as the vocabularies above.
 import { OPERATIONS_OBJECT_SPECS } from '@/lib/operationsObjects';
-import { specBookkeepingFields, specFieldNames } from '@/lib/specObjects';
+import { specBookkeepingFields, specFieldNames, type SpecDeriveBoard } from '@/lib/specObjects';
 import {
   ACADEMIC_MUTABLE_FIELDS, ACADEMIC_REGISTRY, FOUNDER_MUTABLE_FIELDS, FOUNDER_REGISTRY,
   HIRING_MUTABLE_FIELDS, HIRING_REGISTRY, PEOPLE_MUTABLE_FIELDS, PEOPLE_REGISTRY,
@@ -54,7 +54,10 @@ export interface CreationObjectDefinition {
    * (title, subtitle, status) are added automatically. */
   mutableFields: readonly string[];
   allowedConnections: readonly CreationConnectionKind[];
-  contextAdapter: (data: CreationNodeData) => Record<string, unknown>;
+  /** The AI snapshot of one object. `board` is what its COMPUTED fields read — a
+   *  gradebook's mean comes from the submissions beside it — and is optional so a
+   *  single-object read stays a one-argument call. See `creationObjectContext`. */
+  contextAdapter: (data: CreationNodeData, board?: SpecDeriveBoard) => Record<string, unknown>;
   previewAdapter: (data: CreationNodeData) => { kind: CreationObjectKind; title: string; status?: string };
 }
 type BaseCreationObjectDefinition = Pick<CreationObjectDefinition, 'kind' | 'label' | 'icon' | 'group' | 'createData'>;

@@ -27,8 +27,14 @@
  */
 
 /** The networks this deployment can read and publish to. */
-export const SOCIAL_NETWORKS = ['x', 'linkedin', 'facebook', 'instagram', 'tiktok'] as const;
+export const SOCIAL_NETWORKS = [
+  'x', 'linkedin', 'facebook', 'instagram', 'tiktok',
+  'youtube', 'reddit', 'pinterest', 'threads', 'bluesky', 'googleBusiness',
+] as const;
 export type SocialNetwork = typeof SOCIAL_NETWORKS[number];
+
+/** @see SocialProvider.publishMode */
+export type SocialPublishMode = 'text' | 'media' | 'none';
 
 export function isSocialNetwork(value: unknown): value is SocialNetwork {
   return typeof value === 'string' && (SOCIAL_NETWORKS as readonly string[]).includes(value);
@@ -114,9 +120,20 @@ export interface SocialProvider {
   /** The built-in connector manifest this network runs on. */
   connectorKey: string;
   accountFields: readonly SocialAccountField[];
-  /** True when the network REFUSES a text-only post (Instagram, TikTok). Campaigns
-   *  check this before queueing rather than discovering it one failed post at a time. */
-  requiresMedia: boolean;
+  /**
+   * What this network accepts from a publish — checked BEFORE anything is queued,
+   * rather than discovered one failed post at a time.
+   *
+   *   `text`  — a text-only post is fine; media is optional.
+   *   `media` — the network REFUSES a text-only post (Instagram, TikTok, Pinterest).
+   *   `none`  — read and measure only. YouTube is the honest case: publishing is a
+   *             resumable upload of the video bytes, which a declarative HTTP manifest
+   *             cannot express and a Worker should not proxy.
+   *
+   * One field rather than two booleans, because "can it publish" and "does it need
+   * media" are the same question asked twice and could otherwise disagree.
+   */
+  publishMode: SocialPublishMode;
   identity(call: SocialCall, fields: Record<string, string>): Promise<SocialIdentity>;
   listPosts(
     call: SocialCall,
@@ -203,7 +220,7 @@ function requireField(fields: Record<string, string>, key: string, label: string
 // ---------------------------------------------------------------------------
 
 const x: SocialProvider = {
-  network: 'x', label: 'X', connectorKey: 'x-social', requiresMedia: false,
+  network: 'x', label: 'X', connectorKey: 'x-social', publishMode: 'text',
   accountFields: [],
   async identity(call) {
     const me = rec((await ask(call, 'get_me', { 'user.fields': 'id,name,username' })).data);
@@ -259,7 +276,7 @@ const x: SocialProvider = {
 const LINKEDIN_POST_ID_HEADER = 'x-restli-id';
 
 const linkedin: SocialProvider = {
-  network: 'linkedin', label: 'LinkedIn', connectorKey: 'linkedin-social', requiresMedia: false,
+  network: 'linkedin', label: 'LinkedIn', connectorKey: 'linkedin-social', publishMode: 'text',
   accountFields: [{
     key: 'authorUrn', label: 'Author URN',
     help: 'urn:li:organization:123 to post as a company page, or urn:li:person:… to post as yourself.',
@@ -317,7 +334,7 @@ const linkedin: SocialProvider = {
 // ---------------------------------------------------------------------------
 
 const facebook: SocialProvider = {
-  network: 'facebook', label: 'Facebook Pages', connectorKey: 'facebook-pages', requiresMedia: false,
+  network: 'facebook', label: 'Facebook Pages', connectorKey: 'facebook-pages', publishMode: 'text',
   accountFields: [{ key: 'pageId', label: 'Page ID', help: 'The numeric id of the Facebook Page the token administers.' }],
   async identity(call, fields) {
     const me = rec((await ask(call, 'get_account', { fields: 'id,name' })).data);
@@ -374,7 +391,7 @@ const facebook: SocialProvider = {
 // ---------------------------------------------------------------------------
 
 const instagram: SocialProvider = {
-  network: 'instagram', label: 'Instagram', connectorKey: 'instagram-business', requiresMedia: true,
+  network: 'instagram', label: 'Instagram', connectorKey: 'instagram-business', publishMode: 'media',
   accountFields: [{ key: 'igUserId', label: 'Instagram account ID', help: 'The professional account id (IG user id) that owns the media.' }],
   async identity(call, fields) {
     const me = rec((await ask(call, 'get_account', { fields: 'id,username,account_type' })).data);
@@ -451,7 +468,7 @@ function assertTikTokOk(payload: Record<string, unknown>): void {
 }
 
 const tiktok: SocialProvider = {
-  network: 'tiktok', label: 'TikTok', connectorKey: 'tiktok-social', requiresMedia: true,
+  network: 'tiktok', label: 'TikTok', connectorKey: 'tiktok-social', publishMode: 'media',
   accountFields: [],
   async identity(call) {
     const payload = rec((await ask(call, 'creator_info')).data);
@@ -505,11 +522,362 @@ const tiktok: SocialProvider = {
 };
 
 // ---------------------------------------------------------------------------
+// YouTube — read and measure only
+// ---------------------------------------------------------------------------
+
+const youtube: SocialProvider = {
+  network: 'youtube', label: 'YouTube', connectorKey: 'youtube', publishMode: 'none',
+  accountFields: [],
+  async identity(call) {
+    const channel = rec(list((await ask(call, 'get_my_channel')).data)[0]);
+    const snippet = rec(channel.snippet);
+    return {
+      externalId: text(channel.id),
+      handle: text(snippet.customUrl).replace(/^@/, ''),
+      displayName: text(snippet.title) || 'YouTube',
+    };
+  },
+  async listPosts(call, _fields, { limit, identity }) {
+    const found = list((await ask(call, 'search_my_videos', { maxResults: Math.min(Math.max(limit, 1), 50) })).data);
+    const ids = found.map((raw) => text(rec(rec(raw).id).videoId)).filter(Boolean);
+    if (ids.length === 0) return [];
+    // Search does NOT return statistics, so view and like counts need a second call —
+    // ONE call for every id, never one per video.
+    const details = list((await ask(call, 'get_videos', { id: ids.join(',') })).data);
+    return details.map((raw) => {
+      const video = rec(raw);
+      const snippet = rec(video.snippet);
+      const stats = rec(video.statistics);
+      const id = text(video.id);
+      const thumbnails = rec(snippet.thumbnails);
+      const thumb = text(rec(thumbnails.high ?? thumbnails.default).url);
+      return {
+        id,
+        authorName: identity.displayName,
+        text: text(snippet.title),
+        permalink: id ? `https://www.youtube.com/watch?v=${id}` : null,
+        publishedAtISO: toISO(snippet.publishedAt),
+        mediaUrls: thumb ? [thumb] : [],
+        thumbnailUrl: thumb || null,
+        metrics: metrics({ likes: stats.likeCount, comments: stats.commentCount, views: stats.viewCount }),
+      };
+    });
+  },
+  async publish() {
+    // Backstop only — `publishMode: 'none'` is what callers check. Reaching this means
+    // a caller skipped that check, and silently doing nothing would be worse.
+    throw new SocialProviderError('YouTube cannot be published to from here — uploading a video needs a resumable upload. Publish in YouTube Studio and the feed will pick it up.', 400, false);
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Reddit
+// ---------------------------------------------------------------------------
+
+const reddit: SocialProvider = {
+  network: 'reddit', label: 'Reddit', connectorKey: 'reddit-social', publishMode: 'text',
+  accountFields: [{
+    key: 'subreddit', label: 'Subreddit',
+    help: 'Without the r/ prefix. Reddit has no default destination — every post names one.',
+  }],
+  async identity(call) {
+    const me = rec((await ask(call, 'get_me')).data);
+    const name = text(me.name);
+    return { externalId: text(me.id) || name, handle: name, displayName: name ? `u/${name}` : 'Reddit' };
+  },
+  async listPosts(call, _fields, { limit, identity }) {
+    if (!identity.handle) return [];
+    const children = list((await ask(call, 'list_submitted', { username: identity.handle, limit: Math.min(Math.max(limit, 1), 100), sort: 'new' })).data);
+    return children.map((raw) => {
+      // Reddit wraps every listing element as `{kind, data}`.
+      const post = rec(rec(raw).data);
+      const permalink = text(post.permalink);
+      const thumbnail = text(post.thumbnail);
+      return {
+        id: text(post.id),
+        authorName: identity.displayName,
+        text: text(post.title),
+        permalink: permalink ? `https://www.reddit.com${permalink}` : null,
+        publishedAtISO: toISO(post.created_utc),
+        mediaUrls: [],
+        // `thumbnail` is often the literal string "self" or "default" rather than a URL.
+        thumbnailUrl: /^https?:/.test(thumbnail) ? thumbnail : null,
+        // Reddit reports a SCORE (ups minus downs), not likes. It is the closest thing
+        // the network has to the same idea, so it rides in the same column.
+        metrics: metrics({ likes: post.score, comments: post.num_comments }),
+      };
+    });
+  },
+  async publish(call, fields, draft) {
+    const subreddit = requireField(fields, 'subreddit', 'the subreddit to post to');
+    const isLink = Boolean(draft.linkUrl) && !draft.text.includes(draft.linkUrl ?? '');
+    // Reddit requires a TITLE, which no other network here has. The first line is the
+    // title and the rest is the body, which is how people write these posts anyway.
+    const [firstLine, ...restLines] = draft.text.split('\n');
+    const payload = await ask(call, 'submit', {
+      sr: subreddit,
+      title: (firstLine || draft.text).slice(0, 300),
+      ...(isLink
+        ? { kind: 'link', url: draft.linkUrl }
+        : { kind: 'self', text: restLines.join('\n').trim() || draft.text }),
+    });
+    const data = rec(rec(rec(payload.data).json).data);
+    return { externalId: text(data.id) || text(data.name), permalink: text(data.url) || null };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Pinterest
+// ---------------------------------------------------------------------------
+
+const pinterest: SocialProvider = {
+  network: 'pinterest', label: 'Pinterest', connectorKey: 'pinterest-social', publishMode: 'media',
+  accountFields: [{
+    key: 'boardId', label: 'Board ID',
+    help: 'The board new pins are created on. A pin cannot exist without one.',
+  }],
+  async identity(call) {
+    const account = rec((await ask(call, 'get_account')).data);
+    const username = text(account.username);
+    return { externalId: text(account.id) || username, handle: username, displayName: username || 'Pinterest' };
+  },
+  async listPosts(call, _fields, { limit, identity }) {
+    const items = list((await ask(call, 'list_pins', { page_size: Math.min(Math.max(limit, 1), 100) })).data);
+    return items.map((raw) => {
+      const pin = rec(raw);
+      const images = rec(rec(pin.media).images);
+      const image = text(rec(images['1200x'] ?? images.originals).url);
+      const id = text(pin.id);
+      return {
+        id,
+        authorName: identity.handle ? `@${identity.handle}` : identity.displayName,
+        text: text(pin.title) || text(pin.description),
+        permalink: id ? `https://www.pinterest.com/pin/${id}/` : null,
+        publishedAtISO: toISO(pin.created_at),
+        mediaUrls: image ? [image] : [],
+        thumbnailUrl: image || null,
+        // Pin metrics are a per-pin analytics call — the N+1 the caching rule forbids
+        // over a page. The inspector fetches them on demand instead.
+        metrics: metrics({}),
+      };
+    });
+  },
+  async publish(call, fields, draft) {
+    const boardId = requireField(fields, 'boardId', 'the board ID');
+    const media = (draft.mediaUrls ?? []).filter(Boolean);
+    if (media.length === 0) {
+      throw new SocialProviderError('Pinterest cannot publish without an image — attach one and try again.', 400, false);
+    }
+    if (/\.(mp4|mov|m4v)(\?|$)/i.test(media[0]!)) {
+      // A video pin needs a REGISTERED media upload id rather than a URL. Saying so
+      // beats a 400 from the API that names neither the board nor the reason.
+      throw new SocialProviderError('Pinterest video pins need an uploaded media id rather than a URL. Use an image for now.', 400, false);
+    }
+    const pin = rec((await ask(call, 'create_pin', {
+      board_id: boardId,
+      title: draft.text.slice(0, 100),
+      description: draft.text,
+      ...(draft.linkUrl ? { link: draft.linkUrl } : {}),
+      media_source: { source_type: 'image_url', url: media[0] },
+    })).data);
+    const id = text(pin.id);
+    return { externalId: id, permalink: id ? `https://www.pinterest.com/pin/${id}/` : null };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Threads
+// ---------------------------------------------------------------------------
+
+const threads: SocialProvider = {
+  network: 'threads', label: 'Threads', connectorKey: 'threads-social', publishMode: 'text',
+  accountFields: [],
+  async identity(call) {
+    const me = rec((await ask(call, 'get_me')).data);
+    const username = text(me.username);
+    return { externalId: text(me.id), handle: username, displayName: text(me.name) || username || 'Threads' };
+  },
+  async listPosts(call, _fields, { limit, identity }) {
+    const items = list((await ask(call, 'list_threads', {
+      fields: 'id,text,permalink,timestamp,media_type,media_url,thumbnail_url',
+      limit: Math.min(Math.max(limit, 1), 100),
+    })).data);
+    return items.map((raw) => {
+      const post = rec(raw);
+      const media = text(post.media_url);
+      return {
+        id: text(post.id),
+        authorName: identity.handle ? `@${identity.handle}` : identity.displayName,
+        text: text(post.text),
+        permalink: text(post.permalink) || null,
+        publishedAtISO: toISO(post.timestamp),
+        mediaUrls: media ? [media] : [],
+        thumbnailUrl: text(post.thumbnail_url) || media || null,
+        // Threads reports engagement only through a per-post insights call, which over
+        // a page of posts is the N+1 the caching rule forbids.
+        metrics: metrics({}),
+      };
+    });
+  },
+  async publish(call, _fields, draft, identity) {
+    const media = (draft.mediaUrls ?? []).filter(Boolean);
+    const isVideo = media.length > 0 && /\.(mp4|mov|m4v)(\?|$)/i.test(media[0]!);
+    // Threads publishes in two steps by design — a container, then the publish — for
+    // the same reason Instagram does, and both live here so "publish" means one thing.
+    const container = rec((await ask(call, 'create_container', {
+      media_type: media.length === 0 ? 'TEXT' : isVideo ? 'VIDEO' : 'IMAGE',
+      text: draft.text,
+      ...(media.length === 0 && draft.linkUrl ? { link_attachment: draft.linkUrl } : {}),
+      ...(media.length > 0 ? (isVideo ? { video_url: media[0] } : { image_url: media[0] }) : {}),
+    })).data);
+    const creationId = text(container.id);
+    if (!creationId) throw new SocialProviderError('Threads did not return a post container id.', 502, true);
+    const published = rec((await ask(call, 'publish_container', { creation_id: creationId })).data);
+    const id = text(published.id);
+    return {
+      externalId: id,
+      permalink: identity.handle && id ? `https://www.threads.net/@${identity.handle}` : null,
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Bluesky
+// ---------------------------------------------------------------------------
+
+/**
+ * The only network here whose credential is not a long-lived token: AT Protocol
+ * exchanges a handle + app password for a short-lived `accessJwt` per session. The
+ * manifest declares `auth.kind: 'none'` precisely so manifest-level auth does not
+ * overwrite the `Authorization` header this adapter sets from that exchange.
+ */
+async function blueskySession(call: SocialCall): Promise<{ jwt: string; did: string; handle: string }> {
+  const session = rec((await ask(call, 'create_session')).data);
+  const jwt = text(session.accessJwt);
+  if (!jwt) throw new SocialProviderError('Bluesky did not return a session token. Check the handle and app password on this connection.', 401, false);
+  return { jwt, did: text(session.did), handle: text(session.handle) };
+}
+
+/** An `at://…/rkey` URI's last segment is the record key, which is what a web link needs. */
+const blueskyRkey = (uri: string): string => uri.split('/').pop() ?? '';
+
+const bluesky: SocialProvider = {
+  network: 'bluesky', label: 'Bluesky', connectorKey: 'bluesky-social', publishMode: 'text',
+  accountFields: [],
+  async identity(call) {
+    const { did, handle } = await blueskySession(call);
+    return { externalId: did, handle, displayName: handle || 'Bluesky' };
+  },
+  async listPosts(call, _fields, { limit, identity }) {
+    const { jwt } = await blueskySession(call);
+    const feed = list((await ask(call, 'get_author_feed', {
+      actor: identity.handle || identity.externalId,
+      limit: Math.min(Math.max(limit, 1), 100),
+      Authorization: `Bearer ${jwt}`,
+    })).data);
+    return feed.map((raw) => {
+      const post = rec(rec(raw).post);
+      const record = rec(post.record);
+      const uri = text(post.uri);
+      const rkey = blueskyRkey(uri);
+      return {
+        id: uri,
+        authorName: identity.handle ? `@${identity.handle}` : identity.displayName,
+        text: text(record.text),
+        permalink: identity.handle && rkey ? `https://bsky.app/profile/${identity.handle}/post/${rkey}` : null,
+        publishedAtISO: toISO(record.createdAt),
+        mediaUrls: [],
+        thumbnailUrl: null,
+        metrics: metrics({ likes: post.likeCount, comments: post.replyCount, shares: post.repostCount }),
+      };
+    });
+  },
+  async publish(call, _fields, draft, identity) {
+    const { jwt, did } = await blueskySession(call);
+    const body = draft.linkUrl && !draft.text.includes(draft.linkUrl)
+      ? `${draft.text}\n\n${draft.linkUrl}`
+      : draft.text;
+    const created = rec((await ask(call, 'create_record', {
+      repo: did || identity.externalId,
+      collection: 'app.bsky.feed.post',
+      // 300 GRAPHEMES is the real limit; slicing here keeps a long post from being
+      // rejected outright, and the campaign composer counts before it gets this far.
+      record: { text: body.slice(0, 300), createdAt: new Date().toISOString() },
+      Authorization: `Bearer ${jwt}`,
+    })).data);
+    const uri = text(created.uri);
+    const rkey = blueskyRkey(uri);
+    return {
+      externalId: uri,
+      permalink: identity.handle && rkey ? `https://bsky.app/profile/${identity.handle}/post/${rkey}` : null,
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Google Business Profile
+// ---------------------------------------------------------------------------
+
+const googleBusiness: SocialProvider = {
+  network: 'googleBusiness', label: 'Google Business Profile', connectorKey: 'google-business-profile', publishMode: 'text',
+  accountFields: [{
+    key: 'locationName', label: 'Location resource name',
+    help: 'accounts/123/locations/456 — which business location this connection posts about.',
+  }],
+  async identity(_call, fields) {
+    // There is no "who am I" on this API — the LOCATION is the identity, and it is
+    // configured on the connection rather than discoverable from the token.
+    const locationName = (fields.locationName ?? '').trim();
+    return {
+      externalId: locationName,
+      handle: locationName.split('/').pop() ?? '',
+      displayName: locationName || 'Google Business Profile',
+    };
+  },
+  async listPosts(call, fields, { limit, identity }) {
+    const locationName = requireField(fields, 'locationName', 'the location resource name');
+    const posts = list((await ask(call, 'list_local_posts', { location_name: locationName, pageSize: Math.min(Math.max(limit, 1), 100) })).data);
+    return posts.map((raw) => {
+      const post = rec(raw);
+      const media = list(post.media).map((item) => text(rec(item).googleUrl)).filter(Boolean);
+      return {
+        id: text(post.name),
+        authorName: identity.displayName,
+        text: text(post.summary),
+        permalink: text(post.searchUrl) || null,
+        publishedAtISO: toISO(post.createTime),
+        mediaUrls: media,
+        thumbnailUrl: media[0] ?? null,
+        // Local-post metrics live behind the separate Business Profile Performance API.
+        metrics: metrics({}),
+      };
+    });
+  },
+  async publish(call, fields, draft, identity) {
+    const locationName = requireField(fields, 'locationName', 'the location resource name');
+    const media = (draft.mediaUrls ?? []).filter(Boolean);
+    const created = rec((await ask(call, 'create_local_post', {
+      location_name: locationName,
+      summary: draft.text.slice(0, 1500),
+      languageCode: 'en',
+      topicType: 'STANDARD',
+      ...(draft.linkUrl ? { callToAction: { actionType: 'LEARN_MORE', url: draft.linkUrl } } : {}),
+      ...(media.length > 0 ? { media: media.map((url) => ({ mediaFormat: 'PHOTO', sourceUrl: url })) } : {}),
+    })).data);
+    return {
+      externalId: text(created.name) || identity.externalId,
+      permalink: text(created.searchUrl) || null,
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
 
 const PROVIDERS: Readonly<Record<SocialNetwork, SocialProvider>> = {
   x, linkedin, facebook, instagram, tiktok,
+  youtube, reddit, pinterest, threads, bluesky, googleBusiness,
 };
 
 export function getSocialProvider(network: string): SocialProvider | null {

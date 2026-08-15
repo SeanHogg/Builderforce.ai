@@ -42,7 +42,7 @@
  */
 
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
-import { fetchFiles, fetchFileContent, saveFile } from '@/lib/api';
+import { fetchFiles, fetchFileContent, fetchFileHistory, restoreFileVersion, saveFile } from '@/lib/api';
 import { coerceFileContent, validateFileContentForPath } from '@/lib/fileContentGuard';
 import { formatBuildFailures } from '@/lib/buildDiagnostics';
 import { MODALITIES, type ProjectModality } from '@/lib/modality';
@@ -462,6 +462,67 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         return { ok: true, failures: report.split('\n\n---\n\n').length, report };
       },
     },
+    {
+      name: 'canvas_list_build_file_history',
+      description: "List the earlier versions of files in a Builder object's workspace, newest first. Every write archives the version it replaced, so this is what a change can be undone back to. Omit path to see everything that changed recently — which is how you find what the last few edits touched.",
+      parameters: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          path: { type: 'string', description: 'Narrow to one file. Omit for the whole workspace.' },
+          objectId: { type: 'string', description: 'Builder object id. Omit when the board has one.' },
+        },
+      },
+      run: async (raw: unknown) => {
+        const args = raw as { path?: unknown; objectId?: unknown };
+        const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
+        if ('error' in resolved) return resolved;
+        try {
+          const versions = await fetchFileHistory(
+            resolved.build.binding.storageProjectId,
+            typeof args.path === 'string' && args.path.trim() ? args.path.trim() : undefined,
+          );
+          return {
+            ok: true,
+            versions: versions.map((version) => ({
+              path: version.path,
+              at: version.at,
+              replacedAt: new Date(version.at).toISOString(),
+              size: version.size,
+            })),
+          };
+        } catch (error) {
+          return { error: error instanceof Error ? error.message : 'The file history could not be read.' };
+        }
+      },
+    },
+    {
+      name: 'canvas_restore_build_file',
+      description: "Put an earlier version of a file back — the undo. Use this the moment the user says a change broke something or asks to revert: it is instant, it is exact, and it is far better than trying to reconstruct the previous code from memory. Get the `at` value from canvas_list_build_file_history. The restore is itself archived, so it can be undone again.",
+      mutates: true,
+      parameters: {
+        type: 'object', required: ['path', 'at'], additionalProperties: false,
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative path.' },
+          at: { type: 'number', description: 'The version stamp from canvas_list_build_file_history.' },
+          objectId: { type: 'string', description: 'Builder object id. Omit when the board has one.' },
+        },
+      },
+      run: async (raw: unknown) => {
+        const args = raw as { path?: unknown; at?: unknown; objectId?: unknown };
+        const path = typeof args.path === 'string' ? args.path.trim() : '';
+        const at = Number(args.at);
+        if (!path || !Number.isFinite(at)) return { error: 'path and at are both required. Call canvas_list_build_file_history first.' };
+        const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
+        if ('error' in resolved) return resolved;
+        try {
+          await restoreFileVersion(resolved.build.binding.storageProjectId, path, at);
+          ctx.onFilesChanged?.(resolved.build.binding.storageProjectId, [path]);
+          return { ok: true, path, restoredFrom: new Date(at).toISOString() };
+        } catch (error) {
+          return { error: error instanceof Error ? error.message : `"${path}" could not be restored.` };
+        }
+      },
+    },
   ];
 }
 
@@ -474,6 +535,8 @@ export const CANVAS_BUILD_TOOL_NAMES = [
   'canvas_write_build_file',
   'canvas_edit_build_file',
   'canvas_read_build_diagnostics',
+  'canvas_list_build_file_history',
+  'canvas_restore_build_file',
 ] as const;
 
 /** Modality ids a Builder object can be created with, for the UI that offers them. */

@@ -634,101 +634,42 @@ export const partyRoles = pgTable('party_roles', {
 // URL has no tenant to disambiguate it with.
 
 /**
- * A question set published for a human to answer.
+ * One named person a form was sent to — and the ONLY new table on the collection
+ * side.
  *
- * The canvas `form` object is this row's projection. `questions` is JSONB and not
- * a `form_questions` table on purpose: a question has no independent life — it is
- * never queried across forms, never joined to, and is only ever read as the whole
- * ordered set that renders one page. A table would buy a JOIN per render and cost
- * the ordering guarantee the array gives for free.
- */
-export const publishedForms = pgTable('published_forms', {
-  id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id').notNull(),
-  objectId:    uuid('object_id').references(() => objects.id, { onDelete: 'set null' }),
-  /** The public address. Globally unique — see the section note. */
-  slug:        varchar('slug', { length: 64 }).notNull(),
-  title:       varchar('title', { length: 200 }).notNull(),
-  description: text('description'),
-  /** `FormQuestion[]` from the canvas contract: {id, type, label, help, required,
-   *  options, max}. The nine declared types and nothing else. */
-  questions:   jsonb('questions').notNull(),
-  /** 'draft' | 'open' | 'closed'. A draft has a slug and refuses to render. */
-  status:      varchar('status', { length: 16 }).notNull().default('draft'),
-  /**
-   * Whether a response records WHO answered.
-   *
-   * A boolean and not an audience value, which is the distinction the contract
-   * argues and the one that is load-bearing: an anonymous engagement pulse must
-   * not record the responder even though they are signed in, while a policy
-   * acknowledgement is worthless unless it does. Conflating them is how an
-   * "anonymous" survey comes to carry a user id.
-   */
-  anonymous:   boolean('anonymous').notNull().default(false),
-  /** 'anyoneWithLink' | 'workspace' | 'namedRecipients'. */
-  audience:    varchar('audience', { length: 24 }).notNull().default('anyoneWithLink'),
-  closesAt:    timestamp('closes_at'),
-  /** Shown after a successful submit. Authored, because "thanks" is rarely the
-   *  useful thing to say — an applicant wants to know what happens next. */
-  confirmationMessage: text('confirmation_message'),
-  createdBy:   varchar('created_by', { length: 64 }),
-  createdAt:   timestamp('created_at').notNull().defaultNow(),
-  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-}, (t) => [
-  uniqueIndex('uq_published_forms_slug').on(t.slug),
-  index('idx_published_forms_tenant').on(t.tenantId, t.status, t.updatedAt),
-]);
-
-/**
- * One named person a `namedRecipients` form was sent to.
+ * ── WHY THERE IS NO `published_forms` AND NO `form_responses` ────────────────
+ * Because `question_sets` and `responses` further down this file already ARE the
+ * form and the response store: twelve survey tables and thirteen answer tables
+ * were consolidated into them. What did NOT exist was the PUBLICATION — a set
+ * had no public address, no way to say whether it records who answered, and no
+ * enforceable audience, so it could be authored and never sent to anybody
+ * outside the workspace. Those are COLUMNS on `question_sets` (`slug`,
+ * `anonymous`, `audience_kind`, `confirmation_message`, `object_id`), not a
+ * second store. Building a parallel pair here would have been the third response
+ * store the canvas contract's own note warns about in as many words.
  *
- * Exists so the audience is ENFORCED rather than decorative. The register's own
- * complaint about the data room — "carries `nda_required`, `watermark` and
- * `expires_at` and there is no share flow to enforce any of the three, so the
- * properties that make it safe are decoration" — is the failure this avoids: a
- * form whose audience says "named recipients only" and whose route lets anyone
- * with the slug answer is a lie told by a column.
+ * What is genuinely missing is a per-recipient CREDENTIAL. Without one,
+ * `audience_kind = 'namedRecipients'` is decoration: a form that says "named
+ * recipients only" and whose route lets anyone holding the slug answer is a lie
+ * told by a column — the same defect the register logs against the data room's
+ * unenforced `nda_required`.
  *
- * The token IS the credential, so only its hash is stored and the entity layer
- * redacts the column by name.
+ * The token IS the credential, so only its hash is stored, and the entity
+ * layer's redaction removes the column from every generic projection by name.
  */
 export const formRecipients = pgTable('form_recipients', {
-  id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id').notNull(),
-  formId:      integer('form_id').notNull().references(() => publishedForms.id, { onDelete: 'cascade' }),
-  email:       varchar('email', { length: 320 }).notNull(),
-  name:        varchar('name', { length: 200 }),
-  tokenHash:   varchar('token_hash', { length: 64 }).notNull(),
-  invitedAt:   timestamp('invited_at').notNull().defaultNow(),
-  respondedAt: timestamp('responded_at'),
-  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull(),
+  questionSetId: uuid('question_set_id').notNull().references(() => questionSets.id, { onDelete: 'cascade' }),
+  email:         varchar('email', { length: 320 }).notNull(),
+  name:          varchar('name', { length: 200 }),
+  tokenHash:     varchar('token_hash', { length: 64 }).notNull(),
+  invitedAt:     timestamp('invited_at').notNull().defaultNow(),
+  respondedAt:   timestamp('responded_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
-  uniqueIndex('uq_form_recipients_email').on(t.formId, t.email),
+  uniqueIndex('uq_form_recipients_email').on(t.questionSetId, t.email),
   uniqueIndex('uq_form_recipients_token').on(t.tokenHash),
-]);
-
-/**
- * One submitted answer set.
- *
- * `respondentRef` is NULL for an anonymous form — not "anonymous", not a hashed
- * id, absent. A column that holds a pseudonym on an anonymous survey is a column
- * somebody will eventually join, and the promise the form made to the person
- * answering it was that there would be nothing to join.
- */
-export const formResponses = pgTable('form_responses', {
-  id:           serial('id').primaryKey(),
-  tenantId:     integer('tenant_id').notNull(),
-  formId:       integer('form_id').notNull().references(() => publishedForms.id, { onDelete: 'cascade' }),
-  recipientId:  integer('recipient_id').references(() => formRecipients.id, { onDelete: 'set null' }),
-  /** Who answered. NULL when the form is anonymous — see the note above. */
-  respondentRef: varchar('respondent_ref', { length: 64 }),
-  /** `{ [questionId]: string | number | boolean | string[] }`. */
-  answers:      jsonb('answers').notNull(),
-  submittedAt:  timestamp('submitted_at').notNull().defaultNow(),
-  createdAt:    timestamp('created_at').notNull().defaultNow(),
-}, (t) => [
-  index('idx_form_responses_form').on(t.formId, t.submittedAt),
-  index('idx_form_responses_tenant').on(t.tenantId, t.submittedAt),
 ]);
 
 /**
@@ -1149,25 +1090,64 @@ export const messages = pgTable('messages', {
  *
  * **Cadence is config**, not a table per rhythm — a weekly pulse and a one-off
  * survey differ by a JSON key, which is the whole reason there were twelve.
+ *
+ * ── THE PUBLICATION COLUMNS (migration 0469) ────────────────────────────────
+ * A set could be authored and never SENT. The canvas contract declares
+ * `PublishedForm`, `FORM_AUDIENCES`, `FORM_STATUSES` and an `anonymous` boolean
+ * with an argument for each distinction and had zero consumers, because the
+ * store they describe had no public address and no enforceable audience. Those
+ * are the five columns below — added HERE rather than as a `published_forms`
+ * table, because a second form store is a second answer to "what did this person
+ * answer", which is the collapse this table exists to be.
  */
 export const questionSets = pgTable('question_sets', {
   id:          uuid('id').primaryKey().defaultRandom(),
   tenantId:    integer('tenant_id').notNull(),
-  /** 'survey' | 'pulse' | 'check_in' | 'scorecard' | 'screening' | 'diagnostic'. */
+  /** 'survey' | 'pulse' | 'check_in' | 'scorecard' | 'screening' | 'diagnostic'
+   *  | 'form' — the canvas `form` object's own kind. A kind is a column value. */
   kind:        varchar('kind', { length: 32 }).notNull(),
   name:        varchar('name', { length: 200 }).notNull(),
   description: text('description'),
   questions:   jsonb('questions').notNull().default('[]'),
   cadence:     jsonb('cadence'),
+  /** The audience's PARAMETERS — segment filters, role filters. The enforceable
+   *  discriminator is `audienceKind` below; this is what it is parameterised by,
+   *  which is why both exist and neither restates the other. */
   audience:    jsonb('audience'),
   status:      varchar('status', { length: 16 }).notNull().default('draft'),
   opensAt:     timestamp('opens_at'),
   closesAt:    timestamp('closes_at'),
   createdBy:   varchar('created_by', { length: 64 }),
+  /** The canvas `form` object this set is the projection of. */
+  objectId:    uuid('object_id').references(() => objects.id, { onDelete: 'set null' }),
+  /**
+   * The PUBLIC address. Globally unique and nullable: a set that has never been
+   * published has none, and a published one has no tenant in its URL to
+   * disambiguate it with — the row it resolves to reports the tenant rather than
+   * the caller asserting one, which is the `share_token` cross-tenant reason.
+   */
+  slug:        varchar('slug', { length: 64 }),
+  /**
+   * Whether a response records WHO answered.
+   *
+   * A boolean and NOT an audience value, which is the distinction the contract
+   * argues and the one that is load-bearing: an anonymous engagement pulse must
+   * not record the responder even though they are signed in, while a policy
+   * acknowledgement is worthless unless it does. Conflating them is how an
+   * "anonymous" survey comes to carry a user id.
+   */
+  anonymous:   boolean('anonymous').notNull().default(false),
+  /** 'anyoneWithLink' | 'workspace' | 'namedRecipients'. Enforced by the public
+   *  responder route; `form_recipients` is what makes the third value real. */
+  audienceKind: varchar('audience_kind', { length: 24 }).notNull().default('anyoneWithLink'),
+  /** Shown after a successful submit. Authored, because "thanks" is rarely the
+   *  useful thing to say — an applicant wants to know what happens next. */
+  confirmationMessage: text('confirmation_message'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_question_sets_tenant').on(t.tenantId, t.kind, t.status),
+  uniqueIndex('uq_question_sets_slug').on(t.slug),
 ]);
 
 /**
@@ -1184,7 +1164,25 @@ export const responses = pgTable('responses', {
   /** What the answer is ABOUT — a candidate being scored, a sprint being reviewed. */
   objectId:       uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
   respondentKind: varchar('respondent_kind', { length: 16 }).notNull().default('user'),
+  /** NULL on an anonymous form — not "anonymous", not a hashed id, ABSENT. A
+   *  column holding a pseudonym on an anonymous survey is a column somebody
+   *  eventually joins, and the promise made to the person answering was that
+   *  there would be nothing to join. */
   respondentRef:  varchar('respondent_ref', { length: 64 }),
+  /**
+   * The SUBMISSION one answer belongs to (migration 0469).
+   *
+   * This table is one row per ANSWER, which is the right grain and left one
+   * question unanswerable: "how many people responded". Counting distinct
+   * respondents works only while there is a respondent, and on an anonymous form
+   * there deliberately is not — so an anonymous pulse could record every answer
+   * and never report a response COUNT. A per-submission id closes that without
+   * identifying anybody: it groups one person's answers to each other and to
+   * nothing else.
+   */
+  submissionId:   uuid('submission_id'),
+  /** The form recipient whose token was used, when the audience is named. */
+  recipientId:    integer('recipient_id'),
   questionKey:    varchar('question_key', { length: 120 }).notNull(),
   valueText:      text('value_text'),
   valueNumber:    numeric('value_number', { precision: 20, scale: 6 }),
@@ -1195,6 +1193,7 @@ export const responses = pgTable('responses', {
   index('idx_responses_set').on(t.questionSetId, t.questionKey),
   index('idx_responses_object').on(t.objectId),
   index('idx_responses_respondent').on(t.tenantId, t.respondentKind, t.respondentRef),
+  index('idx_responses_submission').on(t.questionSetId, t.submissionId),
 ]);
 
 /**

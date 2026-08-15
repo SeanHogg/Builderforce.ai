@@ -19,6 +19,13 @@ import { DEVTOOLS_CONNECTORS } from './devtools';
 import { GENERIC_CONNECTORS } from './generic';
 import { SOCIAL_CONNECTORS } from './social';
 import { HIRING_CONNECTORS } from './hiring';
+import { ADVERTISING_CONNECTORS } from './advertising';
+import { ANALYTICS_CONNECTORS } from './analytics';
+import { MARKETING_PLATFORM_CONNECTORS } from './marketing';
+// Payroll and tax — the two largest recurring obligations a company has, and the
+// two that appeared nowhere in this codebase at all. Reads lead, deliberately:
+// see the file's own note on why the platform must not become a payroll engine.
+import { PAYROLL_CONNECTORS } from './payroll';
 
 const ALL: readonly ConnectorManifest[] = [
   ...COMMUNICATION_CONNECTORS,
@@ -28,7 +35,11 @@ const ALL: readonly ConnectorManifest[] = [
   ...DEVTOOLS_CONNECTORS,
   ...GENERIC_CONNECTORS,
   ...SOCIAL_CONNECTORS,
+  ...ADVERTISING_CONNECTORS,
+  ...MARKETING_PLATFORM_CONNECTORS,
+  ...ANALYTICS_CONNECTORS,
   ...HIRING_CONNECTORS,
+  ...PAYROLL_CONNECTORS,
 ];
 
 /** Built-in manifests, keyed for O(1) resolution. */

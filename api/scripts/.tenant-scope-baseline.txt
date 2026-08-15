@@ -50,7 +50,6 @@ application/kernel/ObjectRegistry.ts:1
 application/knowledge/knowledgeMarket.ts:1
 application/llm/projectEvermind.ts:2
 application/llm/projectFacts.ts:1
-application/llm/routingTable.ts:1
 application/llm/tenantApiKeyService.ts:1
 application/llm/tenantModelService.ts:1
 application/maintenance/parkAgeTimeout.ts:1

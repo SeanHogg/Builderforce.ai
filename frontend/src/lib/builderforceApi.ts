@@ -8689,3 +8689,190 @@ export const projectBackendApi = {
       { method: 'DELETE' },
     ),
 };
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Developer Portal (PRD 24)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type DeveloperVerificationState = 'unverified' | 'domain_verified' | 'identity_verified';
+export type DeveloperRole = 'owner' | 'admin' | 'publisher';
+export type ExtensionListingState = 'draft' | 'listed' | 'delisted';
+
+export type DeveloperOrg = {
+  id: string;
+  slug: string;
+  legalName: string;
+  website: string | null;
+  supportEmail: string | null;
+  verificationState: DeveloperVerificationState | string;
+  verificationDomain: string | null;
+  verifiedAt: string | null;
+  suspended: boolean;
+  createdAt: string | null;
+};
+
+export type DeveloperMembership = { org: DeveloperOrg; role: DeveloperRole | string };
+
+export type ExtensionPackage = {
+  id: string;
+  developerOrgId: string;
+  publisher: { slug: string; legalName: string; verificationState: string } | null;
+  slug: string;
+  kind: string;
+  name: string;
+  tagline: string;
+  description: string | null;
+  categories: string[];
+  iconUrl: string | null;
+  docsUrl: string | null;
+  listingState: ExtensionListingState | string;
+  currentVersionId: string | null;
+  catalogItemId: string | null;
+  installCount: number;
+  updatedAt: string | null;
+};
+
+/** One check the review pipeline ran, and how it came out. */
+export type ExtensionReviewFinding = {
+  check: string;
+  severity: 'pass' | 'warn' | 'fail';
+  message: string;
+};
+
+export type ExtensionVersion = {
+  id: string;
+  packageId: string;
+  semver: string;
+  spec: Record<string, unknown>;
+  requestedScopes: string[];
+  changelog: string | null;
+  reviewState: 'pending' | 'approved' | 'rejected' | string;
+  reviewFindings: ExtensionReviewFinding[];
+  publishedAt: string | null;
+  createdAt: string | null;
+};
+
+export type ExtensionInstall = {
+  id: string;
+  packageId: string;
+  packageSlug: string;
+  packageName: string;
+  kind: string;
+  publisherName: string | null;
+  versionId: string;
+  semver: string;
+  grantedScopes: string[];
+  connectionId: string | null;
+  disabled: boolean;
+  /** Present when the publisher has shipped a newer head than this install runs. */
+  update: { versionId: string; semver: string; addedScopes: string[]; auto: boolean } | null;
+  createdAt: string | null;
+};
+
+/** What installing WOULD grant — the consent screen's data. Reading it approves nothing. */
+export type InstallPreview = {
+  packageName: string;
+  publisherName: string | null;
+  verificationState: string | null;
+  semver: string;
+  scopes: string[];
+  sensitiveScopes: string[];
+  alreadyInstalled: boolean;
+};
+
+/**
+ * The kinds and scopes the server accepts, fetched rather than hardcoded.
+ *
+ * A client that hardcoded the scope list would drift from the server's the first
+ * time one is added — and the drifted copy is what a consent screen would render.
+ */
+export type ExtensionContract = { kinds: string[]; scopes: string[] };
+
+export const developerApi = {
+  contract: (): Promise<ExtensionContract> => request<ExtensionContract>('/api/developer/contract'),
+
+  // ── Publisher ──────────────────────────────────────────────────────────
+  memberships: (): Promise<DeveloperMembership[]> =>
+    request<{ memberships: DeveloperMembership[] }>('/api/developer/orgs').then((r) => r.memberships ?? []),
+
+  registerOrg: (input: { legalName: string; slug?: string; website?: string; supportEmail?: string }): Promise<DeveloperOrg> =>
+    request<{ org: DeveloperOrg }>('/api/developer/orgs', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }).then((r) => r.org),
+
+  verifyDomain: (orgId: string, domain: string): Promise<{ domain: string; recordName: string; recordValue: string }> =>
+    request<{ challenge: { domain: string; recordName: string; recordValue: string } }>(
+      `/api/developer/orgs/${orgId}/verify-domain`,
+      { method: 'POST', body: JSON.stringify({ domain }) },
+    ).then((r) => r.challenge),
+
+  // ── Packages ───────────────────────────────────────────────────────────
+  packages: (orgId: string): Promise<ExtensionPackage[]> =>
+    request<{ packages: ExtensionPackage[] }>(`/api/developer/orgs/${orgId}/packages`).then((r) => r.packages ?? []),
+
+  createPackage: (
+    orgId: string,
+    input: { kind: string; name: string; slug?: string; tagline?: string; description?: string; categories?: string[]; docsUrl?: string },
+  ): Promise<ExtensionPackage> =>
+    request<{ package: ExtensionPackage }>(`/api/developer/orgs/${orgId}/packages`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }).then((r) => r.package),
+
+  versions: (packageId: string): Promise<ExtensionVersion[]> =>
+    request<{ versions: ExtensionVersion[] }>(`/api/developer/packages/${packageId}/versions`).then((r) => r.versions ?? []),
+
+  /**
+   * Submit a version.
+   *
+   * A REJECTED submission is still a 201: the version row was created, and its
+   * findings are the response. That is not leniency — it is what happened. An
+   * error status would make the transport throw away the body, and the body is
+   * the fix list the publisher needs. Callers branch on `approved`.
+   */
+  submitVersion: (
+    packageId: string,
+    input: { semver: string; spec: unknown; requestedScopes: string[]; changelog?: string },
+  ): Promise<{ version: ExtensionVersion; approved: boolean }> =>
+    request<{ version: ExtensionVersion; approved: boolean }>(`/api/developer/packages/${packageId}/versions`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  publishVersion: (packageId: string, versionId: string): Promise<ExtensionPackage> =>
+    request<{ package: ExtensionPackage }>(`/api/developer/packages/${packageId}/publish`, {
+      method: 'POST',
+      body: JSON.stringify({ versionId }),
+    }).then((r) => r.package),
+
+  setListingState: (packageId: string, state: ExtensionListingState): Promise<ExtensionPackage> =>
+    request<{ package: ExtensionPackage }>(`/api/developer/packages/${packageId}/listing`, {
+      method: 'POST',
+      body: JSON.stringify({ state }),
+    }).then((r) => r.package),
+
+  // ── Catalog + installs ─────────────────────────────────────────────────
+  catalog: (): Promise<ExtensionPackage[]> =>
+    request<{ packages: ExtensionPackage[] }>('/api/developer/catalog').then((r) => r.packages ?? []),
+
+  installs: (): Promise<ExtensionInstall[]> =>
+    request<{ installs: ExtensionInstall[] }>('/api/developer/installs').then((r) => r.installs ?? []),
+
+  previewInstall: (packageId: string): Promise<InstallPreview> =>
+    request<{ preview: InstallPreview }>(`/api/developer/installs/preview/${packageId}`).then((r) => r.preview),
+
+  install: (packageId: string, approvedScopes: string[], connectionId?: string): Promise<ExtensionInstall> =>
+    request<{ install: ExtensionInstall }>('/api/developer/installs', {
+      method: 'POST',
+      body: JSON.stringify({ packageId, approvedScopes, connectionId }),
+    }).then((r) => r.install),
+
+  updateInstall: (installId: string): Promise<ExtensionInstall> =>
+    request<{ install: ExtensionInstall }>(`/api/developer/installs/${installId}/update`, { method: 'POST' })
+      .then((r) => r.install),
+
+  uninstall: (installId: string): Promise<void> =>
+    request(`/api/developer/installs/${installId}`, { method: 'DELETE' }).then(() => undefined),
+};

@@ -43,7 +43,7 @@ describe('the roster', () => {
   const EXPECTED = [
     'growth', 'delivery', 'agents', 'hiring', 'finance', 'revenue', 'commerce',
     'identity', 'people', 'platform', 'governance', 'investor', 'support',
-    'canvas', 'integrations', 'operations',
+    'canvas', 'integrations', 'operations', 'legal',
   ];
 
   it('is exactly the roster PRD 20 §3 enumerates, in order, with no duplicates', () => {

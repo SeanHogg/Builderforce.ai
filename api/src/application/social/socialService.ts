@@ -25,14 +25,11 @@
  * it is a stable fact that every feed read and every publish would otherwise re-fetch.
  */
 
-import { and, inArray } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { connectorConnections } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { credentialSecret, decryptCredentials } from '../integrations/credentialCrypto';
-import { executeConnectorAction } from '../connectors/connectorRuntime';
+import {
+  cacheVersionOf, createConnectedAccountsPort, type } from '../integrations/connectedAccounts';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
   allSocialProviders,
@@ -92,17 +89,6 @@ const IDENTITY_TTL_SECONDS = 60 * 60;
 const FEED_TTL_SECONDS = 5 * 60;
 const FEED_L1_TTL_MS = 30 * 1000;
 
-/**
- * The connection's own `updated_at`, as a cache version.
- *
- * Editing a connection — a corrected Page id, a re-pasted token, a renamed account —
- * changes the version, so every cached read for it is unreachable from the next
- * request onward. Without this, fixing a wrong account id would leave the OLD
- * identity cached for an hour and the old feed for five minutes, and the fix would
- * look like it had not worked.
- */
-const cacheVersion = (row: { updatedAt: Date }) => String(row.updatedAt.getTime());
-
 const identityKey = (tenantId: number, connectionId: string, version: string) =>
   `social:identity:v1:${tenantId}:${connectionId}:${version}`;
 /**
@@ -120,110 +106,47 @@ const feedKey = (tenantId: number, connectionId: string, version: string) =>
 // Accounts
 // ---------------------------------------------------------------------------
 
-interface ConnectionRow {
-  id: string;
-  connectorKey: string;
-  name: string;
-  enabled: boolean;
-  lastTestOk: boolean | null;
-  lastUsedAt: Date | null;
-  /** The cache version — see {@link cacheVersion}. */
-  updatedAt: Date;
-  credentialsEnc: string;
-  iv: string;
-}
+/** Connection storage, decryption, readiness and resolution — shared with the ads and
+ *  analytics ports so "does this account have what it needs" has one answer. */
+const accounts = createConnectedAccountsPort<SocialProvider>({
+  connectorKeys: SOCIAL_CONNECTOR_KEYS,
+  providerForConnector: socialProviderForConnector,
+  providerId: (provider) => provider.network,
+  noun: 'social account',
+});
 
-async function loadSocialRows(db: Db, tenantId: number, connectionIds?: readonly string[]): Promise<ConnectionRow[]> {
-  return db
-    .select({
-      id: connectorConnections.id,
-      connectorKey: connectorConnections.connectorKey,
-      name: connectorConnections.name,
-      enabled: connectorConnections.enabled,
-      lastTestOk: connectorConnections.lastTestOk,
-      lastUsedAt: connectorConnections.lastUsedAt,
-      updatedAt: connectorConnections.updatedAt,
-      credentialsEnc: connectorConnections.credentialsEnc,
-      iv: connectorConnections.iv,
-    })
-    .from(connectorConnections)
-    .where(scopedToTenant(
-      connectorConnections,
-      tenantId,
-      connectionIds?.length
-        ? and(inArray(connectorConnections.connectorKey, [...SOCIAL_CONNECTOR_KEYS]), inArray(connectorConnections.id, [...connectionIds]))
-        : inArray(connectorConnections.connectorKey, [...SOCIAL_CONNECTOR_KEYS]),
-    ))
-    .orderBy(connectorConnections.createdAt);
-}
+type ResolvedAccount_ = ResolvedAccount<SocialProvider>;
 
-/** Non-secret scope fields for one connection (Page id, author URN, IG account id). */
-async function scopeFields(env: Env, tenantId: number, row: ConnectionRow, provider: SocialProvider): Promise<Record<string, string>> {
-  if (provider.accountFields.length === 0) return {};
-  const blob = await decryptCredentials(row.credentialsEnc, row.iv, credentialSecret(env), tenantId);
-  const out: Record<string, string> = {};
-  for (const field of provider.accountFields) {
-    const value = blob?.[field.key];
-    if (value != null && value !== '') out[field.key] = String(value);
-  }
-  return out;
-}
-
-function toAccountView(row: ConnectionRow, provider: SocialProvider, fields: Record<string, string>): SocialAccountView {
-  const missing = provider.accountFields.filter((f) => !fields[f.key]);
+/** The base view plus what a SOCIAL caller additionally needs to know. */
+function toAccountView(account: ResolvedAccount_): SocialAccountView {
   return {
-    id: row.id,
-    network: provider.network,
-    networkLabel: provider.label,
-    name: row.name,
-    enabled: row.enabled,
-    ready: row.enabled && missing.length === 0,
-    missingFields: missing,
-    requiresMedia: provider.requiresMedia,
-    lastTestOk: row.lastTestOk,
-    lastUsedAt: row.lastUsedAt ? row.lastUsedAt.toISOString() : null,
+    ...account.base,
+    network: account.provider.network,
+    networkLabel: account.provider.label,
+    publishMode: account.provider.publishMode,
   };
-}
-
-interface ResolvedAccount {
-  row: ConnectionRow;
-  provider: SocialProvider;
-  fields: Record<string, string>;
-  view: SocialAccountView;
-}
-
-async function resolveAccounts(db: Db, env: Env, tenantId: number, connectionIds?: readonly string[]): Promise<ResolvedAccount[]> {
-  const rows = await loadSocialRows(db, tenantId, connectionIds);
-  const resolved: ResolvedAccount[] = [];
-  for (const row of rows) {
-    const provider = socialProviderForConnector(row.connectorKey);
-    if (!provider) continue; // a social connector key with no adapter is not an account
-    const fields = await scopeFields(env, tenantId, row, provider);
-    resolved.push({ row, provider, fields, view: toAccountView(row, provider, fields) });
-  }
-  return resolved;
 }
 
 /** Every connected social account for the workspace. */
 export async function listSocialAccounts(db: Db, env: Env, tenantId: number): Promise<SocialAccountView[]> {
-  return (await resolveAccounts(db, env, tenantId)).map((a) => a.view);
+  return (await accounts.resolveAll(db, env, tenantId)).map(toAccountView);
 }
 
 /** The catalog + how many of each is connected. One query, not one per network. */
 export async function listSocialNetworks(db: Db, env: Env, tenantId: number): Promise<SocialNetworkOption[]> {
-  const accounts = await listSocialAccounts(db, env, tenantId);
+  const connected = await listSocialAccounts(db, env, tenantId);
   return allSocialProviders().map((provider) => ({
     network: provider.network,
     label: provider.label,
     connectorKey: provider.connectorKey,
     accountFields: provider.accountFields,
-    requiresMedia: provider.requiresMedia,
-    connectedCount: accounts.filter((a) => a.network === provider.network).length,
+    publishMode: provider.publishMode,
+    connectedCount: connected.filter((a) => a.network === provider.network).length,
   }));
 }
 
 export type ResolveAccountResult =
-  | { ok: true; account: ResolvedAccount }
+  | { ok: true; account: ResolvedAccount_ }
   | { ok: false; error: string };
 
 /**
@@ -239,42 +162,10 @@ export async function resolveSocialAccount(
   tenantId: number,
   ref: { connectionId?: string | null; network?: string | null },
 ): Promise<ResolveAccountResult> {
-  const accounts = await resolveAccounts(db, env, tenantId, ref.connectionId ? [ref.connectionId] : undefined);
-  const usable = accounts.filter((a) => a.row.enabled);
-
-  if (ref.connectionId) {
-    const found = usable.find((a) => a.row.id === ref.connectionId);
-    if (!found) return { ok: false, error: 'That social account is not connected to this workspace, or has been disabled.' };
-    return checkReady(found);
-  }
-
-  const scoped = ref.network ? usable.filter((a) => a.provider.network === ref.network) : usable;
-  if (scoped.length === 0) {
-    return {
-      ok: false,
-      error: ref.network
-        ? `No ${ref.network} account is connected to this workspace yet.`
-        : 'No social accounts are connected to this workspace yet.',
-    };
-  }
-  if (scoped.length > 1) {
-    const names = scoped.map((a) => `${a.provider.label} · ${a.row.name}`).join(', ');
-    return { ok: false, error: `Say which account to use: ${names}.` };
-  }
-  return checkReady(scoped[0]!);
-}
-
-/** A connection missing its scope field is not usable for anything — reading a Page
- *  and posting to it need the same id — so this is checked once, not per operation. */
-function checkReady(account: ResolvedAccount): ResolveAccountResult {
-  const missing = account.view.missingFields;
-  if (missing.length > 0) {
-    return {
-      ok: false,
-      error: `The ${account.provider.label} connection “${account.row.name}” is missing ${missing.map((f) => f.label).join(', ')}. Add it to the connection first.`,
-    };
-  }
-  return { ok: true, account };
+  return accounts.resolveOne(db, env, tenantId, {
+    connectionId: ref.connectionId ?? null,
+    providerId: ref.network ?? null,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -282,26 +173,8 @@ function checkReady(account: ResolvedAccount): ResolveAccountResult {
 // ---------------------------------------------------------------------------
 
 /** Bind one account to the connector runtime — the only way this module talks out. */
-function callerFor(db: Db, env: Env, tenantId: number, account: ResolvedAccount, actorKind: 'agent' | 'user') {
-  return async (actionKey: string, input: Record<string, unknown> = {}, opts?: { captureHeaders?: readonly string[] }) => {
-    const result = await executeConnectorAction({
-      db, env, tenantId,
-      connectorKey: account.provider.connectorKey,
-      actionKey,
-      input,
-      connectionId: account.row.id,
-      actorKind,
-      ...(opts?.captureHeaders ? { captureHeaders: opts.captureHeaders } : {}),
-    });
-    return {
-      ok: result.ok,
-      status: result.status,
-      data: result.data,
-      ...(result.error ? { error: result.error } : {}),
-      ...(result.headers ? { headers: result.headers } : {}),
-    };
-  };
-}
+const callerFor = (db: Db, env: Env, tenantId: number, account: ResolvedAccount_, actorKind: 'agent' | 'user') =>
+  accounts.callerFor(db, env, tenantId, account, actorKind);
 
 /** Who this account is, cached — every feed read and publish needs it and it is stable. */
 export async function socialIdentity(
@@ -309,7 +182,7 @@ export async function socialIdentity(
 ): Promise<SocialIdentity> {
   return getOrSetCached(
     env,
-    identityKey(tenantId, account.row.id, cacheVersion(account.row)),
+    identityKey(tenantId, account.row.id, cacheVersionOf(account.row)),
     () => account.provider.identity(callerFor(db, env, tenantId, account, actorKind), account.fields),
     { kvTtlSeconds: IDENTITY_TTL_SECONDS },
   );
@@ -367,7 +240,7 @@ async function readAccountFeed(
     const identity = await socialIdentity(db, env, tenantId, account, actorKind);
     const raw = await getOrSetCached(
       env,
-      feedKey(tenantId, account.row.id, cacheVersion(account.row)),
+      feedKey(tenantId, account.row.id, cacheVersionOf(account.row)),
       () => account.provider.listPosts(
         callerFor(db, env, tenantId, account, actorKind), account.fields,
         { limit: MAX_FEED_LIMIT, identity },
@@ -399,10 +272,10 @@ export async function readSocialFeed(
   db: Db, env: Env, tenantId: number, query: SocialFeedQuery = {}, actorKind: 'agent' | 'user' = 'user',
 ): Promise<SocialFeedRead> {
   const limit = clampFeedLimit(query.limit);
-  const all = await resolveAccounts(db, env, tenantId, query.connectionIds);
+  const all = await accounts.resolveAll(db, env, tenantId, query.connectionIds);
   const selected = all.filter((a) =>
     a.row.enabled
-    && a.view.missingFields.length === 0
+    && a.base.missingFields.length === 0
     && (!query.networks?.length || query.networks.includes(a.provider.network)));
 
   // Fanned out, not serialized: these are independent upstream calls and a merged
@@ -418,7 +291,7 @@ export async function readSocialFeed(
 
   return {
     items,
-    accounts: all.map((a) => a.view),
+    accounts: all.map(toAccountView),
     errors: reads.flatMap((read, index) => {
       const account = selected[index];
       return read.error && account
@@ -437,7 +310,7 @@ export async function readSocialFeed(
  * carries the connection's version — see {@link cacheVersion}.
  */
 export async function invalidateSocialFeed(env: Env, tenantId: number, account: ResolvedAccount): Promise<void> {
-  await invalidateCached(env, feedKey(tenantId, account.row.id, cacheVersion(account.row)));
+  await invalidateCached(env, feedKey(tenantId, account.row.id, cacheVersionOf(account.row)));
 }
 
 // ---------------------------------------------------------------------------
@@ -458,7 +331,7 @@ export type PublishOutcome =
  */
 export async function publishSocialPost(
   db: Db, env: Env, tenantId: number,
-  account: ResolvedAccount,
+  account: ResolvedAccount_,
   draft: SocialPostDraft,
   actorKind: 'agent' | 'user' = 'user',
 ): Promise<PublishOutcome> {
@@ -468,7 +341,7 @@ export async function publishSocialPost(
       callerFor(db, env, tenantId, account, actorKind), account.fields, draft, identity,
     );
     await invalidateSocialFeed(env, tenantId, account);
-    return { ok: true, account: account.view, result };
+    return { ok: true, account: toAccountView(account), result };
   } catch (error) {
     const retryable = error instanceof SocialProviderError ? error.retryable : false;
     const message = error instanceof Error ? error.message : 'That post could not be published.';
@@ -476,16 +349,15 @@ export async function publishSocialPost(
       source: 'application/social/socialService.ts',
       operation: `publish:${account.provider.network}`,
     });
-    return { ok: false, account: account.view, error: message, retryable };
+    return { ok: false, account: toAccountView(account), error: message, retryable };
   }
 }
 
 /** Resolve many accounts at once for a campaign run, in tenant order. */
 export async function resolvePublishableAccounts(
   db: Db, env: Env, tenantId: number, connectionIds: readonly string[],
-): Promise<ResolvedAccount[]> {
-  const accounts = await resolveAccounts(db, env, tenantId, connectionIds);
-  return accounts.filter((a) => a.row.enabled && a.view.missingFields.length === 0);
+): Promise<ResolvedAccount_[]> {
+  return accounts.resolveUsable(db, env, tenantId, connectionIds);
 }
 
-export type { ResolvedAccount };
+export type { ResolvedAccount_ as ResolvedAccount };

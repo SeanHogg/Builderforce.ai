@@ -89,7 +89,11 @@ export const SHARED_OBJECT_SPECS: readonly SpecObjectSpec[] = [
     // print checks either ran on every document or on none.
     kind: 'book',
     icon: '📖',
-    group: 'Create',
+    // `Knowledge`, beside `document`, because that is where a reader looks for the
+    // longer form of the thing they already know how to make. It declared `Create`,
+    // which is not a palette section — see the note on `SpecObjectSpec.group`, which is
+    // typed now so the next one is a compile error rather than a hidden object.
+    group: 'Knowledge',
     defaultStatus: 'manuscript',
     actions: ['read', 'proof', 'export'],
     fields: [

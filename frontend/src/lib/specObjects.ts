@@ -37,6 +37,8 @@
  * not a bespoke body somewhere else.
  */
 
+import type { CreationObjectGroup } from '@/components/creation-canvas/types';
+
 /**
  * How the node body draws one field.
  *
@@ -94,7 +96,16 @@ export interface SpecDeriveBoard {
  *  specific they are: a code identifies more precisely than a name. */
 const REF_KEYS = ['courseCode', 'reference', 'assetTag', 'sku', 'orderNumber', 'name'] as const;
 
-const refKey = (value: unknown): string => String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+/**
+ * The comparable form of a reference.
+ *
+ * Exported because a vocabulary occasionally has to answer the mirror question the board
+ * answers — not "which object does this ref name" but "does this ref name ME" (an
+ * assignment's `cohortRef` against the cohort deriving its own progress). Two spellings
+ * of that normalisation is exactly the drift `SpecDeriveBoard` refuses a `find` to avoid.
+ */
+export const specRefKey = (value: unknown): string => String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+const refKey = specRefKey;
 
 /** The board with no other objects on it. A single frozen instance, so a caller with no
  *  context (a unit test, a detached card) allocates nothing and re-renders nothing. */
@@ -137,6 +148,63 @@ export function makeSpecDeriveBoard(objects: readonly Record<string, unknown>[])
       return value ? byRefKey.get(`${kind}::${value}`) ?? null : null;
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// The arithmetic every derivation does
+// ---------------------------------------------------------------------------
+//
+// Written once here rather than per vocabulary. The operations set had private copies
+// of the first three and the academic derivations needed the same three the same day,
+// which is the point at which two copies become four — and the copies would not have
+// stayed identical, because the interesting behaviour is the REFUSAL and refusals are
+// what get quietly relaxed. Every one of these returns `undefined` rather than a zero
+// when its inputs are missing: a rate of 0 reads as a catastrophe and a total of 0
+// reads as "this cost nothing", and both are answers nobody computed.
+
+/** A finite number, or nothing. An empty string is NOT zero. */
+export function deriveNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  const text = String(value ?? '').trim();
+  if (!text) return undefined;
+  const parsed = Number(text.replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/** The object rows of a `rows` field, with the non-objects dropped. */
+export function deriveRows(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object' && !Array.isArray(row))
+    : [];
+}
+
+/** Sum one numeric column across a `rows` field. `undefined` when nothing summed —
+ *  which is different from a column that genuinely totals zero. */
+export function sumColumn(rows: unknown, column: string): number | undefined {
+  let total = 0;
+  let counted = 0;
+  for (const row of deriveRows(rows)) {
+    const value = deriveNumber(row[column]);
+    if (value === undefined) continue;
+    total += value;
+    counted += 1;
+  }
+  return counted > 0 ? total : undefined;
+}
+
+/** `part / whole` as a whole-number percentage, 0–100. Undefined when either is
+ *  missing or the denominator is zero — a rate with no denominator is not a rate. */
+export function derivePercent(part: number | undefined, whole: number | undefined): number | undefined {
+  if (part === undefined || whole === undefined || whole <= 0) return undefined;
+  return Math.round((part / whole) * 100);
+}
+
+/** Whole days from one instant to another. Negative means early. */
+export function deriveDaysBetween(from: unknown, to: unknown): number | undefined {
+  const start = Date.parse(String(from ?? ''));
+  const end = Date.parse(String(to ?? ''));
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined;
+  return Math.round((end - start) / 86_400_000);
 }
 
 export interface SpecField {

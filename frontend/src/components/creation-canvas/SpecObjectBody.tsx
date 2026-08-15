@@ -2,7 +2,10 @@
 // already declares the client boundary, so the directive would be redundant — and the
 // architecture ratchet counts every one of them for a reason.
 import { useTranslations } from 'next-intl';
-import { specFieldValue, specObjectNamespace, specObjectSpec, type SpecField } from '@/lib/specObjects';
+import {
+  EMPTY_SPEC_BOARD, specFieldValue, specObjectNamespace, specObjectSpec,
+  type SpecDeriveBoard, type SpecField,
+} from '@/lib/specObjects';
 // The vocabularies register themselves as an import SIDE EFFECT, so this component only
 // renders a kind whose set has already been imported by SOMEONE. In the app that
 // happened by accident — `CreationNode` pulls in `creationObjectRegistry`, which pulls in
@@ -202,12 +205,13 @@ function referenceLines(data: CreationNodeData): Array<{ marker: string; text: s
   return [{ marker: '', text: formatReference(record, style).text }];
 }
 
-function FieldSection({ field, data, t }: {
+function FieldSection({ field, data, board, t }: {
   field: SpecField;
   data: CreationNodeData;
+  board: SpecDeriveBoard;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const raw = specFieldValue(field, data);
+  const raw = specFieldValue(field, data, board);
   const label = t(`field.${field.label}`);
 
   // RESTRICTED, before the per-style switch: what the field would have drawn is exactly
@@ -392,8 +396,8 @@ function FieldSection({ field, data, t }: {
  * keep in step, so the checks live here and the sections read the same predicate shape:
  * a section is present exactly when this says its value is non-empty.
  */
-function sectionHasContent(field: SpecField, data: CreationNodeData): boolean {
-  const value = specFieldValue(field, data);
+function sectionHasContent(field: SpecField, data: CreationNodeData, board: SpecDeriveBoard): boolean {
+  const value = specFieldValue(field, data, board);
   // Restricted first, matching `FieldSection`: the section exists when the data was
   // collected, whatever style the field declared for values nobody here will see.
   if (field.restricted) return restrictedCount(value) > 0;
@@ -423,7 +427,14 @@ function sectionHasContent(field: SpecField, data: CreationNodeData): boolean {
   }
 }
 
-export function SpecObjectBody({ data }: { data: CreationNodeData }) {
+/**
+ * `board` is what a CROSS-OBJECT derivation reads — a gradebook's mean over the
+ * submissions beside it, a submission's lateness against its assignment's deadline. It
+ * defaults to the empty board so this component stays renderable on its own (which is
+ * what its own header argues for), and `CreationNode` supplies the real one only for the
+ * kinds whose specs actually declare such a derivation — see `specKindReadsBoard`.
+ */
+export function SpecObjectBody({ data, board = EMPTY_SPEC_BOARD }: { data: CreationNodeData; board?: SpecDeriveBoard }) {
   const namespace = specObjectNamespace(data.kind);
   const spec = specObjectSpec(data.kind);
   // `useTranslations` must be called unconditionally, so the namespace falls back
@@ -432,8 +443,8 @@ export function SpecObjectBody({ data }: { data: CreationNodeData }) {
   if (!spec || !namespace) return null;
 
   const sections = spec.fields
-    .filter((field) => sectionHasContent(field, data))
-    .map((field) => ({ field, node: <FieldSection key={field.name} field={field} data={data} t={t} /> }));
+    .filter((field) => sectionHasContent(field, data, board))
+    .map((field) => ({ field, node: <FieldSection key={field.name} field={field} data={data} board={board} t={t} /> }));
 
   if (!sections.length) {
     return (

@@ -1094,7 +1094,28 @@
     "visualApply": "Übernehmen",
     "visualCancel": "Abbrechen",
     "visualApplied": "{file} aktualisiert",
-    "visualNoPreview": "Starte zuerst das Projekt — Zeigen und Bearbeiten braucht eine Live-Vorschau."
+    "visualNoPreview": "Starte zuerst das Projekt — Zeigen und Bearbeiten braucht eine Live-Vorschau.",
+    "releases": {
+      "title": "Frühere Versionen",
+      "description": "Jeder Build bleibt erhalten. Stelle einen früheren sofort wieder her — ohne neuen Build.",
+      "current": "Live",
+      "restore": "Wiederherstellen",
+      "restoring": "Wird wiederhergestellt…",
+      "restored": "Wiederhergestellt. Die Seite liefert wieder diese Version aus.",
+      "restoreFailed": "Diese Version konnte nicht wiederhergestellt werden."
+    },
+    "packaging": {
+      "title": "Auf dem Handy installieren",
+      "description": "Verpacke diesen Build als installierbare App — genau das, was du gerade in der Vorschau gesehen hast.",
+      "working": "Wird verpackt…",
+      "done": "Projekt nach {directory} geschrieben. Pushe es, um zu bauen.",
+      "failed": "Die App konnte nicht verpackt werden.",
+      "target": {
+        "pwa": "Installierbare Web-App",
+        "android": "Android-Projekt",
+        "ios": "iOS-Projekt"
+      }
+    }
   },
   "tools": {
     "outOf5": "von 5,0",
@@ -14093,6 +14114,8 @@
       "pdfPages": "PDF · {pages, plural, one {# Seite} other {# Seiten}}",
       "codeShape": "{lines} Zeilen",
       "noticeDataset": "{name} als Datensatz geladen – {rows} Zeilen, {columns} Spalten",
+      "noticeResume": "{name} als Lebenslauf gelesen – mit jeder Vorlage neu gestalten",
+      "resumeShape": "{sections, plural, one {# Abschnitt} other {# Abschnitte}}",
       "noticeWorkbook": "{name} als Arbeitsmappe geladen – {sheets, plural, one {# Blatt} other {# Blätter}}",
       "noticeDeck": "{name} als Präsentation geladen – {slides, plural, one {# Folie} other {# Folien}}",
       "noticeDocument": "{name} als Dokument geladen – {pages, plural, one {# Seite} other {# Seiten}}",
@@ -14101,6 +14124,7 @@
       "failed": "{name} konnte nicht gelesen werden",
       "tooManyFiles": "Es wurden nur die ersten {limit} Dateien hinzugefügt",
       "promptData": "Analysiere {name}: Was fällt auf und wo liegen die Ausreißer?",
+      "promptResume": "Rendere {name} in allen Vorlagenstilen, damit ich sie vergleichen kann.",
       "promptDeck": "Prüfe {name}: Ist die Story klar und was fehlt?",
       "promptDocument": "Fasse {name} zusammen und sag mir, was du ändern würdest.",
       "promptImage": "Was ist auf {name} zu sehen und was soll ich damit machen?",
@@ -17718,6 +17742,7 @@
     "notice": {
       "addedToCanvas": "Ich habe den gewünschten Inhalt auf der Arbeitsfläche ergänzt.",
       "noAnswer": "Aus dieser Anfrage konnte ich keine Änderung an der Arbeitsfläche vorbereiten.",
+      "providerStalled": "Der Modellanbieter hat diese Anfrage angenommen und dann nicht mehr geantwortet, deshalb warte ich nicht länger. An deiner Anfrage ist nichts falsch – schicke sie erneut oder wähle im Menü / ein anderes Modell.",
       "toolError": "Die gewünschten Änderungen an der Arbeitsfläche konnte ich nicht vorbereiten: {detail}",
       "answeredWithoutChange": "Ich habe hier geantwortet, aber nichts auf der Arbeitsfläche abgelegt. Bitte mich, es der Arbeitsfläche hinzuzufügen, dann lege ich das Objekt dafür an.",
       "unverifiedCreationPlain": "Ich habe eine Änderung an der Arbeitsfläche beschrieben, sie aber nicht tatsächlich vorgenommen — es wurde also nichts erstellt. Sag mir, welches Objekt entstehen soll, dann baue ich es auf der Arbeitsfläche.",
@@ -18371,7 +18396,8 @@
         "support": "Support",
         "canvas": "Canvas",
         "integrations": "Integrationen",
-        "operations": "Betrieb"
+        "operations": "Betrieb",
+        "legal": "Recht"
       }
     },
     "surface": {
@@ -18407,7 +18433,8 @@
         "support": "Tickets, Artikel und was Kundinnen und Kunden sagen.",
         "canvas": "Alles, was gemeinsam erstellt, geteilt und bearbeitet wird.",
         "integrations": "Verbundene Konten und was sie synchronisieren.",
-        "operations": "Aufträge, die zugehörigen Anlagen, die ausführenden Einsätze und die verbrauchten Teile."
+        "operations": "Aufträge, die zugehörigen Anlagen, die ausführenden Einsätze und die verbrauchten Teile.",
+        "legal": "Rechtsträger, Verträge, geistiges Eigentum und die dazu offenen Vorgänge."
       },
       "kernelBlurb": "Die 25 Primitive, die alle Rollen teilen. Keine Domäne besitzt sie, keine darf sie abspalten."
     },
@@ -19654,8 +19681,7 @@
         "summary": "Das ganze System unter einer echten Adresse, mit Betriebskonsole und Rufbereitschafts-Runbook."
       }
     },
-    "ctaRealize": "Machen Sie etwas real →",
-    "ctaCanvas": "Canvas öffnen"
+    "ctaRealize": "Machen Sie etwas real →"
   },
   "sell": {
     "seo": {
@@ -19777,5 +19803,92 @@
   "relatedArticles": {
     "heading": "Weiterführende Artikel",
     "subtitle": "Vertiefende Beiträge aus dem Builderforce-Blog zu den hier behandelten Themen."
+  },
+  "developerPortal": {
+    "title": "Entwicklerportal",
+    "subtitle": "Eine Integration einmal bauen – und jeder Arbeitsbereich kann sie installieren. Als Anbieter registrieren, ein versioniertes Paket veröffentlichen und sehen, was der eigene Arbeitsbereich installiert hat.",
+    "tabs": {
+      "label": "Portalbereiche",
+      "installed": "Installiert",
+      "catalog": "Katalog",
+      "publish": "Veröffentlichen"
+    },
+    "errors": {
+      "load": "Das Entwicklerportal konnte nicht geladen werden.",
+      "action": "Diese Aktion wurde nicht abgeschlossen."
+    },
+    "installed": {
+      "title": "In diesem Arbeitsbereich installiert",
+      "empty": "Noch nichts installiert. Im Katalog stöbern, um eine Erweiterung hinzuzufügen.",
+      "byPublisher": "Von {publisher} · Version {version}",
+      "grants": "Erteilte Rechte: {scopes}",
+      "updateAvailable": "Version {version} ist verfügbar und verlangt nichts Neues.",
+      "updateNeedsConsent": "Version {version} braucht neue Rechte ({scopes}). Neu installieren, um sie zu erteilen.",
+      "update": "Aktualisieren",
+      "uninstall": "Deinstallieren",
+      "uninstallTitle": "{name} deinstallieren?",
+      "uninstallBody": "Ihre Werkzeuge stehen deinen Agenten sofort nicht mehr zur Verfügung. Die Verbindungseinstellungen bleiben erhalten – eine Neuinstallation stellt sie wieder her.",
+      "uninstallAction": "Deinstallieren"
+    },
+    "catalog": {
+      "title": "Verfügbare Erweiterungen",
+      "empty": "Noch keine veröffentlichten Erweiterungen.",
+      "publisher": "Von {publisher}",
+      "verified": "Verifiziert",
+      "installs": "{count} Arbeitsbereiche",
+      "install": "Installieren",
+      "installed": "Installiert"
+    },
+    "install": {
+      "confirmTitle": "{name} installieren?",
+      "confirmPublisher": "Veröffentlicht von {publisher}.",
+      "confirmScopes": "Sie darf dann: {scopes}",
+      "confirmSensitive": "Dazu gehört das Ändern deiner Daten: {scopes}",
+      "confirmAction": "Installieren",
+      "unknownPublisher": "ein nicht verifizierter Anbieter",
+      "noScopes": "nichts"
+    },
+    "publish": {
+      "registerTitle": "Als Anbieter registrieren",
+      "registerBody": "Ein Anbieter ist dein Unternehmen, nicht dein Arbeitsbereich. Einmal registrieren, dann Pakete veröffentlichen, die jeder Arbeitsbereich installieren kann.",
+      "legalName": "Firmenname",
+      "legalNamePlaceholder": "Acme Payroll GmbH",
+      "register": "Registrieren",
+      "publisherTitle": "Dein Anbieterprofil",
+      "verificationHint": "Verifiziere deine Domain, um ein Abzeichen auf deinen Einträgen zu zeigen. Für kostenpflichtige Pakete ist eine Identitätsprüfung erforderlich.",
+      "verification": {
+        "unverified": "Nicht verifiziert",
+        "domain_verified": "Domain verifiziert",
+        "identity_verified": "Identität verifiziert"
+      },
+      "newPackageTitle": "Neues Paket",
+      "packageName": "Paketname",
+      "packageKind": "Art",
+      "createPackage": "Paket anlegen",
+      "packagesTitle": "Deine Pakete",
+      "packagesEmpty": "Noch keine Pakete.",
+      "listing": {
+        "draft": "Entwurf",
+        "listed": "Gelistet",
+        "delisted": "Ausgelistet"
+      },
+      "review": {
+        "pending": "In Prüfung",
+        "approved": "Freigegeben",
+        "rejected": "Abgelehnt"
+      },
+      "selectForSubmit": "Version einreichen",
+      "delist": "Auslisten",
+      "publishVersion": "Veröffentlichen",
+      "submitTitle": "Version einreichen",
+      "semver": "Version",
+      "scopes": "Rechte, die diese Version braucht",
+      "spec": "Spezifikation (JSON)",
+      "specPlaceholder": "Connector-Manifest oder MCP-Server-Beschreibung einfügen",
+      "specInvalidJson": "Das ist kein gültiges JSON.",
+      "submit": "Zur Prüfung einreichen",
+      "reviewPassed": "Prüfung bestanden – du kannst diese Version veröffentlichen.",
+      "reviewFailed": "Die Prüfung hat Probleme gefunden. Behebe sie und reiche eine neue Version ein."
+    }
   }
 }

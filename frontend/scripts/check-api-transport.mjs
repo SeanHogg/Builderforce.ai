@@ -89,7 +89,13 @@ for (const file of collect(libDir)) {
   if (ALLOWED.has(rel)) continue;
   if (rel.endsWith('.test.ts') || rel.endsWith('.test.tsx')) continue;
 
-  const lines = readFileSync(file, 'utf8').split('\n');
+  // `\r` is stripped, not merely split on. Without it the comment regexes below
+  // silently stop working on a CRLF checkout: `.` does not match a carriage return
+  // and `$` (unanchored) sits AFTER it, so `//.*$` matches nothing and a prose line
+  // is scanned as code. It surfaced as `modelCatalog.ts:132  // Catalog fetch (via
+  // our gateway)` — a comment reported as a raw call, on a repo that checks out CRLF
+  // on Windows. A guard that fails on a comment is one people learn to route around.
+  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
   lines.forEach((line, i) => {
     // Skip comments: `//` trailing, `/* … */` inline, and JSDoc continuation
     // lines (which start with `*` and are pure prose).

@@ -27,7 +27,7 @@
 import type { CreationNodeData } from './types';
 import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
 import { DATA_ARCHITECTURE_FIELD_NAMES } from '@/lib/dataArchitectureObjects';
-import { specDerivedValues, specFieldNames } from '@/lib/specObjects';
+import { EMPTY_SPEC_BOARD, specDerivedValues, specFieldNames, type SpecDeriveBoard } from '@/lib/specObjects';
 // The vocabularies register themselves as an import SIDE EFFECT, and this module asks
 // the registry two questions — which fields are readable, and what the computed ones
 // resolve to. Depending on somebody else having imported the sets first is the accident
@@ -338,7 +338,10 @@ function safeContextValue(
   return undefined;
 }
 
-export function creationObjectAiContext(data: CreationNodeData): Record<string, unknown> {
+export function creationObjectAiContext(
+  data: CreationNodeData,
+  board: SpecDeriveBoard = EMPTY_SPEC_BOARD,
+): Record<string, unknown> {
   /**
    * COMPUTED fields, resolved before the snapshot is cut.
    *
@@ -349,7 +352,7 @@ export function creationObjectAiContext(data: CreationNodeData): Record<string, 
    * stored values, never over them: a stale total somebody once wrote onto an object must
    * not survive a recomputation, and a computed field is not authorable anyway.
    */
-  const resolved = { ...data, ...specDerivedValues(data.kind, data) };
+  const resolved = { ...data, ...specDerivedValues(data.kind, data, board) };
   return Object.fromEntries(CONTEXT_FIELDS.flatMap((field) => {
     // The snapshot boundary, enforced once — see NEVER_IN_CONTEXT.
     if (NEVER_IN_CONTEXT.has(field)) return [];

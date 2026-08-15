@@ -15,6 +15,7 @@ import {
   abTests,
   activityFeed,
   adCampaigns,
+  adInsights,
   adSets,
   ads,
   affiliateReferrals,
@@ -109,6 +110,9 @@ export const GROWTH_ENTITIES = defineDomainEntities('growth', [
   entity(affiliateReferrals, { readOnly: true }),
   /** Observations and sends: captured by a sweep, not authored. */
   entity(activityFeed, { readOnly: true }),
+  /** Delivery read back from the ad networks by the `ad-insights` sweep — restated by
+   *  the networks themselves, so never writable from a seat surface. */
+  entity(adInsights, { readOnly: true }),
   entity(marketingSessionPrompts, { readOnly: true }),
   entity(marketingHeatmapScreenshots, { readOnly: true }),
   entity(eventRemindersSent, { readOnly: true }),

@@ -1,3 +1,433 @@
+## ✅ RESOLVED 2026-08-15 — The academic vocabulary's derived fields finally have a producer
+
+Logged the same day it was found, and closed in the next pass. Nineteen fields on the
+teaching and research kinds were flagged `derived: true` — the right rule, because a model
+that can write `submission.mark` can award a grade nobody earned — and **nothing on the
+platform ever produced one**. A `gradebook` sitting beside two hundred marked submissions
+reported no mean, no median and no pass rate; a late submission reported no lateness; a
+curriculum map reported no coverage. The engines had computed all of it correctly, with
+tests, since the day the vocabulary landed (`lib/academic/gradebook.ts`, `marking.ts`).
+What was missing was one wire.
+
+### The blocker, and how it was cleared
+
+The entry named it precisely: `SpecField.derive` took `(data)` and `lateBy` needs the
+deadline on its ASSIGNMENT while `gradebook.mean` needs every SUBMISSION on the board. So
+the hook was widened to `derive(data, board)` — through a two-question port
+(`SpecDeriveBoard`: `ofKind` and `byRef`) rather than a raw array, because every
+cross-object derivation asks the same two things and letting each write its own matcher is
+how two of them come to disagree about whether a ref is a title or an id. The board is
+indexed once, so N objects with M derivations cost O(N + M).
+
+**Nothing subscribes that does not need to.** `specKindReadsBoard(kind)` reads the declared
+ARITY of each derivation, and `CreationNode`'s selector returns a stable empty array for
+every kind that does not look sideways — so a `workOrder`, whose derivations are arithmetic
+over its own rows, never re-renders because a neighbour changed. For the kinds that do, the
+comparison is per-element reference equality rather than a `JSON.stringify` of two hundred
+submissions on every store tick.
+
+### What is now computed
+
+`gradebook.marks` / `mean` / `median` / `passRate` / `distribution` (through
+`buildGradebook` + `gradebookStats`, unchanged), `assignment.submissionCount` /
+`markedCount`, `submission.lateBy` (through `hoursLate`, the same function the late-policy
+engine applies, so the card and the penalty cannot disagree), `cohort.progress`,
+`lecture.attendanceRate`, `poll.responseCount` / `correctRate`, `officeHours.utilisation`,
+`curriculumMap.coverage` / `gaps`, `participantPool.consentRate`, `bibliography.entryCount`.
+
+`lecture` gained a `cohortRef`: a rate has to have a denominator, and until that field
+existed a lecture had no way to say whose class it was.
+
+The conventions are the engines', kept deliberately: the mean is over MARKED work (a mean
+counting 200 unmarked zeros in week 3 is an artefact of the calendar), the pass rate is
+over the WHOLE cohort (it must not improve by excluding people who submitted nothing), and
+coverage counts only `assured` (an accreditor asks where an outcome is assured, not where
+it was mentioned).
+
+### What is still `derived: true`, and why that is correct
+
+A mark, a mark breakdown, feedback, an integrity ledger, an attendance COUNT, a poll's raw
+responses, a moderation record and a feedback bank's usage count are EVIDENCE of something
+that happened off the board. They cannot be computed from it and must not be invented, so
+they wait for the action that records them. A test pins both halves — every computed field
+is absent from the authorable list, and every testimony field is absent from the computed
+one.
+
+### Also in the same pass
+
+- **The derivation arithmetic is now one primitive.** `deriveNumber`, `deriveRows`,
+  `sumColumn`, `derivePercent` and `deriveDaysBetween` live in `specObjects.ts`; the
+  operations vocabulary's private copies were deleted and every call site migrated. The
+  interesting behaviour in all five is the REFUSAL — `undefined` rather than a zero when
+  an input is missing — and refusals are what get quietly relaxed in a copy.
+- **The `legal` seat had no label in any of the five catalogs**, which left the roster's
+  "names every domain in every catalog" test red and every seat rail rendering a raw key.
+  Added, with real translations, alongside the roster tests being extended to seventeen.
+
+The original entry, for the record:
+
+- **The academic vocabulary's `derived` fields have no producer, so nineteen declared cells are permanently empty.** *(identified 2026-08-15 while adding `SpecField.derive` for the operations vocabulary)* `academicObjects.ts` flags `submission.mark`, `submission.markBreakdown`, `submission.lateBy`, `gradebook.marks`, `gradebook.mean`, `gradebook.passRate`, `cohort.progress`, `poll.responses`, `lecture.attendanceRate` and their siblings `derived: true`, which correctly stops the model asserting a grade nobody earned — and nothing on the platform ever WRITES one, so the card shows the section only when a human types into it. The new `derive` hook (`lib/specObjects.ts`) closes the arithmetic half and cannot close this one: `lateBy` needs the ASSIGNMENT's deadline and `gradebook.mean` needs every SUBMISSION on the board, and `derive(data)` sees one object. Fix = either the canvas action adapters this group's third bullet already tracks (`submission.mark`, `gradebook.compute`), or widening the hook to `derive(data, board)` so a cross-object computation is declarable the same way. **Not blocked.** Unblocks: a gradebook that aggregates the submissions sitting next to it.
+
+## ✅ RESOLVED 2026-08-15 — The free plan announced an upstream model it would not let you pick; the thumbs it collected taught nothing
+
+### What was wrong
+
+Two defects, one root: the platform was telling users something it should have kept, and
+keeping something it should have used.
+
+**1 · The routed plan named the model instead of the product.** A free / anonymous
+composer printed `minimaxai/minimax-m3` — whichever upstream model the cascade happened
+to reach for that turn — directly beside a model menu that said *"Model choice needs a
+paid plan or a connected provider account."* The name changes per turn, per vendor
+outage, per cooldown; on a routed plan the user has no way to act on it. The product they
+bought is **Builderforce Free**, and that is the only answer to "what am I running on"
+that is both true and actionable.
+
+The leak was not one screen. It was in three:
+
+- the shared `/` composer menu, whose routed row was labelled "Auto" and whose
+  `modelInUse()` fell through to the raw resolved id;
+- the **per-reply provenance chip** in `<BrainTimeline>` — which prints `prov.model` under
+  *every* assistant turn on the web Brain panel, the Creation Canvas dock **and** the VS
+  Code webview, so the id a free user could not choose was restated on every message;
+- the VS Code host's `Change model` QuickPick.
+
+**2 · Thumbs up/down had existed for a long time and were unqueryable.** Every press was
+merged into `brain_chat_messages.metadata` as `{"feedback":"up"}` — a JSON blob, no index,
+**no model attribution**. So the platform collected the most direct quality signal it will
+ever get and could not answer the question the signal exists for: *which model is good at
+which kind of work.* Worse, the thumbs lived in the web app's own action bar, so the
+Canvas and the editor — a large share of all model calls — could not contribute one.
+
+Meanwhile `run_model_outcomes` (the learned router's fact table) learns exactly that
+question — but only from **cloud runs**, scored from merges and CI. Chat turns, canvas
+turns and tool calls have no run, no PR and no CI, so the majority of model calls taught
+the router nothing at all.
+
+### What changed
+
+**Model identity — one rule, one place.** `brain-embedded/src/modelIdentity.ts` is the
+single decision: `displayModelName(model, identity, { account })`. A turn our routed pool
+served is named after the PRODUCT (`Builderforce Free` / `Builderforce PRO`); the raw id
+is shown only when the choice is genuinely the user's — a turn served by their OWN
+connected account (`account: 'own'`), or a viewer entitled to pin a model at all. The
+default (`DEFAULT_MODEL_IDENTITY`) is *masked*, so a host that forgets to wire an identity
+fails closed rather than open.
+
+- `buildModelItems` names the routed row after the product; `modelInUse` never surfaces
+  an `effective` upstream id to a viewer who cannot pin one. A `project_evermind:` /
+  `tenant_model:` ref is never masked — those are things the user configured and named.
+- `<BrainTimeline modelIdentity>` masks the provenance chip AND its vendor tooltip.
+- `PromptOptionsModel.canChoose` (a boolean) became `identity` (the object), because the
+  two answers — *may they pin?* and *what do we call it?* — are the same fact and were
+  drifting apart.
+- Wired on all four surfaces from ONE source: `useModelIdentity()` (web),
+  `loadComposerModels().identity` (VS Code webview), `getModels().identity` (extension
+  host). `frontend/src/lib/modelCatalog.ts` now imports the same product names, so the
+  public `/models` page and the in-app label are one string.
+- **The upstream id is not hidden from us.** It still rides `llm_usage_log`, the execution
+  trace, the message's provenance metadata and the "Copy diagnostics" report — exactly as
+  the operator asked: *we* know the LLM, the user sees the product.
+
+**Ratings — the signal, captured and used.** Migration `0468_llm_action_ratings.sql`:
+one row per rater per rated thing, carrying `resolved_model` × `action_type` ×
+`tool_name` (the MCP tool the turn executed), plus surface, plan and project.
+
+- The thumbs moved into the shared `<BrainTimeline>` action row, so the Canvas and the
+  editor rate turns too; the duplicated pair in the web-only `ChatMessageActions` is gone.
+- `ratedTurnContext()` (brain-embedded, pure) derives *what is being rated* from the
+  transcript itself — the model off the reply's own provenance, the tool off the durable
+  step rows of that turn — so a press works after a reload, not just on a live trace.
+- `PATCH /api/brain/messages/:id/feedback` still stamps the message (the UI state) and now
+  ALSO files the durable fact. `POST /api/llm/ratings` is the surface-agnostic path for
+  transcripts that are not Brain chats (the Canvas keys on its own `clientMessageId`).
+- **The router actually learns from it.** `modelQualityScore.ts` blends run outcomes and
+  human satisfaction, each weighted by how much evidence it has:
+  `(n·avgScore + r·ratingScore) / (n + r)`. Ratings are Laplace-smoothed, so one lucky
+  thumbs-up cannot outrank a long good record. `qualityEvidence` counts thumbs toward the
+  eligibility floor, which is what lets a model with *no cloud runs* — the normal case for
+  chat and canvas work — influence routing at all.
+- `/admin?tab=llm&sub=ratings` leads with the **verdict** ("for `canvas_add_object`, A
+  beats B by N points over M ratings") rather than a table to read by eye, then the full
+  (model × action × tool) breakdown. Localized in all five catalogs.
+
+### Also fixed in the same pass
+
+- **A stray NUL byte** written into `actionRatings.ts` made it a binary file to ripgrep and
+  would have failed `check:source`. Replaced with the `|` separator the key wanted.
+- **`check-tenant-scope` debt went DOWN, not up.** The global routing-table read was
+  baselined frozen debt; it is now a declared `acrossTenants(..., 'platform_aggregate')` —
+  a new closed-set reason for a read that GROUPs away tenancy and returns only counts and
+  averages, so no row can identify a tenant. Its baseline line was removed
+  (`application/llm/routingTable.ts: 1 → 0`). The new ratings queries are declared the same
+  way (or `scopedToNullableTenant`, since a rating's tenant is legitimately nullable), and
+  every predicate is written AT the statement — the guard reads the statement, and so does
+  the next person to edit one.
+- `seedSamples` on a routing decision now counts evidence (runs + thumbs), so a seed chosen
+  on human feedback is no longer reported on the execution timeline as "cold-start".
+- Dead code removed: `ModelChoiceLabels.autoLabel` (the routed row is named by the product,
+  not a label) and the four `brain.messageActions.*` thumb strings, in all five catalogs.
+
+---
+
+## ✅ RESOLVED 2026-08-15 (part 2) — The remaining five app-builder gaps: rollback, native packaging, visual editing, end users, and the surface rename
+
+Closes the AI-app-builder parity register (ROADMAP group 11) in full. Part 1 earlier
+the same day shipped the canvas build vocabulary and the failure capture that feeds it.
+
+### Rollback — you can now be wrong cheaply
+
+`publishStaticSite` **deleted every object under the subdomain prefix before writing the new
+build**, so a bad release destroyed the working one it replaced; the `versionToken` it recorded
+was a cache-busting token, not something restorable. And `writeWorkspaceFile` overwrote in
+place, so a bad edit had nothing behind it either. An autonomous agent guarantees you will
+eventually need both.
+
+- **Site releases.** Builds land at `sites/<sub>/<versionToken>/`; `site_releases` (migration
+  0465) is the register; `project_sites.r2_prefix` is the POINTER to the current one. Restoring
+  is a pointer move plus a cache invalidation — no copying, no rebuild, no window serving half
+  of two releases. Ten kept per site, pruned oldest-first. Restore deliberately does NOT delete
+  the release it moved away from: a rollback that burns its own bridge is a worse safety net
+  than none.
+- **File history.** `writeWorkspaceFile` — the single chokepoint every writer already goes
+  through — archives the version it is about to destroy under
+  `ide/history/projects/<id>/<epochMs>/<path>`. Timestamp-first, because path-first collides:
+  `…/src/<ts>` and `…/src/App.jsx/<ts>` are indistinguishable in a listing of `…/src/`.
+  Restoring goes back through the same write path, so the restore is itself archived and an
+  unwanted revert is not a one-way door.
+- Reachable three ways: `SiteReleasePanel` in the publish tab, and `canvas_list_build_file_history`
+  / `canvas_restore_build_file` so the agent can undo its own damage in one action.
+
+### Native mobile packaging — unlocked from the `game` domain
+
+Real `pwa` / `android` (Capacitor + APK) / `ios` (signed `.ipa`) adapters already existed and
+were unreachable by anything that was not a game, because `GameBuild` carried ONE self-contained
+HTML document. The modality literally named "Mobile" is a multi-file react-native-web Vite app,
+so its only phone story was a QR code pointing at the published website.
+
+The INPUT was generalised rather than the adapters duplicated: `GameBuild.webAssets` carries a
+built `dist/`, the browser targets ship it when present and the single document when not, and
+`application/ide/packageApp.ts` is the door an app comes through. `POST /projects/:id/package`
+takes the same asset shape publishing does, so what lands in the APK is byte-for-byte what was
+previewed. The touch layer is injected for a game and never for an app — a D-pad over a login
+form would be worse than useless.
+
+### Click-to-source visual editing — no build-step change
+
+The obvious implementation stamps `data-loc` via a Babel transform, which means rewriting the
+user's `vite.config.js` and migrating every project that predates the feature. React already
+has the answer: `@vitejs/plugin-react` enables the JSX source transform in dev, so every element
+carries `_debugSource` on its fiber. Walking DOM → fiber → source is a property lookup — exact,
+free, and works on a project created before this existed.
+
+The overlay is injected into the MOUNTED copy of `index.html` only, so it is inherently
+dev-only: the user's source stays what they wrote and a published site can neither be inspected
+this way nor ship the overlay. Two operations, both single-line and exact-anchor: the element's
+text and its `className`. Both **refuse rather than guess** when the line holds two elements or
+the text occurs twice — editing the wrong element is worse than not editing.
+
+### End users for a generated app
+
+`siteData.ts` was public-WRITE / no-public-READ by design, and that design is right — but it
+meant the only app shape reachable end to end was a brochure with a form.
+
+`site_users` is a **separate identity space** from `users`: someone signing into a tenant's
+recipe app has no Builderforce account, no membership and no platform permissions. Conflating
+them would make every generated app a door into the platform's own identity. **Passwordless by
+construction** — no password column, no hash: a generated app is authored by a language model,
+and a badly-stored password is the one mistake that cannot be walked back for the person who
+trusted it. Six-digit code, ten-minute life, five attempts, `code_hash` cleared on redemption so
+an unredeemed request cannot be replayed into a session.
+
+Reads are the strictly smaller thing an app with accounts needs — "show me MY orders" — gated
+three ways: the collection must be `read_policy = 'owner'` (default `none`, so nothing existing
+starts returning data), the caller must hold a redeemed session for that site, and the filter is
+on `site_user_id`, so an anonymously-written row is returned to nobody. **There is deliberately
+no `all` policy**: a read-everything option is the failure this module was written to prevent,
+and offering it as one setting among three is how it eventually gets chosen.
+
+### `AgentSurface` `'ide'` → `'workspace'`
+
+The last place a retired destination name was visible outside the repo — a published-package
+type (`packages/agent-tools`), the `ide-bridge` transport, the compile specs and the `/compile`
+selector. Safe without a migration: these are compile/deploy-time values only, and the persisted
+`ide_agents.runtime_surface` is a different vocabulary (`durable`/`container`) and is untouched.
+
+### Guards, tests, and one defect caught before it shipped
+
+- `check-canvas-tool-contract` green at **70 tools** (40 guest-safe, 7 guest-gated, 23
+  account-required); the guard now follows declarations across files rather than assuming one
+  component holds them.
+- `check:tenant-scope` green for every new file: `siteAuth`, `siteReleases` and the owner-scoped
+  read all go through `scopedToTenant`. The site id already implies a tenant, so this is defence
+  in depth — which is exactly what that guard exists to make non-optional.
+- `check:schema`, `check:migrations`, `check:shape-lint`, `check:layering`, `check:polymorphic-fk`,
+  `check:domain-boundary`, `check:roadmap`, `check:prompt-tools` all green. API and frontend
+  typecheck clean.
+- **99 new unit tests.** One caught a real defect: `String.replace` interprets `$&` / `$1` in the
+  REPLACEMENT as capture references, so a model editing a price string or a regex literal would
+  have got silently mangled text back. Both branches are now literal index arithmetic.
+- Fixed a genuine flake found on the way: `AgentExecutionControl.test.tsx` timed out under
+  full-suite load because Testing Library's 1s default is not enough for two awaited microtask
+  hops plus a React commit on a loaded machine.
+
+## ✅ RESOLVED 2026-08-15 — Build, Stage, Live: a canvas creation could go on sale with nobody ever having seen it
+
+### What was wrong
+
+`publishCreationListing` wrote the registry row, an immutable snapshot and the `catalog_items`
+listing in ONE call. There was no surface between the board a creation was built on and the shop
+window that sold it, and four things followed from that:
+
+- **A seller's first sight of the buyer's view was the public URL that was already selling it.**
+  Publishing regenerates every id, recursively strips twenty families of seller binding
+  (`LISTING_STRIPPED_FIELDS`), relays the cards at new coordinates and hands the result to an account
+  with none of the seller's connectors. "It works on my board" and "it works for a buyer" are
+  different claims and nothing ever asked the second one.
+- **The version history existed and nothing read it.** Every re-publish wrote a new `snapshots` row
+  and bumped `1.0.0 → 1.1.0`. The old snapshots were all still there — no list, no comparison, and
+  no way back to the one that worked.
+- **`template_licenses` recorded who bought what and never WHICH VERSION.** Launch and install both
+  served `body.snapshotId` — whatever is current — so somebody who bought v1.1 and installed a month
+  later silently received v1.4. "You own v1.1" was not a knowable fact.
+- **`stripBindings` removed the seller's bindings silently**, so a workflow that worked on their board
+  arrived at a buyer's attached to nothing and neither party could tell why.
+
+### What shipped
+
+**One new value, one new column, and no new table.** The release history IS the `snapshots` rows —
+`object_id`, `reason`, `created_by`, `taken_at` — so staging is a `reason` VALUE (`'stage'`) rather
+than DDL. That choice pays immediately: the public snapshot read already pins
+`reason = 'publication'`, so **a staged version is unreachable from the marketplace by construction**
+rather than by a visibility flag somebody could get wrong. The privacy of Stage is an existing
+security check, reused.
+
+- **`harness` — six runners, not thirty.** `packages/creation-canvas-contract/src/marketplaceListings.ts`
+  declares how a creation is EXERCISED before anyone pays for it, alongside how a buyer `launch`es it.
+  The shape of the output decides it, not the noun: `media` · `runtime` · `paged` · `geometry` ·
+  `instrument` · `system`. `resolveListingHarness(kind, objectKind)` reads the SOURCE kind first,
+  because `creative` legitimately spans a video, a comic and a 3D model — one listing kind, three
+  output shapes, which is the case that proves a per-kind field would have been wrong.
+- **`stageChecks.ts` — the six runners, pure.** No database, no fetch, no clock: they take the
+  snapshot payload and return findings, so the gate is assertable in CI and the panel and the server
+  cannot reach different verdicts. `block` is reserved for what is wrong for EVERY buyer (an empty
+  page, an orphaned question id, a CDN reference in a sandboxed play frame, a mesh with no unit, a
+  cloned voice that does not transfer); anything that depends on the buyer's environment is a `warn`
+  the seller DECLARES, because a gate that refuses on a 1.2mm wall teaches sellers to ignore the panel.
+- **`creationReleases.ts` — the rail, staging, and revert.** Four states derived from two facts the
+  data already held (does a snapshot exist, is the listing pointing at it). Historical versions are
+  reconstructed by replaying `bumpVersion` over the publication snapshots rather than stored in a
+  column that could disagree with `catalog_items.version`. **Revert points the listing at an earlier
+  snapshot and bumps the version — it never edits a snapshot**: "v1.4, whose payload is v1.1's" is
+  honest, and a mutated v1.1 is a lie told to the people who bought it.
+- **Publish promotes what was TESTED.** `fromSnapshotId` copies the staged payload into a new
+  publication snapshot instead of re-reading the board, so a seller cannot stage v1.3, edit a card,
+  and ship an untested build under a tested version number. The staged id is validated against
+  tenant + listing + `reason = 'stage'`, or a crafted request could promote another tenant's board.
+- **`template_licenses.snapshot_id` (migration 0466) — the one new column.** Set at the moment of
+  sale from the listing body; `heldLicence()` replaces the boolean-only `holdsLicence` behind the
+  install and launch paths so one read answers both "may they" and "which version". NULL means
+  unpinned and resolves to current — the exact pre-migration behaviour, so no existing buyer moves.
+- **Two new sellable kinds.** `survey` (from the existing `form` primitive, harness `instrument`,
+  `trial: 'preview'` because an instrument you can read in full is one you can copy) and `book` — a
+  new shared spec-object kind with cover, ordered pages, numbered figures and a print edition, whose
+  page/figure/word counts are `derive`d from their own rows rather than stored beside them.
+- **The seller is told what was stripped.** `stripBindings` now records the field names it removed
+  onto the snapshot, and a binding with no buyer substitute (`connectionId`, `apiKey`, a repo path)
+  is a BLOCKER rather than a note.
+- Localized in all five catalogs; both themes and narrow viewports driven from canvas tokens.
+
+**Also fixed in the same pass, both found by the guards:** `0465` had been claimed by two migrations
+in one working tree, which mattered more than it looked — `check:schema` keys migrations by prefix,
+so one of the pair was being dropped from the drift comparison entirely. The newer
+(`0465_llm_action_ratings.sql`) was renumbered to `0468`, and what that un-masked is now on the
+register. An empty `.catch(() => {})` in `application/llm/actionRatings.ts` was reporting nothing
+where a KV that had stopped accepting deletes would have gone unnoticed behind stale rollups.
+
+**Tests:** `stageChecks.test.ts` — 28 assertions pinning what each harness refuses versus declares,
+that every harness is reachable by a real publish (`geometry` only via the source-kind override —
+the assertion that caught its own first draft), and that the runners are pure. The 21 existing
+`creationListings.test.ts` assertions pass unchanged against the refactored publish path.
+
+## ✅ RESOLVED 2026-08-15 — Idea → Real: the methodology existed in the product and nowhere on the marketing site
+
+### What was wrong
+
+The product is built around a method — the arc **Idea · Make · Run · Measure**, and inside it the loop
+**Read · Prove · Build** — and four public pages each described the company a different way, none of
+which named it.
+
+- `/features` opened onto nine domain cards, which answers "how many things does this have" before
+  anybody has asked it, and never mentioned the eight proof forms or the loop.
+- `/about` said "IDEA to REAL" in the hero visual and then never said what REAL meant or how you got there.
+- `/pricing` showed three columns of ticks to an anonymous visitor with no statement of what the money buys.
+- `/sell-builderforce` pitched a toolkit — a canvas, a CRM, some campaigns — to an audience whose
+  hardest objection is "we already have AI tools", which a longer feature list does not answer.
+- `/realize` — the surface where the method actually runs — was linked from no marketing page at all.
+
+Seven defects were found in the same pass, five of them latent:
+
+1. **`--stage-expand` was never declared.** `STAGES` is iterated into `` var(`--stage-${stage}`) `` by the
+   left panel and by `/features`' arc table. An undeclared custom property with no fallback is invalid at
+   computed-value time, so the Expand row's dot dropped its `background` and painted **nothing, in both
+   themes, with no error anywhere**. A template literal is exactly the shape `check-design-tokens` cannot
+   see, which is why it survived for as long as the stage existed.
+2. **`featuresPage.arcTitle` read "Idea → Make → Run"** while the arc it sat above rendered seven stages.
+3. **`/sell-builderforce` was 100% hardcoded English** — the one public page whose entire job is to be
+   forwarded to somebody was the one page unreadable in four of the five shipped languages.
+4. **`/blog/<slug>` carried seven hardcoded English strings** (both back links, the not-found state, the
+   byline, the closing CTA, the related heading) plus an `en-US`-pinned date, while the blog *index*
+   beside it was fully localized.
+5. **`<RelatedArticles>` had two hardcoded English strings** — its default heading and subtitle — on
+   every marketing surface that mounts it.
+6. **Four sellable/authorable kinds had no catalog entry** and rendered raw dotted keys:
+   `creationCanvas.object.book`, `creationCanvas.object.account`, `marketplaceCreations.kind.book`,
+   `marketplaceCreations.kind.survey`.
+7. **The blog had no way to draw anything.** The shared markdown pipeline has no `rehype-raw` — correctly,
+   since it also renders chat and canvas content — so a post could not embed a diagram, and sixty-two
+   posts were text and a generated cover.
+
+### What changed
+
+**One methodology registry, four projections.** `lib/methodology.ts` declares the loop
+(`METHOD_STEP_SPECS`), the four sold stages, and the eight proof forms as spec data. `components/marketing/
+MethodologySection.tsx` is the ONE renderer, and `/features`, `/about`, `/pricing` and
+`/sell-builderforce` each choose a variant by what they already show — `catalog` on `/features` because
+that page generates the arc from the registry a few bands lower, and two renderings of one arc on one
+page is the same drift in miniature. A stage's question moved from `featuresPage.arcQuestion.*` to
+`methodology.arcQuestion.*`, so the shared component no longer reaches into a page's namespace.
+
+**The mirror has a ratchet.** The eight proof forms live in the API (`realization/targets/*`), which a
+signed-out static page cannot import. `scripts/check-methodology.mjs` (wired into `npm test`) asserts the
+frontend catalogue and its English copy match the API's own `name` / `answers` / `summary` / `fidelity` /
+`effort` / backend posture, that every method step has copy, and that every stage has both a question and
+a **declared hue** — the check that would have caught `--stage-expand`.
+
+**Figures are data, not markup.** `components/blog/BlogFigure.tsx` renders five kinds — `flow`, `matrix`,
+`stack`, `bars`, `compare` — from a ```` ```bf-figure ```` fence containing JSON, wired in via a `<pre>`
+override on the post renderer (`pre`, not `code`: a `<figure>` inside a `<pre>` is invalid HTML and the
+browser reflows it out). A malformed figure falls back to a code block rather than leaving a hole. Hues
+come from an allow-list, never from the markdown. `BlogFigure.test.tsx` parses and renders **every figure
+in the published corpus** and asserts the fidelity/effort matrix plots all eight proofs at the product's
+own numbers.
+
+**Four new articles** (`idea-to-real-the-operating-methodology`, `eight-ways-to-make-an-idea-real`,
+`read-prove-build-the-inner-loop`, `idea-make-run-measure-menu-as-methodology`), attached to the marketing
+surfaces through `RELATED_ARTICLES.methodology` rather than hand-listed per page.
+
+**All seven defects closed**, including the full localization of `/sell-builderforce` (~50 strings × 5
+catalogs, via `scripts/i18n-patch-methodology.mjs`), the post page and `<RelatedArticles>`.
+
+### The load-bearing bit
+
+The pricing claim and the product behaviour are now the same sentence: **Read and Prove cost nothing;
+only Build spends run budget.** That is not a promotion — it is the only pricing consistent with the
+method, because the two acts that decide whether the expensive one is worth doing must never be the
+reason somebody skips them. `MethodologySection.test.tsx` asserts the free/spends marks in that order,
+since an inversion would have `/pricing` telling a visitor the opposite of what their bill says.
+
+---
+
 ## ✅ RESOLVED 2026-08-15 — "Connect all my social accounts": the tools were real, the model was never given them
 
 ### What was wrong
@@ -80,6 +510,26 @@ real capability one free account away.
 
 67 canvas tools classified (39 guest-safe, 7 guest-gated, 21 account-required), the prompt
 cross-checked, and the social gate copy localized across all five catalogs.
+
+### The second gap in the same report: Brain was looking at the chat, not the board
+
+The diagnostics also said *"Brain turns ran against 1 of 2 objects (scope: selection). An answer
+about what is on the canvas from this scope is answering about a subset."* The Brain chat is an
+object on the board, so typing into it selects it, and AUTO scope read any selection as "ask about
+this" — turn one ran against 2 of 2 objects, the composer selected the chat 116ms later, and every
+turn after that saw only the chat. The board's one real object was invisible to Brain for the rest
+of the session. AUTO now ignores a selection that is ENTIRELY chat objects: that is where the person
+is typing, not what they are pointing at. Selecting the chat *and* something else is still a real
+selection, and an explicitly chosen scope is still honoured.
+
+### One more hidden object, found by the same class of check
+
+`SpecObjectSpec.group` was typed `string` — "kept as a string to avoid a cycle", except
+`CreationObjectGroup` is a pure type and there was no cycle. `book`, the publication primitive,
+declared `group: 'Create'`, which is not a palette section, and `CREATION_PALETTE_GROUPS` filters by
+group: the kind was registered, authorable by Brain, and **unreachable by a person**. Exactly what
+that constant's own comment warns a missing group would do. `group` is `CreationObjectGroup` now, so
+the next one is a compile error, and `book` is filed under `Knowledge` beside `document`.
 
 ## ✅ RESOLVED 2026-08-15 — The canvas can build software: `canvas_create_build`, a surgical editor, and failures that reach the agent
 

@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.126] — You run on Builderforce, and you can now say whether it was any good
+
+- **Your chat says what you're actually on: "Builderforce Free" or "Builderforce PRO".** It used to print whichever upstream model the router happened to reach for that turn — a name that changes between turns, that you have no way to choose on a routed plan, and that sat right beside a model list the plan would not let you open. The plan you bought is the answer to "what am I running on", so that is what it says. Connect your own provider account, or move to a paid plan, and every real model name comes back — because then the choice is genuinely yours.
+- **Every reply now has a thumbs up and a thumbs down.** They already existed on the web; the editor had none, so the place a lot of real work happens could not tell us anything about how it went.
+- **Your rating now counts for something.** Each press is recorded against the model that answered you and the tool it used, so the router learns which model is genuinely better at which kind of work and picks it next time. Press the same thumb again to take it back.
+
 ## [2026.7.119] — One composer, one menu — the editor and the web app now match
 
 - **Memory, Consolidate and Fork have moved into the `/` menu.** They used to be three permanent pills in the composer's button row, inert for most of a chat's life, sitting between the mode controls and Send — on a narrow side panel they crowded out the send button itself. In the menu each one has room to say what it actually does, and the two that need a real conversation behind them now explain *why* they are unavailable instead of just greying out.

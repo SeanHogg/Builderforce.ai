@@ -21,11 +21,15 @@ import { apiRequest } from '@/lib/apiClient';
  *
  *  `operations` is the sixteenth: the work a vertical company SELLS — the job,
  *  the asset, the visit, the part, the certificate — which none of the original
- *  fifteen modelled. See `schema/operations.ts` in the api. */
+ *  fifteen modelled. See `schema/operations.ts` in the api.
+ *
+ *  `legal` is the seventeenth: entity formation, jurisdiction registration, IP
+ *  and the matters counsel is arguing. `governance` is Security's SOC 2 seat and
+ *  could not absorb it without meaning two things. */
 export const DOMAINS = [
   'growth', 'delivery', 'agents', 'hiring', 'finance', 'revenue', 'commerce',
   'identity', 'people', 'platform', 'governance', 'investor', 'support',
-  'canvas', 'integrations', 'operations',
+  'canvas', 'integrations', 'operations', 'legal',
 ] as const;
 export type Domain = (typeof DOMAINS)[number];
 

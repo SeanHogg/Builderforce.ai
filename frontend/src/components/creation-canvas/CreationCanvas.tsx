@@ -147,7 +147,7 @@ import { dataSourceApi, resolveDataSource, type DataSourceSummary } from '@/lib/
 import { detectGeoColumns, mapObjectFields, mapPointsFromRows } from '@/lib/canvasGeo';
 import { analyzeCompetitorGeography, competitorSitesFrom } from '@/lib/competitorGeo';
 import { evaluateCanvasTriggers, isDateComparator, triggerUnboundHint } from '@/lib/canvasTriggers';
-import { deadlineBearingKinds } from '@/lib/specObjects';
+import { deadlineBearingKinds, makeSpecDeriveBoard } from '@/lib/specObjects';
 import { useCoarsePointer } from '@/lib/useCoarsePointer';
 import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
 import { canvasStrokes, drawingPatch, DRAWING_TOOLS, eraseStrokes, strokesSvg, type CanvasDrawingTool, type CanvasStroke } from '@/lib/canvasDrawing';
@@ -358,6 +358,23 @@ function safeTraceJson(value: unknown): string {
   } catch {
     return '(unserializable)';
   }
+}
+
+/**
+ * The board a computed field reads, indexed once per snapshot.
+ *
+ * Every `contextAdapter` call below takes one, because a `gradebook`'s mean and a
+ * `submission`'s lateness are computed from the objects NEXT TO them — a snapshot built
+ * without the board hands the model a card the user can see numbers on and it cannot,
+ * which is the authorable-but-unreadable drift `creationObjectContext` exists to stop,
+ * in its mirror image.
+ *
+ * Built per INVOCATION rather than per render: these are tool calls, not frames, and
+ * indexing N objects once inside a call is O(N) where indexing per object would be
+ * O(N²) — the fan-out shape the platform rejects.
+ */
+function specBoardOf(source: readonly CreationFlowNode[]) {
+  return makeSpecDeriveBoard(source.map((node) => node.data as unknown as Record<string, unknown>));
 }
 
 /** True only when an advertised capability has a real Canvas-side adapter. */
@@ -1805,8 +1822,27 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
   const effectiveSelectedIds = useMemo(() => selectedIds.length ? selectedIds : selectedId ? [selectedId] : [], [selectedId, selectedIds]);
+  /**
+   * SELECTING THE CHAT IS NOT A SCOPING INTENT.
+   *
+   * The Brain chat is an object on the board, so typing into it selects it — and AUTO
+   * scope read any selection as "ask about this", which narrowed every turn after the
+   * first to the chat itself. Measured 2026-08-15 (ui 2026.8.17): turn one ran against
+   * 2 of 2 objects, the composer selected the chat 116ms later, and turns two and three
+   * ran against 1 of 2 — the board's only real object invisible to Brain for the rest
+   * of the session, with the diagnostics reporting "an answer about what is on the
+   * canvas from this scope is answering about a subset".
+   *
+   * A selection that is ENTIRELY chat objects is where the person is typing, not what
+   * they are pointing at. Selecting the chat AND something else is still a real
+   * selection, and an explicitly chosen scope is always honoured — this only decides
+   * what `auto` infers.
+   */
+  const selectionIsOnlyChat = effectiveSelectedIds.length > 0
+    && effectiveSelectedIds.every((id) => nodes.find((node) => node.id === id)?.data.kind === 'chat');
   const resolvedScopeMode = scopeMode === 'auto'
-    ? selectedNode?.data.kind === 'frame' ? 'frame' : effectiveSelectedIds.length ? 'selection' : 'canvas'
+    ? selectedNode?.data.kind === 'frame' ? 'frame'
+      : effectiveSelectedIds.length && !selectionIsOnlyChat ? 'selection' : 'canvas'
     : scopeMode;
   const scopedNodeIds = useMemo(() => {
     if (resolvedScopeMode === 'canvas') return new Set(nodes.map((node) => node.id));
@@ -4081,7 +4117,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: () => ({
       scope: resolvedScopeMode,
       scopeNote: scopeNote('canvas', nodes.length, nodes.length),
-      objects: nodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true, inScope: scopedNodeIds.has(node.id) }; }),
+      objects: ((board) => nodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data, board), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true, inScope: scopedNodeIds.has(node.id) }; }))(specBoardOf(nodes)),
       connections: edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
     }),
   }, {
@@ -4113,7 +4149,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const definition = creationObjectDefinition(node.data.kind);
       return {
         found: true,
-        object: { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions },
+        object: { id: node.id, ...definition.contextAdapter(node.data, specBoardOf(nodes)), mutableFields: definition.mutableFields, actions: definition.actions },
         connections: edges
           .filter((edge) => edge.source === node.id || edge.target === node.id)
           .map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
@@ -6443,7 +6479,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!args.objectId || !target) return { error: 'Object not found' };
       const definition = creationObjectDefinition(target.data.kind);
       if (!args.action || !definition.actions.includes(args.action)) return { error: `Unsupported action. Available actions: ${definition.actions.join(', ')}` };
-      if (args.action === 'inspect') return { object: { id: target.id, ...definition.contextAdapter(target.data) }, actions: definition.actions, mutableFields: definition.mutableFields };
+      if (args.action === 'inspect') return { object: { id: target.id, ...definition.contextAdapter(target.data, specBoardOf(nodes)) }, actions: definition.actions, mutableFields: definition.mutableFields };
       if (args.action === 'edit') return { objectId: target.id, kind: target.data.kind, mutableFields: definition.mutableFields, instruction: 'Call canvas_update_object with the desired fields.' };
       if (!canInvokeCreationObjectAction(target.data.kind, args.action)) {
         return { error: `${args.action} is declared for ${definition.label}, but no real Canvas delivery adapter is connected yet. Do not claim that it ran.` };
@@ -7020,8 +7056,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
     const snapshot = JSON.stringify({
       testMode: true,
-      agent: { id: agent.id, ...creationObjectDefinition('agent').contextAdapter(agent.data) },
-      knowledge: knowledge.map((node) => ({ id: node.id, ...creationObjectDefinition(node.data.kind).contextAdapter(node.data) })),
+      agent: { id: agent.id, ...creationObjectDefinition('agent').contextAdapter(agent.data, specBoardOf(nodes)) },
+      knowledge: ((board) => knowledge.map((node) => ({ id: node.id, ...creationObjectDefinition(node.data.kind).contextAdapter(node.data, board) })))(specBoardOf(nodes)),
     });
     setNodes((current) => current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testPrompt, testExpected: expected, testStatus: 'Running', testResponse: '' } } : node));
     setNotice(t('noticeTestingAgent', { name: agent.data.title }));
@@ -7111,7 +7147,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // complete, so an absence claim is never available to be made.
         scopeNote: scopeNote(resolvedScopeMode, nodes.length, scopedNodes.length),
         boardInventory: boardInventory(nodes, scopedNodeIds),
-        objects: scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }),
+        objects: ((board) => scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data, board), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }))(specBoardOf(nodes)),
         connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
       });
       clearComposer();

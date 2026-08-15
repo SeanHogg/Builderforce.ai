@@ -41,7 +41,7 @@ export function PreviewFrame({ url, frameRef }: PreviewFrameProps) {
         <button
           onClick={() => window.open(url, '_blank')}
           className="text-xs whitespace-nowrap"
-          style={{ color: 'var(--accent-primary, #2563eb)' }}
+          style={{ color: 'var(--accent)' }}
         >
           {t('previewOpen')} <Icon source="↗" size="1em" />
         </button>

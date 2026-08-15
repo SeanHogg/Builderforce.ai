@@ -1094,7 +1094,28 @@
     "visualApply": "Appliquer",
     "visualCancel": "Annuler",
     "visualApplied": "{file} mis à jour",
-    "visualNoPreview": "Lancez d'abord le projet — pointer et modifier nécessite un aperçu en direct."
+    "visualNoPreview": "Lancez d'abord le projet — pointer et modifier nécessite un aperçu en direct.",
+    "releases": {
+      "title": "Versions précédentes",
+      "description": "Chaque build est conservé. Restaurez-en un instantanément, sans recompiler.",
+      "current": "En ligne",
+      "restore": "Restaurer",
+      "restoring": "Restauration…",
+      "restored": "Restaurée. Le site sert de nouveau cette version.",
+      "restoreFailed": "Cette version n'a pas pu être restaurée."
+    },
+    "packaging": {
+      "title": "Installer sur un téléphone",
+      "description": "Empaquetez ce build en application installable — exactement ce que vous venez de prévisualiser.",
+      "working": "Empaquetage…",
+      "done": "Projet écrit dans {directory}. Poussez-le pour lancer le build.",
+      "failed": "L'application n'a pas pu être empaquetée.",
+      "target": {
+        "pwa": "Application web installable",
+        "android": "Projet Android",
+        "ios": "Projet iOS"
+      }
+    }
   },
   "tools": {
     "outOf5": "sur 5,0",
@@ -14093,6 +14114,8 @@
       "pdfPages": "PDF · {pages, plural, one {# page} other {# pages}}",
       "codeShape": "{lines} lignes",
       "noticeDataset": "{name} chargé comme jeu de données — {rows} lignes, {columns} colonnes",
+      "noticeResume": "{name} lu comme un CV — changez son style avec n’importe quel modèle",
+      "resumeShape": "{sections, plural, one {# rubrique} other {# rubriques}}",
       "noticeWorkbook": "{name} chargé comme classeur — {sheets, plural, one {# feuille} other {# feuilles}}",
       "noticeDeck": "{name} chargé comme présentation — {slides, plural, one {# diapositive} other {# diapositives}}",
       "noticeDocument": "{name} chargé comme document — {pages, plural, one {# page} other {# pages}}",
@@ -14101,6 +14124,7 @@
       "failed": "Impossible de lire {name}",
       "tooManyFiles": "Seuls les {limit} premiers fichiers ont été ajoutés",
       "promptData": "Analyse {name} : qu'est-ce qui ressort et où sont les valeurs aberrantes ?",
+      "promptResume": "Rends {name} dans tous les styles de modèle pour que je puisse les comparer.",
       "promptDeck": "Relis {name} : le récit est-il clair et que manque-t-il ?",
       "promptDocument": "Résume {name}, puis dis-moi ce que tu changerais.",
       "promptImage": "Que contient {name} et qu'en faire ?",
@@ -17718,6 +17742,7 @@
     "notice": {
       "addedToCanvas": "J’ai ajouté le contenu demandé au canevas.",
       "noAnswer": "Je n’ai pas pu préparer de modification du canevas à partir de cette demande.",
+      "providerStalled": "Le fournisseur du modèle a accepté cette demande puis a cessé de répondre ; j’ai donc arrêté d’attendre. Votre demande n’a rien d’incorrect : renvoyez-la, ou choisissez un autre modèle dans le menu /.",
       "toolError": "Je n’ai pas pu préparer les modifications demandées du canevas : {detail}",
       "answeredWithoutChange": "J’ai répondu ici, mais je n’ai rien placé sur le canevas. Demandez-moi de l’ajouter au canevas et je créerai l’objet correspondant.",
       "unverifiedCreationPlain": "J’ai décrit une modification du canevas sans la faire réellement : rien n’a donc été créé. Dites-moi quel objet créer et je le construirai sur le canevas.",
@@ -18371,7 +18396,8 @@
         "support": "Support",
         "canvas": "Canevas",
         "integrations": "Intégrations",
-        "operations": "Opérations"
+        "operations": "Opérations",
+        "legal": "Juridique"
       }
     },
     "surface": {
@@ -18407,7 +18433,8 @@
         "support": "Tickets, articles et ce que disent les clients.",
         "canvas": "Tout ce qui est créé, partagé et travaillé ensemble.",
         "integrations": "Comptes connectés et ce qu’ils synchronisent.",
-        "operations": "Ordres de travail, équipements concernés, interventions qui les réalisent et pièces consommées."
+        "operations": "Ordres de travail, équipements concernés, interventions qui les réalisent et pièces consommées.",
+        "legal": "Entités, contrats, propriété intellectuelle et les dossiers ouverts à leur sujet."
       },
       "kernelBlurb": "Les vingt-cinq primitives partagées par tous les postes. Aucun domaine ne les possède ni ne peut les dupliquer."
     },
@@ -19654,8 +19681,7 @@
         "summary": "Le système complet en service à une vraie adresse, avec une console d’exploitation et un runbook d’astreinte."
       }
     },
-    "ctaRealize": "Rendez quelque chose réel →",
-    "ctaCanvas": "Ouvrir le canevas"
+    "ctaRealize": "Rendez quelque chose réel →"
   },
   "sell": {
     "seo": {
@@ -19777,5 +19803,92 @@
   "relatedArticles": {
     "heading": "À lire aussi",
     "subtitle": "Des analyses approfondies du blog Builderforce sur les sujets abordés ici."
+  },
+  "developerPortal": {
+    "title": "Portail développeur",
+    "subtitle": "Créez une intégration une fois, et chaque espace de travail pourra l'installer. Inscrivez-vous comme éditeur, publiez un paquet versionné et consultez ce que votre propre espace a installé.",
+    "tabs": {
+      "label": "Sections du portail",
+      "installed": "Installées",
+      "catalog": "Catalogue",
+      "publish": "Publier"
+    },
+    "errors": {
+      "load": "Impossible de charger le portail développeur.",
+      "action": "Cette action n'a pas abouti."
+    },
+    "installed": {
+      "title": "Installées dans cet espace de travail",
+      "empty": "Rien d'installé pour l'instant. Parcourez le catalogue pour ajouter une extension.",
+      "byPublisher": "Par {publisher} · version {version}",
+      "grants": "Autorisations accordées : {scopes}",
+      "updateAvailable": "La version {version} est disponible et ne demande rien de nouveau.",
+      "updateNeedsConsent": "La version {version} demande de nouvelles autorisations ({scopes}). Réinstallez-la pour les accorder.",
+      "update": "Mettre à jour",
+      "uninstall": "Désinstaller",
+      "uninstallTitle": "Désinstaller {name} ?",
+      "uninstallBody": "Ses outils cessent immédiatement d'être proposés à vos agents. Vos réglages de connexion sont conservés : une réinstallation les restaure.",
+      "uninstallAction": "Désinstaller"
+    },
+    "catalog": {
+      "title": "Extensions disponibles",
+      "empty": "Aucune extension publiée pour l'instant.",
+      "publisher": "Par {publisher}",
+      "verified": "Vérifié",
+      "installs": "{count} espaces de travail",
+      "install": "Installer",
+      "installed": "Installée"
+    },
+    "install": {
+      "confirmTitle": "Installer {name} ?",
+      "confirmPublisher": "Publiée par {publisher}.",
+      "confirmScopes": "Elle sera autorisée à : {scopes}",
+      "confirmSensitive": "Cela inclut la modification de vos données : {scopes}",
+      "confirmAction": "Installer",
+      "unknownPublisher": "un éditeur non vérifié",
+      "noScopes": "rien"
+    },
+    "publish": {
+      "registerTitle": "Inscrivez-vous comme éditeur",
+      "registerBody": "Un éditeur, c'est votre entreprise, pas votre espace de travail. Inscrivez-vous une fois, puis publiez des paquets que n'importe quel espace peut installer.",
+      "legalName": "Nom de l'entreprise",
+      "legalNamePlaceholder": "Acme Payroll, SAS",
+      "register": "S'inscrire",
+      "publisherTitle": "Votre profil d'éditeur",
+      "verificationHint": "Vérifiez votre domaine pour afficher un badge sur vos fiches. La vérification d'identité est obligatoire pour faire payer un paquet.",
+      "verification": {
+        "unverified": "Non vérifié",
+        "domain_verified": "Domaine vérifié",
+        "identity_verified": "Identité vérifiée"
+      },
+      "newPackageTitle": "Nouveau paquet",
+      "packageName": "Nom du paquet",
+      "packageKind": "Type",
+      "createPackage": "Créer le paquet",
+      "packagesTitle": "Vos paquets",
+      "packagesEmpty": "Aucun paquet pour l'instant.",
+      "listing": {
+        "draft": "Brouillon",
+        "listed": "Publié",
+        "delisted": "Retiré"
+      },
+      "review": {
+        "pending": "En revue",
+        "approved": "Approuvée",
+        "rejected": "Refusée"
+      },
+      "selectForSubmit": "Soumettre une version",
+      "delist": "Retirer",
+      "publishVersion": "Publier",
+      "submitTitle": "Soumettre une version",
+      "semver": "Version",
+      "scopes": "Autorisations requises par cette version",
+      "spec": "Spécification (JSON)",
+      "specPlaceholder": "Collez votre manifeste de connecteur ou le descripteur du serveur MCP",
+      "specInvalidJson": "Ce n'est pas du JSON valide.",
+      "submit": "Soumettre à la revue",
+      "reviewPassed": "Revue réussie — vous pouvez publier cette version.",
+      "reviewFailed": "La revue a relevé des problèmes. Corrigez-les et soumettez une nouvelle version."
+    }
   }
 }

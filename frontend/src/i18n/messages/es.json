@@ -1094,7 +1094,28 @@
     "visualApply": "Aplicar",
     "visualCancel": "Cancelar",
     "visualApplied": "{file} actualizado",
-    "visualNoPreview": "Ejecuta primero el proyecto: señalar y editar necesita una vista previa en vivo."
+    "visualNoPreview": "Ejecuta primero el proyecto: señalar y editar necesita una vista previa en vivo.",
+    "releases": {
+      "title": "Versiones anteriores",
+      "description": "Cada compilación se conserva. Restaura una anterior al instante, sin recompilar.",
+      "current": "En vivo",
+      "restore": "Restaurar",
+      "restoring": "Restaurando…",
+      "restored": "Restaurada. El sitio vuelve a servir esa versión.",
+      "restoreFailed": "No se pudo restaurar esa versión."
+    },
+    "packaging": {
+      "title": "Instalar en un móvil",
+      "description": "Empaqueta esta compilación como una app instalable. La misma que acabas de previsualizar.",
+      "working": "Empaquetando…",
+      "done": "Proyecto escrito en {directory}. Súbelo para compilar.",
+      "failed": "No se pudo empaquetar la app.",
+      "target": {
+        "pwa": "App web instalable",
+        "android": "Proyecto Android",
+        "ios": "Proyecto iOS"
+      }
+    }
   },
   "tools": {
     "outOf5": "de 5,0",
@@ -14093,6 +14114,8 @@
       "pdfPages": "PDF · {pages, plural, one {# página} other {# páginas}}",
       "codeShape": "{lines} líneas",
       "noticeDataset": "{name} cargado como conjunto de datos: {rows} filas, {columns} columnas",
+      "noticeResume": "{name} leído como currículum: dale otro estilo con cualquier plantilla",
+      "resumeShape": "{sections, plural, one {# sección} other {# secciones}}",
       "noticeWorkbook": "{name} cargado como libro: {sheets, plural, one {# hoja} other {# hojas}}",
       "noticeDeck": "{name} cargado como presentación: {slides, plural, one {# diapositiva} other {# diapositivas}}",
       "noticeDocument": "{name} cargado como documento: {pages, plural, one {# página} other {# páginas}}",
@@ -14101,6 +14124,7 @@
       "failed": "No se pudo leer {name}",
       "tooManyFiles": "Solo se añadieron los primeros {limit} archivos",
       "promptData": "Analiza {name}: ¿qué destaca y dónde están los valores atípicos?",
+      "promptResume": "Renderiza {name} con todos los estilos de plantilla para poder compararlos.",
       "promptDeck": "Revisa {name}: ¿el relato es claro y qué falta?",
       "promptDocument": "Resume {name} y dime qué cambiarías.",
       "promptImage": "¿Qué hay en {name} y qué debería hacer con ello?",
@@ -17718,6 +17742,7 @@
     "notice": {
       "addedToCanvas": "He añadido al lienzo el contenido solicitado.",
       "noAnswer": "No he podido preparar ningún cambio en el lienzo a partir de esa petición.",
+      "providerStalled": "El proveedor del modelo aceptó esta petición y luego dejó de responder, así que he dejado de esperar. Tu petición no tiene ningún problema: vuelve a enviarla o elige otro modelo en el menú /.",
       "toolError": "No he podido preparar los cambios solicitados en el lienzo: {detail}",
       "answeredWithoutChange": "He respondido aquí, pero no he puesto nada en el lienzo. Pídeme que lo añada al lienzo y crearé el objeto correspondiente.",
       "unverifiedCreationPlain": "He descrito un cambio en el lienzo, pero no lo he hecho realmente, así que no se ha creado nada. Dime qué objeto crear y lo construiré en el lienzo.",
@@ -18371,7 +18396,8 @@
         "support": "Soporte",
         "canvas": "Lienzo",
         "integrations": "Integraciones",
-        "operations": "Operaciones"
+        "operations": "Operaciones",
+        "legal": "Legal"
       }
     },
     "surface": {
@@ -18407,7 +18433,8 @@
         "support": "Tickets, artículos y lo que dicen los clientes.",
         "canvas": "Todo lo creado, compartido y trabajado en conjunto.",
         "integrations": "Cuentas conectadas y lo que sincronizan.",
-        "operations": "Órdenes de trabajo, los activos sobre los que se realizan, las visitas que las ejecutan y las piezas que consumen."
+        "operations": "Órdenes de trabajo, los activos sobre los que se realizan, las visitas que las ejecutan y las piezas que consumen.",
+        "legal": "Entidades, contratos, propiedad intelectual y los asuntos abiertos sobre ellos."
       },
       "kernelBlurb": "Las veinticinco primitivas que comparten todos los puestos. Ningún dominio las posee ni puede bifurcarlas."
     },
@@ -19654,8 +19681,7 @@
         "summary": "El sistema completo funcionando en una dirección real, con consola de operaciones y manual de guardia."
       }
     },
-    "ctaRealize": "Haz algo real →",
-    "ctaCanvas": "Abrir el lienzo"
+    "ctaRealize": "Haz algo real →"
   },
   "sell": {
     "seo": {
@@ -19777,5 +19803,92 @@
   "relatedArticles": {
     "heading": "Lecturas relacionadas",
     "subtitle": "Análisis en profundidad del blog de Builderforce sobre los temas tratados aquí."
+  },
+  "developerPortal": {
+    "title": "Portal para desarrolladores",
+    "subtitle": "Crea una integración una vez y cualquier espacio de trabajo podrá instalarla. Regístrate como editor, publica un paquete versionado y consulta lo que tiene instalado tu propio espacio.",
+    "tabs": {
+      "label": "Secciones del portal",
+      "installed": "Instaladas",
+      "catalog": "Catálogo",
+      "publish": "Publicar"
+    },
+    "errors": {
+      "load": "No se pudo cargar el portal para desarrolladores.",
+      "action": "Esa acción no se completó."
+    },
+    "installed": {
+      "title": "Instaladas en este espacio de trabajo",
+      "empty": "Todavía no hay nada instalado. Explora el catálogo para añadir una extensión.",
+      "byPublisher": "De {publisher} · versión {version}",
+      "grants": "Permisos concedidos: {scopes}",
+      "updateAvailable": "La versión {version} está disponible y no pide nada nuevo.",
+      "updateNeedsConsent": "La versión {version} necesita permisos nuevos ({scopes}). Reinstálala para concederlos.",
+      "update": "Actualizar",
+      "uninstall": "Desinstalar",
+      "uninstallTitle": "¿Desinstalar {name}?",
+      "uninstallBody": "Sus herramientas dejarán de ofrecerse a tus agentes de inmediato. Se conserva la configuración de conexión, así que al reinstalar se restaura.",
+      "uninstallAction": "Desinstalar"
+    },
+    "catalog": {
+      "title": "Extensiones disponibles",
+      "empty": "Todavía no hay extensiones publicadas.",
+      "publisher": "De {publisher}",
+      "verified": "Verificado",
+      "installs": "{count} espacios de trabajo",
+      "install": "Instalar",
+      "installed": "Instalada"
+    },
+    "install": {
+      "confirmTitle": "¿Instalar {name}?",
+      "confirmPublisher": "Publicada por {publisher}.",
+      "confirmScopes": "Se le permitirá: {scopes}",
+      "confirmSensitive": "Esto incluye modificar tus datos: {scopes}",
+      "confirmAction": "Instalar",
+      "unknownPublisher": "un editor sin verificar",
+      "noScopes": "nada"
+    },
+    "publish": {
+      "registerTitle": "Regístrate como editor",
+      "registerBody": "Un editor es tu empresa, no tu espacio de trabajo. Regístrate una vez y publica paquetes que cualquier espacio pueda instalar.",
+      "legalName": "Nombre de la empresa",
+      "legalNamePlaceholder": "Acme Payroll, S.L.",
+      "register": "Registrarse",
+      "publisherTitle": "Tu perfil de editor",
+      "verificationHint": "Verifica tu dominio para mostrar un distintivo en tus fichas. La verificación de identidad es obligatoria para cobrar por un paquete.",
+      "verification": {
+        "unverified": "Sin verificar",
+        "domain_verified": "Dominio verificado",
+        "identity_verified": "Identidad verificada"
+      },
+      "newPackageTitle": "Nuevo paquete",
+      "packageName": "Nombre del paquete",
+      "packageKind": "Tipo",
+      "createPackage": "Crear paquete",
+      "packagesTitle": "Tus paquetes",
+      "packagesEmpty": "Todavía no hay paquetes.",
+      "listing": {
+        "draft": "Borrador",
+        "listed": "Publicado",
+        "delisted": "Retirado"
+      },
+      "review": {
+        "pending": "En revisión",
+        "approved": "Aprobada",
+        "rejected": "Rechazada"
+      },
+      "selectForSubmit": "Enviar una versión",
+      "delist": "Retirar",
+      "publishVersion": "Publicar",
+      "submitTitle": "Enviar una versión",
+      "semver": "Versión",
+      "scopes": "Permisos que necesita esta versión",
+      "spec": "Especificación (JSON)",
+      "specPlaceholder": "Pega tu manifiesto de conector o el descriptor del servidor MCP",
+      "specInvalidJson": "Eso no es JSON válido.",
+      "submit": "Enviar a revisión",
+      "reviewPassed": "Revisión superada: ya puedes publicar esta versión.",
+      "reviewFailed": "La revisión encontró problemas. Corrígelos y envía una versión nueva."
+    }
   }
 }

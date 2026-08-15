@@ -113,8 +113,19 @@ export function scopedToNullableTenant(
  *     statement about MODELS, and every tenant's router legitimately reads it.
  *     The access control is the projection itself: use this ONLY when the select
  *     list contains no tenant-owned column, and never to fetch rows.
+ *   `scheduled_sweep` — a cron sweep, which HAS no caller and therefore no tenant
+ *     to filter by: it is the platform acting on its own schedule over every
+ *     tenant's rows, which is what a sweep IS. The access control is that it is
+ *     unreachable from a request at all — it runs from `scheduled()` or from the
+ *     superadmin force-run, and both are gated before this code is entered.
+ *     Declared here rather than filed in the frozen baseline for the reason this
+ *     helper exists at all: several sweeps sit in that baseline today for a
+ *     decision nobody disagrees with, which makes the debt number report work
+ *     that is not owed and then dares the next reader to pay it down by breaking
+ *     a feature. A sweep still has to name what it acts ON — the predicate is
+ *     what separates "every expired request" from "every request".
  */
-export type CrossTenantReason = 'public_catalogue' | 'share_token' | 'platform_admin' | 'platform_aggregate';
+export type CrossTenantReason = 'public_catalogue' | 'share_token' | 'platform_admin' | 'platform_aggregate' | 'scheduled_sweep';
 
 /**
  * A DECLARED cross-tenant read.

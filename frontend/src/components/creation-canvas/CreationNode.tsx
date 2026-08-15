@@ -7,7 +7,10 @@ import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import ReactMarkdown from 'react-markdown';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
 import { Avatar, evermindLearnedStatus, evermindNextAction } from '@seanhogg/builderforce-brain-ui';
-import type { CreationNodeData } from './types';
+import type { CreationNodeData, CreationObjectKind } from './types';
+import {
+  EMPTY_SPEC_BOARD, makeSpecDeriveBoard, specKindReadsBoard, type SpecDeriveBoard,
+} from '@/lib/specObjects';
 import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL } from './authoredColors';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
@@ -2280,8 +2283,44 @@ function useAuthoredNodeSize(id: string): { width?: number; height?: number } {
   }, [authored]);
 }
 
+/**
+ * The neighbours a CROSS-OBJECT derivation reads — a gradebook's mean over the
+ * submissions beside it, a submission's lateness against its assignment's deadline.
+ *
+ * ── WHY THIS IS GATED, AND HOW ──────────────────────────────────────────────────
+ * Subscribing every card to every other card's data would re-render the whole board on
+ * every keystroke, which is the fan-out the platform rejects in a request handler and is
+ * no more acceptable here. So the selector returns a STABLE EMPTY ARRAY for any kind
+ * whose spec declares no board-reading derivation — the overwhelming majority — and
+ * those nodes never re-render for a neighbour's change at all.
+ *
+ * For the kinds that do read it, the comparison is per-element REFERENCE equality rather
+ * than a serialisation: React Flow replaces a node's `data` object when it changes, so
+ * identity is exactly the signal, and an O(N) reference scan is cheap where a
+ * `JSON.stringify` of two hundred submissions on every store tick is not.
+ */
+const NO_NEIGHBOURS: readonly CreationNodeData[] = [];
+
+function useSpecDeriveBoard(kind: CreationObjectKind): SpecDeriveBoard {
+  const reads = specKindReadsBoard(kind);
+  const neighbours = useStore(
+    (state) => {
+      if (!reads) return NO_NEIGHBOURS;
+      const out: CreationNodeData[] = [];
+      for (const node of state.nodeLookup.values()) out.push(node.data as CreationNodeData);
+      return out;
+    },
+    (left, right) => left === right || (left.length === right.length && left.every((item, index) => item === right[index])),
+  );
+  return useMemo(
+    () => (neighbours.length ? makeSpecDeriveBoard(neighbours as unknown as Record<string, unknown>[]) : EMPTY_SPEC_BOARD),
+    [neighbours],
+  );
+}
+
 export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
+  const specBoard = useSpecDeriveBoard(data.kind);
   const isWide = ['workflow', 'website', 'prototype', 'guidedTour', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
     // A model, a lineage flow and a check suite are all read across, not down.
     'erd', 'lineage', 'dataQuality', 'dataContract', 'datasource',
@@ -2399,7 +2438,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'release' && <ReleaseBody data={data} onOpen={() => onOpenDetails?.(id, 'delivery')} />}
         {/* All seventeen founder kinds, from the one spec that declares their fields.
             See SpecObjectBody for why this is one branch and not forty-seven. */}
-        <SpecObjectBody data={data} />
+        <SpecObjectBody data={data} board={specBoard} />
         {!specialized.has(data.kind) && <><AuthoredContent data={data} fallback={t('objectReady', { label: creationObjectDefinition(data.kind).label })} /><div className={styles.pills}><span>{data.status || t('canvasObject')}</span><span>{t('liveSessionContext')}</span></div></>}
         {/* Every artifact leaves the board from the same place, in its own
             native formats. The row renders nothing for an object that is not a

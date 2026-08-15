@@ -439,7 +439,7 @@ async function creditSeller(db: Db, input: {
  * is how a revoked licence keeps working for a TTL — the same reasoning the kernel
  * applies to share tokens.
  */
-export async function holdsLicence(
+async function holdsLicence(
   db: Db,
   tenantId: number,
   buyerRef: string,
@@ -451,11 +451,11 @@ export async function holdsLicence(
 /**
  * The live licence itself, so a caller can serve THE VERSION THIS BUYER HOLDS.
  *
- * `holdsLicence` is the same question with the answer thrown away, and it is kept as
- * the name every gate already reads — but the launch and install paths need one more
- * fact than a boolean: which snapshot the buyer paid for. Two queries asking the same
- * thing is how "do they own it" and "what do they own" drift apart, so there is one
- * read and the boolean is derived from it.
+ * This is the read; `holdsLicence` above is the same question with the answer thrown
+ * away, and it is now module-private because every caller outside this file needs the
+ * extra fact: which snapshot the buyer paid for. Two queries asking the same thing is
+ * how "do they own it" and "what do they own" drift apart, so there is one read and
+ * the boolean is derived from it.
  *
  * `snapshotId` is null for licences granted before migration 0466, which is the
  * honest answer — nothing recorded what those buyers received — and every caller

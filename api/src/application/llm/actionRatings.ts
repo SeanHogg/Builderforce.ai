@@ -1,4 +1,3 @@
-import { reportCaughtError } from '../observability/caughtErrorReporter';
 /**
  * Human ratings of model output — the capture, the rollup, and the pure maths
  * that turns thumbs into a number the router can rank on.
@@ -8,7 +7,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * It cannot answer "which model is good at THIS?" for the vast majority of model
  * calls — chat turns, canvas turns, tool executions — because none of those have
  * a run, a PR or a CI result. For those the only quality signal that exists is
- * the one a person gives by pressing a thumb, and until migration 0465 that press
+ * the one a person gives by pressing a thumb, and until migration 0468 that press
  * was written into a JSON blob on the message and never read again.
  *
  * ── THE TWO AXES ────────────────────────────────────────────────────────────
@@ -34,6 +33,7 @@ import { acrossTenants, scopedToNullableTenant, scopedToTenant } from '../../inf
 import { normalizeActionType, type ActionType } from './actionTypes';
 import { ratingScore } from './modelQualityScore';
 import { applyRatingToRoutingTable, ROUTING_WINDOW_DAYS } from './routingTable';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** Where the press happened. A canvas turn and a coding run are rated against
  *  very different expectations, so the summary can split by this. */

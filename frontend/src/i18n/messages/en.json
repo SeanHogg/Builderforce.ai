@@ -1094,7 +1094,28 @@
     "visualApply": "Apply",
     "visualCancel": "Cancel",
     "visualApplied": "Updated {file}",
-    "visualNoPreview": "Run the project first — point & edit needs a live preview."
+    "visualNoPreview": "Run the project first — point & edit needs a live preview.",
+    "releases": {
+      "title": "Previous versions",
+      "description": "Every build is kept. Put an earlier one back instantly — no rebuild.",
+      "current": "Live",
+      "restore": "Restore",
+      "restoring": "Restoring…",
+      "restored": "Restored. The site is serving that version again.",
+      "restoreFailed": "That version could not be restored."
+    },
+    "packaging": {
+      "title": "Install on a phone",
+      "description": "Package this build as an installable app. The same build you just previewed.",
+      "working": "Packaging…",
+      "done": "Project written to {directory}. Push it to build.",
+      "failed": "The app could not be packaged.",
+      "target": {
+        "pwa": "Installable web app",
+        "android": "Android project",
+        "ios": "iOS project"
+      }
+    }
   },
   "tools": {
     "outOf5": "out of 5.0",
@@ -14094,6 +14115,8 @@
       "pdfPages": "PDF · {pages, plural, one {# page} other {# pages}}",
       "codeShape": "{lines} lines",
       "noticeDataset": "{name} loaded as a dataset — {rows} rows, {columns} columns",
+      "noticeResume": "{name} read as a résumé — restyle it with any template",
+      "resumeShape": "{sections, plural, one {# section} other {# sections}}",
       "noticeWorkbook": "{name} loaded as a workbook — {sheets, plural, one {# sheet} other {# sheets}}",
       "noticeDeck": "{name} loaded as a deck — {slides, plural, one {# slide} other {# slides}}",
       "noticeDocument": "{name} loaded as a document — {pages, plural, one {# page} other {# pages}}",
@@ -14102,6 +14125,7 @@
       "failed": "{name} could not be read",
       "tooManyFiles": "Only the first {limit} files were added",
       "promptData": "Analyse {name}: what stands out, and where are the outliers?",
+      "promptResume": "Render {name} in every template style so I can compare them.",
       "promptDeck": "Review {name}: is the story clear, and what is missing?",
       "promptDocument": "Summarise {name}, then tell me what you would change.",
       "promptImage": "What is in {name}, and what should I do with it?",
@@ -17719,6 +17743,7 @@
     "notice": {
       "addedToCanvas": "I added the requested content to the canvas.",
       "noAnswer": "I couldn't prepare any canvas changes from that request.",
+      "providerStalled": "The model provider accepted this request and then stopped responding, so I stopped waiting. Nothing is wrong with what you asked — send it again, or pick a different model from the / menu.",
       "toolError": "I couldn't prepare the requested canvas changes: {detail}",
       "answeredWithoutChange": "I answered here but did not put anything on the canvas. Ask me to add this to the canvas and I will create the object for it.",
       "unverifiedCreationPlain": "I described a canvas change but did not actually make one, so nothing was created. Tell me which object to create and I will build it on the canvas.",
@@ -18372,7 +18397,8 @@
         "support": "Support",
         "canvas": "Canvas",
         "integrations": "Integrations",
-        "operations": "Operations"
+        "operations": "Operations",
+        "legal": "Legal"
       }
     },
     "surface": {
@@ -18408,7 +18434,8 @@
         "support": "Tickets, articles and what customers are telling you.",
         "canvas": "Everything authored, shared and worked on together.",
         "integrations": "Connected accounts and what they sync.",
-        "operations": "Jobs, the assets they are done to, the visits that deliver them and the parts they consume."
+        "operations": "Jobs, the assets they are done to, the visits that deliver them and the parts they consume.",
+        "legal": "Entities, contracts, intellectual property and the matters open against them."
       },
       "kernelBlurb": "The twenty-five primitives every seat shares. No domain owns them, and none may fork one."
     },
@@ -19655,8 +19682,7 @@
         "summary": "The whole system running at a real address, with an ops console and an on-call runbook."
       }
     },
-    "ctaRealize": "Make something real →",
-    "ctaCanvas": "Open the canvas"
+    "ctaRealize": "Make something real →"
   },
   "sell": {
     "seo": {
@@ -19778,5 +19804,92 @@
   "relatedArticles": {
     "heading": "Related reading",
     "subtitle": "Deeper dives from the Builderforce blog on the topics covered here."
+  },
+  "developerPortal": {
+    "title": "Developer Portal",
+    "subtitle": "Build an integration once, and every workspace can install it. Register as a publisher, ship a versioned package, and see what your own workspace has installed.",
+    "tabs": {
+      "label": "Portal sections",
+      "installed": "Installed",
+      "catalog": "Catalog",
+      "publish": "Publish"
+    },
+    "errors": {
+      "load": "Could not load the developer portal.",
+      "action": "That action did not complete."
+    },
+    "installed": {
+      "title": "Installed in this workspace",
+      "empty": "Nothing installed yet. Browse the catalog to add an extension.",
+      "byPublisher": "By {publisher} · version {version}",
+      "grants": "Grants: {scopes}",
+      "updateAvailable": "Version {version} is available and asks for nothing new.",
+      "updateNeedsConsent": "Version {version} needs new permissions ({scopes}). Reinstall to approve them.",
+      "update": "Update",
+      "uninstall": "Uninstall",
+      "uninstallTitle": "Uninstall {name}?",
+      "uninstallBody": "Its tools stop being offered to your agents straight away. Your connection settings are kept, so reinstalling restores them.",
+      "uninstallAction": "Uninstall"
+    },
+    "catalog": {
+      "title": "Available extensions",
+      "empty": "No published extensions yet.",
+      "publisher": "By {publisher}",
+      "verified": "Verified",
+      "installs": "{count} workspaces",
+      "install": "Install",
+      "installed": "Installed"
+    },
+    "install": {
+      "confirmTitle": "Install {name}?",
+      "confirmPublisher": "Published by {publisher}.",
+      "confirmScopes": "It will be allowed to: {scopes}",
+      "confirmSensitive": "This includes changing your data: {scopes}",
+      "confirmAction": "Install",
+      "unknownPublisher": "an unverified publisher",
+      "noScopes": "nothing"
+    },
+    "publish": {
+      "registerTitle": "Register as a publisher",
+      "registerBody": "A publisher is your company, not your workspace. Register once, then ship packages any workspace can install.",
+      "legalName": "Company name",
+      "legalNamePlaceholder": "Acme Payroll, Inc.",
+      "register": "Register",
+      "publisherTitle": "Your publisher",
+      "verificationHint": "Verify your domain to show a badge on your listings. Identity verification is required before you can charge for a package.",
+      "verification": {
+        "unverified": "Unverified",
+        "domain_verified": "Domain verified",
+        "identity_verified": "Identity verified"
+      },
+      "newPackageTitle": "New package",
+      "packageName": "Package name",
+      "packageKind": "Kind",
+      "createPackage": "Create package",
+      "packagesTitle": "Your packages",
+      "packagesEmpty": "No packages yet.",
+      "listing": {
+        "draft": "Draft",
+        "listed": "Listed",
+        "delisted": "Delisted"
+      },
+      "review": {
+        "pending": "In review",
+        "approved": "Approved",
+        "rejected": "Rejected"
+      },
+      "selectForSubmit": "Submit a version",
+      "delist": "Delist",
+      "publishVersion": "Publish",
+      "submitTitle": "Submit a version",
+      "semver": "Version",
+      "scopes": "Permissions this version needs",
+      "spec": "Specification (JSON)",
+      "specPlaceholder": "Paste your connector manifest or MCP server descriptor",
+      "specInvalidJson": "That is not valid JSON.",
+      "submit": "Submit for review",
+      "reviewPassed": "Review passed — you can publish this version.",
+      "reviewFailed": "Review found problems. Fix these and submit a new version."
+    }
   }
 }

@@ -8,6 +8,7 @@
  */
 import {
   billingPlans,
+  bills,
   breakEvenScenarios,
   businessPricingModels,
   churnPredictions,
@@ -16,6 +17,7 @@ import {
   expenses,
   fundingRounds,
   invoiceLineItems,
+  invoices,
   kpiFormulas,
   monteCarloSimulations,
   paybackPeriod,
@@ -42,6 +44,21 @@ export const FINANCE_ENTITIES = defineDomainEntities('finance', [
   savedCalculations,
   customKpis,
   kpiFormulas,
+  /**
+   * The receivable header (0469) — what `invoice_line_items.invoice_ref` was
+   * always pointing at. Writable through the generic path: authoring a draft
+   * invoice is ordinary work, and the acts that are NOT ordinary (issuing it,
+   * recording a payment) are gated separately by `canvasApprovalGate`.
+   */
+  entity(invoices, { kind: 'invoice', registers: true }),
+  /**
+   * The payable header. READ-ONLY through the generic path, and this one is not
+   * symmetry with `invoices` — it is `approved_by`. The object's own hint calls
+   * it "the one field on this object that can cause real harm", and a generic
+   * PATCH is exactly the surface that would fill it in on the requester's behalf.
+   * Every write goes through the three handlers, which refuse self-approval.
+   */
+  entity(bills, { kind: 'bill', registers: true, readOnly: true }),
   invoiceLineItems,
   /** A stored payment instrument. The processor owns it; the row is a pointer,
    *  and its secret columns are redacted. */

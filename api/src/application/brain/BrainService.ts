@@ -1624,7 +1624,7 @@ export class BrainService {
    * TWO writes, deliberately, from ONE click:
    *   1. `metadata.feedback` on the message — the UI's own state, so re-opening the
    *      chat shows the thumb the user pressed. Unchanged behaviour.
-   *   2. A durable `llm_action_ratings` row (migration 0465) joining that verdict to
+   *   2. A durable `llm_action_ratings` row (migration 0468) joining that verdict to
    *      the MODEL that earned it and the MCP tool the turn executed.
    *
    * (2) is what was missing. The thumbs have existed for a long time and every press

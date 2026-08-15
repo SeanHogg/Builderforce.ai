@@ -157,9 +157,16 @@ export default function MethodologySection({
         </div>
       )}
 
+      {/* ONE action, and it points at the canvas rather than at `/realize`.
+          `/realize` is where the loop runs, but every route under
+          `/api/realizations` sits behind `authMiddleware` — including the target
+          catalogue — so a signed-out visitor arriving there from a public
+          marketing page gets an empty page and a Read button that fails. A CTA
+          on a marketing surface has to work for the audience of that surface.
+          `/create/new` is guest-capable (a real local-first board, no account),
+          which is where Read → Prove → Build actually begins for a new visitor. */}
       <div className={styles.actions}>
-        <Link href="/realize" className={styles.cta}>{t('ctaRealize')}</Link>
-        <Link href="/create/new" className={styles.ctaGhost}>{t('ctaCanvas')}</Link>
+        <Link href="/create/new" className={styles.cta}>{t('ctaRealize')}</Link>
       </div>
     </div>
   );

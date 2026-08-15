@@ -230,9 +230,13 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
   });
 
   /**
-   * Submit a version. A REJECTED submission is a 422 with the findings attached
-   * — not a 500 and not a silent 200. The publisher is looking at the form, and
-   * the findings are the fix list.
+   * Submit a version.
+   *
+   * A REJECTED submission is still a 201, and that is deliberate: the version row
+   * WAS created — rejected submissions are kept, with their findings, so the
+   * publisher's third attempt can see the first two. An error status would also
+   * make every HTTP client discard the body, and the body IS the fix list. The
+   * outcome is `approved`, which callers branch on.
    */
   router.post('/packages/:id/versions', async (c) => {
     const { userId, env } = ctx(c);
@@ -248,7 +252,7 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
         requestedScopes: body.requestedScopes ?? [],
         changelog: body.changelog ?? null,
       });
-      return c.json({ version, approved }, approved ? 201 : 422);
+      return c.json({ version, approved }, 201);
     } catch (error) {
       const { body: b, status } = fail(error);
       return c.json(b, status);
