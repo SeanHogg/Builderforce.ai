@@ -171,6 +171,23 @@ function applyRenames(raw, text) {
     renameColumn(m[1].toLowerCase(), m[2].toLowerCase(), m[3].toLowerCase());
 }
 
+/**
+ * Every column dropped by an ALTER TABLE, INCLUDING the multi-action form.
+ *
+ * `ALTER TABLE t DROP COLUMN a, DROP COLUMN b;` is one statement, and only `a` sits
+ * next to the `ALTER TABLE` keyword — matching the keyword and the column in a single
+ * regex silently keeps every column after the first comma, which then reads as a
+ * migrated column that schema.ts forgot to declare. This mirrors `alterBlockRe`,
+ * which already treats ADD COLUMN as a comma-separated list.
+ */
+function* droppedColumns(text) {
+  for (const block of text.matchAll(/ALTER TABLE\s+(?:IF EXISTS\s+)?([a-z_][a-z_0-9]*)\s+([\s\S]*?);/gi)) {
+    const table = block[1].toLowerCase();
+    for (const drop of block[2].matchAll(/DROP COLUMN(?:\s+IF EXISTS)?\s+([a-z_][a-z_0-9]*)/gi))
+      yield { table, column: drop[1].toLowerCase() };
+  }
+}
+
 for (const file of sqlFiles) {
   const raw = readFileSync(resolve(dir, file), 'utf8');
   // Strip BLOCK comments before line comments: several migrations document
@@ -189,9 +206,7 @@ for (const file of sqlFiles) {
 
   // A later DROP COLUMN removes it from the live schema just like DROP TABLE removes
   // the table. Process before renames, in migration order.
-  for (const m of text.matchAll(/ALTER TABLE\s+(?:IF EXISTS\s+)?([a-z_][a-z_0-9]*)\s+DROP COLUMN(?:\s+IF EXISTS)?\s+([a-z_][a-z_0-9]*)/gi)) {
-    const table = m[1].toLowerCase();
-    const column = m[2].toLowerCase();
+  for (const { table, column } of droppedColumns(text)) {
     const direct = migratedColumns.get(table);
     if (direct) {
       direct.delete(column);
@@ -227,8 +242,8 @@ for (const file of sqlFiles) {
 
   // Re-apply drops after renames as well. This handles `RENAME TO new; DROP COLUMN`
   // sequences in one migration without requiring a full SQL statement parser.
-  for (const m of text.matchAll(/ALTER TABLE\s+(?:IF EXISTS\s+)?([a-z_][a-z_0-9]*)\s+DROP COLUMN(?:\s+IF EXISTS)?\s+([a-z_][a-z_0-9]*)/gi)) {
-    migratedColumns.get(m[1].toLowerCase())?.delete(m[2].toLowerCase());
+  for (const { table, column } of droppedColumns(text)) {
+    migratedColumns.get(table)?.delete(column);
   }
 }
 
