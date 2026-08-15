@@ -55,6 +55,11 @@ import {
   podcastOutreach,
   promoProjects,
   referralEntries,
+  siteReleases,
+  siteUserSessions,
+  siteUsers,
+  socialCampaignPosts,
+  socialCampaigns,
   videos,
   waitlistEntries,
   websitePages,
@@ -103,6 +108,11 @@ export const GROWTH_ENTITIES = defineDomainEntities('growth', [
   eventWaitlist,
   eventMatchmaking,
   promoProjects,
+  /** A campaign published to the workspace's own social accounts. Authored like
+   *  any other campaign, so it is writable like any other campaign — the
+   *  counters it also carries are stamped by the publish sweep, and `id`,
+   *  tenancy and the timestamps are never writable anywhere. */
+  socialCampaigns,
   /** Settled money — a boost is paid for before it runs (§5 step 3 narrowed both
    *  checkout tables to order satellites). */
   entity(boostCheckouts, { readOnly: true }),
@@ -113,6 +123,21 @@ export const GROWTH_ENTITIES = defineDomainEntities('growth', [
   /** Delivery read back from the ad networks by the `ad-insights` sweep — restated by
    *  the networks themselves, so never writable from a seat surface. */
   entity(adInsights, { readOnly: true }),
+  /** What went out, to which account, under which permalink. The same rule the
+   *  email ledger keeps: editing a delivery record would rewrite what the world
+   *  already saw, and the retry counter that bounds a requeue is only sound
+   *  while the publisher is its single writer. */
+  entity(socialCampaignPosts, { readOnly: true }),
+  /** A published build, kept so a worse one can be rolled back. Written by the
+   *  publish path; `project_sites.r2_prefix` is the pointer to the current one,
+   *  so a hand-edited release row would point serving at a build nobody chose. */
+  entity(siteReleases, { readOnly: true }),
+  /** END USERS of a generated app — a separate identity space from `users`, and
+   *  the reason it is read-only here: a generic PATCH over an identity table is
+   *  an account takeover in the app the tenant shipped. Sign-up and sign-in own
+   *  these rows; a seat surface reads them. */
+  entity(siteUsers, { readOnly: true }),
+  entity(siteUserSessions, { readOnly: true }),
   entity(marketingSessionPrompts, { readOnly: true }),
   entity(marketingHeatmapScreenshots, { readOnly: true }),
   entity(eventRemindersSent, { readOnly: true }),

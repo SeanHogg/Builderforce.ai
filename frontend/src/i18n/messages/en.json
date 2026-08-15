@@ -4004,7 +4004,8 @@
       "autonomy": "Autonomy",
       "chatModes": "Conversations vs Executions",
       "aiHub": "AI Insights",
-      "deliveryHub": "Delivery"
+      "deliveryHub": "Delivery",
+      "paidMedia": "Paid media"
     },
     "title": {
       "aiProductivity": "AI Productivity Score",
@@ -4142,7 +4143,11 @@
       "delivHubDelayTaxonomy": "Delay causes",
       "aiHubConsumption": "AI tokens this month",
       "delivHubVerdict": "Are you delivering value?",
-      "overviewAsk": "Ask a question"
+      "overviewAsk": "Ask a question",
+      "paidMediaSpend": "Paid spend",
+      "paidMediaCostPerResult": "Cost per result",
+      "paidMediaSpendByNetwork": "Spend by network",
+      "paidMediaSpendTrend": "Daily spend"
     },
     "loading": "Loading…",
     "overview": {
@@ -4357,7 +4362,15 @@
       "delivHubDelayTaxonomyDesc": "Why work is running late",
       "aiHubConsumptionDesc": "AI tokens consumed this month, with the month-to-date daily trend.",
       "delivHubVerdictDesc": "Delivery health at a glance — one verdict and a 0–100 score fused from DORA, cycle time and live bottlenecks.",
-      "overviewAsk": "Ask for any metric in plain English and get the number, plus the metric it matched."
+      "overviewAsk": "Ask for any metric in plain English and get the number, plus the metric it matched.",
+      "paidMediaSpend": "What the connected ad networks charged over the window.",
+      "paidMediaCostPerResult": "Spend divided by the results the networks attributed."
+    },
+    "paidMedia": {
+      "noSpend": "No paid delivery recorded in this window.",
+      "noResults": "No results attributed yet.",
+      "spendSub": "{clicks} clicks · {conversions} results",
+      "costPerResultSub": "across {conversions} results"
     }
   },
   "compile": {
@@ -8427,17 +8440,32 @@
     },
     "resume": {
       "title": "Résumé",
-      "subtitle": "Uploaded to hired.video and shown in the embedded viewer.",
+      "subtitle": "Upload it, pick a design, and choose who can see it.",
       "upload": "Upload résumé",
       "replace": "Replace résumé",
       "uploading": "Uploading…",
-      "viewerTitle": "Résumé viewer",
-      "viewerPending": "Your résumé is being processed by hired.video.",
-      "viewerNotConnected": "Connect hired.video to show your embedded résumé.",
-      "claimHiredVideo": "Claim your hired.video account",
-      "connectExisting": "Connect existing hired.video account",
-      "connecting": "Connecting…",
-      "connectUnavailable": "hired.video isn't available right now."
+      "uploaded": "Imported “{title}”.",
+      "uploadFailed": "That file could not be imported.",
+      "loading": "Loading your résumé…",
+      "loadFailed": "Your résumé could not be loaded.",
+      "updateFailed": "That change could not be saved.",
+      "empty": "No résumé yet. Upload a PDF, Word document, or text file to get started.",
+      "fillFromResume": "Fill profile from résumé",
+      "filling": "Reading résumé…",
+      "autofilled": "Profile fields filled in. Review them, then save.",
+      "autofillUnavailable": "We could not read enough from this résumé to fill anything in.",
+      "autofillFailed": "Your résumé could not be read.",
+      "styleLabel": "Design",
+      "privacyLabel": "Who can see it",
+      "versionLabel": "Version shown",
+      "versionOriginal": "original",
+      "versionCount": "{count, plural, one {# version} other {# versions}}",
+      "privacy": {
+        "public": "Anyone",
+        "recruiter_only": "Recruiters",
+        "connections": "My connections",
+        "private": "Only me"
+      }
     },
     "gigs": {
       "title": "Find work",

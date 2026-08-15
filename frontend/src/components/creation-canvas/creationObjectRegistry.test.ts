@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationObjectAiContext, creationObjectDefinition, creationObjectMutableFields, emptyShellProblem, sanitizeCreationObjectPatch } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationObjectAiContext, creationObjectDefinition, creationObjectMutableFields, emptyShellProblem, sanitizeCreationObjectPatch, TITLE_IS_CONTENT_KINDS } from './creationObjectRegistry';
 import { CREATION_CONNECTION_KINDS, CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
 
 describe('creation object registry', () => {
@@ -14,7 +14,10 @@ describe('creation object registry', () => {
     for (const definition of CREATION_OBJECT_REGISTRY) {
       const data = createDefaultCreationData(definition.kind);
       expect(data.kind).toBe(definition.kind);
-      expect(data.title.trim()).not.toBe('');
+      // A sticky is the one kind whose title IS its content, so it starts blank
+      // on purpose — see `TITLE_IS_CONTENT_KINDS`. Every other kind arrives named.
+      if (TITLE_IS_CONTENT_KINDS.has(definition.kind)) expect(data.title).toBe('');
+      else expect(data.title.trim()).not.toBe('');
       expect(creationObjectDefinition(definition.kind)).toBe(definition);
       expect(definition.actions.length).toBeGreaterThan(0);
       expect(definition.actions).toEqual(expect.arrayContaining(['inspect', 'edit']));

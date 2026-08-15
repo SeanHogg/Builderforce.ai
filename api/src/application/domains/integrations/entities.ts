@@ -34,7 +34,7 @@ export const INTEGRATIONS_ENTITIES = defineDomainEntities('integrations', [
   //
   // There is no `publisher` entity, and there is no longer a table for one: a
   // publisher is a WORKSPACE with `tenants.publisher_state <> 'none'` (migration
-  // 0471). Registering a facet of `tenants` as a domain entity here would give
+  // 0472). Registering a facet of `tenants` as a domain entity here would give
   // the integrations domain an owner's claim over the identity context's root.
   entity(extensionPackages, { kind: 'extension', registers: true, readOnly: true }),
   entity(extensionVersions, { readOnly: true }),

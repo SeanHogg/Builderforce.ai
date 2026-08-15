@@ -4004,7 +4004,8 @@
       "autonomy": "Autonomie",
       "chatModes": "Discussions et exécutions",
       "aiHub": "Aperçus IA",
-      "deliveryHub": "Livraison"
+      "deliveryHub": "Livraison",
+      "paidMedia": "Médias payants"
     },
     "title": {
       "aiProductivity": "Score de productivité IA",
@@ -4142,7 +4143,11 @@
       "delivHubDelayTaxonomy": "Causes de retard",
       "aiHubConsumption": "Jetons d'IA ce mois-ci",
       "delivHubVerdict": "Livrez-vous de la valeur ?",
-      "overviewAsk": "Posez une question"
+      "overviewAsk": "Posez une question",
+      "paidMediaSpend": "Dépense publicitaire",
+      "paidMediaCostPerResult": "Coût par résultat",
+      "paidMediaSpendByNetwork": "Dépense par régie",
+      "paidMediaSpendTrend": "Dépense quotidienne"
     },
     "loading": "Chargement…",
     "overview": {
@@ -4357,7 +4362,15 @@
       "delivHubDelayTaxonomyDesc": "Pourquoi le travail est en retard",
       "aiHubConsumptionDesc": "Jetons d'IA consommés ce mois-ci, avec la tendance quotidienne depuis le début du mois.",
       "delivHubVerdictDesc": "L'état de la livraison en un coup d'œil : un verdict et un score de 0 à 100 combinant DORA, le temps de cycle et les goulots d'étranglement en direct.",
-      "overviewAsk": "Posez une question sur n'importe quelle métrique en langage naturel et obtenez le chiffre ainsi que la métrique correspondante."
+      "overviewAsk": "Posez une question sur n'importe quelle métrique en langage naturel et obtenez le chiffre ainsi que la métrique correspondante.",
+      "paidMediaSpend": "Ce que les régies connectées ont facturé sur la période.",
+      "paidMediaCostPerResult": "Dépense divisée par les résultats attribués."
+    },
+    "paidMedia": {
+      "noSpend": "Aucune diffusion payante enregistrée sur cette période.",
+      "noResults": "Aucun résultat attribué pour l'instant.",
+      "spendSub": "{clicks} clics · {conversions} résultats",
+      "costPerResultSub": "sur {conversions} résultats"
     }
   },
   "compile": {
@@ -8426,17 +8439,32 @@
     },
     "resume": {
       "title": "CV",
-      "subtitle": "Téléversé sur hired.video et affiché dans la visionneuse intégrée.",
+      "subtitle": "Importez-le, choisissez une mise en page et décidez qui peut le voir.",
       "upload": "Téléverser le CV",
       "replace": "Remplacer le CV",
       "uploading": "Téléversement…",
-      "viewerTitle": "Visionneuse de CV",
-      "viewerPending": "Votre CV est en cours de traitement par hired.video.",
-      "viewerNotConnected": "Connectez hired.video pour afficher votre CV intégré.",
-      "claimHiredVideo": "Revendiquez votre compte hired.video",
-      "connectExisting": "Connecter un compte hired.video existant",
-      "connecting": "Connexion…",
-      "connectUnavailable": "hired.video n'est pas disponible pour le moment."
+      "uploaded": "« {title} » importé.",
+      "uploadFailed": "Ce fichier n'a pas pu être importé.",
+      "loading": "Chargement de votre CV…",
+      "loadFailed": "Votre CV n'a pas pu être chargé.",
+      "updateFailed": "La modification n'a pas pu être enregistrée.",
+      "empty": "Aucun CV pour le moment. Importez un PDF, un document Word ou un fichier texte pour commencer.",
+      "fillFromResume": "Remplir le profil depuis le CV",
+      "filling": "Lecture du CV…",
+      "autofilled": "Champs du profil remplis. Vérifiez-les, puis enregistrez.",
+      "autofillUnavailable": "Nous n'avons pas pu lire assez d'informations dans ce CV.",
+      "autofillFailed": "Votre CV n'a pas pu être lu.",
+      "styleLabel": "Mise en page",
+      "privacyLabel": "Qui peut le voir",
+      "versionLabel": "Version affichée",
+      "versionOriginal": "original",
+      "versionCount": "{count, plural, one {# version} other {# versions}}",
+      "privacy": {
+        "public": "Tout le monde",
+        "recruiter_only": "Les recruteurs",
+        "connections": "Mes contacts",
+        "private": "Moi uniquement"
+      }
     },
     "gigs": {
       "title": "Trouver du travail",

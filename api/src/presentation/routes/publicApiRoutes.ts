@@ -4,7 +4,7 @@
  * Read-only endpoints an external site calls with a tenant API key, to embed
  * Builderforce.ai listings.
  *
- * ── ONE CREDENTIAL (migration 0471) ─────────────────────────────────────────
+ * ── ONE CREDENTIAL (migration 0472) ─────────────────────────────────────────
  * These used to authenticate with a `bfai_*` key from `developer_api_keys` — a
  * second key table with a second middleware and a second answer to "what may this
  * caller do". A developer is a tenant, so the key is a `tenant_api_keys` row and
@@ -44,7 +44,7 @@ interface ApiCaller { keyId: string; tenantId: number }
  *
  * Header parsing is genuinely the presentation layer's job; the hash/lookup/
  * revoked/scope triple is not, and lives in the shared service. The ORIGIN check
- * is new to this surface and is the reason migration 0471 grandfathered every
+ * is new to this surface and is the reason migration 0472 grandfathered every
  * copied key onto the any-origin allowlist: these endpoints exist to be called
  * from an external site's page, and inheriting the tenant default of server-only
  * would have revoked exactly that usage on deploy day.

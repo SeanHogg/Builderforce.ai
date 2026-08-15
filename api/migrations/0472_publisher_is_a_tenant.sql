@@ -1,4 +1,4 @@
--- 0471 — A developer is a tenant. Only the tenant survives.
+-- 0472 — A developer is a tenant. Only the tenant survives.
 --
 -- ── THE DECISION ────────────────────────────────────────────────────────────
 -- 0467 introduced a PUBLISHER as a first-class party, deliberately distinct from

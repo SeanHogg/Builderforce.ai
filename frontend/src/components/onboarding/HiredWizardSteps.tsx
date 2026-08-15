@@ -127,7 +127,7 @@ export function WizardResumeStep() {
     setUploading(true); setUploadError(null);
     try {
       const res = await uploadMyResume(file);
-      setFilename(res.resumeFilename);
+      setFilename(res.resumeTitle);
       invalidateMyTalentProfile();
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : String(err));
@@ -159,7 +159,7 @@ export function WizardResumeStep() {
 
   if (loading) return <p style={intro}>{tf('loading')}</p>;
 
-  const currentFile = filename ?? profile?.resumeFilename ?? null;
+  const currentFile = filename ?? profile?.resume?.title ?? null;
 
   return (
     <div>

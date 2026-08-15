@@ -16,6 +16,7 @@ import { INCIDENT_WIDGETS } from '@/components/widgets/registry-modules/incident
 import { WORKFORCE_WIDGETS } from '@/components/widgets/registry-modules/workforceWidgets';
 import { WORKFORCE_PLAN_WIDGETS } from '@/components/widgets/registry-modules/workforcePlanWidgets';
 import { EMP_METRICS_WIDGETS } from '@/components/widgets/registry-modules/empMetricsWidgets';
+import { PAID_MEDIA_WIDGETS } from '@/components/widgets/registry-modules/paidMediaWidgets';
 
 /**
  * The single aggregation point for the app-wide widget registry.
@@ -43,6 +44,9 @@ export const ALL_WIDGETS: WidgetDef[] = [
   ...CHAT_MODE_WIDGETS,
   ...FINANCE_WIDGETS,
   ...FORECAST_WIDGETS,
+  // Paid media — the CMO's `measure` half, pinnable anywhere rather than only
+  // inside the canvas panel that launches the spend.
+  ...PAID_MEDIA_WIDGETS,
   // ── Non-insights surfaces (proves the registry is app-wide) ──
   ...CORE_WIDGETS,
   ...CATALOG_WIDGETS,

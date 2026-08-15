@@ -204,7 +204,7 @@ export const mailboxAutomationReplies = pgTable('mailbox_automation_replies', {
 // argument against the table rather than a note beside it.
 
 
-// ═══ developer portal / extension marketplace (PRD 24, migrations 0467 + 0471) ═══
+// ═══ developer portal / extension marketplace (PRD 24, migrations 0467 + 0472) ═══
 //
 // ── WHY THESE THREE TABLES AND NOT MORE ─────────────────────────────────────
 // Everything a third party could build for this platform lands in one of two
@@ -223,7 +223,7 @@ export const mailboxAutomationReplies = pgTable('mailbox_automation_replies', {
 // here?") would become three queries that disagree. So `kind` is a VALUE, exactly
 // as `discipline` is on `field_jobs` and `builtin_kind` is on `ide_agents`.
 //
-// ── AND THE PUBLISHER IS A TENANT (0471) ────────────────────────────────────
+// ── AND THE PUBLISHER IS A TENANT (0472) ────────────────────────────────────
 // 0467 shipped `developer_orgs` + `developer_org_members` as a party model beside
 // the one that already existed, on the argument that a vendor is not necessarily a
 // customer. That was rejected: a developer IS a tenant. The publisher's identity,

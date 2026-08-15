@@ -8698,7 +8698,7 @@ export const projectBackendApi = {
 /**
  * A publisher's state — 'none' means this workspace does not publish. One ordered
  * scale rather than a boolean plus a tier, so "not a publisher, yet verified" is
- * unrepresentable. See migration 0471: a developer is a tenant.
+ * unrepresentable. See migration 0472: a developer is a tenant.
  */
 export type PublisherState = 'none' | 'unverified' | 'domain_verified' | 'identity_verified';
 export type ExtensionListingState = 'draft' | 'listed' | 'delisted';

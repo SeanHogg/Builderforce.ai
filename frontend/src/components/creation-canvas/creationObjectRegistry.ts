@@ -556,6 +556,21 @@ export function creationObjectMutableFields(kind: CreationObjectKind): readonly 
 }
 
 /**
+ * Kinds whose `title` IS their content rather than a name for it.
+ *
+ * Every other object on the board is a named thing with a body: a `prd` is called
+ * something and then says something. A sticky is only its words, so it has one
+ * field and that field starts blank — a sticky that arrives reading "New note" is
+ * a card whose first interaction is deleting the text on it, which is the same
+ * defect as the workflow that used to arrive saying "Ready".
+ *
+ * Exported because the registry's "every kind arrives named" invariant is real and
+ * has exactly this exception; asserting it needs one place to read the exception
+ * from, rather than each consumer spelling `kind === 'sticky'` and drifting.
+ */
+export const TITLE_IS_CONTENT_KINDS: ReadonlySet<CreationObjectKind> = new Set<CreationObjectKind>(['sticky']);
+
+/**
  * Kinds whose object is legitimately created EMPTY, with a reason each.
  *
  * The shell is the point for these: a Builder workspace is seeded from a starter
@@ -724,7 +739,7 @@ export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
   mutableFields: creationObjectMutableFields(definition.kind),
   allowedConnections: CREATION_CONNECTION_KINDS,
   contextAdapter: creationObjectAiContext,
-  previewAdapter: (data: CreationNodeData) => ({ kind: data.kind, title: data.title, ...(data.status ? { status: data.status } : {}) }),
+  previewAdapter: (data: CreationNodeData) => ({ kind: data.kind, title: creationObjectName(data), ...(data.status ? { status: data.status } : {}) }),
 }));
 
 const byKind = new Map(CREATION_OBJECT_REGISTRY.map((definition) => [definition.kind, definition]));
@@ -737,6 +752,23 @@ export function creationObjectDefinition(kind: CreationObjectKind): CreationObje
 
 export function createDefaultCreationData(kind: CreationObjectKind): CreationNodeData {
   return creationObjectDefinition(kind).createData();
+}
+
+/**
+ * What to CALL an object anywhere it is referred to rather than drawn — the accessible
+ * outline, a preview chip, the Brain's roster of connected work.
+ *
+ * Most kinds mint a default title, but the `TITLE_IS_CONTENT_KINDS` above deliberately
+ * do not: a sticky's text IS its title, so prefilling it would make every new note
+ * something to clear before typing. That is right on the board and wrong everywhere
+ * else — the outline rendered `aria-label="Focus "` for one, an unnamed control with
+ * nothing to distinguish it from the next blank note, and the Brain's roster of
+ * connected work drew an empty line. So a name is the title when there is one and the
+ * kind's label when there is not, decided HERE rather than by each consumer inventing
+ * its own fallback (or, as all three did, not inventing one).
+ */
+export function creationObjectName(data: Pick<CreationNodeData, 'kind' | 'title'>): string {
+  return data.title?.trim() || creationObjectDefinition(data.kind).label;
 }
 
 export function availableCreationObjects(capabilities: ReadonlySet<string>): readonly CreationObjectDefinition[] {

@@ -8,11 +8,11 @@
  * which is the same rule written twice with two chances to disagree about whether
  * a manager counts.
  *
- * The publisher paths (PRD 24, migration 0471) are the first callers that need
+ * The publisher paths (PRD 24, migration 0472) are the first callers that need
  * "at least this role" rather than "exactly this role", because a developer is a
  * tenant and a publisher's staff are `tenant_members`. Rather than give that
  * context its OWN three-value ladder — which is precisely what `developer_org
- * _members` did, and precisely what 0471 deleted — the order is declared here,
+ * _members` did, and precisely what 0472 deleted — the order is declared here,
  * once, against the roles that already exist.
  *
  * Pure data and one query. No HTTP, no caching decisions: a membership read is

@@ -1,6 +1,90 @@
+## ✅ RESOLVED 2026-08-15 — Every consolidated table has an entity-catalog entry again
+
+`entityCatalog.test.ts`'s "covers every consolidated table" was red on `main` with nine
+tables uncovered, and the register recorded a real blocker: the owning SEAT for each was a
+bounded-context decision, not a lookup, and seven of them belonged to work that was actively
+landing in the tree.
+
+Closed from both directions on the same day. Migration **0472** removed two of the nine
+outright — `developer_orgs` and `developer_org_members` are not uncovered tables, they are
+tables that should never have existed, because a publisher is a workspace. The remaining
+seven were filed by the pass that owned them: `llm_action_ratings` → `agents`;
+`social_campaigns`, `social_campaign_posts`, `site_releases`, `site_users`,
+`site_user_sessions` → `growth`; `realizations` → `delivery`.
+
+One defect surfaced underneath it and is fixed here: `entityCatalog.test.ts` carried its OWN
+creates-only scan of the migrations directory, under a comment claiming it read "the same
+source `check-table-adoption.mjs` measures". That had stopped being true when the guard
+learned to replay `DROP TABLE`. So a dropped table left the guard green and the test red,
+demanding an entity entry for a relation Postgres does not have. The test now imports
+`collectCreatedTables` from the shared collector, which is what the comment always said.
+
+---
+
+## ✅ RESOLVED 2026-08-15 — The canvas has a second axis: WHICH runtime is mounted
+
+`frontend/src/lib/canvasSurfaces.ts` + `CanvasSurfaceRouter.tsx` + `CanvasChatSurface.tsx`.
+
+### What was missing
+
+The canvas had one first-class extensibility hook — the object KIND, declared once as spec
+data so a new kind is an entry rather than a render branch. It answered *"what is this
+thing?"* and never answered *"how is this board read?"*. There was exactly one answer to
+the second question (a node graph) with 3D bolted on beside it as a boolean.
+
+That is the wrong metaphor for a conversation, and it is why someone arriving with a
+question landed on a board offering ~95 object kinds. It will also be the wrong metaphor
+for a podcast (time is the axis) and a resume (a page is the axis) — see the open Gap
+Register entry for the `page` / `timeline` / `play` runtimes, deliberately not in this pass.
+
+### What shipped
+
+- **The registry.** `graph` / `scene3d` / `chat`, each declaring `showsBoard`,
+  `showsObjects`, `brainIsSurface` and `persist`. Nothing branches on an id: the
+  stylesheet keys on `:not([data-view='graph'])`, the selection toolbar and large-session
+  notice read `showsObjects` (the 3D space draws objects *without* the flat board — two
+  questions, two flags), and only a surface the visitor CHOSE is remembered, so a canvas
+  never reopens silently rotated into 3D.
+- **The router**, modelled on hired.video's `CanvasRouter`: surfaces arrive as ReactNodes
+  the host assembles, so no runtime's props leak into the dispatch. The flat board is
+  deliberately not in the map — React Flow stays mounted so the viewport and selection
+  survive a trip through another surface and back.
+- **The chat surface**, which is the *zero-object case of the canvas*, not a second page.
+  It renders `BrainSurfaceBody` verbatim (the same component the edge dock and the inline
+  Brain Object use), owns no composer of its own, and stands the edge dock and its
+  launcher down so there is never a second live transcript. Its footer carries a live
+  count of what the conversation has already put on the board behind it.
+- **The 3D boolean moved in.** `useCanvasThreeD` still serves the four other spatial
+  canvases; the creation canvas derives 3D from the surface instead, so one state and one
+  control (`CanvasSurfaceSwitcher`, rendered in both the rail and the phone stack) own the
+  decision. Its buttons name the surface ("3D space"), not the act.
+
+### Two defects found on the way, both fixed here
+
+- **`BrainSurfaceActions` asked the wrong question.** It hid "show this in the Brain
+  Object" when `useCanvas3DControls()` was non-null — which answers *"is the 3D scene
+  up?"* and was only accidentally the same answer as *"is there a board to move into?"*.
+  It now reads the surface (`canvasSurfaceContext.tsx`). Its dismiss is optional for the
+  same reason: closing a conversation that IS the page leaves nothing behind.
+- **A blank-by-design object was an unnamed control.** A new `sticky` starts with an empty
+  title on purpose (its text *is* its title), which is right on the board and wrong
+  everywhere it is only referred to: the accessible outline rendered
+  `aria-label="Focus "` and the Brain's connected-work roster drew an empty line. One
+  shared rule now decides — `creationObjectName()` — and all three consumers read it.
+
+### One test primitive was quietly less capable than what it stood in for
+
+`realCatalogTranslations.ts` hard-coded `one {…} other {…}` in that order, so a catalog
+entry opening with an exact match (`{count, plural, =0 {Open the board} one {…} other {…}}`
+— how a real empty state is written) did not match at all and the raw ICU source was
+asserted against as if it were copy. It now parses every arm, exact matches first. That
+file's own header warns about exactly this class of drift; this was the second instance.
+
+---
+
 ## ✅ RESOLVED 2026-08-15 — A developer is a tenant. Only the tenant survives.
 
-Migration **0471** (`0471_publisher_is_a_tenant.sql`). Closes two Gap Register entries and
+Migration **0472** (`0472_publisher_is_a_tenant.sql`). Closes two Gap Register entries and
 narrows a third, on an explicit owner decision.
 
 ### What was wrong
@@ -457,16 +541,16 @@ The original entry, for the record:
 
 ## ✅ RESOLVED 2026-08-15 — Developer Portal Phase 1: the third bucket exists (PRD 24)
 
-> **⚠️ PARTLY SUPERSEDED, same day, by migration 0471** (the entry at the top of this file).
+> **⚠️ PARTLY SUPERSEDED, same day, by migration 0472** (the entry at the top of this file).
 > The *third bucket* — a published, installable extension — is current and unchanged, and so is
 > everything below about packages, versions, installs, scope grants, review and the
 > `connectorRegistry` third source. What did NOT survive is this entry's PARTY MODEL: the
 > `developer_orgs`, `developer_org_members` and `developer_api_keys` tables described under
-> "What shipped" were removed by 0471, which made a publisher a FACET of `tenants`
+> "What shipped" were removed by 0472, which made a publisher a FACET of `tenants`
 > (`publisher_state`) rather than a second kind of party. Read the sections below as the
 > history of how Phase 1 arrived, not as a description of the schema. The three guards this
 > entry records arguing with — `check-signature-duplication`, `check-shape-lint` and the
-> tenancy guard — were right, and 0471 acts on them.
+> tenancy guard — were right, and 0472 acts on them.
 
 **The finding.** Everything a third party could build for the platform landed in one of two buckets:
 TENANT-PRIVATE (a `connectors` row, a `tenant_mcp_extensions` row — real capability, one workspace) or
@@ -537,7 +621,7 @@ argument `agent_definition_versions` makes, one layer out. That adjudication sta
 
 A second one, for `developer_org_members`, was written here and **has since been withdrawn**: it argued
 that the `memberships` primitive was unusable because it is tenant-scoped and a publisher has no tenant.
-0471 removed the premise rather than the guard — a publisher is a tenant, its staff are `tenant_members`,
+0472 removed the premise rather than the guard — a publisher is a tenant, its staff are `tenant_members`,
 and the guard was correct that the table was `memberships` with the tenancy taken out.
 
 ## ✅ RESOLVED 2026-08-15 — The free plan announced an upstream model it would not let you pick; the thumbs it collected taught nothing

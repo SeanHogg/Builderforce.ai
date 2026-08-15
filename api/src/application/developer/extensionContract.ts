@@ -72,7 +72,7 @@ export type ReviewState = (typeof REVIEW_STATES)[number];
  * and is expressed by the array index, so a caller asks "at least this tier?"
  * rather than enumerating states — one comparison that cannot drift from the list.
  *
- * Stored on `tenants.publisher_state` (migration 0471). Before that it was
+ * Stored on `tenants.publisher_state` (migration 0472). Before that it was
  * `developer_orgs.verification_state`, on a party model that no longer exists:
  * a developer is a tenant.
  */
@@ -103,7 +103,7 @@ export function meetsVerification(
  * `application/tenant/tenantRoles.ts`. There is deliberately no role ladder here:
  * this context had its own three-value one (`owner`/`admin`/`publisher`) beside
  * the tenant's four-value one, so "may this person ship a version?" had two
- * answers that were free to disagree. Migration 0471 kept the ladder that already
+ * answers that were free to disagree. Migration 0472 kept the ladder that already
  * governed everything else.
  *
  *   ship a version, create a package  → at least `developer`

@@ -194,7 +194,7 @@ export const authTokens = pgTable('auth_tokens', {
 /**
  * Tenant API keys (bfk_*) — the ONE credential presented by anything calling us
  * from outside a browser session: a tenant app (hired.video, burnrateos), a
- * customer's integration server, and — since 0471 — a PUBLISHER's CI shipping an
+ * customer's integration server, and — since 0472 — a PUBLISHER's CI shipping an
  * extension version.
  *
  * ── WHY THERE IS NO SECOND KEY TABLE ────────────────────────────────────────
@@ -202,7 +202,7 @@ export const authTokens = pgTable('auth_tokens', {
  * the same concept with a different owner: an outside caller, a hash, a scope
  * list, a revocation. 0467 tried to keep them apart by REMOVING a column until
  * `check-signature-duplication` stopped scoring them as one table — which dodges
- * a threshold rather than answering it. A developer is a tenant (0471), so the
+ * a threshold rather than answering it. A developer is a tenant (0472), so the
  * credential a developer presents is a tenant key, and "what may this caller do"
  * has one answer in one place.
  *
@@ -367,7 +367,7 @@ export const tenants = pgTable('tenants', {
    *  before creating any manual, scheduled, autonomous, or integration run. */
   agentExecutionEnabled:  boolean('agent_execution_enabled').notNull().default(true),
   /**
-   * ── THE PUBLISHER FACET (migration 0471) ────────────────────────────────
+   * ── THE PUBLISHER FACET (migration 0472) ────────────────────────────────
    * A developer IS a tenant. Publishing an extension is something a workspace
    * DOES, not a second kind of party — so these nine columns replaced
    * `developer_orgs` + `developer_org_members` outright rather than joining to

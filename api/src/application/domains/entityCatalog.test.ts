@@ -25,7 +25,7 @@ const api = resolve(__dirname, '..', '..', '..');
  *
  * Read through the SAME collector `check-table-adoption.mjs` uses, which is what
  * this comment already claimed and was not true: the guard had learned to replay
- * `DROP TABLE`, and this file kept its own creates-only copy. So migration 0471 —
+ * `DROP TABLE`, and this file kept its own creates-only copy. So migration 0472 —
  * which drops `developer_orgs` and `developer_org_members` because a publisher is
  * a workspace — left the guard green and this test red, demanding an entity entry
  * for two relations Postgres no longer has. Two implementations of one question

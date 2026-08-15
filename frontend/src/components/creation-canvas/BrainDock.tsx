@@ -11,7 +11,7 @@ import { useModelIdentity } from '@/lib/useLlmModels';
 import { Icon } from '@/components/ui/Icon';
 import type { Edge } from '@xyflow/react';
 import styles from './CreationCanvas.module.css';
-import { creationObjectDefinition } from './creationObjectRegistry';
+import { creationObjectDefinition, creationObjectName } from './creationObjectRegistry';
 import type { CreationFlowNode } from './CreationNode';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
 import type { BrainSurfaceCollaborator } from './brainSurfaceContext';
@@ -383,7 +383,7 @@ export function BrainContextPanel({ node, nodes, edges }: { node: CreationFlowNo
   const roster = (items: CreationFlowNode[], empty: string) => items.length
     ? <div className={styles.brainAssociationList}>{items.map((item) => <div key={item.id}>
       <span aria-hidden><Icon source={creationObjectDefinition(item.data.kind).icon} size={18} /></span>
-      <p><b>{item.data.title}</b><small>{item.data.status || creationObjectDefinition(item.data.kind).label}</small></p>
+      <p><b>{creationObjectName(item.data)}</b><small>{item.data.status || creationObjectDefinition(item.data.kind).label}</small></p>
     </div>)}</div>
     : <p className={styles.brainEmpty}>{empty}</p>;
 

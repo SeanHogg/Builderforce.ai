@@ -55,7 +55,7 @@ const TENANT_INDEPENDENT = new Map([
   ['marketing_session_prompts', 'PRE-TENANT: the prompts behind a `marketing_sessions` row, written on the same pre-signup path and scoped by the same `visitor_id` (0434).'],
   ['web_search_robots', 'a cache of the public robots.txt policy for a DNS domain. The policy and its expiry are identical for every tenant; tenant-owned crawl sources and frontier rows remain tenant-scoped.'],
   // `developer_orgs` and `developer_org_members` were declared here on the
-  // argument that a publisher is not a tenant. Migration 0471 rejected that: a
+  // argument that a publisher is not a tenant. Migration 0472 rejected that: a
   // developer IS a tenant, both tables are gone, and `extension_packages` now
   // carries the publisher's `tenant_id` like everything else. That the exemption
   // could be argued for at all is what this map is supposed to surface — the

@@ -1,7 +1,7 @@
 /**
  * `/api/developer` — the Developer Portal (PRD 24 Phase 1).
  *
- *   Publisher — the caller's WORKSPACE, because a developer is a tenant (0471)
+ *   Publisher — the caller's WORKSPACE, because a developer is a tenant (0472)
  *     GET    /publisher                     this workspace as a publisher, or null
  *     POST   /publisher                     register it as one
  *     POST   /publisher/verify-domain       start a domain claim → the TXT record
@@ -27,7 +27,7 @@
  * are separate on realizations: showing somebody what they are about to approve
  * must not itself approve it.
  *
- * There are no member endpoints, and their absence is the point of migration 0471.
+ * There are no member endpoints, and their absence is the point of migration 0472.
  * A publisher's staff are its WORKSPACE's members, managed where workspace members
  * have always been managed. Publishing gained no second membership to keep in sync.
  * For the same reason no publisher id appears in a path: the caller's workspace is

@@ -13,10 +13,10 @@ import {
   TALENT_DISCIPLINES, TALENT_AVAILABILITIES, TALENT_SEEKING_MODES, TALENT_WORK_MODES, TALENT_SENIORITIES,
 } from '@/components/freelance/talentFields';
 import {
-  getMyFreelancerProfile, updateMyFreelancerProfile, uploadMyResume,
-  getMyEmbedToken, checkMySlug, getResumeSuggestions, connectHiredVideo,
-  type FreelancerProfile, type SlugCheck,
+  getMyFreelancerProfile, updateMyFreelancerProfile, checkMySlug,
+  type FreelancerProfile, type MyResume, type ResumeSuggestions, type SlugCheck,
 } from '@/lib/freelancerApi';
+import { ProfileResumePanel } from '@/components/freelance/ProfileResumePanel';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 const DISCIPLINES = TALENT_DISCIPLINES;
@@ -42,11 +42,9 @@ export default function FreelancerProfilePage() {
   const [salaryMinText, setSalaryMinText] = useState('');
   const [salaryMaxText, setSalaryMaxText] = useState('');
   const [slugCheck, setSlugCheck] = useState<SlugCheck | null>(null);
-  const [embedUrl, setEmbedUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [autofilling, setAutofilling] = useState(false);
-  const [autofilled, setAutofilled] = useState(false);
-  const [connecting, setConnecting] = useState(false);
+  // Held only so the Preview slide-out can show the résumé alongside unsaved edits.
+  // The panel below owns every résumé interaction and reports the loaded value up.
+  const [myResume, setMyResume] = useState<MyResume | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   // 1500ms confirmation, owned by the shared hook.
   const { copied, copy } = useCopyToClipboard(1500);
@@ -63,8 +61,6 @@ export default function FreelancerProfilePage() {
       setTargetRolesText((p.targetRoles ?? []).join(', '));
       setSalaryMinText(p.desiredSalaryMinCents != null ? (p.desiredSalaryMinCents / 100).toString() : '');
       setSalaryMaxText(p.desiredSalaryMaxCents != null ? (p.desiredSalaryMaxCents / 100).toString() : '');
-      const embed = await getMyEmbedToken('profile').catch(() => null);
-      setEmbedUrl(embed?.embedUrl ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -129,51 +125,15 @@ export default function FreelancerProfilePage() {
     }
   };
 
-  const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true); setError(null);
-    try {
-      await uploadMyResume(file);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  // Pull extracted fields from the résumé and prefill the form (user reviews + saves).
-  const applyResume = async () => {
-    setAutofilling(true); setError(null); setAutofilled(false);
-    try {
-      const s = await getResumeSuggestions();
-      if (!s.available) { setError(t('profile.autofillUnavailable')); return; }
-      set({
-        headline: profile?.headline || s.headline,
-        bio: profile?.bio || s.summary,
-        discipline: profile?.discipline || s.discipline,
-      });
-      if (!currentSkills.length && s.skills.length) setSkillsText(s.skills.join(', '));
-      setAutofilled(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to read résumé');
-    } finally {
-      setAutofilling(false);
-    }
-  };
-
-  const connectHired = async () => {
-    setConnecting(true); setError(null);
-    try {
-      const res = await connectHiredVideo({ redirectUrl: typeof window !== 'undefined' ? window.location.href : undefined });
-      if (res.consentUrl) window.open(res.consentUrl, '_blank', 'noopener,noreferrer');
-      else setError(t('resume.connectUnavailable'));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to connect');
-    } finally {
-      setConnecting(false);
-    }
+  // The résumé panel owns upload, style and version; the only thing the FORM needs
+  // from it is the extracted fields, which the user reviews and then saves.
+  const applyResumeSuggestions = (suggestions: ResumeSuggestions) => {
+    set({
+      headline: profile?.headline || suggestions.headline,
+      bio: profile?.bio || suggestions.summary,
+      discipline: profile?.discipline || suggestions.discipline,
+    });
+    if (!currentSkills.length && suggestions.skills.length) setSkillsText(suggestions.skills.join(', '));
   };
 
   const publicPath = profile ? `/talent/${profile.slug || profile.userId}` : '';
@@ -192,9 +152,11 @@ export default function FreelancerProfilePage() {
       slug: slugText.trim() || null,
       skills: currentSkills,
       hourlyRateCents: rateDollars ? Math.round(parseFloat(rateDollars) * 100) : null,
-      embedUrl,
+      // The preview must show the same résumé a visitor sees, so hand the editor's
+      // loaded family through as the public projection.
+      publicResume: myResume ? { title: myResume.title, family: myResume.family } : profile.publicResume,
     };
-  }, [profile, nameText, slugText, currentSkills, rateDollars, embedUrl]);
+  }, [profile, nameText, slugText, currentSkills, rateDollars, myResume]);
 
   if (loading) return <PageContainer width="readable" style={{ padding: '32px 40px' }}><p style={{ color: 'var(--text-muted)' }}>{t('loading')}</p></PageContainer>;
   if (!profile) return <PageContainer width="readable" style={{ padding: '32px 40px' }}><p style={{ color: 'var(--coral-bright)' }}>{error ?? t('loadFailed')}</p></PageContainer>;
@@ -407,64 +369,17 @@ export default function FreelancerProfilePage() {
           </div>
         </Surface>
 
-        {/* Right: resume + hired.video viewer */}
-        <Surface style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' }}>{t('resume.title')}</h2>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('resume.subtitle')}</p>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <label className="ui-button ui-button--secondary ui-button--sm">
-              {uploading ? t('resume.uploading') : (profile.resumeFilename ? t('resume.replace') : t('resume.upload'))}
-              <input type="file" accept=".pdf,.doc,.docx,.txt,.md" onChange={onUpload} style={{ display: 'none' }} />
-            </label>
-            {(profile.canAutofill || profile.resumeFilename) && (
-              <button type="button" onClick={applyResume} disabled={autofilling} className="ui-button ui-button--secondary ui-button--sm">
-                {autofilling ? t('profile.filling') : `${t('profile.fillFromResume')}`}
-              </button>
-            )}
-          </div>
-          {profile.resumeFilename && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}><Icon source="📄" size="1em" /> {profile.resumeFilename}</p>}
-          {autofilled && <p style={{ fontSize: 12, color: 'rgba(34,197,94,0.9)', margin: 0 }}>{t('profile.autofilled')}</p>}
-
-          {embedUrl ? (
-            <iframe
-              title={t('resume.viewerTitle')}
-              src={embedUrl}
-              style={{ width: '100%', height: 460, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-elevated)' }}
-            />
-          ) : (
-            <div style={{
-              padding: 20, borderRadius: 'var(--radius-lg)', border: '1px dashed var(--border-subtle)', background: 'var(--bg-elevated)',
-              fontSize: 13, color: 'var(--text-muted)', textAlign: 'center',
-            }}>
-              {profile.hiredVideoConnected ? t('resume.viewerPending') : t('resume.viewerNotConnected')}
-              {!profile.hiredVideoConnected && (
-                <div style={{ marginTop: 12 }}>
-                  <button type="button" onClick={connectHired} disabled={connecting}
-                    className="ui-button ui-button--secondary ui-button--sm" style={{ margin: '0 auto', background: 'var(--surface-coral-soft)', border: '1px solid var(--coral-bright)', color: 'var(--coral-bright)' }}>
-                    {connecting ? t('resume.connecting') : t('resume.connectExisting')}
-                  </button>
-                </div>
-              )}
-              {profile.hiredVideoClaimUrl && (
-                <div style={{ marginTop: 10 }}>
-                  <a href={profile.hiredVideoClaimUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ color: 'var(--coral-bright)', fontWeight: 600, textDecoration: 'none' }}>
-                    {t('resume.claimHiredVideo')} →
-                  </a>
-                </div>
-              )}
-            </div>
-          )}
-        </Surface>
+        {/* Right: the résumé — upload it, choose its design, pick which version is the
+            one employers see, and decide who they are. Self-contained because the
+            résumé saves on change while the profile form saves on submit. */}
+        <ProfileResumePanel onAutofill={applyResumeSuggestions} onLoaded={setMyResume} />
       </div>
 
       {/* Preview: exactly what employers see, rendered from unsaved editor state. */}
       {previewProfile && (
         <SlideOutPanel open={previewOpen} onClose={() => setPreviewOpen(false)} title={t('profile.previewTitle')} width="min(680px, 96vw)">
           <div style={{ padding: 20 }}>
-            <TalentProfileView profile={previewProfile} resumeEmptyNote={t('resume.viewerNotConnected')} />
+            <TalentProfileView profile={previewProfile} resumeEmptyNote={t('resume.empty')} />
           </div>
         </SlideOutPanel>
       )}

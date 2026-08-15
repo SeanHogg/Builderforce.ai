@@ -4004,7 +4004,8 @@
       "autonomy": "Autonomía",
       "chatModes": "Conversaciones frente a ejecuciones",
       "aiHub": "Perspectivas de IA",
-      "deliveryHub": "Entrega"
+      "deliveryHub": "Entrega",
+      "paidMedia": "Medios de pago"
     },
     "title": {
       "aiProductivity": "Puntuación de productividad de IA",
@@ -4142,7 +4143,11 @@
       "delivHubDelayTaxonomy": "Causas de retraso",
       "aiHubConsumption": "Tokens de IA este mes",
       "delivHubVerdict": "¿Estáis entregando valor?",
-      "overviewAsk": "Haz una pregunta"
+      "overviewAsk": "Haz una pregunta",
+      "paidMediaSpend": "Inversión publicitaria",
+      "paidMediaCostPerResult": "Coste por resultado",
+      "paidMediaSpendByNetwork": "Inversión por plataforma",
+      "paidMediaSpendTrend": "Inversión diaria"
     },
     "loading": "Cargando…",
     "overview": {
@@ -4357,7 +4362,15 @@
       "delivHubDelayTaxonomyDesc": "Por qué el trabajo va con retraso",
       "aiHubConsumptionDesc": "Tokens de IA consumidos este mes, con la tendencia diaria del mes en curso.",
       "delivHubVerdictDesc": "Estado de la entrega de un vistazo: un veredicto y una puntuación de 0 a 100 que combinan DORA, el tiempo de ciclo y los cuellos de botella en vivo.",
-      "overviewAsk": "Pregunta por cualquier métrica en lenguaje natural y obtén el número junto con la métrica que coincidió."
+      "overviewAsk": "Pregunta por cualquier métrica en lenguaje natural y obtén el número junto con la métrica que coincidió.",
+      "paidMediaSpend": "Lo que cobraron las plataformas conectadas en el periodo.",
+      "paidMediaCostPerResult": "Inversión dividida entre los resultados atribuidos."
+    },
+    "paidMedia": {
+      "noSpend": "No hay entregas de pago registradas en este periodo.",
+      "noResults": "Todavía no se ha atribuido ningún resultado.",
+      "spendSub": "{clicks} clics · {conversions} resultados",
+      "costPerResultSub": "sobre {conversions} resultados"
     }
   },
   "compile": {
@@ -8426,17 +8439,32 @@
     },
     "resume": {
       "title": "Currículum",
-      "subtitle": "Subido a hired.video y mostrado en el visor integrado.",
+      "subtitle": "Súbelo, elige un diseño y decide quién puede verlo.",
       "upload": "Subir currículum",
       "replace": "Reemplazar currículum",
       "uploading": "Subiendo…",
-      "viewerTitle": "Visor de currículum",
-      "viewerPending": "Tu currículum está siendo procesado por hired.video.",
-      "viewerNotConnected": "Conecta hired.video para mostrar tu currículum integrado.",
-      "claimHiredVideo": "Reclama tu cuenta de hired.video",
-      "connectExisting": "Conectar cuenta existente de hired.video",
-      "connecting": "Conectando…",
-      "connectUnavailable": "hired.video no está disponible ahora."
+      "uploaded": "Se importó «{title}».",
+      "uploadFailed": "No se pudo importar ese archivo.",
+      "loading": "Cargando tu currículum…",
+      "loadFailed": "No se pudo cargar tu currículum.",
+      "updateFailed": "No se pudo guardar el cambio.",
+      "empty": "Aún no hay currículum. Sube un PDF, un documento de Word o un archivo de texto para empezar.",
+      "fillFromResume": "Rellenar perfil desde el currículum",
+      "filling": "Leyendo el currículum…",
+      "autofilled": "Campos del perfil rellenados. Revísalos y guarda.",
+      "autofillUnavailable": "No pudimos leer lo suficiente de este currículum para rellenar nada.",
+      "autofillFailed": "No se pudo leer tu currículum.",
+      "styleLabel": "Diseño",
+      "privacyLabel": "Quién puede verlo",
+      "versionLabel": "Versión mostrada",
+      "versionOriginal": "original",
+      "versionCount": "{count, plural, one {# versión} other {# versiones}}",
+      "privacy": {
+        "public": "Cualquiera",
+        "recruiter_only": "Reclutadores",
+        "connections": "Mis contactos",
+        "private": "Solo yo"
+      }
     },
     "gigs": {
       "title": "Buscar trabajo",

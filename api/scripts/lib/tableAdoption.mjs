@@ -65,7 +65,7 @@ function stripComments(text) {
  * which would have added a `pgTable` for a relation Postgres does not have.
  *
  * Measured 2026-08-15: 0467 created `developer_orgs` and `developer_org_members`
- * as a publisher party distinct from a tenant; 0471 rejected that design and
+ * as a publisher party distinct from a tenant; 0472 rejected that design and
  * dropped all three of its tables into `tenants` / `tenant_members` /
  * `tenant_api_keys`. The schema was RIGHT not to declare them, and the guard
  * failed the build for it — the worst kind of guard, one that is louder about

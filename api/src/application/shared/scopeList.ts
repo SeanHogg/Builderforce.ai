@@ -2,7 +2,7 @@
  * A stored SCOPE LIST — the one implementation of "what may this credential do?".
  *
  * Two credentials on this platform answer that question: a tenant API key
- * (`bfk_*` — since migration 0471 that includes the publisher's, which used to be
+ * (`bfk_*` — since migration 0472 that includes the publisher's, which used to be
  * a third), and an extension install's grant. Both store the answer the same way
  * — a JSON array in a `text` column, with NULL or `[]` meaning UNRESTRICTED — and
  * both need the same three operations: serialise on write, deserialise on read,

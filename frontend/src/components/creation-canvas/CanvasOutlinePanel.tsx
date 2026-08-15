@@ -6,6 +6,7 @@ import type { Edge } from '@xyflow/react';
 import styles from './CreationCanvas.module.css';
 import { CanvasPanelFilters } from './CanvasPanelFilters';
 import { filterOutlineNodes, outlineKindCounts } from '@/lib/canvasOutline';
+import { creationObjectName } from './creationObjectRegistry';
 import type { CreationFlowNode } from './CreationNode';
 
 /**
@@ -43,7 +44,7 @@ export function CanvasOutlinePanel({
   const visible = useMemo(() => filterOutlineNodes(nodes, { query: search, kind }), [nodes, search, kind]);
   // Titles are resolved once per render rather than inside the per-edge lookup
   // below, which was O(nodes × edges) on every keystroke.
-  const titleById = useMemo(() => new Map(nodes.map((node) => [node.id, node.data.title])), [nodes]);
+  const titleById = useMemo(() => new Map(nodes.map((node) => [node.id, creationObjectName(node.data)])), [nodes]);
   const chips = useMemo(() => [
     { value: 'all', label: t('outlineFilterAll', { count: nodes.length }) },
     ...kinds.map(({ kind: value, count }) => ({ value, label: `${t(`object.${value}` as 'object.task')} ${count}` })),
@@ -75,7 +76,9 @@ export function CanvasOutlinePanel({
               {t('outlineShowing', { shown: visible.length, total: nodes.length })}
             </p>
             <ol>{visible.map((node) => <li key={node.id}>
-              <button type="button" aria-label={t('focusObject', { title: node.data.title })} onClick={() => onFocus(node.id)}>{node.data.title} ({node.data.kind})</button>
+              {/* Named through the shared rule, so a blank-by-design object (a new
+                  sticky note) is still a control with a name rather than "Focus ". */}
+              <button type="button" aria-label={t('focusObject', { title: creationObjectName(node.data) })} onClick={() => onFocus(node.id)}>{creationObjectName(node.data)} ({node.data.kind})</button>
               <span>{String(node.data.status || t('canvasObject'))}{node.data.placementLocked === true ? ` · ${t('placementLocked')}` : ''}</span>
               <ul>{edges.filter((edge) => edge.source === node.id).map((edge) => <li key={edge.id}>
                 {t('outlineConnection', {

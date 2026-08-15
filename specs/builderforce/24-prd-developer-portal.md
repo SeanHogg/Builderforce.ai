@@ -178,7 +178,7 @@ version of this); hyperscaler marketplace listings (§9, later phase).
 
 ### 5.1 Developer identity — **a developer is a tenant**
 
-> **Superseded (migration 0471).** This section originally proposed a *developer
+> **Superseded (migration 0472).** This section originally proposed a *developer
 > org* as a first-class party distinct from a tenant, on the argument that "a
 > vendor is not necessarily our customer". That was overruled by the owner: **a
 > developer is a tenant, and only the tenant survives.** What follows is the
@@ -368,12 +368,12 @@ tenant · engineering hours for design partners.
 ## 8. Known drift this PRD resolves
 
 - **`/api/v1` is a listings-embed API wearing a platform's name.** ✅ RESOLVED
-  (0471). Four read-only endpoints, keys parented to a **user** while the rest of
+  (0472). Four read-only endpoints, keys parented to a **user** while the rest of
   the platform is tenant-scoped, no `scopes`, no `allowed_origins`, no rate tier —
   while `tenant_api_keys` next to it had all three. The endpoints now authenticate
   with a tenant key through the shared resolver, require `read:catalog`, and
   enforce the origin allowlist that path already had.
-- **Two key models, one concept.** ✅ RESOLVED (0471). `developer_api_keys` and
+- **Two key models, one concept.** ✅ RESOLVED (0472). `developer_api_keys` and
   `tenant_api_keys` both meant "a credential calling us from outside", with
   different columns and different middleware. 0467's answer was to keep them apart
   by REMOVING a column until `check-signature-duplication` stopped scoring them as

@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { RatingStars } from '@/components/freelance/RatingStars';
 import { TrustBadge } from '@/components/freelance/TrustBadge';
 import { ProfileAvatar } from '@/components/profile/ProfileIdentityCard';
+import { ResumeDocumentView } from '@/components/resume/ResumeDocumentView';
 import type { FreelancerProfile, FreelancerStats } from '@/lib/freelancerApi';
 
 /**
@@ -125,9 +126,11 @@ export function TalentProfileView({ profile, actions, resumeEmptyNote }: TalentP
 
       <div style={card}>
         <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 }}>{t('resumeTitle')}</div>
-        {profile.embedUrl ? (
-          <iframe title={t('resumeTitle')} src={profile.embedUrl}
-            style={{ width: '100%', height: 560, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-elevated)' }} />
+        {profile.publicResume ? (
+          // Rendered natively through the shared document view — the same component the
+          // canvas, the owner's editor and the public share link use, so every surface
+          // answers "what does my résumé look like" identically.
+          <ResumeDocumentView family={profile.publicResume.family} framed={false} />
         ) : (
           <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: 0 }}>{resumeEmptyNote ?? t('noResume')}</p>
         )}

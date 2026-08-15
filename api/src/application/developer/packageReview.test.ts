@@ -229,7 +229,7 @@ describe('ordered vocabularies', () => {
   });
 
   it('gates publisher actions on the TENANT role ladder, not a second one', () => {
-    // Migration 0471 deleted this context's own owner/admin/publisher ladder.
+    // Migration 0472 deleted this context's own owner/admin/publisher ladder.
     // A publisher's staff are workspace members, so "may they ship a version?"
     // is answered by the ladder that already governs every other action.
     expect(tenantRoleAtLeast('owner', 'developer')).toBe(true);

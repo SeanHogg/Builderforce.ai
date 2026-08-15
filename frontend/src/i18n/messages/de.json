@@ -4004,7 +4004,8 @@
       "autonomy": "Autonomie",
       "chatModes": "Unterhaltungen und Ausführungen",
       "aiHub": "KI-Einblicke",
-      "deliveryHub": "Lieferung"
+      "deliveryHub": "Lieferung",
+      "paidMedia": "Bezahlte Medien"
     },
     "title": {
       "aiProductivity": "KI-Produktivitätswert",
@@ -4142,7 +4143,11 @@
       "delivHubDelayTaxonomy": "Verzögerungsgründe",
       "aiHubConsumption": "KI-Tokens diesen Monat",
       "delivHubVerdict": "Liefert ihr Wert?",
-      "overviewAsk": "Eine Frage stellen"
+      "overviewAsk": "Eine Frage stellen",
+      "paidMediaSpend": "Werbeausgaben",
+      "paidMediaCostPerResult": "Kosten pro Ergebnis",
+      "paidMediaSpendByNetwork": "Ausgaben je Netzwerk",
+      "paidMediaSpendTrend": "Tägliche Ausgaben"
     },
     "loading": "Laden…",
     "overview": {
@@ -4357,7 +4362,15 @@
       "delivHubDelayTaxonomyDesc": "Warum die Arbeit im Verzug ist",
       "aiHubConsumptionDesc": "Diesen Monat verbrauchte KI-Tokens, mit dem täglichen Verlauf seit Monatsbeginn.",
       "delivHubVerdictDesc": "Lieferzustand auf einen Blick — ein Urteil und ein Wert von 0–100, gebildet aus DORA, Durchlaufzeit und aktuellen Engpässen.",
-      "overviewAsk": "Fragen Sie in natürlicher Sprache nach einer beliebigen Kennzahl und erhalten Sie den Wert samt der zugeordneten Kennzahl."
+      "overviewAsk": "Fragen Sie in natürlicher Sprache nach einer beliebigen Kennzahl und erhalten Sie den Wert samt der zugeordneten Kennzahl.",
+      "paidMediaSpend": "Was die verbundenen Werbenetzwerke im Zeitraum berechnet haben.",
+      "paidMediaCostPerResult": "Ausgaben geteilt durch die zugeordneten Ergebnisse."
+    },
+    "paidMedia": {
+      "noSpend": "In diesem Zeitraum wurde keine bezahlte Auslieferung erfasst.",
+      "noResults": "Noch keine Ergebnisse zugeordnet.",
+      "spendSub": "{clicks} Klicks · {conversions} Ergebnisse",
+      "costPerResultSub": "über {conversions} Ergebnisse"
     }
   },
   "compile": {
@@ -8426,17 +8439,32 @@
     },
     "resume": {
       "title": "Lebenslauf",
-      "subtitle": "Auf hired.video hochgeladen und im eingebetteten Viewer angezeigt.",
+      "subtitle": "Hochladen, Design wählen und festlegen, wer ihn sehen darf.",
       "upload": "Lebenslauf hochladen",
       "replace": "Lebenslauf ersetzen",
       "uploading": "Wird hochgeladen…",
-      "viewerTitle": "Lebenslauf-Viewer",
-      "viewerPending": "Ihr Lebenslauf wird von hired.video verarbeitet.",
-      "viewerNotConnected": "Verbinden Sie hired.video, um Ihren eingebetteten Lebenslauf anzuzeigen.",
-      "claimHiredVideo": "Beanspruchen Sie Ihr hired.video-Konto",
-      "connectExisting": "Bestehendes hired.video-Konto verbinden",
-      "connecting": "Wird verbunden…",
-      "connectUnavailable": "hired.video ist derzeit nicht verfügbar."
+      "uploaded": "„{title}“ importiert.",
+      "uploadFailed": "Diese Datei konnte nicht importiert werden.",
+      "loading": "Lebenslauf wird geladen…",
+      "loadFailed": "Ihr Lebenslauf konnte nicht geladen werden.",
+      "updateFailed": "Die Änderung konnte nicht gespeichert werden.",
+      "empty": "Noch kein Lebenslauf. Laden Sie ein PDF, ein Word-Dokument oder eine Textdatei hoch.",
+      "fillFromResume": "Profil aus Lebenslauf füllen",
+      "filling": "Lebenslauf wird gelesen…",
+      "autofilled": "Profilfelder ausgefüllt. Bitte prüfen und speichern.",
+      "autofillUnavailable": "Aus diesem Lebenslauf ließ sich nicht genug auslesen.",
+      "autofillFailed": "Ihr Lebenslauf konnte nicht gelesen werden.",
+      "styleLabel": "Design",
+      "privacyLabel": "Wer ihn sehen darf",
+      "versionLabel": "Angezeigte Version",
+      "versionOriginal": "Original",
+      "versionCount": "{count, plural, one {# Version} other {# Versionen}}",
+      "privacy": {
+        "public": "Alle",
+        "recruiter_only": "Recruiter",
+        "connections": "Meine Kontakte",
+        "private": "Nur ich"
+      }
     },
     "gigs": {
       "title": "Arbeit finden",

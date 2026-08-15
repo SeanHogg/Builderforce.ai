@@ -16,6 +16,7 @@ import {
   listItems,
   portfolioCompanies,
   portfolioItems,
+  realizations,
   releaseNoteBetaEnrollments,
   releasePlans,
   signOffs,
@@ -47,4 +48,9 @@ export const DELIVERY_ENTITIES = defineDomainEntities('delivery', [
   /** Enrollment records capture a user's beta consent and are changed only by
    *  the release-note enrollment workflow. */
   entity(releaseNoteBetaEnrollments, { readOnly: true }),
+  /** One act of making an idea real: what was planned, what the build produced,
+   *  where it went live. A record OF work, so the builder is its single writer —
+   *  a hand-edited `status` or `result` would answer "what did it actually do?"
+   *  with something nothing ran. */
+  entity(realizations, { readOnly: true }),
 ]);

@@ -27,6 +27,7 @@ import {
   executionClaims,
   executionLimits,
   geocoderCache,
+  llmActionRatings,
   modelLocks,
   workflowActions,
 } from '../../../infrastructure/database/schema/agents';
@@ -47,6 +48,11 @@ export const AGENTS_ENTITIES = defineDomainEntities('agents', [
   /** Cost and token accounting. Read it, chart it, never retype it. */
   entity(aiUsageRecords, { readOnly: true }),
   entity(aiToolCalls, { readOnly: true }),
+  /** The thumbs a person pressed on a model's work. One row per rater per rated
+   *  thing, and the router learns from it — so it is written by the vote
+   *  endpoint that enforces that grain and read from everywhere else. A generic
+   *  write here would be a vote nobody cast, teaching the router. */
+  entity(llmActionRatings, { readOnly: true }),
   entity(aiEmailClassifications, { readOnly: true }),
   entity(aiVoiceAgentCalls, { readOnly: true }),
   /** Caches: keyed by their input, refilled by a miss, expired by their TTL. */

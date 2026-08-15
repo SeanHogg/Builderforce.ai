@@ -8,6 +8,13 @@
 import { getStoredWebToken } from './auth';
 import { apiRequestStream, type AuthMode } from './apiClient';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
+import type {
+  CanvasResumeFamily,
+  ResumePrivacy as ResumePrivacyLevel,
+  ResumeTemplateId,
+} from '@builderforce/creation-canvas-contract';
+
+export type { ResumePrivacyLevel, ResumeTemplateId, CanvasResumeFamily };
 
 const MY_PROFILE_CACHE_KEY = 'talent-profile:mine';
 
@@ -49,13 +56,14 @@ export interface FreelancerProfile {
   openToRelocation?: boolean;
   hasResume?: boolean;
   published?: boolean;
-  hiredVideoConnected?: boolean;
-  hiredVideoClaimUrl?: string | null;
-  resumeFilename?: string | null;
-  /** True when we can auto-fill fields from the résumé (hired.video link or a cached extract). */
+  /** Summary of the OWNER's résumé object (own profile only). The full revision
+   *  family is fetched separately by `getMyResume`. */
+  resume?: ProfileResumeSummary | null;
+  /** True when the stored résumé parsed into something we can prefill fields from. */
   canAutofill?: boolean;
   email?: string;
-  embedUrl?: string | null;
+  /** The PUBLIC résumé projection on someone else's profile — one revision, no history. */
+  publicResume?: PublicResume | null;
   rating?: number | null;
   ratingCount?: number;
   /** Trust badge + JSS on the BROWSE projection (detail carries them under `stats`). */
@@ -294,11 +302,52 @@ export async function updateMyFreelancerProfile(patch: Partial<FreelancerProfile
   await jsonOrThrow(res, 'Failed to save profile');
 }
 
-export async function uploadMyResume(file: File): Promise<{ resumeFilename: string; canAutofill?: boolean }> {
+/** Summary of the résumé object a profile points at. */
+export interface ProfileResumeSummary {
+  objectId: string;
+  title: string;
+  privacy: ResumePrivacyLevel;
+  templateId: ResumeTemplateId;
+  revisionCount: number;
+  updatedAt: string;
+}
+
+/** The owner's own résumé: the object plus its whole revision family. */
+export interface MyResume {
+  objectId: string;
+  sessionId: string;
+  title: string;
+  family: CanvasResumeFamily;
+}
+
+/** What a visitor sees — one revision, no history, no source-file key. */
+export interface PublicResume {
+  title: string;
+  family: CanvasResumeFamily;
+}
+
+export async function uploadMyResume(file: File): Promise<{ resumeTitle: string; canAutofill?: boolean }> {
   const fd = new FormData();
   fd.append('file', file);
   const res = await apiRequestStream(`/api/freelancers/me/resume`, { method: 'POST', auth: 'web', body: fd });
-  return jsonOrThrow<{ resumeFilename: string; canAutofill?: boolean }>(res, 'Failed to upload resume');
+  return jsonOrThrow<{ resumeTitle: string; canAutofill?: boolean }>(res, 'Failed to upload resume');
+}
+
+/** The owner's full résumé — every revision, for the profile's viewer and editor. */
+export async function getMyResume(): Promise<MyResume | null> {
+  const res = await apiRequestStream(`/api/freelancers/me/resume`, { auth: 'web' });
+  const body = await jsonOrThrow<{ resume: MyResume | null }>(res, 'Failed to load resume');
+  return body.resume;
+}
+
+/** Choose the design, the visibility, or which variant the profile shows. */
+export async function updateMyResume(patch: {
+  templateId?: ResumeTemplateId;
+  privacy?: ResumePrivacyLevel;
+  masterRevisionId?: string;
+}): Promise<{ family: CanvasResumeFamily }> {
+  const res = await apiRequestStream(`/api/freelancers/me/resume`, { method: 'PATCH', auth: 'web', body: JSON.stringify(patch) });
+  return jsonOrThrow<{ family: CanvasResumeFamily }>(res, 'Failed to update resume');
 }
 
 export async function uploadMyAvatar(file: File): Promise<{ avatarUrl: string }> {
@@ -320,18 +369,6 @@ export interface ResumeSuggestions { available: boolean; headline: string | null
 export async function getResumeSuggestions(): Promise<ResumeSuggestions> {
   const res = await apiRequestStream(`/api/freelancers/me/resume/suggestions`, { auth: 'web' });
   return jsonOrThrow<ResumeSuggestions>(res, 'Failed to read résumé');
-}
-
-/** Start the consent flow to connect an EXISTING hired.video account. Returns a
- *  consent URL to open (null when hired.video isn't configured server-side). */
-export async function connectHiredVideo(input: { email?: string; redirectUrl?: string } = {}): Promise<{ configured: boolean; consentUrl: string | null }> {
-  const res = await apiRequestStream(`/api/freelancers/me/connect`, { method: 'POST', auth: 'web', body: JSON.stringify(input) });
-  return jsonOrThrow(res, 'Failed to connect hired.video');
-}
-
-export async function getMyEmbedToken(kind: 'profile' | 'resume' = 'profile'): Promise<{ configured: boolean; embedUrl: string | null }> {
-  const res = await apiRequestStream(`/api/freelancers/me/embed-token?kind=${kind}`, { auth: 'web' });
-  return jsonOrThrow(res, 'Failed to get embed token');
 }
 
 // ---- Marketplace: browse ------------------------------------------------

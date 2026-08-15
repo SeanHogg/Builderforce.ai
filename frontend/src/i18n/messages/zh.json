@@ -4004,7 +4004,8 @@
       "autonomy": "自主",
       "chatModes": "对话与执行",
       "aiHub": "AI 洞察",
-      "deliveryHub": "交付"
+      "deliveryHub": "交付",
+      "paidMedia": "付费投放"
     },
     "title": {
       "aiProductivity": "AI 生产力评分",
@@ -4142,7 +4143,11 @@
       "delivHubDelayTaxonomy": "延误原因",
       "aiHubConsumption": "本月 AI 令牌",
       "delivHubVerdict": "你们在创造价值吗？",
-      "overviewAsk": "提一个问题"
+      "overviewAsk": "提一个问题",
+      "paidMediaSpend": "付费花费",
+      "paidMediaCostPerResult": "单次转化成本",
+      "paidMediaSpendByNetwork": "各平台花费",
+      "paidMediaSpendTrend": "每日花费"
     },
     "loading": "加载中…",
     "overview": {
@@ -4357,7 +4362,15 @@
       "delivHubDelayTaxonomyDesc": "工作为何延误",
       "aiHubConsumptionDesc": "本月消耗的 AI 令牌数，以及月初至今的每日趋势。",
       "delivHubVerdictDesc": "交付健康度一览——由 DORA、周期时间和实时瓶颈融合得出的单一结论与 0–100 分评分。",
-      "overviewAsk": "用自然语言询问任何指标，获得数值以及所匹配的指标。"
+      "overviewAsk": "用自然语言询问任何指标，获得数值以及所匹配的指标。",
+      "paidMediaSpend": "此时间范围内已连接广告平台的收费金额。",
+      "paidMediaCostPerResult": "花费除以广告平台归因的转化数。"
+    },
+    "paidMedia": {
+      "noSpend": "此时间范围内没有付费投放记录。",
+      "noResults": "尚未归因任何转化。",
+      "spendSub": "{clicks} 次点击 · {conversions} 次转化",
+      "costPerResultSub": "基于 {conversions} 次转化"
     }
   },
   "compile": {
@@ -8426,17 +8439,32 @@
     },
     "resume": {
       "title": "简历",
-      "subtitle": "上传至 hired.video 并在嵌入式查看器中显示。",
+      "subtitle": "上传简历、选择版式，并决定谁可以查看。",
       "upload": "上传简历",
       "replace": "替换简历",
       "uploading": "上传中…",
-      "viewerTitle": "简历查看器",
-      "viewerPending": "您的简历正在由 hired.video 处理。",
-      "viewerNotConnected": "连接 hired.video 以显示嵌入式简历。",
-      "claimHiredVideo": "认领您的 hired.video 账户",
-      "connectExisting": "连接现有的 hired.video 账户",
-      "connecting": "连接中…",
-      "connectUnavailable": "hired.video 当前不可用。"
+      "uploaded": "已导入“{title}”。",
+      "uploadFailed": "无法导入该文件。",
+      "loading": "正在加载您的简历…",
+      "loadFailed": "无法加载您的简历。",
+      "updateFailed": "无法保存该更改。",
+      "empty": "尚未上传简历。请上传 PDF、Word 文档或文本文件以开始。",
+      "fillFromResume": "用简历填充资料",
+      "filling": "正在读取简历…",
+      "autofilled": "已填充资料字段。请检查后保存。",
+      "autofillUnavailable": "无法从这份简历中读取到足够的信息。",
+      "autofillFailed": "无法读取您的简历。",
+      "styleLabel": "版式",
+      "privacyLabel": "谁可以查看",
+      "versionLabel": "展示的版本",
+      "versionOriginal": "原件",
+      "versionCount": "{count} 个版本",
+      "privacy": {
+        "public": "所有人",
+        "recruiter_only": "招聘方",
+        "connections": "我的人脉",
+        "private": "仅自己"
+      }
     },
     "gigs": {
       "title": "寻找工作",

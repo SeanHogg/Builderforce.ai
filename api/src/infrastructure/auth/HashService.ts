@@ -35,7 +35,7 @@ export async function verifySecret(value: string, storedHash: string): Promise<b
  *             all `clk_*` keys have rotated to `bfa_*`.
  *   - `clu` — Legacy user-bootstrap API key (`users.api_key_hash`)
  *   - `bfk` — Tenant API key for the LLM gateway (`tenant_api_keys.key_hash`)
- *   - `bfai` — RETIRED (migration 0471). Was the developer API key for the public
+ *   - `bfai` — RETIRED (migration 0472). Was the developer API key for the public
  *             read-only API, on a `developer_api_keys` table that no longer exists.
  *             Issued keys were copied into `tenant_api_keys` with their hash intact
  *             and still AUTHENTICATE; the prefix is simply never minted again,

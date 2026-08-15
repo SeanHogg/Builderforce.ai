@@ -16,7 +16,7 @@
  * from the server's the first time one was added, and the drifted copy is exactly
  * what a consent screen would render.
  *
- * ── THE PUBLISHER IS THIS WORKSPACE (migration 0471) ────────────────────────
+ * ── THE PUBLISHER IS THIS WORKSPACE (migration 0472) ────────────────────────
  * There is no publisher picker and no registration form asking for a name and a
  * slug, because a developer is a tenant: the workspace already has both, and
  * asking again is how `/developers/acme` ends up owned by a workspace called

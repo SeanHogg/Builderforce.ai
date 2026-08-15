@@ -1,7 +1,7 @@
 /**
  * Publishers — becoming one, verifying one, standing one down.
  *
- * ── A DEVELOPER IS A TENANT (migration 0471) ────────────────────────────────
+ * ── A DEVELOPER IS A TENANT (migration 0472) ────────────────────────────────
  * This module used to own two tables. `developer_orgs` was a party model beside
  * the one that already existed, and `developer_org_members` was its staff list —
  * `tenant_members` with the tenant taken out, which is what `check-shape-lint`

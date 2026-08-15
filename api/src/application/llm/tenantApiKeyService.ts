@@ -28,7 +28,7 @@ import {
 // (host → BuilderForce). The BI burn-rate pull goes the other way (BuilderForce
 // → host) and uses a host-issued token stored as BI config, so its scope is not
 // part of this registry.
-// The PUBLISHER scopes below arrived with migration 0471, when `developer_api_keys`
+// The PUBLISHER scopes below arrived with migration 0472, when `developer_api_keys`
 // was folded into this table. They are in the SAME list rather than a second one
 // because a developer is a tenant: one credential, one vocabulary, one answer to
 // "what may this caller do". A key that carries none of them simply cannot reach
@@ -177,7 +177,7 @@ export interface ResolvedTenantApiKey {
  * Resolve a raw `bfk_*` key, enforcing `required` if given.
  *
  * The ONE place a non-gateway route decides whether a key-bearing caller is
- * allowed in. Before migration 0471 the public developer API had its own copy of
+ * allowed in. Before migration 0472 the public developer API had its own copy of
  * "hash it, look it up, is it revoked" against its own table, and it asked about
  * neither scopes nor origins — which is how a second credential model always
  * starts, and why there is now only one.
