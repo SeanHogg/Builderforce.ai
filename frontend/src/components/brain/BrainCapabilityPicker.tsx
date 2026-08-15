@@ -58,7 +58,7 @@ export function BrainCapabilityPicker({ surface, value, onSelect, layout, disabl
   return (
     <div style={{ width: '100%', maxWidth: 640, padding: '0 16px' }}>
       <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', textAlign: 'center', marginBottom: 10 }}>
-        {t(surface === 'ide' ? 'tilesHintIde' : 'tilesHintBrainstorm')}
+        {t(surface === 'build' ? 'tilesHintBuild' : 'tilesHintBrainstorm')}
       </div>
       <div
         role="group"

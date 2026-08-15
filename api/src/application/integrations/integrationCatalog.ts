@@ -229,10 +229,27 @@ function build(): IntegrationCatalogEntry[] {
   // could not claim we read a single actual, which is the first question a finance
   // buyer asks.
   //
+  // ── AND WHY THE FILTER IS HERE ──────────────────────────────────────────────────
+  // The port shipped its REGISTRY before its adapters, which is a reasonable order to
+  // build in and a disastrous one to advertise from: this loop published five accounting
+  // systems to a public page as `direction: 'import'` while `AccountingProvider`'s
+  // `fetchTransactions` / `fetchDocuments` / `fetchBalances` were optional and
+  // implemented by none of them. A buyer read that we import their books; nothing could
+  // read one number out of any of the five.
+  //
+  // `connectorDirection()` above already solves this for connectors — it derives
+  // "two-way" from whether a non-GET action EXISTS, because a claim about writing to
+  // somebody's Salesforce has to come from whether a write exists. The ledger surface
+  // asserted its direction from the surface NAME instead, which is the one thing this
+  // module says a catalog entry may never do. `descriptor.live` applies the same rule, so
+  // an adapter landing turns the claim on by itself and a registry entry with no adapter
+  // is SILENT rather than false. A smaller honest catalog beats a larger one a demo
+  // disproves.
+  //
   // `stripe-revenue` deliberately merges onto the payout port's `stripe` entry: it is
   // one system a buyer asks about once, and the merge rule turns two surfaces into one
   // card reading "import · export" rather than two cards each telling half the answer.
-  for (const provider of describeAccountingProviders({})) {
+  for (const provider of describeAccountingProviders({}).filter((entry) => entry.live)) {
     merge(byId, {
       id: provider.name === 'stripe-revenue' ? 'stripe' : provider.name,
       name: provider.name === 'stripe-revenue' ? 'Stripe' : provider.label,

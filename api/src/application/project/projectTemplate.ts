@@ -16,8 +16,10 @@
 
 export const IDE_PREFIX = 'ide/';
 
-/** Default files for new (vanilla) projects. Must match the Run-flow defaults
- *  in IDENew.tsx so seeded projects run identically to the run-only fallback. */
+/** Default files for new (vanilla) projects. Must match the Run-flow defaults in
+ *  `BuilderWorkspace.tsx` (the component `IDENew.tsx` became when the standalone
+ *  IDE destination was folded into the canvas) so seeded projects run identically
+ *  to the run-only fallback. */
 export const VANILLA_TEMPLATE: Record<string, string> = {
   'package.json': JSON.stringify({
     name: 'my-app',

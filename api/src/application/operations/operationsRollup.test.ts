@@ -21,7 +21,13 @@ import { DOMAIN_MANIFEST, metricsFor } from '../kernel/DomainService';
 const source = readFileSync(resolve(__dirname, 'operationsRollup.ts'), 'utf8');
 
 /** Every `'operations.…'` literal the writer actually inserts. */
-const written = new Set([...source.matchAll(/'(operations\.[a-z_]+)'/g)].map((m) => m[1]));
+// The capture group is optional to the type system even though the pattern cannot match
+// without it, so it is narrowed rather than asserted: a `Set<string | undefined>` here
+// made `metrics.includes(metric)` a type error and left the whole API typecheck red,
+// which under [[build-guard-ratchets]] hides every guard behind it.
+const written = new Set([...source.matchAll(/'(operations\.[a-z_]+)'/g)]
+  .map((m) => m[1])
+  .filter((key): key is string => !!key));
 
 describe('the operations rollup writes what the seat advertises', () => {
   it('produces every metric the manifest declares', () => {

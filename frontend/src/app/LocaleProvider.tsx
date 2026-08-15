@@ -2,8 +2,7 @@
 
 import { NextIntlClientProvider } from 'next-intl';
 import { useEffect, useState } from 'react';
-import enMessages from '@/i18n/messages/en.json';
-import { loadCatalog, type Messages } from '@/i18n/catalog';
+import { defaultMessages, loadCatalog, type Messages } from '@/i18n/catalog';
 import { DEFAULT_LOCALE, readLocaleCookie, type Locale } from '@/i18n/config';
 import { ignoreEnvironmentFallback } from '@/i18n/onError';
 
@@ -29,7 +28,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   // Start in the default locale so SSR + first client render match (no hydration
   // mismatch); swap to the cookie locale after mount.
   const [locale, setLocale] = useState<Locale>(DEFAULT_LOCALE);
-  const [messages, setMessages] = useState<Messages>(enMessages as Messages);
+  const [messages, setMessages] = useState<Messages>(defaultMessages);
 
   useEffect(() => {
     const target = readLocaleCookie() ?? DEFAULT_LOCALE;
@@ -38,7 +37,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
     // `loadCatalog` degrades to the default catalog rather than rejecting, so a
     // failed fetch leaves the page in English instead of throwing at mount.
     void loadCatalog(target).then((loaded) => {
-      if (cancelled || loaded === enMessages) return;
+      if (cancelled || loaded === defaultMessages) return;
       setMessages(loaded);
       setLocale(target);
       document.documentElement.lang = target;

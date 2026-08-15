@@ -33,11 +33,11 @@ const SCOPES: AlertScopeKind[] = ['tenant', 'project', 'team'];
 
 const inputStyle: React.CSSProperties = {
   padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
+  background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)',
 };
 const btnStyle: React.CSSProperties = {
   padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)',
-  color: 'var(--text-on-accent)', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap',
+  color: 'var(--text-on-accent)', fontWeight: 600, fontSize: 'var(--font-size-small)', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 const ghostBtnStyle: React.CSSProperties = {
   ...btnStyle, background: 'transparent', color: 'var(--text-secondary)',
@@ -110,8 +110,8 @@ export function AlertsClient() {
   return (
     <PageContainer>
       <div style={{ marginBottom: 18 }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>{t('title')}</h1>
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: 4 }}>{t('subtitle')}</p>
+        <h1 style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, margin: 0 }}>{t('title')}</h1>
+        <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', marginTop: 4 }}>{t('subtitle')}</p>
       </div>
 
       <RoleGate capability="alerts.manage" variant="block">
@@ -207,7 +207,7 @@ export function AlertsClient() {
                                 onClick={() => run(() => alertsApi.remove(a.id))}>
                                 {t('common.delete')}
                               </button>
-                              {tested[a.id] && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{tested[a.id]}</span>}
+                              {tested[a.id] && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{tested[a.id]}</span>}
                             </div>
                           </td>
                         </tr>
@@ -265,7 +265,7 @@ export function AlertsClient() {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>
       {label}
       {children}
     </label>
@@ -273,7 +273,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const checkLabel: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', color: 'var(--text-secondary)',
+  display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)',
 };
 
 function fmt(n: number): string {

@@ -1,11 +1,11 @@
 /**
  * The kernel surface's contracts (PRD 20 §7).
  *
- * §7 states the rule that this file exists to keep honest: **the fifteen domains
- * and the fifteen seats are the same list, and neither may drift from the
- * other.** Three things encode that list today — the api's `DOMAINS`, this
- * client's `DOMAINS`, and the five message catalogs — and every one of them is a
- * place a sixteenth seat can be added without the other two noticing.
+ * §7 states the rule that this file exists to keep honest: **the domains and the
+ * seats are the same list, and neither may drift from the other.** Three things
+ * encode that list today — the api's `DOMAINS`, this client's `DOMAINS`, and the
+ * five message catalogs — and every one of them is a place a seat can be added
+ * without the other two noticing.
  *
  * Also asserts the two §7.2 non-negotiables a test can actually check: real
  * translations in all five catalogs (not English copies), and the
@@ -40,9 +40,23 @@ function at(catalog: unknown, path: string): unknown {
 }
 
 describe('the roster is one list', () => {
-  it('has fifteen domains', () => {
-    expect(DOMAINS).toHaveLength(15);
-    expect(new Set(DOMAINS).size).toBe(15);
+  /**
+   * The roster, written out — and it must stay identical to `EXPECTED` in the api's
+   * `kernelContract.test.ts`, which is the drift this file's header is about.
+   *
+   * This used to be `toHaveLength(15)`, the weaker half of the invariant: a count
+   * catches an accidental extra seat and is blind to a renamed one, a reordered one,
+   * or a duplicate that keeps the total right.
+   */
+  const EXPECTED = [
+    'growth', 'delivery', 'agents', 'hiring', 'finance', 'revenue', 'commerce',
+    'identity', 'people', 'platform', 'governance', 'investor', 'support',
+    'canvas', 'integrations', 'operations',
+  ];
+
+  it('is exactly the roster, in order, with no duplicates', () => {
+    expect([...DOMAINS]).toEqual(EXPECTED);
+    expect(new Set(DOMAINS).size).toBe(DOMAINS.length);
   });
 
   it('names every domain in every catalog', () => {

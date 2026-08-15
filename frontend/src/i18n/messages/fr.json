@@ -7162,7 +7162,7 @@
       "pickerAria": "Que voulez-vous créer ?",
       "none": "Peu importe",
       "tilesHintBrainstorm": "…ou partez de ce que vous voulez créer",
-      "tilesHintIde": "…ou partez de ce que vous voulez construire",
+      "tilesHintBuild": "…ou partez de ce que vous voulez construire",
       "document": {
         "label": "Document",
         "hint": "Rédigez un document structuré avec titres, sections et tableaux.",
@@ -17723,6 +17723,7 @@
       "support": "Support client",
       "storage": "Stockage",
       "data": "Données",
+      "hiring": "Recrutement",
       "other": "Autres"
     },
     "gallery": {
@@ -19007,6 +19008,7 @@
       "support": "Centre de services",
       "storage": "Fichiers et stockage",
       "data": "Données et entrepôts",
+      "hiring": "Recrutement et sites d'emploi",
       "other": "Autres"
     },
     "direction": {

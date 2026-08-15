@@ -1,3 +1,255 @@
+## ✅ RESOLVED 2026-08-15 — Both deploys were red: a shape-lint baseline, and 4.7 MB of message catalogs inside every Edge function
+
+Two CI jobs failed on the same push. They had nothing to do with each other.
+
+### Deploy API — `check:shape-lint`
+
+`service_assets` matched the `artifact` kernel shape. Already reconciled in the tree (the table is a
+declared entry, and the guard passes). **The real finding was what the failure HID**: `api npm test`
+chains 24 guards and `vitest`, `&&`-joined, so one red guard means the other 13 guards and all 5,759
+tests never ran — see [[build-guard-ratchets]]. Running the full suite locally surfaced a second red
+that CI had never reached.
+
+`orderByNullPlacement.test.ts` reads all ~1,500 API source files **synchronously inside the `it()`**,
+which is ~1s idle and over vitest's 5s default on a loaded runner. It failed as a TIMEOUT reported
+against the assertion — and that assertion's message is about `asc(sql\`… nulls first\`)`, so the log
+read exactly like a real ORDER BY violation. Given a 60s budget: the scan is the work, not the
+assertion. A guard whose failure mode is indistinguishable from the thing it guards is worse than no
+guard.
+
+### Deploy frontend — `Exceeds maximum edge function size: 4 MB / 4 MB` on `/embedded/page`
+
+`/embedded/page.tsx` had not changed. Measuring the edge functions out of a real build explains why:
+
+| | gzipped |
+|---|---|
+| `/embedded/page` | **4.01 MB** (ceiling 4 MB) |
+| — chunk `2644.js`, all five catalogs inlined | **1.23 MB** |
+| Functions between 4.00 and 4.01 MB | **15** |
+
+`src/i18n/request.ts` loaded messages with ``import(`./messages/${locale}.json`)``. A template-literal
+import is an **eager webpack context module** — all five catalogs (~4.7 MB of JSON) inlined into one
+chunk — and an Edge function must carry every chunk it can reach. So all fifteen server-translating
+routes shipped every catalog, sat within 1% of the ceiling, and the next byte anywhere tipped whichever
+route was heaviest. `/embedded` was not the cause; it was the straw. Nothing about the failure said so,
+which is why the route it names is the wrong place to look.
+
+**The fix — catalogs are data, so they ship as data.** `scripts/publish-message-catalogs.mjs` (prebuild,
+and in `dev`) writes minified copies to `public/i18n/`; `src/i18n/catalog.ts` is the ONE loader both
+`request.ts` and `LocaleProvider` use. The default locale stays a static import — it is what SSR and the
+first client render use, so a network hop in front of first paint would buy nothing. Everything else is
+fetched from a `NEXT_PUBLIC_APP_VERSION`-versioned URL, cached through `getOrSetClientCached` (single-flight
+matters: a cold isolate starting several renders should share one fetch of an ~800 KB file), marked
+`immutable` in `public/_headers`, and degraded to English on failure — a page in the wrong language beats
+a page that does not render.
+
+**Verified by rebuild:** `/embedded/page` **4.01 MB → 1.99 MB** gzipped; functions over 4 MB **15 → 0**.
+Every locale still resolves per-request; no route lost server-side translation. Localization behaviour is
+unchanged — this moved where the catalogs live, not which one a visitor gets.
+
+*Left open (logged, Gap Register group 15):* `frontend npm test` is red on two ratchets — `check:architecture`
+(+1 `'use client'`, +1 client-rooted page) and `check:design-scale` (+32 literal font sizes) — from the
+2026-08-14/15 component work, not from this pass. Neither guard is in either deploy job, and neither
+reports WHICH files moved its count, which is half of what needs fixing.
+
+---
+
+## ✅ RESOLVED 2026-08-15 — Three drifts found and closed while landing the trigger sweep
+
+Each was found by the work rather than looked for, and each is the same shape: a vocabulary declared
+in one place and consumed in another, with nothing holding the two together.
+
+**1. The `/integrations` page rendered six connectors under a missing message key.** The API publishes
+`hiring` as an integration category (the six job-board connectors in `connectors/defaults/hiring.ts`
+carry it) and publishes `payout` and `ledger` as surfaces. `frontend/src/lib/integrationCatalog.ts` —
+the READER — still declared the twelve categories and five surfaces of an earlier version, and
+`integrationsIndex.category` in all five catalogs had no `hiring` label. The page renders
+`t("category.<key>")` for whatever the API sends, so the whole hiring group came out under a raw key.
+`connectors.category.hiring` was missing too, so the connector gallery had the same hole. Fixed the
+reader's union, exported `INTEGRATION_CATEGORIES` / `INTEGRATION_SURFACES` from it, added both labels
+to en/zh/es/fr/de with real translations, and added a test asserting every member of the reader's
+vocabulary has a label — the half `messages.test.ts` (which holds the five catalogs in step with each
+OTHER) was not checking.
+
+**2. The API typecheck was red, hiding every guard behind it.**
+`application/operations/operationsRollup.test.ts` built a `Set` from a regex capture group, which is
+`string | undefined` under `noUncheckedIndexedAccess`, so `metrics.includes(metric)` was a type error
+and `tsgo --noEmit` failed for the whole package. Narrowed with a type predicate. Under
+[[build-guard-ratchets]] one red guard hides the rest, and this one was hiding the entire API
+typecheck.
+
+**3. `founderObjects.ts` kept a private copy of the shared spec field type.** It declared its own
+`FounderField` / `FounderFieldRender` — written before `specObjects.ts` generalised the mechanism and
+left behind after — plus byte-identical copies of `SOURCES_FIELD` and `SUMMARY_FIELD`. The two types
+were structurally compatible, which is what made the duplicate dangerous rather than merely redundant:
+`registerSpecObjectSet` accepted the specs happily, nothing failed, and every capability added to
+`SpecField` was simply UNAVAILABLE to the founder vocabulary with no error to say so — `restricted`,
+`derived` and `derive` had been out of reach the whole time. Adding `deadline` is what made it visible.
+`FounderField` is now an alias of `SpecField`, `FounderObjectSpec` extends `SpecObjectSpec` narrowing
+only `kind` and `group`, and the duplicated constants are imported.
+
+## ✅ RESOLVED 2026-08-15 — The board can finally speak first: date-bearing triggers, and a sweep that runs when nobody is looking
+
+`trigger` was declared as the object "that makes the board speak first — a bound threshold that is
+evaluated rather than watched by a person who has to remember to look". Two things made that false,
+and they were one gap: it could only watch a NUMBER, and it was only ever evaluated by a FRONTEND
+tool. So a threshold was checked exactly when somebody already had the board open, which is the one
+circumstance in which they did not need telling.
+
+Worse, the vocabularies had already written the instruction anyway. `obligation.dueAt` said "Bind a
+`trigger` to it so the board warns before rather than reporting after"; `policy.reviewAt` said "Bind
+a `trigger` to it". Both were false. A model that follows a documented instruction into a binding
+that silently never fires is worse served than one told nothing.
+
+### What landed
+
+**A deadline is declared, not mapped.** `SpecField.deadline` is a new flag on the shared spec
+primitive, and the date fields carry it: `contract.renewsAt`, `invoice.dueAt`, `bill.dueAt`,
+`fundingRound.closeTarget`, `obligation.dueAt`, `policy.reviewAt`, `offer.expiresAt`,
+`assignment.dueAt`, `grant.deadlineAt`, `peerReview.dueAt`. The alternative — a `DATE_FIELD_BY_KIND`
+map in the trigger module — would have been the fifth hand-maintained list `specObjects.ts` exists to
+abolish. `specDeadlineFields()` and `deadlineBearingKinds()` derive from the declaration, and the
+tool's own model-facing description names the watchable kinds from the registry rather than from a
+prompt paragraph that drifts from it.
+
+**Two comparators, both relative.** `due-within` (breached when the date is N days away or closer,
+INCLUDING already past — so a renewal that slipped by stays breached instead of silently re-arming)
+and `overdue-by` (breached only once it is N days late; `0` means the day after). Deliberately not
+`before`/`after` against an absolute date: that needs a second date re-typed every period and is
+stale the moment the contract renews.
+
+**One engine, two callers.** The comparison moved out of `frontend/src/lib/canvasTriggers.ts` into
+`packages/creation-canvas-contract/src/triggers.ts`, which the API already aliases. Two
+implementations of one threshold is how a board comes to report `armed` on screen and `breached` in a
+digest with nothing to say which lied. `canvasTriggers.ts` is now the registry-aware adapter over it
+plus `triggerUnboundHint()`, which turns each unbound reason into a sentence naming the field the
+watched kind actually declares.
+
+**The sweep.** `application/canvas/runTriggerSweep.ts`, registered as the daily `canvas-triggers`
+sweep after `finance-rollup` (a `liveMetric` bound to `finance.runway_months` must be refreshed
+before its threshold is tested). Three statements per pass regardless of tenant count — find the
+sessions that actually hold a trigger, load their objects in one `inArray`, write the moved rows in
+one batched `jsonb ||` merge — with a 500-board ceiling that is REPORTED rather than swallowed. It
+writes only `state` and `lastEvaluatedAt`, both already `bookkeeping` fields, and logs
+`trigger.breached` / `trigger.rearmed` on the TRANSITION only: an alert that repeats nightly is one
+nobody reads by Friday. It deliberately does NOT perform the trigger's `thenDo` actions — several are
+irreversible, and a sweep that executed them would be an unattended agent acting on a threshold
+nobody re-read.
+
+`daysUntil` floors and `dateValue` refuses a bare number (`Date.parse('30')` is a valid date in some
+engines, so a threshold pasted into a deadline field would have become a date in 2030). 45 frontend
+tests + 8 API tests, both typechecks clean.
+
+The original entry, for the record:
+
+- **Triggers cannot watch a DATE, and nothing evaluates them while the board is closed.** `lib/canvasTriggers.ts` parses a number out of a `liveMetric` on the same board and compares below/above/equals/changes-by. So the four dates a founder is actually ambushed by — `contract.renewsAt`, `invoice.dueAt`, `obligation.dueAt`, `fundingRound.closeTarget` — are unwatchable, and `people.ts` documented the opposite until this pass corrected it. Separately, `canvas_evaluate_triggers` is a FRONTEND tool with no server sweep, so "the board speaks first" requires a person to open the board and ask. Fix = a `before`/`after` date comparator plus a `watches` binding to any object field (not only a `liveMetric`), and a cron sweep gated by `cronWorkSignal` per [[neon-cost-under-5-dollars]]. Unblocks: the auto-renewal nobody noticed.
+
+## ✅ RESOLVED 2026-08-15 — `/integrations` claimed we read five companies' books and no adapter existed
+
+The ledger port shipped its REGISTRY before its adapters, which is a reasonable order to build in and
+a disastrous one to advertise from. `integrationCatalog.ts` merged all five accounting providers into
+the public catalog as `surfaces: ['ledger'], direction: 'import'` while
+`AccountingProvider.fetchTransactions` / `fetchDocuments` / `fetchBalances` were optional and
+implemented by none of them. A buyer read that we import their books; nothing could read one number.
+
+That is exactly the overclaim the catalog module was written to prevent, and the answer was one
+function away in the same file: `connectorDirection()` derives "two-way" from whether a non-GET action
+EXISTS, "because a claim about writing to somebody's Salesforce has to come from whether a write
+exists". The ledger loop asserted its direction from the surface NAME instead.
+
+`AccountingProviderDescriptor.live` now derives from `accountingProviderIsLive()` — does this provider
+implement at least one read — and the catalog filters on it. An adapter landing turns the claim on by
+itself; nobody has to remember to edit a page, and a registry entry with no adapter is SILENT rather
+than false. A test asserts the property against the PORT rather than a list of names, so it stays
+correct as adapters land and fails the moment a sixth entry is advertised that cannot read.
+
+**The capability itself is still open** and stays in the Gap Register, narrowed to the adapters and
+blocked on vendor sandbox credentials.
+
+The original entry, for the record:
+
+- **`/integrations` advertises reading actuals from five accounting systems and not one adapter exists.** *(identified 2026-08-14 during the founder-lens canvas + domain review)* `api/src/application/finance/accountingProviders.ts` registers QuickBooks, Xero, NetSuite, Plaid and Stripe-revenue, and declares `fetchTransactions?` / `fetchDocuments?` / `fetchBalances?` as OPTIONAL members of `AccountingProvider` — grep confirms the three names appear only in the interface declaration, so every provider implements zero of them. The file says so itself ("each adapter's `fetch` half lands behind `AccountingProvider` as its credentials are configured"). But its only non-test consumer is `integrations/integrationCatalog.ts`, which merges all five into the public catalog with `surfaces: ['ledger'], direction: 'import'` and ships them to `GET /api/integrations/catalog` → the `/integrations` marketing page. That is precisely the overclaim the catalog module was written to prevent: `connectorDirection()` derives "two-way" from whether a non-GET action exists, while the ledger loop asserts "import" from the surface name alone. Downstream, `finance/financeRollup.ts` — the sole writer of `finance.burn` / `finance.mrr` / `finance.runway_months` — reads `expenses`, `ledger_entries` and `invoice_line_items`, all hand-entered, so the flagship live-runway number is live over data the founder typed. **Blocker: an explicit product decision — does `/integrations` advertise a PLANNED port?** The contained fix is to include the `ledger` surface only for providers that implement at least one fetch (the same rule `connectorDirection` already applies), but that removes the entire finance-import claim from a public buyer-facing page today, which is an outward-facing change that is not mine to make unilaterally. Once decided it is a one-line filter in the ledger loop, plus adapters. Unblocks: a burn/runway figure sourced from the company's real books, and a finance category on the pricing-adjacent page that survives a demo.
+
+## ✅ RESOLVED 2026-08-15 — `check:architecture` was red against a baseline nobody bumped when the work landed
+
+The Gap Register recorded this as blocked on "another session's uncommitted, in-flight work". That
+stopped being true: `CanvasEmailComposer.tsx` was committed in `53287004d` (+1 `'use client'` file,
+784 → 785) and `app/realize/page.tsx` in `751b3ec21` (+1 client-rooted page, 65 → 66). The ratchet was
+therefore red on `main` itself, and under [[build-guard-ratchets]] one red guard hides the ten behind
+it — `frontend npm test` could not report anything else.
+
+Baseline moved to `useClientFiles: 785`, `useClientPages: 66`. Both are ratchets,
+so this is a deliberate one-step move for work that has already shipped, not a widening. The
+`oversizedProductionFiles` half of the original entry is already covered by its own grandfathered set
+(21 files) and is unchanged.
+
+The original entry, for the record:
+
+- **`check:architecture` is red on two counts from in-flight canvas work.** *(re-observed 2026-08-14; supersedes the 783-vs-778 reading)* The ratchet now reports `'use client' files: 785 exceeds baseline 784` — the one extra is the untracked `components/creation-canvas/CanvasEmailComposer.tsx` — and `production files over 800 lines: new violation lib/creationCanvasAi.ts`, which is at 854. Fix = move the baseline to 785 as the composer lands, and split `creationCanvasAi.ts` along its own seams. **Blocker: both files are another session's uncommitted, in-flight work**, so bumping a ratchet for a half-finished component or splitting a file under active edit would collide with that stream. Unblocks: `frontend npm test` passing end to end (one red guard hides the ten behind it — see [[build-guard-ratchets]]).
+
+## ✅ RESOLVED 2026-08-15 — The platform modelled how a company runs itself and not what it sells: the `operations` vocabulary and the sixteenth seat
+
+Reviewed the canvas and every domain from the position of a founder of a NICHE VERTICAL company —
+field service, trades, property, facilities, a clinic, a fleet, a workshop, a professional practice.
+
+### The finding
+
+The canvas held nine vocabularies (founder, academic, hiring, people, sales, data architecture, data
+science, QA, creative) and the roster held fifteen seats, and **every one of them models how a company
+runs ITSELF**: raise, market, sell, hire, employ, pay, teach, ship software, test it. Not one modelled
+what the company DOES for the customer who pays it. A vertical founder could bring their fundraising,
+hiring, payroll and marketing onto a board and had nowhere at all to put the job, the visit, the asset,
+the part, the inspection or the certificate. The board could plan the business and could not run it.
+
+`delivery` looked like the home for it and is not — its vocabulary is `work_item` / `sprint` /
+`release`, the software backlog, and a boiler repair filed as a sprint item puts a customer's SLA in a
+burndown chart. `commerce` is the marketplace; `support` is the ticket ABOUT the work.
+
+### The build — one vocabulary, not one pack per industry
+
+Six industries share one shape: WORK ordered against an ASSET, executed at a scheduled VISIT, evidenced
+by an INSPECTION, permitted by a CERTIFICATION, consuming PARTS. So the industry is a `discipline` VALUE
+(`OPERATIONS_DISCIPLINES`, twelve of them plus `other`) and never a table — the `funnel` argument applied
+to a whole domain. Six industry packs would have been six copies that drift.
+
+- **13 canvas kinds** (`packages/creation-canvas-contract/src/operations.ts`,
+  `frontend/src/lib/operationsObjects.ts`): `serviceAsset`, `workOrder`, `visit`, `dispatchBoard`,
+  `serviceAgreement`, `estimate`, `inspection`, `certification`, `inventoryItem`, `supplier`,
+  `purchaseOrder`, `shipment`, `incident` — in a new `Operations` palette group, with 132 field labels
+  and 32 column headers translated into all five catalogs. `estimate` also closes a hole in the FOUNDER
+  set, which modelled `invoice`, `bill` and `contract` and had no object for the priced quote that
+  precedes all three.
+- **`SpecField.derive`** — a NEW half of the spec primitive, vocabulary-neutral. `derived` says who may
+  WRITE a field; `derive` says a field is COMPUTED and is never stored. A work order's cost is its parts
+  plus its labour, an estimate's total is the sum of its lines, a dispatch board's utilisation is
+  assigned over capacity: storing those is one fact in two places and fails the way stored totals always
+  fail. `specFieldValue` is the one resolver the node body and the emptiness predicate both read, and
+  `specDerivedValues` merges them into the AI snapshot so the model is not blind to a number the card is
+  showing. Every derivation refuses rather than guessing — a £0 job would read as "this cost us nothing".
+- **`incident` is `restricted` by default** (`RESTRICTED_BY_DEFAULT_KINDS`), beside the HR `case` and the
+  hiring kinds: it names the person it happened to and records their harm.
+- **The sixteenth seat** — `operations`, root kind `work_order`, 12 tables (migration 0464), registered
+  through the generic entity layer. It needed no service, no route and no surface, only a manifest row
+  and a name in `DOMAINS`, which is the open/closed claim `DomainService.ts` makes, tested.
+- **`operationsRollup.ts`** — the WRITER for the three metrics the seat advertises
+  (`open_work_orders`, `first_time_fix`, `sla_breaches`), wired into `CRON_SWEEPS`. Built because
+  `financeRollup.ts` records exactly this defect (three declared keys, no writer, a live promise over an
+  empty read) and recreating it knowingly for a new seat was not acceptable. It also recomputes
+  `work_orders.first_time_fix` from ATTENDED visits, so an asserted value is corrected rather than
+  trusted. `operationsRollup.test.ts` asserts the manifest and the writer name the same set of keys.
+- **A `field-operations` starter board**, and a roster test that names all sixteen seats in order rather
+  than counting to fifteen — a length check is blind to a rename, a reorder, or a duplicate.
+
+### Also fixed in the same pass
+
+**Two data vocabularies were registered by accident of import order.** `specObjectSets.ts` exists
+precisely to stop this — its header says a set that registers itself and is never listed "works in
+whichever surface imports it directly and silently renders nothing everywhere else" — and
+`dataScienceObjects` was never listed. In the app it resolved because `creationObjectRegistry` pulls it
+in transitively; `SpecObjectBody` imported on its own rendered null for `notebook`, `model`,
+`trainingRun`, `runComparison`, `labelSet` and `prompt`. Now listed, and `creationObjectContext.ts`
+imports the sets itself rather than depending on somebody else having done so.
+
 ## ✅ RESOLVED 2026-08-15 — The canvas threw away the answer it had already written, and an email had no body
 
 Diagnostics from a public Creation Canvas session (ui 2026.8.15, `local-5bcdff45`): "help me write an

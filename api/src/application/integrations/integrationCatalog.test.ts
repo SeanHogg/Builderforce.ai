@@ -11,6 +11,7 @@ import { BOARD_PROVIDERS } from '../boardsync/providerCatalog';
 import { BUILTIN_CONNECTOR_LIST } from '../connectors/defaults';
 import { MAILBOX_PROVIDER_NAMES } from '../mailbox/mailboxProviders';
 import { PAYOUT_PROVIDER_NAMES } from '../payouts/payoutProviders';
+import { describeAccountingProviders } from '../finance/accountingProviders';
 import { describeProviders } from './dataProviderCatalog';
 import {
   INTEGRATION_CATALOG,
@@ -74,6 +75,31 @@ describe('integration catalog projection', () => {
         // Unless another port writes to the same system, in which case two-way
         // is the truth — that merge is asserted above.
         if (entry?.surfaces.length === 1) expect(entry.direction).toBe('import');
+      }
+    }
+  });
+
+  /**
+   * THE OVERCLAIM THIS PINS. The ledger port shipped its registry before its adapters —
+   * five accounting systems declared, `fetchTransactions`/`fetchDocuments`/`fetchBalances`
+   * optional and implemented by none — and this loop published all five to the public
+   * page as `direction: 'import'`. A buyer read that we import their books; nothing could
+   * read one number out of any of them.
+   *
+   * The assertion is deliberately written against the PORT rather than against a list of
+   * names: it stays correct as adapters land, and it fails the moment somebody advertises
+   * a sixth registry entry that cannot read.
+   */
+  it('advertises a ledger provider only when an adapter can actually read from it', () => {
+    for (const provider of describeAccountingProviders({})) {
+      const id = provider.name === 'stripe-revenue' ? 'stripe' : provider.name;
+      const entry = INTEGRATION_CATALOG.find((item) => item.id === id);
+      if (provider.live) {
+        expect(entry?.surfaces, `${provider.name} implements a read and is not advertised`)
+          .toEqual(expect.arrayContaining(['ledger']));
+      } else {
+        expect(entry?.surfaces ?? [], `${provider.name} is advertised as a ledger and implements no read`)
+          .not.toContain('ledger');
       }
     }
   });

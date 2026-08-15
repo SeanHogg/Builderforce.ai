@@ -223,6 +223,30 @@ export interface AccountingProviderDescriptor {
   fields: Array<{ key: string; label: string; secret: boolean; required: boolean; help?: string }>;
   /** True when this deployment could actually complete a connection today. */
   configured: boolean;
+  /**
+   * True when an adapter exists that can actually READ from this provider.
+   *
+   * ── WHY THIS IS DERIVED AND NOT DECLARED ────────────────────────────────────────
+   * The `fetch*` members of {@link AccountingProvider} are OPTIONAL — the port shipped
+   * its registry before its adapters, exactly as the payout port did — and every one of
+   * the five is currently absent. `integrationCatalog.ts` nevertheless published all five
+   * to the public `/integrations` page as `direction: 'import'`, so the page claimed the
+   * platform reads a company's actuals out of QuickBooks, Xero, NetSuite, Plaid and
+   * Stripe when no code could read one number from any of them.
+   *
+   * That is precisely the overclaim the catalog module was written to prevent, and it had
+   * the answer one function away: `connectorDirection()` derives "two-way" from whether a
+   * non-GET action EXISTS rather than from a declaration, because a claim about writing to
+   * somebody's Salesforce has to come from whether a write exists. The same rule, applied
+   * to reading somebody's ledger. An adapter landing turns the claim on by itself; nobody
+   * has to remember to edit a page.
+   */
+  live: boolean;
+}
+
+/** True when this provider implements at least one real read. See `descriptor.live`. */
+export function accountingProviderIsLive(provider: AccountingProvider): boolean {
+  return !!(provider.fetchTransactions ?? provider.fetchDocuments ?? provider.fetchBalances);
 }
 
 /** What the public catalog and the connect UI read. Never returns a secret. */
@@ -237,6 +261,7 @@ export function describeAccountingProviders(env: Record<string, unknown>): Accou
       capabilities: [...provider.capabilities],
       fields: [...(provider.fields ?? [])],
       configured: provider.connect === 'fields' || (provider.oauth != null && isProviderOAuthConfigured(env, provider.oauth)),
+      live: accountingProviderIsLive(provider),
     };
   });
 }

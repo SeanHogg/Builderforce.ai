@@ -98,8 +98,11 @@ export async function runOperationsRollup(db: Db): Promise<OperationsRollupResul
   if (await tableExists(db, 'work_order_visits')) {
     const resolved = await db.execute(sql`
       UPDATE work_orders o
-         SET first_time_fix = v.attended = 1,
-             updated_at = o.updated_at
+         -- Parenthesised deliberately: SET col = a = b is legal and reads as an
+         -- assignment of a comparison, which is a sentence no reviewer should have to
+         -- parse twice. updated_at is NOT touched — recomputing evidence must not
+         -- reorder the seat's "recently touched" list under somebody's cursor.
+         SET first_time_fix = (v.attended = 1)
         FROM (
           SELECT work_order_id, COUNT(*) FILTER (WHERE check_in_at IS NOT NULL) AS attended
             FROM work_order_visits

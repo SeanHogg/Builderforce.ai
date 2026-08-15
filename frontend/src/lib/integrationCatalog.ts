@@ -18,11 +18,34 @@
 import { SEO_INTEGRATIONS } from './content';
 import { publicApiGet } from './publicApi';
 
+/**
+ * The reader's copy of the API's vocabulary.
+ *
+ * It had drifted, and the drift was visible on the page: the API publishes `hiring` as a
+ * category (six job-board connectors carry it) and publishes `payout` and `ledger` as
+ * surfaces, while this file still listed the twelve categories and five surfaces of an
+ * earlier version. The page renders `t('category.<key>')`, so the hiring group came out
+ * under a missing message key — the whole reason the catalog was made a projection was to
+ * stop the page and the ports disagreeing, and the TYPE was the one place still doing it.
+ *
+ * Kept as a literal union rather than imported from the API: the frontend does not depend
+ * on the API package, and a union is what makes a missing i18n key a compile-time
+ * question. `messages.test.ts` asserts every member has a label in all five catalogs.
+ */
 export type IntegrationCategory =
   | 'work' | 'devtools' | 'incident' | 'communication' | 'crm'
-  | 'productivity' | 'finance' | 'marketing' | 'support' | 'storage' | 'data' | 'other';
+  | 'productivity' | 'finance' | 'marketing' | 'support' | 'storage' | 'data' | 'hiring' | 'other';
 
-export type IntegrationSurface = 'connector' | 'board' | 'data' | 'drive' | 'mailbox';
+export const INTEGRATION_CATEGORIES: readonly IntegrationCategory[] = [
+  'work', 'devtools', 'incident', 'communication', 'crm',
+  'productivity', 'finance', 'marketing', 'support', 'storage', 'data', 'hiring', 'other',
+];
+
+export type IntegrationSurface = 'connector' | 'board' | 'data' | 'drive' | 'mailbox' | 'payout' | 'ledger';
+
+export const INTEGRATION_SURFACES: readonly IntegrationSurface[] = [
+  'connector', 'board', 'data', 'drive', 'mailbox', 'payout', 'ledger',
+];
 
 export interface IntegrationCatalogEntry {
   id: string;

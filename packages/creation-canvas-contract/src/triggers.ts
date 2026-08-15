@@ -150,8 +150,13 @@ export function numericValue(raw: unknown): number | null {
   const literal = /,\d{3}/.test(token) ? token.replace(/,/g, '') : token.replace(',', '.');
   const base = Number(literal);
   if (!Number.isFinite(base)) return null;
-  const suffix = trimmed.slice(match.index! + token.length).trim().match(MAGNITUDE);
-  return suffix ? base * (MAGNITUDE_FACTOR[suffix[1].toLowerCase()] ?? 1) : base;
+  // `suffix[1]` is the capture group, which is only optional to the type system: the
+  // pattern cannot match without it. Read defensively anyway, because this module is now
+  // compiled under the API's stricter `noUncheckedIndexedAccess` as well as the
+  // frontend's — and a `?? 1` here is the identity multiplier, not a silent wrong answer.
+  const suffix = trimmed.slice((match.index ?? 0) + token.length).trim().match(MAGNITUDE);
+  const magnitude = suffix?.[1] ? MAGNITUDE_FACTOR[suffix[1].toLowerCase()] ?? 1 : 1;
+  return base * magnitude;
 }
 
 /** Milliseconds in a day. A calendar day, not a DST-corrected one: a renewal date is a

@@ -7165,7 +7165,7 @@
       "pickerAria": "What are you making?",
       "none": "Anything",
       "tilesHintBrainstorm": "…or start from what you want to make",
-      "tilesHintIde": "…or start from what you want to build",
+      "tilesHintBuild": "…or start from what you want to build",
       "document": {
         "label": "Document",
         "hint": "Write a structured document with headings, sections, and tables.",
@@ -17724,6 +17724,7 @@
       "support": "Customer support",
       "storage": "Storage",
       "data": "Data",
+      "hiring": "Hiring",
       "other": "Other"
     },
     "gallery": {
@@ -19008,6 +19009,7 @@
       "support": "Service desk",
       "storage": "Files & storage",
       "data": "Data & warehouses",
+      "hiring": "Hiring & job boards",
       "other": "Other"
     },
     "direction": {

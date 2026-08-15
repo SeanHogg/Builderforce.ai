@@ -11,9 +11,17 @@
  *
  * Capabilities are split by SURFACE. Making things that are *authored* — docs,
  * decks, data — belongs to Brain Storm; making things that are *built and run*
- * (a site, an app, a game) belongs to the IDE, where there is a file tree, a dev
- * server, and a preview. The surface a BrainPanel sits on picks the set; this
- * registry is the single source for both, so no surface inlines its own list.
+ * (a site, an app, a game) belongs to the BUILD panel, where there is a file
+ * tree, a dev server, and a preview. The surface a BrainPanel sits on picks the
+ * set; this registry is the single source for both, so no surface inlines its
+ * own list.
+ *
+ * `'build'` was called `'ide'` until the standalone IDE destination was folded
+ * into the canvas: there is no IDE route or IDE surface any more, only a Builder
+ * object on a board that opens `<CanvasBuildPanel>`. The value is renamed rather
+ * than kept as an alias because a surface name is read by people deciding where
+ * a capability belongs, and a name for a destination that no longer exists sends
+ * them looking for it.
  *
  * The selection is a property of the CHAT (`brain_chats.capability`, migration
  * 0345), so it follows the conversation across surfaces and devices rather than
@@ -23,7 +31,7 @@
  * prompts are model-facing and stay in English here.
  */
 
-export type BrainCapabilitySurface = 'brainstorm' | 'ide';
+export type BrainCapabilitySurface = 'brainstorm' | 'build';
 
 export type BrainCapabilityId =
   | 'document'
@@ -46,9 +54,9 @@ export interface BrainCapabilityDef {
   /**
    * File a reply in this capability can be exported as. `docx`/`pptx` render
    * server-side (`/api/exports`); `csv` saves straight from the reply's table.
-   * Absent = nothing to export: the IDE capabilities already emit real files via
-   * path-tagged code blocks, so a download button there would be a worse copy of
-   * "create file".
+   * Absent = nothing to export: the build capabilities already emit real files
+   * via path-tagged code blocks, so a download button there would be a worse copy
+   * of "create file".
    */
   exportFormat?: 'docx' | 'pptx' | 'csv';
   /**
@@ -127,10 +135,10 @@ const BASE_CAPABILITIES: BrainCapabilityDef[] = [
     ].join('\n'),
   },
 
-  // ---- IDE: things you build and run --------------------------------------
+  // ---- Build panel: things you build and run ------------------------------
   {
     id: 'website',
-    surface: 'ide',
+    surface: 'build',
     icon: '🌐',
     expects: 'code',
     systemPrompt: [
@@ -141,7 +149,7 @@ const BASE_CAPABILITIES: BrainCapabilityDef[] = [
   },
   {
     id: 'design',
-    surface: 'ide',
+    surface: 'build',
     icon: '🎨',
     expects: 'code',
     systemPrompt: [
@@ -152,7 +160,7 @@ const BASE_CAPABILITIES: BrainCapabilityDef[] = [
   },
   {
     id: 'mobile',
-    surface: 'ide',
+    surface: 'build',
     icon: '📱',
     expects: 'code',
     systemPrompt: [
@@ -163,7 +171,7 @@ const BASE_CAPABILITIES: BrainCapabilityDef[] = [
   },
   {
     id: 'animation',
-    surface: 'ide',
+    surface: 'build',
     icon: '✨',
     expects: 'code',
     systemPrompt: [
@@ -174,7 +182,7 @@ const BASE_CAPABILITIES: BrainCapabilityDef[] = [
   },
   {
     id: 'game3d',
-    surface: 'ide',
+    surface: 'build',
     icon: '🎮',
     expects: 'code',
     systemPrompt: [

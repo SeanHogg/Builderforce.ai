@@ -36,50 +36,42 @@
  */
 
 import type { FounderObjectKind } from '@builderforce/creation-canvas-contract';
-import { registerSpecObjectSet } from './specObjects';
+import {
+  SOURCES_FIELD,
+  SUMMARY_FIELD,
+  registerSpecObjectSet,
+  type SpecField,
+  type SpecObjectSpec,
+} from './specObjects';
 
 /**
- * How the node body draws one field.
+ * A founder field IS a spec field.
  *
- * `stat`    a headline value — big, tabular numerals. The number you look for first.
- * `text`    a paragraph of authored prose.
- * `chips`   `string[]` as pills. Short, unordered, scannable.
- * `list`    `Array<string | {title, detail}>` as a titled list. Ordered, readable.
- * `rows`    `Array<Record>` as a compact table, driven by `columns`.
- * `meter`   a 0–100 score with a proportional bar.
- * `verdict` a callout: a short judgement plus its reasoning.
+ * ── WHY THIS IS AN ALIAS AND NOT A DECLARATION ──────────────────────────────────
+ * It used to be its own interface — seven render styles, `columns`, `bookkeeping` —
+ * written before `specObjects.ts` generalised the mechanism, and left behind after. The
+ * two were structurally compatible, which is exactly what made the duplicate dangerous
+ * rather than merely redundant: `registerSpecObjectSet` accepted these specs happily, so
+ * nothing failed, and a capability added to `SpecField` was simply UNAVAILABLE here with
+ * no error to say so. `deadline` was the one that made it visible — flagging a contract's
+ * `renewsAt` failed to compile against a local type that had never heard of it, while
+ * `restricted`, `derived` and `derive` had been quietly out of reach for the founder
+ * vocabulary the whole time.
+ *
+ * The names survive because the file's own vocabulary reads better with them and its
+ * existing importers use them; the TYPE is the shared one, so there is nothing left to
+ * drift.
  */
-export type FounderFieldRender = 'stat' | 'text' | 'chips' | 'list' | 'rows' | 'meter' | 'verdict';
+export type FounderField = SpecField;
+export type FounderFieldRender = SpecField['render'];
 
-export interface FounderField {
-  name: string;
-  render: FounderFieldRender;
-  /** i18n key suffix under `creationCanvas.founder.field`. */
-  label: string;
-  /** Model-facing documentation. Says what good content looks like, not just the type. */
-  hint: string;
-  /** Column keys for `rows`. Header labels resolve under `creationCanvas.founder.column`. */
-  columns?: readonly string[];
-  /**
-   * Identity/bookkeeping rather than work. Excluded from the empty-shell check, so an
-   * object whose only authored field is its own status still counts as a shell.
-   */
-  bookkeeping?: boolean;
-}
-
-export interface FounderObjectSpec {
+/** A founder spec, with the kind narrowed to the declared founder set — the one thing
+ *  this vocabulary knows that the generic type cannot. */
+export interface FounderObjectSpec extends SpecObjectSpec {
   kind: FounderObjectKind;
-  icon: string;
-  /** Mirrors `CreationObjectGroup` in the registry; kept as a string to avoid a cycle. */
+  /** Mirrors `CreationObjectGroup` in the registry; kept as a string union rather than
+   *  imported to avoid a cycle. */
   group: 'Insights' | 'Work' | 'People' | 'Data' | 'Knowledge' | 'Collaborate';
-  /** Default status on a freshly created object. An i18n key suffix under
-   *  `creationCanvas.founder.status`. Never "Live" or "Ready" on an empty card — the
-   *  defect the registry's workflow and KPI comments already record. */
-  defaultStatus: string;
-  fields: readonly FounderField[];
-  actions: readonly string[];
-  /** Non-authored scaffolding merged into a new object (never model-writable). */
-  seed?: Record<string, unknown>;
 }
 
 /**
@@ -116,22 +108,9 @@ const CURRENCY_FIELD: FounderField = {
   hint: 'ISO-4217 code for every amount on this object, e.g. "USD", "EUR", "GBP". One currency per object — a mixed-currency total is refused rather than silently added.',
 };
 
-/** Cited evidence. Present on every founder object for the same reason: each one of
- *  these is a claim about the real world, and a claim without a source is a guess. */
-const SOURCES_FIELD: FounderField = {
-  name: 'sources',
-  render: 'list',
-  label: 'sources',
-  hint: 'One entry per source actually consulted: {title, url}. A researched claim with no source here is not researched.',
-  bookkeeping: true,
-};
-
-const SUMMARY_FIELD: FounderField = {
-  name: 'summary',
-  render: 'text',
-  label: 'summary',
-  hint: 'Two or three sentences a reader can act on. Lead with the finding, not the method.',
-};
+// `SOURCES_FIELD` and `SUMMARY_FIELD` are imported from `specObjects.ts`. They were
+// declared here too, byte-identical, which is the same duplicate the type alias above
+// removes: two constants that agreed until somebody improved one of them.
 
 export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
   // ── Who we are ────────────────────────────────────────────────────────────────

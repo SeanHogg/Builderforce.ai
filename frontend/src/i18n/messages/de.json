@@ -7162,7 +7162,7 @@
       "pickerAria": "Was möchtest du erstellen?",
       "none": "Beliebig",
       "tilesHintBrainstorm": "…oder beginne mit dem, was du erstellen willst",
-      "tilesHintIde": "…oder beginne mit dem, was du bauen willst",
+      "tilesHintBuild": "…oder beginne mit dem, was du bauen willst",
       "document": {
         "label": "Dokument",
         "hint": "Schreibe ein strukturiertes Dokument mit Überschriften, Abschnitten und Tabellen.",
@@ -17723,6 +17723,7 @@
       "support": "Kundensupport",
       "storage": "Speicher",
       "data": "Daten",
+      "hiring": "Recruiting",
       "other": "Sonstige"
     },
     "gallery": {
@@ -19007,6 +19008,7 @@
       "support": "Service-Desk",
       "storage": "Dateien & Speicher",
       "data": "Daten & Warehouses",
+      "hiring": "Recruiting & Jobbörsen",
       "other": "Weitere"
     },
     "direction": {

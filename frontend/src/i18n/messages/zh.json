@@ -7162,7 +7162,7 @@
       "pickerAria": "你想创作什么？",
       "none": "不限",
       "tilesHintBrainstorm": "……或从你想创作的内容开始",
-      "tilesHintIde": "……或从你想构建的内容开始",
+      "tilesHintBuild": "……或从你想构建的内容开始",
       "document": {
         "label": "文档",
         "hint": "撰写包含标题、章节和表格的结构化文档。",
@@ -17723,6 +17723,7 @@
       "support": "客户支持",
       "storage": "存储",
       "data": "数据",
+      "hiring": "招聘",
       "other": "其他"
     },
     "gallery": {
@@ -19007,6 +19008,7 @@
       "support": "服务台",
       "storage": "文件与存储",
       "data": "数据与数仓",
+      "hiring": "招聘与职位板",
       "other": "其他"
     },
     "direction": {

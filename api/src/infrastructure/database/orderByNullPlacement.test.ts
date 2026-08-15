@@ -72,7 +72,11 @@ describe('ORDER BY null placement', () => {
       'Put the direction INSIDE the sql fragment instead: sql`${col} asc nulls first`. '
       + 'asc()/desc() append the direction after the null clause, which Postgres rejects.',
     ).toEqual([]);
-  });
+    // Reads every one of ~1,500 source files synchronously. That is ~1s idle and
+    // over the 5s default on a loaded CI runner, where it failed as a TIMEOUT
+    // reported against this assertion — indistinguishable, in the log, from an
+    // actual `asc(sql`… nulls first`)` violation. Budget for the scan instead.
+  }, 60_000);
 
   /** The detector has to actually catch the shape that shipped, or it guards nothing. */
   it('detects the shape that broke the repo-activity sweep', () => {

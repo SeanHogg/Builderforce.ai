@@ -1204,7 +1204,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                 initialChatId={initialChatId}
                 initialPrompt={initialPrompt}
                 initialTicket={initialTicket}
-                capabilitySurface="ide"
+                capabilitySurface="build"
               />
             </div>
           </div>

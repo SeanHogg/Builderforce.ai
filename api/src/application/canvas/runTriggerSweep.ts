@@ -246,7 +246,7 @@ export async function runTriggerSweep(env: Env, db: Db): Promise<TriggerSweepRes
     .filter((write) => write.isBreached || write.wasBreached)
     .map((write) => recordActivity(env, db, {
       tenantId: write.tenantId,
-      actor: { type: 'system', name: 'Canvas triggers' },
+      actor: { type: 'system', ref: null, name: 'Canvas triggers' },
       verb: write.isBreached ? 'trigger.breached' : 'trigger.rearmed',
       targetType: 'creation_object',
       targetId: write.id,

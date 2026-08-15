@@ -109,14 +109,14 @@ export default function OAuthCallbackPage() {
           <h2
             style={{
               fontFamily: 'var(--font-display)',
-              fontSize: '1.25rem',
+              fontSize: 'var(--font-size-section)',
               fontWeight: 700,
               marginBottom: 12,
             }}
           >
             {t('title')}
           </h2>
-          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: 24 }}>
+          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', marginBottom: 24 }}>
             {error}
           </p>
           <Link
@@ -129,7 +129,7 @@ export default function OAuthCallbackPage() {
               padding: '10px 24px',
               fontFamily: 'var(--font-display)',
               fontWeight: 600,
-              fontSize: '0.9rem',
+              fontSize: 'var(--font-size-body)',
               textDecoration: 'none',
             }}
           >
@@ -163,7 +163,7 @@ export default function OAuthCallbackPage() {
             marginBottom: 16,
           }}
         />
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{t('signingIn')}</p>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-body)' }}>{t('signingIn')}</p>
       </div>
     </div>
   );

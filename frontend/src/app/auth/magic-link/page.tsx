@@ -73,14 +73,14 @@ export default function MagicLinkVerifyPage() {
           <h2
             style={{
               fontFamily: 'var(--font-display)',
-              fontSize: '1.25rem',
+              fontSize: 'var(--font-size-section)',
               fontWeight: 700,
               marginBottom: 12,
             }}
           >
             Link expired or invalid
           </h2>
-          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: 24 }}>
+          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-secondary)', marginBottom: 24 }}>
             {errorMsg}
           </p>
           <Link
@@ -93,7 +93,7 @@ export default function MagicLinkVerifyPage() {
               padding: '10px 24px',
               fontFamily: 'var(--font-display)',
               fontWeight: 600,
-              fontSize: '0.9rem',
+              fontSize: 'var(--font-size-body)',
               textDecoration: 'none',
             }}
           >
@@ -127,7 +127,7 @@ export default function MagicLinkVerifyPage() {
             marginBottom: 16,
           }}
         />
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-body)' }}>
           Verifying your magic link…
         </p>
       </div>
