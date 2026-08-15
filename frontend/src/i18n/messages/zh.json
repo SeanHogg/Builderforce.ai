@@ -15033,7 +15033,20 @@
       "notebook": "笔记本",
       "prompt": "提示词",
       "runComparison": "运行对比",
-      "trainingRun": "训练运行"
+      "trainingRun": "训练运行",
+      "serviceAsset": "资产",
+      "workOrder": "工单",
+      "visit": "上门服务",
+      "dispatchBoard": "调度看板",
+      "serviceAgreement": "服务协议",
+      "estimate": "报价单",
+      "inspection": "检查记录",
+      "certification": "资质证书",
+      "inventoryItem": "库存物料",
+      "supplier": "供应商",
+      "purchaseOrder": "采购订单",
+      "shipment": "发货",
+      "incident": "事故事件"
     },
     "twilioSetup": {
       "title": "Twilio 集成",

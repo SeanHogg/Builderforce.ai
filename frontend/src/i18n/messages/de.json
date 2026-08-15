@@ -15033,7 +15033,20 @@
       "notebook": "Notebook",
       "prompt": "Prompt",
       "runComparison": "Laufvergleich",
-      "trainingRun": "Trainingslauf"
+      "trainingRun": "Trainingslauf",
+      "serviceAsset": "Anlage",
+      "workOrder": "Arbeitsauftrag",
+      "visit": "Einsatz",
+      "dispatchBoard": "Einsatzplan",
+      "serviceAgreement": "Servicevertrag",
+      "estimate": "Kostenvoranschlag",
+      "inspection": "Prüfung",
+      "certification": "Zertifizierung",
+      "inventoryItem": "Lagerartikel",
+      "supplier": "Lieferant",
+      "purchaseOrder": "Bestellung",
+      "shipment": "Lieferung",
+      "incident": "Vorfall"
     },
     "twilioSetup": {
       "title": "Twilio-Integration",

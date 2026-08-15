@@ -15033,7 +15033,20 @@
       "notebook": "Cuaderno",
       "prompt": "Prompt",
       "runComparison": "Comparación de ejecuciones",
-      "trainingRun": "Ejecución de entrenamiento"
+      "trainingRun": "Ejecución de entrenamiento",
+      "serviceAsset": "Activo",
+      "workOrder": "Orden de trabajo",
+      "visit": "Visita",
+      "dispatchBoard": "Panel de despacho",
+      "serviceAgreement": "Contrato de servicio",
+      "estimate": "Presupuesto",
+      "inspection": "Inspección",
+      "certification": "Certificación",
+      "inventoryItem": "Artículo de inventario",
+      "supplier": "Proveedor",
+      "purchaseOrder": "Orden de compra",
+      "shipment": "Envío",
+      "incident": "Incidente"
     },
     "twilioSetup": {
       "title": "Integración de Twilio",

@@ -36,3 +36,11 @@
 # revalidate; combined with updateViaCache:'none' in PwaUpdateBanner.
 /sw.js
   Cache-Control: no-cache, max-age=0, must-revalidate
+
+# The message catalogs (scripts/publish-message-catalogs.mjs). They used to be
+# hashed JS chunks and cached forever; as assets they need the same treatment, or
+# every non-English visitor revalidates ~1 MB of JSON on each navigation and each
+# cold server isolate. Safe because `catalogUrl()` versions the URL with
+# NEXT_PUBLIC_APP_VERSION, so a deploy asks for a different path.
+/i18n/*
+  Cache-Control: public, max-age=31536000, immutable

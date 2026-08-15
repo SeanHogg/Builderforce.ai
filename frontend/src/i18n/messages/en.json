@@ -15034,7 +15034,20 @@
       "notebook": "Notebook",
       "prompt": "Prompt",
       "runComparison": "Run comparison",
-      "trainingRun": "Training run"
+      "trainingRun": "Training run",
+      "serviceAsset": "Asset",
+      "workOrder": "Work order",
+      "visit": "Visit",
+      "dispatchBoard": "Dispatch board",
+      "serviceAgreement": "Service agreement",
+      "estimate": "Estimate",
+      "inspection": "Inspection",
+      "certification": "Certification",
+      "inventoryItem": "Inventory item",
+      "supplier": "Supplier",
+      "purchaseOrder": "Purchase order",
+      "shipment": "Shipment",
+      "incident": "Incident"
     },
     "twilioSetup": {
       "title": "Twilio integration",

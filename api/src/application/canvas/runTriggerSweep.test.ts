@@ -8,7 +8,15 @@ vi.mock('../activity/activityLog', () => ({
 const { recordActivity } = await import('../activity/activityLog');
 
 const NOW = Date.now();
-const inDays = (n: number) => new Date(NOW + n * 86_400_000).toISOString();
+/**
+ * A deadline `n` whole days out, with half a day of slack.
+ *
+ * The sweep reads its own `Date.now()`, which is milliseconds later than this fixture's,
+ * and `daysUntil` FLOORS — so an exact `NOW + 12 days` evaluates as 11 and the fixture
+ * would appear to be off by one when the code is right. Half a day of slack puts every
+ * case in the middle of its day instead of on the boundary.
+ */
+const inDays = (n: number) => new Date(NOW + n * 86_400_000 + 43_200_000).toISOString();
 
 /**
  * A fake of the drizzle-neon builder chain this sweep uses, and only of it.
@@ -20,7 +28,6 @@ const inDays = (n: number) => new Date(NOW + n * 86_400_000).toISOString();
  */
 function fakeDb(sessions: unknown[], objects: unknown[]) {
   const executed: unknown[] = [];
-  let readCount = 0;
   const reader = (rows: unknown[]) => {
     const chain: Record<string, unknown> = {};
     for (const method of ['from', 'innerJoin', 'where']) chain[method] = () => chain;
@@ -29,8 +36,12 @@ function fakeDb(sessions: unknown[], objects: unknown[]) {
   };
   return {
     executed,
+    // The two reads are distinguishable by METHOD, not by call order: the session scan is
+    // the only `selectDistinct`, so the object load is always `select`. Keying on a call
+    // counter instead made the object read return sessions and every board come back
+    // empty — the fake lying rather than the code failing.
     selectDistinct: () => reader(sessions),
-    select: () => { readCount += 1; return reader(readCount === 1 ? sessions : objects); },
+    select: () => reader(objects),
     execute: async (statement: unknown) => { executed.push(statement); return { rowCount: 0 }; },
   };
 }

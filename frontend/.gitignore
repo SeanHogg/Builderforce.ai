@@ -28,3 +28,7 @@ next-env.d.ts
 # ONNX runtime published by scripts/copy-ort-runtime.mjs (prebuild) for the
 # VS Code canvas. Generated from the pinned dependency — never committed.
 /public/ort/
+
+# next-intl catalogs published by scripts/publish-message-catalogs.mjs (prebuild).
+# Minified copies of src/i18n/messages/ — that directory is the source of truth.
+/public/i18n/
