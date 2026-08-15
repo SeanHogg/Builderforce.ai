@@ -35,6 +35,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import ts from 'typescript';
 
 /**
  * Every source file that DECLARES canvas actions.
@@ -134,6 +135,68 @@ for (const [name, description] of declarations) {
   }
 }
 
+// ── RULE 3 — the SYSTEM PROMPT may not name a tool this board lacks either ──────
+//
+// Rule 2 covers tool descriptions. It does not cover the much larger surface that
+// actually failed: the canvas system prompt, which is assembled in
+// `frontend/src/lib/creationCanvasAi.ts` and reaches the model in the SAME request as
+// the tool list.
+//
+// Measured 2026-08-15 (ui 2026.8.17 / api 2026.8.11). The prompt's SOCIAL block is
+// unconditional and named all five social tools — "call canvas_add_social_feed",
+// "canvas_create_social_campaign", "canvas_publish_social_campaign" — while every one
+// of them was account-required and therefore stripped from an anonymous board. The
+// model was handed detailed operating instructions for capabilities it did not have.
+// Asked to connect social accounts and post to all of them, it resolved the
+// contradiction by inventing a product limitation and recommending a competitor. Zero
+// tool calls, nothing on the board.
+//
+// Rule 1 could not catch it (every tool was classified) and rule 2 could not catch it
+// (no tool DESCRIPTION was at fault). The property is the same one in both: a name that
+// reaches the model must be a name the model can call.
+//
+// A prompt block wrapped in `persistence === 'server'` is exempt, because that block
+// does not exist on an anonymous board — that is how the BUILDING SOFTWARE paragraph
+// legitimately names the seven account-required build tools.
+const PROMPT_FILE = path.resolve('..', 'frontend', 'src', 'lib', 'creationCanvasAi.ts');
+
+/** True when this node sits inside the true-branch of a `persistence === 'server'`
+ *  conditional — i.e. the text only reaches a signed-in board. */
+function isServerOnly(node) {
+  for (let current = node; current; current = current.parent) {
+    const parent = current.parent;
+    if (!parent) break;
+    if (ts.isConditionalExpression(parent) && parent.whenTrue === current
+      && /persistence\s*===\s*'server'/.test(parent.condition.getText())) return true;
+    // The mirror form: `persistence === 'local' ? [] : [ … ]`.
+    if (ts.isConditionalExpression(parent) && parent.whenFalse === current
+      && /persistence\s*===\s*'local'/.test(parent.condition.getText())) return true;
+  }
+  return false;
+}
+
+if (!fs.existsSync(PROMPT_FILE)) {
+  failures.push(`the canvas prompt is missing — expected ${PROMPT_FILE}. This guard reads it; a moved file must move this path too.`);
+} else {
+  const source = ts.createSourceFile(PROMPT_FILE, fs.readFileSync(PROMPT_FILE, 'utf8'), ts.ScriptTarget.Latest, true);
+  const visit = (node) => {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) {
+      const text = node.getText();
+      const named = new Set([...text.matchAll(/canvas_[a-z0-9_]+/g)].map((m) => m[0]));
+      const reachable = [...named].filter((name) => declared.has(name));
+      if (reachable.length && !isServerOnly(node)) {
+        for (const name of reachable) {
+          if (guestAdvertised.has(name)) continue;
+          const { line } = source.getLineAndCharacterOfPosition(node.getStart());
+          failures.push(`the canvas system prompt names ${name} at creationCanvasAi.ts:${line + 1}, but that tool is account-required and absent from an anonymous board. Either reclassify it as guest-gated so it states its own reason when called, or move that prompt block inside the \`options.persistence === 'server'\` branch.`);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+}
+
 if (failures.length) {
   console.error('check-canvas-tool-contract FAILED:\n');
   for (const failure of failures) console.error(`  • ${failure}`);
@@ -142,4 +205,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`check-canvas-tool-contract: ${declared.size} canvas tools classified (${guestSafe.length} guest-safe, ${guestGated.length} guest-gated, ${accountRequired.length} account-required); ${guestAdvertised.size} guest-visible descriptions cross-checked.`);
+console.log(`check-canvas-tool-contract: ${declared.size} canvas tools classified (${guestSafe.length} guest-safe, ${guestGated.length} guest-gated, ${accountRequired.length} account-required); ${guestAdvertised.size} guest-visible descriptions and the canvas system prompt cross-checked.`);

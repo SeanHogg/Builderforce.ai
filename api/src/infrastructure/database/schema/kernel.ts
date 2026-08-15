@@ -611,6 +611,206 @@ export const partyRoles = pgTable('party_roles', {
 ]);
 
 // ---------------------------------------------------------------------------
+// 4b — Collection and signature: getting an answer, and an agreement, from a
+//      human who is NOT in this workspace (migration 0469)
+// ---------------------------------------------------------------------------
+//
+// WHY THESE ARE KERNEL PRIMITIVES AND NOT PEOPLE TABLES. The canvas contract
+// declares both in `people.ts` because HR is the domain that exposed their
+// absence — applications, acknowledgements, 360s, exit interviews, pulses and
+// accommodation requests are all one shape — and it says in as many words that
+// every field it declares is domain NEUTRAL. Support intake, a research
+// screener, a customer satisfaction round and an investor NDA are the same two
+// objects. Handing the domain that asked first a private copy is how a product
+// ends up with three response stores and two answers to "has this person agreed
+// yet", which is precisely what §0 forbids. So they live here, owned by no
+// domain, and `pulse_surveys` becomes a binding rather than a competitor.
+//
+// WHY THE PUBLIC SURFACE IS TOKEN-ADDRESSED. The responder and the signer are
+// outside the workspace by construction: they have no session, and the row they
+// reach reports the tenant rather than the caller asserting one. That is the
+// `share_token` cross-tenant reason the scope helper already declares, and it is
+// why `slug` here is globally unique rather than unique per tenant — a public
+// URL has no tenant to disambiguate it with.
+
+/**
+ * A question set published for a human to answer.
+ *
+ * The canvas `form` object is this row's projection. `questions` is JSONB and not
+ * a `form_questions` table on purpose: a question has no independent life — it is
+ * never queried across forms, never joined to, and is only ever read as the whole
+ * ordered set that renders one page. A table would buy a JOIN per render and cost
+ * the ordering guarantee the array gives for free.
+ */
+export const publishedForms = pgTable('published_forms', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  objectId:    uuid('object_id').references(() => objects.id, { onDelete: 'set null' }),
+  /** The public address. Globally unique — see the section note. */
+  slug:        varchar('slug', { length: 64 }).notNull(),
+  title:       varchar('title', { length: 200 }).notNull(),
+  description: text('description'),
+  /** `FormQuestion[]` from the canvas contract: {id, type, label, help, required,
+   *  options, max}. The nine declared types and nothing else. */
+  questions:   jsonb('questions').notNull(),
+  /** 'draft' | 'open' | 'closed'. A draft has a slug and refuses to render. */
+  status:      varchar('status', { length: 16 }).notNull().default('draft'),
+  /**
+   * Whether a response records WHO answered.
+   *
+   * A boolean and not an audience value, which is the distinction the contract
+   * argues and the one that is load-bearing: an anonymous engagement pulse must
+   * not record the responder even though they are signed in, while a policy
+   * acknowledgement is worthless unless it does. Conflating them is how an
+   * "anonymous" survey comes to carry a user id.
+   */
+  anonymous:   boolean('anonymous').notNull().default(false),
+  /** 'anyoneWithLink' | 'workspace' | 'namedRecipients'. */
+  audience:    varchar('audience', { length: 24 }).notNull().default('anyoneWithLink'),
+  closesAt:    timestamp('closes_at'),
+  /** Shown after a successful submit. Authored, because "thanks" is rarely the
+   *  useful thing to say — an applicant wants to know what happens next. */
+  confirmationMessage: text('confirmation_message'),
+  createdBy:   varchar('created_by', { length: 64 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_published_forms_slug').on(t.slug),
+  index('idx_published_forms_tenant').on(t.tenantId, t.status, t.updatedAt),
+]);
+
+/**
+ * One named person a `namedRecipients` form was sent to.
+ *
+ * Exists so the audience is ENFORCED rather than decorative. The register's own
+ * complaint about the data room — "carries `nda_required`, `watermark` and
+ * `expires_at` and there is no share flow to enforce any of the three, so the
+ * properties that make it safe are decoration" — is the failure this avoids: a
+ * form whose audience says "named recipients only" and whose route lets anyone
+ * with the slug answer is a lie told by a column.
+ *
+ * The token IS the credential, so only its hash is stored and the entity layer
+ * redacts the column by name.
+ */
+export const formRecipients = pgTable('form_recipients', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  formId:      integer('form_id').notNull().references(() => publishedForms.id, { onDelete: 'cascade' }),
+  email:       varchar('email', { length: 320 }).notNull(),
+  name:        varchar('name', { length: 200 }),
+  tokenHash:   varchar('token_hash', { length: 64 }).notNull(),
+  invitedAt:   timestamp('invited_at').notNull().defaultNow(),
+  respondedAt: timestamp('responded_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_form_recipients_email').on(t.formId, t.email),
+  uniqueIndex('uq_form_recipients_token').on(t.tokenHash),
+]);
+
+/**
+ * One submitted answer set.
+ *
+ * `respondentRef` is NULL for an anonymous form — not "anonymous", not a hashed
+ * id, absent. A column that holds a pseudonym on an anonymous survey is a column
+ * somebody will eventually join, and the promise the form made to the person
+ * answering it was that there would be nothing to join.
+ */
+export const formResponses = pgTable('form_responses', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  formId:       integer('form_id').notNull().references(() => publishedForms.id, { onDelete: 'cascade' }),
+  recipientId:  integer('recipient_id').references(() => formRecipients.id, { onDelete: 'set null' }),
+  /** Who answered. NULL when the form is anonymous — see the note above. */
+  respondentRef: varchar('respondent_ref', { length: 64 }),
+  /** `{ [questionId]: string | number | boolean | string[] }`. */
+  answers:      jsonb('answers').notNull(),
+  submittedAt:  timestamp('submitted_at').notNull().defaultNow(),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_form_responses_form').on(t.formId, t.submittedAt),
+  index('idx_form_responses_tenant').on(t.tenantId, t.submittedAt),
+]);
+
+/**
+ * A request for one or more parties to sign or acknowledge something.
+ *
+ * `intent` keeps `signed` distinct from `acknowledged`, which is the distinction
+ * the contract argues for and the one an auditor will later need: acknowledging a
+ * handbook and signing an offer are different acts with different evidentiary
+ * weight, and a product that records both as "signed" cannot say which happened.
+ * Same table, same trail, different word — a kind is a column value.
+ */
+export const signatureRequests = pgTable('signature_requests', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull(),
+  objectId:      uuid('object_id').references(() => objects.id, { onDelete: 'set null' }),
+  subject:       varchar('subject', { length: 200 }).notNull(),
+  /** 'sign' | 'acknowledge'. Drives the wording the party sees; the engine treats
+   *  both identically, which is the point. */
+  intent:        varchar('intent', { length: 16 }).notNull().default('sign'),
+  /** What is being agreed to, rendered to the signer verbatim. Held here rather
+   *  than resolved from a document at signing time, deliberately: the evidence an
+   *  auditor needs is what THIS person saw on THAT day, and a live reference to a
+   *  document somebody edited afterwards is not that. */
+  documentTitle: varchar('document_title', { length: 200 }).notNull(),
+  documentBody:  text('document_body').notNull(),
+  /** The artifact or canvas object the body was rendered from, for provenance. */
+  documentRef:   varchar('document_ref', { length: 64 }),
+  /** 'draft' | 'sent' | 'completed' | 'declined' | 'cancelled' | 'expired'. */
+  status:        varchar('status', { length: 16 }).notNull().default('draft'),
+  sentAt:        timestamp('sent_at'),
+  completedAt:   timestamp('completed_at'),
+  expiresAt:     timestamp('expires_at'),
+  /** Days of silence before the sweep nudges. 0 disables reminders entirely — a
+   *  standing invitation that must not chase, e.g. an optional consent. */
+  remindAfterDays: integer('remind_after_days').notNull().default(3),
+  lastRemindedAt: timestamp('last_reminded_at'),
+  createdBy:     varchar('created_by', { length: 64 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_signature_requests_tenant').on(t.tenantId, t.status, t.updatedAt),
+  /** The reminder sweep's own access path: everything sent and not yet chased. */
+  index('idx_signature_requests_remind').on(t.status, t.lastRemindedAt),
+]);
+
+/**
+ * One party on one request, and the audit record of what they did.
+ *
+ * `evidence` holds what was true at the moment of the act — the instant, the
+ * client's user agent, a hash of the address it came from — and never the address
+ * itself. A signature record has to be defensible without becoming a second copy
+ * of somebody's browsing history.
+ */
+export const signatureParties = pgTable('signature_parties', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  requestId:   integer('request_id').notNull().references(() => signatureRequests.id, { onDelete: 'cascade' }),
+  /** `party_roles.party_ref` when this signer is a known counterparty. */
+  partyRef:    varchar('party_ref', { length: 64 }),
+  name:        varchar('name', { length: 200 }).notNull(),
+  email:       varchar('email', { length: 320 }).notNull(),
+  /** Signing ORDER. Countersignature is a real requirement — a customer signs,
+   *  then we do — and it is expressed as a position rather than a second table. */
+  position:    integer('position').notNull().default(0),
+  /** 'pending' | 'viewed' | 'signed' | 'acknowledged' | 'declined'. */
+  status:      varchar('status', { length: 16 }).notNull().default('pending'),
+  tokenHash:   varchar('token_hash', { length: 64 }).notNull(),
+  viewedAt:    timestamp('viewed_at'),
+  decidedAt:   timestamp('decided_at'),
+  /** What the signer TYPED as their name. The act itself — kept distinct from
+   *  `name`, which is what we addressed them as. */
+  signedName:  varchar('signed_name', { length: 200 }),
+  declineReason: text('decline_reason'),
+  evidence:    jsonb('evidence'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_signature_parties_token').on(t.tokenHash),
+  index('idx_signature_parties_request').on(t.requestId, t.position),
+]);
+
+// ---------------------------------------------------------------------------
 // 5 — Work, execution, measurement
 // ---------------------------------------------------------------------------
 

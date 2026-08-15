@@ -2049,6 +2049,8 @@ function BrainObjectBody({ nodeId, data }: { nodeId: string; data: CreationNodeD
         collaborators={surface.collaborators}
         joinedCollaborator={surface.joinedCollaborator}
         onReplayMessage={surface.onReplayMessage}
+        onRateMessage={surface.onRateMessage}
+        ratings={surface.ratings}
         guestSignup={surface.guestSignup}
       />
     </section>

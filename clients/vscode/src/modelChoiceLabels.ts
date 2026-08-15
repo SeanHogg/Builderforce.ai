@@ -21,7 +21,6 @@ export function modelChoiceLabels(): ModelChoiceLabels {
     categoryPlan: t("Plan"),
     categoryPaid: t("Paid"),
     categoryConfigured: t("Configured"),
-    autoLabel: t("Auto"),
     autoDetail: t("Routed per turn: your connected accounts first, then your plan."),
     poolLabel: t("Pool"),
     poolDetail: t("Tries your connected accounts in the order configured in Account settings."),

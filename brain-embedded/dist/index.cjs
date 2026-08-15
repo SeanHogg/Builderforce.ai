@@ -23,6 +23,7 @@ __export(src_exports, {
   ADDRESSED_TO_META_KEY: () => ADDRESSED_TO_META_KEY,
   API_VERSION_TTL_MS: () => API_VERSION_TTL_MS,
   AUTHORED_BY_META_KEY: () => AUTHORED_BY_META_KEY,
+  BUILDERFORCE_PRODUCT_NAME: () => BUILDERFORCE_PRODUCT_NAME,
   BrainActionsProvider: () => BrainActionsProvider,
   BrainContextProvider: () => BrainContextProvider,
   BrainProvider: () => BrainProvider,
@@ -33,6 +34,7 @@ __export(src_exports, {
   CONSOLIDATION_META: () => CONSOLIDATION_META,
   DEFAULT_CHAT_TITLE: () => DEFAULT_CHAT_TITLE,
   DEFAULT_MODEL_CHOICE_LABELS: () => DEFAULT_MODEL_CHOICE_LABELS,
+  DEFAULT_MODEL_IDENTITY: () => DEFAULT_MODEL_IDENTITY,
   DEFAULT_TOOL_LIMIT: () => DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS: () => EVERMIND_LEARN_MIN_CHARS,
   MODEL_CATEGORIES: () => MODEL_CATEGORIES,
@@ -79,6 +81,7 @@ __export(src_exports, {
   detectAnnouncedButUnmadeToolCall: () => detectAnnouncedButUnmadeToolCall,
   detectUnbackedTicketClaim: () => detectUnbackedTicketClaim,
   detectUnbackedWriteClaim: () => detectUnbackedWriteClaim,
+  displayModelName: () => displayModelName,
   effortProfile: () => effortProfile,
   extractXmlToolCalls: () => extractXmlToolCalls,
   fetchApiVersionVia: () => fetchApiVersionVia,
@@ -111,6 +114,7 @@ __export(src_exports, {
   isStepMessage: () => isStepMessage,
   isTicketRecordingTool: () => isTicketRecordingTool,
   isTruncatedTurn: () => isTruncatedTurn,
+  isUserConfiguredModelRef: () => isUserConfiguredModelRef,
   lastConsolidationIndex: () => lastConsolidationIndex,
   linkedTicketsToAdvance: () => linkedTicketsToAdvance,
   mcpActionsFrom: () => mcpActionsFrom,
@@ -130,11 +134,16 @@ __export(src_exports, {
   perMillionUsd: () => perMillionUsd,
   premiumCostLabel: () => premiumCostLabel,
   prepareImageDataUrl: () => prepareImageDataUrl,
+  productForPlan: () => productForPlan,
+  productModelName: () => productModelName,
+  ratedTurnContext: () => ratedTurnContext,
+  ratedTurnTool: () => ratedTurnTool,
   reasoningForRun: () => reasoningForRun,
   resetApiVersionCache: () => resetApiVersionCache,
   resetBrainRunStore: () => resetBrainRunStore,
   resolveRecipient: () => resolveRecipient,
   resolveRunConfirm: () => resolveRunConfirm,
+  revealsModelId: () => revealsModelId,
   routerToolSpecs: () => routerToolSpecs,
   routingQueryForTurn: () => routingQueryForTurn,
   runBrainLoop: () => startRun,
@@ -2173,6 +2182,26 @@ function withProvenanceMetadata(provenance, base) {
   return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
 }
 
+// src/turnRating.ts
+function ratedTurnTool(messages, messageId) {
+  const index = messages.findIndex((m) => m.id === messageId);
+  if (index < 0) return null;
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (!isStepMessage(message)) return null;
+    const parsed = parseStepMessage(message.metadata ?? null);
+    if (parsed?.step.category === "tool") return parsed.step.label || null;
+  }
+  return null;
+}
+function ratedTurnContext(messages, messageId) {
+  const message = messages.find((m) => m.id === messageId);
+  return {
+    model: message && parseMessageProvenance(message)?.model || "",
+    toolName: ratedTurnTool(messages, messageId)
+  };
+}
+
 // src/selectTools.ts
 var DEFAULT_TOOL_LIMIT = 64;
 var STOP_WORDS = /* @__PURE__ */ new Set([
@@ -3436,7 +3465,7 @@ function useBrainConversation(options) {
   const reloadMessages = (0, import_react6.useCallback)(() => setReloadNonce((n) => n + 1), []);
   const [localSending, setLocalSending] = (0, import_react6.useState)(false);
   const [localError, setLocalError] = (0, import_react6.useState)("");
-  const [feedbackMap, setFeedbackMap] = (0, import_react6.useState)({});
+  const [ratings, setRatings] = (0, import_react6.useState)({});
   const [pendingAttachments, setPendingAttachments] = (0, import_react6.useState)([]);
   const [uploading, setUploading] = (0, import_react6.useState)(false);
   const autoRepliedChatIdRef = (0, import_react6.useRef)(null);
@@ -3497,11 +3526,12 @@ function useBrainConversation(options) {
       if (!msg.metadata) continue;
       try {
         const meta = JSON.parse(msg.metadata);
-        if (meta.feedback === "up" || meta.feedback === "down") map[msg.id] = meta.feedback;
+        if (meta.feedback === "up") map[msg.id] = 1;
+        else if (meta.feedback === "down") map[msg.id] = -1;
       } catch {
       }
     }
-    setFeedbackMap(map);
+    setRatings(map);
   }, [messages]);
   const resolvedSystemPrompt = systemPrompt ?? resolveSystemPrompt(modality);
   const fullSystemPrompt = extraSystem ? `${resolvedSystemPrompt}
@@ -3614,20 +3644,23 @@ ${refs}`;
     }));
     void startRun(chatId, buildRequest(seed, last.content));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
-  const submitFeedback = (0, import_react6.useCallback)(async (msg, value) => {
-    const current = feedbackMap[msg.id];
-    const next = current === value ? null : value;
-    setFeedbackMap((prev) => {
+  const rateMessage = (0, import_react6.useCallback)(async (msg, rating) => {
+    setRatings((prev) => {
       const copy = { ...prev };
-      if (next) copy[msg.id] = next;
-      else delete copy[msg.id];
+      if (rating === 0) delete copy[msg.id];
+      else copy[msg.id] = rating;
       return copy;
     });
+    const context = ratedTurnContext(messages, msg.id);
     try {
-      await persistence.setMessageFeedback(msg.id, next);
+      await persistence.setMessageFeedback(
+        msg.id,
+        rating === 1 ? "up" : rating === -1 ? "down" : null,
+        { toolName: context.toolName }
+      );
     } catch {
     }
-  }, [persistence, feedbackMap]);
+  }, [persistence, messages]);
   const attach = (0, import_react6.useCallback)(async (file) => {
     setUploading(true);
     try {
@@ -3686,12 +3719,12 @@ ${refs}`;
      *  (e.g. a failed rename) has no gateway verdict behind it. */
     errorAction: localError ? null : snapshot.errorAction,
     streamingText: snapshot.streamingText,
-    feedbackMap,
+    ratings,
     pendingAttachments,
     uploading,
     send,
     stop,
-    submitFeedback,
+    rateMessage,
     attach,
     removeAttachment,
     setError: setLocalError,
@@ -3806,6 +3839,33 @@ function takePendingPrompt() {
   }
 }
 
+// src/modelIdentity.ts
+var BUILDERFORCE_PRODUCT_NAME = {
+  free: "Builderforce Free",
+  pro: "Builderforce PRO"
+};
+var DEFAULT_MODEL_IDENTITY = { product: "free", canChoose: false };
+function productModelName(identity) {
+  return BUILDERFORCE_PRODUCT_NAME[(identity ?? DEFAULT_MODEL_IDENTITY).product];
+}
+function productForPlan(isPaid) {
+  return isPaid ? "pro" : "free";
+}
+var USER_CONFIGURED_PREFIXES = ["project_evermind:", "tenant_model:"];
+function isUserConfiguredModelRef(model) {
+  return typeof model === "string" && USER_CONFIGURED_PREFIXES.some((p) => model.startsWith(p));
+}
+function revealsModelId(identity, account) {
+  if (account === "own") return true;
+  return (identity ?? DEFAULT_MODEL_IDENTITY).canChoose;
+}
+function displayModelName(model, identity, opts) {
+  const id = typeof model === "string" ? model.trim() : "";
+  if (!id) return productModelName(identity);
+  if (isUserConfiguredModelRef(id)) return id;
+  return revealsModelId(identity, opts?.account) ? id : productModelName(identity);
+}
+
 // src/modelChoice.ts
 var PROJECT_EVERMIND_MODEL_PREFIX = "project_evermind:";
 var DEFAULT_MODEL_CHOICE_LABELS = {
@@ -3815,7 +3875,6 @@ var DEFAULT_MODEL_CHOICE_LABELS = {
   categoryPlan: "Plan",
   categoryPaid: "Paid",
   categoryConfigured: "Configured",
-  autoLabel: "Auto",
   autoDetail: "Routed per turn \u2014 your connected accounts first, then your plan.",
   poolLabel: "BYO pool",
   poolDetail: "Tries your connected accounts in the order configured in Account settings.",
@@ -3865,9 +3924,9 @@ function modelCategoryLabel(category, labels) {
       return labels.categoryConfigured;
   }
 }
-function buildModelItems(options, labels) {
+function buildModelItems(options, labels, identity = DEFAULT_MODEL_IDENTITY) {
   const items = [
-    { key: "auto", label: labels.autoLabel, detail: labels.autoDetail, category: "auto", selection: { mode: "auto" } }
+    { key: "auto", label: productModelName(identity), detail: labels.autoDetail, category: "auto", selection: { mode: "auto" } }
   ];
   const normalized = (value) => typeof value === "string" ? { id: value } : value;
   const seen = /* @__PURE__ */ new Set();
@@ -3905,16 +3964,20 @@ function filterModelItems(items, labels, query, category) {
   const needle = query.trim().toLowerCase();
   return items.filter((item) => (category === "all" || item.category === category) && (!needle || `${item.label} ${item.detail} ${modelCategoryLabel(item.category, labels)}`.toLowerCase().includes(needle)));
 }
-function modelInUse(selection, items, labels, effective) {
+function modelInUse(selection, items, labels, effective, identity = DEFAULT_MODEL_IDENTITY) {
+  const routed = { name: productModelName(identity), detail: labels.autoDetail };
   const resolve = (model) => {
     const item = items.find((entry) => entry.key === `model:${model}`);
-    if (item) return { name: item.label, detail: item.detail };
-    return model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX) ? { name: labels.evermindLabel, detail: labels.evermindDetail } : { name: model, detail: labels.autoDetail };
+    if (model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)) {
+      return { name: labels.evermindLabel, detail: labels.evermindDetail };
+    }
+    if (!revealsModelId(identity)) return routed;
+    return item ? { name: item.label, detail: item.detail } : { name: model, detail: labels.autoDetail };
   };
   if (selection.mode === "model") return resolve(selection.model);
   if (selection.mode === "byo_pool") return { name: labels.poolLabel, detail: labels.poolDetail };
   if (effective) return resolve(effective);
-  return { name: labels.autoLabel, detail: labels.autoDetail };
+  return routed;
 }
 
 // src/chatDiagnostics.ts
@@ -4121,6 +4184,7 @@ function formatChatDiagnostics(d) {
   ADDRESSED_TO_META_KEY,
   API_VERSION_TTL_MS,
   AUTHORED_BY_META_KEY,
+  BUILDERFORCE_PRODUCT_NAME,
   BrainActionsProvider,
   BrainContextProvider,
   BrainProvider,
@@ -4131,6 +4195,7 @@ function formatChatDiagnostics(d) {
   CONSOLIDATION_META,
   DEFAULT_CHAT_TITLE,
   DEFAULT_MODEL_CHOICE_LABELS,
+  DEFAULT_MODEL_IDENTITY,
   DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS,
   MODEL_CATEGORIES,
@@ -4177,6 +4242,7 @@ function formatChatDiagnostics(d) {
   detectAnnouncedButUnmadeToolCall,
   detectUnbackedTicketClaim,
   detectUnbackedWriteClaim,
+  displayModelName,
   effortProfile,
   extractXmlToolCalls,
   fetchApiVersionVia,
@@ -4209,6 +4275,7 @@ function formatChatDiagnostics(d) {
   isStepMessage,
   isTicketRecordingTool,
   isTruncatedTurn,
+  isUserConfiguredModelRef,
   lastConsolidationIndex,
   linkedTicketsToAdvance,
   mcpActionsFrom,
@@ -4228,11 +4295,16 @@ function formatChatDiagnostics(d) {
   perMillionUsd,
   premiumCostLabel,
   prepareImageDataUrl,
+  productForPlan,
+  productModelName,
+  ratedTurnContext,
+  ratedTurnTool,
   reasoningForRun,
   resetApiVersionCache,
   resetBrainRunStore,
   resolveRecipient,
   resolveRunConfirm,
+  revealsModelId,
   routerToolSpecs,
   routingQueryForTurn,
   runBrainLoop,

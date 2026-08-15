@@ -337,6 +337,14 @@
   --stage-run: var(--emerald-bright);
   --stage-measure: var(--violet-bright);
   --stage-market: var(--pink-bright);
+  /* EXPAND had no hue for as long as the stage existed. `STAGES` is iterated
+     into `var(--stage-${stage})` by the left panel and by /features' arc table,
+     and an undeclared custom property with no fallback is invalid at
+     computed-value time — so the Expand row's dot simply dropped its
+     `background` and painted nothing, in both themes, with no error anywhere.
+     A template literal is exactly the shape `check-design-tokens` cannot see,
+     which is why it survived. */
+  --stage-expand: var(--orange-bright);
   --stage-admin: var(--text-muted);
   /* The Learn ▾ columns are stages of a different journey — reading, proving,
      building with — and take three hues from the same ramp. */

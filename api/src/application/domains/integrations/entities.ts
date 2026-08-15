@@ -11,12 +11,31 @@
  * to look like from above.
  */
 import {
+  developerOrgMembers,
+  developerOrgs,
+  extensionPackages,
+  extensionVersions,
   mailboxAutomationReplies,
   mailboxAutomationRules,
+  tenantExtensionInstalls,
 } from '../../../infrastructure/database/schema/integrations';
 import { defineDomainEntities, entity } from '../entityDefinition';
 
 export const INTEGRATIONS_ENTITIES = defineDomainEntities('integrations', [
   entity(mailboxAutomationRules, { readOnly: true }),
   entity(mailboxAutomationReplies, { readOnly: true }),
+
+  // ── Developer portal (PRD 24) ───────────────────────────────────────────
+  // Every one of these is readOnly to the GENERIC layer. Their invariants are
+  // not "a valid row" — they are "this version passed review", "this grant is
+  // what an admin approved", "this publisher is verified". A generic PATCH that
+  // could set `review_state: 'approved'` or widen `granted_scopes` would route
+  // around the entire review pipeline through a route that exists to save
+  // writing CRUD, which is exactly the case `entityDefinition` reserves
+  // `readOnly` for. Writes go through `application/developer/*`.
+  entity(developerOrgs, { kind: 'publisher', registers: true, readOnly: true }),
+  entity(developerOrgMembers, { readOnly: true }),
+  entity(extensionPackages, { kind: 'extension', registers: true, readOnly: true }),
+  entity(extensionVersions, { readOnly: true }),
+  entity(tenantExtensionInstalls, { readOnly: true }),
 ]);

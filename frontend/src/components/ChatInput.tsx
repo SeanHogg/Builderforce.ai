@@ -4,7 +4,7 @@ import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { PromptPanel, PromptOptionsMenu, useMentionAutocomplete, type ChatModelOptions, type ChatModelSelection, type PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
+import { PromptPanel, PromptOptionsMenu, useMentionAutocomplete, type ChatModelOptions, type ChatModelSelection, type ModelIdentityContext, type PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
 import { effortProfile, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import { CHAT_MODES, CHAT_MODE_ICON, type BrainEffort, type ChatMode } from '@/lib/brain';
 import { PlanBadge } from '@/components/PlanBadge';
@@ -46,6 +46,13 @@ export interface ChatInputProps {
   running?: boolean;
   /** Interrupt the in-flight run (shown as a Stop button while `running`). */
   onStop?: () => void;
+  /**
+   * Turns the user typed while a run was in flight and this composer is holding
+   * (see `useQueuedTurns`). Rendered as a receipt under the input — the composer
+   * owns this chrome so every host says the same sentence in the same place.
+   * Zero renders nothing.
+   */
+  queuedCount?: number;
   /** Number of rows for the text area. Default 2. */
   rows?: number;
   /** If false, Enter does not submit (send only via button). Default true. */
@@ -77,9 +84,11 @@ export interface ChatInputProps {
   /** The model the gateway will actually use while the selection is `auto`, when
    *  the host knows it — so the menu names what is running, not just "Auto". */
   effectiveModel?: string;
-  /** False ⇒ the tenant may not pin a model (no paid plan, no connected provider):
-   *  the `/` menu says why instead of offering a list the gateway would reject. */
-  canChooseModel?: boolean;
+  /** Who is reading: the routing product funding their turns, and whether the gateway
+   *  would accept a pin from them. A viewer who may not pin is named by product rather
+   *  than by upstream model, and the `/` menu says why instead of offering a dead list.
+   *  Comes from `useModelIdentity()` — never re-derived per surface. */
+  modelIdentity?: ModelIdentityContext;
   /**
    * Conversation mode for this turn — Chat (answer it) or Work (open it, staff it,
    * dispatch it). Shown and changed in the `/` menu, and named on its trigger: this
@@ -330,6 +339,7 @@ export function ChatInput({
   submitLabel = 'Send',
   running = false,
   onStop,
+  queuedCount = 0,
   rows = 2,
   submitOnEnter = false,
   onAttach,
@@ -345,7 +355,7 @@ export function ChatInput({
   modelOptions,
   onModelSelectionChange,
   effectiveModel,
-  canChooseModel = true,
+  modelIdentity,
   chatMode,
   onChatModeChange,
   memoryEnabled,
@@ -374,6 +384,9 @@ export function ChatInput({
   // The two mode names are the conversation's vocabulary, not the composer's — they
   // are the SAME words the Brain empty state uses, from the same catalog namespace.
   const tModes = useTranslations('brain.modes');
+  // The queued-turns receipt speaks the conversation's vocabulary, from the same
+  // catalog the Brain surface reads — one sentence, not one per host.
+  const tBrain = useTranslations('brain');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
@@ -437,7 +450,6 @@ export function ChatInput({
     categoryPlan: t('categoryPlan'),
     categoryPaid: t('categoryPaid'),
     categoryConfigured: t('categoryConfigured'),
-    autoLabel: t('categoryAuto'),
     autoDetail: t('autoDetail'),
     poolLabel: t('poolLabel'),
     poolDetail: t('poolDetail'),
@@ -689,7 +701,7 @@ export function ChatInput({
               onThinkingChange={onThinkingChange}
               describeThinking={describeThinking}
               model={onModelSelectionChange && modelOptions && modelSelection
-                ? { selection: modelSelection, options: modelOptions, onChange: onModelSelectionChange, effective: effectiveModel, canChoose: canChooseModel }
+                ? { selection: modelSelection, options: modelOptions, onChange: onModelSelectionChange, effective: effectiveModel, identity: modelIdentity }
                 : undefined}
               onAccountSettings={accountSettingsHref ? () => router.push(accountSettingsHref) : undefined}
             />
@@ -749,6 +761,14 @@ export function ChatInput({
           </>
         )}
       />
+      {/* Turns held behind the running one. The receipt for a composer that never
+          refuses input — same sentence, same place, on every surface. */}
+      {queuedCount > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
+          <span aria-hidden><Icon source="⏳" size="1em" /></span>
+          {tBrain('queuedCount', { count: queuedCount })}
+        </div>
+      )}
       {secondaryContent && (
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           {secondaryContent}

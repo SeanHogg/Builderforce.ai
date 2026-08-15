@@ -28,6 +28,7 @@
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { siteCollections, siteRecords } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isSendableEmail, normalizeEmail } from '../shared/dnsVerification';
 import { addAudienceMembers } from '../marketing/campaignEngine';
 
@@ -131,6 +132,16 @@ export interface SubmitInput {
   ipHash?: string | null;
   userAgent?: string | null;
   referrer?: string | null;
+  /**
+   * The signed-in end user (`site_users`) who submitted this, when there was one.
+   *
+   * Null keeps the anonymous form post exactly as it was — that path is unchanged
+   * and still the default. A non-null owner is what makes an owner-scoped read
+   * possible at all: {@link listOwnedSiteRecords} hands back only rows whose
+   * owner matches the caller, and a null-owner row belongs to nobody and is
+   * therefore never returned to anyone but the tenant.
+   */
+  siteUserId?: number | null;
 }
 
 export type SubmitResult =
@@ -193,6 +204,7 @@ export async function submitSiteRecord(input: SubmitInput): Promise<SubmitResult
       tenantId,
       payload: sanitized.payload,
       email: sanitized.email,
+      siteUserId: input.siteUserId ?? null,
       ipHash: input.ipHash ?? null,
       userAgent: input.userAgent?.slice(0, 500) ?? null,
       referrer: input.referrer?.slice(0, 1000) ?? null,
@@ -469,4 +481,93 @@ export async function updateCollection(
     });
   if (!row) return { ok: false, status: 404, error: 'Collection not found.' };
   return { ok: true, collection: row };
+}
+
+// ---------------------------------------------------------------------------
+// Owner-scoped reads — the half a generated app with accounts needs
+// ---------------------------------------------------------------------------
+
+/**
+ * Rows a SIGNED-IN END USER may read back: their own, in one collection, and
+ * only when the collection's owner has opted the collection in.
+ *
+ * ── WHY THIS IS NARROW ──────────────────────────────────────────────────────
+ * The module's opening rule stands unchanged: there is no public GET, because
+ * one would hand every visitor the whole submission list. This does not add one.
+ * It adds the strictly smaller thing an app with accounts actually needs — "show
+ * me MY orders" — and it is gated three ways at once. The collection must be set
+ * to `read_policy = 'owner'` (the default is `none`, so nothing that exists today
+ * starts returning data). The caller must hold a redeemed session for THIS site.
+ * And the filter is on `site_user_id`, so a row written anonymously — owner null
+ * — is returned to nobody, ever.
+ *
+ * There is deliberately no `all` policy. A read-everything option is the failure
+ * this module was written to prevent, and offering it as one setting among three
+ * is how it eventually gets chosen by someone who did not read this comment.
+ */
+export interface OwnedRecordView {
+  id: number;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
+export type OwnedRecordsResult =
+  | { ok: true; records: OwnedRecordView[] }
+  | { ok: false; status: 403 | 404; error: string };
+
+export async function listOwnedSiteRecords(args: {
+  db: Db;
+  siteId: number;
+  tenantId: number;
+  collectionName: string;
+  siteUserId: number;
+  limit?: number;
+}): Promise<OwnedRecordsResult> {
+  const { db, siteId, tenantId, siteUserId } = args;
+  const name = normalizeCollectionName(args.collectionName);
+  if (!name) return { ok: false, status: 404, error: 'Unknown collection.' };
+
+  const [collection] = await db
+    .select({ id: siteCollections.id, readPolicy: siteCollections.readPolicy })
+    .from(siteCollections)
+    .where(and(eq(siteCollections.siteId, siteId), eq(siteCollections.name, name), eq(siteCollections.tenantId, tenantId)))
+    .limit(1);
+  if (!collection) return { ok: false, status: 404, error: 'Unknown collection.' };
+  if (collection.readPolicy !== 'owner') {
+    // 404, not 403: whether a collection allows reads is not something an
+    // unauthorised caller should be able to enumerate.
+    return { ok: false, status: 404, error: 'Unknown collection.' };
+  }
+
+  const limit = Math.min(Math.max(Number(args.limit) || 50, 1), 200);
+  const rows = await db
+    .select({ id: siteRecords.id, payload: siteRecords.payload, createdAt: siteRecords.createdAt })
+    .from(siteRecords)
+    .where(scopedToTenant(siteRecords, tenantId, eq(siteRecords.collectionId, collection.id), eq(siteRecords.siteUserId, siteUserId)))
+    .orderBy(desc(siteRecords.createdAt))
+    .limit(limit);
+
+  return {
+    ok: true,
+    records: rows.map((row) => ({
+      id: Number(row.id),
+      payload: (row.payload ?? {}) as Record<string, unknown>,
+      createdAt: new Date(row.createdAt).toISOString(),
+    })),
+  };
+}
+
+/** Set a collection's read policy. Owner-side; the tenant decides, never the app. */
+export async function setCollectionReadPolicy(
+  db: Db,
+  tenantId: number,
+  collectionId: number,
+  policy: 'none' | 'owner',
+): Promise<boolean> {
+  const updated = await db
+    .update(siteCollections)
+    .set({ readPolicy: policy, updatedAt: sql`NOW()` })
+    .where(and(eq(siteCollections.id, collectionId), eq(siteCollections.tenantId, tenantId)))
+    .returning({ id: siteCollections.id });
+  return updated.length > 0;
 }

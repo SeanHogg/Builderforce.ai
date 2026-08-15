@@ -8,6 +8,7 @@ import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
 import { useCanvas3DControls } from '@/components/canvas/canvas3dControls';
+import { useModelIdentity } from '@/lib/useLlmModels';
 import { Icon } from '@/components/ui/Icon';
 import type { Edge } from '@xyflow/react';
 import styles from './CreationCanvas.module.css';
@@ -66,6 +67,11 @@ export interface BrainSurfaceBodyProps {
   /** Re-send a transcript message as the next canvas turn. Omitted on a board the
    *  viewer cannot drive, which hides the action rather than failing on click. */
   onReplayMessage?: (message: BrainMessage, role: 'user' | 'assistant') => void;
+  /** Rate a Brain reply. Omitted on a board that cannot file one (guest session, or
+   *  a turn with no resolved model), which hides the thumbs. */
+  onRateMessage?: (message: BrainMessage, rating: 1 | -1 | 0) => void;
+  /** This viewer's thumb per message id. */
+  ratings?: Record<number, 1 | -1>;
   /** The guest wall this conversation ran into, when a turn was refused for want of
    *  an account. Null on every signed-in board, where the CTA renders nothing. */
   guestSignup?: GuestSignupPrompt | null;
@@ -94,10 +100,15 @@ export interface BrainDockProps extends BrainSurfaceBodyProps {
 export function BrainSurfaceBody({
   showExecutionDetail, messages, trace, running, runStartedAt = null,
   node, nodes, edges, collaborators = [], joinedCollaborator = null, onReplayMessage,
+  onRateMessage, ratings,
   guestSignup = null,
 }: BrainSurfaceBodyProps) {
   const t = useTranslations('creationCanvas');
   const [tab, setTab] = useState<'chat' | 'context'>('chat');
+  // Read straight from the shared source rather than accepting it as a prop: the canvas
+  // surface renders in two placements and inside a guest session, and each of those
+  // would otherwise have to remember to thread the same fact through.
+  const modelIdentity = useModelIdentity();
   // Derived ONCE and shared: the transcript's live node and the footer strip are two
   // views of the same moment, so they must never narrate it in different words.
   const activity = useBrainActivity(running, trace, runStartedAt);
@@ -114,6 +125,8 @@ export function BrainSurfaceBody({
     copy: t('copyMessage'),
     copied: t('copiedMessage'),
     replay: t('replayMessage'),
+    rateUp: t('rateUp'),
+    rateDown: t('rateDown'),
   }), [liveLine, t]);
   const typingCollaborators = collaborators.filter((member) => member.typing);
   const showPresence = joinedCollaborator != null || typingCollaborators.length > 0;
@@ -144,7 +157,10 @@ export function BrainSurfaceBody({
             isRunning={running}
             assistantName={t('brain')}
             labels={timelineLabels}
+            modelIdentity={modelIdentity}
             onReplayMessage={onReplayMessage}
+            onRateMessage={onRateMessage}
+            ratings={ratings}
           />
         </div>
         {/* The refusal that ended the last turn is already the final message in the
@@ -245,7 +261,7 @@ export function BrainDock({
   mode, side, size, width, showExecutionDetail,
   onModeChange, onSideChange, onSizeChange, onWidthChange, onExecutionDetailChange, onClose,
   messages, trace, running, runStartedAt = null, node, nodes, edges, collaborators = [], joinedCollaborator = null,
-  onReplayMessage, guestSignup = null,
+  onReplayMessage, onRateMessage, ratings, guestSignup = null,
 }: BrainDockProps) {
   const t = useTranslations('creationCanvas');
 
@@ -330,6 +346,8 @@ export function BrainDock({
         collaborators={collaborators}
         joinedCollaborator={joinedCollaborator}
         onReplayMessage={onReplayMessage}
+        onRateMessage={onRateMessage}
+        ratings={ratings}
         guestSignup={guestSignup}
       />
     </aside>

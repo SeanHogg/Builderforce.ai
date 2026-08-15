@@ -37,11 +37,17 @@ import {
   unpublishCreationListing,
 } from '../../application/marketplace/creationListings';
 import {
+  checksForStagedRelease,
+  listReleases,
+  revertListing,
+  stageRelease,
+} from '../../application/marketplace/creationReleases';
+import {
   acquireListing,
   acquiredListings,
   completeListingCheckout,
   entitlementFromAuthHeader,
-  holdsLicence,
+  heldLicence,
   payoutSellerBalance,
   platformTakeRateBps,
   refundListingOrder,
@@ -87,8 +93,99 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
         currency: typeof body.currency === 'string' ? body.currency : 'USD',
         trial: typeof body.trial === 'string' ? body.trial : null,
         listingId: typeof body.listingId === 'string' && body.listingId ? body.listingId : null,
+        // Present when the seller pressed Publish from Stage: the staged payload is
+        // promoted rather than the board re-read, so the build that was checked is
+        // the build that goes on sale.
+        fromSnapshotId: typeof body.fromSnapshotId === 'string' && body.fromSnapshotId ? body.fromSnapshotId : null,
       });
       return c.json({ listing }, 201);
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  /**
+   * The release rail for one card — every version, its state, and who holds it.
+   *
+   * `objectId` is a query parameter rather than a path segment because a rail for
+   * the WHOLE BOARD is addressed by its absence, and `/releases/:sessionId/` with a
+   * trailing empty segment is not a route anybody should have to reason about.
+   */
+  router.get('/releases/:sessionId', async (c) => {
+    try {
+      const rail = await listReleases(db, {
+        tenantId: c.get('tenantId') as number,
+        userId: c.get('userId') as string,
+        sessionId: c.req.param('sessionId'),
+        objectId: c.req.query('objectId') || null,
+      });
+      return c.json({ rail });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  /**
+   * Capture a candidate and run its harness over it. Publishes NOTHING.
+   *
+   * Same body as publish, because the same validation decides both — the kind has to
+   * accept the source before either can write a snapshot.
+   */
+  router.post('/releases/stage', async (c) => {
+    try {
+      const body = await c.req.json<Record<string, unknown>>();
+      const staged = await stageRelease(db, c.env, {
+        tenantId: c.get('tenantId') as number,
+        userId: c.get('userId') as string,
+        sessionId: String(body.sessionId ?? ''),
+        objectId: typeof body.objectId === 'string' && body.objectId ? body.objectId : null,
+        kind: String(body.kind ?? ''),
+        name: String(body.name ?? ''),
+        summary: typeof body.summary === 'string' ? body.summary : null,
+        priceCents: Number(body.priceCents ?? 0),
+        currency: typeof body.currency === 'string' ? body.currency : 'USD',
+        trial: typeof body.trial === 'string' ? body.trial : null,
+        listingId: typeof body.listingId === 'string' && body.listingId ? body.listingId : null,
+      });
+      return c.json({ staged }, 201);
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  /**
+   * Re-read an existing candidate's findings.
+   *
+   * Separate from staging on purpose: reopening Stage must not re-capture, or a
+   * seller who staged yesterday silently gets a new build off today's board under
+   * the version number they thought they were about to publish.
+   */
+  router.get('/releases/:sessionId/staged/:snapshotId', async (c) => {
+    try {
+      const staged = await checksForStagedRelease(db, {
+        tenantId: c.get('tenantId') as number,
+        userId: c.get('userId') as string,
+        sessionId: c.req.param('sessionId'),
+        objectId: c.req.query('objectId') || null,
+        snapshotId: c.req.param('snapshotId'),
+      });
+      return c.json({ staged });
+    } catch (error) {
+      return fail(c, error);
+    }
+  });
+
+  /** Put an earlier version back on sale. Existing buyers are not moved. */
+  router.post('/releases/revert', async (c) => {
+    try {
+      const body = await c.req.json<Record<string, unknown>>();
+      const result = await revertListing(db, c.env, {
+        tenantId: c.get('tenantId') as number,
+        userId: c.get('userId') as string,
+        listingId: String(body.listingId ?? ''),
+        snapshotId: String(body.snapshotId ?? ''),
+      });
+      return c.json({ reverted: result });
     } catch (error) {
       return fail(c, error);
     }
@@ -187,10 +284,14 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
       // window would 404 the one person entitled to a copy.
       const listing = await resolveListingBySlug(db, slug);
       if (!listing) return c.json({ error: 'Listing not found' }, 404);
-      if (!(await holdsLicence(db, tenantId, userId, listing.id))) {
-        return c.json({ error: 'Take a copy first' }, 403);
-      }
-      const installed = await installListingIntoCanvas(db, c.env, { tenantId, userId, slug });
+      // One read answers both questions: may they install, and WHICH VERSION do they
+      // own. Asking them separately is how "they own it" and "this is what they own"
+      // come to disagree.
+      const licence = await heldLicence(db, tenantId, userId, listing.id);
+      if (!licence) return c.json({ error: 'Take a copy first' }, 403);
+      const installed = await installListingIntoCanvas(db, c.env, {
+        tenantId, userId, slug, heldSnapshotId: licence.snapshotId,
+      });
       return c.json({ installed }, 201);
     } catch (error) {
       return fail(c, error);
@@ -274,11 +375,11 @@ export function createPublicListingRoutes(db: Db): Hono<HonoEnv> {
     // A bad or expired token is treated exactly like no token: the visitor gets the
     // free/preview experience instead of an error, because a signed-out visitor and
     // a stale-token visitor want the same thing from this URL.
-    const entitled = await entitlementFromAuthHeader(
+    const { entitled, snapshotId } = await entitlementFromAuthHeader(
       db, c.env, c.req.header('Authorization'), listing.id,
     );
 
-    const payload = await launchListing(db, c.env, slug, entitled);
+    const payload = await launchListing(db, c.env, slug, entitled, snapshotId);
     return payload ? c.json({ launch: payload }) : c.json({ error: 'Nothing to launch' }, 404);
   });
 

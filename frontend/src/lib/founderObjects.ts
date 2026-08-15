@@ -35,7 +35,7 @@
  * `hint` is model-facing and stays English, like every other tool description.
  */
 
-import type { FounderObjectKind } from '@builderforce/creation-canvas-contract';
+import { ACCOUNT_RELATIONSHIPS, type FounderObjectKind } from '@builderforce/creation-canvas-contract';
 import {
   SOURCES_FIELD,
   SUMMARY_FIELD,
@@ -111,6 +111,28 @@ const CURRENCY_FIELD: FounderField = {
 // `SOURCES_FIELD` and `SUMMARY_FIELD` are imported from `specObjects.ts`. They were
 // declared here too, byte-identical, which is the same duplicate the type alias above
 // removes: two constants that agreed until somebody improved one of them.
+
+/**
+ * The counterparty instruction, declared ONCE for the fields that used to be three
+ * independent string matches.
+ *
+ * ── WHY ONE CONSTANT AND NOT THREE HINTS ────────────────────────────────────────
+ * `invoice.customer`, `bill.vendor` and `contract.counterparty` each told the model to
+ * "match it to a `company`, `salesContact` or `contract` on the board where one
+ * exists". Three fields, three slightly different instructions, three chances for a
+ * trailing "Ltd" to produce a second Acme. The instruction is one instruction, so it is
+ * one constant, and a fourth counterparty field costs a reference rather than a fourth
+ * paraphrase.
+ *
+ * ── WHAT THIS DOES AND DOES NOT DO ──────────────────────────────────────────────
+ * It points all three at ONE object — the `account` kind below — instead of at three
+ * different ones. The typed FIELD that carries an account's id alongside the display
+ * name is the next step and is deliberately not here: binding four call sites through a
+ * shared resolver, with a read-time fallback that leaves an existing board's string
+ * values readable, is its own change. What this closes is the part that made that change
+ * impossible: there was no object to point at.
+ */
+const COUNTERPARTY_HINT = 'The legal name of the counterparty, as it appears on the paperwork. Where an `account` object for them is on this board, use that account\'s title verbatim — it is the ONE object every commercial reference points at, so matching it is what joins this to their other invoices, their contract and their renewal. Author the account first if it is missing.';
 
 export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
   // ── Who we are ────────────────────────────────────────────────────────────────
@@ -477,7 +499,7 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     defaultStatus: 'draft',
     actions: ['issue', 'record-payment', 'chase'],
     fields: [
-      { name: 'customer', render: 'stat', label: 'customer', hint: 'The legal name of the party that owes this. Match it to a `company`, `salesContact` or `contract` on the board where one exists.' },
+      { name: 'customer', render: 'stat', label: 'customer', hint: `The party that owes this. ${COUNTERPARTY_HINT}` },
       { name: 'invoiceNumber', render: 'stat', label: 'invoiceNumber', hint: 'Your own reference for it.' },
       CURRENCY_FIELD,
       { name: 'amount', render: 'stat', label: 'amount', hint: `${EXACT_MONEY_HINT} The total payable including tax.` },
@@ -497,7 +519,7 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     defaultStatus: 'received',
     actions: ['approve', 'schedule-payment', 'dispute'],
     fields: [
-      { name: 'vendor', render: 'stat', label: 'vendor', hint: 'The legal name of the party owed. Match it to a `contract` on the board where one exists — a bill without its contract cannot be checked against what was agreed.' },
+      { name: 'vendor', render: 'stat', label: 'vendor', hint: `The party owed — a bill without its counterparty cannot be checked against what was agreed. ${COUNTERPARTY_HINT}` },
       { name: 'reference', render: 'stat', label: 'reference', hint: "The vendor's own invoice reference." },
       CURRENCY_FIELD,
       { name: 'amount', render: 'stat', label: 'amount', hint: `${EXACT_MONEY_HINT} The total payable including tax.` },
@@ -517,7 +539,7 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     defaultStatus: 'draft',
     actions: ['review', 'sign'],
     fields: [
-      { name: 'counterparty', render: 'stat', label: 'counterparty', hint: 'The legal name of the other party.' },
+      { name: 'counterparty', render: 'stat', label: 'counterparty', hint: COUNTERPARTY_HINT },
       { name: 'contractType', render: 'stat', label: 'contractType', hint: 'msa | sow | nda | employment | vendor | formation.' },
       { name: 'effectiveAt', render: 'stat', label: 'effectiveAt', hint: 'ISO start date.' },
       { name: 'renewsAt', render: 'stat', label: 'renewsAt', hint: 'ISO renewal or expiry date — the field that makes a contract something the board can warn about. Bind a `trigger` with comparator "due-within" to be told before an auto-renewal rather than after it.', deadline: true },
@@ -525,6 +547,62 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       { name: 'obligations', render: 'rows', label: 'obligations', columns: ['obligation', 'owner', 'due'], hint: 'What this commits us to: {obligation, owner, due}. The reason to hold a contract on a board rather than in a drive.' },
       { name: 'risks', render: 'chips', label: 'risks', hint: 'Clauses worth a second look — auto-renewal, unlimited liability, exclusivity, IP assignment.' },
       SUMMARY_FIELD,
+    ],
+  },
+  // ── The counterparty ──────────────────────────────────────────────────────────
+  //
+  // The object the four fields above now point AT. See the kind's note in the
+  // contract for why it is not a second customer table: `party_roles` already holds
+  // one row per (tenant, party, role), so this card is a PROJECTION of a kernel row
+  // and `partyRef` is the join.
+  //
+  // `history` is the FO-A3 half — the account's own open invoices, live contract and
+  // renewal, written by `canvas_sync_account` from the domains that already hold them.
+  // Declared `derived` rather than omitted: a model that cannot see the section exists
+  // will invent somewhere to put a receivable, and the honest instruction is "this
+  // exists, you may reason about it, you may not assert it".
+  {
+    kind: 'account',
+    icon: '⬡',
+    group: 'People',
+    defaultStatus: 'prospect',
+    actions: ['sync', 'research'],
+    fields: [
+      {
+        name: 'partyRef',
+        render: 'stat',
+        label: 'partyRef',
+        hint: 'The stable reference every other object joins to this account by — lowercase, hyphenated, derived from the legal name ("Acme Holdings Ltd" → "acme-holdings-ltd"). Set it ONCE and never edit it: changing a ref orphans every invoice, bill and contract that already points at it. canvas_sync_account writes it when the account comes from the workspace.',
+      },
+      {
+        name: 'relationship',
+        render: 'stat',
+        label: 'relationship',
+        hint: `What this party is to us: ${ACCOUNT_RELATIONSHIPS.join(' | ')}. One account can be more than one thing — a customer who also supplies you is TWO relationships, so use \`alsoKnownAs\` to say so rather than picking the more flattering one.`,
+      },
+      { name: 'legalName', render: 'stat', label: 'legalName', hint: 'Registered legal name as it appears on the contract, if it differs from the trading name in the title. This is the name that has to match on an invoice.' },
+      { name: 'owner', render: 'stat', label: 'owner', hint: 'The single person here who owns this relationship. Not a team — an account with no named owner is an account nobody chases.' },
+      { name: 'website', render: 'stat', label: 'website', hint: 'Primary domain. The cheapest way to tell two similarly-named companies apart.' },
+      { name: 'segment', render: 'stat', label: 'segment', hint: 'Title of the `customerSegment` object this account belongs to, where one is on the board. This is what makes "how are we doing in mid-market" answerable.' },
+      { name: 'since', render: 'stat', label: 'since', hint: 'ISO date the relationship started — first order, first invoice, signature date.' },
+      { name: 'alsoKnownAs', render: 'chips', label: 'alsoKnownAs', hint: 'Every other name this party appears under — the trading name, the old name before an acquisition, the abbreviation the team actually types. This is the list that stops a second account being created for a company you already have.' },
+      {
+        name: 'contacts',
+        render: 'rows',
+        label: 'contacts',
+        columns: ['name', 'role', 'email', 'notes'],
+        hint: 'The people at this account: {name, role, email, notes}. `role` is what they DO in a deal — economic buyer, champion, blocker, user — not their job title, because the title is on their business card and the role is what a next step depends on.',
+      },
+      {
+        name: 'history',
+        render: 'rows',
+        label: 'history',
+        columns: ['record', 'reference', 'status', 'amount', 'date'],
+        derived: true,
+        hint: 'This account\'s own record from the workspace — open invoices, unpaid bills, the live contract and its renewal — written by canvas_sync_account from the domains that already hold them. READ-ONLY: never author a row here, because an invented receivable is a number somebody will chase a real company for.',
+      },
+      SUMMARY_FIELD,
+      SOURCES_FIELD,
     ],
   },
 ];

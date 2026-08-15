@@ -19,7 +19,7 @@ import {
  * `PRD-agent-compile-primitive.md`.
  */
 
-const SURFACES: CompileSurface[] = ['cloud-durable', 'ide', 'workflow-node', 'cloud-container', 'desktop'];
+const SURFACES: CompileSurface[] = ['cloud-durable', 'workspace', 'workflow-node', 'cloud-container', 'desktop'];
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)',

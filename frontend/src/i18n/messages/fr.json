@@ -1081,7 +1081,20 @@
     },
     "askAi": "Demander à l’IA",
     "previewWeb": "Web",
-    "previewMobile": "Mobile"
+    "previewMobile": "Mobile",
+    "previewEmpty": "Lancez votre projet pour voir un aperçu",
+    "previewOpen": "Ouvrir",
+    "previewTitle": "Aperçu",
+    "visualEdit": "Pointer et modifier",
+    "visualEditHint": "Cliquez sur n'importe quel élément de l'aperçu pour changer son texte ou son style sans passer par l'agent.",
+    "visualEditOn": "Sélection — cliquez sur un élément",
+    "visualSelected": "Sélectionné {tag} · {file}:{line}",
+    "visualText": "Texte",
+    "visualClasses": "Classes de style",
+    "visualApply": "Appliquer",
+    "visualCancel": "Annuler",
+    "visualApplied": "{file} mis à jour",
+    "visualNoPreview": "Lancez d'abord le projet — pointer et modifier nécessite un aperçu en direct."
   },
   "tools": {
     "outOf5": "sur 5,0",
@@ -6626,7 +6639,8 @@
       "Rôles d'agent personnalisés",
       "Boîte de réception d'approbation partagée pour l'équipe",
       "Contrôles de coûts par poste"
-    ]
+    ],
+    "methodNote": "Lire une idée et choisir une preuve est gratuit sur tous les forfaits. Seule la construction consomme du budget d’exécution — et c’est bien le principe : les deux actes qui décident si le coûteux en vaut la peine ne coûtent rien."
   },
   "phonePage": {
     "seoTitle": "Téléphone professionnel — Builderforce.ai",
@@ -7021,7 +7035,16 @@
     "prevPage": "Page précédente",
     "nextPage": "Page suivante",
     "pageN": "Page {n}",
-    "title": "Blog Builderforce"
+    "title": "Blog Builderforce",
+    "post": {
+      "back": "← Retour au blog",
+      "byline": "Par {author}",
+      "notFoundTitle": "Article introuvable",
+      "notFoundBody": "Cet article n’existe pas ou a été déplacé.",
+      "browseAll": "Voir tous les articles →",
+      "relatedHeading": "Articles liés",
+      "startFree": "Commencez à créer gratuitement →"
+    }
   },
   "brain": {
     "timeline": {
@@ -7059,7 +7082,9 @@
       "stop": "Arrêter",
       "learnTargetContributed": "Contribué à {name} (projet #{projectId} v{version})",
       "learnTargetSkipped": "Ignoré {name} (projet #{projectId}) — {reason}",
-      "replay": "Renvoyer"
+      "replay": "Renvoyer",
+      "rateUp": "Bonne réponse",
+      "rateDown": "Mauvaise réponse"
     },
     "tickets": {
       "none": "Aucun ticket lié pour l’instant.",
@@ -7226,11 +7251,7 @@
     },
     "messageActions": {
       "downloadMarkdown": "Télécharger le Markdown",
-      "downloaded": "Téléchargé",
-      "goodResponse": "Bonne réponse",
-      "badResponse": "Mauvaise réponse",
-      "thumbsUp": "J'aime",
-      "thumbsDown": "Je n'aime pas"
+      "downloaded": "Téléchargé"
     },
     "newProjectPlaceholder": "Nom du nouveau projet",
     "createAndAssign": "Créer et attribuer",
@@ -9184,7 +9205,8 @@
       "salesLeads": "Leads commerciaux",
       "salesCommissions": "Commissions commerciales",
       "cron": "Tâches planifiées",
-      "broadcasts": "Annonces"
+      "broadcasts": "Annonces",
+      "llmRatings": "Évaluations"
     },
     "common": {
       "loading": "Chargement…",
@@ -10126,7 +10148,36 @@
         "paid": "Clients payants"
       }
     },
-    "subnavLabel": "Sous-vues d’administration"
+    "subnavLabel": "Sous-vues d’administration",
+    "llmRatings": {
+      "title": "Évaluations des modèles",
+      "subtitle": "Ce que les gens ont dit du résultat : chaque pouce, rattaché au modèle qui a traité le tour et à l’outil MCP exécuté.",
+      "count": "{total} évaluations sur {models} modèles",
+      "periodLabel": "Période d’évaluation",
+      "period7": "7 derniers jours",
+      "period30": "30 derniers jours",
+      "period90": "90 derniers jours",
+      "period365": "Dernière année",
+      "statSatisfaction": "Satisfaction",
+      "statUp": "Pouces levés",
+      "statDown": "Pouces baissés",
+      "statModels": "Modèles évalués",
+      "verdictsTitle": "Quel modèle l’emporte, et sur quoi",
+      "verdictsHint": "Affiché uniquement quand deux modèles ou plus ont été évalués sur le même travail — un seul candidat n’est pas une comparaison.",
+      "verdictsEmpty": "Pas encore de duel : chaque groupe n’a des évaluations que pour un seul modèle.",
+      "verdict": "<winner></winner> devance <loser></loser> de {points} points sur {n} évaluations",
+      "breakdownTitle": "Tous les groupes évalués",
+      "colModel": "Modèle",
+      "colAction": "Action",
+      "colTool": "Outil MCP",
+      "colUp": "Pour",
+      "colDown": "Contre",
+      "colScore": "Satisfaction",
+      "noTool": "sans outil",
+      "scoreNote": "La satisfaction est ramenée vers le neutre selon la taille de l’échantillon : un pouce chanceux ne peut donc pas dépasser un long historique positif. Le routeur apprenant combine ce même nombre avec les résultats d’exécution.",
+      "emptyTitle": "Aucune évaluation sur cette période.",
+      "emptyBody": "Les pouces apparaissent sous chaque réponse de l’IA dans le panneau Brain, le Canevas de création et l’extension VS Code. Chaque clic enregistre le modèle et l’outil MCP de ce tour."
+    }
   },
   "providerKeys": {
     "title": "Utilisez vos propres modèles",
@@ -15047,7 +15098,9 @@
       "supplier": "Fournisseur",
       "purchaseOrder": "Bon de commande",
       "shipment": "Expédition",
-      "incident": "Incident"
+      "incident": "Incident",
+      "book": "Livre",
+      "account": "Compte"
     },
     "twilioSetup": {
       "title": "Intégration Twilio",
@@ -16265,7 +16318,9 @@
       "publishFailed": "Cette publication n’a pas pu être publiée.",
       "campaignPublished": "Publié sur {published} comptes sur {targets}.",
       "campaignScheduled": "Programmé pour {count} comptes.",
-      "campaignUpdateFailed": "Cette campagne n’a pas pu être mise à jour."
+      "campaignUpdateFailed": "Cette campagne n’a pas pu être mise à jour.",
+      "gateTitle": "Créez un compte gratuit pour connecter vos comptes sociaux",
+      "gateBody": "Connecter X, LinkedIn, Facebook, Instagram et TikTok — et publier sur tous depuis une seule campagne — nécessite un compte Builderforce gratuit. Votre canevas reste inchangé."
     },
     "noticeGuestLimitRoom": "Cette session partagée a utilisé ses {limit} messages gratuits du jour. Inscrivez-vous gratuitement pour continuer — votre canevas vous suit.",
     "founder": {
@@ -17215,7 +17270,8 @@
       "freshHours": "il y a {count} h",
       "freshDays": "il y a {count} j",
       "label": {
-        "funnel": "Entonnoir"
+        "funnel": "Entonnoir",
+        "book": "Livre"
       },
       "field": {
         "funnelDomain": "Entonnoir",
@@ -17228,7 +17284,19 @@
         "dateRange": "Période",
         "bottleneck": "Goulot d’étranglement",
         "fetchedAt": "Mesuré",
-        "summary": "Synthèse"
+        "summary": "Synthèse",
+        "author": "Auteur",
+        "coverImageUrl": "Couverture",
+        "coverDpi": "Résolution de couverture",
+        "pages": "Pages",
+        "figures": "Figures",
+        "contents": "Sommaire",
+        "samplePages": "Pages d’extrait",
+        "formats": "Éditions",
+        "trimSize": "Format fini",
+        "pageCount": "Nombre de pages",
+        "figureCount": "Nombre de figures",
+        "wordCount": "Mots"
       },
       "column": {
         "stage": "Étape",
@@ -17238,7 +17306,20 @@
         "medianDays": "Jours médians",
         "source": "Source",
         "converted": "Convertis",
-        "rate": "Taux"
+        "rate": "Taux",
+        "page": "Page",
+        "heading": "Titre",
+        "body": "Texte",
+        "figure": "Figure",
+        "ref": "Réf.",
+        "caption": "Légende",
+        "altText": "Texte alternatif",
+        "url": "Fichier",
+        "chapter": "Chapitre",
+        "title": "Titre"
+      },
+      "status": {
+        "manuscript": "Manuscrit"
       }
     },
     "noticeGateEvaluated": "Critère de publication évalué à partir des exécutions et des anomalies de ce canevas — {score} % des critères remplis.",
@@ -17396,7 +17477,9 @@
         "course": "Cours",
         "dataset": "Jeu de données",
         "tool": "Outil",
-        "creative": "Ressource créative"
+        "creative": "Ressource créative",
+        "survey": "Questionnaire",
+        "book": "Livre"
       },
       "launchHint": {
         "play": "Les acheteurs y jouent dans le navigateur.",
@@ -17642,7 +17725,57 @@
       "fabricatedData": "Ces chiffres ne sont pas réels : ce canevas contient un jeu de données importé, j’aurais donc dû en calculer les valeurs au lieu d’utiliser des espaces réservés. Demandez-moi de le refaire et j’interrogerai chaque ligne.",
       "documentUnverified": "Le canevas contient un brouillon de document, mais son contenu rédigé ne vérifie pas les {requestedPages, number} pages demandées. Un manuscrit de cette taille ne peut pas être rédigé en un seul tour borné de Brain : il n’est donc pas complet. Construisez-le et relisez-le par sections avant de le considérer comme terminé ou de l’exporter.",
       "documentIncomplete": "J’ai créé sur le canevas un brouillon de document de {authoredWords, number} mots (environ {estimatedPages, number} {estimatedPages, plural, one {page} other {pages}}), et non les {requestedPages, number} pages demandées. Un manuscrit de cette taille ne peut pas être rédigé en un seul tour borné de Brain : je ne l’ai donc pas marqué comme terminé. Construisez-le et relisez-le par sections avant de le considérer comme terminé ou de l’exporter."
-    }
+    },
+    "releases": {
+      "crumb": "Place de marché",
+      "title": "Créer, préparer, publier",
+      "loading": "Lecture de l’historique des versions…",
+      "notSellable": "Cette carte ne peut pas être vendue : elle n’a donc pas de versions.",
+      "openAction": "Versions et préparation",
+      "harnessLine": "Contrôles de préparation : {harness}",
+      "railLabel": "Versions",
+      "harness": {
+        "media": "le lit en entier et le mesure",
+        "runtime": "le démarre en bac à sable et le pilote",
+        "paged": "le lit, le reflue et en tire une épreuve",
+        "geometry": "vérifie qu’il est réellement fabricable",
+        "instrument": "y répond, puis lit ses résultats sans aucune réponse",
+        "system": "l’exécute à blanc, chaque étape sortante étant simulée"
+      },
+      "state": {
+        "draft": "Brouillon",
+        "staged": "Préparée",
+        "live": "En vente",
+        "superseded": "Remplacée"
+      },
+      "now": "à l’instant",
+      "draftNote": "Votre canevas tel quel. Rien n’a encore été capturé.",
+      "holders": "{count, plural, =0 {Personne n’a cette version} one {# acheteur a cette version} other {# acheteurs ont cette version}}",
+      "stageAction": "Préparer cette version",
+      "revertAction": "Remettre en vente",
+      "viewListing": "Voir la fiche",
+      "group": {
+        "runs": "Fonctionne",
+        "travels": "Voyage",
+        "sells": "Se vend"
+      },
+      "groupOpen": "{count} à examiner",
+      "groupClear": "{count} sans problème",
+      "strippedHead": "Retiré avant de quitter votre espace",
+      "verdictBlocked": "{count, plural, one {# blocage} other {# blocages}}. Corrigez-les puis préparez à nouveau.",
+      "verdictReady": "La v{version} est prête à être vendue.",
+      "publishVersion": "Publier la v{version}",
+      "restage": "Capturer à nouveau",
+      "working": "En cours…",
+      "revertTitle": "Remettre la v{version} en vente ?",
+      "revertBody": "Les nouveaux acheteurs la recevront à la place de la v{version}. Les {holders} déjà sur la v{version} gardent ce qu’ils ont acheté : personne n’est déplacé.",
+      "revertConfirm": "La remettre en vente",
+      "noticeStaged": "v{version} préparée.",
+      "noticePublished": "La v{version} est en vente.",
+      "noticeReverted": "Retour à la version v{from}, publiée sous le numéro v{version}."
+    },
+    "rateUp": "Bonne réponse",
+    "rateDown": "Mauvaise réponse"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -18564,6 +18697,9 @@
       "body": "Commencez sur le canevas, reliez le contexte opérationnel et donnez aux humains et aux agents un lieu unique pour transformer l’intention en résultats.",
       "primary": "Créer gratuitement",
       "secondary": "Explorer toutes les capacités"
+    },
+    "method": {
+      "eyebrow": "Comment le travail se fait réellement"
     }
   },
   "routeMarketing": {
@@ -18933,21 +19069,12 @@
     "foundationsLede": "Substrat transverse. Aucun siège ne les possède — et notamment, aucune ne s’appelle « IA » : le modèle est la surface, pas un département.",
     "foundationBadge": "Fondation",
     "arcBadge": "Le parcours",
-    "arcTitle": "Idée → Créer → Piloter",
+    "arcTitle": "De l’idée au réel, étape par étape",
     "arcLede": "Le menu n’est pas une liste de services : c’est votre position dans le parcours, et chaque destination n’occupe qu’une seule place.",
     "arcCol": {
       "stage": "Étape",
       "question": "La question",
       "where": "Où vous allez"
-    },
-    "arcQuestion": {
-      "idea": "Et si… ?",
-      "make": "Construisez-le.",
-      "run": "Pilotez-le comme une entreprise.",
-      "measure": "Est-ce que ça marche ?",
-      "market": "Vendre, acheter, recruter, être trouvé.",
-      "expand": "Faites-le grandir.",
-      "admin": "Paramètres."
     },
     "arcNote": "Générée depuis la navigation même du produit : ce tableau ne peut donc ni annoncer une destination inexistante ni en oublier une réelle.",
     "faqTitle": "Les questions que cela soulève",
@@ -18975,7 +19102,8 @@
     ],
     "closeTitle": "Prêt à remplacer la pile ?",
     "closeLede": "Une plateforme au lieu de cinq, et un menu au lieu de sept. Commencez sur le canevas ; revendiquez votre entreprise quand vous en aurez une.",
-    "closeFine": "Sans carte bancaire · votre canevas est à vous avant l’inscription · évoluez quand vous voulez"
+    "closeFine": "Sans carte bancaire · votre canevas est à vous avant l’inscription · évoluez quand vous voulez",
+    "methodBadge": "La méthode"
   },
   "referencePanel": {
     "crumb": "{seat} · Référence",
@@ -19384,7 +19512,9 @@
       "course": "Cours",
       "dataset": "Jeu de données",
       "tool": "Outil",
-      "creative": "Ressource créative"
+      "creative": "Ressource créative",
+      "book": "Livre",
+      "survey": "Enquête"
     },
     "launchVerb": {
       "play": "Jouer",
@@ -19439,5 +19569,213 @@
       "built": "construit",
       "failed": "échoué"
     }
+  },
+  "methodology": {
+    "eyebrow": "La méthode",
+    "title": "De l’idée au réel",
+    "lede": "Quatre étapes disent où vous en êtes. Trois actes disent ce que vous faites. L’acte du milieu porte tout le parti pris : lire une idée coûte peu, la construire non, et choisir la preuve qui mérite d’être menée est la décision la plus lourde de conséquences du premier mois de n’importe quel projet.",
+    "step": {
+      "read": {
+        "title": "Lire",
+        "question": "Qu’avez-vous réellement dit ?",
+        "body": "Collez une idée, un brief, un appel d’offres ou un règlement de concours — rien n’a besoin d’être mis au propre. Cela revient sous forme de spécification : ce que la chose doit faire, les capacités qu’elle nomme et les limites que le brief a lui-même posées. Lire n’écrit rien et ne construit rien."
+      },
+      "prove": {
+        "title": "Prouver",
+        "question": "À quelle question êtes-vous prêt à payer pour répondre ?",
+        "body": "Huit façons de rendre l’idée réelle, classées face à votre spécification, de la moins chère à la plus chère. Chacune s’ouvre sur la question qu’elle tranche et porte une condition d’arrêt — le chiffre qui stopperait le projet — fixée avant la construction, pas après le résultat."
+      },
+      "build": {
+        "title": "Construire",
+        "question": "Est-ce réel, et où puis-je l’ouvrir ?",
+        "body": "La preuve choisie est matérialisée : fichiers sur le canevas, endpoints en service, tickets sur le tableau, site publié et une adresse que vous pouvez envoyer à quelqu’un. Les agents reprennent les tickets de construction à partir de là."
+      }
+    },
+    "spends": {
+      "yes": "Consomme du budget d’exécution",
+      "no": "Ne coûte rien"
+    },
+    "arcHead": "Où se placent les trois actes",
+    "arcQuestion": {
+      "idea": "Et si… ?",
+      "make": "Construisez-le.",
+      "run": "Exploitez-le comme une entreprise.",
+      "measure": "Est-ce que ça marche ?",
+      "market": "Vendez, achetez, recrutez, faites-vous trouver.",
+      "expand": "Faites-le grandir.",
+      "admin": "Paramètres."
+    },
+    "arcNote": "Mesurer est ce qui fait de cet arc une boucle et non une ligne : la condition d’arrêt fixée au moment de Prouver y est jugée, et la réponse retourne à Idée. Une preuve sans condition capable d’échouer n’est qu’un lancement avec des étapes en plus.",
+    "proofsHead": "Huit façons de rendre une idée réelle",
+    "proofsLede": "Classées comme le produit les classe : les moins chères d’abord. La recommandation ne commence jamais par le système complet, car l’échec coûteux n’est pas de construire lentement la mauvaise chose. C’est de construire la chose qui a l’air juste avant d’avoir vérifié que quelqu’un la voulait.",
+    "proofsNote": "Toutes les options sont toujours proposées. C’est un conseil sur ce qu’il faut mener en premier, pas un filtre — masquer une option en ferait un verdict plutôt qu’une recommandation.",
+    "liveBadge": "Publie une adresse",
+    "fidelity": "Fidélité",
+    "effort": "Effort",
+    "proof": {
+      "demo-video": {
+        "name": "Vidéo de démo",
+        "question": "Pouvez-vous me montrer ce que c’est ?",
+        "summary": "Un montage minuté et un script de narration, pour qu’une démo enregistrable de 90 secondes existe dès aujourd’hui."
+      },
+      "clickable-prototype": {
+        "name": "Prototype cliquable",
+        "question": "Quelqu’un peut-il vraiment aller au bout sans aide ?",
+        "summary": "Un parcours cliquable du flux, instrumenté, sans back-end ni données."
+      },
+      "smoke-test": {
+        "name": "Test de fumée",
+        "question": "Est-ce que quelqu’un en veut vraiment ?",
+        "summary": "Une landing « fausse porte », une liste d’attente et une console de demande jugée face à un seuil fixé à l’avance."
+      },
+      "wizard-of-oz": {
+        "name": "Magicien d’Oz",
+        "question": "Le résultat vaut-il d’être payé, avant qu’on sache l’automatiser ?",
+        "summary": "Un vrai front-end avec un humain derrière, sur une horloge de SLA, empruntant les routes que le système construit utilisera."
+      },
+      "poc": {
+        "name": "Preuve de concept",
+        "question": "La partie difficile fonctionne-t-elle vraiment, assez fiablement ?",
+        "summary": "L’étape la plus risquée isolée derrière un banc d’essai, avec un taux de réussite jugé face à une barre fixée à l’avance."
+      },
+      "pilot": {
+        "name": "Pilote",
+        "question": "Est-ce que ça tient avec de vraies personnes, à une taille où se tromper reste survivable ?",
+        "summary": "Un déploiement borné avec une cohorte nommée, une boucle de retour hebdomadaire et des critères de sortie écrits."
+      },
+      "phone-line": {
+        "name": "Ligne téléphonique",
+        "question": "Les clients peuvent-ils l’atteindre par téléphone — et peut-elle les rappeler ?",
+        "summary": "Un numéro entrant qui répond et comprend, plus un endpoint qui passe des appels sortants."
+      },
+      "live-system": {
+        "name": "Système en production",
+        "question": "Est-ce que ça tourne vraiment, et savons-nous l’exploiter ?",
+        "summary": "Le système complet en service à une vraie adresse, avec une console d’exploitation et un runbook d’astreinte."
+      }
+    },
+    "ctaRealize": "Rendez quelque chose réel →",
+    "ctaCanvas": "Ouvrir le canevas"
+  },
+  "sell": {
+    "seo": {
+      "title": "Vendre Builderforce — Programme de parrainage et d’associés commerciaux",
+      "description": "Rejoignez le programme de parrainage et d’associés commerciaux de Builderforce. Menez votre prospection, gérez vos leads, suivez vos objectifs et collaborez avec Builderforce depuis un canevas commercial persistant.",
+      "ogTitle": "Grandissez avec Builderforce"
+    },
+    "hero": {
+      "eyebrow": "Programme de parrainage et d’associés commerciaux",
+      "titleLine1": "Vendez Builderforce.",
+      "titleLine2": "Construisez un pipeline qui vous appartient.",
+      "lede": "Obtenez les supports, l’espace de vente connecté et l’accompagnement direct nécessaires pour présenter Builderforce aux bonnes équipes — et gagnez selon les taux de parrainage et de vente attribués à votre programme.",
+      "primaryCta": "Devenir associé commercial",
+      "secondaryCta": "Connexion associé",
+      "finePrint": "La participation au programme et l’éligibilité aux commissions sont soumises à approbation et aux conditions affichées dans votre compte."
+    },
+    "heroPanel": {
+      "aria": "Aperçu de l’espace de travail de l’associé commercial",
+      "status": "Espace commercial",
+      "title": "De l’objectif de revenus à la prochaine action",
+      "pipelineLabel": "Pipeline",
+      "pipelineValue": "Contacts → Gagné",
+      "goalsLabel": "Objectifs",
+      "goalsValue": "Cadence hebdomadaire",
+      "step1": "Viser le bon marché",
+      "step2": "Lancer une prospection coordonnée",
+      "step3": "Suivre inscriptions et conversions",
+      "step4": "Progresser avec le coaching Builderforce"
+    },
+    "pitch": {
+      "eyebrow": "Ce que vous vendez réellement",
+      "title": "Une méthode, pas une liste de fonctionnalités",
+      "body": "L’objection la plus dure de cette catégorie est « nous avons déjà des outils d’IA ». La réponse n’est pas une liste de fonctionnalités plus longue : c’est que Builderforce vend une façon de travailler. Lire l’idée, choisir la preuve la moins chère qui répond à la vraie question, puis construire. Ceux qui se sont brûlés sur six mois de développement jamais validés comprennent cette phrase immédiatement — et c’est la phrase même que le produit affiche à l’écran."
+    },
+    "capabilities": {
+      "eyebrow": "Votre système d’exploitation commercial",
+      "title": "Tout centré sur un seul canevas",
+      "intro": "C’est plus qu’un lien de parrainage. Votre compte associé réunit le CRM, les campagnes, l’agenda et le coaching essentiels pour que chaque action ait du contexte.",
+      "items": {
+        "canvas": {
+          "title": "Un canevas commercial",
+          "text": "Planifiez et exécutez le travail commercial et marketing dans un espace persistant, adossé à votre compte, où votre équipe et Builderforce peuvent collaborer."
+        },
+        "crm": {
+          "title": "CRM et pipeline",
+          "text": "Importez des contacts, organisez des listes, qualifiez des leads, suivez les étapes et voyez où se situe chaque opportunité dans votre pipeline."
+        },
+        "targeting": {
+          "title": "Ciblage de marché",
+          "text": "Définissez les marchés et audiences que vous voulez atteindre, puis bâtissez des campagnes ciblées autour d’eux."
+        },
+        "campaigns": {
+          "title": "Campagnes e-mail",
+          "text": "Créez la prospection, organisez les relances et reliez l’activité de campagne aux contacts et opportunités qu’elle doit faire avancer."
+        },
+        "goals": {
+          "title": "Objectifs et coaching",
+          "text": "Fixez des objectifs hebdomadaires d’activité et de revenus, voyez les actions nécessaires pour combler l’écart et demandez un accompagnement individuel à Builderforce."
+        },
+        "meetings": {
+          "title": "Réunions et agenda",
+          "text": "Connectez votre agenda, planifiez des rendez-vous prospects et invitez le superadministrateur Builderforce quand vous voulez du soutien en visio."
+        }
+      }
+    },
+    "visibility": {
+      "eyebrow": "Un programme lisible",
+      "title": "Sachez quand votre travail devient du revenu",
+      "body": "Recevez des notifications quand les utilisateurs qui vous sont attribués s’inscrivent et quand ils convertissent. Votre tableau de bord relie activité, opportunités, parrainages et gains pour que vous puissiez vous concentrer sur la meilleure action suivante.",
+      "check1": "Notifications d’inscription et de conversion",
+      "check2": "Taux de parrainage et de vente indexés sur les tarifs",
+      "check3": "Objectifs de revenus traduits en cibles de pipeline",
+      "check4": "Demandes de rendez-vous directes et appui sur les affaires"
+    },
+    "materials": {
+      "eyebrow": "Boîte à outils commerciale",
+      "title": "Commencez avec des supports validés",
+      "intro": "Utilisez ces ressources pour la prospection et la découverte. Le dossier public presse et produit reste disponible dans le <media>kit média</media>.",
+      "download": "Télécharger →",
+      "items": {
+        "discovery": {
+          "label": "GUIDE",
+          "title": "Guide de découverte commerciale",
+          "text": "Questions de qualification, relances sur l’impact et un cadre pratique pour l’étape suivante."
+        },
+        "outbound": {
+          "label": "PLAYBOOK",
+          "title": "Playbook e-mail sortant",
+          "text": "Une séquence concise en trois touches avec le positionnement Builderforce validé."
+        },
+        "contacts": {
+          "label": "CSV",
+          "title": "Modèle de contacts CRM",
+          "text": "Champs prêts à importer pour les contacts, les marchés cibles et les étapes du pipeline."
+        }
+      }
+    },
+    "steps": {
+      "eyebrow": "Comment ça marche",
+      "one": {
+        "title": "Créez votre compte associé",
+        "text": "Choisissez le type de compte Associé commercial et transmettez les informations de votre programme."
+      },
+      "two": {
+        "title": "Fixez votre marché et votre objectif de revenus",
+        "text": "Bâtissez un plan de pipeline autour de l’audience et du résultat que vous voulez viser."
+      },
+      "three": {
+        "title": "Menez le travail depuis votre canevas",
+        "text": "Gérez contacts, campagnes, réunions, relances et coaching au même endroit."
+      }
+    },
+    "cta": {
+      "eyebrow": "Prêt à commencer ?",
+      "title": "Transformez votre réseau en une mécanique commerciale reproductible.",
+      "button": "Rejoindre le programme"
+    }
+  },
+  "relatedArticles": {
+    "heading": "À lire aussi",
+    "subtitle": "Des analyses approfondies du blog Builderforce sur les sujets abordés ici."
   }
 }

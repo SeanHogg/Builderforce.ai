@@ -13,6 +13,10 @@ import { nextDatasetVersion, rowBasis } from './canvasDatasetVersion';
 import { fileExtension, fileStem } from './canvasDocuments';
 import { htmlToMarkdown } from './richText';
 import {
+  createResumeFamily, isJsonResume, renderResumeMarkdown, resumeDocumentFromJson, resumeNodePatch,
+  type CanvasResumeDocument,
+} from './canvasResume';
+import {
   MAX_PARSEABLE_BYTES, PAGE_BREAK_MARKER, readDocx, readPdf, readPptx, readXlsx, rtfToText,
   type OfficeSlide, type WorkbookSheet,
 } from './officeFormats';
@@ -151,6 +155,47 @@ function documentObject(
   };
 }
 
+/**
+ * A JSON Resume export, as the résumé object the template engine renders.
+ *
+ * Returns null for any other JSON so the caller falls through to the tabular path —
+ * a genuine data export must still become a Dataset.
+ */
+function jsonResumeObject(file: File, source: string, t: ImportTranslator): ImportedCanvasObject | null {
+  let parsed: unknown;
+  try { parsed = JSON.parse(source.replace(/^﻿/, '')) as unknown; } catch { return null; }
+  if (!isJsonResume(parsed)) return null;
+  const document = resumeDocumentFromJson(parsed);
+  const markdown = document ? renderResumeMarkdown(document) : '';
+  if (!document || !markdown.trim()) return null;
+  const title = stringField(document.basics?.name) || fileStem(file.name);
+  return {
+    kind: 'resume',
+    data: {
+      title,
+      fileName: file.name,
+      mimeType: file.type || 'application/json',
+      fileSize: file.size,
+      status: t('statusImported'),
+      subtitle: t('resumeShape', { sections: countedResumeSections(document) }),
+      ...resumeNodePatch(createResumeFamily({
+        title,
+        markdown,
+        document,
+        sourceFile: { name: file.name, mimeType: file.type || 'application/json', size: file.size },
+      })),
+    },
+  };
+}
+
+const stringField = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
+
+/** Sections with at least one entry — what the card can honestly say it holds. */
+function countedResumeSections(document: CanvasResumeDocument): number {
+  return Object.values(document).filter((value) => Array.isArray(value) && value.length > 0).length
+    + (stringField(document.basics?.summary) ? 1 : 0);
+}
+
 function workbookObjects(file: File, sheets: WorkbookSheet[], t: ImportTranslator): ImportedCanvasObject[] {
   const [first, ...rest] = sheets;
   if (!first) return [];
@@ -209,12 +254,13 @@ function attachmentObject(file: File, t: ImportTranslator, extra: Record<string,
  * what the file turned out to be. */
 function promptFor(kind: CreationObjectKind, file: File, t: ImportTranslator): string {
   const key = kind === 'spreadsheet' || kind === 'dataset' ? 'promptData'
-    : kind === 'slides' ? 'promptDeck'
-      : kind === 'document' ? 'promptDocument'
-        : kind === 'image' ? 'promptImage'
-          : kind === 'model3d' ? 'promptModel'
-            : kind === 'cad' ? 'promptDrawing'
-              : kind === 'code' ? 'promptCode' : 'promptFile';
+    : kind === 'resume' ? 'promptResume'
+      : kind === 'slides' ? 'promptDeck'
+        : kind === 'document' ? 'promptDocument'
+          : kind === 'image' ? 'promptImage'
+            : kind === 'model3d' ? 'promptModel'
+              : kind === 'cad' ? 'promptDrawing'
+                : kind === 'code' ? 'promptCode' : 'promptFile';
   return t(key, { name: file.name });
 }
 
@@ -227,6 +273,7 @@ function noticeFor(objects: ImportedCanvasObject[], file: File, t: ImportTransla
       ? t('noticeWorkbook', { name: file.name, sheets })
       : t('noticeDataset', { name: file.name, rows: Number(data.rowCount ?? 0).toLocaleString(), columns: Array.isArray(data.columns) ? data.columns.length : 0 });
   }
+  if (kind === 'resume') return t('noticeResume', { name: file.name });
   if (kind === 'slides') return t('noticeDeck', { name: file.name, slides: Array.isArray(data.items) ? data.items.length : 0 });
   if (kind === 'document') return t('noticeDocument', { name: file.name, pages: Number(data.pageCount ?? 1) });
   if (kind === 'image') return t('noticeImage', { name: file.name });
@@ -407,6 +454,23 @@ async function deriveObjects(file: File, t: ImportTranslator): Promise<ImportedC
     // A malformed container falls through to the attachment path: the person
     // still gets their file on the board, labelled honestly.
     return [attachmentObject(file, t, { status: t('statusUnreadable') })];
+  }
+
+  /**
+   * A JSON RESUME IS A RÉSUMÉ, NOT A DATASET.
+   *
+   * The standard export is one top-level object, so the tabular importer below read it
+   * as a single row whose twelve cells were JSON strings — queryable in principle,
+   * renderable by nothing. The person then asked for their résumé in ten styles and the
+   * only route left was to have a model retype the whole document ten times, which is
+   * what stalled a four-minute turn (2026-08-15) without producing one. Recognised
+   * here, it arrives as a résumé the template engine can restyle for free.
+   *
+   * Checked BEFORE the tabular branch because `.json` matches both.
+   */
+  if (!oversized && /\.json$/i.test(file.name)) {
+    const resume = jsonResumeObject(file, await file.text(), t);
+    if (resume) return [resume];
   }
 
   if (!oversized && isTabularFile(file.name, file.type) && !MARKDOWN_FILE.test(file.name)) {

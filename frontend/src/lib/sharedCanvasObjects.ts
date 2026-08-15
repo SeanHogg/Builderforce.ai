@@ -20,6 +20,25 @@
 
 import { registerSpecObjectSet, SUMMARY_FIELD, type SpecObjectSpec } from './specObjects';
 
+/**
+ * Rows out of a `rows` field, whatever the model wrote there.
+ *
+ * A `rows` value arrives as an array of objects when the model behaves and as
+ * anything at all when it does not, and a `derive` that throws takes the whole card
+ * down. So every derivation below reads through this rather than trusting the shape.
+ */
+function rowsOf(value: unknown): ReadonlyArray<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
+    : [];
+}
+
+/** Words in a cell. Whitespace-split, which is close enough for a manuscript figure
+ *  and honest about being an estimate rather than a typesetter's count. */
+function wordsIn(value: unknown): number {
+  return typeof value === 'string' ? value.trim().split(/\s+/).filter(Boolean).length : 0;
+}
+
 /** i18n namespace for every cross-domain label, status, field and column. */
 export const SHARED_NAMESPACE = 'creationCanvas.shared';
 
@@ -61,16 +80,61 @@ export const SHARED_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       SUMMARY_FIELD,
     ],
   },
+  {
+    // ── THE PUBLICATION PRIMITIVE ────────────────────────────────────────────────
+    // A book is not a longer `document`. A document is read on a screen and is done;
+    // a book carries a cover, an ordered page list, numbered figures and a print
+    // edition, and each of those is a thing the paged harness asks a question about
+    // before it may be sold. Adding it as a `document` variant would have meant the
+    // print checks either ran on every document or on none.
+    kind: 'book',
+    icon: '📖',
+    group: 'Create',
+    defaultStatus: 'manuscript',
+    actions: ['read', 'proof', 'export'],
+    fields: [
+      { name: 'author', render: 'stat', label: 'author', hint: 'Whose name goes on the cover, as it should be printed. Not the account that made it — a ghostwritten book has two different answers and only one of them belongs here.' },
+      { name: 'coverImageUrl', render: 'reference', label: 'coverImageUrl', hint: 'The cover artwork. For a print edition it must be 300 dpi at trim size (2480 x 3508 for A4) — the paged harness measures it and refuses the print output below that, because a 72 dpi cover is only discovered after somebody has paid for a parcel.' },
+      { name: 'coverDpi', render: 'stat', label: 'coverDpi', hint: 'Effective resolution of the cover at trim size. Write the measured number, not the intent.' },
+      {
+        name: 'pages', render: 'rows', label: 'pages', columns: ['page', 'heading', 'body', 'figure'],
+        hint: 'The book, in order: {page, heading, body, figure}. `page` is the printed folio and must be unique and contiguous — a gap is a page nobody wrote. `figure` names a figure from `figures` by its ref, or is empty. An entry with no body and no figure is an empty page and blocks publication.',
+      },
+      {
+        name: 'figures', render: 'rows', label: 'figures', columns: ['ref', 'caption', 'altText', 'url'],
+        hint: 'Illustrations: {ref, caption, altText, url}. `altText` is required by both the EPUB validator and every screen reader, and is the single most-skipped field in a finished manuscript — the harness warns per missing entry rather than once, so the number is visible.',
+      },
+      { name: 'contents', render: 'rows', label: 'contents', columns: ['chapter', 'title', 'page'], hint: 'Table of contents: {chapter, title, page}. Every `page` must exist in `pages`; a contents entry pointing past the end is a link that 404s inside a paid product.' },
+      { name: 'samplePages', render: 'stat', label: 'samplePages', hint: 'How many pages a non-buyer may read. This IS the sales pitch — zero means the listing sells a cover.' },
+      { name: 'formats', render: 'chips', label: 'formats', hint: 'Which editions ship: reader | epub | pdf | print. Print is a fulfilment rather than a download and carries its own checks, so listing it commits to the 300 dpi cover.' },
+      { name: 'trimSize', render: 'stat', label: 'trimSize', hint: 'Finished page size for the print edition, e.g. "A4" or "6x9in". Absent means digital-only.' },
+      // Counted from the rows rather than stored beside them: a page count that can
+      // disagree with the page list is the one number a reader will notice is wrong.
+      { name: 'pageCount', render: 'stat', label: 'pageCount', hint: 'Pages written. Counted from `pages`, never typed.', derive: (data) => rowsOf(data.pages).length || undefined },
+      { name: 'figureCount', render: 'stat', label: 'figureCount', hint: 'Figures placed. Counted from `figures`, never typed.', derive: (data) => rowsOf(data.figures).length || undefined },
+      {
+        name: 'wordCount', render: 'stat', label: 'wordCount',
+        hint: 'Words across every page body. Counted, never typed.',
+        derive: (data) => {
+          const total = rowsOf(data.pages).reduce((sum, row) => sum + wordsIn(row.body), 0);
+          return total || undefined;
+        },
+      },
+      SUMMARY_FIELD,
+    ],
+  },
 ];
 
 /** English fallbacks the palette shows before `creationCanvas.shared.label.*` resolves. */
 export const SHARED_LABELS: Record<string, string> = {
   funnel: 'Funnel',
+  book: 'Book',
 };
 
 /** Blank-object status fallbacks under `creationCanvas.shared.status.*`. */
 export const SHARED_STATUSES: Record<string, string> = {
   notMeasured: 'Not measured',
+  manuscript: 'Manuscript',
 };
 
 registerSpecObjectSet({

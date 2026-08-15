@@ -28,7 +28,7 @@ export type DeployTransport =
   | 'cloud-durable' // CloudRunnerDO alarm/tick
   | 'cloud-container' // AgentContainerDO
   | 'workflow-claim' // workflow_tasks claimed by a host or advanced by the cloud cron
-  | 'ide-bridge' // VS Code relay
+  | 'workspace-bridge' // in-browser workspace, relayed from the editor
   | 'desktop-bridge'; // native-app relay
 
 export interface DeployPlan {
@@ -53,7 +53,7 @@ const SURFACE_TRANSPORT: Record<AgentSurface, DeployTransport> = {
   'cloud-durable': 'cloud-durable',
   'cloud-container': 'cloud-container',
   'workflow-node': 'workflow-claim',
-  ide: 'ide-bridge',
+  workspace: 'workspace-bridge',
   desktop: 'desktop-bridge',
 };
 

@@ -131,18 +131,27 @@ export const pwaTarget: GameTarget = {
 </script>`,
     ].join('\n');
 
-    const document = injectIntoHead(withTouchControls(game.html, game.accent), head);
+    // Two input shapes, one installable output — see `capacitorWebAssets`. A
+    // built app bundle is shipped as-is (its own `index.html` gains the install
+    // head tags); a game is the single document with the touch layer injected.
+    const bundle = game.webAssets;
+    const entry = bundle?.['index.html'] ?? withTouchControls(game.html, game.accent);
+    const document = injectIntoHead(entry, head);
+    // The stamp changes exactly when the payload does, so republishing something
+    // unchanged does not needlessly evict a working cache on every phone.
+    const stamp = bundle
+      ? Object.values(bundle).reduce((total, file) => total + file.length, 0)
+      : game.html.length;
 
     return {
       files: {
+        ...Object.fromEntries(Object.entries(bundle ?? {}).filter(([path]) => path !== 'index.html')),
         'index.html': document,
         'manifest.webmanifest': renderManifest(ctx),
-        // The build stamp is the game's own length: it changes exactly when the
-        // game does, so a republish of an unchanged game does not needlessly
-        // evict a working cache on every player's phone.
-        'sw.js': renderServiceWorker(game.slug).replace('__BUILD__', String(game.html.length)),
+        'sw.js': renderServiceWorker(game.slug).replace('__BUILD__', String(stamp)),
       },
       binaryFiles: {
+        ...(game.binaryAssets ?? {}),
         'icons/icon-192.png': gameIconPng(192, game.accent),
         'icons/icon-512.png': gameIconPng(512, game.accent),
       },

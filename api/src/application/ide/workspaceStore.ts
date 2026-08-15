@@ -224,8 +224,142 @@ export async function writeWorkspaceFile(
   if (!validPath.ok) return { ok: false, status: 400, reason: validPath.reason };
   const validContent = validateWorkspaceContent(path, content);
   if (!validContent.ok) return { ok: false, status: 422, reason: validContent.reason };
+  // Keep the version this write is about to destroy. Done HERE, at the single
+  // chokepoint, so every writer is covered by construction — the editor, the
+  // canvas build tools, an agent, the scaffold self-heal — rather than each one
+  // remembering to snapshot.
+  await captureWorkspaceVersion(bucket, projectId, path);
   await withSameObjectRetry(() => bucket.put(workspacePrefix(projectId) + path, content));
   return { ok: true };
+}
+
+/**
+ * ── FILE HISTORY ────────────────────────────────────────────────────────────
+ *
+ * An autonomous agent editing a working app WILL eventually break it, and until
+ * now there was nothing to go back to: `writeWorkspaceFile` overwrote in place
+ * and the previous content was gone. Every competing prompt-to-app product treats
+ * one-click revert as mandatory for exactly this reason.
+ *
+ * ── THE KEY SHAPE, AND WHY TIMESTAMP-FIRST ──────────────────────────────────
+ * `ide/history/projects/<id>/<epochMs>/<path>`.
+ *
+ * The obvious alternative — path first, then timestamp — makes listing ONE
+ * file's versions a clean prefix scan and is wrong: workspace paths nest, so
+ * `…/src/App.jsx/<ts>` and `…/src/App.jsx.bak/<ts>` are fine but `…/src/<ts>`
+ * and `…/src/App.jsx/<ts>` are not distinguishable from a listing of `…/src/`.
+ * Timestamp-first has no such collision because a timestamp segment can never be
+ * a path segment. Listing a single file's versions is then a filter over a set
+ * that is bounded anyway by {@link MAX_HISTORY_VERSIONS}.
+ */
+const HISTORY_ROOT = 'ide/history/projects/';
+
+/** Versions kept per project. Older ones are pruned on the next write. */
+export const MAX_HISTORY_VERSIONS = 100;
+
+function historyPrefix(projectId: number): string {
+  return `${HISTORY_ROOT}${projectId}/`;
+}
+
+export interface WorkspaceVersion {
+  /** Workspace-relative path this version is of. */
+  path: string;
+  /** Epoch ms the version was superseded — i.e. when it stopped being current. */
+  at: number;
+  size: number;
+}
+
+/** Split a history key back into its `{ at, path }`. Null when it is malformed. */
+function parseHistoryKey(key: string, prefix: string): WorkspaceVersion | null {
+  const rest = key.slice(prefix.length);
+  const slash = rest.indexOf('/');
+  if (slash <= 0) return null;
+  const at = Number(rest.slice(0, slash));
+  const path = rest.slice(slash + 1);
+  if (!Number.isFinite(at) || !path) return null;
+  return { path, at, size: 0 };
+}
+
+/**
+ * Copy the CURRENT content of `path` into history, then prune.
+ *
+ * A no-op when the file does not exist yet — creating a file destroys nothing, so
+ * there is nothing to keep, and recording an empty "before" would make the undo
+ * list claim a version that never existed.
+ */
+export async function captureWorkspaceVersion(bucket: R2Bucket, projectId: number, path: string): Promise<void> {
+  const existing = await bucket.get(workspacePrefix(projectId) + path);
+  if (!existing) return;
+  await withSameObjectRetry(() => bucket.put(`${historyPrefix(projectId)}${Date.now()}/${path}`, existing.body));
+  await pruneWorkspaceHistory(bucket, projectId);
+}
+
+/** Drop the oldest versions beyond {@link MAX_HISTORY_VERSIONS}. */
+async function pruneWorkspaceHistory(bucket: R2Bucket, projectId: number): Promise<void> {
+  const prefix = historyPrefix(projectId);
+  const listed = await bucket.list({ prefix });
+  const objects = listed.objects ?? [];
+  if (objects.length <= MAX_HISTORY_VERSIONS) return;
+  // R2 lists lexicographically, and epoch-ms keys of equal width sort
+  // chronologically — but a clock that crosses a digit boundary would break that,
+  // so sort on the parsed value rather than trusting key order.
+  const withTime = objects
+    .map((object) => ({ key: object.key, at: parseHistoryKey(object.key, prefix)?.at ?? 0 }))
+    .sort((a, b) => a.at - b.at);
+  for (const stale of withTime.slice(0, withTime.length - MAX_HISTORY_VERSIONS)) {
+    await bucket.delete(stale.key);
+  }
+}
+
+/**
+ * Versions available to restore, newest first. `path` narrows to one file; omit it
+ * for the whole project (which is what "undo what that prompt did" reads).
+ */
+export async function listWorkspaceHistory(
+  bucket: R2Bucket,
+  projectId: number,
+  path?: string,
+): Promise<WorkspaceVersion[]> {
+  const prefix = historyPrefix(projectId);
+  const listed = await bucket.list({ prefix });
+  return (listed.objects ?? [])
+    .flatMap((object) => {
+      const parsed = parseHistoryKey(object.key, prefix);
+      if (!parsed) return [];
+      if (path && parsed.path !== path) return [];
+      return [{ ...parsed, size: object.size }];
+    })
+    .sort((a, b) => b.at - a.at);
+}
+
+/** Read one archived version's content, or null when it is not there. */
+export async function readWorkspaceVersion(
+  bucket: R2Bucket,
+  projectId: number,
+  path: string,
+  at: number,
+): Promise<string | null> {
+  if (!validateWorkspacePath(path).ok) return null;
+  const object = await bucket.get(`${historyPrefix(projectId)}${at}/${path}`);
+  return object ? object.text() : null;
+}
+
+/**
+ * Restore an archived version as the current file.
+ *
+ * Goes back through {@link writeWorkspaceFile}, which means the restore itself is
+ * captured into history first — so undoing a restore is the same action again,
+ * and a mistaken revert is not a one-way door.
+ */
+export async function restoreWorkspaceVersion(
+  bucket: R2Bucket,
+  projectId: number,
+  path: string,
+  at: number,
+): Promise<WriteResult> {
+  const content = await readWorkspaceVersion(bucket, projectId, path, at);
+  if (content == null) return { ok: false, status: 400, reason: 'That version is no longer available.' };
+  return writeWorkspaceFile(bucket, projectId, path, content);
 }
 
 /**

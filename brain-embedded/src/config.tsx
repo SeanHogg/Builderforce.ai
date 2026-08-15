@@ -45,7 +45,20 @@ export interface BrainPersistenceAdapter {
     chatId: number,
     messages: Array<{ role: string; content: string; metadata?: string }>,
   ): Promise<BrainMessage[]>;
-  setMessageFeedback(messageId: number, feedback: 'up' | 'down' | null): Promise<unknown>;
+  /**
+   * Record this viewer's thumb on one assistant reply (null clears it).
+   *
+   * `context` carries what the TRANSCRIPT knows and the server would otherwise have
+   * to reconstruct — chiefly which MCP tool the rated turn executed. The server
+   * joins it to the model on the reply's provenance and files a durable
+   * `llm_action_ratings` row, so the press teaches the learned router which model is
+   * good at which kind of work rather than only colouring a button.
+   */
+  setMessageFeedback(
+    messageId: number,
+    feedback: 'up' | 'down' | null,
+    context?: { toolName?: string | null },
+  ): Promise<unknown>;
   /**
    * Ask an invited agent participant to reply — a chat-scoped run that answers AS
    * the addressed agent and returns the posted assistant turn (attributed to it via

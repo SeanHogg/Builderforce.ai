@@ -26,4 +26,8 @@ export * from './schema/investor';
 export * from './schema/revenue';
 export * from './schema/support';
 export * from './schema/operations';
+// The seventeenth seat: entity formation, jurisdiction registration, IP and the
+// matters counsel is arguing — plus the co-founder matching that leads to the
+// first of them. See `schema/legal.ts`.
+export * from './schema/legal';
 export * from './schema/search';

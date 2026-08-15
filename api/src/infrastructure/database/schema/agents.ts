@@ -1250,6 +1250,50 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
 
 
 // ---------------------------------------------------------------------------
+// Human ratings of model output (migration 0465).
+//
+// The SIBLING fact to `run_model_outcomes`: that table learns which model ships
+// working code from merges and CI; this one learns which model produces work a
+// person actually accepted, from the thumbs they pressed. Chat and canvas turns
+// have no run, no PR and no CI, so before this they taught the router nothing —
+// while the thumbs sat unqueryable inside `brain_chat_messages.metadata`.
+//
+// Grain: ONE row per rater per rated thing (the unique index below). Clearing a
+// vote deletes the row — "no opinion" is an absent fact, not a third value.
+// ---------------------------------------------------------------------------
+export const llmActionRatings = pgTable('llm_action_ratings', {
+  id:               serial('id').primaryKey(),
+  tenantId:         integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
+  /** Who pressed it — part of the uniqueness key, so two members of a shared chat
+   *  keep their own votes instead of overwriting each other. */
+  userId:           varchar('user_id', { length: 64 }).notNull(),
+  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  /** 'brain' | 'canvas' | 'vscode' | 'execution' — where the press happened. */
+  surface:          varchar('surface', { length: 16 }).notNull().default('brain'),
+  /** 'turn' (an assistant reply) | 'tool' (one tool execution). */
+  subjectKind:      varchar('subject_kind', { length: 16 }).notNull().default('turn'),
+  /** The rated thing's id in ITS OWN surface. Deliberately opaque — a foreign key
+   *  would have to point at four different tables. */
+  subjectRef:       varchar('subject_ref', { length: 128 }).notNull(),
+  /** The closed action taxonomy the learned router already ranks on, so a rating
+   *  lands in the same bucket a cloud run does and the two are comparable. */
+  actionType:       varchar('action_type', { length: 32 }).notNull().default('other'),
+  /** WHICH MCP tool the rated turn executed, when it executed one. Null for a
+   *  prose-only reply — "it answered badly" is a real, rateable outcome. */
+  toolName:         varchar('tool_name', { length: 120 }),
+  /** The model that actually served it (the gateway's resolved id). We always know
+   *  this, even when the user was shown only "Builderforce Free". */
+  resolvedModel:    varchar('resolved_model', { length: 200 }).notNull(),
+  plan:             varchar('plan', { length: 16 }).notNull().default('free'),
+  /** +1 up, -1 down (CHECK-constrained in the migration). */
+  rating:           smallint('rating').notNull(),
+  comment:          text('comment'),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+});
+
+
+// ---------------------------------------------------------------------------
 // Digital Transformation / Architect repo-analysis tool (migration 0072).
 // Cloud-only LLM analysis of a project's mapped repos, driven by
 // AnalysisRunnerDO one stage per alarm() tick. See repoAnalysisRoutes +

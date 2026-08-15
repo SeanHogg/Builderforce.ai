@@ -10,6 +10,13 @@
  * on the sentence that told the user who was being billed.
  */
 
+import {
+  DEFAULT_MODEL_IDENTITY,
+  productModelName,
+  revealsModelId,
+  type ModelIdentityContext,
+} from './modelIdentity';
+
 /** The gateway pin that expands to a project's CURRENT Evermind head at call time.
  *  Mirrors `PROJECT_EVERMIND_MODEL_PREFIX` on the gateway (api/.../projectEvermind.ts). */
 export const PROJECT_EVERMIND_MODEL_PREFIX = 'project_evermind:';
@@ -58,7 +65,9 @@ export interface ModelChoiceLabels {
   categoryPlan: string;
   categoryPaid: string;
   categoryConfigured: string;
-  autoLabel: string;
+  /** The funding sentence for the routed row. Its NAME comes from the product
+   *  ({@link BUILDERFORCE_PRODUCT_NAME}), not from a label — a brand token is not
+   *  translated, and the tier it states must match what the gateway actually funds. */
   autoDetail: string;
   poolLabel: string;
   poolDetail: string;
@@ -84,7 +93,6 @@ export const DEFAULT_MODEL_CHOICE_LABELS: ModelChoiceLabels = {
   categoryPlan: 'Plan',
   categoryPaid: 'Paid',
   categoryConfigured: 'Configured',
-  autoLabel: 'Auto',
   autoDetail: 'Routed per turn — your connected accounts first, then your plan.',
   poolLabel: 'BYO pool',
   poolDetail: 'Tries your connected accounts in the order configured in Account settings.',
@@ -152,10 +160,20 @@ export function modelCategoryLabel(category: ModelCategory, labels: ModelChoiceL
  * accounts (BYO pool + its models, in the server-supplied provider priority
  * order), then saved workspace LLM configs. A model already listed in a cheaper
  * group is never repeated.
+ *
+ * `identity` names the ROUTED row after the product that actually funds it —
+ * "Builderforce Free" / "Builderforce PRO" rather than a bare "Auto" — because that
+ * is the thing the user bought and the only honest answer to "what am I running on?"
+ * when the gateway picks per turn. Omit it and the row degrades to the free product
+ * (see {@link DEFAULT_MODEL_IDENTITY}: the safe default is masked, never leaked).
  */
-export function buildModelItems(options: ChatModelOptions, labels: ModelChoiceLabels): ModelItem[] {
+export function buildModelItems(
+  options: ChatModelOptions,
+  labels: ModelChoiceLabels,
+  identity: ModelIdentityContext = DEFAULT_MODEL_IDENTITY,
+): ModelItem[] {
   const items: ModelItem[] = [
-    { key: 'auto', label: labels.autoLabel, detail: labels.autoDetail, category: 'auto', selection: { mode: 'auto' } },
+    { key: 'auto', label: productModelName(identity), detail: labels.autoDetail, category: 'auto', selection: { mode: 'auto' } },
   ];
   const normalized = (value: string | { id: string; cost?: string }) => (typeof value === 'string' ? { id: value } : value);
   const seen = new Set<string>();
@@ -206,27 +224,38 @@ export function filterModelItems(
 
 /**
  * What is ACTUALLY running the next turn, said in one line: the pinned model, the
- * BYO pool, or — under `auto` — whatever the host resolved (a configured default
- * or a project-Evermind pin), which is the thing the user came to the menu to read.
+ * BYO pool, or — under `auto` — the routing PRODUCT that funds it.
+ *
+ * `effective` (what the host resolved an `auto` turn to) is honoured only when it names
+ * something the user owns: a project-Evermind head, a saved workspace LLM config, or —
+ * for a viewer entitled to pick models at all — a catalog id. On a routed plan the
+ * answer is the product, not the upstream model the cascade happened to reach for; see
+ * `modelIdentity.ts` for why. This is the fix for a free-plan composer that announced
+ * "minimaxai/minimax-m3" beside a menu that would not let the user change it.
  */
 export function modelInUse(
   selection: ChatModelSelection,
   items: ModelItem[],
   labels: ModelChoiceLabels,
   effective?: string,
+  identity: ModelIdentityContext = DEFAULT_MODEL_IDENTITY,
 ): { name: string; detail: string } {
+  const routed = { name: productModelName(identity), detail: labels.autoDetail };
   const resolve = (model: string) => {
     const item = items.find((entry) => entry.key === `model:${model}`);
-    if (item) return { name: item.label, detail: item.detail };
-    // Not in the offered surface. An Evermind pin is a plan FEATURE (the gateway
-    // expands it to the project's learned head), not a premium catalog model, so it
-    // must be named — and funded — as one rather than shown as a raw pin.
-    return model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)
-      ? { name: labels.evermindLabel, detail: labels.evermindDetail }
-      : { name: model, detail: labels.autoDetail };
+    // An Evermind pin is a plan FEATURE (the gateway expands it to the project's
+    // learned head), not a premium catalog model, so it must be named — and funded —
+    // as one rather than shown as a raw pin.
+    if (model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)) {
+      return { name: labels.evermindLabel, detail: labels.evermindDetail };
+    }
+    // A viewer who cannot pin has nothing to learn from an upstream id; they are on
+    // the product, whatever the cascade resolved to underneath it.
+    if (!revealsModelId(identity)) return routed;
+    return item ? { name: item.label, detail: item.detail } : { name: model, detail: labels.autoDetail };
   };
   if (selection.mode === 'model') return resolve(selection.model);
   if (selection.mode === 'byo_pool') return { name: labels.poolLabel, detail: labels.poolDetail };
   if (effective) return resolve(effective);
-  return { name: labels.autoLabel, detail: labels.autoDetail };
+  return routed;
 }

@@ -47,8 +47,11 @@ export function createPersistence(
         // WITHOUT this the VSIX dropped the outcome and every turn was silent about
         // learning, leaving "Connected, yet nothing learned" an unexplained mystery.
       }).then((r) => attachEvermindLearn(r.messages, r.evermindLearn)),
-    setMessageFeedback: (mid, fb) =>
-      req(`/api/brain/messages/${mid}/feedback`, { method: 'PATCH', body: JSON.stringify({ feedback: fb }) }),
+    setMessageFeedback: (mid, fb, context) =>
+      req(`/api/brain/messages/${mid}/feedback`, {
+        method: 'PATCH',
+        body: JSON.stringify({ feedback: fb, toolName: context?.toolName ?? null }),
+      }),
     requestAgentReply: (id, input) =>
       req<{ message: BrainMessage }>(`/api/brain/chats/${id}/agent-reply`, {
         method: 'POST',

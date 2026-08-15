@@ -48,7 +48,7 @@ function fallbackSpec(text: string): AgentSpec {
       bio: trimmed.slice(0, 280),
     },
     model: { ref: null, autoRoute: true },
-    surfaces: ['cloud-durable', 'ide', 'workflow-node'],
+    surfaces: ['cloud-durable', 'workspace', 'workflow-node'],
   };
 }
 
@@ -81,6 +81,6 @@ export async function compileFromProse(need: ProseNeed, deps: CompileDeps = {}):
       ...(skills && skills.length ? { skills } : {}),
     },
     model: { ref: null, autoRoute: true },
-    surfaces: ['cloud-durable', 'ide', 'workflow-node'],
+    surfaces: ['cloud-durable', 'workspace', 'workflow-node'],
   };
 }

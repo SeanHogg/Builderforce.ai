@@ -28,7 +28,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { authFieldsFor, type ConnectorManifest } from './connectorManifest';
-import { listConnectorsForTenant } from './connectorRegistry';
+import { listConnectorsForTenant, type ConnectorOrigin } from './connectorRegistry';
 
 /** One parameter of one action, as a form needs it. */
 export interface CatalogParam {
@@ -58,7 +58,8 @@ export interface CatalogConnector {
   description: string;
   category: string;
   icon: string;
-  origin: 'builtin' | 'tenant';
+  /** Owned by `connectorRegistry` — see the note on `ConnectorSummary.origin`. */
+  origin: ConnectorOrigin;
   docsUrl?: string;
   /** Credential fields this connector needs, so a picker can say what to set up. */
   authFields: Array<{ key: string; label: string; required: boolean; secret: boolean }>;

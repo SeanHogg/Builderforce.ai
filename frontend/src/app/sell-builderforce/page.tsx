@@ -1,7 +1,9 @@
 import { Icon } from '@/components/ui/Icon';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
+import MethodologySection from '@/components/marketing/MethodologySection';
 import { BRAND } from '@/lib/content';
 import { pageMetadata } from '@/lib/seo';
 import styles from './sell-builderforce.module.css';
@@ -9,36 +11,53 @@ import { signInHref } from '@/lib/auth';
 
 export const runtime = 'edge';
 
-const description = 'Join the Builderforce referral and sales associate program. Run outreach, manage leads, track goals and collaborate with Builderforce from one persistent sales canvas.';
+/**
+ * `/sell-builderforce` — the referral and sales-associate programme.
+ *
+ * Two things were wrong with it and they were the same thing. Every string was
+ * hardcoded English, so the one public page whose entire job is to be forwarded
+ * to somebody was the one page that could not be read in four of the five
+ * languages the rest of the site ships. And it sold a TOOLKIT — a canvas, a
+ * CRM, some campaigns — to people whose hardest objection is "we already have
+ * AI tools", which a longer feature list does not answer.
+ *
+ * So the method is on the page now, rendered by the same component `/features`,
+ * `/about` and `/pricing` use. An associate pitching Builderforce and a
+ * prospect reading about it are then looking at the same sentence, which is the
+ * only version of sales enablement that survives contact with a real call.
+ */
 
-export const metadata: Metadata = pageMetadata({
-  title: 'Sell Builderforce — Referral & Sales Associate Program',
-  description,
-  path: '/sell-builderforce',
-  ogTitle: 'Grow with Builderforce',
-});
+/** Capability cards: the copy is in the catalogs, the ORDER is here. */
+const CAPABILITY_IDS = ['canvas', 'crm', 'targeting', 'campaigns', 'goals', 'meetings'] as const;
 
-const capabilities = [
-  { title: 'One sales canvas', text: 'Plan and execute sales and marketing work in one persistent, account-backed workspace that your team and Builderforce can collaborate in.' },
-  { title: 'CRM & pipeline', text: 'Upload contacts, organize lists, qualify leads, track stages, and see where every opportunity sits in your pipeline.' },
-  { title: 'Market targeting', text: 'Define the markets and audiences you want to reach, then build focused campaigns around them.' },
-  { title: 'Email campaigns', text: 'Create outreach, organize follow-ups, and connect campaign activity to the contacts and opportunities it is meant to move.' },
-  { title: 'Goals & coaching', text: 'Set weekly activity and revenue goals, see the actions needed to close the gap, and request one-to-one guidance from Builderforce.' },
-  { title: 'Meetings & calendar', text: 'Connect your calendar, schedule prospect meetings, and invite the Builderforce superadmin when you want support on a call.' },
-];
+/** Downloadables. The href is the only non-translatable part of a material. */
+const MATERIALS = [
+  { id: 'discovery', href: '/media/sales/Builderforce-Sales-Discovery-Guide.html' },
+  { id: 'outbound', href: '/media/sales/Builderforce-Outbound-Playbook.html' },
+  { id: 'contacts', href: '/media/sales/Builderforce-Contacts-Template.csv' },
+] as const;
 
-const materials = [
-  { label: 'GUIDE', title: 'Sales discovery guide', text: 'Qualification questions, impact prompts, and a practical next-step framework.', href: '/media/sales/Builderforce-Sales-Discovery-Guide.html' },
-  { label: 'PLAYBOOK', title: 'Outbound email playbook', text: 'A concise three-touch sequence with approved Builderforce positioning.', href: '/media/sales/Builderforce-Outbound-Playbook.html' },
-  { label: 'CSV', title: 'CRM contact template', text: 'Import-ready fields for contacts, target markets, and pipeline stages.', href: '/media/sales/Builderforce-Contacts-Template.csv' },
-];
+const STEP_IDS = ['one', 'two', 'three'] as const;
 
-export default function SellBuilderforcePage() {
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('sell.seo');
+  return pageMetadata({
+    title: t('title'),
+    description: t('description'),
+    path: '/sell-builderforce',
+    ogTitle: t('ogTitle'),
+  });
+}
+
+export default async function SellBuilderforcePage() {
+  const t = await getTranslations('sell');
+  const tSeo = await getTranslations('sell.seo');
+
   const programSchema = {
     '@context': 'https://schema.org',
     '@type': 'Service',
     name: 'Builderforce Referral & Sales Associate Program',
-    description,
+    description: tSeo('description'),
     provider: { '@type': 'Organization', name: BRAND.name, url: BRAND.url },
     url: `${BRAND.url}/sell-builderforce`,
   };
@@ -49,41 +68,51 @@ export default function SellBuilderforcePage() {
 
       <section className={styles.hero}>
         <div className={styles.heroCopy}>
-          <p className={styles.eyebrow}>Referral &amp; sales associate program</p>
-          <h1>Sell Builderforce.<br />Build a pipeline you own.</h1>
-          <p className={styles.lede}>Get the materials, connected sales workspace, and direct support you need to introduce Builderforce to the right teams—and earn according to the referral and sales rates assigned to your program.</p>
+          <p className={styles.eyebrow}>{t('hero.eyebrow')}</p>
+          <h1>{t('hero.titleLine1')}<br />{t('hero.titleLine2')}</h1>
+          <p className={styles.lede}>{t('hero.lede')}</p>
           <div className={styles.actions}>
-            <Link className={styles.primaryButton} href="/register?role=sales&next=/sales">Become a sales associate</Link>
-            <Link className={styles.secondaryButton} href={signInHref('/sales')}>Associate sign in</Link>
+            <Link className={styles.primaryButton} href="/register?role=sales&next=/sales">{t('hero.primaryCta')}</Link>
+            <Link className={styles.secondaryButton} href={signInHref('/sales')}>{t('hero.secondaryCta')}</Link>
           </div>
-          <p className={styles.finePrint}>Program participation and commission eligibility are subject to approval and the terms shown in your account.</p>
+          <p className={styles.finePrint}>{t('hero.finePrint')}</p>
         </div>
-        <div className={styles.heroPanel} aria-label="Sales associate workspace overview">
-          <span className={styles.status}><i /> Sales workspace</span>
-          <h2>From revenue goal to next action</h2>
+        <div className={styles.heroPanel} aria-label={t('heroPanel.aria')}>
+          <span className={styles.status}><i /> {t('heroPanel.status')}</span>
+          <h2>{t('heroPanel.title')}</h2>
           <div className={styles.metricRow}>
-            <div><small>Pipeline</small><strong>Contacts → Won</strong></div>
-            <div><small>Goals</small><strong>Weekly cadence</strong></div>
+            <div><small>{t('heroPanel.pipelineLabel')}</small><strong>{t('heroPanel.pipelineValue')}</strong></div>
+            <div><small>{t('heroPanel.goalsLabel')}</small><strong>{t('heroPanel.goalsValue')}</strong></div>
           </div>
           <ul>
-            <li><span>01</span>Target the right market</li>
-            <li><span>02</span>Launch coordinated outreach</li>
-            <li><span>03</span>Track signups and conversions</li>
-            <li><span>04</span>Improve with Builderforce coaching</li>
+            <li><span>01</span>{t('heroPanel.step1')}</li>
+            <li><span>02</span>{t('heroPanel.step2')}</li>
+            <li><span>03</span>{t('heroPanel.step3')}</li>
+            <li><span>04</span>{t('heroPanel.step4')}</li>
           </ul>
         </div>
       </section>
 
+      {/* What an associate is actually selling. The method comes before the
+          toolkit because the toolkit is the answer to a question the prospect
+          has not asked yet. */}
+      <section className={styles.methodSection}>
+        <p className={styles.eyebrow}>{t('pitch.eyebrow')}</p>
+        <h2>{t('pitch.title')}</h2>
+        <p className={styles.sectionIntro}>{t('pitch.body')}</p>
+        <MethodologySection variant="loop" headingLevel="h3" />
+      </section>
+
       <section className={styles.section}>
-        <p className={styles.eyebrow}>Your sales operating system</p>
-        <h2>Everything centered on a single canvas</h2>
-        <p className={styles.sectionIntro}>This is more than a referral link. Your associate account brings the essential CRM, campaign, scheduling, and coaching tools together so each action has context.</p>
+        <p className={styles.eyebrow}>{t('capabilities.eyebrow')}</p>
+        <h2>{t('capabilities.title')}</h2>
+        <p className={styles.sectionIntro}>{t('capabilities.intro')}</p>
         <div className={styles.capabilityGrid}>
-          {capabilities.map((capability, index) => (
-            <article key={capability.title} className={styles.capabilityCard}>
+          {CAPABILITY_IDS.map((id, index) => (
+            <article key={id} className={styles.capabilityCard}>
               <span>{String(index + 1).padStart(2, '0')}</span>
-              <h3>{capability.title}</h3>
-              <p>{capability.text}</p>
+              <h3>{t(`capabilities.items.${id}.title`)}</h3>
+              <p>{t(`capabilities.items.${id}.text`)}</p>
             </article>
           ))}
         </div>
@@ -91,46 +120,55 @@ export default function SellBuilderforcePage() {
 
       <section className={styles.splitSection}>
         <div>
-          <p className={styles.eyebrow}>A program with visibility</p>
-          <h2>Know when your work turns into revenue</h2>
-          <p>Receive notifications when attributed users sign up and when they convert. Your dashboard connects activity, opportunities, referrals, and earnings so you can focus on the next best action.</p>
+          <p className={styles.eyebrow}>{t('visibility.eyebrow')}</p>
+          <h2>{t('visibility.title')}</h2>
+          <p>{t('visibility.body')}</p>
         </div>
         <div className={styles.checkList}>
-          <p><span><Icon source="✓" size="1em" /></span> Signup and conversion notifications</p>
-          <p><span><Icon source="✓" size="1em" /></span> Pricing-linked referral and sales rates</p>
-          <p><span><Icon source="✓" size="1em" /></span> Revenue goals translated into pipeline targets</p>
-          <p><span><Icon source="✓" size="1em" /></span> Direct meeting requests and deal support</p>
+          {(['check1', 'check2', 'check3', 'check4'] as const).map((key) => (
+            <p key={key}><span><Icon source="✓" size="1em" /></span> {t(`visibility.${key}`)}</p>
+          ))}
         </div>
       </section>
 
       <section className={styles.section}>
-        <p className={styles.eyebrow}>Sales toolkit</p>
-        <h2>Start with approved materials</h2>
-        <p className={styles.sectionIntro}>Use these resources for prospecting and discovery. The public press and product deck remains available in the <Link href="/media">Media Kit</Link>.</p>
+        <p className={styles.eyebrow}>{t('materials.eyebrow')}</p>
+        <h2>{t('materials.title')}</h2>
+        <p className={styles.sectionIntro}>
+          {t.rich('materials.intro', {
+            media: (chunks) => <Link href="/media">{chunks}</Link>,
+          })}
+        </p>
         <div className={styles.materialGrid}>
-          {materials.map((material) => (
+          {MATERIALS.map((material) => (
             <a key={material.href} className={styles.materialCard} href={material.href} download>
-              <span>{material.label}</span>
-              <h3>{material.title}</h3>
-              <p>{material.text}</p>
-              <strong>Download →</strong>
+              <span>{t(`materials.items.${material.id}.label`)}</span>
+              <h3>{t(`materials.items.${material.id}.title`)}</h3>
+              <p>{t(`materials.items.${material.id}.text`)}</p>
+              <strong>{t('materials.download')}</strong>
             </a>
           ))}
         </div>
       </section>
 
       <section className={styles.stepsSection}>
-        <p className={styles.eyebrow}>How it works</p>
+        <p className={styles.eyebrow}>{t('steps.eyebrow')}</p>
         <div className={styles.steps}>
-          <article><b>1</b><div><h3>Create your associate account</h3><p>Choose the Sales Associate account type and submit your program details.</p></div></article>
-          <article><b>2</b><div><h3>Set your market and revenue goal</h3><p>Build a pipeline plan around the audience and outcome you want to pursue.</p></div></article>
-          <article><b>3</b><div><h3>Run the work from your canvas</h3><p>Manage contacts, campaigns, meetings, follow-ups, and coaching in one place.</p></div></article>
+          {STEP_IDS.map((id, index) => (
+            <article key={id}>
+              <b>{index + 1}</b>
+              <div>
+                <h3>{t(`steps.${id}.title`)}</h3>
+                <p>{t(`steps.${id}.text`)}</p>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
 
       <section className={styles.cta}>
-        <div><p className={styles.eyebrow}>Ready to start?</p><h2>Turn your network into a repeatable sales motion.</h2></div>
-        <Link className={styles.primaryButton} href="/register?role=sales&next=/sales">Join the program</Link>
+        <div><p className={styles.eyebrow}>{t('cta.eyebrow')}</p><h2>{t('cta.title')}</h2></div>
+        <Link className={styles.primaryButton} href="/register?role=sales&next=/sales">{t('cta.button')}</Link>
       </section>
     </main>
   );

@@ -223,7 +223,7 @@ export type CompileNeed =
   | { modality: 'diagnostic'; findings: unknown; subject?: string }
   | { modality: 'policy'; gates: Array<{ id: string; tool?: string; effect: string; directive?: string; reason?: string }> };
 
-export type CompileSurface = 'ide' | 'desktop' | 'cloud-durable' | 'cloud-container' | 'workflow-node';
+export type CompileSurface = 'workspace' | 'desktop' | 'cloud-durable' | 'cloud-container' | 'workflow-node';
 
 export interface CompiledAgentSpec {
   id?: string;
@@ -424,11 +424,13 @@ export const brain = {
       // heuristic. Shared with the VS Code webview adapter so the two never drift.
     }).then((r) => attachEvermindLearn(r.messages, r.evermindLearn)),
 
-  /** Set thumbs up/down on a message. feedback: 'up' | 'down' | null. */
-  setMessageFeedback: (messageId: number, feedback: 'up' | 'down' | null) =>
+  /** Set thumbs up/down on a message (null clears). `context.toolName` is the MCP
+   *  tool the rated turn ran — the server files it, with the reply's resolved model,
+   *  as an `llm_action_ratings` row the learned router ranks on. */
+  setMessageFeedback: (messageId: number, feedback: 'up' | 'down' | null, context?: { toolName?: string | null }) =>
     request<{ ok: boolean }>(`/api/brain/messages/${messageId}/feedback`, {
       method: 'PATCH',
-      body: JSON.stringify({ feedback }),
+      body: JSON.stringify({ feedback, toolName: context?.toolName ?? null }),
     }),
 
   /** Upload a file for use as an attachment in chat. Returns key, name, type. */
@@ -4462,6 +4464,29 @@ export const llmApi = {
   modelAnalytics: (scope: string = 'tenant'): Promise<ModelAnalyticsResponse> =>
     request<ModelAnalyticsResponse>(`/llm/v1/model-analytics?scope=${encodeURIComponent(scope)}`),
 
+  /**
+   * Record this user's thumb on one AI response, filed against the model that served
+   * it and the MCP tool it ran. The SURFACE-AGNOSTIC capture path: any transcript
+   * that is not a Brain chat (the Creation Canvas, an execution output) posts here
+   * with its own subject id. A Brain chat message rides its existing feedback route,
+   * which files the same fact server-side.
+   */
+  rateAction: (input: {
+    subjectRef: string;
+    resolvedModel: string;
+    rating: 1 | -1 | 0;
+    surface?: 'brain' | 'canvas' | 'vscode' | 'execution';
+    subjectKind?: 'turn' | 'tool';
+    toolName?: string | null;
+    actionType?: string;
+    projectId?: number | null;
+    comment?: string | null;
+  }): Promise<{ ok: boolean; rating: number }> =>
+    request<{ ok: boolean; rating: number }>('/api/llm/ratings', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   /** Learned Model Routing (§6.6): seed feed for the client's LOCAL SSM recall memory
    *  — the tenant's recently-scored outcomes (task text + winning model + score). */
   recallSeed: (limit = 50): Promise<{ memories: RecallSeedMemory[] }> =>
@@ -8135,7 +8160,19 @@ export interface CreationTimelineMessage {
   clientMessageId: string;
   messageRole: 'user' | 'assistant' | 'system';
   body: string;
-  metadata: { scope?: string; objectIds?: string[]; model?: string; error?: boolean; authoredBy?: { kind: 'agent' | 'brain' | 'human'; ref: string; name: string } };
+  metadata: {
+    scope?: string;
+    objectIds?: string[];
+    /** The model the gateway RESOLVED for this turn (post-failover). Stamped on an
+     *  assistant turn so a thumb pressed on it can be filed against the model that
+     *  earned it — see `llm_action_ratings`. */
+    model?: string;
+    /** The MCP tools the turn executed, in call order. The last one is what the
+     *  reply is reporting on, and therefore what a rating judges. */
+    tools?: string[];
+    error?: boolean;
+    authoredBy?: { kind: 'agent' | 'brain' | 'human'; ref: string; name: string };
+  };
   createdBy: string | null;
   createdAt: string;
 }

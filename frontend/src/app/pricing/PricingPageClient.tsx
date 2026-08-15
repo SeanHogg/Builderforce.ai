@@ -10,6 +10,7 @@ import { billingApi, type BillingPlan, type BillingSubscription } from '@/lib/bi
 import JsonLd from '@/components/JsonLd';
 import PageContainer from '@/components/PageContainer';
 import RelatedArticles from '@/components/blog/RelatedArticles';
+import MethodologySection from '@/components/marketing/MethodologySection';
 import { PremiumModelUnlock } from '@/components/llm/PremiumModelUnlock';
 import { CardOnFile } from '@/components/llm/CardOnFile';
 import { pricingSchema } from '@/lib/structured-data';
@@ -331,6 +332,20 @@ export default function PricingPageClient() {
               renders for any given card status. */}
           <CardOnFile />
           </>
+          )}
+
+          {/* What the money is actually for. An anonymous visitor comparing
+              three columns of ticks has no way to tell what the product DOES,
+              and the honest pricing fact — that Read and Prove cost nothing and
+              only Build spends run budget — is a pricing fact, so it belongs
+              here rather than only on /features. Signed-in tenants are on this
+              page to manage a subscription and already know; they get the plan
+              grid straight away. */}
+          {isAnon && (
+            <section className={styles.methodSection}>
+              <MethodologySection variant="loop" />
+              <p className={styles.methodNote}>{t('methodNote')}</p>
+            </section>
           )}
 
           <section className={styles.section}>

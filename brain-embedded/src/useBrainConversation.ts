@@ -33,6 +33,7 @@ import { prepareImageDataUrl } from './imagePrep';
 import { scopeToConsolidation } from './consolidation';
 import { withDirectedMetadata, isDirectedToParticipant, type DirectedRecipient } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
+import { ratedTurnContext } from './turnRating';
 import type { ChatErrorAction } from './chatError';
 import type { ChatMode } from './chatMode';
 import {
@@ -150,7 +151,9 @@ export interface UseBrainConversation {
   errorAction: ChatErrorAction | null;
   /** Live assistant delta buffer (rendered as a trailing bubble while streaming). */
   streamingText: string;
-  feedbackMap: Record<number, 'up' | 'down'>;
+  /** This viewer's thumb per message id (+1 up, -1 down). Hand straight to the
+   *  shared transcript's `ratings` prop. */
+  ratings: Record<number, 1 | -1>;
   pendingAttachments: ChatInputAttachment[];
   uploading: boolean;
   /**
@@ -166,7 +169,13 @@ export interface UseBrainConversation {
    * running. Pair with `sending` to drive a Stop button.
    */
   stop(): void;
-  submitFeedback(msg: BrainMessage, value: 'up' | 'down'): Promise<void>;
+  /**
+   * Rate one assistant reply (+1 / -1, or 0 to clear). Beyond flipping the thumb it
+   * derives WHAT is being rated — the model that served the turn and the MCP tool it
+   * ran ({@link ratedTurnContext}) — and sends that with the vote, which is what
+   * makes the press teach the learned router instead of just colouring a button.
+   */
+  rateMessage(msg: BrainMessage, rating: 1 | -1 | 0): Promise<void>;
   attach(file: File): Promise<void>;
   removeAttachment(key: string): void;
   setError(msg: string): void;
@@ -248,7 +257,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   const reloadMessages = useCallback(() => setReloadNonce((n) => n + 1), []);
   const [localSending, setLocalSending] = useState(false);
   const [localError, setLocalError] = useState('');
-  const [feedbackMap, setFeedbackMap] = useState<Record<number, 'up' | 'down'>>({});
+  const [ratings, setRatings] = useState<Record<number, 1 | -1>>({});
   const [pendingAttachments, setPendingAttachments] = useState<ChatInputAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const autoRepliedChatIdRef = useRef<number | null>(null);
@@ -332,17 +341,20 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     });
   }, [snapshot.messagesEpoch, snapshot.appended]);
 
-  // Derive feedback state from persisted message metadata.
+  // Re-hydrate this viewer's thumbs from the persisted message metadata, so a
+  // reopened chat shows what they already pressed. (The durable RATING fact lives in
+  // `llm_action_ratings`; this is only the UI state the message still carries.)
   useEffect(() => {
-    const map: Record<number, 'up' | 'down'> = {};
+    const map: Record<number, 1 | -1> = {};
     for (const msg of messages) {
       if (!msg.metadata) continue;
       try {
         const meta = JSON.parse(msg.metadata) as { feedback?: 'up' | 'down' };
-        if (meta.feedback === 'up' || meta.feedback === 'down') map[msg.id] = meta.feedback;
+        if (meta.feedback === 'up') map[msg.id] = 1;
+        else if (meta.feedback === 'down') map[msg.id] = -1;
       } catch { /* ignore */ }
     }
-    setFeedbackMap(map);
+    setRatings(map);
   }, [messages]);
 
   const resolvedSystemPrompt = systemPrompt ?? resolveSystemPrompt(modality);
@@ -507,19 +519,26 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     void startRun(chatId, buildRequest(seed, last.content));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
 
-  const submitFeedback = useCallback(async (msg: BrainMessage, value: 'up' | 'down') => {
-    const current = feedbackMap[msg.id];
-    const next = current === value ? null : value;
-    setFeedbackMap((prev) => {
+  const rateMessage = useCallback(async (msg: BrainMessage, rating: 1 | -1 | 0) => {
+    // Optimistic: the thumb reacts immediately; a failed write only loses telemetry.
+    setRatings((prev) => {
       const copy = { ...prev };
-      if (next) copy[msg.id] = next;
-      else delete copy[msg.id];
+      if (rating === 0) delete copy[msg.id];
+      else copy[msg.id] = rating;
       return copy;
     });
+    // Derived from the transcript, not from the composer's current state: the model
+    // is whatever the gateway actually resolved for THIS reply (after any failover),
+    // and the tool is the one the turn executed.
+    const context = ratedTurnContext(messages, msg.id);
     try {
-      await persistence.setMessageFeedback(msg.id, next);
+      await persistence.setMessageFeedback(
+        msg.id,
+        rating === 1 ? 'up' : rating === -1 ? 'down' : null,
+        { toolName: context.toolName },
+      );
     } catch { /* best-effort */ }
-  }, [persistence, feedbackMap]);
+  }, [persistence, messages]);
 
   const attach = useCallback(async (file: File) => {
     setUploading(true);
@@ -589,12 +608,12 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
      *  (e.g. a failed rename) has no gateway verdict behind it. */
     errorAction: localError ? null : snapshot.errorAction,
     streamingText: snapshot.streamingText,
-    feedbackMap,
+    ratings,
     pendingAttachments,
     uploading,
     send,
     stop,
-    submitFeedback,
+    rateMessage,
     attach,
     removeAttachment,
     setError: setLocalError,

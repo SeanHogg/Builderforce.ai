@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { getPostsBySlugs, getRelatedByTags, type BlogPost } from '@/lib/blogData';
 import { RELATED_ARTICLES } from '@/lib/content';
 import { ArticleCardGrid } from './ArticleCard';
@@ -25,7 +26,7 @@ export interface RelatedArticlesProps {
   slugs?: string[];
   /** Show tag-related posts for this slug (used on individual blog posts). */
   relatedToSlug?: string;
-  /** Section heading. */
+  /** Section heading. Defaults to the translated `relatedArticles.heading`. */
   heading?: string;
   /** Max cards to show. */
   limit?: number;
@@ -37,10 +38,14 @@ export default function RelatedArticles({
   surface,
   slugs,
   relatedToSlug,
-  heading = 'Related reading',
+  heading,
   limit = 3,
   embedded = false,
 }: RelatedArticlesProps) {
+  const t = useTranslations('relatedArticles');
+  // The default heading is resolved here rather than in the parameter list so
+  // it can be translated — a default argument cannot call a hook.
+  const title = heading ?? t('heading');
   let posts: BlogPost[] = [];
   if (slugs && slugs.length) posts = getPostsBySlugs(slugs);
   else if (surface) posts = getPostsBySlugs(RELATED_ARTICLES[surface] ?? []);
@@ -52,7 +57,7 @@ export default function RelatedArticles({
   return (
     <section
       className={`related-articles${embedded ? ' related-articles--embedded' : ''}`}
-      aria-label={heading}
+      aria-label={title}
     >
       <style>{`
         .related-articles {
@@ -87,11 +92,9 @@ export default function RelatedArticles({
         @media (max-width: 640px) { .related-articles { padding-block: 8px 40px; } }
       `}</style>
       <h2 className={embedded ? 'ui-eyebrow related-articles-route-head' : 'related-articles-head'}>
-        {!embedded && <span className="related-accent">⟩</span>}{heading}
+        {!embedded && <span className="related-accent">⟩</span>}{title}
       </h2>
-      <p className="related-articles-sub">
-        Deeper dives from the Builderforce blog on the topics covered here.
-      </p>
+      <p className="related-articles-sub">{t('subtitle')}</p>
       <ArticleCardGrid posts={posts} limit={limit} />
     </section>
   );

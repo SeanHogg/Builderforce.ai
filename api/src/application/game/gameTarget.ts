@@ -70,6 +70,29 @@ export interface GameBuild {
   html: string;
   /** `#rrggbb`, derived from the title when the author picked nothing. */
   accent: string;
+  /**
+   * A BUILT BUNDLE to ship instead of the single document — `index.html` plus its
+   * assets, exactly as a bundler emitted them, keyed by dist-relative path.
+   *
+   * ── WHY THIS FIELD EXISTS ─────────────────────────────────────────────────
+   * The browser targets (`web`, `pwa`, `android`, `ios`) are the only honest way
+   * this platform produces something installable on a phone — a real Capacitor
+   * project, a real APK, a signed `.ipa` — and they were reachable ONLY from the
+   * `game` domain, because the input was one self-contained HTML document. The
+   * modality actually named "Mobile" is a multi-file react-native-web Vite app,
+   * so it could not reach any of them: its only phone story was a QR code
+   * pointing at the published website.
+   *
+   * Generalising the INPUT rather than duplicating the adapters is what keeps one
+   * packaging implementation. When this is present the targets ship these files;
+   * when it is absent they ship {@link html} exactly as before, so every existing
+   * game is byte-for-byte unaffected.
+   *
+   * Must contain an `index.html`. {@link binaryAssets} carries anything that is
+   * not text (images, fonts, wasm) under the same rooting.
+   */
+  webAssets?: Record<string, string>;
+  binaryAssets?: Record<string, Uint8Array>;
 }
 
 export interface GameTargetContext {

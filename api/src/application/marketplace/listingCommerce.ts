@@ -206,6 +206,16 @@ async function grantListing(
     commissionCents,
   });
 
+  // WHICH VERSION THEY BOUGHT, recorded at the moment of sale (migration 0466).
+  //
+  // Without this the launch and install paths serve whatever the listing currently
+  // points at, so a buyer's copy changes under them every time the seller
+  // re-publishes — and a seller who ships a broken version takes every existing
+  // buyer with them. Read off the listing body here rather than passed in: the
+  // snapshot a sale is against is a fact about the listing at this instant, and a
+  // caller-supplied id is one a caller could get wrong.
+  const boughtSnapshotId = (listing.body as { snapshotId?: string } | null)?.snapshotId ?? null;
+
   const [licence] = await db
     .insert(templateLicenses)
     .values({
@@ -214,12 +224,14 @@ async function grantListing(
       licenseeRef: input.buyerRef,
       scope: 'single',
       orderId: order.id,
+      snapshotId: boughtSnapshotId,
     })
     .onConflictDoUpdate({
       target: [templateLicenses.tenantId, templateLicenses.catalogItemId, templateLicenses.licenseeRef],
       // Re-acquiring after a revocation restores the licence rather than failing —
-      // a refunded buyer who buys again is a customer, not a conflict.
-      set: { revokedAt: null, orderId: order.id, updatedAt: new Date() },
+      // a refunded buyer who buys again is a customer, not a conflict. Re-pinned to
+      // what is on sale NOW, because that is what they have just paid for.
+      set: { revokedAt: null, orderId: order.id, snapshotId: boughtSnapshotId, updatedAt: new Date() },
     })
     .returning();
   if (!licence) throw new ListingError('Could not grant the licence', 400);
@@ -433,8 +445,36 @@ export async function holdsLicence(
   buyerRef: string,
   listingId: string,
 ): Promise<boolean> {
+  return (await heldLicence(db, tenantId, buyerRef, listingId)) !== null;
+}
+
+/**
+ * The live licence itself, so a caller can serve THE VERSION THIS BUYER HOLDS.
+ *
+ * `holdsLicence` is the same question with the answer thrown away, and it is kept as
+ * the name every gate already reads — but the launch and install paths need one more
+ * fact than a boolean: which snapshot the buyer paid for. Two queries asking the same
+ * thing is how "do they own it" and "what do they own" drift apart, so there is one
+ * read and the boolean is derived from it.
+ *
+ * `snapshotId` is null for licences granted before migration 0466, which is the
+ * honest answer — nothing recorded what those buyers received — and every caller
+ * treats null as "serve the listing's current snapshot", which is exactly what they
+ * were being served already.
+ */
+export async function heldLicence(
+  db: Db,
+  tenantId: number,
+  buyerRef: string,
+  listingId: string,
+): Promise<{ id: number; snapshotId: string | null } | null> {
   const [row] = await db
-    .select({ id: templateLicenses.id, revokedAt: templateLicenses.revokedAt, expiresAt: templateLicenses.expiresAt })
+    .select({
+      id: templateLicenses.id,
+      revokedAt: templateLicenses.revokedAt,
+      expiresAt: templateLicenses.expiresAt,
+      snapshotId: templateLicenses.snapshotId,
+    })
     .from(templateLicenses)
     .where(and(
       eq(templateLicenses.tenantId, tenantId),
@@ -442,8 +482,9 @@ export async function holdsLicence(
       eq(templateLicenses.licenseeRef, buyerRef),
     ))
     .limit(1);
-  if (!row || row.revokedAt) return false;
-  return !row.expiresAt || row.expiresAt > new Date();
+  if (!row || row.revokedAt) return null;
+  if (row.expiresAt && row.expiresAt <= new Date()) return null;
+  return { id: row.id, snapshotId: row.snapshotId };
 }
 
 /**
@@ -452,7 +493,9 @@ export async function holdsLicence(
  * The PUBLIC launch endpoint needs to answer this without being able to reject:
  * a signed-out visitor and a visitor with a stale token both want the same thing
  * from that URL — the free-or-preview experience — so anything that is not a valid
- * workspace token holding a live licence resolves to `false` rather than to a 401.
+ * workspace token holding a live licence resolves to "not entitled" rather than to a
+ * 401. It also answers WHICH VERSION they hold, so the buyer is served the build they
+ * paid for rather than whatever the seller published since.
  *
  * It lives in the application layer rather than in the route because the route may
  * not reach into infrastructure, and token verification is infrastructure. That is
@@ -463,17 +506,21 @@ export async function entitlementFromAuthHeader(
   env: Env,
   authorization: string | undefined,
   listingId: string,
-): Promise<boolean> {
-  if (!authorization?.startsWith('Bearer ')) return false;
+): Promise<{ entitled: boolean; snapshotId: string | null }> {
+  const anonymous = { entitled: false, snapshotId: null };
+  if (!authorization?.startsWith('Bearer ')) return anonymous;
   try {
     const payload = await verifyJwt(authorization.slice(7), env.JWT_SECRET);
     const tenantId = Number(payload.tid ?? 0);
-    if (!(tenantId > 0) || !payload.sub) return false;
-    return await holdsLicence(db, tenantId, payload.sub, listingId);
+    if (!(tenantId > 0) || !payload.sub) return anonymous;
+    const licence = await heldLicence(db, tenantId, payload.sub, listingId);
+    // The pinned snapshot rides along because the launch endpoint needs both facts
+    // and reading the licence twice is how they come to disagree.
+    return licence ? { entitled: true, snapshotId: licence.snapshotId } : anonymous;
   } catch {
     // An unreadable, expired or workspace-less token is "not entitled", which is
     // the same answer as no token at all — not an error the visitor can act on.
-    return false;
+    return anonymous;
   }
 }
 

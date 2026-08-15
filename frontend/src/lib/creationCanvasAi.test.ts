@@ -18,7 +18,7 @@ vi.mock('@/lib/brain/runtime', () => ({ brainConfig: { transport: {} } }));
 vi.mock('@/lib/brain/guestRuntime', () => ({ guestBrainConfig: { transport: {} } }));
 vi.mock('@/lib/guestRoomApi', () => ({ ensureGuestToken: mocks.ensureGuestToken }));
 
-const { runCreationCanvasAi, MAX_CANVAS_TOOL_TURNS } = await import('./creationCanvasAi');
+const { runCreationCanvasAi, MAX_CANVAS_TOOL_TURNS, CanvasRunAbortedError, isCanvasRunAborted } = await import('./creationCanvasAi');
 
 /**
  * Runtime notices come from the CATALOG now, not from string literals in the runner, so
@@ -85,9 +85,6 @@ describe('runCreationCanvasAi', () => {
     expect(firstRequest.messages[1].content).toContain('"create a workflow" means call canvas_add_object');
     expect(firstRequest.messages[1].content).toContain('do not call builtin_workflows_create or ask a follow-up question');
     expect(firstRequest.messages[1].content).toContain('call canvas_arrange_objects');
-    expect(firstRequest.messages[1].content).toContain('first call canvas_read_project_prds');
-    expect(firstRequest.messages[1].content).toContain('Then call canvas_create_project_prd');
-    expect(firstRequest.messages[1].content).toContain('regardless of the current canvas selection');
     expect(firstRequest.messages[1].content).toContain('Never emit tool_code');
     expect(firstRequest.messages[1].content).toContain('Never create a blank drawing or visual placeholder');
     expect(firstRequest.messages[1].content).toContain('A correction, complaint, question about a displayed value');
@@ -98,6 +95,57 @@ describe('runCreationCanvasAi', () => {
     expect(firstRequest.messages[1].content).toContain('never ask the user what "this" means');
     expect(firstRequest.messages[1].content).toContain('fields.pages containing real page objects');
     expect(firstRequest.messages[1].content).toContain('Never rely on default ecommerce copy');
+  });
+
+  /**
+   * A PROMPT MAY ONLY NAME A TOOL THIS BOARD HAS.
+   *
+   * Both halves of this are a defect that shipped. The PRD paragraph lived in the
+   * unconditional authoring block and instructed every anonymous board to "first call
+   * canvas_read_project_prds" — account-required, and stripped before the request left
+   * the browser. The SOCIAL block did the same for five social tools, and the model,
+   * asked to connect the user's accounts, told them to go and use a social media
+   * management platform instead (2026-08-15, ui 2026.8.17).
+   *
+   * The two are fixed in opposite directions on purpose: the PRD tools stay
+   * account-required and their instructions moved behind the tenant branch; the social
+   * tools became guest-gated and their instructions stayed, because connecting an
+   * account is a real capability one free account away and a model that is not told
+   * about it invents a worse limitation.
+   *
+   * `api/scripts/check-canvas-tool-contract.mjs` enforces this over the whole prompt;
+   * this pins the two blocks the failures were actually in.
+   */
+  const promptOf = async (persistence: 'local' | 'server') => {
+    mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'ok', toolCalls: [] });
+    await runTurn({ prompt: 'connect all my socials', canvasSnapshot: '{"objects":[]}', persistence, canvasActions: [] });
+    const request = mocks.streamChatCompletion.mock.calls.at(-1)![0];
+    return request.messages.map((message: { content: string }) => message.content).join('\n');
+  };
+
+  it('never names an account-required tool to an anonymous board', async () => {
+    const guest = await promptOf('local');
+    expect(guest).not.toContain('canvas_read_project_prds');
+    expect(guest).not.toContain('canvas_create_project_prd');
+    // …and the anonymous block must not deny a capability the board now has.
+    expect(guest).not.toContain('connected social accounts, canonical project PRDs');
+  });
+
+  it('keeps the PRD instructions for a board that has the PRD tools', async () => {
+    const tenant = await promptOf('server');
+    expect(tenant).toContain('first call canvas_read_project_prds');
+    expect(tenant).toContain('Then call canvas_create_project_prd');
+    expect(tenant).toContain('regardless of the current canvas selection');
+  });
+
+  it('tells BOTH surfaces how to connect a social account, and forbids the competitor answer', async () => {
+    for (const persistence of ['local', 'server'] as const) {
+      const prompt = await promptOf(persistence);
+      expect(prompt).toContain('canvas_connect_social_account');
+      expect(prompt).toContain('never tell the user to use a third-party social media management tool');
+      // The one genuine limitation, kept distinct from the supported half.
+      expect(prompt).toContain('BRAND-NEW account on a social network is the one thing you cannot do');
+    }
   });
 
   it('recovers a prose-only selected Website refinement and executes the update', async () => {
@@ -743,5 +791,62 @@ describe('runCreationCanvasAi', () => {
     });
 
     expect(answer).toContain('Those figures are not real');
+  });
+  // STOP. The composer's Stop button aborts the run: the signal reaches the model
+  // stream, and the loop refuses to spend another round-trip or run another tool
+  // after the user has said stop.
+  describe('when the user stops the run', () => {
+    it('forwards the abort signal to the model stream', async () => {
+      mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Done.', toolCalls: [] });
+      const controller = new AbortController();
+
+      await runTurn({
+        prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local',
+        canvasActions: [], signal: controller.signal,
+      });
+
+      expect(mocks.streamChatCompletion.mock.calls[0][0].signal).toBe(controller.signal);
+    });
+
+    it('refuses to start a turn that was already stopped', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(runTurn({
+        prompt: 'draft it', canvasSnapshot: '{"objects":[]}', persistence: 'local',
+        canvasActions: [], signal: controller.signal,
+      })).rejects.toBeInstanceOf(CanvasRunAbortedError);
+      expect(mocks.streamChatCompletion).not.toHaveBeenCalled();
+    });
+
+    it('runs no further tool and no further round-trip once stopped mid-stream', async () => {
+      const controller = new AbortController();
+      const run = vi.fn(() => ({ ok: true, proposed: true }));
+      // The model answers with two tool calls and the user stops while it streams.
+      mocks.streamChatCompletion.mockImplementationOnce(async () => {
+        controller.abort();
+        return { text: '', toolCalls: [
+          { id: 'c1', name: 'canvas_add_object', args: '{}' },
+          { id: 'c2', name: 'canvas_add_object', args: '{}' },
+        ] };
+      });
+
+      const failure = await runTurn({
+        prompt: 'build it', canvasSnapshot: '{"objects":[]}', persistence: 'local',
+        canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run }],
+        signal: controller.signal,
+      }).catch((error: unknown) => error);
+
+      expect(isCanvasRunAborted(failure)).toBe(true);
+      expect(run).not.toHaveBeenCalled();
+      expect(mocks.streamChatCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    it('recognises the transport-level AbortError as a stop, not a failure', () => {
+      const aborted = new Error('The operation was aborted.');
+      aborted.name = 'AbortError';
+      expect(isCanvasRunAborted(aborted)).toBe(true);
+      expect(isCanvasRunAborted(new Error('gateway exploded'))).toBe(false);
+    });
   });
 });

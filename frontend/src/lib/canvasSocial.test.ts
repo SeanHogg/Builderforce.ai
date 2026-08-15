@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canvasSocialToolRedirect,
   isSocialNetworkName,
   socialCampaignNodeData,
   socialFeedPatch,
@@ -103,5 +104,29 @@ describe('isSocialNetworkName', () => {
     expect(isSocialNetworkName('linkedin')).toBe(true);
     expect(isSocialNetworkName('threads')).toBe(false);
     expect(isSocialNetworkName(null)).toBe(false);
+  });
+});
+
+/**
+ * The refusal that replaced "send the authored content in fields: … campaignId …
+ * publishedCount, failedCount", which asked a model to hand-write a publish ledger.
+ */
+describe('canvasSocialToolRedirect', () => {
+  it('names the tool that reads the real thing, for each connected-account kind', () => {
+    expect(canvasSocialToolRedirect('socialCampaign')).toContain('canvas_create_social_campaign');
+    expect(canvasSocialToolRedirect('socialFeed')).toContain('canvas_add_social_feed');
+    expect(canvasSocialToolRedirect('socialPost')).toContain('canvas_pin_social_post');
+  });
+
+  it('never asks for the server-owned ledger a model would have to invent', () => {
+    const redirect = canvasSocialToolRedirect('socialCampaign') ?? '';
+    for (const ledgerField of ['campaignId', 'publishedCount', 'failedCount']) {
+      expect(redirect).not.toContain(ledgerField);
+    }
+  });
+
+  it('leaves every other kind to the generic empty-shell guard', () => {
+    expect(canvasSocialToolRedirect('emailCampaign')).toBeNull();
+    expect(canvasSocialToolRedirect('document')).toBeNull();
   });
 });

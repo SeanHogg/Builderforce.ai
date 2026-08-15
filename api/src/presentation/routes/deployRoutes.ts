@@ -75,6 +75,9 @@ export function createDeployRoutes(): Hono<HonoEnv> {
       tenantId: Number(binding.tenantId),
       projectName: String(binding.name ?? ''),
       requestedSubdomain: form.get('subdomain') as string | null,
+      // This route IS the CI producer (OIDC-authenticated, built on a runner), so
+      // its releases are labelled as such in the rollback list.
+      source: 'github',
       assets: assetsFromFormData(form, ['subdomain']),
     });
     if (!result.ok) return c.json({ error: result.error }, result.status);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
 import { DocumentEditor } from './DocumentEditor';
@@ -33,7 +33,8 @@ import {
   type ResumeOrientation,
   type ResumePageSize,
 } from '@/lib/canvasResume';
-import { RESUME_DOCUMENT_STYLES, renderCanvasResumeRevision, resumePageDimensions } from '@/lib/canvasResumeRenderer';
+import { renderCanvasResumeRevision, resumePageDimensions } from '@/lib/canvasResumeRenderer';
+import { ResumeDocumentStyles } from './ResumeDocumentStyles';
 import { compareResumeDocuments, mergeResumeAsNewVersion, type ResumeDiffSection } from '@/lib/canvasResumeDiff';
 import { analyzeResumeAgainstJob, resumeFieldRewritePrompt, resumeTailorPrompt, type ResumeAiField } from '@/lib/canvasResumeAts';
 import { applyResumeBulletConsolidation, suggestResumeBulletConsolidation } from '@/lib/canvasResumeConsolidate';
@@ -70,7 +71,7 @@ function ResumePreview({ html, page, zoom, mode, onClose }: { html: string; page
     const observer = new ResizeObserver(calculate); observer.observe(element);
     return () => observer.disconnect();
   }, [html, page.height]);
-  return <div className={styles.resumePreviewShell}><button type="button" className={styles.resumePreviewClose} onClick={onClose} aria-label={t('closePreview')}>×</button><div className={styles.resumePreviewViewport} data-page-view={mode}><style>{RESUME_DOCUMENT_STYLES}</style><div className={styles.resumePreviewCanvas} style={{ width: `${page.width * zoom / 100}mm`, minHeight: `${page.height * pageCount * zoom / 100}mm`, '--resume-page-height': `${page.height * zoom / 100}mm` } as CSSProperties}><div ref={documentRef} style={{ width: `${page.width}mm`, minHeight: `${page.height}mm`, transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }} dangerouslySetInnerHTML={{ __html: html }} />{mode !== 'continuous' && Array.from({ length: pageCount }, (_, index) => <span key={index} className={styles.resumePageNumber} style={{ top: `calc(var(--resume-page-height) * ${index + 1} - 22px)` }}>{t('pageNumber', { page: index + 1, count: pageCount })}</span>)}</div></div></div>;
+  return <div className={styles.resumePreviewShell}><button type="button" className={styles.resumePreviewClose} onClick={onClose} aria-label={t('closePreview')}>×</button><div className={styles.resumePreviewViewport} data-page-view={mode}><div className={styles.resumePreviewCanvas} style={{ width: `${page.width * zoom / 100}mm`, minHeight: `${page.height * pageCount * zoom / 100}mm`, '--resume-page-height': `${page.height * zoom / 100}mm` } as CSSProperties}><div ref={documentRef} style={{ width: `${page.width}mm`, minHeight: `${page.height}mm`, transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }} dangerouslySetInnerHTML={{ __html: html }} />{mode !== 'continuous' && Array.from({ length: pageCount }, (_, index) => <span key={index} className={styles.resumePageNumber} style={{ top: `calc(var(--resume-page-height) * ${index + 1} - 22px)` }}>{t('pageNumber', { page: index + 1, count: pageCount })}</span>)}</div></div></div>;
 }
 
 type ResumeShareActions = { create: (kind: 'view' | 'embed') => Promise<void>; list: () => Promise<CanvasResumeShare[]>; revoke: (shareId: string) => Promise<void> };
@@ -79,7 +80,23 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
   const t = useTranslations('creationCanvas.resumeEditor');
   const tImport = useTranslations('creationCanvas.import');
   const translateImport = tImport as unknown as ImportTranslator;
-  const family = resumeFamilyFromNode(data);
+  /**
+   * EVERY DERIVATION BELOW IS MEMOISED, AND THAT IS LOAD-BEARING.
+   *
+   * Rendering a résumé is not cheap — deep-clone the document, project it to Markdown,
+   * convert to HTML, split it into sections and re-order them per template — and this
+   * component used to do it twice per React render, plus once per template thumbnail,
+   * plus a full ATS analysis, a structural diff and a duplicate-bullet scan. None of
+   * that depends on the state that actually changes: typing one character into the job
+   * description, or nudging the zoom slider, re-rendered both documents and all twelve
+   * gallery thumbnails. On a board holding several résumé cards that is the difference
+   * between a slider that drags and one that stutters.
+   *
+   * `family` is memoised first because everything else keys off its identity — it is
+   * rebuilt by a validating parse, so recomputing it per render made every downstream
+   * memo (and the Escape-key effect below) miss on every render regardless.
+   */
+  const family = useMemo(() => resumeFamilyFromNode(data), [data.resumeFamily]);
   const input = useRef<HTMLInputElement>(null);
   const [view, setView] = useState<ResumeView>('preview');
   const [newTitle, setNewTitle] = useState('');
@@ -114,6 +131,23 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
     window.addEventListener('keydown', closePreview);
     return () => window.removeEventListener('keydown', closePreview);
   }, [family, view]);
+
+  const active = useMemo(() => family ? activeResumeRevision(family) : null, [family]);
+  const original = useMemo(() => family ? originalResumeRevision(family) : null, [family]);
+  const rendered = useMemo(() => active ? renderCanvasResumeRevision(active) : null, [active]);
+  const originalRendered = useMemo(() => original ? renderCanvasResumeRevision(original) : null, [original]);
+  const differences = useMemo(() => original?.document && active?.document
+    ? compareResumeDocuments(original.document, active.document).filter((difference) => difference.changed)
+    : [], [active, original]);
+  const ats = useMemo(() => active?.document && jobDescription.trim()
+    ? analyzeResumeAgainstJob(active.document, jobDescription)
+    : null, [active, jobDescription]);
+  const bulletSuggestions = useMemo(() => active?.document ? suggestResumeBulletConsolidation(active.document) : [], [active]);
+  // Twelve full résumé renders. Gated on `galleryOpen` as well as memoised, so a closed
+  // gallery costs nothing at all rather than costing twelve renders nobody can see.
+  const thumbnails = useMemo(() => galleryOpen && active
+    ? RESUME_TEMPLATES.map((item) => ({ item, html: renderCanvasResumeRevision({ ...active, templateId: item.id }).html }))
+    : [], [active, galleryOpen]);
 
   const commit = (next: CanvasResumeFamily) => onEdit?.({
     ...resumeNodePatch(next),
@@ -170,7 +204,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
     }
   };
 
-  if (!family) return <div className={`${styles.resumeEmpty} nodrag nowheel`} onPointerDownCapture={(event) => event.stopPropagation()}>
+  if (!family || !active || !original || !rendered || !originalRendered) return <div className={`${styles.resumeEmpty} nodrag nowheel`} onPointerDownCapture={(event) => event.stopPropagation()}>
     <strong>{t('emptyTitle')}</strong>
     <p>{t('emptyBody')}</p>
     <input ref={input} type="file" hidden accept=".pdf,.doc,.docx,.rtf,.txt,.md,.markdown,.json,.png,.jpg,.jpeg,.webp" onChange={chooseResume} />
@@ -180,14 +214,6 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
     {error && <p role="alert" className={styles.resumeError}>{error}</p>}
   </div>;
 
-  const active = activeResumeRevision(family);
-  const original = originalResumeRevision(family);
-  const template = RESUME_TEMPLATES.find((item) => item.id === active.templateId) ?? RESUME_TEMPLATES[0];
-  const rendered = renderCanvasResumeRevision(active);
-  const originalRendered = renderCanvasResumeRevision(original);
-  const differences = original.document && active.document ? compareResumeDocuments(original.document, active.document).filter((difference) => difference.changed) : [];
-  const ats = active.document && jobDescription.trim() ? analyzeResumeAgainstJob(active.document, jobDescription) : null;
-  const bulletSuggestions = active.document ? suggestResumeBulletConsolidation(active.document) : [];
   const selectedBulletSuggestions = bulletSuggestions.filter((suggestion) => !excludedBulletSuggestions.includes(suggestion.id));
   const page = resumePageDimensions(active.pageSize, active.orientation);
   const changePresentation = (patch: Parameters<typeof updateActiveResumePresentation>[1]) => commit(updateActiveResumePresentation(family, patch));
@@ -199,6 +225,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
   };
 
   return <div className={`${styles.resumeStudio} nodrag nowheel`} onPointerDownCapture={(event) => event.stopPropagation()}>
+    <ResumeDocumentStyles />
     <input ref={input} type="file" hidden accept=".pdf,.doc,.docx,.rtf,.txt,.md,.markdown,.json,.png,.jpg,.jpeg,.webp" onChange={chooseResume} />
     <div className={styles.resumeSourceBar}>
       <label><span>{t('version')}</span><select value={active.id} onChange={(event) => commit(selectResumeRevision(family, event.target.value))}>
@@ -273,11 +300,10 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
       <div className={styles.resumePageModes} role="group" aria-label={t('pageViewMode')}>{(['continuous', 'paged', 'spread'] as const).map((mode) => <button key={mode} type="button" aria-pressed={family.previewMode === mode} disabled={!onEdit} onClick={() => commit(updateResumeFamilySettings(family, { previewMode: mode }))}>{t(`pageView_${mode}`)}</button>)}</div>
     </div>
     {galleryOpen && <section className={styles.resumeTemplateGallery} aria-label={t('templateGallery')}>
-      {RESUME_TEMPLATES.map((item) => {
-        const thumbnail = renderCanvasResumeRevision({ ...active, templateId: item.id });
+      {thumbnails.map(({ item, html }) => {
         const selected = active.templateId === item.id;
         return <button key={item.id} type="button" aria-pressed={selected} disabled={!onEdit} onClick={() => changePresentation({ templateId: item.id })}>
-          <span className={styles.resumeTemplateThumbnail}><style>{RESUME_DOCUMENT_STYLES}</style><span dangerouslySetInnerHTML={{ __html: thumbnail.html }} /></span>
+          <span className={styles.resumeTemplateThumbnail}><span dangerouslySetInnerHTML={{ __html: html }} /></span>
           <strong>{t(item.labelKey)}</strong><small>{item.industry} · {item.columns === 2 ? t('twoColumns') : t('oneColumn')}</small>
           <em>{item.firstParty ? t('firstPartyTemplate') : item.creator}</em>
           {family.defaultTemplateId === item.id && <i>{t('defaultTemplate')}</i>}
@@ -339,7 +365,6 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
         }}>{t('mergeOriginalSections', { count: mergeSections.length })}</button>
       </aside>}
       <div className={styles.resumeCompare}>
-        <style>{RESUME_DOCUMENT_STYLES}</style>
         <section><strong>{t('original')}</strong><div className={styles.resumeCompareViewport} dangerouslySetInnerHTML={{ __html: originalRendered.html }} /></section>
         <section><strong>{t('selectedVersion')}</strong><div className={styles.resumeCompareViewport} dangerouslySetInnerHTML={{ __html: rendered.html }} /></section>
       </div>

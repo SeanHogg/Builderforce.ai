@@ -25,7 +25,6 @@ creation_outcome_events
 creation_session_comments
 creation_session_connections
 creation_session_events
-creation_session_invites
 creation_session_members
 creation_session_snapshots
 cron_jobs
@@ -52,6 +51,7 @@ knowledge_documents
 legal_document_versions
 legal_documents
 lens_snapshots
+llm_action_ratings
 mailbox_connections
 marketing_assets
 marketing_audience_members
@@ -83,7 +83,6 @@ service_assets
 source_control_integrations
 spec_versions
 team_members
-tenant_invitations
 tenant_members
 tenant_openrouter_connections
 ticket_audits

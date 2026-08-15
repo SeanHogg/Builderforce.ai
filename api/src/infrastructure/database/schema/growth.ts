@@ -101,6 +101,20 @@ export const siteCollections = pgTable('site_collections', {
   audienceId:           integer('audience_id'),
   /** Per-collection daily write ceiling; 0 = use the platform default. */
   dailyWriteCap:        integer('daily_write_cap').notNull().default(0),
+  /**
+   * Who may READ this collection back (0465).
+   *
+   * `none` is today's behaviour and the default, so nothing that exists changes:
+   * writes are public, reads are the owner's through the authenticated project
+   * API. `owner` additionally lets a SIGNED-IN end user (`site_users`) read the
+   * rows they themselves wrote, which is what makes a generated app with accounts
+   * possible at all.
+   *
+   * There is deliberately no `all`. A public read of every submission is the
+   * exact failure this module was written to prevent, and offering it as one
+   * option among three is how it eventually gets chosen.
+   */
+  readPolicy:           varchar('read_policy', { length: 16 }).notNull().default('none'),
   recordCount:          integer('record_count').notNull().default(0),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
@@ -118,6 +132,10 @@ export const siteRecords = pgTable('site_records', {
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   payload:      jsonb('payload').notNull().default({}),
   email:        varchar('email', { length: 320 }),
+  /** The end user who wrote this row, when one was signed in (0465). Null keeps
+   *  the anonymous form post exactly as it was, and is what an owner-scoped read
+   *  filters on — a null-owner row belongs to nobody and is never handed back. */
+  siteUserId:   integer('site_user_id').references(() => siteUsers.id, { onDelete: 'set null' }),
   ipHash:       varchar('ip_hash', { length: 64 }),
   userAgent:    varchar('user_agent', { length: 500 }),
   referrer:     varchar('referrer', { length: 1000 }),
@@ -126,6 +144,90 @@ export const siteRecords = pgTable('site_records', {
   index('idx_site_records_collection_time').on(t.collectionId, t.createdAt),
   index('idx_site_records_tenant_time').on(t.tenantId, t.createdAt),
   index('idx_site_records_email').on(t.email),
+  index('site_records_owner_idx').on(t.collectionId, t.siteUserId),
+]);
+
+/**
+ * A release of a published site — the register that makes rollback possible.
+ *
+ * Publishing used to delete every object under the subdomain prefix before
+ * writing the new build, so the previous release was gone the moment a worse one
+ * shipped. Builds now land under `sites/<sub>/<versionToken>/` and this is the
+ * list of them. `project_sites.r2_prefix` stays the POINTER to the current one:
+ * a deliberate denormalisation with a single writer, because serving an asset
+ * must resolve a site in one read and a join per request is the hot path.
+ */
+export const siteReleases = pgTable('site_releases', {
+  id:           serial('id').primaryKey(),
+  siteId:       integer('site_id').notNull().references(() => projectSites.id, { onDelete: 'cascade' }),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  versionToken: varchar('version_token', { length: 32 }).notNull(),
+  r2Prefix:     text('r2_prefix').notNull(),
+  /** 'browser' (built in the workspace) | 'github' (built by the tenant's Action). */
+  source:       varchar('source', { length: 16 }).notNull().default('browser'),
+  assetCount:   integer('asset_count').notNull().default(0),
+  totalBytes:   bigint('total_bytes', { mode: 'number' }).notNull().default(0),
+  publishedAt:  timestamp('published_at').notNull().defaultNow(),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('site_releases_site_version_unique').on(t.siteId, t.versionToken),
+  index('site_releases_site_published_idx').on(t.siteId, t.publishedAt),
+  index('site_releases_tenant_idx').on(t.tenantId),
+]);
+
+/**
+ * An END USER of a generated app — someone who signed up to the thing a tenant
+ * built, not a Builderforce user.
+ *
+ * A separate identity space from `users` on purpose. A person signing into
+ * someone's recipe app has no Builderforce account, no tenant membership and no
+ * platform permissions; conflating the two would make every generated app a door
+ * into the platform's own identity.
+ *
+ * Passwordless by construction — there is no password column and no hash. A
+ * generated app is authored by a language model, and a badly-stored password is
+ * the one mistake that cannot be walked back. Sign-in is a one-time code sent to
+ * the address, so the app never holds a reusable secret.
+ */
+export const siteUsers = pgTable('site_users', {
+  id:          serial('id').primaryKey(),
+  siteId:      integer('site_id').notNull().references(() => projectSites.id, { onDelete: 'cascade' }),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  email:       varchar('email', { length: 320 }).notNull(),
+  displayName: varchar('display_name', { length: 120 }),
+  status:      varchar('status', { length: 16 }).notNull().default('active'),
+  lastSeenAt:  timestamp('last_seen_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('site_users_site_email_unique').on(t.siteId, t.email),
+  index('site_users_tenant_idx').on(t.tenantId),
+]);
+
+/**
+ * One sign-in attempt, and — once redeemed — the session it became.
+ *
+ * `codeHash` is set while the one-time code is outstanding and CLEARED on
+ * redemption, so an unredeemed request cannot be replayed into a session and a
+ * live session carries no credential at all. Only hashes are stored: neither the
+ * code nor the session token is recoverable from this table.
+ */
+export const siteUserSessions = pgTable('site_user_sessions', {
+  id:            serial('id').primaryKey(),
+  siteUserId:    integer('site_user_id').notNull().references(() => siteUsers.id, { onDelete: 'cascade' }),
+  siteId:        integer('site_id').notNull().references(() => projectSites.id, { onDelete: 'cascade' }),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  tokenHash:     varchar('token_hash', { length: 64 }).notNull(),
+  codeHash:      varchar('code_hash', { length: 64 }),
+  codeExpiresAt: timestamp('code_expires_at'),
+  attempts:      integer('attempts').notNull().default(0),
+  expiresAt:     timestamp('expires_at').notNull(),
+  redeemedAt:    timestamp('redeemed_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('site_user_sessions_token_unique').on(t.tokenHash),
+  index('site_user_sessions_user_idx').on(t.siteUserId),
+  index('site_user_sessions_site_idx').on(t.siteId),
 ]);
 
 // ---------------------------------------------------------------------------

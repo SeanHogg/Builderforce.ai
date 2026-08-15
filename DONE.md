@@ -1,3 +1,86 @@
+## ✅ RESOLVED 2026-08-15 — "Connect all my social accounts": the tools were real, the model was never given them
+
+### What was wrong
+
+A user opened a board and typed *"I want to create a social media campaign. First I want to connect
+all my social media accounts and then create a post that goes to all the social media."* Three turns,
+zero objects created, one failed tool call, and this answer:
+
+> "I can't directly perform those actions. You would need to connect your existing accounts to a
+> social media management platform, and create new accounts directly on each social media platform."
+
+Every clause of that is false about the product it was said inside. Builderforce connects X, LinkedIn,
+Facebook Pages, Instagram and TikTok through the connector platform (`socialProviders.ts`), merges
+their feeds, drafts one campaign across all of them, and publishes with a per-account ledger — and
+the panel that connects them (`CanvasSocialPanel`) was one rail icon away on the same canvas. The
+model recommended a competitor from inside the thing it was describing.
+
+Four separate defects produced it, and only the first is about social:
+
+1. **The five social tools were `ACCOUNT_REQUIRED`, so an anonymous board never saw them — while the
+   canvas system prompt named all five, unconditionally.** The model held a detailed SOCIAL operating
+   paragraph ("call `canvas_add_social_feed`… `canvas_create_social_campaign`…") for tools that had
+   been stripped from its list before the request left the browser, and an ANONYMOUS-CANVAS block
+   telling it that connected social accounts were among the things it did not have. Given
+   instructions to use a capability and a statement that it lacks it, a model invents a product
+   limitation. This is the exact failure `canvas_add_image` was moved out of that set to stop, written
+   up at length in `canvasTools.ts` — and social had it worse, because absence here also removed the
+   *connect* path, which is what the user asked for first.
+2. **There was no tool for connecting an account at all.** Every social tool assumed accounts already
+   existed. Nothing in the vocabulary could reach the connect panel, so the honest answer ("connect
+   one here") was not available to the model even when it wanted to give it.
+3. **`canvas_add_object` demanded a hand-written publish ledger.** Falling back, the model tried
+   `kind: "socialCampaign"` and was refused with *"send the authored content in fields: content,
+   campaignId, body, linkUrl, mediaUrls, variants, targets, posts, publishedCount, failedCount,
+   blockers"*. Four of those eleven are the SERVER's publish ledger; the only way to satisfy that
+   refusal is to invent a campaign id and a count of posts that were never published. The generic
+   empty-shell guard was asking for something no model can honestly supply.
+4. **`social_campaigns.session_id` is a `uuid` FK to `creation_sessions`, and the canvas sent it
+   unconditionally.** An unsaved board's id is the literal string `local-<uuid>`, so every campaign
+   drafted from an unsaved board would have died at the database — the failure waiting behind the
+   other three.
+
+### What shipped
+
+**`packages/creation-canvas-contract/src/canvasTools.ts`** — the five social tools moved
+`ACCOUNT_REQUIRED` → `GUEST_GATED`, joined by the new `canvas_connect_social_account`.
+`canvas_pin_social_post` moved the other way, to `GUEST_SAFE`: it lifts a post out of a feed tile
+already on the board, in the browser, with no request of its own. New `CANVAS_SOCIAL_ACCOUNT_GATE`
+tells the model to do three things rather than one — name the account in a sentence, author the
+campaign on the board anyway, and separate the supported half (connecting accounts they have) from
+the genuinely unsupported half (registering brand-new accounts on a network), which is the
+distinction the failed session collapsed.
+
+**`CreationCanvas.tsx`** — one `socialAccountGate()` in front of every social tool, gated on
+CREDENTIALS via `getStoredTenantToken()` and not on whether the board is saved, exactly as
+`canvas_add_image` is: `/api/social/*` is a stateless request carrying the tenant token, so a
+signed-in user on an unsaved board connects, drafts and publishes for real. New
+**`canvas_connect_social_account`** opens the social panel and returns which networks exist, which are
+connected, and what each still needs — it never asks for a credential in chat, because a token typed
+into a message is a token written into the conversation, the timeline and the diagnostics report.
+"No account is ready" now OPENS the panel it names and reports which field is missing on which
+account, instead of describing a destination the model could not reach. `sessionId` is sent only when
+`persistence === 'server'`.
+
+**`canvasSocial.ts`** — `canvasSocialToolRedirect(kind)`, the `canvasImageToolRedirect` pattern one
+domain over: `socialFeed`, `socialPost` and `socialCampaign` name the tool that reads the real thing
+rather than describing a schema the request can never satisfy. It also closes a quieter half of the
+same hole — `socialFeed` and `socialPost` are in `SHELL_IS_LEGITIMATE`, so an authored one was
+ACCEPTED and landed as a permanently blank tile.
+
+**`api/scripts/check-canvas-tool-contract.mjs` — RULE 3.** The guard already checked that no tool
+DESCRIPTION names a tool the session lacks. It now walks the canvas system prompt
+(`creationCanvasAi.ts`) with the TypeScript AST and applies the same property to every string literal
+that reaches a model, exempting blocks inside a `persistence === 'server'` branch. It found the
+identical defect on its first run: the PRD paragraph instructed every anonymous board to "first call
+`canvas_read_project_prds`", account-required and absent there. Those sentences now live in their own
+tenant-gated block — fixed in the opposite direction from social, deliberately: PRDs stay
+account-required because a guest has no canonical project, while connecting a social account is a
+real capability one free account away.
+
+67 canvas tools classified (39 guest-safe, 7 guest-gated, 21 account-required), the prompt
+cross-checked, and the social gate copy localized across all five catalogs.
+
 ## ✅ RESOLVED 2026-08-15 — The canvas can build software: `canvas_create_build`, a surgical editor, and failures that reach the agent
 
 Five of the ten AI-app-builder parity gaps opened earlier the same day (ROADMAP group 11). The other

@@ -38,6 +38,81 @@
 export const LISTING_LAUNCH_MODES = ['play', 'open', 'run', 'preview', 'install'] as const;
 export type ListingLaunchMode = (typeof LISTING_LAUNCH_MODES)[number];
 
+/**
+ * HOW A CREATION IS EXERCISED BEFORE ANYONE PAYS FOR IT.
+ *
+ * ── WHY SIX, AND WHY NOT ONE PER KIND ────────────────────────────────────────────
+ * `launch` answers "what does a buyer DO with it". It does not answer "how do we
+ * find out whether it works for them", and those are different questions with
+ * different answers: a game and an app both `play`/`open` for a buyer, and both have
+ * to be exercised the same way — booted in a sandbox and driven. A book and a comic
+ * launch as `preview` and both need the same three things asked of them: does every
+ * page have content, does it reflow, does it hold at print resolution.
+ *
+ * So the harness follows the SHAPE OF THE OUTPUT, not the noun. Counting the shapes
+ * across everything the platform can make — canvas creations and studio media kinds
+ * together — there are six. Thirty-odd sellable things, six runners.
+ *
+ *  - `media`      time-based output. Play it through and measure it: does the render
+ *                 finish, is it loud enough, do the captions cover it.
+ *  - `runtime`    executable output. Boot it in a sandbox and drive it: no console
+ *                 errors, no outbound requests, works without a keyboard.
+ *  - `paged`      fixed-page output. Read it, reflow it, proof it: no empty pages,
+ *                 alt text present, resolution holds at final size.
+ *  - `geometry`   dimensioned output. Can it actually be made: manifold, wall
+ *                 thickness, overhangs, units declared.
+ *  - `instrument`  something a person answers. Take it, then read its own results on
+ *                 zero responses: stable ids, scoring, an honest empty state.
+ *  - `system`     something that runs against other systems. Dry-run it with every
+ *                 outbound step stubbed and every seller binding gone.
+ */
+export const LISTING_HARNESSES = ['media', 'runtime', 'paged', 'geometry', 'instrument', 'system'] as const;
+export type ListingHarness = (typeof LISTING_HARNESSES)[number];
+
+/**
+ * WHERE A RELEASE IS IN ITS LIFE.
+ *
+ * Not a column anywhere. Every state is derivable from two facts the data already
+ * holds — does a snapshot exist, and is the listing pointing at it — and deriving it
+ * in one place is what stops the seller's rail and the buyer's badge disagreeing.
+ */
+export const LISTING_RELEASE_STATES = ['draft', 'staged', 'live', 'superseded'] as const;
+export type ListingReleaseState = (typeof LISTING_RELEASE_STATES)[number];
+
+/**
+ * The two `snapshots.reason` values this seam writes.
+ *
+ * `publication` is load-bearing beyond bookkeeping: the public read pins it, so a
+ * STAGED snapshot cannot be served to a stranger by construction rather than by a
+ * visibility flag somebody could get wrong. The privacy of Stage is the existing
+ * security check, reused — which is also why staging must never write `publication`.
+ */
+export const SNAPSHOT_REASON_STAGE = 'stage';
+export const SNAPSHOT_REASON_PUBLICATION = 'publication';
+
+/** What a check found. `block` refuses the publish; `warn` is declared, not fixed. */
+export const STAGE_CHECK_SEVERITIES = ['pass', 'warn', 'block'] as const;
+export type StageCheckSeverity = (typeof STAGE_CHECK_SEVERITIES)[number];
+
+/**
+ * The three questions every harness asks, in the order a seller cares about them.
+ *
+ * Shared so the six runners cannot invent their own headings and the panel can group
+ * without knowing which harness produced a row.
+ */
+export const STAGE_CHECK_GROUPS = ['runs', 'travels', 'sells'] as const;
+export type StageCheckGroup = (typeof STAGE_CHECK_GROUPS)[number];
+
+/** One finding. `code` is stable and is what the i18n key and any test assert on. */
+export interface StageCheck {
+  code: string;
+  group: StageCheckGroup;
+  severity: StageCheckSeverity;
+  /** Already-resolved human text. The runner owns the wording; it has the numbers. */
+  label: string;
+  detail?: string;
+}
+
 /** What a visitor who has not paid is allowed to do. */
 export const LISTING_TRIAL_POLICIES = ['full', 'preview'] as const;
 export type ListingTrialPolicy = (typeof LISTING_TRIAL_POLICIES)[number];
@@ -66,6 +141,16 @@ export interface MarketplaceListingKindSpec {
    */
   readonly from: readonly string[];
   readonly family: ListingFamily;
+  /**
+   * How Stage exercises it, when the source object does not say otherwise.
+   *
+   * A DEFAULT rather than the answer, because one listing kind can carry more than
+   * one output shape: `creative` legitimately covers a video (time-based), a comic
+   * (paged) and a 3D model (dimensioned). `resolveListingHarness` reads the source
+   * object kind first and falls back here — one derivation, called by the panel and
+   * by the server, so what was tested and what was gated cannot drift.
+   */
+  readonly harness: ListingHarness;
   /** May the seller charge for it? `free` exists for kinds where a price would be
    *  a lie — nothing is transferred that the buyer keeps. */
   readonly pricing: 'free' | 'either';
@@ -93,6 +178,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     launch: 'play',
     from: ['game'],
     family: 'asset',
+    harness: 'runtime',
     pricing: 'either',
     trial: 'full',
     icon: '🎮',
@@ -104,6 +190,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     launch: 'open',
     from: ['website', 'prototype', 'build', 'project', 'service'],
     family: 'asset',
+    harness: 'runtime',
     pricing: 'either',
     trial: 'full',
     icon: '🚀',
@@ -113,6 +200,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     launch: 'install',
     from: ['workflow'],
     family: 'asset',
+    harness: 'system',
     pricing: 'either',
     trial: 'preview',
     icon: '⚙️',
@@ -124,6 +212,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     launch: 'install',
     from: ['agent', 'staff'],
     family: 'agent',
+    harness: 'system',
     pricing: 'either',
     trial: 'preview',
     icon: '🤖',
@@ -133,6 +222,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     launch: 'install',
     from: ['template', 'frame'],
     family: 'asset',
+    harness: 'system',
     pricing: 'either',
     trial: 'preview',
     icon: '🧩',
@@ -144,6 +234,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     launch: 'install',
     from: [],
     family: 'asset',
+    harness: 'system',
     pricing: 'either',
     trial: 'preview',
     icon: '📦',
@@ -153,6 +244,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     launch: 'preview',
     from: ['dashboard', 'chart', 'kpi', 'report', 'metric', 'liveMetric'],
     family: 'asset',
+    harness: 'system',
     pricing: 'either',
     trial: 'preview',
     icon: '📊',
@@ -162,6 +254,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     launch: 'preview',
     from: ['document', 'knowledge', 'prd', 'slides', 'diagram', 'roadmap', 'pitch', 'testPlan'],
     family: 'asset',
+    harness: 'paged',
     pricing: 'either',
     trial: 'preview',
     icon: '📘',
@@ -171,6 +264,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     launch: 'run',
     from: ['course', 'practice', 'guidedTour'],
     family: 'asset',
+    harness: 'instrument',
     pricing: 'either',
     trial: 'preview',
     icon: '🎓',
@@ -180,6 +274,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     launch: 'preview',
     from: ['dataset', 'table', 'spreadsheet', 'datasource'],
     family: 'asset',
+    harness: 'system',
     pricing: 'either',
     trial: 'preview',
     icon: '🗂️',
@@ -189,6 +284,7 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     launch: 'run',
     from: ['diagnostics', 'mcp', 'code', 'evaluation'],
     family: 'asset',
+    harness: 'instrument',
     pricing: 'either',
     trial: 'preview',
     icon: '🛠️',
@@ -198,9 +294,42 @@ export const MARKETPLACE_LISTING_KINDS: readonly MarketplaceListingKindSpec[] = 
     launch: 'preview',
     from: ['image', 'video', 'animation', 'podcast', 'comic', 'model3d', 'cad', 'mockup', 'mockupSet', 'drawing'],
     family: 'asset',
+    // The kind that proved `harness` cannot be one value per listing kind: a video is
+    // time-based, a comic is paged and a 3D model is dimensioned, and all three are
+    // legitimately `creative`. `resolveListingHarness` reads the source object first.
+    harness: 'media',
     pricing: 'either',
     trial: 'full',
     icon: '🎨',
+  },
+  {
+    // An INSTRUMENT, not its answers. What is sold is the questions and the scoring;
+    // the responses belong to whoever runs it and are the one thing the seller must
+    // never be able to read — which is why the buyer gets an empty response store and
+    // the publish path strips the seller's own.
+    id: 'survey',
+    launch: 'run',
+    from: ['form'],
+    family: 'asset',
+    harness: 'instrument',
+    pricing: 'either',
+    // `preview` even when free: an instrument someone can read in full is one they can
+    // copy, and the sample is the sales pitch.
+    trial: 'preview',
+    icon: '📋',
+  },
+  {
+    // Cover, pages and figures as one product with three outputs (reader, EPUB/PDF,
+    // print). Separate from `playbook` because the harness differs: a playbook is read
+    // on a screen and a book has to hold at print resolution as well.
+    id: 'book',
+    launch: 'preview',
+    from: ['book'],
+    family: 'asset',
+    harness: 'paged',
+    pricing: 'either',
+    trial: 'preview',
+    icon: '📖',
   },
 ] as const;
 
@@ -265,6 +394,82 @@ export function resolveTrialPolicy(
 /** Whether a seller may put a price on this kind. */
 export function allowsPricing(kindId: string): boolean {
   return listingKindSpec(kindId)?.pricing === 'either';
+}
+
+/**
+ * OBJECT KINDS WHOSE OUTPUT SHAPE OVERRIDES THEIR LISTING KIND'S DEFAULT.
+ *
+ * Only the kinds that genuinely disagree with their listing kind are listed. A card
+ * absent from this map is exercised by its listing kind's `harness`, which is right
+ * for the great majority — this map exists for `creative`, which spans three output
+ * shapes, and for the handful of cards that are paged output filed under a listing
+ * kind whose other members are not.
+ *
+ * Deliberately keyed by the CANVAS kind rather than by a per-listing override field:
+ * a `video` is time-based wherever it is sold, and encoding that once is what stops
+ * two listing kinds answering the question differently.
+ */
+const HARNESS_BY_OBJECT_KIND: Readonly<Record<string, ListingHarness>> = {
+  // Time-based.
+  video: 'media',
+  animation: 'media',
+  podcast: 'media',
+  voice: 'media',
+  // Fixed pages.
+  comic: 'paged',
+  image: 'paged',
+  drawing: 'paged',
+  mockup: 'paged',
+  mockupSet: 'paged',
+  slides: 'paged',
+  book: 'paged',
+  document: 'paged',
+  prd: 'paged',
+  pitch: 'paged',
+  // Dimensioned.
+  model3d: 'geometry',
+  cad: 'geometry',
+  // Executable.
+  game: 'runtime',
+  website: 'runtime',
+  prototype: 'runtime',
+};
+
+/**
+ * Which of the six runners exercises this creation.
+ *
+ * ONE derivation, called by the Stage surface (to show the seller what will be
+ * checked) and by the server (to decide what actually gates the publish). Two copies
+ * of this rule is how a seller is shown a print proof and gated on a loudness
+ * measurement.
+ *
+ * A pack — published from a whole board, so no single source kind — falls to its
+ * listing kind's default, which is `system`: the right question for a board is
+ * whether it still stands up in an empty workspace.
+ */
+export function resolveListingHarness(kindId: string, objectKind?: string | null): ListingHarness {
+  if (objectKind) {
+    const override = HARNESS_BY_OBJECT_KIND[objectKind];
+    if (override) return override;
+  }
+  return listingKindSpec(kindId)?.harness ?? 'system';
+}
+
+/**
+ * Does this set of findings refuse the publish?
+ *
+ * The rule is `block`, and only `block`. A warning is a fact about the buyer's
+ * environment the seller should DECLARE — a 1.2mm wall, a local high score, a font
+ * that may substitute — and a gate that refuses on those teaches sellers to ignore
+ * the panel, which costs more than the warnings save.
+ */
+export function blockingChecks(checks: readonly StageCheck[]): readonly StageCheck[] {
+  return checks.filter((check) => check.severity === 'block');
+}
+
+/** True when a staged release may go on sale. */
+export function isPublishable(checks: readonly StageCheck[]): boolean {
+  return blockingChecks(checks).length === 0;
 }
 
 /**

@@ -1081,7 +1081,20 @@
     },
     "askAi": "问 AI",
     "previewWeb": "网页",
-    "previewMobile": "移动端"
+    "previewMobile": "移动端",
+    "previewEmpty": "运行你的项目以查看预览",
+    "previewOpen": "打开",
+    "previewTitle": "预览",
+    "visualEdit": "点选编辑",
+    "visualEditHint": "点击预览中的任意元素，即可直接修改其文本或样式，无需询问智能体。",
+    "visualEditOn": "选择中 — 请点击一个元素",
+    "visualSelected": "已选择 {tag} · {file}:{line}",
+    "visualText": "文本",
+    "visualClasses": "样式类",
+    "visualApply": "应用",
+    "visualCancel": "取消",
+    "visualApplied": "已更新 {file}",
+    "visualNoPreview": "请先运行项目 — 点选编辑需要实时预览。"
   },
   "tools": {
     "outOf5": "满分 5.0",
@@ -6626,7 +6639,8 @@
       "自定义智能体角色",
       "共享团队审批收件箱",
       "按席位成本控制"
-    ]
+    ],
+    "methodNote": "在所有套餐中，读取想法与选择验证方式都是免费的。只有构建才会消耗运行预算——这正是重点：决定那件昂贵的事是否值得做的两个动作，本身不花钱。"
   },
   "phonePage": {
     "seoTitle": "企业电话 — Builderforce.ai",
@@ -7021,7 +7035,16 @@
     "prevPage": "上一页",
     "nextPage": "下一页",
     "pageN": "第 {n} 页",
-    "title": "Builderforce 博客"
+    "title": "Builderforce 博客",
+    "post": {
+      "back": "← 返回博客",
+      "byline": "作者：{author}",
+      "notFoundTitle": "未找到文章",
+      "notFoundBody": "这篇文章不存在或已被移动。",
+      "browseAll": "浏览全部文章 →",
+      "relatedHeading": "相关文章",
+      "startFree": "免费开始构建 →"
+    }
   },
   "brain": {
     "timeline": {
@@ -7059,7 +7082,9 @@
       "stop": "停止",
       "learnTargetContributed": "已贡献到 {name}（项目 #{projectId} v{version}）",
       "learnTargetSkipped": "已跳过 {name}（项目 #{projectId}）— {reason}",
-      "replay": "重新发送"
+      "replay": "重新发送",
+      "rateUp": "回答很好",
+      "rateDown": "回答不佳"
     },
     "tickets": {
       "none": "尚未关联任何工单。",
@@ -7226,11 +7251,7 @@
     },
     "messageActions": {
       "downloadMarkdown": "下载 Markdown",
-      "downloaded": "已下载",
-      "goodResponse": "回答很好",
-      "badResponse": "回答不佳",
-      "thumbsUp": "点赞",
-      "thumbsDown": "点踩"
+      "downloaded": "已下载"
     },
     "newProjectPlaceholder": "新项目名称",
     "createAndAssign": "创建并分配",
@@ -9184,7 +9205,8 @@
       "salesLeads": "销售线索",
       "salesCommissions": "销售佣金",
       "cron": "定时任务",
-      "broadcasts": "广播"
+      "broadcasts": "广播",
+      "llmRatings": "评分"
     },
     "common": {
       "loading": "加载中…",
@@ -10126,7 +10148,36 @@
         "paid": "付费客户"
       }
     },
-    "subnavLabel": "管理子视图"
+    "subnavLabel": "管理子视图",
+    "llmRatings": {
+      "title": "模型评分",
+      "subtitle": "用户对输出的评价——每一次点赞或点踩，都会记录到服务该轮对话的模型及其执行的 MCP 工具上。",
+      "count": "{models} 个模型共 {total} 条评分",
+      "periodLabel": "评分周期",
+      "period7": "最近 7 天",
+      "period30": "最近 30 天",
+      "period90": "最近 90 天",
+      "period365": "最近一年",
+      "statSatisfaction": "满意度",
+      "statUp": "点赞",
+      "statDown": "点踩",
+      "statModels": "已评分模型",
+      "verdictsTitle": "哪个模型更胜一筹，擅长什么",
+      "verdictsHint": "仅在同一类工作有两个及以上模型被评分时显示——只有一个候选者不构成比较。",
+      "verdictsEmpty": "尚无对比结果：目前每个分组都只有一个模型收到评分。",
+      "verdict": "<winner></winner> 以 {points} 分优势胜过 <loser></loser>（基于 {n} 条评分）",
+      "breakdownTitle": "全部评分分组",
+      "colModel": "模型",
+      "colAction": "操作",
+      "colTool": "MCP 工具",
+      "colUp": "赞",
+      "colDown": "踩",
+      "colScore": "满意度",
+      "noTool": "无工具",
+      "scoreNote": "满意度会依据样本量向中性收缩，因此一次偶然的点赞无法压过长期良好的记录。学习型路由会将此数值与运行结果一并加权。",
+      "emptyTitle": "本周期内尚无评分。",
+      "emptyBody": "在 Brain 面板、创作画布和 VS Code 扩展中，每条 AI 回复下方都有评分按钮。每次点击都会记录该轮对话背后的模型与 MCP 工具。"
+    }
   },
   "providerKeys": {
     "title": "使用您自己的模型",
@@ -15047,7 +15098,9 @@
       "supplier": "供应商",
       "purchaseOrder": "采购订单",
       "shipment": "发货",
-      "incident": "事故事件"
+      "incident": "事故事件",
+      "book": "书籍",
+      "account": "客户"
     },
     "twilioSetup": {
       "title": "Twilio 集成",
@@ -16265,7 +16318,9 @@
       "publishFailed": "该帖子发布失败。",
       "campaignPublished": "已发布到 {targets} 个账号中的 {published} 个。",
       "campaignScheduled": "已为 {count} 个账号排期。",
-      "campaignUpdateFailed": "无法更新该活动。"
+      "campaignUpdateFailed": "无法更新该活动。",
+      "gateTitle": "创建免费账户以连接您的社交账户",
+      "gateBody": "连接 X、LinkedIn、Facebook、Instagram 和 TikTok，并通过一个营销活动向所有平台发布，需要一个免费的 Builderforce 账户。您的画布将保持原样。"
     },
     "noticeGuestLimitRoom": "此共享会话今天的 {limit} 条免费消息已用完。免费注册即可继续——您的画布会一并保留。",
     "founder": {
@@ -17215,7 +17270,8 @@
       "freshHours": "{count} 小时前",
       "freshDays": "{count} 天前",
       "label": {
-        "funnel": "转化漏斗"
+        "funnel": "转化漏斗",
+        "book": "书籍"
       },
       "field": {
         "funnelDomain": "漏斗类型",
@@ -17228,7 +17284,19 @@
         "dateRange": "统计区间",
         "bottleneck": "瓶颈",
         "fetchedAt": "统计时间",
-        "summary": "摘要"
+        "summary": "摘要",
+        "author": "作者",
+        "coverImageUrl": "封面图",
+        "coverDpi": "封面分辨率",
+        "pages": "页面",
+        "figures": "插图",
+        "contents": "目录",
+        "samplePages": "试读页数",
+        "formats": "版本",
+        "trimSize": "成品尺寸",
+        "pageCount": "页数",
+        "figureCount": "插图数",
+        "wordCount": "字数"
       },
       "column": {
         "stage": "阶段",
@@ -17238,7 +17306,20 @@
         "medianDays": "中位天数",
         "source": "来源",
         "converted": "已转化",
-        "rate": "转化率"
+        "rate": "转化率",
+        "page": "页",
+        "heading": "标题",
+        "body": "正文",
+        "figure": "插图",
+        "ref": "编号",
+        "caption": "图注",
+        "altText": "替代文本",
+        "url": "文件",
+        "chapter": "章",
+        "title": "标题"
+      },
+      "status": {
+        "manuscript": "手稿"
       }
     },
     "noticeGateEvaluated": "已根据此画布上的运行与缺陷评估发布门禁——满足 {score}% 的标准。",
@@ -17396,7 +17477,9 @@
         "course": "课程",
         "dataset": "数据集",
         "tool": "工具",
-        "creative": "创意素材"
+        "creative": "创意素材",
+        "survey": "问卷",
+        "book": "书籍"
       },
       "launchHint": {
         "play": "买家可在浏览器中直接试玩。",
@@ -17642,7 +17725,57 @@
       "fabricatedData": "这些数字并不真实：本画布已导入数据集，我本应据此计算数值，而不是使用占位数据。让我重建一次，我会查询每一行。",
       "documentUnverified": "画布上有一份文档草稿，但其撰写内容无法印证所要求的 {requestedPages, number} 页。这么大的稿件无法在一次受限的 Brain 回合内完成，因此它并不完整。请分章节构建与审阅，之后再视为完成或导出。",
       "documentIncomplete": "我在画布上创建了一份文档草稿，共 {authoredWords, number} 字（约 {estimatedPages, number} 页），而非所要求的 {requestedPages, number} 页。这么大的稿件无法在一次受限的 Brain 回合内完成，因此我没有将其标记为完成。请分章节构建与审阅，之后再视为完成或导出。"
-    }
+    },
+    "releases": {
+      "crumb": "市场",
+      "title": "构建、预演、上线",
+      "loading": "正在读取版本记录…",
+      "notSellable": "此卡片无法出售，因此没有版本记录。",
+      "openAction": "版本与预演",
+      "harnessLine": "预演检查：{harness}",
+      "railLabel": "版本",
+      "harness": {
+        "media": "完整播放并测量",
+        "runtime": "在沙箱中启动并运行",
+        "paged": "阅读、重排并校样",
+        "geometry": "检查是否真的能制作出来",
+        "instrument": "先作答，再在零回复下查看结果",
+        "system": "在所有对外步骤都被拦截的情况下试运行"
+      },
+      "state": {
+        "draft": "草稿",
+        "staged": "已预演",
+        "live": "已上线",
+        "superseded": "已被取代"
+      },
+      "now": "刚刚",
+      "draftNote": "你当前的画布。尚未捕获任何内容。",
+      "holders": "{count, plural, =0 {没有人持有此版本} other {# 位买家持有此版本}}",
+      "stageAction": "预演此版本",
+      "revertAction": "重新上架",
+      "viewListing": "查看商品页",
+      "group": {
+        "runs": "运行",
+        "travels": "迁移",
+        "sells": "销售"
+      },
+      "groupOpen": "{count} 项待处理",
+      "groupClear": "{count} 项通过",
+      "strippedHead": "离开你的工作区前已移除",
+      "verdictBlocked": "{count} 项阻断问题。修复后请重新预演。",
+      "verdictReady": "v{version} 可以出售了。",
+      "publishVersion": "发布 v{version}",
+      "restage": "重新捕获",
+      "working": "处理中…",
+      "revertTitle": "将 v{version} 重新上架？",
+      "revertBody": "新买家将收到该版本，而不是 v{version}。已在 v{version} 上的 {holders} 位买家保留他们买到的版本，不会被迁移。",
+      "revertConfirm": "重新上架",
+      "noticeStaged": "已预演 v{version}。",
+      "noticePublished": "v{version} 已上线。",
+      "noticeReverted": "已回到 v{from} 的构建，并发布为 v{version}。"
+    },
+    "rateUp": "回答很好",
+    "rateDown": "回答不佳"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -18564,6 +18697,9 @@
       "body": "从画布开始，连接运营上下文，为人类与智能体提供一个将意图转化为成果的共同空间。",
       "primary": "免费开始创作",
       "secondary": "探索全部能力"
+    },
+    "method": {
+      "eyebrow": "工作实际是怎样发生的"
     }
   },
   "routeMarketing": {
@@ -18933,21 +19069,12 @@
     "foundationsLede": "横向支撑层。没有单一席位拥有它们——而且值得注意：其中没有一项叫“AI”，模型是界面本身，不是一个部门。",
     "foundationBadge": "基础",
     "arcBadge": "主线",
-    "arcTitle": "构想 → 构建 → 运营",
+    "arcTitle": "从想法到真实，逐个阶段",
     "arcLede": "菜单不是部门清单，而是你在旅程中的位置；下面每个目的地都只属于一个位置。",
     "arcCol": {
       "stage": "阶段",
       "question": "要回答的问题",
       "where": "前往何处"
-    },
-    "arcQuestion": {
-      "idea": "如果……会怎样？",
-      "make": "把它做出来。",
-      "run": "像公司一样运营它。",
-      "measure": "有效果吗？",
-      "market": "销售、采购、招聘、被发现。",
-      "expand": "让它成长。",
-      "admin": "设置。"
     },
     "arcNote": "由产品自身的导航生成，因此这张表不会宣传不存在的目的地，也不会遗漏已有的目的地。",
     "faqTitle": "由此带来的问题",
@@ -18975,7 +19102,8 @@
     ],
     "closeTitle": "准备好替换整套工具了吗？",
     "closeLede": "用一个平台取代五个，用一份菜单取代七份。先从画布开始；等你有了公司，再认领它。",
-    "closeFine": "无需信用卡 · 注册之前画布就属于你 · 随时升级"
+    "closeFine": "无需信用卡 · 注册之前画布就属于你 · 随时升级",
+    "methodBadge": "方法论"
   },
   "referencePanel": {
     "crumb": "{seat} · 参考",
@@ -19384,7 +19512,9 @@
       "course": "课程",
       "dataset": "数据集",
       "tool": "工具",
-      "creative": "创意素材"
+      "creative": "创意素材",
+      "book": "书籍",
+      "survey": "问卷"
     },
     "launchVerb": {
       "play": "试玩",
@@ -19439,5 +19569,213 @@
       "built": "已完成",
       "failed": "失败"
     }
+  },
+  "methodology": {
+    "eyebrow": "方法论",
+    "title": "从想法到真实",
+    "lede": "四个阶段告诉你身在何处，三个动作告诉你该做什么。中间那个动作才是全部主张：读懂一个想法很便宜，构建则不然，而选择值得投入的验证方式，是任何事情头一个月里最关键的决定。",
+    "step": {
+      "read": {
+        "title": "读取",
+        "question": "你到底说了什么？",
+        "body": "粘贴一个想法、一份简报、一份招标书或一场竞赛——无需事先整理。它会返回一份规格说明：这个东西要做什么、涉及哪些能力，以及简报本身设定的限制。读取既不写入任何内容，也不构建任何东西。"
+      },
+      "prove": {
+        "title": "验证",
+        "question": "你愿意花钱回答哪一个问题？",
+        "body": "八种把想法变成真实的方式，依据你的规格说明排序，最便宜的排在前面。每一种都先摆出它所回答的问题，并带有一个终止条件——那个会让项目停下来的数字——在构建之前就设定好，而不是等结果出来之后。"
+      },
+      "build": {
+        "title": "构建",
+        "question": "它是真的吗？我可以在哪里打开它？",
+        "body": "选定的验证方式被具体实现：画布上的文件、上线的接口、看板上的工单、已发布的站点，以及一个你可以发给别人的地址。智能体从这里接手构建工单。"
+      }
+    },
+    "spends": {
+      "yes": "消耗运行预算",
+      "no": "不产生费用"
+    },
+    "arcHead": "这三个动作所处的位置",
+    "arcQuestion": {
+      "idea": "如果……会怎样？",
+      "make": "把它做出来。",
+      "run": "像一家公司那样运营它。",
+      "measure": "它有效吗？",
+      "market": "销售、采购、招聘、被找到。",
+      "expand": "让它成长。",
+      "admin": "设置。"
+    },
+    "arcNote": "\"衡量\"正是让这条弧线成为闭环而非直线的原因：在\"验证\"阶段设定的终止条件会在这里被评判，答案再回到\"想法\"。一个没有可能失败条件的验证，不过是多了几个步骤的发布。",
+    "proofsHead": "让想法成真的八种方式",
+    "proofsLede": "排序方式与产品内部一致——最便宜的优先。推荐从不以完整系统开场，因为代价最高的失败不是慢慢地做错东西，而是在弄清是否有人想要之前，就把看起来正确的东西做了出来。",
+    "proofsNote": "所有选项始终都会呈现。这是关于\"先做什么\"的建议，而不是过滤器——隐藏选项会把建议变成裁决。",
+    "liveBadge": "发布一个地址",
+    "fidelity": "保真度",
+    "effort": "投入",
+    "proof": {
+      "demo-video": {
+        "name": "演示视频",
+        "question": "你能让我看看这是什么吗？",
+        "summary": "一段计时短片和一份旁白脚本，让一段可录制的 90 秒演示今天就能存在。"
+      },
+      "clickable-prototype": {
+        "name": "可点击原型",
+        "question": "有人能在无人帮助下真正完成这个流程吗？",
+        "summary": "一个带埋点的流程点击演示，没有后端，也没有数据。"
+      },
+      "smoke-test": {
+        "name": "烟雾测试",
+        "question": "真的有人想要这个吗？",
+        "summary": "一个\"假门\"落地页、一份等待名单，以及一个按预设阈值评判的需求控制台。"
+      },
+      "wizard-of-oz": {
+        "name": "绿野仙踪法",
+        "question": "在能够自动化之前，这个结果值得付费吗？",
+        "summary": "一个真实的前端，背后由人工支撑，带 SLA 计时，走的是最终系统将要使用的同一批路由。"
+      },
+      "poc": {
+        "name": "概念验证",
+        "question": "最难的那部分真的能可靠地跑通吗？",
+        "summary": "把风险最高的环节隔离到一套试验框架中，用通过率对照预设标准进行评判。"
+      },
+      "pilot": {
+        "name": "试点",
+        "question": "面对真实用户它站得住吗？规模是否小到即使判断错误也承受得起？",
+        "summary": "一次有边界的运行，配合指定的用户群、每周反馈循环和书面退出标准。"
+      },
+      "phone-line": {
+        "name": "电话线路",
+        "question": "客户能通过电话找到它吗——它又能主动联系客户吗？",
+        "summary": "一个会接听并能理解的来电号码，外加一个可发起外呼的接口。"
+      },
+      "live-system": {
+        "name": "上线系统",
+        "question": "它真的在运行吗？我们运维得了吗？",
+        "summary": "整套系统运行在真实地址上，配有运维控制台和值班手册。"
+      }
+    },
+    "ctaRealize": "让它成真 →",
+    "ctaCanvas": "打开画布"
+  },
+  "sell": {
+    "seo": {
+      "title": "销售 Builderforce — 推荐与销售伙伴计划",
+      "description": "加入 Builderforce 推荐与销售伙伴计划。在一块持久的销售画布上开展外联、管理线索、追踪目标，并与 Builderforce 协作。",
+      "ogTitle": "与 Builderforce 一同成长"
+    },
+    "hero": {
+      "eyebrow": "推荐与销售伙伴计划",
+      "titleLine1": "销售 Builderforce。",
+      "titleLine2": "打造属于你自己的管道。",
+      "lede": "获取资料、互联的销售工作区，以及把 Builderforce 介绍给对的团队所需的直接支持——并按照你所在计划设定的推荐与销售费率获得收入。",
+      "primaryCta": "成为销售伙伴",
+      "secondaryCta": "伙伴登录",
+      "finePrint": "计划参与资格与佣金资格须经审核，并以你账户中显示的条款为准。"
+    },
+    "heroPanel": {
+      "aria": "销售伙伴工作区概览",
+      "status": "销售工作区",
+      "title": "从收入目标到下一步行动",
+      "pipelineLabel": "管道",
+      "pipelineValue": "联系人 → 成交",
+      "goalsLabel": "目标",
+      "goalsValue": "每周节奏",
+      "step1": "瞄准正确的市场",
+      "step2": "发起协同外联",
+      "step3": "追踪注册与转化",
+      "step4": "在 Builderforce 辅导下持续改进"
+    },
+    "pitch": {
+      "eyebrow": "你真正在销售的东西",
+      "title": "一套方法，而不是一份功能清单",
+      "body": "这个领域最难应对的异议是\"我们已经有 AI 工具了\"。答案不是更长的功能清单，而是 Builderforce 销售的是一种工作方式：读懂想法，选择能回答真正问题的最便宜验证方式，然后再构建。那些曾被一个从未验证过、耗时半年的项目伤过的客户，会立刻理解这句话——而产品本身在屏幕上呈现的正是同一句话。"
+    },
+    "capabilities": {
+      "eyebrow": "你的销售操作系统",
+      "title": "一切都围绕一块画布",
+      "intro": "这不只是一个推荐链接。你的伙伴账户把必要的 CRM、营销活动、日程与辅导工具整合在一起，让每个动作都有上下文。",
+      "items": {
+        "canvas": {
+          "title": "一块销售画布",
+          "text": "在一个持久的、有账户支撑的工作区中规划并执行销售与营销工作，你的团队和 Builderforce 都可以在其中协作。"
+        },
+        "crm": {
+          "title": "CRM 与管道",
+          "text": "上传联系人、整理名单、甄别线索、追踪阶段，并了解每个商机在管道中的位置。"
+        },
+        "targeting": {
+          "title": "市场定位",
+          "text": "定义你想触达的市场与受众，然后围绕它们构建有针对性的营销活动。"
+        },
+        "campaigns": {
+          "title": "邮件营销",
+          "text": "创建外联内容、组织跟进，并把营销活动与它意在推动的联系人和商机关联起来。"
+        },
+        "goals": {
+          "title": "目标与辅导",
+          "text": "设定每周的活动与收入目标，看清弥补差距所需的行动，并向 Builderforce 申请一对一指导。"
+        },
+        "meetings": {
+          "title": "会议与日历",
+          "text": "连接你的日历，安排潜客会议，并在需要通话支持时邀请 Builderforce 超级管理员参加。"
+        }
+      }
+    },
+    "visibility": {
+      "eyebrow": "一个透明可见的计划",
+      "title": "知道你的工作何时变成收入",
+      "body": "当归属于你的用户注册和转化时，你会收到通知。你的仪表盘把活动、商机、推荐与收益连接起来，让你可以专注于下一个最佳行动。",
+      "check1": "注册与转化通知",
+      "check2": "与定价挂钩的推荐与销售费率",
+      "check3": "把收入目标转换为管道指标",
+      "check4": "直接的会议邀约与交易支持"
+    },
+    "materials": {
+      "eyebrow": "销售工具包",
+      "title": "从经过审核的资料开始",
+      "intro": "把这些资源用于开发客户与需求挖掘。公开的媒体与产品资料仍可在<media>媒体资料包</media>中获取。",
+      "download": "下载 →",
+      "items": {
+        "discovery": {
+          "label": "指南",
+          "title": "销售需求挖掘指南",
+          "text": "甄别问题、影响力提问，以及一套可落地的下一步框架。"
+        },
+        "outbound": {
+          "label": "手册",
+          "title": "外呼邮件手册",
+          "text": "一套简洁的三次触达序列，采用经过审核的 Builderforce 定位话术。"
+        },
+        "contacts": {
+          "label": "CSV",
+          "title": "CRM 联系人模板",
+          "text": "可直接导入的字段，涵盖联系人、目标市场与管道阶段。"
+        }
+      }
+    },
+    "steps": {
+      "eyebrow": "运作方式",
+      "one": {
+        "title": "创建你的伙伴账户",
+        "text": "选择\"销售伙伴\"账户类型并提交你的计划信息。"
+      },
+      "two": {
+        "title": "设定你的市场与收入目标",
+        "text": "围绕你想争取的受众与结果制定管道计划。"
+      },
+      "three": {
+        "title": "在你的画布上开展工作",
+        "text": "在一个地方管理联系人、营销活动、会议、跟进与辅导。"
+      }
+    },
+    "cta": {
+      "eyebrow": "准备好开始了吗？",
+      "title": "把你的人脉变成可复制的销售动作。",
+      "button": "加入计划"
+    }
+  },
+  "relatedArticles": {
+    "heading": "延伸阅读",
+    "subtitle": "来自 Builderforce 博客、围绕本页主题的深度文章。"
   }
 }

@@ -2894,3 +2894,72 @@
   border-left:3px solid var(--tone-success-mark); font:600 12px inherit; word-break:break-all;
 }
 .publishSuccess a { color:inherit; }
+
+/* ── Build / Stage / Live ──────────────────────────────────────────────────────
+   The release rail and the staging surface. Every colour is a canvas token, so
+   the panel reads in both themes exactly as the board it sits over does, and the
+   layout is fluid rather than fixed-width because this panel is resizable and is
+   opened on a phone. */
+.releasePanel { display:flex; flex-direction:column; gap:14px; padding:4px 2px 18px; }
+.releaseRail { display:flex; flex-direction:column; gap:8px; }
+.releaseItem {
+  display:flex; flex-direction:column; gap:6px; padding:10px 12px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel-muted);
+}
+.releaseItem[data-current='true'] {
+  border-color:var(--canvas-accent); background:var(--info-bg);
+}
+.releaseTop { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.releaseVersion { font:700 12px var(--font-mono); letter-spacing:.02em; color:var(--canvas-ink); }
+.releaseWhen { margin-left:auto; font:500 10px var(--font-mono); color:var(--canvas-muted); }
+.releaseNote { margin:0; font:500 11px inherit; line-height:1.45; color:var(--canvas-muted); }
+.releaseActions { display:flex; flex-wrap:wrap; gap:6px; }
+.releaseActions > button { flex:0 1 auto; }
+
+.releaseState {
+  display:inline-flex; align-items:center; gap:5px; padding:2px 8px;
+  border-radius:var(--radius-full); font:700 10px var(--font-mono);
+  letter-spacing:.06em; text-transform:uppercase;
+  border:1px solid var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-muted);
+}
+.releaseState[data-state='live']       { color:var(--success-text, var(--success)); background:var(--success-bg); border-color:transparent; }
+.releaseState[data-state='staged']     { color:var(--warning-text, var(--warning)); background:var(--warning-bg); border-color:transparent; }
+.releaseState[data-state='draft']      { color:var(--info-text, var(--info)); background:var(--info-bg); border-color:transparent; }
+.releaseState[data-state='superseded'] { color:var(--canvas-muted); }
+
+.checkGroup { display:flex; flex-direction:column; gap:2px; }
+.checkGroupHead {
+  display:flex; align-items:center; gap:8px; padding-bottom:4px;
+  font:600 10px var(--font-mono); letter-spacing:.13em;
+  text-transform:uppercase; color:var(--canvas-muted);
+}
+.checkGroupHead > span:last-child { margin-left:auto; }
+.checkRow {
+  display:grid; grid-template-columns:16px minmax(0, 1fr); gap:9px;
+  padding:8px 0; border-bottom:1px solid var(--canvas-line); align-items:start;
+}
+.checkRow:last-child { border-bottom:0; }
+.checkMark { font:800 12px inherit; line-height:1.4; color:var(--canvas-muted); }
+.checkMark[data-severity='pass']  { color:var(--success); }
+.checkMark[data-severity='warn']  { color:var(--warning); }
+.checkMark[data-severity='block'] { color:var(--error); }
+.checkLabel { display:block; font:600 12px inherit; color:var(--canvas-ink); }
+.checkDetail { display:block; margin-top:2px; font:500 11px inherit; line-height:1.45; color:var(--canvas-muted); }
+
+.releaseVerdict {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  padding:10px 12px; border-radius:var(--radius-md);
+  border-left:3px solid var(--canvas-accent); background:var(--canvas-panel-muted);
+  font:500 12px inherit; line-height:1.45; color:var(--canvas-ink);
+}
+.releaseVerdict[data-blocked='true'] { border-left-color:var(--error); }
+
+.releaseHarness {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  font:500 11px inherit; color:var(--canvas-muted);
+}
+.releaseStripped {
+  margin:0; font:500 11px var(--font-mono); line-height:1.6;
+  color:var(--canvas-muted); word-break:break-word;
+}

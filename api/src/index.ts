@@ -128,6 +128,7 @@ import { createPersonalityRoutes }      from './presentation/routes/personalityR
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
 import { createMcpServerRoutes }    from './presentation/routes/mcpServerRoutes';
 import { createTenantModelRoutes }  from './presentation/routes/tenantModelRoutes';
+import { createLlmRatingRoutes }   from './presentation/routes/llmRatingRoutes';
 import { createSemanticCacheRoutes } from './presentation/routes/semanticCacheRoutes';
 import { createAdminRoutes }        from './presentation/routes/adminRoutes';
 import { createChatRoutes }         from './presentation/routes/chatRoutes';
@@ -172,6 +173,7 @@ import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createCompileRoutes }     from './presentation/routes/compileRoutes';
 import { createChallengeRoutes }   from './presentation/routes/challengeRoutes';
 import { createRealizationRoutes } from './presentation/routes/realizationRoutes';
+import { createDeveloperRoutes }  from './presentation/routes/developerRoutes';
 import { createBackendRuntimeRoutes } from './presentation/routes/backendRuntimeRoutes';
 import { createProjectBackendRoutes } from './presentation/routes/projectBackendRoutes';
 import { createGameRoutes } from './presentation/routes/gameRoutes';
@@ -482,6 +484,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Tenant "LLM" objects — named, reusable model configs selectable anywhere by
   // the ref `tenant_model:<slug>` (cloud agents, on-prem hosts, the Designer Brain).
   app.route('/api/llm/models', createTenantModelRoutes(db));
+
+  // Human ratings of model output (migration 0465) — the thumbs every chat surface
+  // shows, filed against (action / MCP tool) × model so the learned router can tell
+  // which model is actually good at which kind of work.
+  app.route('/api/llm/ratings', createLlmRatingRoutes(db));
 
   // Shared (L2) semantic response cache — the web app and the agent runtime both
   // query it so a paraphrased answer from one surface is reusable by the other.
@@ -817,6 +824,12 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/teams',        createTeamRoutes(db));
   app.route('/api/ide',       createIdeRoutes());
   app.route('/api/compile',   createCompileRoutes(db, runtimeService));
+  // The Developer Portal (PRD 24). A publisher registers, ships a versioned
+  // package, and any tenant installs it under a scope grant. An installed
+  // `connector` package joins the tenant's catalog through `connectorRegistry`,
+  // which is what makes it callable by agents and workflows without any consumer
+  // learning that a marketplace exists.
+  app.route('/api/developer', createDeveloperRoutes(db));
   // Paste a brief (a contest, an RFP, a hackathon prompt) → extracted requirements,
   // a matched blueprint, a plan, and — on an explicit second call — a built project.
   app.route('/api/challenges', createChallengeRoutes(db, runtimeService));

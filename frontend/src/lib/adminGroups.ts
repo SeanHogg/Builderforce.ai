@@ -52,6 +52,10 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
   ] },
   { id: 'llm', labelKey: 'tab.adminLlm', icon: '📊', subs: [
     { id: '', subKey: 'usage', icon: '📊' },
+    // What the spend BOUGHT: the thumbs people pressed, by model and by MCP tool.
+    // It sits beside usage because a model that is cheap and disliked is a worse
+    // choice than the cost table on its own can ever show.
+    { id: 'ratings', subKey: 'llmRatings', icon: '👍' },
     { id: 'traces', subKey: 'traces', icon: '🔎' },
   ] },
   { id: 'content', labelKey: 'tab.adminContent', icon: '🎭', subs: [

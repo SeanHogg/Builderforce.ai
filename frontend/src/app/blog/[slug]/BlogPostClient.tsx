@@ -3,17 +3,57 @@
 import { Icon } from '@/components/ui/Icon';
 import { use } from 'react';
 import Link from 'next/link';
+import { useLocale, useTranslations } from 'next-intl';
 import ReactMarkdown from 'react-markdown';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
 import { getPostBySlug } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import BlogCover from '@/components/blog/BlogCover';
+import BlogFigure, { parseFigure } from '@/components/blog/BlogFigure';
 import { blogPostSchema } from '@/lib/structured-data';
+
+/**
+ * The fence language a post uses to place a figure. Data, never markup — the
+ * shared markdown pipeline has no `rehype-raw` on purpose (it also renders chat
+ * and canvas content), so a post cannot embed HTML and does not need to.
+ */
+const FIGURE_LANG = 'language-bf-figure';
+
+/**
+ * `<pre>` override: a ```bf-figure block becomes a <BlogFigure>, anything else
+ * stays a code block.
+ *
+ * `pre` rather than `code` because a figure is a `<figure>` and a `<figure>`
+ * inside a `<pre>` is invalid HTML — the browser reflows it out of the block
+ * and the styling goes with it. The raw JSON is read off the hast node: by the
+ * time react-markdown hands over `children`, the source is already React
+ * elements.
+ */
+type HastNode = { children?: Array<{ tagName?: string; properties?: { className?: unknown }; children?: Array<{ value?: string }> }> };
+
+function MarkdownPre({ node, children, ...rest }: { node?: unknown; children?: React.ReactNode } & React.HTMLAttributes<HTMLPreElement>) {
+  const code = (node as HastNode | undefined)?.children?.find((child) => child.tagName === 'code');
+  const classNames = Array.isArray(code?.properties?.className) ? (code.properties.className as string[]) : [];
+  if (code && classNames.includes(FIGURE_LANG)) {
+    const source = code.children?.map((child) => child.value ?? '').join('') ?? '';
+    const spec = parseFigure(source);
+    // A malformed figure falls through to the code block rather than vanishing:
+    // a typo in a post should show its source, not a hole in the article.
+    if (spec) return <BlogFigure spec={spec} />;
+  }
+  return <pre {...rest}>{children}</pre>;
+}
+
+const MARKDOWN_COMPONENTS = { pre: MarkdownPre };
 
 export default function BlogPostClient({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const post = getPostBySlug(slug);
+  const t = useTranslations('blog.post');
+  // The published date is formatted in the reader's locale rather than always
+  // en-US — a localized article with an American date is half-translated.
+  const locale = useLocale();
 
   return (
     <>
@@ -206,26 +246,26 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
       <div className="bpost-page">
         {/* ── Content ── */}
         <main className="bpost-main">
-          <Link href="/blog" className="bpost-back">← Back to Blog</Link>
+          <Link href="/blog" className="bpost-back">{t('back')}</Link>
 
           {!post ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-secondary)' }}>
               <p style={{ fontSize: 'var(--font-size-page-title)', marginBottom: 16 }}><Icon source="📄" size="1em" /></p>
               <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-section)', color: 'var(--text-primary)', marginBottom: 8 }}>
-                Post not found
+                {t('notFoundTitle')}
               </h2>
               <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>
-                This article doesn&apos;t exist or has been moved.
+                {t('notFoundBody')}
               </p>
               <Link href="/blog" style={{ color: 'var(--coral-bright)', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-                Browse all articles →
+                {t('browseAll')}
               </Link>
             </div>
           ) : (
             <>
               <div className="bpost-meta">
                 <span className="bpost-date">
-                  {new Date(post.date).toLocaleDateString('en-US', {
+                  {new Date(post.date).toLocaleDateString(locale, {
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric',
@@ -234,7 +274,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
                 {post.tags.slice(0, 3).map((tag) => (
                   <span key={tag} className="bpost-tag">{tag}</span>
                 ))}
-                {post.author && <span className="bpost-author">By {post.author}</span>}
+                {post.author && <span className="bpost-author">{t('byline', { author: post.author })}</span>}
               </div>
 
               <h1 className="bpost-title">{post.title}</h1>
@@ -243,24 +283,28 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
               <BlogCover title={post.title} tags={post.tags} slug={post.slug} />
 
               <div className="bpost-content">
-                <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>
+                <ReactMarkdown
+                  remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+                  rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
+                  components={MARKDOWN_COMPONENTS}
+                >
                   {post.content}
                 </ReactMarkdown>
               </div>
 
               <div style={{ marginTop: 48, paddingTop: 32, borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                 <Link href="/blog" style={{ fontSize: 'var(--font-size-body)', color: 'var(--coral-bright)', fontFamily: 'var(--font-display)', fontWeight: 600, textDecoration: 'none' }}>
-                  ← Back to Blog
+                  {t('back')}
                 </Link>
                 <Link href="/register" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 'var(--radius-lg)', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 'var(--font-size-body)', textDecoration: 'none', boxShadow: '0 4px 14px var(--shadow-coral-mid)' }}>
-                  Start building for free →
+                  {t('startFree')}
                 </Link>
               </div>
             </>
           )}
         </main>
 
-        {post && <RelatedArticles relatedToSlug={post.slug} heading="Related articles" />}
+        {post && <RelatedArticles relatedToSlug={post.slug} heading={t('relatedHeading')} />}
 
         {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </div>

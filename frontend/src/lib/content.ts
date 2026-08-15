@@ -1812,6 +1812,8 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'multiplayer-creation-canvas-web-vscode',
   ],
   product: [
+    'idea-to-real-the-operating-methodology',
+    'eight-ways-to-make-an-idea-real',
     'creation-canvas-beyond-chat',
     'customer-feedback-to-ten-mockups',
     'multiplayer-creation-canvas-web-vscode',
@@ -1847,10 +1849,25 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'builderforce-vs-cursor-windsurf',
   ],
   pricing: [
+    // The method leads, because the pricing question a visitor actually has is
+    // "what am I paying for" and the answer is the third act, not the first two.
+    'read-prove-build-the-inner-loop',
+    'eight-ways-to-make-an-idea-real',
     'evermind-self-updating-model',
     'memory-first-inference-skip-the-llm',
     'system-of-record-for-agentic-work',
     'semantic-response-cache',
+  ],
+  /**
+   * The methodology set. Attached to every surface that renders
+   * <MethodologySection>, so a visitor who wants the long version has one
+   * consistent set of four articles behind the same four pages.
+   */
+  methodology: [
+    'idea-to-real-the-operating-methodology',
+    'eight-ways-to-make-an-idea-real',
+    'read-prove-build-the-inner-loop',
+    'idea-make-run-measure-menu-as-methodology',
   ],
   // Per-competitor leaf pages — keyed by the COMPETITORS column key. Each points
   // at its dedicated head-to-head post first, then the roundup for context.

@@ -143,6 +143,8 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
     copy: t('tl.copy', 'Copy'),
     copied: t('tl.copied', 'Copied'),
     replay: t('tl.replay', 'Send again'),
+    rateUp: t('tl.rateUp', 'Good response'),
+    rateDown: t('tl.rateDown', 'Bad response'),
     apply: t('tl.apply', 'Apply'),
     createFile: t('tl.createFile', 'Create file'),
     preview: t('tl.preview', 'Preview'),
@@ -1559,8 +1561,13 @@ function Chat({ init }: { init: InitData }) {
           loading={conv.loadingMessages}
           assistantName="BuilderForce"
           labels={tlLabels}
+          modelIdentity={modelChoices?.identity}
           onAnswerQuestion={answerQuestion}
           onReplayMessage={replayMessage}
+          // The editor rates turns too now — before the thumbs moved into the shared
+          // action row, a large share of all model calls could not be rated at all.
+          onRateMessage={conv.rateMessage}
+          ratings={conv.ratings}
         />
       </div>
 
@@ -1837,7 +1844,7 @@ function Chat({ init }: { init: InitData }) {
               options: modelChoices.options,
               onChange: chooseModel,
               effective: init.model,
-              canChoose: modelChoices.canChooseModel,
+              identity: modelChoices.identity,
             } : undefined}
             onAccountSettings={() => post('settings')}
           />

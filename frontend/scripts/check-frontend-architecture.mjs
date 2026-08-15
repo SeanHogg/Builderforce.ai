@@ -1,4 +1,22 @@
 #!/usr/bin/env node
+/**
+ * Frontend architecture ratchets. Counts and sets that may shrink but not grow.
+ *
+ * The baseline lives in `.frontend-architecture-baseline.json`, which is data
+ * and therefore has nowhere to put a reason. So a raise is justified HERE, in
+ * prose, and a raise with no entry below is a raise nobody argued for:
+ *
+ *   786 → 787 (`useClientFiles`, 2026-08-15) — `components/marketing/
+ *   MethodologySection.tsx`. It is the single renderer of the Idea→Real method
+ *   for four marketing pages, two of which are Server Components
+ *   (`/features`, `/about`) and two of which are Client Components
+ *   (`/pricing`, `/sell-builderforce`). `useTranslations` is the only
+ *   translation API that works under both, and it needs the client boundary
+ *   here because no non-`'use client'` component in this tree uses it — making
+ *   this the file that finds out whether that works is not a trade worth taking
+ *   for one ratchet point. The alternative was two copies of the same markup,
+ *   which is the drift the component exists to prevent.
+ */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

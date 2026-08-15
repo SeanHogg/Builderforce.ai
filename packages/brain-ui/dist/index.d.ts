@@ -1,7 +1,7 @@
 import * as React from 'react';
 import React__default, { HTMLAttributes, ReactNode } from 'react';
-import { BrainMessage, BrainTraceEvent, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
-export { ChatModelOptions, ChatModelSelection, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, activeModelKey, buildModelItems, byoVendorLabel, filterModelItems, modelCategoryLabel, modelInUse, perMillionUsd, premiumCostLabel } from '@seanhogg/builderforce-brain-embedded';
+import { BrainMessage, BrainTraceEvent, ModelIdentityContext, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+export { BUILDERFORCE_PRODUCT_NAME, ChatModelOptions, ChatModelSelection, DEFAULT_MODEL_IDENTITY, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelIdentityContext, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, RoutedProduct, activeModelKey, buildModelItems, byoVendorLabel, displayModelName, filterModelItems, modelCategoryLabel, modelInUse, perMillionUsd, premiumCostLabel, productForPlan, productModelName, revealsModelId } from '@seanhogg/builderforce-brain-embedded';
 
 interface BrainTimelineLabels {
     /** Shown on the live thinking node while a turn streams. */
@@ -20,6 +20,9 @@ interface BrainTimelineLabels {
     /** Per-message "send this again" action — re-asks the model with the same text,
      *  from a user turn or an assistant one. */
     replay: string;
+    /** Thumbs up / down on an assistant reply. */
+    rateUp: string;
+    rateDown: string;
     apply: string;
     createFile: string;
     /** Heading for the change preview shown on an edit_file / write_file tool step. */
@@ -70,6 +73,8 @@ interface BrainTimelineLabels {
     reconcileHint: string;
 }
 declare const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels;
+/** +1 up, -1 down, 0 = cleared. Mirrors the `llm_action_ratings.rating` domain. */
+type MessageRating = 1 | -1 | 0;
 interface BrainTimelineProps {
     messages: BrainMessage[];
     trace: BrainTraceEvent[];
@@ -77,6 +82,9 @@ interface BrainTimelineProps {
     isRunning: boolean;
     loading?: boolean;
     labels?: Partial<BrainTimelineLabels>;
+    /** Who is reading — decides whether a reply's provenance chip may name the upstream
+     *  model or shows the routing product instead. Omitted ⇒ masked (fail closed). */
+    modelIdentity?: ModelIdentityContext;
     /** Override the assistant display name (defaults to labels.assistant). */
     assistantName?: string;
     /** Replaces the built-in empty state entirely. */
@@ -96,6 +104,15 @@ interface BrainTimelineProps {
     /** Re-send a message's text as the next turn. When omitted the "send again" action
      *  hides itself, so a read-only transcript offers only copy. */
     onReplayMessage?: (msg: BrainMessage, role: 'user' | 'assistant') => void;
+    /**
+     * Rate an assistant reply. Wiring it renders the thumbs; omitting it hides them,
+     * so a read-only transcript (or a surface with no signed-in rater) offers none.
+     * The host is responsible for filing the rating against the model that served the
+     * turn — see `llm_action_ratings` / `POST /api/llm/ratings`.
+     */
+    onRateMessage?: (msg: BrainMessage, rating: MessageRating) => void;
+    /** The rating THIS viewer has already given, keyed by message id. */
+    ratings?: Record<number, 1 | -1>;
     onInternalLink?: (href: string) => void;
     onApplyCode?: (code: string) => void;
     onCreateFile?: (path: string, content: string) => void;
@@ -113,7 +130,7 @@ interface BrainTimelineProps {
  * Input/Output, or an error. Presentational and theme-driven (CSS variables), so
  * it renders identically in the web app and a VS Code webview.
  */
-declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, loading, labels: labelOverrides, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onReplayMessage, onInternalLink, onApplyCode, onCreateFile, onAnswerQuestion, autoScroll, }: BrainTimelineProps): React__default.JSX.Element;
+declare function BrainTimelineInner({ messages, trace, streamingText, isRunning, loading, labels: labelOverrides, modelIdentity, assistantName, emptyState, renderMessage, renderStreaming, renderAssistantActions, onReplayMessage, onRateMessage, ratings, onInternalLink, onApplyCode, onCreateFile, onAnswerQuestion, autoScroll, }: BrainTimelineProps): React__default.JSX.Element;
 /**
  * Memoized so an unrelated re-render of the host (e.g. every keystroke in the
  * composer, which lives in the same component tree) does not re-render the whole
@@ -420,9 +437,14 @@ interface PromptOptionsModel {
      * "Auto" alone does not answer the question the user opened the menu to ask.
      */
     effective?: string;
-    /** False ⇒ the gateway would reject a pin (no paid plan, no connected account):
-     *  the list is replaced by the reason, rather than offering a dead control. */
-    canChoose?: boolean;
+    /**
+     * Who is reading: which routing product funds their turns, and whether the gateway
+     * would accept a pin from them at all. ONE object rather than a `canChoose` boolean
+     * beside it, because the two answers are the same fact — a viewer who may not pin is
+     * on the product, and must be told so by name instead of being shown an upstream id
+     * next to a list they cannot use. Omitted ⇒ free + no choice (fail closed).
+     */
+    identity?: ModelIdentityContext;
 }
 /** One selectable conversation mode. `value` is the host's stable, non-translatable id. */
 interface PromptOptionsModeChoice {
@@ -1868,4 +1890,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, promptOptionsLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type MessageRating, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsAutoMode, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, type PromptOptionsSession, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, promptOptionsLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };

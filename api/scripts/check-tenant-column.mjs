@@ -54,6 +54,10 @@ const TENANT_INDEPENDENT = new Map([
   ['marketing_sessions', 'PRE-TENANT: an anonymous visitor IS the row, and it is written on their first prompt — before an account, and therefore before a tenant, exists. Scoped by the opaque `visitor_id`, which is narrower than tenant. Moved out of the baseline (0434) because it is a decision, not an omission.'],
   ['marketing_session_prompts', 'PRE-TENANT: the prompts behind a `marketing_sessions` row, written on the same pre-signup path and scoped by the same `visitor_id` (0434).'],
   ['web_search_robots', 'a cache of the public robots.txt policy for a DNS domain. The policy and its expiry are identical for every tenant; tenant-owned crawl sources and frontier rows remain tenant-scoped.'],
+  ['developer_orgs', 'NOT A TENANT: a publisher (PRD 24) is a third party who ships extensions and is not necessarily a customer, so there is no workspace that owns the row. Reached through `developer_org_members`, which is narrower than tenant, not looser. The tenancy in this context lives on `tenant_extension_installs`, where the grant is.'],
+  ['developer_org_members', 'the membership of a `developer_orgs` row, which is itself tenant-independent for the reason above. Scoped by (developer_org_id, user_id).'],
+  ['extension_packages', 'a GLOBAL CATALOGUE: a published package is the same row for every tenant — that is what publishing means. What a given tenant has is a `tenant_extension_installs` row, which is scoped.'],
+  ['extension_versions', 'the immutable versions of a `extension_packages` row, global for the same reason.'],
 ]);
 
 const tables = parseDrizzleTables(srcDir);

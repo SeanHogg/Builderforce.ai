@@ -60,14 +60,14 @@ describe('deployAndDispatch', () => {
   });
 
   it('returns plan-only for IDE (client-driven surface)', async () => {
-    const spec: AgentSpec = { ...cloudSpec, surfaces: ['ide'] };
-    const res = await deployAndDispatch(spec, 'ide', { db: fakeDb, tenantId: 7 });
+    const spec: AgentSpec = { ...cloudSpec, surfaces: ['workspace'] };
+    const res = await deployAndDispatch(spec, 'workspace', { db: fakeDb, tenantId: 7 });
     expect(res.ok && res.kind).toBe('plan-only');
     if (res.ok && res.kind === 'plan-only') expect(res.reason).toMatch(/client relay/);
   });
 
   it('rejects a surface the spec does not allow', async () => {
-    const res = await deployAndDispatch(cloudSpec, 'ide', { db: fakeDb, tenantId: 7 });
+    const res = await deployAndDispatch(cloudSpec, 'workspace', { db: fakeDb, tenantId: 7 });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/not allowed/);
   });

@@ -55,9 +55,13 @@ import {
   writeWorkspaceFile,
   writeWorkspaceBinary,
   deleteWorkspaceFile,
+  listWorkspaceHistory,
+  restoreWorkspaceVersion,
 } from '../../application/ide/workspaceStore';
 import { onCanvasWrite } from '../../application/backend';
 import { HOSTING_APEX } from '../../application/ide/siteHosting';
+import { listSiteReleases, restoreSiteRelease } from '../../application/ide/siteReleases';
+import { APP_PACKAGE_TARGETS, isAppPackageTarget, packageAppTarget } from '../../application/ide/packageApp';
 import { publishStaticSite, assetsFromFormData } from '../../application/ide/publishStaticSite';
 import { validateLoRASafetensors } from '../../domain/training/loraArtifact';
 
@@ -360,6 +364,60 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     return c.json({ success: true });
   });
 
+  // ---------- File history (undo what a prompt did) ----------
+  // Every write through `writeWorkspaceFile` archives the version it replaces, so
+  // these two routes are the whole revert story for code: list what a file used to
+  // be, and put one of those back. Restoring goes through the same write path, so
+  // the restore is itself archived and an unwanted revert is not a one-way door.
+
+  router.get('/projects/:projectId/history', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
+    const bucket = r2(c);
+    if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const path = c.req.query('path')?.trim() || undefined;
+    return c.json(await listWorkspaceHistory(bucket, projectId, path));
+  });
+
+  router.post('/projects/:projectId/history/restore', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
+    const bucket = r2(c);
+    if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const body = await c.req.json<{ path?: unknown; at?: unknown }>().catch(() => ({} as { path?: unknown; at?: unknown }));
+    const path = typeof body.path === 'string' ? body.path : '';
+    const at = Number(body.at);
+    if (!path || !Number.isFinite(at)) return c.json({ error: 'path and at are both required.' }, 400);
+    const result = await restoreWorkspaceVersion(bucket, projectId, path, at);
+    if (!result.ok) return c.json({ error: result.reason }, result.status);
+    await onCanvasWrite(c.env, projectId, path);
+    return c.json({ success: true, path, at });
+  });
+
+  // ---------- Site releases (roll a published site back) ----------
+
+  router.get('/projects/:projectId/site/releases', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    return c.json(await listSiteReleases(db, projectId, tenantId));
+  });
+
+  router.post('/projects/:projectId/site/releases/:versionToken/restore', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
+    if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const result = await restoreSiteRelease(c.env, db, projectId, tenantId, c.req.param('versionToken'), HOSTING_APEX);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({ success: true, versionToken: result.versionToken, url: result.url });
+  });
+
   // ---------- Designer ↔ repo bridge (import / commit / create / status) ----------
   // R2 is the working store; these sync it with a linked git repo using the shared
   // cloud-native repo helpers (no on-prem host). All tenant-scoped via projectInTenant.
@@ -460,6 +518,64 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     await invalidateCached(c.env as Env, repoStatusKey(projectId));
     const { ok: _ok, ...enabled } = result;
     return c.json(enabled);
+  });
+
+  // ---------- Package a built app as something installable ----------
+  // The built `dist/` arrives exactly as it does for publishing (it is built in
+  // the WebContainer, in the tab), so what goes into the APK is byte-for-byte
+  // what was previewed and published. The packaging itself is the shared game
+  // adapters — see `application/ide/packageApp.ts` for why that is reuse rather
+  // than a category error.
+  router.post('/projects/:projectId/package', async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
+    const bucket = r2(c);
+    if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    const [project] = await db
+      .select({ name: projects.name })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
+      .limit(1);
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+
+    const form = await c.req.formData();
+    const target = String(form.get('target') ?? '');
+    if (!isAppPackageTarget(target)) {
+      return c.json({ error: `Unknown target. Use one of: ${APP_PACKAGE_TARGETS.join(', ')}.` }, 422);
+    }
+
+    // Text and binary halves are separated here rather than in the packager: the
+    // multipart body is the only place that knows a part's content type, and a
+    // PNG decoded to a string to be re-encoded later is a corrupted PNG.
+    const files: Record<string, string> = {};
+    const binaryFiles: Record<string, Uint8Array> = {};
+    for (const [name, value] of form.entries()) {
+      if (name === 'target' || name === 'description' || name === 'accent' || typeof value === 'string') continue;
+      const file = value as unknown as File;
+      const path = name.replace(/^\/+/, '').replace(/^dist\//, '');
+      if (!path) continue;
+      if (/^(?:image|font|audio|video)\//.test(file.type) || file.type === 'application/wasm') {
+        binaryFiles[path] = new Uint8Array(await file.arrayBuffer());
+      } else {
+        files[path] = await file.text();
+      }
+    }
+
+    const result = await packageAppTarget({
+      env: c.env,
+      db,
+      bucket,
+      tenantId,
+      projectId,
+      projectName: project.name ?? '',
+      target,
+      bundle: { files, binaryFiles },
+      description: typeof form.get('description') === 'string' ? String(form.get('description')) : undefined,
+      accent: typeof form.get('accent') === 'string' ? String(form.get('accent')) : undefined,
+    });
+    if (!result.ok) return c.json({ error: result.reason }, result.status);
+    return c.json({ success: true, target, state: result.state, writtenPaths: result.writtenPaths });
   });
 
   // ---------- Site hosting (publish a Designer project to a subdomain) ----------

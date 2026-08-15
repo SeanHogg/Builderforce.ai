@@ -1,6 +1,6 @@
 {
   "name": "builderforce-frontend",
-  "version": "2026.8.17",
+  "version": "2026.8.18",
   "private": true,
   "scripts": {
     "postinstall": "node ../scripts/ensure-linked-deps.mjs",
@@ -17,12 +17,13 @@
     "check:architecture": "node scripts/check-frontend-architecture.mjs",
     "check:edge-runtime": "node scripts/check-edge-runtime.mjs",
     "check:declared-deps": "node scripts/check-declared-deps.mjs",
-    "test": "npm run check:api-transport && npm run check:architecture && npm run check:design-tokens && npm run check:destinations && npm run check:design-scale && npm run check:edge-runtime && npm run check:declared-deps && node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs run",
+    "test": "npm run check:api-transport && npm run check:architecture && npm run check:design-tokens && npm run check:destinations && npm run check:design-scale && npm run check:edge-runtime && npm run check:declared-deps && npm run check:methodology && node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs run",
     "test:watch": "node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs",
     "typecheck:native": "tsgo --noEmit",
     "type-check": "tsgo --noEmit && tsc --noEmit",
     "check:design-scale": "node scripts/check-design-scale.mjs",
-    "check:destinations": "node scripts/check-destinations.mjs"
+    "check:destinations": "node scripts/check-destinations.mjs",
+    "check:methodology": "node scripts/check-methodology.mjs"
   },
   "dependencies": {
     "@cloudflare/next-on-pages": "^1.13.16",

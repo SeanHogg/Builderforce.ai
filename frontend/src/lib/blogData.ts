@@ -73,6 +73,13 @@ import creationObjectRegistry from '@/content/blog/forty-eight-live-objects-one-
 import llmInteractiveCourse from '@/content/blog/learn-how-to-build-an-llm-interactive-course.md';
 import whatsNewAlwaysOnCanvas from '@/content/blog/whats-new-always-on-canvas-workspace.md';
 import creationCanvasFunctionalityGuide from '@/content/blog/creation-canvas-functionality-guide.md';
+// The methodology set — the arc, the loop, the eight proofs, and the navigation
+// that carries them. These four are the written form of what <MethodologySection>
+// renders on /features, /about, /pricing and /sell-builderforce.
+import ideaToRealMethodology from '@/content/blog/idea-to-real-the-operating-methodology.md';
+import eightWaysToMakeItReal from '@/content/blog/eight-ways-to-make-an-idea-real.md';
+import readProveBuild from '@/content/blog/read-prove-build-the-inner-loop.md';
+import menuAsMethodology from '@/content/blog/idea-make-run-measure-menu-as-methodology.md';
 
 export interface BlogPost {
   slug: string;
@@ -135,6 +142,10 @@ function buildPost(slug: string, raw: string): BlogPost {
 
 /** All published blog posts, sorted newest-first. */
 export const BLOG_POSTS: BlogPost[] = [
+  buildPost('idea-to-real-the-operating-methodology', ideaToRealMethodology),
+  buildPost('eight-ways-to-make-an-idea-real', eightWaysToMakeItReal),
+  buildPost('read-prove-build-the-inner-loop', readProveBuild),
+  buildPost('idea-make-run-measure-menu-as-methodology', menuAsMethodology),
   buildPost('whats-new-always-on-canvas-workspace', whatsNewAlwaysOnCanvas),
   buildPost('creation-canvas-functionality-guide', creationCanvasFunctionalityGuide),
   buildPost('learn-how-to-build-an-llm-interactive-course', llmInteractiveCourse),

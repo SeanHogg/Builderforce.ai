@@ -132,8 +132,8 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 6 | [Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 31 |
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
-| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 30 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 118 |
+| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 31 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 137 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 14 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
@@ -153,8 +153,8 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 6 | 31 |
 | 7 | 25 |
 | 8 | 3 |
-| 9 | 30 |
-| 10 | 118 |
+| 9 | 31 |
+| 10 | 137 |
 | 11 | 14 |
 | 12 | 10 |
 | 13 | 11 |
@@ -694,6 +694,8 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 
 ### 📶 Project connection status — read-time probe bounds
 
+- **There is no third-party publisher path, and the developer API that names itself one is a listings embed** *(identified 2026-08-15 during the Developer Portal assessment — see [PRD 24](./specs/builderforce/24-prd-developer-portal.md))*. Everything a vendor could build for us is either **tenant-private** (`tenant_mcp_extensions`, tenant-authored connector manifests) or **code-owned** (the 40 `defaults/` manifests, `BOARD_PROVIDERS`, `dataProviderCatalog`, the drive/mailbox/payout/ledger ports, `builtinMcpService`). There is no "published by a vendor, installable by any tenant" bucket, so a vendor's only routes are a PR we have to merge or a workspace-of-one — which is why nobody builds. Two concrete drifts fall out and are fixable independently of the program: (a) `/api/v1` (`presentation/routes/publicApiRoutes.ts`) is four read-only endpoints (`agents`, `agents/:id`, `skills`, `personas`) whose `developer_api_keys` rows are parented to a **user** while the whole rest of the platform is tenant-scoped, with **no `scopes`, no `allowed_origins`, no rate tier** — while `tenant_api_keys` sitting next to it in `identity.ts` has all three; (b) two key models (`developer_api_keys`, `tenant_api_keys`) mean the same thing ("a credential calling us from outside") with different columns and different middleware, in violation of the DRY/one-shape rule. Fix = PRD 24 §5.1–5.2: re-parent developer keys to a new `developer_orgs` party, unify the scope vocabulary on the `tenant_api_keys` shape, and add ONE `extension_packages`/`extension_versions`/`tenant_extension_installs` triple whose `kind` is a column value (`connector` | `mcp_server` | `canvas_kind` | `agent` | `skill` | `template`) projecting into the existing `catalog_items` commerce rails rather than a second store. **Blocked on operator decisions, not code** — PRD 24 §9 names five (rev-share threshold, whether verification gates charging, whether a published `canvas_kind` may declare `derive`, sandbox-tenant cost under the Neon-under-$5 constraint, and the design-partner list); the schema shape and the review pipeline both depend on the first two. Unblocks: vendors building integrations we do not have to write, and the `/integrations` page listing an ecosystem instead of only our own ports.
+
 - **Build status + open-PR count are GitHub-only and read at request time, so two cohorts show `unknown`** *(projects-widget connection strip, 2026-08-06)* — `buildProjectConnections` (`api/src/application/repos/projectConnectionStatus.ts`) probes each repo live (open pulls + latest Actions run), cached per repo. Two deliberate bounds fall out of doing it at read time: (a) **GitLab/Bitbucket repos are never probed** — `probeRepoDelivery` returns `not_probed`, so those cards list the connection but show no build verdict and fall back to the Builderforce-recorded PR count; (b) **`LIVE_PROBE_BUDGET = 20`** caps the probes per composition so a many-repo tenant cannot exhaust the Worker's subrequest allowance — repos past the cap (defaults are probed first) also degrade to `unknown`. Both degrade honestly rather than showing a false green, but neither shows the truth. Fix: move CI status off the read path entirely — a scheduled per-repo sweep persisting `(repo, branch) → latest build verdict` (the `githubActionsReconcile` sweep is the template), plus GitLab pipelines / Bitbucket build-statuses readers behind the same `probeRepoDelivery` seam. Unblocks: a build verdict on every connected repo regardless of provider or repo count, with zero provider calls on a dashboard load. **Not blocked — scoped out of this pass** because it needs a new persistence table + a scheduled sweep, which is a larger feature than the widget status strip it would serve.
 
 ---
@@ -724,16 +726,268 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 
 ### 🧑‍💼 Founder operations — the canvas can ANALYSE a company and cannot RUN one
 
-> *All identified 2026-08-14 in one review that read the canvas through a founder's use cases (co-founder, CRM, pipeline, lead gen, contracts, billing, investors) and then swept the fifteen `DOMAIN_MANIFEST` domains for the same jobs. The founder vocabulary — the 21 kinds in `FOUNDER_OBJECT_KINDS` — is genuinely strong at holding an ANALYSIS. Every entry below is the same defect class: an act that ends at a card.*
+> *Identified 2026-08-14 in one review that read the canvas through a founder's use cases (co-founder,
+> CRM, pipeline, lead gen, contracts, billing, investors) and then swept the `DOMAIN_MANIFEST` domains
+> for the same jobs. The founder vocabulary — the 21 kinds in `FOUNDER_OBJECT_KINDS` — is genuinely
+> strong at holding an ANALYSIS. Every item below is the same defect class: an act that ends at a card.*
+>
+> **Two of the original ten are closed** (see DONE.md): date-bearing triggers with a server sweep, and
+> the `/integrations` ledger overclaim. The rest are broken out below in BUILD ORDER, because they are
+> not eight independent features — six of them are downstream of two foundations.
 
-- **`form` and the signature engine are declared in the contract and implemented nowhere.** `packages/creation-canvas-contract/src/people.ts` declares `PublishedForm`, `FORM_FIELD_TYPES`, `FORM_AUDIENCES`, `FORM_STATUSES`, `SIGNATURE_PARTY_STATUSES`, `SIGNATURE_REQUEST_STATUSES`, `SIGNATURE_INTENTS`, `isTerminalPartyStatus` and `isAgreedPartyStatus` — with a long, correct argument for each distinction. Grep across `api/src`, `frontend/src`, `clients` and `packages` finds **zero consumers** of any of them: no `signature_requests` table, no `form_responses` table, no public `/f/<slug>` responder route, no signer route. The file's own comment calls `form` "the single largest 'idea to REAL' break the canvas had" — the break is still open, and it is now load-bearing for five other things: `contract.sign` (gated in `canvasApprovalGate.ts`, no handler), `policy` acknowledgement rosters, `jobPosting` applications, `offer` acceptance, and the `data_rooms.nda_required` column. Fix = the two tables, a `PublishedForm` responder surface, a signer surface, and the `contract`/`policy`/`offer` actions routed through them. Unblocks: every flow that needs a COUNTERPARTY to act, which is most of what a founder does.
-- **`invoice.issue`, `bill.schedule-payment` and `invoice.record-payment` are gated acts with no handler behind the gate.** `GATED_ACTIONS` correctly names them irreversible/attested, and `founderObjects.ts` advertises `actions: ['issue','record-payment','chase']` on `invoice` and `['approve','schedule-payment','dispute']` on `bill` — grep for `record-payment` / `chase` / `schedule-payment` returns only the gate and its test. There is no `invoices` table (the only one is `freelancer_invoices`), no PDF render, no payment link, no ageing sweep (`ageingDays` is documented as "computed from `dueAt`" and nothing computes it), and no dunning. Fix = an AR/AP pair in the finance domain with the canvas object as its projection, so `financeRollup` gains a real source at the same time. Unblocks: a founder billing their own customer and knowing who has not paid.
-- **A tenant cannot take money from their own customers.** `infrastructure/payment/PaymentProvider.ts` states there is exactly one flow and it is Builderforce's own hosted subscription checkout; `marketplace/listingCommerce.ts` is the only other paid door and it sells a *creation on the marketplace* with a platform cut, crediting `ledger_entries`. There is no tenant merchant account (no Stripe Connect / no per-tenant processor credential), so "charge my customer" has no path — while `payoutProviders` (Stripe, PayPal, bank, Wise) can send money OUT to a freelancer, and even that is env-gated behind `PAYOUT_WEBHOOK_URL` with a "mark paid" fallback that moves no money. The finance category is one-directional by construction. Unblocks: the revenue half of running a business on the product.
-- **The canvas pipeline and the real CRM are two systems of record synchronised by a language model.** `lib/canvasSalesPipeline.ts` normalises authored JSON — `cards` with a title and `valueCents` — while the `revenue` domain owns `deals`, `pipeline_stages`, `pipeline_touchpoints`, contacts, sequences and enrichment provenance. `creationCanvasAi.ts` bridges them with a prompt instruction: use `builtin_sales_*`, then "mirror the returned canonical id and current values into the matching salesContact/salesCampaign/salesGoal/salesPipeline canvas object". A deal dragged on the board is not a deal moved in the CRM unless the model remembers. Fix = make the canvas objects a PROJECTION of the revenue entities through the consolidated entity layer, the way the founder `company` card already hydrates via `canvas_sync_company_profile`. Unblocks: one pipeline with one number.
-- **There is no CUSTOMER object, so every commercial reference is a string match.** `company` is us, `competitor` is them, `salesContact` is a person, `customerSegment` is a cohort — nothing represents an account you have won. It shows in the hints: `invoice.customer` says "Match it to a `company`, `salesContact` or `contract` on the board where one exists", `bill.vendor` says "Match it to a `contract` on the board", `battlecard.againstCompetitor` wants "the exact title of the competitor object". Joining a contract to its invoices, its support tickets and its renewal is therefore a name comparison. Fix = an `account` kind (or bind these fields to kernel object ids). Unblocks: revenue, delivery, support and finance answering about the same buyer.
-- **The founder cannot hold equity, and `capTable` is a typed table with nothing behind it.** No `cap_table` table exists anywhere in the schema; the canvas `capTable` is `holders: {holder, instrument, shares, percent}` authored by hand, with a hint asking the model to say so in `summary` when the percentages do not total 100. There is no share class, no issuance event, no option grant, no vesting schedule or cliff (grep: `409a`, `safe_note`, `equity_grant` → nothing), no board consent or minutes — so a pool top-up, a round, or a departure cannot be applied, only re-typed. Related: **there is no co-founder anything** (grep `co-founder|cofounder` across the frontend → no matches) — no matching surface, no founder agreement, no IP-assignment or vesting paperwork, which is the very first artifact a company produces. Unblocks: a cap table that survives its second event.
-- **Raising is four cards; the data room's own safety columns are unenforced.** `fundingRound.investors` is a rows table `{investor, stage, amount, nextStep}` — a spreadsheet inside a card — with no investor as an object, no warm-intro path and no per-investor thread. `investorUpdate.send` and `dataRoom.share` are gated and have no delivery. And `investor.data_rooms` carries `nda_required`, `watermark` and `expires_at` columns with no share flow, no access log and no view analytics to enforce or report them — so the three properties that make a data room safe to send are decoration. Note the seat asymmetry: the `investor` domain's root is `company` with `products`, `due_diligence_checklists`, `investment_opportunities` and `peer_comparables`, i.e. the CEO EVALUATING deals; the founder RAISING one gets `funding_rounds` in finance and these four cards. Unblocks: running a raise on the board instead of in a spreadsheet and an inbox.
-- **No legal/counsel domain exists, so a company's first ninety days are canvas cards.** The fifteen `DOMAIN_MANIFEST` domains give `governance` to the Security seat (controls, findings, policy — SOC 2), and nothing owns formation, registered agent, jurisdiction registration, IP assignment, trademark, or a contract repository with obligations and renewals. `contract` is one canvas kind whose `obligations` are free text and whose `sign` is gated with no engine. This is also the domain that would naturally own the signature primitive and a template library. Unblocks: the paper a company is actually made of.
+#### Build order, and why
+
+```
+FO-A  the counterparty          ─┬─→  FO-C money  ──→  FO-D ownership
+FO-B  collection & signature    ─┘    FO-E raising ──→  FO-G legal
+
+FO-F  one pipeline — independent of all of it
+```
+
+**FO-A and FO-B are the foundations and nothing downstream is worth starting first.** Every money,
+raising and legal item either needs to name a counterparty (FO-A) or needs a human outside the
+workspace to agree to something (FO-B). Building any of them first means inventing a private answer to
+one of those two questions that the next item then has to unpick. The two foundations are independent
+of each other and can run in parallel.
+
+**Neither foundation invents a table**, which is why they are first rather than merely urgent.
+`party_roles` (kernel) already carries `role: 'customer' | 'vendor' | 'investor' | 'partner' | …` with
+one row per (tenant, party kind, party ref, role) and a unique index proving it — so the counterparty
+EXISTS and the canvas simply cannot see it. And `packages/creation-canvas-contract/src/people.ts`
+already declares the entire form and signature contract, argued distinction by distinction, with zero
+implementations. Both foundations are wiring, not modelling.
+
+---
+
+#### Can these run in parallel? Partly — and the limit is not the one it looks like
+
+**Ten of the twenty-seven have no prerequisite** and can be dispatched today:
+
+`FO-A1` · `FO-B1` · `FO-B2` · `FO-C1` · `FO-C3` · `FO-C6` · `FO-E3` · `FO-F1` · `FO-G1` · `FO-D5`(matching half)
+
+The other seventeen are gated, and the gating is real rather than tidy-mindedness. FO-A2 cannot bind a
+field to an object that does not exist. FO-B3 has nothing to route through. FO-D1 needs the
+`equity_holder` role FO-A1 introduces, and FO-E1 needs the `investor` one. FO-C2 has no header to issue
+from. FO-F2 deletes a prompt paragraph that must not be deleted before FO-F1 replaces what it does.
+
+**The tighter constraint is file collision, not logical dependency.** Six of the ten "independent" items
+edit the same four files, so dispatching them at once produces conflicts even though none of them
+depends on another's behaviour:
+
+| File | Contended by |
+|---|---|
+| `packages/creation-canvas-contract/src/index.ts` (`FOUNDER_OBJECT_KINDS`) | FO-A1, FO-D1, FO-E1 |
+| `frontend/src/lib/founderObjects.ts` | FO-A1, FO-C1/C2, FO-C3, FO-D1, FO-E1, FO-G2 |
+| `frontend/src/i18n/messages/{en,zh,es,fr,de}.json` | every item with a surface |
+| `frontend/src/components/creation-canvas/CreationCanvas.tsx` (tool registry) | every item with a tool |
+| `api/migrations/` | FO-A1, FO-B1, FO-B2, FO-C1, FO-C3, FO-D1, FO-G1 — draw from the owning track's reserved band |
+
+Per the isolation-track rule at the foot of this file, shared coordination files are not file-disjoint
+and must be serialized and rebased before merge. In practice that means **three or four concurrent
+tracks, not ten**:
+
+**Track 1 — foundations, serialized:** FO-A1 → FO-A2 → FO-A3. Owns `founderObjects.ts` and the kind
+  list for the duration; everything else rebases onto it.
+**Track 2 — collection & signature:** FO-B1 ∥ FO-B2 → FO-B3 → FO-B4. Almost entirely new files
+  (tables, routes, a public responder surface), so it is the most genuinely isolated of the seven.
+**Track 3 — money headers:** FO-C1 ∥ FO-C3, then FO-C2 → FO-C5, then FO-C4. Schema-first, and its
+  canvas half rebases onto Track 1.
+**Track 4 — the disjoint singles:** FO-C6 (connector manifests — new files, touches nothing else),
+  FO-G1 (a new domain + seat), FO-F1 → FO-F2 (own module + one prompt), FO-E3 (a handler over an
+  existing transport). These are the ones a spare agent can take without coordinating.
+
+FO-D and the rest of FO-E should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do.
+
+#### FO-A · The counterparty — one object every commercial reference points at
+
+- **FO-A1 — There is no CUSTOMER object, so every commercial reference is a string match.** `company` is
+  us, `competitor` is them, `salesContact` is a person, `customerSegment` is a cohort — nothing
+  represents an account you have won. It shows in the hints the model is handed: `invoice.customer` says
+  "Match it to a `company`, `salesContact` or `contract` on the board where one exists", `bill.vendor`
+  says "Match it to a `contract` on the board", `battlecard.againstCompetitor` wants "the exact title of
+  the competitor object". Joining a contract to its invoices, its support tickets and its renewal is
+  therefore a comparison of two typed strings. Fix = an `account` canvas kind in the founder vocabulary
+  whose `partyRef` binds to a `party_roles` row — NOT a new table: the kernel already holds exactly one
+  row per party-and-role, and a second customer store is the collision `finance_soc_controls` exists to
+  record. Unblocks: FO-C, FO-E and FO-G all naming the same buyer.
+- **FO-A2 — Bind the counterparty FIELDS to it.** Once `account` exists, `invoice.customer`,
+  `bill.vendor`, `contract.counterparty` and `placement.client` stop being free text and carry an object
+  id with the string kept as the display label. Needs ONE shared resolver over four call sites rather
+  than each field inventing its own match, plus a read-time fallback that leaves existing string values
+  readable — a board saved yesterday must not lose its counterparty because the field grew a type.
+  Unblocks: "show me everything about Acme" as one query instead of four greps.
+- **FO-A3 — Project the account's own history onto the card.** With FO-A2 landed, an `account` can show
+  its open invoices, its live contract, its renewal date and its support load from the domains that
+  already hold them, through the consolidated entity layer. Read-through cached per (tenant, account)
+  and invalidated on write, per the caching standard. Unblocks: the card being worth opening.
+
+#### FO-B · Collection & signature — the two primitives the contract already declares
+
+> `people.ts` calls `form` "the single largest 'idea to REAL' break the canvas had: it could author
+> anything and collect nothing, so every flow that needed an answer from a person terminated in a
+> document and finished its real work somewhere else". That is still true, and it is now load-bearing
+> for five other things.
+
+- **FO-B1 — `PublishedForm` is declared and implemented nowhere.** `people.ts` declares
+  `PublishedForm`, `FORM_FIELD_TYPES`, `FORM_AUDIENCES` and `FORM_STATUSES` with a careful argument for
+  each distinction — including why `anonymous` is a boolean and not an audience, since an anonymous
+  pulse must not record who answered while a policy acknowledgement is worthless unless it does. Grep
+  across `api/src`, `frontend/src`, `clients` and `packages` finds ZERO consumers of any of them. Fix =
+  a `form_responses` table, a publish action that mints the slug, and a PUBLIC responder route rendering
+  the nine declared question types; the `PublishedForm` projection (no tenant, no session, no responses)
+  is already the right shape to send to a browser outside the workspace. Unblocks: every flow that needs
+  an answer from a person who is not a member.
+- **FO-B2 — The signature engine is declared and implemented nowhere.** `SIGNATURE_PARTY_STATUSES`,
+  `SIGNATURE_REQUEST_STATUSES`, `SIGNATURE_INTENTS`, `isTerminalPartyStatus` and `isAgreedPartyStatus`
+  are all declared and all unused. `isTerminalPartyStatus` even documents the three call sites it was
+  written for — the request's completion check, the reminder job, the canvas progress meter — and none
+  of the three exists. Fix = `signature_requests` + `signature_parties`, a signer route, a reminder
+  sweep, and an audit record that keeps `signed` distinct from `acknowledged`, which is the distinction
+  the contract argues for and the one an auditor will later need. Unblocks: FO-B3, and it is the reason
+  `contract.sign` is a gated act with nothing behind the gate.
+- **FO-B3 — Route the five waiting consumers through them.** `contract.sign`; `policy.acknowledge` with
+  its roster and its `acknowledgementRate` meter (declared `derived: true` and derived from nothing);
+  `offer.send` / `offer.sign`; `jobPosting` applications; and the `data_rooms.nda_required` column. Each
+  is a handler over FO-B1/FO-B2 rather than a new mechanism, and doing them in one pass is what stops
+  five surfaces inventing five answers to "has this person agreed yet". Unblocks: the offer→employee
+  handover `people.ts` names as the seam between the Recruiter and HR seats.
+- **FO-B4 — An e-signature VENDOR adapter (DocuSign / Dropbox Sign).** Only worth building after FO-B2:
+  a vendor adapter with no internal engine has nothing to map onto, and would become the second answer
+  to "is it signed". Slots into the connector platform as manifest DATA per migration 0410, the same
+  argument the HRMS entry in §9 makes. Unblocks: customers whose legal team requires a named provider.
+
+#### FO-C · Money — the founder cannot bill anyone, and cannot be paid
+
+- **FO-C1 — There is no invoice HEADER table.** `finance.invoice_line_items` exists and carries
+  `invoice_ref` as a bare `varchar(64)` pointing at nothing: the LINES exist and the invoice does not.
+  The only invoice table on the platform is `freelancer_invoices`, which is the marketplace paying its
+  own freelancers. Fix = an `invoices` header in the finance domain that `invoice_line_items.invoice_ref`
+  becomes a real reference to, with the canvas `invoice` kind as its projection. Doing this first also
+  hands `financeRollup.ts` its first real revenue source. Unblocks: FO-C2 … FO-C5.
+- **FO-C2 — `invoice.issue` / `record-payment` / `chase` are gated acts with no handler.**
+  `canvasApprovalGate.GATED_ACTIONS` correctly names them irreversible/attested and `founderObjects.ts`
+  advertises all three; grep for the handlers returns the gate and its own test. There is no PDF render,
+  no delivery, and `ageingDays` is documented as "computed from `dueAt`" by nothing. Fix = the three
+  handlers over FO-C1 plus an ageing recompute in the daily sweep. Half-solved already: the `overdue-by`
+  trigger comparator shipped 2026-08-15, so an invoice carrying `dueAt` can be WATCHED — what it cannot
+  be is issued.
+- **FO-C3 — There is no payables HEADER either, and `bill.approve` / `schedule-payment` / `dispute` are
+  gated acts with no handler.** *(prerequisite corrected 2026-08-15: this was written as though it were a
+  sibling of FO-C2, and it is a sibling of FO-C1.)* The payable side has the same hole as the receivable
+  one and FO-C1 does NOT cover it: `finance.expenses` is an expense CLAIM — a person spent money and
+  wants it back, hence `submittedBy`, `category`, `incurredAt` — not a vendor bill with a counterparty, a
+  due date and an approval. `grep "pgTable('bills'"` returns nothing. Fix = a `bills` header alongside
+  FO-C1's `invoices`, reusing its line-item shape, and then the three handlers. Two kinds rather than one
+  signed number because "who owes us" and "who we owe" are asked separately, which the contract already
+  argues. `bill.approvedBy` must stay the one field no handler ever fills in on the requester's behalf —
+  the object's own hint calls it "the one field on this object that can cause real harm". Depends on:
+  nothing — a sibling of FO-C1, buildable beside it.
+- **FO-C4 — A tenant cannot take money from their own customers.**
+  `infrastructure/payment/PaymentProvider.ts` states there is exactly one flow and it is Builderforce's
+  own hosted subscription checkout; `marketplace/listingCommerce.ts` is the only other paid door and it
+  sells a creation on the marketplace with a platform cut. There is no tenant merchant account — no
+  Stripe Connect, no per-tenant processor credential — so "charge my customer" has no path at all, while
+  `payoutProviders` can already send money OUT (itself env-gated behind `PAYOUT_WEBHOOK_URL`, with a
+  "mark paid" fallback that moves no money). The finance category is one-directional by construction.
+  Fix = Connect onboarding per tenant, a payment link on an issued invoice, and a webhook landing on the
+  SAME `ledger_entries` unique reference `listingCommerce` already uses, so a replayed webhook collides
+  in the database rather than in a check somebody remembered to write. Unblocks: the revenue half of
+  running a business on the product.
+- **FO-C5 — A collections ladder.** `invoice.collection` is authored prose today, under a hint that says
+  "collections work with no record is collections work that gets done twice or not at all". With FO-C2
+  and the `overdue-by` trigger both live, the ladder is a small engine over parts that already exist.
+  Unblocks: getting paid without a person remembering to chase.
+- **FO-C6 — No payroll and no tax, in any port.** `payroll` appears in the codebase only as a word in a
+  lexicon and a provider blurb; sales tax and VAT appear nowhere at all. `compensation_structures` and
+  `timesheets` exist; turning them into a pay run does not. Fix = manifest DATA in the connector platform
+  for Gusto / Rippling / Deel / ADP and Stripe Tax / Avalara. Unblocks: "pay the team" and "remit the
+  tax" being reachable at all, directly or through an integration.
+
+#### FO-D · Ownership — equity does not exist
+
+- **FO-D1 — No cap-table tables exist.** `grep cap_table` across the schema returns nothing; the canvas
+  `capTable` is a hand-typed `holders: {holder, instrument, shares, percent}` array whose hint asks the
+  model to say so in `summary` when the percentages do not total 100 — an object that documents its own
+  inability to be right. Fix = `share_classes`, an `equity_holder` `party_roles` role (per FO-A1) and
+  `equity_grants`, with the cap table as a PROJECTION that computes its own totals rather than storing
+  them, per the "no stored totals" rule migration 0464 states for `work_estimates.lines`. Unblocks: a
+  cap table that survives its second event.
+- **FO-D2 — No issuance EVENT, so nothing can be applied.** A pool top-up, a round, a departure and a
+  buy-back are all re-typing today. Fix = an append-only issuance / transfer / cancellation event that
+  the projection folds — which is also what makes a historical cap table askable ("what did we own in
+  March"). Unblocks: FO-D3, FO-D4 and FO-E1 modelling a round against something real.
+- **FO-D3 — No vesting.** `grep 409a|safe_note|equity_grant` returns nothing; `vesting` appears only in
+  `career/compensation.ts` and as prose inside `offer.equity`. Fix = a schedule (cliff, duration,
+  frequency, acceleration) on `equity_grants`, vested-to-date COMPUTED rather than stored, and a
+  `due-within` trigger on the cliff date — which now works. Unblocks: an offer whose equity line is
+  checkable rather than a sentence.
+- **FO-D4 — No SAFE, note or conversion modelling.** The instrument a pre-seed company actually issues
+  cannot be represented, so `fundingRound.roundType: 'safe'` is a label over nothing and a priced round
+  cannot be modelled against what came before it. Needs FO-D2.
+- **FO-D5 — There is no co-founder anything.** `grep -i 'co-?founder'` across the frontend returns no
+  matches: no matching or introduction surface, no founder agreement, no IP-assignment or founder-vesting
+  paperwork. The first artifact a company produces has no home. Split deliberately from FO-D3 because the
+  PAPERWORK half is FO-B3 (a signature flow over a template) and only the MATCHING half is genuinely new
+  — which also makes it the cheapest of the five to start. Unblocks: the "find a co-founder" use case,
+  which today has no answer at all.
+
+#### FO-E · Raising — four cards and an unenforced data room
+
+- **FO-E1 — The fundraise pipeline is a spreadsheet inside a card.** `fundingRound.investors` is a rows
+  table `{investor, stage, amount, nextStep}` with no investor as an object, no warm-intro path and no
+  per-investor thread. Fix = project it over `revenue.deals`, which ALREADY carries the `kind` column
+  PRD 20 §3.3 adjudicated for exactly this — "a sales deal, a recruiter placement fee and an investor
+  allocation are one shape with three kinds" — plus `pipeline_stages` and `pipeline_touchpoints`. An
+  investor is a `party_roles` row with `role='investor'`, per FO-A1. This is a projection, not a schema.
+- **FO-E2 — The data room's own safety columns are unenforced.** `investor.data_rooms` carries
+  `nda_required`, `watermark` and `expires_at`, and there is no share flow, no access log and no view
+  analytics to enforce or report any of the three — so the properties that make a data room safe to send
+  are decoration. `dataRoom.share` is gated with nothing behind the gate. Needs FO-B2 for the NDA.
+  Unblocks: sending a data room to a firm and knowing what they actually read.
+- **FO-E3 — `investorUpdate.send` has no delivery.** Gated, no handler. `campaignTransports.ts` already
+  sends to an audience with tracking; an investor update is that with a different audience, so this is
+  wiring rather than a second sender. Unblocks: the monthly update going out from the board that holds
+  the metrics it quotes.
+- **FO-E4 — QUESTION, not a task: the seat asymmetry itself.** The `investor` domain belongs to the CEO
+  EVALUATING deals — root `company`, with `products`, `due_diligence_checklists`,
+  `investment_opportunities` and `investor_peer_comparables`. The founder RAISING gets `funding_rounds`
+  in finance and four canvas cards. Worth an explicit decision once FO-E1..E3 land: does the raising
+  founder get their own surface, or is `investor` genuinely both sides of one table? Recorded as a
+  question because building either answer before FO-E1 exists would be guessing.
+
+#### FO-F · One pipeline — independent of everything above
+
+- **FO-F1 — The canvas pipeline and the real CRM are two systems of record synchronised by a language
+  model.** `lib/canvasSalesPipeline.ts` normalises authored JSON — `cards` with a title and
+  `valueCents`, in memory — while the `revenue` domain owns `deals`, `pipeline_stages`,
+  `pipeline_touchpoints`, contacts, sequences and enrichment provenance. The bridge is a PROMPT
+  instruction in `creationCanvasAi.ts`: use `builtin_sales_*`, then "mirror the returned canonical id and
+  current values into the matching salesContact/salesCampaign/salesGoal/salesPipeline canvas object". A
+  deal dragged on the board is not a deal moved in the CRM unless the model remembers. Fix = make the
+  canvas objects a projection of the revenue entities through the consolidated entity layer, the way the
+  founder `company` card already hydrates via `canvas_sync_company_profile`. Unblocks: one pipeline with
+  one number.
+- **FO-F2 — Then DELETE the mirroring instruction.** It is a long paragraph in the largest system prompt
+  on the platform, and leaving it after FO-F1 would tell the model to write back over a projection.
+  Named as its own item because a prompt deletion is exactly the step that gets forgotten, and the cost
+  of forgetting it is the same drift running in the opposite direction.
+
+#### FO-G · Legal — a company's first ninety days are canvas cards
+
+- **FO-G1 — No legal/counsel domain exists.** The `DOMAIN_MANIFEST` roster gives `governance` to the
+  Security seat (controls, findings, policy — SOC 2), and nothing owns entity formation, registered
+  agent, jurisdiction registration, IP assignment or trademark. `contract` is one canvas kind whose
+  `obligations` are free text and whose `sign` is gated with no engine. Fix = a `legal` domain with its
+  own seat, OR an explicit decision that counsel belongs inside `governance` — the current state is
+  neither, which is how the first ninety days of a company came to have no home.
+- **FO-G2 — A contract repository with live obligations.** `contract.obligations` is
+  `{obligation, owner, due}` prose, and nothing binds a contract to the invoices it should generate or a
+  `bill` to the contract it should be checked against (the hint tells the model to "match it to a
+  contract on the board" — by name). Needs FO-A2 and FO-C1. The renewal-warning half is already done:
+  `contract.renewsAt` is a declared deadline and the `due-within` comparator shipped 2026-08-15.
+- **FO-G3 — A template library.** Formation documents, NDAs, MSAs, SOWs, offer letters, IP assignments.
+  Worth nothing before FO-B2 — a template you cannot get signed is a `document` — and is mostly content
+  once the engine exists.
 
 ### Canvas — the sell-Builderforce motion ("Idea to REAL")
 

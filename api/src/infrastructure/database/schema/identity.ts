@@ -192,14 +192,48 @@ export const authTokens = pgTable('auth_tokens', {
 
 
 /**
- * Developer API keys — allows external sites to query the public Builderforce.ai API.
+ * Developer API keys (`bfai_*`) — the credential a PUBLISHER presents when calling
+ * us from outside, on `/api/v1/*`.
+ *
  * The key itself is only shown once at creation; only the hash is stored.
+ *
+ * ── WHY THIS ROW MOVED (PRD 24 §5.1, migration 0467) ────────────────────────
+ * It used to be parented to a USER and carry no scopes, while `tenant_api_keys`
+ * sitting twenty lines below carried scopes AND an origin allowlist — two shapes
+ * for one concept ("a credential calling us from outside"), with two middlewares
+ * and two answers to "what may this key do". So the key now belongs to a
+ * `developer_orgs` row: a vendor's key survives the departure of the engineer who
+ * minted it, and its permissions are stated in the SAME vocabulary tenant keys
+ * use (`application/shared/scopeList.ts`) rather than a second one.
+ *
+ * `userId` is retained and still populated — it is who minted the key, which is
+ * an audit fact, not an ownership one. `developerOrgId` is nullable only because
+ * migration 0467 backfills every legacy row into a personal publisher org and a
+ * NOT NULL would fail the deploy if one slipped through; the mint path always
+ * sets it.
+ *
+ * `developerOrgId` is a cross-domain id, deliberately NOT a foreign key: publishers
+ * are the integrations context's, and importing that module here would be identity
+ * reaching across a bounded context (`npm run check:domain-boundary`).
  */
 export const developerApiKeys = pgTable('developer_api_keys', {
   id:          uuid('id').primaryKey().defaultRandom(),
+  /** Who minted it. Audit, not ownership — see the block comment. */
   userId:      varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** The publisher the key acts for. Cross-domain id into `developer_orgs`. */
+  developerOrgId: uuid('developer_org_id'),
   name:        varchar('name', { length: 255 }).notNull(),
   keyHash:     varchar('key_hash', { length: 128 }).notNull().unique(),
+  /** JSON array of scopes from the shared vocabulary. NULL / empty = unrestricted
+   *  (the legacy read-only listing keys), non-empty = exactly these. Same
+   *  semantics as `tenant_api_keys.scopes`, because it is the same helper.
+   *
+   *  There is deliberately NO `allowed_origins` beside it. A `bfai_*` key is a
+   *  publisher's SERVER credential — their CI, their integration server — and a
+   *  browser origin allowlist would be a column that is always NULL, added for
+   *  symmetry with `tenant_api_keys` rather than for a caller. That symmetry is
+   *  what `check-signature-duplication` exists to refuse. */
+  scopes:      text('scopes'),
   lastUsedAt:  timestamp('last_used_at', { withTimezone: true }),
   revokedAt:   timestamp('revoked_at', { withTimezone: true }),
   createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

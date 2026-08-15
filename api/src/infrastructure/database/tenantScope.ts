@@ -27,7 +27,7 @@
  * {@link scopedToSegment}, which adds the segment predicate on top.
  */
 
-import { and, eq, type SQL } from 'drizzle-orm';
+import { and, eq, isNull, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import type { Db } from './connection';
 import { projects, tasks } from './schema';
@@ -66,6 +66,31 @@ export function scopedToTenant(
 }
 
 /**
+ * The tenant predicate for a table whose `tenant_id` is NULLABLE, where a NULL
+ * means "no tenant" rather than "any tenant".
+ *
+ * A handful of tables record something a signed-out or pre-tenant actor did — a
+ * rating pressed on a marketing surface, for instance. Their `tenant_id` is
+ * nullable, and the correct predicate is `tenant_id IS NULL` for that population
+ * and `tenant_id = $1` for everyone else. Written inline that is a ternary, and a
+ * ternary is both easy to get backwards and invisible to `check-tenant-scope` —
+ * which reads the statement, not the variable it was assigned from.
+ *
+ * So it is a primitive. `tenantId: null` selects exactly the untenanted rows; it
+ * NEVER widens to every tenant, which is the failure a hand-written version
+ * produces by dropping the clause entirely. A genuine cross-tenant read is
+ * {@link acrossTenants}, and it has to name its reason.
+ */
+export function scopedToNullableTenant(
+  table: TenantOwnedTable,
+  tenantId: number | null,
+  ...conditions: Array<SQL | undefined>
+): SQL {
+  const owner = tenantId === null ? isNull(table.tenantId) : eq(table.tenantId, tenantId);
+  return and(owner, ...conditions) as SQL;
+}
+
+/**
  * The reasons a read against a tenant-owned table may legitimately cross tenants.
  *
  * A CLOSED set, because "this one is special" is exactly the sentence that
@@ -81,8 +106,15 @@ export function scopedToTenant(
  *     it resolves to reports the tenant rather than the caller asserting one.
  *   `platform_admin` — a superadmin surface that is cross-tenant by definition and
  *     is gated before the query is reached.
+ *   `platform_aggregate` — the read PROJECTS AWAY tenancy: it is a GROUP BY over
+ *     non-tenant dimensions returning counts and averages only, so no returned row
+ *     can identify a tenant or expose a tenant's content. The global learned-routing
+ *     blob is the case — "which model scores best for SQL work, platform-wide" is a
+ *     statement about MODELS, and every tenant's router legitimately reads it.
+ *     The access control is the projection itself: use this ONLY when the select
+ *     list contains no tenant-owned column, and never to fetch rows.
  */
-export type CrossTenantReason = 'public_catalogue' | 'share_token' | 'platform_admin';
+export type CrossTenantReason = 'public_catalogue' | 'share_token' | 'platform_admin' | 'platform_aggregate';
 
 /**
  * A DECLARED cross-tenant read.

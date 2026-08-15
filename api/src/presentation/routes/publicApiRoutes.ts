@@ -8,31 +8,43 @@
  * Rate limiting: applied upstream via the shared rate limiter middleware.
  */
 import { Hono } from 'hono';
-import { eq, and, isNull, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
-import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
+import { DeveloperOrgError } from '../../application/developer/developerOrgs';
+import {
+  listDeveloperApiKeys,
+  mintDeveloperApiKey,
+  resolveDeveloperApiKey,
+  revokeDeveloperApiKey,
+  type DeveloperApiScope,
+} from '../../application/developer/developerApiKeys';
 
 // ---------------------------------------------------------------------------
 // Auth middleware
 // ---------------------------------------------------------------------------
 
-async function requireDevApiKey(db: Db, authHeader: string | undefined): Promise<{ ok: false; error: string; status: number } | { ok: true; userId: string; keyId: string }> {
+/**
+ * Resolve the `bfai_*` key on the request, and check it carries `required`.
+ *
+ * The hash/lookup/revoked triple moved to
+ * `application/developer/developerApiKeys.ts` (PRD 24 §5.1) so that the key's
+ * OWNER, its scopes and its origin allowlist are decided in one place rather than
+ * re-derived per endpoint. This wrapper is what is left: header parsing, which is
+ * genuinely the presentation layer's job.
+ */
+async function requireDevApiKey(
+  db: Db,
+  authHeader: string | undefined,
+  required: DeveloperApiScope,
+): Promise<{ ok: false; error: string; status: number } | { ok: true; userId: string; keyId: string; developerOrgId: string | null }> {
   if (!authHeader?.startsWith('Bearer ')) {
     return { ok: false, error: 'Missing or malformed Authorization header', status: 401 };
   }
-  const raw = authHeader.slice(7);
-  const hash = await hashSecret(raw);
-
-  const [row] = await db
-    .select({ id: schema.developerApiKeys.id, userId: schema.developerApiKeys.userId })
-    .from(schema.developerApiKeys)
-    .where(and(eq(schema.developerApiKeys.keyHash, hash), isNull(schema.developerApiKeys.revokedAt)))
-    .limit(1);
-
-  if (!row) return { ok: false, error: 'Invalid or revoked API key', status: 401 };
-  return { ok: true, userId: row.userId, keyId: row.id };
+  const resolved = await resolveDeveloperApiKey(db, authHeader.slice(7), required);
+  if (!resolved) return { ok: false, error: 'Invalid or revoked API key', status: 401 };
+  return { ok: true, userId: resolved.userId, keyId: resolved.keyId, developerOrgId: resolved.developerOrgId };
 }
 
 // ---------------------------------------------------------------------------
@@ -45,73 +57,59 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
   // ── Developer key management (authenticated with main web JWT) ─────────────
 
   /**
-   * POST /api/v1/developer/keys – generate a new developer API key
+   * POST /api/v1/developer/keys – mint a key for the caller's publisher
    * Requires main Tenant JWT (Authorization: Bearer <tenant_jwt>).
    * Returns the raw key once — it is not stored, only its hash is.
+   *
+   * The key belongs to a `developer_orgs` row (PRD 24 §5.1), created on demand
+   * for a caller who has never registered one — so a developer who has never
+   * heard of the portal gets exactly the behaviour they had before.
    */
   router.post('/developer/keys', async (c) => {
     const userId = c.get('userId') as string | undefined;
     if (!userId) return c.json({ error: 'Authentication required' }, 401);
 
-    const body = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }));
-    const name = (body.name ?? '').trim() || 'My API Key';
+    type Body = { name?: string; developerOrgId?: string; scopes?: string[] };
+    const body = await c.req.json<Body>().catch((): Body => ({}));
 
-    const rawKey = generateApiKey('bfai');
-    const keyHash = await hashSecret(rawKey);
-
-    const [row] = await db
-      .insert(schema.developerApiKeys)
-      .values({ userId, name, keyHash })
-      .returning({ id: schema.developerApiKeys.id, name: schema.developerApiKeys.name, createdAt: schema.developerApiKeys.createdAt });
-
-    return c.json({ key: rawKey, id: row!.id, name: row!.name, createdAt: row!.createdAt }, 201);
+    try {
+      const minted = await mintDeveloperApiKey(db, c.env, {
+        userId,
+        name: body.name ?? '',
+        developerOrgId: body.developerOrgId ?? null,
+        scopes: body.scopes ?? null,
+      });
+      return c.json(minted, 201);
+    } catch (error) {
+      const status = error instanceof DeveloperOrgError ? error.status : 500;
+      return c.json({ error: error instanceof Error ? error.message : 'failed to mint key' }, status);
+    }
   });
 
   /**
-   * GET /api/v1/developer/keys – list own developer API keys (does NOT return raw keys)
+   * GET /api/v1/developer/keys – keys the caller can see (theirs, and their
+   * publishers'). Never returns a raw key.
    */
   router.get('/developer/keys', async (c) => {
     const userId = c.get('userId') as string | undefined;
     if (!userId) return c.json({ error: 'Authentication required' }, 401);
-
-    const rows = await db
-      .select({
-        id:         schema.developerApiKeys.id,
-        name:       schema.developerApiKeys.name,
-        lastUsedAt: schema.developerApiKeys.lastUsedAt,
-        revokedAt:  schema.developerApiKeys.revokedAt,
-        createdAt:  schema.developerApiKeys.createdAt,
-      })
-      .from(schema.developerApiKeys)
-      .where(eq(schema.developerApiKeys.userId, userId))
-      .orderBy(desc(schema.developerApiKeys.createdAt));
-
-    return c.json({ keys: rows });
+    return c.json({ keys: await listDeveloperApiKeys(db, userId) });
   });
 
   /**
-   * DELETE /api/v1/developer/keys/:id – revoke a key
+   * DELETE /api/v1/developer/keys/:id – revoke a key.
+   * Any admin of the owning publisher may, not only the engineer who minted it.
    */
   router.delete('/developer/keys/:id', async (c) => {
     const userId = c.get('userId') as string | undefined;
     if (!userId) return c.json({ error: 'Authentication required' }, 401);
-
-    const keyId = c.req.param('id');
-    const [row] = await db
-      .select({ userId: schema.developerApiKeys.userId })
-      .from(schema.developerApiKeys)
-      .where(eq(schema.developerApiKeys.id, keyId))
-      .limit(1);
-
-    if (!row) return c.json({ error: 'Key not found' }, 404);
-    if (row.userId !== userId) return c.json({ error: 'Forbidden' }, 403);
-
-    await db
-      .update(schema.developerApiKeys)
-      .set({ revokedAt: new Date() })
-      .where(eq(schema.developerApiKeys.id, keyId));
-
-    return c.json({ ok: true });
+    try {
+      await revokeDeveloperApiKey(db, c.req.param('id'), userId);
+      return c.json({ ok: true });
+    } catch (error) {
+      const status = error instanceof DeveloperOrgError ? error.status : 500;
+      return c.json({ error: error instanceof Error ? error.message : 'failed to revoke key' }, status);
+    }
   });
 
   // ── Public read endpoints (Developer API key auth) ─────────────────────────
@@ -121,7 +119,7 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
    * Query: ?q=&skill=&page=1&limit=24
    */
   router.get('/agents', async (c) => {
-    const auth = await requireDevApiKey(db, c.req.header('Authorization'));
+    const auth = await requireDevApiKey(db, c.req.header('Authorization'), 'read:catalog');
     if (!auth.ok) return c.json({ error: auth.error }, auth.status as 401 | 403);
 
     // Update last_used_at (fire-and-forget)
@@ -160,7 +158,7 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
    * GET /api/v1/agents/:id – get a single agent
    */
   router.get('/agents/:id', async (c) => {
-    const auth = await requireDevApiKey(db, c.req.header('Authorization'));
+    const auth = await requireDevApiKey(db, c.req.header('Authorization'), 'read:catalog');
     if (!auth.ok) return c.json({ error: auth.error }, auth.status as 401 | 403);
 
     c.executionCtx.waitUntil(
@@ -191,7 +189,7 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
    * Query: ?q=&category=&page=1&limit=24
    */
   router.get('/skills', async (c) => {
-    const auth = await requireDevApiKey(db, c.req.header('Authorization'));
+    const auth = await requireDevApiKey(db, c.req.header('Authorization'), 'read:catalog');
     if (!auth.ok) return c.json({ error: auth.error }, auth.status as 401 | 403);
 
     c.executionCtx.waitUntil(
@@ -269,7 +267,7 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
    * Returns the canonical list — no auth required.
    */
   router.get('/personas', async (c) => {
-    const auth = await requireDevApiKey(db, c.req.header('Authorization'));
+    const auth = await requireDevApiKey(db, c.req.header('Authorization'), 'read:catalog');
     if (!auth.ok) return c.json({ error: auth.error }, auth.status as 401 | 403);
 
     // Platform personas from DB (admin-managed)

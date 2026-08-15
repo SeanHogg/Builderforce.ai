@@ -29,6 +29,7 @@ import {
 } from './siteHosting';
 import { ensureDefaultCollection } from './siteData';
 import { ensureProjectBackend } from '../backend';
+import { recordSiteRelease, type ReleaseSource } from './siteReleases';
 
 /** A single built file, dist-relative. */
 export interface PublishAsset {
@@ -48,6 +49,12 @@ export interface PublishInput {
   projectName: string;
   /** Explicit subdomain; falls back to the current site's, then the project name. */
   requestedSubdomain?: string | null;
+  /**
+   * Which producer built this. Recorded on the release so a reader can tell a
+   * browser publish from a CI one when choosing what to roll back to. Defaults to
+   * `browser`, the older of the two paths.
+   */
+  source?: ReleaseSource;
   assets: PublishAsset[];
 }
 
@@ -109,13 +116,16 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
     return { ok: false, status: 409, error: `Subdomain "${subdomain}" is taken.` };
   }
 
-  const newPrefix = `${SITES_PREFIX}${subdomain}/`;
-  // Clear prior contents under this subdomain (stale files from an earlier build,
-  // or a different project that just released the name) before writing.
-  for (const obj of (await bucket.list({ prefix: newPrefix })).objects ?? []) {
-    await bucket.delete(obj.key!);
-  }
-  // If this project previously published under a DIFFERENT subdomain, retire it.
+  // Each build lands under its OWN version prefix rather than overwriting the
+  // subdomain root. Publishing used to delete every object under the subdomain
+  // before writing, so a bad release destroyed the working one it replaced and
+  // there was nothing to go back to — which an autonomous agent guarantees you
+  // will eventually need. Old versions are pruned below, not here.
+  const versionToken = newVersionToken();
+  const newPrefix = `${SITES_PREFIX}${subdomain}/${versionToken}/`;
+
+  // If this project previously published under a DIFFERENT subdomain, retire it —
+  // the name is now free for someone else, so nothing of ours may remain there.
   if (oldSub && oldSub !== subdomain) {
     const oldPrefix = `${SITES_PREFIX}${oldSub}/`;
     for (const obj of (await bucket.list({ prefix: oldPrefix })).objects ?? []) {
@@ -131,8 +141,6 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
       httpMetadata: { contentType: contentTypeFor(asset.path) },
     });
   }
-
-  const versionToken = newVersionToken();
   const [siteRow] = await db
     .insert(projectSites)
     .values({
@@ -162,6 +170,25 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
     })
     .returning({ id: projectSites.id });
   await invalidateSite(env, subdomain);
+
+  // Register the release and prune old ones. Best-effort for the same reason the
+  // convenience rows below are: a publish that succeeded must not be reported as
+  // failed because its history entry could not be written. The site is already
+  // live and pointing at the new prefix by this line.
+  if (siteRow?.id) {
+    try {
+      await recordSiteRelease({
+        db, bucket, siteId: siteRow.id, tenantId, subdomain,
+        versionToken, r2Prefix: newPrefix, source: input.source ?? 'browser',
+        assetCount: assets.length, totalBytes,
+      });
+    } catch (error) {
+      reportCaughtError(error, {
+        source: 'application/ide/publishStaticSite.ts',
+        operation: 'recordSiteRelease',
+      });
+    }
+  }
 
   const url = `https://${subdomain}.${HOSTING_APEX}`;
 

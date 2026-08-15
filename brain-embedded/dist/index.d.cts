@@ -531,7 +531,18 @@ interface BrainPersistenceAdapter {
         content: string;
         metadata?: string;
     }>): Promise<BrainMessage[]>;
-    setMessageFeedback(messageId: number, feedback: 'up' | 'down' | null): Promise<unknown>;
+    /**
+     * Record this viewer's thumb on one assistant reply (null clears it).
+     *
+     * `context` carries what the TRANSCRIPT knows and the server would otherwise have
+     * to reconstruct — chiefly which MCP tool the rated turn executed. The server
+     * joins it to the model on the reply's provenance and files a durable
+     * `llm_action_ratings` row, so the press teaches the learned router which model is
+     * good at which kind of work rather than only colouring a button.
+     */
+    setMessageFeedback(messageId: number, feedback: 'up' | 'down' | null, context?: {
+        toolName?: string | null;
+    }): Promise<unknown>;
     /**
      * Ask an invited agent participant to reply — a chat-scoped run that answers AS
      * the addressed agent and returns the posted assistant turn (attributed to it via
@@ -1732,7 +1743,9 @@ interface UseBrainConversation {
     errorAction: ChatErrorAction | null;
     /** Live assistant delta buffer (rendered as a trailing bubble while streaming). */
     streamingText: string;
-    feedbackMap: Record<number, 'up' | 'down'>;
+    /** This viewer's thumb per message id (+1 up, -1 down). Hand straight to the
+     *  shared transcript's `ratings` prop. */
+    ratings: Record<number, 1 | -1>;
     pendingAttachments: ChatInputAttachment[];
     uploading: boolean;
     /**
@@ -1750,7 +1763,13 @@ interface UseBrainConversation {
      * running. Pair with `sending` to drive a Stop button.
      */
     stop(): void;
-    submitFeedback(msg: BrainMessage, value: 'up' | 'down'): Promise<void>;
+    /**
+     * Rate one assistant reply (+1 / -1, or 0 to clear). Beyond flipping the thumb it
+     * derives WHAT is being rated — the model that served the turn and the MCP tool it
+     * ran ({@link ratedTurnContext}) — and sends that with the vote, which is what
+     * makes the press teach the learned router instead of just colouring a button.
+     */
+    rateMessage(msg: BrainMessage, rating: 1 | -1 | 0): Promise<void>;
     attach(file: File): Promise<void>;
     removeAttachment(key: string): void;
     setError(msg: string): void;
@@ -2387,6 +2406,141 @@ declare function parseMessageProvenance(msg: {
 declare function withProvenanceMetadata(provenance: MessageProvenance | null | undefined, base?: Record<string, unknown>): string | undefined;
 
 /**
+ * WHAT THE USER IS TOLD RAN THEIR TURN — the one rule, shared by every surface.
+ *
+ * A turn served by BuilderForce's own routed pool IS the product the user signed up
+ * for: "Builderforce Free" or "Builderforce PRO". Which upstream model the cascade
+ * happened to land on (`minimaxai/minimax-m3`, `@cf/zai-org/glm-4.7-flash`, …) is an
+ * implementation detail of that product — it changes per turn, per vendor outage, per
+ * cooldown, and the user on a routed plan has no control over it. Naming it in the UI
+ * only ever raises a question they cannot act on ("why did I get Minimax?").
+ *
+ * The id is NOT hidden from us. It still rides every `llm_usage_log` row, every
+ * execution trace, the provenance metadata on the message, and the "Copy diagnostics"
+ * report — the places where WE need to know exactly which model served a turn. This
+ * module governs the DISPLAY layer only.
+ *
+ * It is shown to the user in exactly the two cases where the choice is theirs:
+ *   • the turn ran on their OWN connected account (BYO) — it is their model, on their
+ *     key, and naming it is the whole point of connecting it; or
+ *   • they are entitled to pick a model at all (a paid plan, or a connected provider),
+ *     in which case the catalog is theirs to browse and pin.
+ *
+ * Everyone else — the free plan and the anonymous canvas — sees the product name.
+ *
+ * Lives in brain-embedded (not a UI package) because four surfaces have to agree on
+ * it: the shared `/` composer menu, the per-reply provenance chip in the transcript,
+ * the VS Code host's `Change model` QuickPick, and the public `/models` catalog page.
+ */
+
+/** The two BuilderForce routing products. A turn with no explicit pin runs on one of
+ *  them, and that PRODUCT is what the user sees named. */
+type RoutedProduct = 'free' | 'pro';
+/**
+ * The user-facing names of our two routing products. THE single source — the composer
+ * menu, the provenance chip and the public `/models` catalog all read these, so the
+ * product can never be called three different things in three places.
+ *
+ * Brand tokens, deliberately NOT localized (see the i18n rule for brand names).
+ */
+declare const BUILDERFORCE_PRODUCT_NAME: Readonly<Record<RoutedProduct, string>>;
+/**
+ * What this viewer is allowed to see about model identity.
+ *
+ * `product`   — which routing product funds their unpinned turns.
+ * `canChoose` — may they pick a model at all (paid plan OR a connected provider)?
+ *               This is the SAME gate the gateway enforces on a strict pin, so the
+ *               label a user reads and the choice they are offered agree by construction.
+ */
+interface ModelIdentityContext {
+    product: RoutedProduct;
+    canChoose: boolean;
+}
+/**
+ * The safe default: a free, choice-less viewer. Deliberately the FALLBACK for a host
+ * that has not wired an identity yet, so the failure mode of forgetting is "masked",
+ * never "leaked". A host that is wired always passes its own.
+ */
+declare const DEFAULT_MODEL_IDENTITY: ModelIdentityContext;
+/** The product name for this viewer — "Builderforce Free" / "Builderforce PRO". */
+declare function productModelName(identity: ModelIdentityContext | null | undefined): string;
+/** Which product a plan funds. One mapping, so "paid ⇒ PRO" is not re-decided per host. */
+declare function productForPlan(isPaid: boolean): RoutedProduct;
+/** True when `model` is a user-configured ref (Evermind head / saved LLM config)
+ *  rather than an upstream catalog id. */
+declare function isUserConfiguredModelRef(model: string | null | undefined): boolean;
+/**
+ * THE decision: may this viewer be shown the raw model id, or do they get the product
+ * name? See the module header for the rule. `account` is the turn's provenance account
+ * when known — a turn served by the tenant's OWN connected account always names its
+ * model, because that model is the thing they connected.
+ */
+declare function revealsModelId(identity: ModelIdentityContext | null | undefined, account?: ProvenanceAccount): boolean;
+/**
+ * The name to PUT ON SCREEN for `model`. Returns the model id when this viewer owns the
+ * choice (see {@link revealsModelId}) or when the ref names something they configured
+ * themselves; otherwise the routing product's name.
+ *
+ * Every surface that renders a model to a user goes through this — the composer menu,
+ * the provenance chip, the QuickPick — so a masked plan cannot leak an upstream id
+ * through whichever surface was written last.
+ */
+declare function displayModelName(model: string | null | undefined, identity: ModelIdentityContext | null | undefined, opts?: {
+    account?: ProvenanceAccount;
+}): string;
+
+/**
+ * WHAT A RATING IS ABOUT — the pure rule that turns "the user pressed 👎 on this
+ * reply" into the two facts the learned router needs: WHICH MODEL served the turn,
+ * and WHICH MCP TOOL it executed.
+ *
+ * "Some models are better than others at specific tasks" is only measurable if a
+ * rating is filed against the task, and the task a chat turn performed is the tool
+ * it called. That association is derivable from the transcript itself: the agent
+ * loop persists each tool call as a durable STEP row (see `persistedSteps.ts`) that
+ * sits between the user's question and the assistant's answer. Walking back from
+ * the rated reply to the steps of ITS turn therefore works after a reload, unlike
+ * the in-memory trace, which is empty on a freshly-opened chat.
+ *
+ * Pure and host-agnostic: the web Brain panel, the Canvas dock and the VS Code
+ * webview all mount the same transcript and all call this, so a rating means the
+ * same thing wherever it was pressed.
+ */
+/** The minimum message shape this rule needs — every surface's own `BrainMessage`
+ *  satisfies it, so nothing has to be converted to call in. */
+interface RatableMessage {
+    id: number;
+    role: string;
+    metadata?: string | null;
+}
+/** Everything a rating carries beyond the thumb itself. */
+interface RatedTurnContext {
+    /** The model the gateway actually resolved for this reply, from its provenance.
+     *  Empty when the turn predates provenance — the caller must then skip the
+     *  rating rather than attribute it to a guess. */
+    model: string;
+    /** The MCP tool the rated turn executed, or null for a prose-only reply. */
+    toolName: string | null;
+}
+/**
+ * The tool a rated turn executed. Walks BACK from the reply over the durable step
+ * rows that belong to the same turn (they sit between it and the previous
+ * conversation message) and returns the LAST tool step — the one whose result the
+ * reply is actually reporting on, and therefore the one being judged.
+ *
+ * Returns null for a turn that called nothing. That is a real and common case, and
+ * a rating with no tool is still evidence about the model: "it answered badly" is a
+ * verdict, and forcing it into some tool's bucket would libel that tool.
+ */
+declare function ratedTurnTool(messages: readonly RatableMessage[], messageId: number): string | null;
+/**
+ * Build the full rating context for one assistant reply. `model` comes from the
+ * reply's own persisted provenance, so it is the id the gateway resolved after any
+ * failover — never the model the composer happened to be showing.
+ */
+declare function ratedTurnContext(messages: readonly RatableMessage[], messageId: number): RatedTurnContext;
+
+/**
  * The model id the most recent completion ACTUALLY resolved to.
  *
  * The gateway auto-selects per turn (a connected BYO account, the learned reorder, or
@@ -2621,6 +2775,7 @@ declare function formatChatDiagnostics(d: ChatDiagnosticsData): string[];
  * list they drifted on grouping order, on how a connected provider was named, and
  * on the sentence that told the user who was being billed.
  */
+
 /** The gateway pin that expands to a project's CURRENT Evermind head at call time.
  *  Mirrors `PROJECT_EVERMIND_MODEL_PREFIX` on the gateway (api/.../projectEvermind.ts). */
 declare const PROJECT_EVERMIND_MODEL_PREFIX = "project_evermind:";
@@ -2684,7 +2839,9 @@ interface ModelChoiceLabels {
     categoryPlan: string;
     categoryPaid: string;
     categoryConfigured: string;
-    autoLabel: string;
+    /** The funding sentence for the routed row. Its NAME comes from the product
+     *  ({@link BUILDERFORCE_PRODUCT_NAME}), not from a label — a brand token is not
+     *  translated, and the tier it states must match what the gateway actually funds. */
     autoDetail: string;
     poolLabel: string;
     poolDetail: string;
@@ -2725,18 +2882,30 @@ declare function modelCategoryLabel(category: ModelCategory, labels: ModelChoice
  * accounts (BYO pool + its models, in the server-supplied provider priority
  * order), then saved workspace LLM configs. A model already listed in a cheaper
  * group is never repeated.
+ *
+ * `identity` names the ROUTED row after the product that actually funds it —
+ * "Builderforce Free" / "Builderforce PRO" rather than a bare "Auto" — because that
+ * is the thing the user bought and the only honest answer to "what am I running on?"
+ * when the gateway picks per turn. Omit it and the row degrades to the free product
+ * (see {@link DEFAULT_MODEL_IDENTITY}: the safe default is masked, never leaked).
  */
-declare function buildModelItems(options: ChatModelOptions, labels: ModelChoiceLabels): ModelItem[];
+declare function buildModelItems(options: ChatModelOptions, labels: ModelChoiceLabels, identity?: ModelIdentityContext): ModelItem[];
 /** The key identifying the active row (matches {@link ModelItem.key}). */
 declare function activeModelKey(selection: ChatModelSelection): string;
 /** Search + category narrowing. Matches label, funding detail, and category name. */
 declare function filterModelItems(items: ModelItem[], labels: ModelChoiceLabels, query: string, category: 'all' | ModelCategory): ModelItem[];
 /**
  * What is ACTUALLY running the next turn, said in one line: the pinned model, the
- * BYO pool, or — under `auto` — whatever the host resolved (a configured default
- * or a project-Evermind pin), which is the thing the user came to the menu to read.
+ * BYO pool, or — under `auto` — the routing PRODUCT that funds it.
+ *
+ * `effective` (what the host resolved an `auto` turn to) is honoured only when it names
+ * something the user owns: a project-Evermind head, a saved workspace LLM config, or —
+ * for a viewer entitled to pick models at all — a catalog id. On a routed plan the
+ * answer is the product, not the upstream model the cascade happened to reach for; see
+ * `modelIdentity.ts` for why. This is the fix for a free-plan composer that announced
+ * "minimaxai/minimax-m3" beside a menu that would not let the user change it.
  */
-declare function modelInUse(selection: ChatModelSelection, items: ModelItem[], labels: ModelChoiceLabels, effective?: string): {
+declare function modelInUse(selection: ChatModelSelection, items: ModelItem[], labels: ModelChoiceLabels, effective?: string, identity?: ModelIdentityContext): {
     name: string;
     detail: string;
 };
@@ -2898,4 +3067,4 @@ declare function handleRouterCall(catalog: BrainToolSpec[], name: string, args: 
     };
 };
 
-export { ADDRESSED_TO_META_KEY, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, RESTING_CHAT_MODE, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolExposure, type ToolSelection, type TurnInterruption, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, allowanceState, attachEvermindLearn, buildBrainTriageReport, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isMalformedToolCall, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, lastConsolidationIndex, linkedTicketsToAdvance, mcpActionsFrom, mentionRecipient, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, normalizeChatMode, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, perMillionUsd, premiumCostLabel, prepareImageDataUrl, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolSpecsFor, traceWithPersistedSteps, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, BUILDERFORCE_PRODUCT_NAME, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_MODEL_IDENTITY, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelIdentityContext, type ModelItem, NEW_CHAT_MODE, NOT_STARTED_TASK_STATUSES, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, RESTING_CHAT_MODE, type RatableMessage, type RatedTurnContext, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, type RoutedProduct, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolExposure, type ToolSelection, type TurnInterruption, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, allowanceState, attachEvermindLearn, buildBrainTriageReport, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, displayModelName, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isMalformedToolCall, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, isTruncatedTurn, isUserConfiguredModelRef, lastConsolidationIndex, linkedTicketsToAdvance, mcpActionsFrom, mentionRecipient, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, normalizeChatMode, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, perMillionUsd, premiumCostLabel, prepareImageDataUrl, productForPlan, productModelName, ratedTurnContext, ratedTurnTool, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, revealsModelId, routerToolSpecs, routingQueryForTurn, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolSpecsFor, traceWithPersistedSteps, turnInterruption, turnOptimizationDirective, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

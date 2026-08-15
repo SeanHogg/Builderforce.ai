@@ -45,7 +45,18 @@ export function bundleIdFor(slug: string): string {
   return `ai.builderforce.game.${/^[0-9]/.test(segment) ? `g${segment}` : segment}`;
 }
 
-/** The web assets both platforms wrap: the game, touch-adapted, plus its icons. */
+/**
+ * The web assets both platforms wrap: the app, plus its icons.
+ *
+ * TWO INPUT SHAPES, ONE OUTPUT. A game is one self-contained document and gets
+ * the touch layer injected into it. An APP (`game.webAssets`) is a built `dist/`
+ * — many files, its own bundler-emitted `index.html` — copied under `www/`
+ * unchanged apart from the head tags that point at the icons.
+ *
+ * The touch layer is deliberately NOT injected into an app bundle: it exists to
+ * give a keyboard-driven game on-screen controls, and an app already has its own
+ * interface. Adding it would put a D-pad over someone's login form.
+ */
 export function capacitorWebAssets(ctx: GameTargetContext): {
   files: Record<string, string>;
   binaryFiles: Record<string, Uint8Array>;
@@ -55,9 +66,22 @@ export function capacitorWebAssets(ctx: GameTargetContext): {
     `<meta name="theme-color" content="${escapeHtml(game.accent)}">`,
     `<link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png">`,
   ].join('\n');
+  const files: Record<string, string> = {};
+  const bundled: Record<string, Uint8Array> = {};
+  if (game.webAssets) {
+    for (const [path, contents] of Object.entries(game.webAssets)) {
+      files[`www/${path}`] = path === 'index.html' ? injectIntoHead(contents, head) : contents;
+    }
+    for (const [path, bytes] of Object.entries(game.binaryAssets ?? {})) {
+      bundled[`www/${path}`] = bytes;
+    }
+  } else {
+    files['www/index.html'] = injectIntoHead(withTouchControls(game.html, game.accent), head);
+  }
   return {
-    files: { 'www/index.html': injectIntoHead(withTouchControls(game.html, game.accent), head) },
+    files,
     binaryFiles: {
+      ...bundled,
       'www/icons/icon-192.png': gameIconPng(192, game.accent),
       'www/icons/icon-512.png': gameIconPng(512, game.accent),
       // Capacitor's asset generator reads `resources/icon.png` (1024², opaque) to

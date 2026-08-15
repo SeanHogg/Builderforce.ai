@@ -344,6 +344,104 @@ export async function publishSite(
 }
 
 // ---------------------------------------------------------------------------
+// Rollback — published releases and workspace file history
+// ---------------------------------------------------------------------------
+
+/** One published release of a project's site. */
+export interface SiteRelease {
+  versionToken: string;
+  source: string;
+  assetCount: number;
+  totalBytes: number;
+  publishedAt: string | null;
+  /** True for the release the site is serving right now. */
+  current: boolean;
+}
+
+export async function fetchSiteReleases(projectId: number | string): Promise<SiteRelease[]> {
+  return apiRequest<SiteRelease[]>(`${IDE}/projects/${projectId}/site/releases`);
+}
+
+/** Point the site back at an earlier build. A pointer move, not a rebuild. */
+export async function restoreSiteRelease(
+  projectId: number | string,
+  versionToken: string,
+): Promise<{ success: boolean; url: string }> {
+  return apiRequest(`${IDE}/projects/${projectId}/site/releases/${versionToken}/restore`, { method: 'POST' });
+}
+
+/** One archived version of a workspace file. `at` is when it stopped being current. */
+export interface FileVersion {
+  path: string;
+  at: number;
+  size: number;
+}
+
+export async function fetchFileHistory(projectId: number | string, path?: string): Promise<FileVersion[]> {
+  const query = path ? `?path=${encodeURIComponent(path)}` : '';
+  return apiRequest<FileVersion[]>(`${IDE}/projects/${projectId}/history${query}`);
+}
+
+export async function restoreFileVersion(
+  projectId: number | string,
+  path: string,
+  at: number,
+): Promise<{ success: boolean }> {
+  return apiRequest(`${IDE}/projects/${projectId}/history/restore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, at }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Packaging — turn a built app into something installable
+// ---------------------------------------------------------------------------
+
+/** Targets a BUILT app can be packaged for. `web`/`roblox` are game-only. */
+export const APP_PACKAGE_TARGETS = ['pwa', 'android', 'ios'] as const;
+export type AppPackageTarget = (typeof APP_PACKAGE_TARGETS)[number];
+
+export interface PackageAppResult {
+  success: boolean;
+  target: AppPackageTarget;
+  state: { directory: string; detail: string; setupSteps: Array<{ key: string; label: string; detail: string; blocking: boolean; url?: string }> };
+  writtenPaths: string[];
+}
+
+/**
+ * Package the built `dist/` as a PWA, an Android project, or an iOS project.
+ *
+ * Takes the same asset shape as {@link publishSite} — the build happens in the
+ * WebContainer, so what is packaged is byte-for-byte what was previewed.
+ */
+export async function packageApp(
+  projectId: number | string,
+  target: AppPackageTarget,
+  assets: Array<{ path: string; data: Uint8Array }>,
+): Promise<PackageAppResult> {
+  const form = new FormData();
+  form.append('target', target);
+  for (const { path, data } of assets) {
+    // The content type decides which half of the bundle a part lands in on the
+    // server, so a real one matters: a PNG read as text is a corrupted PNG.
+    form.append(path, new Blob([data as BlobPart], { type: guessAssetType(path) }), path);
+  }
+  return apiRequest<PackageAppResult>(`${IDE}/projects/${projectId}/package`, { method: 'POST', body: form });
+}
+
+/** Minimal extension→type map, only precise enough to split text from binary. */
+function guessAssetType(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase() ?? '';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'ico'].includes(ext)) return `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+  if (['woff', 'woff2', 'ttf', 'otf'].includes(ext)) return `font/${ext}`;
+  if (ext === 'mp3' || ext === 'wav' || ext === 'ogg') return `audio/${ext}`;
+  if (ext === 'mp4' || ext === 'webm') return `video/${ext}`;
+  if (ext === 'wasm') return 'application/wasm';
+  return 'text/plain';
+}
+
+// ---------------------------------------------------------------------------
 // IDE: AI chat (streaming)
 // ---------------------------------------------------------------------------
 

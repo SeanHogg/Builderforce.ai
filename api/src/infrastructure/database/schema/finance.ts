@@ -481,10 +481,150 @@ export const expenses = pgTable('expenses', {
   index('idx_expenses_category').on(t.tenantId, t.category, t.incurredAt),
 ]);
 
-/** A line on an invoice. */
+// ---------------------------------------------------------------------------
+// Receivable and payable — the two headers the LINES were always pointing at
+// (migration 0469)
+// ---------------------------------------------------------------------------
+//
+// `invoice_line_items` shipped carrying `invoice_ref` as a bare varchar pointing
+// at nothing: the LINES existed and the invoice did not. The only invoice table
+// on the platform was `freelancer_invoices`, which is the marketplace paying its
+// own freelancers — a different fact entirely.
+//
+// WHY TWO HEADERS AND NOT ONE WITH A `direction`. Receivable and payable are the
+// same SHAPE and they are not the same concept, and the difference is in the
+// invariants rather than in the columns. An invoice is issued, aged and chased —
+// it has a paid amount, a collections history and a customer. A bill is
+// APPROVED, scheduled and disputed — it has an approver, a payment date and a
+// vendor, and `approved_by` is the one column on this platform that can cause
+// real financial harm if a generic writer fills it in on somebody's behalf.
+// Folding them into one table would put "who authorised this payment" and "how
+// overdue is this receipt" in the same row and give the approval column no
+// natural home. Two tables with two lifecycles is the DDD answer; the shared
+// SHAPE is reused by the line-item table below rather than copied.
+//
+// WHY THE LINES ARE ONE TABLE FOR BOTH. That is the other half of the same
+// argument, applied the other way: a billed line is a billed line — a
+// description, a quantity, a unit amount and a tax rate — with no invariant that
+// differs by direction. A `bill_line_items` table would be the per-feature copy
+// of an existing shape §0 forbids, and the two copies would drift the first time
+// somebody added a discount column to one. So the discriminator is a column
+// value, which is the same rule everything else here follows.
+
+/**
+ * A receivable — what a customer owes us.
+ *
+ * `reference` is the natural key `invoice_line_items.invoice_ref` resolves to,
+ * which is what turns that column from a string into a real reference. It is
+ * unique per tenant and the composite foreign key is declared in the migration.
+ *
+ * NO STORED `ageingDays` and NO STORED total. Ageing is `now() - due_at` and a
+ * stored one is wrong every day after it is written; the total is the sum of the
+ * lines and a stored one is the number that ends up disagreeing with the rows
+ * printed directly beneath it — the same rule `work_estimates.lines` states.
+ * `amount` is the AGREED total including tax, which is a fact the issuer asserts
+ * and not a derivation, so it is stored and the lines are checked against it.
+ */
+export const invoices = pgTable('invoices', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull(),
+  objectId:      uuid('object_id').references(() => objects.id, { onDelete: 'set null' }),
+  /** Our own invoice number. The natural key the lines point at. */
+  reference:     varchar('reference', { length: 64 }).notNull(),
+  /** `party_roles.party_ref` for the customer — the counterparty binding. */
+  customerRef:   varchar('customer_ref', { length: 64 }),
+  /** The name as it must appear on the document. Kept beside the ref rather than
+   *  joined at render: an invoice is a legal record of what was sent, and the
+   *  name on it must not change because somebody later renamed the account. */
+  customerName:  varchar('customer_name', { length: 200 }).notNull(),
+  currency:      varchar('currency', { length: 8 }).notNull().default('USD'),
+  /** 'draft' | 'issued' | 'part-paid' | 'paid' | 'void' | 'written-off'. */
+  status:        varchar('status', { length: 16 }).notNull().default('draft'),
+  issuedAt:      timestamp('issued_at'),
+  dueAt:         timestamp('due_at'),
+  amount:        numeric('amount', { precision: 16, scale: 2 }).notNull(),
+  taxAmount:     numeric('tax_amount', { precision: 16, scale: 2 }),
+  /** How much has actually landed. Part payment is the normal case, so this is
+   *  not a boolean. */
+  paidAmount:    numeric('paid_amount', { precision: 16, scale: 2 }).notNull().default('0'),
+  paidAt:        timestamp('paid_at'),
+  notes:         text('notes'),
+  createdBy:     varchar('created_by', { length: 64 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_invoices_reference').on(t.tenantId, t.reference),
+  index('idx_invoices_status').on(t.tenantId, t.status, t.dueAt),
+  index('idx_invoices_customer').on(t.tenantId, t.customerRef, t.status),
+]);
+
+/**
+ * A payable — what we owe a vendor.
+ *
+ * `finance.expenses` does NOT cover this and the difference is not cosmetic: an
+ * expense is a CLAIM — a person spent money and wants it back, hence
+ * `submitted_by`, `category` and `incurred_at`. A bill is a vendor's demand with
+ * a counterparty, a due date and an approval, and nobody is owed a reimbursement.
+ *
+ * `approvedBy` is deliberately NOT writable through the generic entity path (the
+ * entity declares itself read-only): an approval nobody gave is the one field
+ * here that can cause real harm, so it is written by the approve handler, which
+ * refuses to let the requester approve their own bill.
+ */
+export const bills = pgTable('bills', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull(),
+  objectId:      uuid('object_id').references(() => objects.id, { onDelete: 'set null' }),
+  /** The VENDOR's own reference, not ours — which is why it is unique per vendor
+   *  rather than per tenant: two suppliers both numbering from 1001 is normal,
+   *  and one of them re-sending 1001 is a duplicate we must refuse. */
+  reference:     varchar('reference', { length: 64 }).notNull(),
+  vendorRef:     varchar('vendor_ref', { length: 64 }),
+  vendorName:    varchar('vendor_name', { length: 200 }).notNull(),
+  currency:      varchar('currency', { length: 8 }).notNull().default('USD'),
+  /** 'received' | 'approved' | 'scheduled' | 'paid' | 'disputed' | 'void'. */
+  status:        varchar('status', { length: 16 }).notNull().default('received'),
+  receivedAt:    timestamp('received_at').notNull().defaultNow(),
+  dueAt:         timestamp('due_at'),
+  amount:        numeric('amount', { precision: 16, scale: 2 }).notNull(),
+  taxAmount:     numeric('tax_amount', { precision: 16, scale: 2 }),
+  paidAmount:    numeric('paid_amount', { precision: 16, scale: 2 }).notNull().default('0'),
+  /** Which budget line this lands on — what connects a bill to a `budget`. An
+   *  uncategorised bill cannot appear in a variance. */
+  category:      varchar('category', { length: 96 }),
+  approvedBy:    varchar('approved_by', { length: 64 }),
+  approvedAt:    timestamp('approved_at'),
+  /** The date a payment run should release it. Set by schedule-payment, which
+   *  refuses on anything unapproved. */
+  scheduledFor:  timestamp('scheduled_for'),
+  paidAt:        timestamp('paid_at'),
+  disputedAt:    timestamp('disputed_at'),
+  disputeReason: text('dispute_reason'),
+  /** 'none' | 'monthly' | 'quarterly' | 'annual'. A recurring bill is a committed
+   *  cost and belongs in the forecast, not just in this month. */
+  recurring:     varchar('recurring', { length: 16 }).notNull().default('none'),
+  notes:         text('notes'),
+  createdBy:     varchar('created_by', { length: 64 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_bills_reference').on(t.tenantId, t.vendorRef, t.reference),
+  index('idx_bills_status').on(t.tenantId, t.status, t.dueAt),
+  index('idx_bills_schedule').on(t.tenantId, t.scheduledFor),
+]);
+
+/** A line on an invoice or a bill. See the section note for why one table serves
+ *  both: a billed line has no invariant that differs by direction, so the
+ *  direction is a column value and not a second table. */
 export const invoiceLineItems = pgTable('invoice_line_items', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull(),
+  /**
+   * Which header this line belongs to: 'invoice' (default, so every existing row
+   * keeps meaning exactly what it meant) or 'bill'.
+   */
+  documentKind: varchar('document_kind', { length: 16 }).notNull().default('invoice'),
+  /** `invoices.reference` or `bills.reference`, per `documentKind`. */
   invoiceRef:  varchar('invoice_ref', { length: 64 }).notNull(),
   description: varchar('description', { length: 500 }).notNull(),
   quantity:    numeric('quantity', { precision: 14, scale: 4 }).notNull().default('1'),
@@ -499,7 +639,7 @@ export const invoiceLineItems = pgTable('invoice_line_items', {
   position:    integer('position').notNull().default(0),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
-  index('idx_invoice_line_items_invoice').on(t.tenantId, t.invoiceRef, t.position),
+  index('idx_invoice_line_items_invoice').on(t.tenantId, t.documentKind, t.invoiceRef, t.position),
 ]);
 
 /** A stored way to pay. The token never touches this table — the secret lives in

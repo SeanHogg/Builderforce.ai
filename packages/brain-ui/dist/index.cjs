@@ -31,6 +31,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var src_exports = {};
 __export(src_exports, {
   Avatar: () => Avatar,
+  BUILDERFORCE_PRODUCT_NAME: () => import_builderforce_brain_embedded6.BUILDERFORCE_PRODUCT_NAME,
   BrainTimeline: () => BrainTimeline,
   ChatErrorBanner: () => ChatErrorBanner,
   ChatTicketsPanel: () => ChatTicketsPanel,
@@ -38,6 +39,7 @@ __export(src_exports, {
   DEFAULT_CHAT_ERROR_LABELS: () => DEFAULT_CHAT_ERROR_LABELS,
   DEFAULT_CHAT_TICKETS_LABELS: () => DEFAULT_CHAT_TICKETS_LABELS,
   DEFAULT_EVERMIND_LABELS: () => DEFAULT_EVERMIND_LABELS,
+  DEFAULT_MODEL_IDENTITY: () => import_builderforce_brain_embedded6.DEFAULT_MODEL_IDENTITY,
   DEFAULT_PROJECT360_LABELS: () => DEFAULT_PROJECT360_LABELS,
   DEFAULT_PROJECT_LIST_LABELS: () => DEFAULT_PROJECT_LIST_LABELS,
   DEFAULT_PROMPT_OPTIONS_LABELS: () => DEFAULT_PROMPT_OPTIONS_LABELS,
@@ -65,6 +67,7 @@ __export(src_exports, {
   buildSettledTimeline: () => buildSettledTimeline,
   buildTimeline: () => buildTimeline,
   byoVendorLabel: () => import_builderforce_brain_embedded6.byoVendorLabel,
+  displayModelName: () => import_builderforce_brain_embedded6.displayModelName,
   evermindLearnedStatus: () => evermindLearnedStatus,
   evermindNextAction: () => evermindNextAction,
   filterModelItems: () => import_builderforce_brain_embedded6.filterModelItems,
@@ -77,7 +80,10 @@ __export(src_exports, {
   parseAskUser: () => parseAskUser,
   perMillionUsd: () => import_builderforce_brain_embedded6.perMillionUsd,
   premiumCostLabel: () => import_builderforce_brain_embedded6.premiumCostLabel,
+  productForPlan: () => import_builderforce_brain_embedded6.productForPlan,
+  productModelName: () => import_builderforce_brain_embedded6.productModelName,
   promptOptionsLabels: () => promptOptionsLabels,
+  revealsModelId: () => import_builderforce_brain_embedded6.revealsModelId,
   selectPendingAskUser: () => selectPendingAskUser,
   serializeAskUser: () => serializeAskUser,
   splitThinkSegments: () => splitThinkSegments,
@@ -544,6 +550,8 @@ var DEFAULT_TIMELINE_LABELS = {
   copy: "Copy",
   copied: "Copied",
   replay: "Send again",
+  rateUp: "Good response",
+  rateDown: "Bad response",
   apply: "Apply",
   createFile: "Create file",
   preview: "Preview",
@@ -569,13 +577,18 @@ var DEFAULT_TIMELINE_LABELS = {
   reconcileTitle: "Reconciled {count} learned memories in Evermind v{version}",
   reconcileHint: "The answer restated these recalled learnings, so it updates them (write-through cognition)."
 };
-function ProvenanceChip({ prov, labels }) {
+function ProvenanceChip({
+  prov,
+  labels,
+  identity
+}) {
   const unused = prov.account === "shared_byo_unused";
   const badge = prov.account === "own" ? labels.accountOwn : unused ? labels.accountByoUnused : prov.account === "shared" ? labels.accountShared : null;
   const variant = prov.account === "own" ? "bf-tl__prov--own" : unused ? "bf-tl__prov--unused" : "bf-tl__prov--shared";
-  const modelTitle = prov.vendor ? `${prov.model} \xB7 ${prov.vendor}` : prov.model;
+  const name = (0, import_builderforce_brain_embedded2.displayModelName)(prov.model, identity, { account: prov.account });
+  const modelTitle = prov.vendor && name === prov.model ? `${name} \xB7 ${prov.vendor}` : name;
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: `bf-tl__prov ${variant}`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__prov-model", title: modelTitle, children: prov.model }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__prov-model", title: modelTitle, children: name }),
     badge && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__prov-badge", children: badge }),
     prov.evermind ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__prov-evermind", title: labels.ranOnEvermind, children: `\u{1F9E0} Evermind v${prov.evermind.version}` }) : null
   ] });
@@ -631,9 +644,15 @@ function MessageActions({
   role,
   text,
   labels,
-  onReplay
+  onReplay,
+  onRate,
+  rating
 }) {
   if (!text.trim()) return null;
+  const rate = (next) => (event) => {
+    event.stopPropagation();
+    onRate?.(message, rating === next ? 0 : next);
+  };
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(CopyButton, { text, labels, icon: true }),
     onReplay && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
@@ -649,7 +668,35 @@ function MessageActions({
         },
         children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { "aria-hidden": true, children: "\u21BB" })
       }
-    )
+    ),
+    onRate && role === "assistant" && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        "button",
+        {
+          type: "button",
+          className: "bf-tl__act",
+          title: labels.rateUp,
+          "aria-label": labels.rateUp,
+          "aria-pressed": rating === 1,
+          "data-state": rating === 1 ? "done" : void 0,
+          onClick: rate(1),
+          children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { "aria-hidden": true, children: "\u{1F44D}" })
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        "button",
+        {
+          type: "button",
+          className: "bf-tl__act",
+          title: labels.rateDown,
+          "aria-label": labels.rateDown,
+          "aria-pressed": rating === -1,
+          "data-state": rating === -1 ? "done" : void 0,
+          onClick: rate(-1),
+          children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { "aria-hidden": true, children: "\u{1F44E}" })
+        }
+      )
+    ] })
   ] });
 }
 function toolPreview(args) {
@@ -729,12 +776,15 @@ function BrainTimelineInner({
   isRunning,
   loading,
   labels: labelOverrides,
+  modelIdentity = import_builderforce_brain_embedded2.DEFAULT_MODEL_IDENTITY,
   assistantName,
   emptyState,
   renderMessage,
   renderStreaming,
   renderAssistantActions,
   onReplayMessage,
+  onRateMessage,
+  ratings,
   onInternalLink,
   onApplyCode,
   onCreateFile,
@@ -825,10 +875,21 @@ function BrainTimelineInner({
                 }
               ),
               /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "bf-tl__actions", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(MessageActions, { message: node.message, role: "assistant", text: bodyText, labels, onReplay: onReplayMessage }),
+                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                  MessageActions,
+                  {
+                    message: node.message,
+                    role: "assistant",
+                    text: bodyText,
+                    labels,
+                    onReplay: onReplayMessage,
+                    onRate: onRateMessage,
+                    rating: ratings?.[node.message.id]
+                  }
+                ),
                 renderAssistantActions?.(node.message)
               ] }),
-              prov && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ProvenanceChip, { prov, labels })
+              prov && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(ProvenanceChip, { prov, labels, identity: modelIdentity })
             ] })
           ] }, node.key);
         }
@@ -1151,10 +1212,11 @@ function PromptOptionsMenu({
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
-  const items = (0, import_react4.useMemo)(() => model ? (0, import_builderforce_brain_embedded4.buildModelItems)(model.options, labels) : [], [model, labels]);
+  const identity = model?.identity ?? import_builderforce_brain_embedded4.DEFAULT_MODEL_IDENTITY;
+  const items = (0, import_react4.useMemo)(() => model ? (0, import_builderforce_brain_embedded4.buildModelItems)(model.options, labels, identity) : [], [model, labels, identity]);
   const inUse = (0, import_react4.useMemo)(
-    () => model ? (0, import_builderforce_brain_embedded4.modelInUse)(model.selection, items, labels, model.effective) : null,
-    [model, items, labels]
+    () => model ? (0, import_builderforce_brain_embedded4.modelInUse)(model.selection, items, labels, model.effective, identity) : null,
+    [model, items, labels, identity]
   );
   const categories = (0, import_react4.useMemo)(
     () => import_builderforce_brain_embedded4.MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category)),
@@ -1162,7 +1224,7 @@ function PromptOptionsMenu({
   );
   const visible = (0, import_react4.useMemo)(() => (0, import_builderforce_brain_embedded4.filterModelItems)(items, labels, query, filter), [items, labels, query, filter]);
   if (!mode && !memory && !autoMode && !session && !onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
-  const canChoose = model?.canChoose !== false;
+  const canChoose = identity.canChoose;
   const activeKey = model ? (0, import_builderforce_brain_embedded4.activeModelKey)(model.selection) : "";
   const activeMode = mode?.choices.find((choice) => choice.value === mode.value);
   const title = [
@@ -4486,6 +4548,7 @@ function Row2({ item, onAction }) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   Avatar,
+  BUILDERFORCE_PRODUCT_NAME,
   BrainTimeline,
   ChatErrorBanner,
   ChatTicketsPanel,
@@ -4493,6 +4556,7 @@ function Row2({ item, onAction }) {
   DEFAULT_CHAT_ERROR_LABELS,
   DEFAULT_CHAT_TICKETS_LABELS,
   DEFAULT_EVERMIND_LABELS,
+  DEFAULT_MODEL_IDENTITY,
   DEFAULT_PROJECT360_LABELS,
   DEFAULT_PROJECT_LIST_LABELS,
   DEFAULT_PROMPT_OPTIONS_LABELS,
@@ -4520,6 +4584,7 @@ function Row2({ item, onAction }) {
   buildSettledTimeline,
   buildTimeline,
   byoVendorLabel,
+  displayModelName,
   evermindLearnedStatus,
   evermindNextAction,
   filterModelItems,
@@ -4532,7 +4597,10 @@ function Row2({ item, onAction }) {
   parseAskUser,
   perMillionUsd,
   premiumCostLabel,
+  productForPlan,
+  productModelName,
   promptOptionsLabels,
+  revealsModelId,
   selectPendingAskUser,
   serializeAskUser,
   splitThinkSegments,

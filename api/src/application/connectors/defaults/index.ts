@@ -41,6 +41,19 @@ export const BUILTIN_CONNECTOR_LIST: readonly ConnectorManifest[] = ALL;
 export const RESERVED_CONNECTOR_KEYS: ReadonlySet<string> = new Set(ALL.map((m) => m.key));
 
 /**
+ * True when `key` names a built-in and therefore cannot be claimed by anyone else.
+ *
+ * Lives beside the set rather than in `connectorRegistry` (which re-exports it for
+ * its existing callers) because both the tenant-authoring path and the marketplace
+ * review path need it, and routing the review path through the registry would put
+ * `connectorRegistry → extensionInstalls → packageReview → connectorRegistry` in
+ * the module graph. The predicate belongs with its data; the cycle was the hint.
+ */
+export function isReservedConnectorKey(key: string): boolean {
+  return RESERVED_CONNECTOR_KEYS.has(key);
+}
+
+/**
  * Run every built-in manifest through the SAME validator tenant input goes through.
  * Called by `defaults.test.ts` — a built-in with a typo'd path placeholder or an
  * undeclared `{{auth.x}}` would otherwise fail at call time, in a customer's account,

@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import type { ModelIdentityContext } from '@seanhogg/builderforce-brain-ui';
 import { ChatInput, type ChatModelOptions } from './ChatInput';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
+/** A tenant entitled to pick a model — the only viewer shown upstream model ids. */
+const CHOOSER: ModelIdentityContext = { product: 'pro', canChoose: true };
 
 const options: ChatModelOptions = {
   configured: [{ id: 'tenant_model:reviewer', label: 'Review specialist' }],
@@ -23,6 +27,7 @@ function renderComposer(props: Partial<React.ComponentProps<typeof ChatInput>> =
       onSubmit={() => {}}
       modelSelection={{ mode: 'auto' }}
       modelOptions={options}
+      modelIdentity={CHOOSER}
       onModelSelectionChange={onModelSelectionChange}
       {...props}
     />,
@@ -59,9 +64,26 @@ describe('ChatInput `/` options menu', () => {
     expect(screen.getAllByRole('button', { name: /plan\/sonnet/ })).toHaveLength(1);
   });
 
-  it('reports what auto actually resolved to rather than just "Auto"', () => {
+  it('reports what auto actually resolved to for a tenant who may pin', () => {
     renderComposer({ modelSelection: { mode: 'auto' }, effectiveModel: 'free/qwen' });
     expect(trigger()).toHaveTextContent('free/qwen');
+  });
+
+  it('names the PRODUCT — never the upstream model — for a routed free tenant', () => {
+    // The reported bug: the free/anonymous composer announced "minimaxai/minimax-m3"
+    // beside a locked menu. A routed plan runs "Builderforce Free", full stop.
+    renderComposer({
+      modelSelection: { mode: 'auto' },
+      effectiveModel: 'minimaxai/minimax-m3',
+      modelIdentity: { product: 'free', canChoose: false },
+    });
+    expect(trigger()).toHaveTextContent('Builderforce Free');
+    expect(trigger()).not.toHaveTextContent('minimax');
+  });
+
+  it('names the paid product when a paying tenant has pinned nothing', () => {
+    renderComposer({ modelSelection: { mode: 'auto' } });
+    expect(trigger()).toHaveTextContent('Builderforce PRO');
   });
 
   it('switches the model from the panel', () => {
@@ -88,7 +110,7 @@ describe('ChatInput `/` options menu', () => {
   });
 
   it('says why instead of offering a dead list when the tenant may not pin a model', () => {
-    renderComposer({ canChooseModel: false });
+    renderComposer({ modelIdentity: { product: 'free', canChoose: false } });
 
     fireEvent.click(trigger());
     expect(screen.queryByRole('listbox')).toBeNull();

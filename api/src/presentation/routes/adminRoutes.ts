@@ -102,6 +102,7 @@ import {
   type ProxyEnv,
 } from '../../application/llm/LlmProxyService';
 import { getAllVendorIds, vendorForModel, type VendorId } from '../../application/llm/vendors';
+import { summarizeActionRatings } from '../../application/llm/actionRatings';
 import { llmFailoverLog, llmHealthProbes, llmTraces } from '../../infrastructure/database/schema';
 import { probeVendor, tryAcquireProbeSlot, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
@@ -2545,6 +2546,22 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         createdAt:    r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
       })),
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/llm-ratings?days=30 — platform-wide human ratings of model
+  // output, rolled up by (model × action × MCP tool).
+  //
+  // The counterpart to /llm-usage: that answers "what did we spend and where",
+  // this answers "was any of it any GOOD, and which model is good at what". Both
+  // live under the same admin tab because a model that is cheap and disliked is a
+  // worse choice than the cost table alone can show.
+  // -------------------------------------------------------------------------
+  router.get('/llm-ratings', async (c) => {
+    const days = Math.min(Math.max(Number(c.req.query('days') ?? '30'), 1), 365);
+    const db = buildDatabase(c.env);
+    // tenantId omitted ⇒ every tenant, which is exactly what a platform view is.
+    return c.json(await summarizeActionRatings(c.env, db, { days }));
   });
 
   // -------------------------------------------------------------------------

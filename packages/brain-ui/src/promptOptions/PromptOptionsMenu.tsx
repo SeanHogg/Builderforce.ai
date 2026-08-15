@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   activeModelKey,
   buildModelItems,
+  DEFAULT_MODEL_IDENTITY,
   filterModelItems,
   MODEL_CATEGORIES,
   modelCategoryLabel,
@@ -10,6 +11,7 @@ import {
   type ChatModelSelection,
   type Effort,
   type ModelCategory,
+  type ModelIdentityContext,
 } from '@seanhogg/builderforce-brain-embedded';
 import { promptOptionsLabels, type PromptOptionsLabels } from './types';
 
@@ -24,9 +26,14 @@ export interface PromptOptionsModel {
    * "Auto" alone does not answer the question the user opened the menu to ask.
    */
   effective?: string;
-  /** False ⇒ the gateway would reject a pin (no paid plan, no connected account):
-   *  the list is replaced by the reason, rather than offering a dead control. */
-  canChoose?: boolean;
+  /**
+   * Who is reading: which routing product funds their turns, and whether the gateway
+   * would accept a pin from them at all. ONE object rather than a `canChoose` boolean
+   * beside it, because the two answers are the same fact — a viewer who may not pin is
+   * on the product, and must be told so by name instead of being shown an upstream id
+   * next to a list they cannot use. Omitted ⇒ free + no choice (fail closed).
+   */
+  identity?: ModelIdentityContext;
 }
 
 /** One selectable conversation mode. `value` is the host's stable, non-translatable id. */
@@ -169,10 +176,11 @@ export function PromptOptionsMenu({
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [open]);
 
-  const items = useMemo(() => (model ? buildModelItems(model.options, labels) : []), [model, labels]);
+  const identity = model?.identity ?? DEFAULT_MODEL_IDENTITY;
+  const items = useMemo(() => (model ? buildModelItems(model.options, labels, identity) : []), [model, labels, identity]);
   const inUse = useMemo(
-    () => (model ? modelInUse(model.selection, items, labels, model.effective) : null),
-    [model, items, labels],
+    () => (model ? modelInUse(model.selection, items, labels, model.effective, identity) : null),
+    [model, items, labels, identity],
   );
   const categories = useMemo(
     () => MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category)),
@@ -183,7 +191,7 @@ export function PromptOptionsMenu({
   // Nothing wired ⇒ no control (the component decides its own visibility).
   if (!mode && !memory && !autoMode && !session && !onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
 
-  const canChoose = model?.canChoose !== false;
+  const canChoose = identity.canChoose;
   const activeKey = model ? activeModelKey(model.selection) : '';
   const activeMode = mode?.choices.find((choice) => choice.value === mode.value);
   // The trigger names what is ARMED — the mode first, because it decides whether this

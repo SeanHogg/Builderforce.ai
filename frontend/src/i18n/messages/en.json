@@ -1081,7 +1081,20 @@
     },
     "askAi": "Ask AI",
     "previewWeb": "Web",
-    "previewMobile": "Mobile"
+    "previewMobile": "Mobile",
+    "previewEmpty": "Run your project to see a preview",
+    "previewOpen": "Open",
+    "previewTitle": "Preview",
+    "visualEdit": "Point & edit",
+    "visualEditHint": "Click any element in the preview to change its text or styling without asking the agent.",
+    "visualEditOn": "Picking — click an element",
+    "visualSelected": "Selected {tag} · {file}:{line}",
+    "visualText": "Text",
+    "visualClasses": "Style classes",
+    "visualApply": "Apply",
+    "visualCancel": "Cancel",
+    "visualApplied": "Updated {file}",
+    "visualNoPreview": "Run the project first — point & edit needs a live preview."
   },
   "tools": {
     "outOf5": "out of 5.0",
@@ -6627,7 +6640,8 @@
       "Custom agent roles",
       "Shared team approval inbox",
       "Per-seat cost controls"
-    ]
+    ],
+    "methodNote": "Reading an idea and choosing a proof are free on every plan. Only building spends run budget — which is the point: the two acts that decide whether the expensive one is worth doing cost nothing."
   },
   "phonePage": {
     "seoTitle": "Business Phone — Builderforce.ai",
@@ -7022,7 +7036,16 @@
     "prevPage": "Previous page",
     "nextPage": "Next page",
     "pageN": "Page {n}",
-    "title": "Builderforce Blog"
+    "title": "Builderforce Blog",
+    "post": {
+      "back": "← Back to Blog",
+      "byline": "By {author}",
+      "notFoundTitle": "Post not found",
+      "notFoundBody": "This article doesn’t exist or has been moved.",
+      "browseAll": "Browse all articles →",
+      "relatedHeading": "Related articles",
+      "startFree": "Start building for free →"
+    }
   },
   "brain": {
     "timeline": {
@@ -7060,7 +7083,9 @@
       "stop": "Stop",
       "learnTargetContributed": "Contributed to {name} (project #{projectId} v{version})",
       "learnTargetSkipped": "Skipped {name} (project #{projectId}) — {reason}",
-      "replay": "Send again"
+      "replay": "Send again",
+      "rateUp": "Good response",
+      "rateDown": "Bad response"
     },
     "tickets": {
       "none": "No tickets linked yet.",
@@ -7229,11 +7254,7 @@
     },
     "messageActions": {
       "downloadMarkdown": "Download Markdown",
-      "downloaded": "Downloaded",
-      "goodResponse": "Good response",
-      "badResponse": "Bad response",
-      "thumbsUp": "Thumbs up",
-      "thumbsDown": "Thumbs down"
+      "downloaded": "Downloaded"
     },
     "newProjectPlaceholder": "New project name",
     "createAndAssign": "Create & assign",
@@ -9185,7 +9206,8 @@
       "salesLeads": "Sales leads",
       "salesCommissions": "Sales commissions",
       "cron": "Scheduled sweeps",
-      "broadcasts": "Broadcasts"
+      "broadcasts": "Broadcasts",
+      "llmRatings": "Ratings"
     },
     "common": {
       "loading": "Loading…",
@@ -10127,7 +10149,36 @@
         "paid": "Paying customers"
       }
     },
-    "subnavLabel": "Admin sub-views"
+    "subnavLabel": "Admin sub-views",
+    "llmRatings": {
+      "title": "Model ratings",
+      "subtitle": "What people said about the output — every thumb, filed against the model that served the turn and the MCP tool it ran.",
+      "count": "{total} ratings across {models} models",
+      "periodLabel": "Rating period",
+      "period7": "Last 7 days",
+      "period30": "Last 30 days",
+      "period90": "Last 90 days",
+      "period365": "Last year",
+      "statSatisfaction": "Satisfaction",
+      "statUp": "Thumbs up",
+      "statDown": "Thumbs down",
+      "statModels": "Models rated",
+      "verdictsTitle": "Which model wins, and at what",
+      "verdictsHint": "Only shown where two or more models were rated on the same work — a single candidate is not a comparison.",
+      "verdictsEmpty": "No head-to-head yet: every bucket so far has ratings for only one model.",
+      "verdict": "<winner></winner> beats <loser></loser> by {points} points over {n} ratings",
+      "breakdownTitle": "Every rated bucket",
+      "colModel": "Model",
+      "colAction": "Action",
+      "colTool": "MCP tool",
+      "colUp": "Up",
+      "colDown": "Down",
+      "colScore": "Satisfaction",
+      "noTool": "no tool",
+      "scoreNote": "Satisfaction is smoothed toward neutral by sample size, so one lucky thumbs-up cannot outrank a long good record. The learned router blends this exact number with run outcomes.",
+      "emptyTitle": "No ratings yet in this period.",
+      "emptyBody": "Thumbs appear under every AI reply in the Brain panel, the Creation Canvas and the VS Code extension. Each press records the model and the MCP tool behind that turn."
+    }
   },
   "providerKeys": {
     "title": "Bring your own models",
@@ -15048,7 +15099,9 @@
       "supplier": "Supplier",
       "purchaseOrder": "Purchase order",
       "shipment": "Shipment",
-      "incident": "Incident"
+      "incident": "Incident",
+      "book": "Book",
+      "account": "Account"
     },
     "twilioSetup": {
       "title": "Twilio integration",
@@ -16266,7 +16319,9 @@
       "publishFailed": "That post could not be published.",
       "campaignPublished": "Published to {published} of {targets} accounts.",
       "campaignScheduled": "Scheduled for {count} accounts.",
-      "campaignUpdateFailed": "That campaign could not be updated."
+      "campaignUpdateFailed": "That campaign could not be updated.",
+      "gateTitle": "Create a free account to connect your social accounts",
+      "gateBody": "Connecting X, LinkedIn, Facebook, Instagram and TikTok — and publishing to all of them from one campaign — needs a free Builderforce account. Your board stays exactly as it is."
     },
     "noticeGuestLimitRoom": "This shared session has used its {limit} free messages for today. Sign up free to keep going — your canvas comes with you.",
     "founder": {
@@ -17216,7 +17271,8 @@
       "freshHours": "{count}h ago",
       "freshDays": "{count}d ago",
       "label": {
-        "funnel": "Funnel"
+        "funnel": "Funnel",
+        "book": "Book"
       },
       "field": {
         "funnelDomain": "Funnel",
@@ -17229,7 +17285,19 @@
         "dateRange": "Window",
         "bottleneck": "Bottleneck",
         "fetchedAt": "Measured",
-        "summary": "Summary"
+        "summary": "Summary",
+        "author": "Author",
+        "coverImageUrl": "Cover art",
+        "coverDpi": "Cover resolution",
+        "pages": "Pages",
+        "figures": "Figures",
+        "contents": "Contents",
+        "samplePages": "Sample pages",
+        "formats": "Editions",
+        "trimSize": "Trim size",
+        "pageCount": "Page count",
+        "figureCount": "Figure count",
+        "wordCount": "Words"
       },
       "column": {
         "stage": "Stage",
@@ -17239,7 +17307,20 @@
         "medianDays": "Median days",
         "source": "Source",
         "converted": "Converted",
-        "rate": "Rate"
+        "rate": "Rate",
+        "page": "Page",
+        "heading": "Heading",
+        "body": "Text",
+        "figure": "Figure",
+        "ref": "Ref",
+        "caption": "Caption",
+        "altText": "Alt text",
+        "url": "File",
+        "chapter": "Chapter",
+        "title": "Title"
+      },
+      "status": {
+        "manuscript": "Manuscript"
       }
     },
     "noticeGateEvaluated": "Release gate evaluated from the runs and defects on this board — {score}% of criteria met.",
@@ -17397,7 +17478,9 @@
         "course": "Course",
         "dataset": "Dataset",
         "tool": "Tool",
-        "creative": "Creative asset"
+        "creative": "Creative asset",
+        "survey": "Survey",
+        "book": "Book"
       },
       "launchHint": {
         "play": "Buyers play it in the browser.",
@@ -17643,7 +17726,57 @@
       "fabricatedData": "Those figures are not real: this canvas has an imported dataset, so I should have computed the values from it instead of using placeholders. Ask me to rebuild this and I will query every row.",
       "documentUnverified": "The canvas contains a document draft, but its authored content does not verify the requested {requestedPages, number} pages. A manuscript that large cannot be authored in one bounded Brain turn, so it is not complete. Build and review it in sections before treating it as finished or exporting it.",
       "documentIncomplete": "I created a document draft on the canvas with {authoredWords, number} words (about {estimatedPages, number} {estimatedPages, plural, one {page} other {pages}}), not the requested {requestedPages, number} pages. A manuscript that large cannot be authored in one bounded Brain turn, so I have not marked it complete. Build and review it in sections before treating it as finished or exporting it."
-    }
+    },
+    "releases": {
+      "crumb": "Marketplace",
+      "title": "Build, stage, live",
+      "loading": "Reading the release history…",
+      "notSellable": "This card cannot be sold, so it has no releases.",
+      "openAction": "Releases & staging",
+      "harnessLine": "Staging checks: {harness}",
+      "railLabel": "Versions",
+      "harness": {
+        "media": "plays it through and measures it",
+        "runtime": "boots it in a sandbox and drives it",
+        "paged": "reads it, reflows it and proofs it",
+        "geometry": "checks it can actually be made",
+        "instrument": "takes it, then reads the results on zero responses",
+        "system": "dry-runs it with every outbound step stubbed"
+      },
+      "state": {
+        "draft": "Draft",
+        "staged": "Staged",
+        "live": "Live",
+        "superseded": "Superseded"
+      },
+      "now": "now",
+      "draftNote": "Your board as it is now. Nothing captured yet.",
+      "holders": "{count, plural, =0 {Nobody holds this version} one {# buyer holds this version} other {# buyers hold this version}}",
+      "stageAction": "Stage this version",
+      "revertAction": "Put back on sale",
+      "viewListing": "View listing",
+      "group": {
+        "runs": "Runs",
+        "travels": "Travels",
+        "sells": "Sells"
+      },
+      "groupOpen": "{count} to look at",
+      "groupClear": "{count} clear",
+      "strippedHead": "Removed before it leaves your workspace",
+      "verdictBlocked": "{count, plural, one {# blocker} other {# blockers}}. Fix these and stage again.",
+      "verdictReady": "v{version} is ready to sell.",
+      "publishVersion": "Publish v{version}",
+      "restage": "Capture again",
+      "working": "Working…",
+      "revertTitle": "Put v{version} back on sale?",
+      "revertBody": "New buyers will receive it instead of v{version}. The {holders} already on v{version} keep what they bought — nobody is moved.",
+      "revertConfirm": "Put it back on sale",
+      "noticeStaged": "Staged v{version}.",
+      "noticePublished": "v{version} is live.",
+      "noticeReverted": "Back on the v{from} build, published as v{version}."
+    },
+    "rateUp": "Good response",
+    "rateDown": "Bad response"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -18565,6 +18698,9 @@
       "body": "Start on the canvas, connect the operating context, and give people and agents one place to turn intent into outcomes.",
       "primary": "Start creating free",
       "secondary": "Explore all capabilities"
+    },
+    "method": {
+      "eyebrow": "How the work actually happens"
     }
   },
   "routeMarketing": {
@@ -18934,21 +19070,12 @@
     "foundationsLede": "Cross-cutting substrate. No single seat owns these — and notably, none of them is called “AI”: the model is the surface, not a department.",
     "foundationBadge": "Foundation",
     "arcBadge": "The arc",
-    "arcTitle": "Idea → Make → Run",
+    "arcTitle": "Idea to real, stage by stage",
     "arcLede": "The menu is not a list of departments. It is where you are in the journey, and every destination below sits in exactly one place.",
     "arcCol": {
       "stage": "Stage",
       "question": "The question",
       "where": "Where you go"
-    },
-    "arcQuestion": {
-      "idea": "What if?",
-      "make": "Build it.",
-      "run": "Run it as a company.",
-      "measure": "Is it working?",
-      "market": "Sell, buy, hire, be found.",
-      "expand": "Grow it.",
-      "admin": "Settings."
     },
     "arcNote": "Generated from the product’s own navigation, so this table cannot advertise a destination that does not exist or miss one that does.",
     "faqTitle": "Questions this raises",
@@ -18976,7 +19103,8 @@
     ],
     "closeTitle": "Ready to replace the stack?",
     "closeLede": "One platform instead of five, and one menu instead of seven. Start on the canvas; claim your company when you have one.",
-    "closeFine": "No credit card · your board is yours before you sign up · upgrade whenever"
+    "closeFine": "No credit card · your board is yours before you sign up · upgrade whenever",
+    "methodBadge": "The method"
   },
   "referencePanel": {
     "crumb": "{seat} · Reference",
@@ -19385,7 +19513,9 @@
       "course": "Course",
       "dataset": "Dataset",
       "tool": "Tool",
-      "creative": "Creative asset"
+      "creative": "Creative asset",
+      "book": "Book",
+      "survey": "Survey"
     },
     "launchVerb": {
       "play": "Play",
@@ -19440,5 +19570,213 @@
       "built": "built",
       "failed": "failed"
     }
+  },
+  "methodology": {
+    "eyebrow": "The method",
+    "title": "Idea to real",
+    "lede": "Four stages say where you are. Three acts say what you do. The middle act is the whole opinion: reading an idea is cheap, building is not, and choosing which proof is worth running is the most consequential decision in the first month of anything.",
+    "step": {
+      "read": {
+        "title": "Read",
+        "question": "What did you actually say?",
+        "body": "Paste an idea, a brief, an RFP or a contest — nothing needs cleaning up first. It comes back as a specification: what the thing has to do, which capabilities it names, and the limits the brief itself set. Reading writes nothing and builds nothing."
+      },
+      "prove": {
+        "title": "Prove",
+        "question": "Which question are you willing to spend money answering?",
+        "body": "Eight ways to make it real, ranked against your specification, cheapest first. Each leads with the question it answers and carries a kill condition — the number that would stop the project — set before it is built rather than after the result is in."
+      },
+      "build": {
+        "title": "Build",
+        "question": "Is it real, and where can I open it?",
+        "body": "The chosen proof is materialised: files on the canvas, endpoints live, tickets on the board, the site published, and an address you can send to somebody. Agents pick the build tickets up from there."
+      }
+    },
+    "spends": {
+      "yes": "Spends run budget",
+      "no": "Costs nothing"
+    },
+    "arcHead": "Where the three acts sit",
+    "arcQuestion": {
+      "idea": "What if?",
+      "make": "Build it.",
+      "run": "Run it as a company.",
+      "measure": "Is it working?",
+      "market": "Sell, buy, hire, be found.",
+      "expand": "Grow it.",
+      "admin": "Settings."
+    },
+    "arcNote": "Measure is what makes this a loop rather than a line: the kill condition set during Prove is graded there, and the answer goes back to Idea. A proof with no condition that could fail is a launch with extra steps.",
+    "proofsHead": "Eight ways to make it real",
+    "proofsLede": "Ordered the way the product orders them — cheapest first. The recommendation never opens with the whole system, because the expensive failure is not building the wrong thing slowly. It is building the right-looking thing before finding out whether anyone wanted it.",
+    "proofsNote": "Every option is always offered. This is advice about what to run first, not a filter — hiding an option would make it a verdict instead of a recommendation.",
+    "liveBadge": "Publishes an address",
+    "fidelity": "Fidelity",
+    "effort": "Effort",
+    "proof": {
+      "demo-video": {
+        "name": "Demo video",
+        "question": "Can you show me what this is?",
+        "summary": "A timed reel and a narration script, so a recordable 90-second demo exists today."
+      },
+      "clickable-prototype": {
+        "name": "Clickable prototype",
+        "question": "Can someone actually complete this without help?",
+        "summary": "An instrumented click-through of the flow, with no backend and no data."
+      },
+      "smoke-test": {
+        "name": "Smoke test",
+        "question": "Does anyone actually want this?",
+        "summary": "A fake-door landing page, a waitlist, and a demand console judged against a pre-set threshold."
+      },
+      "wizard-of-oz": {
+        "name": "Wizard of Oz",
+        "question": "Is the outcome worth paying for, before we can automate it?",
+        "summary": "A real front end with a human behind it, on an SLA clock, using the routes the built system will use."
+      },
+      "poc": {
+        "name": "Proof of concept",
+        "question": "Does the hard part actually work, reliably enough?",
+        "summary": "The riskiest step isolated behind a trial harness, with a pass rate judged against a pre-set bar."
+      },
+      "pilot": {
+        "name": "Pilot",
+        "question": "Does it hold up with real people, at a size we can survive being wrong at?",
+        "summary": "A bounded run with a named cohort, a weekly feedback loop and written exit criteria."
+      },
+      "phone-line": {
+        "name": "Phone line",
+        "question": "Can customers reach this by phone — and can it reach them?",
+        "summary": "An inbound number that answers and understands, plus an endpoint that places outbound calls."
+      },
+      "live-system": {
+        "name": "Live system",
+        "question": "Is it actually running, and can we operate it?",
+        "summary": "The whole system running at a real address, with an ops console and an on-call runbook."
+      }
+    },
+    "ctaRealize": "Make something real →",
+    "ctaCanvas": "Open the canvas"
+  },
+  "sell": {
+    "seo": {
+      "title": "Sell Builderforce — Referral & Sales Associate Program",
+      "description": "Join the Builderforce referral and sales associate program. Run outreach, manage leads, track goals and collaborate with Builderforce from one persistent sales canvas.",
+      "ogTitle": "Grow with Builderforce"
+    },
+    "hero": {
+      "eyebrow": "Referral & sales associate program",
+      "titleLine1": "Sell Builderforce.",
+      "titleLine2": "Build a pipeline you own.",
+      "lede": "Get the materials, the connected sales workspace and the direct support you need to introduce Builderforce to the right teams — and earn according to the referral and sales rates assigned to your program.",
+      "primaryCta": "Become a sales associate",
+      "secondaryCta": "Associate sign in",
+      "finePrint": "Program participation and commission eligibility are subject to approval and the terms shown in your account."
+    },
+    "heroPanel": {
+      "aria": "Sales associate workspace overview",
+      "status": "Sales workspace",
+      "title": "From revenue goal to next action",
+      "pipelineLabel": "Pipeline",
+      "pipelineValue": "Contacts → Won",
+      "goalsLabel": "Goals",
+      "goalsValue": "Weekly cadence",
+      "step1": "Target the right market",
+      "step2": "Launch coordinated outreach",
+      "step3": "Track signups and conversions",
+      "step4": "Improve with Builderforce coaching"
+    },
+    "pitch": {
+      "eyebrow": "What you are actually selling",
+      "title": "A method, not a feature list",
+      "body": "The hardest objection in this category is “we already have AI tools”. The answer is not a longer feature list — it is that Builderforce sells a way of working: read the idea, choose the cheapest proof that answers the real question, then build it. Prospects who have been burned by a six-month build they never validated understand that sentence immediately, and it is the same sentence the product itself puts on screen."
+    },
+    "capabilities": {
+      "eyebrow": "Your sales operating system",
+      "title": "Everything centered on a single canvas",
+      "intro": "This is more than a referral link. Your associate account brings the essential CRM, campaign, scheduling and coaching tools together so each action has context.",
+      "items": {
+        "canvas": {
+          "title": "One sales canvas",
+          "text": "Plan and execute sales and marketing work in one persistent, account-backed workspace that your team and Builderforce can collaborate in."
+        },
+        "crm": {
+          "title": "CRM & pipeline",
+          "text": "Upload contacts, organize lists, qualify leads, track stages, and see where every opportunity sits in your pipeline."
+        },
+        "targeting": {
+          "title": "Market targeting",
+          "text": "Define the markets and audiences you want to reach, then build focused campaigns around them."
+        },
+        "campaigns": {
+          "title": "Email campaigns",
+          "text": "Create outreach, organize follow-ups, and connect campaign activity to the contacts and opportunities it is meant to move."
+        },
+        "goals": {
+          "title": "Goals & coaching",
+          "text": "Set weekly activity and revenue goals, see the actions needed to close the gap, and request one-to-one guidance from Builderforce."
+        },
+        "meetings": {
+          "title": "Meetings & calendar",
+          "text": "Connect your calendar, schedule prospect meetings, and invite the Builderforce superadmin when you want support on a call."
+        }
+      }
+    },
+    "visibility": {
+      "eyebrow": "A program with visibility",
+      "title": "Know when your work turns into revenue",
+      "body": "Receive notifications when attributed users sign up and when they convert. Your dashboard connects activity, opportunities, referrals and earnings so you can focus on the next best action.",
+      "check1": "Signup and conversion notifications",
+      "check2": "Pricing-linked referral and sales rates",
+      "check3": "Revenue goals translated into pipeline targets",
+      "check4": "Direct meeting requests and deal support"
+    },
+    "materials": {
+      "eyebrow": "Sales toolkit",
+      "title": "Start with approved materials",
+      "intro": "Use these resources for prospecting and discovery. The public press and product deck remains available in the <media>Media Kit</media>.",
+      "download": "Download →",
+      "items": {
+        "discovery": {
+          "label": "GUIDE",
+          "title": "Sales discovery guide",
+          "text": "Qualification questions, impact prompts, and a practical next-step framework."
+        },
+        "outbound": {
+          "label": "PLAYBOOK",
+          "title": "Outbound email playbook",
+          "text": "A concise three-touch sequence with approved Builderforce positioning."
+        },
+        "contacts": {
+          "label": "CSV",
+          "title": "CRM contact template",
+          "text": "Import-ready fields for contacts, target markets, and pipeline stages."
+        }
+      }
+    },
+    "steps": {
+      "eyebrow": "How it works",
+      "one": {
+        "title": "Create your associate account",
+        "text": "Choose the Sales Associate account type and submit your program details."
+      },
+      "two": {
+        "title": "Set your market and revenue goal",
+        "text": "Build a pipeline plan around the audience and outcome you want to pursue."
+      },
+      "three": {
+        "title": "Run the work from your canvas",
+        "text": "Manage contacts, campaigns, meetings, follow-ups and coaching in one place."
+      }
+    },
+    "cta": {
+      "eyebrow": "Ready to start?",
+      "title": "Turn your network into a repeatable sales motion.",
+      "button": "Join the program"
+    }
+  },
+  "relatedArticles": {
+    "heading": "Related reading",
+    "subtitle": "Deeper dives from the Builderforce blog on the topics covered here."
   }
 }

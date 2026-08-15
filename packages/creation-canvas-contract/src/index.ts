@@ -9,6 +9,11 @@ export * from './people';
 export * from './dataScience';
 export * from './triggers';
 export * from './operations';
+// The counterparty vocabulary — `PARTY_ROLES`, `ACCOUNT_RELATIONSHIPS`, `partyRef`.
+// Declared in this package rather than in either consumer because the canvas `account`
+// kind, the API's `party_roles` writer and the kernel's own role column must mean the
+// same thing on purpose; see `parties.ts`.
+export * from './parties';
 // `export *` re-exports a binding; it does not bring it INTO scope here, and the
 // kind list below spreads it — without this import the whole contract module
 // throws `PEOPLE_OBJECT_KINDS is not defined` at import time, which takes every
@@ -133,6 +138,25 @@ export const FOUNDER_OBJECT_KINDS = [
   // company, which the governance vocabulary (SOC 2 controls, vendor registers) covers
   // for an enterprise and not at all for a new one.
   'contract',
+  // ── THE COUNTERPARTY ────────────────────────────────────────────────────────────
+  // An account you have WON, or a vendor you buy from — the ONE object every
+  // commercial reference on this board points at.
+  //
+  // WHY IT WAS MISSING, AND WHY THAT COST SOMETHING. `company` is US. `competitor` is
+  // THEM. `salesContact` is a person and `customerSegment` is a cohort; none of the
+  // four is an account. So `invoice.customer`, `bill.vendor`, `contract.counterparty`
+  // and `placement.client` were each told to "match it to a company, salesContact or
+  // contract on the board where one exists" — four fields matching four different
+  // typed strings, which means joining a contract to its invoices, its tickets and its
+  // renewal was a string comparison that a trailing "Ltd" broke.
+  //
+  // WHY IT IS NOT A NEW TABLE. `party_roles` in the kernel already holds exactly one
+  // row per (tenant, party kind, party ref, role) with a unique index proving it — the
+  // counterparty EXISTS and the canvas simply could not see it. A second customer store
+  // is the collision `finance_soc_controls` exists to record. So the kind carries a
+  // `partyRef`, and `parties.ts` declares the ref format and the role vocabulary that
+  // both sides resolve through.
+  'account',
 ] as const;
 
 export type FounderObjectKind = typeof FOUNDER_OBJECT_KINDS[number];
@@ -233,7 +257,7 @@ export function isHiringObjectKind(value: unknown): value is HiringObjectKind {
  * A kind belongs here when it is genuinely cross-domain. A kind that only looks generic
  * because nobody has written the second consumer yet belongs to its vocabulary.
  */
-export const SHARED_OBJECT_KINDS = ['funnel'] as const;
+export const SHARED_OBJECT_KINDS = ['funnel', 'book'] as const;
 
 export type SharedObjectKind = typeof SHARED_OBJECT_KINDS[number];
 

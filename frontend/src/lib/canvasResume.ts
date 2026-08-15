@@ -165,9 +165,54 @@ const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const stringValue = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
 const stringArray = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && !!item.trim()) : [];
 
-/** Retain the complete JSON Resume object, including extension fields Hired does not render. */
+/**
+ * Array sections of the JSON Resume schema. Used to RECOGNISE a résumé export among
+ * arbitrary JSON, which is the difference between a file becoming a rendered résumé
+ * and becoming a one-row dataset nothing can render (see {@link isJsonResume}).
+ */
+const JSON_RESUME_SECTIONS = ['work', 'volunteer', 'education', 'awards', 'certificates', 'publications', 'skills', 'languages', 'interests', 'references', 'projects'] as const;
+
+/**
+ * Lower-case the first character of every key, at every depth.
+ *
+ * Hired.VIDEO exports JSON Resume in PascalCase (`Basics.StartDate`) while the schema —
+ * and every reader in this file — is camelCase (`basics.startDate`). Without this the
+ * document parses, validates as "an object", and then renders BLANK, because not one
+ * field name matches. Identity on already-camelCase keys, so it is safe to run on any
+ * résumé document from any source rather than guessing which sources need it.
+ */
+function camelizeKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(camelizeKeys);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .map(([key, item]) => [key ? `${key[0]!.toLowerCase()}${key.slice(1)}` : key, camelizeKeys(item)]));
+}
+
+/**
+ * True for a parsed JSON Resume document, in any key casing.
+ *
+ * `basics` alone is not enough (plenty of API payloads have one), so a document
+ * qualifies on an identifiable `basics` object OR on two of the schema's array
+ * sections — the combination arbitrary JSON does not have by accident.
+ */
+export function isJsonResume(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = camelizeKeys(value) as Record<string, unknown>;
+  const basics = record.basics;
+  const namedBasics = !!basics && typeof basics === 'object' && !Array.isArray(basics)
+    && ['name', 'label', 'email', 'summary'].some((field) => typeof (basics as Record<string, unknown>)[field] === 'string');
+  const sections = JSON_RESUME_SECTIONS.filter((section) => Array.isArray(record[section])).length;
+  return namedBasics || sections >= 2;
+}
+
+/**
+ * Retain the complete JSON Resume object, including extension fields Hired does not
+ * render, normalised to the schema's camelCase key casing.
+ */
 export function resumeDocumentFromJson(value: unknown): CanvasResumeDocument | null {
-  return value && typeof value === 'object' && !Array.isArray(value) ? clone(value as CanvasResumeDocument) : null;
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? camelizeKeys(clone(value)) as CanvasResumeDocument
+    : null;
 }
 
 function dateRange(row: Record<string, unknown>): string {
@@ -283,16 +328,23 @@ export interface CanvasResumeFamily {
 
 const id = () => crypto.randomUUID();
 
-export function createResumeFamily(args: { title: string; markdown: string; document?: CanvasResumeDocument; sourceFile?: CanvasResumeRevision['sourceFile']; now?: string; idFactory?: () => string }): CanvasResumeFamily {
+export function createResumeFamily(args: { title: string; markdown: string; document?: CanvasResumeDocument; templateId?: ResumeTemplateId; sourceFile?: CanvasResumeRevision['sourceFile']; now?: string; idFactory?: () => string }): CanvasResumeFamily {
   const now = args.now ?? new Date().toISOString();
   const revisionId = (args.idFactory ?? id)();
+  // The template travels WITH the family it belongs to. It used to be hard-coded here
+  // and then re-stamped over the caller's choice by `resumeNodePatch`, so every résumé
+  // — imported, agent-authored, or fanned out by the template engine — rendered in
+  // hired-default no matter which template was asked for.
+  const templateId = RESUME_TEMPLATE_IDS.includes(args.templateId as ResumeTemplateId)
+    ? args.templateId as ResumeTemplateId
+    : 'hired-default';
   const original: CanvasResumeRevision = {
     id: revisionId,
     kind: 'original',
     title: args.title.trim(),
     markdown: args.markdown.trim(),
     ...(args.document ? { document: clone(args.document), structuredStale: false } : {}),
-    templateId: 'hired-default',
+    templateId,
     pageSize: 'a4',
     orientation: 'portrait',
     ...(args.sourceFile ? { sourceFile: clone(args.sourceFile) } : {}),
@@ -300,7 +352,7 @@ export function createResumeFamily(args: { title: string; markdown: string; docu
     createdAt: now,
     updatedAt: now,
   };
-  return { version: 1, privacy: 'private', archivedAt: null, watched: false, defaultTemplateId: 'hired-default', viewZoom: 75, previewMode: 'continuous', originalRevisionId: revisionId, activeRevisionId: revisionId, masterRevisionId: revisionId, revisions: [original] };
+  return { version: 1, privacy: 'private', archivedAt: null, watched: false, defaultTemplateId: templateId, viewZoom: 75, previewMode: 'continuous', originalRevisionId: revisionId, activeRevisionId: revisionId, masterRevisionId: revisionId, revisions: [original] };
 }
 
 export function activeResumeRevision(family: CanvasResumeFamily): CanvasResumeRevision {
@@ -514,6 +566,71 @@ export function initializeResumeFromPatch(title: string, patch: Partial<Creation
   delete persistedPatch.resumeDocument;
   return {
     ...persistedPatch,
-    ...resumeNodePatch(createResumeFamily({ title, markdown, ...(document ? { document } : {}) })),
+    ...resumeNodePatch(createResumeFamily({
+      title,
+      markdown,
+      ...(document ? { document } : {}),
+      ...(RESUME_TEMPLATE_IDS.includes(patch.templateId as ResumeTemplateId) ? { templateId: patch.templateId as ResumeTemplateId } : {}),
+    })),
   };
+}
+
+/**
+ * THE TEMPLATE ENGINE FAN-OUT: one résumé document, N presentations of it.
+ *
+ * Producing "ten versions in different styles" by asking a model to author ten
+ * résumés is the expensive way to get the wrong thing — ten separate generations,
+ * each free to drift from the person's actual history, and (measured 2026-08-15) a
+ * turn that stalled without finishing one. The content is already settled; only the
+ * PRESENTATION varies, and presentation is what {@link RESUME_TEMPLATES} describes.
+ * So the fan-out is a pure function over the document: no model, no round-trip, no
+ * opportunity to invent a job the person never had.
+ */
+export function resumeTemplateVariants(
+  document: CanvasResumeDocument,
+  templateIds: readonly ResumeTemplateId[],
+  options: { title?: string; now?: string; idFactory?: () => string } = {},
+): Array<{ templateId: ResumeTemplateId; industry: string; family: CanvasResumeFamily }> {
+  const markdown = renderResumeMarkdown(document);
+  const name = stringValue(options.title ?? document.basics?.name);
+  return templateIds.map((templateId) => {
+    const template = RESUME_TEMPLATES.find((item) => item.id === templateId) ?? RESUME_TEMPLATES[0]!;
+    return {
+      templateId: template.id,
+      industry: template.industry,
+      family: createResumeFamily({
+        title: name ? `${name} — ${template.industry}` : template.industry,
+        markdown,
+        document,
+        templateId: template.id,
+        ...(options.now ? { now: options.now } : {}),
+        ...(options.idFactory ? { idFactory: options.idFactory } : {}),
+      }),
+    };
+  });
+}
+
+/**
+ * The résumé document a canvas object holds, whatever kind of object it is.
+ *
+ * A JSON Resume file imported before {@link isJsonResume} existed is still sitting on
+ * boards as a one-row Dataset whose cells are JSON strings, so the fan-out reads BOTH
+ * shapes: it must work on the résumé the user already has, not only on one imported
+ * after this change.
+ */
+export function resumeDocumentFromNode(data: CreationNodeData): CanvasResumeDocument | null {
+  const family = resumeFamilyFromNode(data);
+  const revision = family ? activeResumeRevision(family) : null;
+  if (revision?.document) return clone(revision.document);
+  if (revision?.markdown.trim()) return resumeDocumentFromMarkdown(revision.markdown);
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const row = rows[0];
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+  // Dataset cells are stringified by the tabular importer; a section that survived as
+  // a real value is kept as-is rather than round-tripped through a failed parse.
+  const revived = Object.fromEntries(Object.entries(row as Record<string, unknown>).map(([key, cell]) => {
+    if (typeof cell !== 'string' || !/^\s*[[{]/.test(cell)) return [key, cell];
+    try { return [key, JSON.parse(cell) as unknown]; } catch { return [key, cell]; }
+  }));
+  return isJsonResume(revived) ? resumeDocumentFromJson(revived) : null;
 }

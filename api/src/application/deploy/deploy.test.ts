@@ -21,9 +21,9 @@ describe('deploy() registry', () => {
 
   it('maps each surface to its transport', () => {
     expect(deploy(base, 'workflow-node').transport).toBe('workflow-claim');
-    expect(deploy(base, 'ide').transport).toBe('ide-bridge');
+    expect(deploy(base, 'workspace').transport).toBe('workspace-bridge');
     expect(deploy(base, 'desktop').transport).toBe('desktop-bridge');
-    expect(deploy(base, 'ide').cloudDispatchable).toBe(false);
+    expect(deploy(base, 'workspace').cloudDispatchable).toBe(false);
   });
 
   it('keeps the engineId override seam for a future engine version', () => {
@@ -32,7 +32,7 @@ describe('deploy() registry', () => {
 
   it('rejects a surface the spec does not allow', () => {
     const restricted: AgentSpec = { ...base, surfaces: ['cloud-durable'] };
-    expect(() => deploy(restricted, 'ide')).toThrow(/not allowed/);
+    expect(() => deploy(restricted, 'workspace')).toThrow(/not allowed/);
     expect(deploy(restricted, 'cloud-durable').surface).toBe('cloud-durable');
   });
 });

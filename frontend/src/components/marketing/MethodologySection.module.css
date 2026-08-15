@@ -1,0 +1,377 @@
+/**
+ * MethodologySection — every colour is a token, so the four host pages carry it
+ * into both themes without a per-theme rule, and every track is fluid, so the
+ * proof grid reflows from four columns to one without a breakpoint.
+ *
+ * The component paints no page background of its own: each host band already
+ * owns one (`.mk-band` on /features, the section backgrounds on the other
+ * three), and a second one would fight it.
+ */
+
+.root {
+  display: grid;
+  gap: var(--space-6);
+  color: var(--text-primary);
+}
+
+/* ── Heading ─────────────────────────────────────────────────────────────── */
+.head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: var(--font-size-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--coral-bright);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.3rem, 3vw, 1.85rem);
+  font-weight: 750;
+  letter-spacing: -0.028em;
+  text-wrap: balance;
+  color: var(--text-primary);
+}
+
+.lede {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+/* ── The loop: Read → Prove → Build ──────────────────────────────────────── */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+}
+
+.step {
+  position: relative;
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-top: 3px solid var(--step-hue, var(--coral-bright));
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+}
+
+.stepTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.stepIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--step-hue, var(--coral-bright)) 14%, transparent);
+  color: var(--step-hue, var(--coral-bright));
+}
+
+.stepIndex {
+  font-size: var(--font-size-small);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.stepTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-card-title);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.stepQuestion {
+  margin: 0;
+  font-style: italic;
+  color: var(--step-hue, var(--coral-bright));
+  line-height: 1.5;
+}
+
+.stepBody {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.stepCost {
+  justify-self: start;
+  margin-top: var(--space-1);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+}
+
+.stepCost[data-spends='false'] {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+/* ── The arc the loop sits inside ────────────────────────────────────────── */
+.arc {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card-strong);
+}
+
+.arcHead {
+  margin: 0;
+  font-size: var(--font-size-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.arcRow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+}
+
+.arcStage {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--step-hue, var(--coral-bright)) 8%, transparent);
+}
+
+.arcStage strong {
+  font-family: var(--font-display);
+  font-size: var(--font-size-card-title);
+  color: var(--text-primary);
+}
+
+.arcStage em {
+  font-style: normal;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+/* Measure is where the proof's kill condition is graded, which is what makes the
+   arc a loop rather than a line. It gets the dashed edge so the closing step is
+   visible without a sentence explaining it. */
+.arcStage[data-closes='true'] {
+  outline: 1px dashed color-mix(in srgb, var(--step-hue, var(--coral-bright)) 55%, transparent);
+  outline-offset: -1px;
+}
+
+.arcDot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--step-hue, var(--coral-bright));
+}
+
+.arcNote {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* ── The eight proof forms ───────────────────────────────────────────────── */
+.proofs {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.proofsHead {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-card-title);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.proofsLede,
+.proofsNote {
+  margin: 0;
+  max-width: 72ch;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.proofsNote {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.proofGrid {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
+}
+
+.proof {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+}
+
+.proofTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.proofTop strong {
+  font-family: var(--font-display);
+  font-size: var(--font-size-card-title);
+  color: var(--text-primary);
+}
+
+.proofLive {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-accent);
+  background: var(--surface-coral-soft);
+  color: var(--coral-bright);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.proofQuestion {
+  margin: 0;
+  font-size: var(--font-size-small);
+  font-style: italic;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.proofSummary {
+  margin: 0;
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.proofMeters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-1);
+}
+
+.meter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-eyebrow);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.meterLabel {
+  font-weight: 600;
+}
+
+.meterDots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.meterDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--border-subtle);
+}
+
+.meterDot[data-on='true'] {
+  background: var(--coral-bright);
+}
+
+/* ── Close ───────────────────────────────────────────────────────────────── */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: center;
+}
+
+.cta,
+.ctaGhost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 11px 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: var(--font-size-body);
+  text-decoration: none;
+  transition: filter 0.18s ease;
+}
+
+.cta {
+  background: var(--coral-bright);
+  color: var(--text-on-accent);
+}
+
+.cta:hover {
+  filter: brightness(1.06);
+}
+
+.ctaGhost {
+  background: transparent;
+  border-color: var(--border-accent);
+  color: var(--coral-bright);
+}
+
+.ctaGhost:hover {
+  background: var(--surface-coral-soft);
+}

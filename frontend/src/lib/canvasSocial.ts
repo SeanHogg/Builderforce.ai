@@ -28,6 +28,48 @@ export function isSocialNetworkName(value: unknown): value is SocialNetwork {
   return typeof value === 'string' && (SOCIAL_NETWORKS as readonly string[]).includes(value);
 }
 
+/**
+ * The three social kinds a model must never author by hand, and the tool for each.
+ *
+ * ── THE DEFECT THIS EXISTS TO STOP ───────────────────────────────────────────────
+ * Every field on these kinds is READ from somewhere: a feed's posts and engagement come
+ * from the networks, a pinned post is one item lifted out of a feed, and a campaign's
+ * `campaignId`, `posts`, `publishedCount` and `failedCount` are the server's publish
+ * ledger. So `canvas_add_object` cannot produce a real one, and the generic empty-shell
+ * guard — which asks for "the authored content in fields" and lists whatever the kind
+ * declares — asks for the wrong thing here.
+ *
+ * Measured 2026-08-15 (ui 2026.8.17): a `socialCampaign` add was refused with "send the
+ * authored content in fields: content, campaignId, body, linkUrl, mediaUrls, variants,
+ * targets, posts, publishedCount, failedCount, blockers". Four of those eleven are a
+ * publish ledger; the only honest way to satisfy that refusal is to invent a campaign id
+ * and a count of posts that were never published. The model did not try again, and the
+ * turn ended with an empty board.
+ *
+ * `socialFeed` and `socialPost` fail more quietly and no less badly — they are in
+ * SHELL_IS_LEGITIMATE (a person drags an empty feed out of the palette and connects it),
+ * so an authored one is ACCEPTED and lands as a permanently blank tile.
+ *
+ * Same shape and same reasoning as `canvasImageToolRedirect`: name the tool that would
+ * actually work, rather than describing a schema the request can never satisfy.
+ */
+const SOCIAL_AUTHORING_REDIRECT: Readonly<Record<string, string>> = {
+  socialFeed: 'canvas_add_social_feed',
+  socialPost: 'canvas_pin_social_post',
+  socialCampaign: 'canvas_create_social_campaign',
+};
+
+/** Why an authored patch for this kind must go through a social tool, or null when the
+ *  kind is not one of the connected-account kinds. */
+export function canvasSocialToolRedirect(kind: string): string | null {
+  const tool = SOCIAL_AUTHORING_REDIRECT[kind];
+  if (!tool) return null;
+  const what = kind === 'socialCampaign'
+    ? 'A socialCampaign is bound to a real campaign on the server — its campaign id, its per-account posts and its published/failed counts are a publish ledger, not text anyone can write.'
+    : 'A socialFeed and a socialPost hold what the connected accounts actually published — real posts, real engagement — which cannot be authored without inventing them.';
+  return `${what} Call ${tool} instead: it reads the workspace's connected X, LinkedIn, Facebook, Instagram and TikTok accounts and puts the real object on the board. If no account is connected yet, ${tool} says so and names where to connect one — relay that rather than authoring a placeholder. Never create a "${kind}" with canvas_add_object.`;
+}
+
 /** The compact per-post shape stored on a tile and returned to the model. */
 export interface SocialPostProjection {
   id: string;

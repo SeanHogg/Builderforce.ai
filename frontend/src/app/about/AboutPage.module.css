@@ -29,6 +29,10 @@
 .thesis h2, .sectionHeader h2, .story h2, .trust h2, .cta h2 { margin: 0; font-family: var(--font-display); font-size: var(--font-size-page-title); line-height: 1.04; letter-spacing: -.035em; }
 .thesis div p { max-width: 760px; margin: 24px 0 0; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.8; }
 .promises, .system, .principles { max-width: var(--marketing-max); margin: 0 auto; padding: 96px var(--marketing-gutter); }
+/* The method band. It only supplies the column and the rhythm — <MethodologySection>
+   brings its own cards, hues and heading, so this page cannot restyle the method
+   into looking like a different method than the other three pages show. */
+.method { max-width: var(--marketing-max); margin: 0 auto; padding: 96px var(--marketing-gutter); }
 .sectionHeader { max-width: 760px; margin-bottom: 48px; }
 .principles .sectionHeader { max-width: none; }
 .sectionHeader > p:last-child { margin: 20px 0 0; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.7; }
@@ -72,4 +76,4 @@
 .cta .actions { justify-content: center; }
 .cta .secondaryButton { color: inherit; background: transparent; border-color: color-mix(in srgb, currentColor 22%, transparent); }
 @media (max-width: 940px) { .hero { grid-template-columns: 1fr; padding-top: 64px; }.systemVisual { min-height: 440px; }.thesis, .story { grid-template-columns: 1fr; gap: 30px; }.promiseGrid, .domainGrid { grid-template-columns: repeat(2, 1fr); }.storyCopy { padding-left: 0; border-left: 0; }.trust { align-items: flex-start; flex-direction: column; } }
-@media (max-width: 620px) { .hero { padding-inline: 18px; }.hero h1 { font-size: var(--font-size-hero); }.metrics { justify-content: space-between; }.metrics div { min-width: 0; padding-right: 12px; }.systemVisual { min-height: 390px; border-radius: var(--radius-xl); }.orbit { width: 250px; height: 250px; }.core { width: 142px; height: 142px; }.satellite { max-width: 135px; padding: 9px; font-size: var(--font-size-eyebrow); }.satelliteProduct { left: 4%; }.satelliteFinance { right: 3%; }.satelliteGrowth { left: 3%; }.satelliteSecurity { right: 2%; }.promises, .system, .principles { padding: 72px 18px; }.promiseGrid, .domainGrid, .foundationGrid, .principleGrid { grid-template-columns: 1fr; }.thesis, .story { padding-block: 72px; }.trust { margin: 0 18px 72px; padding: 30px; }.domainCard { min-height: 96px; } }
+@media (max-width: 620px) { .hero { padding-inline: 18px; }.hero h1 { font-size: var(--font-size-hero); }.metrics { justify-content: space-between; }.metrics div { min-width: 0; padding-right: 12px; }.systemVisual { min-height: 390px; border-radius: var(--radius-xl); }.orbit { width: 250px; height: 250px; }.core { width: 142px; height: 142px; }.satellite { max-width: 135px; padding: 9px; font-size: var(--font-size-eyebrow); }.satelliteProduct { left: 4%; }.satelliteFinance { right: 3%; }.satelliteGrowth { left: 3%; }.satelliteSecurity { right: 2%; }.promises, .system, .principles, .method { padding: 72px 18px; }.promiseGrid, .domainGrid, .foundationGrid, .principleGrid { grid-template-columns: 1fr; }.thesis, .story { padding-block: 72px; }.trust { margin: 0 18px 72px; padding: 30px; }.domainCard { min-height: 96px; } }

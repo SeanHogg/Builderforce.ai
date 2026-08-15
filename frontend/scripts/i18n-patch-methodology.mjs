@@ -1,0 +1,905 @@
+// "Idea to Real" — the methodology, rendered by <MethodologySection> on
+// /features, /about, /pricing and /sell-builderforce, plus the full
+// localization of /sell-builderforce (which had shipped hardcoded English).
+//
+// The eight proof forms' `name` / `question` / `summary` are the API's own
+// strings (api/src/application/realization/targets/*); scripts/check-methodology.mjs
+// asserts the English copy here still matches them.
+//
+// Usage: node scripts/i18n-merge.mjs scripts/i18n-patch-methodology.mjs
+export const PATCHES = {
+  en: {
+    methodology: {
+      eyebrow: 'The method',
+      title: 'Idea to real',
+      lede: 'Four stages say where you are. Three acts say what you do. The middle act is the whole opinion: reading an idea is cheap, building is not, and choosing which proof is worth running is the most consequential decision in the first month of anything.',
+      step: {
+        read: {
+          title: 'Read',
+          question: 'What did you actually say?',
+          body: 'Paste an idea, a brief, an RFP or a contest — nothing needs cleaning up first. It comes back as a specification: what the thing has to do, which capabilities it names, and the limits the brief itself set. Reading writes nothing and builds nothing.',
+        },
+        prove: {
+          title: 'Prove',
+          question: 'Which question are you willing to spend money answering?',
+          body: 'Eight ways to make it real, ranked against your specification, cheapest first. Each leads with the question it answers and carries a kill condition — the number that would stop the project — set before it is built rather than after the result is in.',
+        },
+        build: {
+          title: 'Build',
+          question: 'Is it real, and where can I open it?',
+          body: 'The chosen proof is materialised: files on the canvas, endpoints live, tickets on the board, the site published, and an address you can send to somebody. Agents pick the build tickets up from there.',
+        },
+      },
+      spends: {
+        yes: 'Spends run budget',
+        no: 'Costs nothing',
+      },
+      arcHead: 'Where the three acts sit',
+      arcQuestion: {
+        idea: 'What if?',
+        make: 'Build it.',
+        run: 'Run it as a company.',
+        measure: 'Is it working?',
+        market: 'Sell, buy, hire, be found.',
+        expand: 'Grow it.',
+        admin: 'Settings.',
+      },
+      arcNote: 'Measure is what makes this a loop rather than a line: the kill condition set during Prove is graded there, and the answer goes back to Idea. A proof with no condition that could fail is a launch with extra steps.',
+      proofsHead: 'Eight ways to make it real',
+      proofsLede: 'Ordered the way the product orders them — cheapest first. The recommendation never opens with the whole system, because the expensive failure is not building the wrong thing slowly. It is building the right-looking thing before finding out whether anyone wanted it.',
+      proofsNote: 'Every option is always offered. This is advice about what to run first, not a filter — hiding an option would make it a verdict instead of a recommendation.',
+      liveBadge: 'Publishes an address',
+      fidelity: 'Fidelity',
+      effort: 'Effort',
+      proof: {
+        'demo-video': {
+          name: 'Demo video',
+          question: 'Can you show me what this is?',
+          summary: 'A timed reel and a narration script, so a recordable 90-second demo exists today.',
+        },
+        'clickable-prototype': {
+          name: 'Clickable prototype',
+          question: 'Can someone actually complete this without help?',
+          summary: 'An instrumented click-through of the flow, with no backend and no data.',
+        },
+        'smoke-test': {
+          name: 'Smoke test',
+          question: 'Does anyone actually want this?',
+          summary: 'A fake-door landing page, a waitlist, and a demand console judged against a pre-set threshold.',
+        },
+        'wizard-of-oz': {
+          name: 'Wizard of Oz',
+          question: 'Is the outcome worth paying for, before we can automate it?',
+          summary: 'A real front end with a human behind it, on an SLA clock, using the routes the built system will use.',
+        },
+        poc: {
+          name: 'Proof of concept',
+          question: 'Does the hard part actually work, reliably enough?',
+          summary: 'The riskiest step isolated behind a trial harness, with a pass rate judged against a pre-set bar.',
+        },
+        pilot: {
+          name: 'Pilot',
+          question: 'Does it hold up with real people, at a size we can survive being wrong at?',
+          summary: 'A bounded run with a named cohort, a weekly feedback loop and written exit criteria.',
+        },
+        'phone-line': {
+          name: 'Phone line',
+          question: 'Can customers reach this by phone — and can it reach them?',
+          summary: 'An inbound number that answers and understands, plus an endpoint that places outbound calls.',
+        },
+        'live-system': {
+          name: 'Live system',
+          question: 'Is it actually running, and can we operate it?',
+          summary: 'The whole system running at a real address, with an ops console and an on-call runbook.',
+        },
+      },
+      ctaRealize: 'Make something real →',
+      ctaCanvas: 'Open the canvas',
+    },
+    sell: {
+      seo: {
+        title: 'Sell Builderforce — Referral & Sales Associate Program',
+        description: 'Join the Builderforce referral and sales associate program. Run outreach, manage leads, track goals and collaborate with Builderforce from one persistent sales canvas.',
+        ogTitle: 'Grow with Builderforce',
+      },
+      hero: {
+        eyebrow: 'Referral & sales associate program',
+        titleLine1: 'Sell Builderforce.',
+        titleLine2: 'Build a pipeline you own.',
+        lede: 'Get the materials, the connected sales workspace and the direct support you need to introduce Builderforce to the right teams — and earn according to the referral and sales rates assigned to your program.',
+        primaryCta: 'Become a sales associate',
+        secondaryCta: 'Associate sign in',
+        finePrint: 'Program participation and commission eligibility are subject to approval and the terms shown in your account.',
+      },
+      heroPanel: {
+        aria: 'Sales associate workspace overview',
+        status: 'Sales workspace',
+        title: 'From revenue goal to next action',
+        pipelineLabel: 'Pipeline',
+        pipelineValue: 'Contacts → Won',
+        goalsLabel: 'Goals',
+        goalsValue: 'Weekly cadence',
+        step1: 'Target the right market',
+        step2: 'Launch coordinated outreach',
+        step3: 'Track signups and conversions',
+        step4: 'Improve with Builderforce coaching',
+      },
+      pitch: {
+        eyebrow: 'What you are actually selling',
+        title: 'A method, not a feature list',
+        body: 'The hardest objection in this category is “we already have AI tools”. The answer is not a longer feature list — it is that Builderforce sells a way of working: read the idea, choose the cheapest proof that answers the real question, then build it. Prospects who have been burned by a six-month build they never validated understand that sentence immediately, and it is the same sentence the product itself puts on screen.',
+      },
+      capabilities: {
+        eyebrow: 'Your sales operating system',
+        title: 'Everything centered on a single canvas',
+        intro: 'This is more than a referral link. Your associate account brings the essential CRM, campaign, scheduling and coaching tools together so each action has context.',
+        items: {
+          canvas: { title: 'One sales canvas', text: 'Plan and execute sales and marketing work in one persistent, account-backed workspace that your team and Builderforce can collaborate in.' },
+          crm: { title: 'CRM & pipeline', text: 'Upload contacts, organize lists, qualify leads, track stages, and see where every opportunity sits in your pipeline.' },
+          targeting: { title: 'Market targeting', text: 'Define the markets and audiences you want to reach, then build focused campaigns around them.' },
+          campaigns: { title: 'Email campaigns', text: 'Create outreach, organize follow-ups, and connect campaign activity to the contacts and opportunities it is meant to move.' },
+          goals: { title: 'Goals & coaching', text: 'Set weekly activity and revenue goals, see the actions needed to close the gap, and request one-to-one guidance from Builderforce.' },
+          meetings: { title: 'Meetings & calendar', text: 'Connect your calendar, schedule prospect meetings, and invite the Builderforce superadmin when you want support on a call.' },
+        },
+      },
+      visibility: {
+        eyebrow: 'A program with visibility',
+        title: 'Know when your work turns into revenue',
+        body: 'Receive notifications when attributed users sign up and when they convert. Your dashboard connects activity, opportunities, referrals and earnings so you can focus on the next best action.',
+        check1: 'Signup and conversion notifications',
+        check2: 'Pricing-linked referral and sales rates',
+        check3: 'Revenue goals translated into pipeline targets',
+        check4: 'Direct meeting requests and deal support',
+      },
+      materials: {
+        eyebrow: 'Sales toolkit',
+        title: 'Start with approved materials',
+        intro: 'Use these resources for prospecting and discovery. The public press and product deck remains available in the <media>Media Kit</media>.',
+        download: 'Download →',
+        items: {
+          discovery: { label: 'GUIDE', title: 'Sales discovery guide', text: 'Qualification questions, impact prompts, and a practical next-step framework.' },
+          outbound: { label: 'PLAYBOOK', title: 'Outbound email playbook', text: 'A concise three-touch sequence with approved Builderforce positioning.' },
+          contacts: { label: 'CSV', title: 'CRM contact template', text: 'Import-ready fields for contacts, target markets, and pipeline stages.' },
+        },
+      },
+      steps: {
+        eyebrow: 'How it works',
+        one: { title: 'Create your associate account', text: 'Choose the Sales Associate account type and submit your program details.' },
+        two: { title: 'Set your market and revenue goal', text: 'Build a pipeline plan around the audience and outcome you want to pursue.' },
+        three: { title: 'Run the work from your canvas', text: 'Manage contacts, campaigns, meetings, follow-ups and coaching in one place.' },
+      },
+      cta: {
+        eyebrow: 'Ready to start?',
+        title: 'Turn your network into a repeatable sales motion.',
+        button: 'Join the program',
+      },
+    },
+    about: {
+      method: {
+        eyebrow: 'How the work actually happens',
+      },
+    },
+    pricing: {
+      methodNote: 'Reading an idea and choosing a proof are free on every plan. Only building spends run budget — which is the point: the two acts that decide whether the expensive one is worth doing cost nothing.',
+    },
+    featuresPage: {
+      methodBadge: 'The method',
+    },
+  },
+
+  zh: {
+    methodology: {
+      eyebrow: '方法论',
+      title: '从想法到真实',
+      lede: '四个阶段告诉你身在何处，三个动作告诉你该做什么。中间那个动作才是全部主张：读懂一个想法很便宜，构建则不然，而选择值得投入的验证方式，是任何事情头一个月里最关键的决定。',
+      step: {
+        read: {
+          title: '读取',
+          question: '你到底说了什么？',
+          body: '粘贴一个想法、一份简报、一份招标书或一场竞赛——无需事先整理。它会返回一份规格说明：这个东西要做什么、涉及哪些能力，以及简报本身设定的限制。读取既不写入任何内容，也不构建任何东西。',
+        },
+        prove: {
+          title: '验证',
+          question: '你愿意花钱回答哪一个问题？',
+          body: '八种把想法变成真实的方式，依据你的规格说明排序，最便宜的排在前面。每一种都先摆出它所回答的问题，并带有一个终止条件——那个会让项目停下来的数字——在构建之前就设定好，而不是等结果出来之后。',
+        },
+        build: {
+          title: '构建',
+          question: '它是真的吗？我可以在哪里打开它？',
+          body: '选定的验证方式被具体实现：画布上的文件、上线的接口、看板上的工单、已发布的站点，以及一个你可以发给别人的地址。智能体从这里接手构建工单。',
+        },
+      },
+      spends: {
+        yes: '消耗运行预算',
+        no: '不产生费用',
+      },
+      arcHead: '这三个动作所处的位置',
+      arcQuestion: {
+        idea: '如果……会怎样？',
+        make: '把它做出来。',
+        run: '像一家公司那样运营它。',
+        measure: '它有效吗？',
+        market: '销售、采购、招聘、被找到。',
+        expand: '让它成长。',
+        admin: '设置。',
+      },
+      arcNote: '"衡量"正是让这条弧线成为闭环而非直线的原因：在"验证"阶段设定的终止条件会在这里被评判，答案再回到"想法"。一个没有可能失败条件的验证，不过是多了几个步骤的发布。',
+      proofsHead: '让想法成真的八种方式',
+      proofsLede: '排序方式与产品内部一致——最便宜的优先。推荐从不以完整系统开场，因为代价最高的失败不是慢慢地做错东西，而是在弄清是否有人想要之前，就把看起来正确的东西做了出来。',
+      proofsNote: '所有选项始终都会呈现。这是关于"先做什么"的建议，而不是过滤器——隐藏选项会把建议变成裁决。',
+      liveBadge: '发布一个地址',
+      fidelity: '保真度',
+      effort: '投入',
+      proof: {
+        'demo-video': {
+          name: '演示视频',
+          question: '你能让我看看这是什么吗？',
+          summary: '一段计时短片和一份旁白脚本，让一段可录制的 90 秒演示今天就能存在。',
+        },
+        'clickable-prototype': {
+          name: '可点击原型',
+          question: '有人能在无人帮助下真正完成这个流程吗？',
+          summary: '一个带埋点的流程点击演示，没有后端，也没有数据。',
+        },
+        'smoke-test': {
+          name: '烟雾测试',
+          question: '真的有人想要这个吗？',
+          summary: '一个"假门"落地页、一份等待名单，以及一个按预设阈值评判的需求控制台。',
+        },
+        'wizard-of-oz': {
+          name: '绿野仙踪法',
+          question: '在能够自动化之前，这个结果值得付费吗？',
+          summary: '一个真实的前端，背后由人工支撑，带 SLA 计时，走的是最终系统将要使用的同一批路由。',
+        },
+        poc: {
+          name: '概念验证',
+          question: '最难的那部分真的能可靠地跑通吗？',
+          summary: '把风险最高的环节隔离到一套试验框架中，用通过率对照预设标准进行评判。',
+        },
+        pilot: {
+          name: '试点',
+          question: '面对真实用户它站得住吗？规模是否小到即使判断错误也承受得起？',
+          summary: '一次有边界的运行，配合指定的用户群、每周反馈循环和书面退出标准。',
+        },
+        'phone-line': {
+          name: '电话线路',
+          question: '客户能通过电话找到它吗——它又能主动联系客户吗？',
+          summary: '一个会接听并能理解的来电号码，外加一个可发起外呼的接口。',
+        },
+        'live-system': {
+          name: '上线系统',
+          question: '它真的在运行吗？我们运维得了吗？',
+          summary: '整套系统运行在真实地址上，配有运维控制台和值班手册。',
+        },
+      },
+      ctaRealize: '让它成真 →',
+      ctaCanvas: '打开画布',
+    },
+    sell: {
+      seo: {
+        title: '销售 Builderforce — 推荐与销售伙伴计划',
+        description: '加入 Builderforce 推荐与销售伙伴计划。在一块持久的销售画布上开展外联、管理线索、追踪目标，并与 Builderforce 协作。',
+        ogTitle: '与 Builderforce 一同成长',
+      },
+      hero: {
+        eyebrow: '推荐与销售伙伴计划',
+        titleLine1: '销售 Builderforce。',
+        titleLine2: '打造属于你自己的管道。',
+        lede: '获取资料、互联的销售工作区，以及把 Builderforce 介绍给对的团队所需的直接支持——并按照你所在计划设定的推荐与销售费率获得收入。',
+        primaryCta: '成为销售伙伴',
+        secondaryCta: '伙伴登录',
+        finePrint: '计划参与资格与佣金资格须经审核，并以你账户中显示的条款为准。',
+      },
+      heroPanel: {
+        aria: '销售伙伴工作区概览',
+        status: '销售工作区',
+        title: '从收入目标到下一步行动',
+        pipelineLabel: '管道',
+        pipelineValue: '联系人 → 成交',
+        goalsLabel: '目标',
+        goalsValue: '每周节奏',
+        step1: '瞄准正确的市场',
+        step2: '发起协同外联',
+        step3: '追踪注册与转化',
+        step4: '在 Builderforce 辅导下持续改进',
+      },
+      pitch: {
+        eyebrow: '你真正在销售的东西',
+        title: '一套方法，而不是一份功能清单',
+        body: '这个领域最难应对的异议是"我们已经有 AI 工具了"。答案不是更长的功能清单，而是 Builderforce 销售的是一种工作方式：读懂想法，选择能回答真正问题的最便宜验证方式，然后再构建。那些曾被一个从未验证过、耗时半年的项目伤过的客户，会立刻理解这句话——而产品本身在屏幕上呈现的正是同一句话。',
+      },
+      capabilities: {
+        eyebrow: '你的销售操作系统',
+        title: '一切都围绕一块画布',
+        intro: '这不只是一个推荐链接。你的伙伴账户把必要的 CRM、营销活动、日程与辅导工具整合在一起，让每个动作都有上下文。',
+        items: {
+          canvas: { title: '一块销售画布', text: '在一个持久的、有账户支撑的工作区中规划并执行销售与营销工作，你的团队和 Builderforce 都可以在其中协作。' },
+          crm: { title: 'CRM 与管道', text: '上传联系人、整理名单、甄别线索、追踪阶段，并了解每个商机在管道中的位置。' },
+          targeting: { title: '市场定位', text: '定义你想触达的市场与受众，然后围绕它们构建有针对性的营销活动。' },
+          campaigns: { title: '邮件营销', text: '创建外联内容、组织跟进，并把营销活动与它意在推动的联系人和商机关联起来。' },
+          goals: { title: '目标与辅导', text: '设定每周的活动与收入目标，看清弥补差距所需的行动，并向 Builderforce 申请一对一指导。' },
+          meetings: { title: '会议与日历', text: '连接你的日历，安排潜客会议，并在需要通话支持时邀请 Builderforce 超级管理员参加。' },
+        },
+      },
+      visibility: {
+        eyebrow: '一个透明可见的计划',
+        title: '知道你的工作何时变成收入',
+        body: '当归属于你的用户注册和转化时，你会收到通知。你的仪表盘把活动、商机、推荐与收益连接起来，让你可以专注于下一个最佳行动。',
+        check1: '注册与转化通知',
+        check2: '与定价挂钩的推荐与销售费率',
+        check3: '把收入目标转换为管道指标',
+        check4: '直接的会议邀约与交易支持',
+      },
+      materials: {
+        eyebrow: '销售工具包',
+        title: '从经过审核的资料开始',
+        intro: '把这些资源用于开发客户与需求挖掘。公开的媒体与产品资料仍可在<media>媒体资料包</media>中获取。',
+        download: '下载 →',
+        items: {
+          discovery: { label: '指南', title: '销售需求挖掘指南', text: '甄别问题、影响力提问，以及一套可落地的下一步框架。' },
+          outbound: { label: '手册', title: '外呼邮件手册', text: '一套简洁的三次触达序列，采用经过审核的 Builderforce 定位话术。' },
+          contacts: { label: 'CSV', title: 'CRM 联系人模板', text: '可直接导入的字段，涵盖联系人、目标市场与管道阶段。' },
+        },
+      },
+      steps: {
+        eyebrow: '运作方式',
+        one: { title: '创建你的伙伴账户', text: '选择"销售伙伴"账户类型并提交你的计划信息。' },
+        two: { title: '设定你的市场与收入目标', text: '围绕你想争取的受众与结果制定管道计划。' },
+        three: { title: '在你的画布上开展工作', text: '在一个地方管理联系人、营销活动、会议、跟进与辅导。' },
+      },
+      cta: {
+        eyebrow: '准备好开始了吗？',
+        title: '把你的人脉变成可复制的销售动作。',
+        button: '加入计划',
+      },
+    },
+    about: {
+      method: {
+        eyebrow: '工作实际是怎样发生的',
+      },
+    },
+    pricing: {
+      methodNote: '在所有套餐中，读取想法与选择验证方式都是免费的。只有构建才会消耗运行预算——这正是重点：决定那件昂贵的事是否值得做的两个动作，本身不花钱。',
+    },
+    featuresPage: {
+      methodBadge: '方法论',
+    },
+  },
+
+  es: {
+    methodology: {
+      eyebrow: 'El método',
+      title: 'De la idea a algo real',
+      lede: 'Cuatro etapas dicen dónde estás. Tres actos dicen qué haces. El acto intermedio es toda la opinión: leer una idea es barato, construirla no lo es, y elegir qué prueba merece la pena ejecutar es la decisión más consecuente del primer mes de cualquier proyecto.',
+      step: {
+        read: {
+          title: 'Leer',
+          question: '¿Qué dijiste realmente?',
+          body: 'Pega una idea, un briefing, un pliego o las bases de un concurso: no hace falta ordenarlo antes. Vuelve como una especificación: qué tiene que hacer, qué capacidades nombra y los límites que el propio briefing fijó. Leer no escribe nada ni construye nada.',
+        },
+        prove: {
+          title: 'Probar',
+          question: '¿Qué pregunta estás dispuesto a pagar por responder?',
+          body: 'Ocho formas de hacerlo real, ordenadas frente a tu especificación, de la más barata a la más cara. Cada una encabeza con la pregunta que responde y lleva una condición de parada —el número que detendría el proyecto— fijada antes de construir, no después de ver el resultado.',
+        },
+        build: {
+          title: 'Construir',
+          question: '¿Es real y dónde puedo abrirlo?',
+          body: 'La prueba elegida se materializa: archivos en el lienzo, endpoints en marcha, tickets en el tablero, el sitio publicado y una dirección que puedes enviar a alguien. Los agentes recogen desde ahí los tickets de construcción.',
+        },
+      },
+      spends: {
+        yes: 'Consume presupuesto de ejecución',
+        no: 'No cuesta nada',
+      },
+      arcHead: 'Dónde encajan los tres actos',
+      arcQuestion: {
+        idea: '¿Y si…?',
+        make: 'Constrúyelo.',
+        run: 'Opéralo como una empresa.',
+        measure: '¿Está funcionando?',
+        market: 'Vende, compra, contrata, hazte encontrar.',
+        expand: 'Hazlo crecer.',
+        admin: 'Ajustes.',
+      },
+      arcNote: 'Medir es lo que convierte esto en un bucle y no en una línea: la condición de parada fijada al Probar se evalúa ahí, y la respuesta vuelve a Idea. Una prueba sin una condición que pueda fallar es un lanzamiento con pasos de más.',
+      proofsHead: 'Ocho formas de hacerlo real',
+      proofsLede: 'Ordenadas como las ordena el producto: primero las más baratas. La recomendación nunca abre con el sistema completo, porque el fallo caro no es construir lo equivocado despacio. Es construir algo que parece correcto antes de averiguar si alguien lo quería.',
+      proofsNote: 'Todas las opciones se ofrecen siempre. Esto es un consejo sobre qué ejecutar primero, no un filtro: ocultar una opción lo convertiría en un veredicto en vez de una recomendación.',
+      liveBadge: 'Publica una dirección',
+      fidelity: 'Fidelidad',
+      effort: 'Esfuerzo',
+      proof: {
+        'demo-video': {
+          name: 'Vídeo demo',
+          question: '¿Puedes enseñarme qué es esto?',
+          summary: 'Un montaje cronometrado y un guion de narración, para que hoy mismo exista una demo grabable de 90 segundos.',
+        },
+        'clickable-prototype': {
+          name: 'Prototipo clicable',
+          question: '¿Alguien puede completar esto sin ayuda?',
+          summary: 'Un recorrido clicable del flujo, instrumentado, sin backend y sin datos.',
+        },
+        'smoke-test': {
+          name: 'Prueba de humo',
+          question: '¿Alguien quiere esto de verdad?',
+          summary: 'Una landing de puerta falsa, una lista de espera y una consola de demanda evaluada frente a un umbral fijado de antemano.',
+        },
+        'wizard-of-oz': {
+          name: 'Mago de Oz',
+          question: '¿Vale la pena pagar por el resultado antes de poder automatizarlo?',
+          summary: 'Un front end real con una persona detrás, con reloj de SLA, usando las mismas rutas que usará el sistema construido.',
+        },
+        poc: {
+          name: 'Prueba de concepto',
+          question: '¿La parte difícil funciona de verdad, con suficiente fiabilidad?',
+          summary: 'El paso más arriesgado aislado tras un banco de pruebas, con una tasa de acierto evaluada frente a un listón fijado de antemano.',
+        },
+        pilot: {
+          name: 'Piloto',
+          question: '¿Aguanta con personas reales, a un tamaño en el que podamos sobrevivir a estar equivocados?',
+          summary: 'Una ejecución acotada con un grupo definido, un ciclo de feedback semanal y criterios de salida por escrito.',
+        },
+        'phone-line': {
+          name: 'Línea telefónica',
+          question: '¿Pueden los clientes llegar a esto por teléfono, y puede él llamarlos?',
+          summary: 'Un número entrante que contesta y entiende, más un endpoint que realiza llamadas salientes.',
+        },
+        'live-system': {
+          name: 'Sistema en producción',
+          question: '¿Está funcionando de verdad y sabemos operarlo?',
+          summary: 'El sistema completo funcionando en una dirección real, con consola de operaciones y manual de guardia.',
+        },
+      },
+      ctaRealize: 'Haz algo real →',
+      ctaCanvas: 'Abrir el lienzo',
+    },
+    sell: {
+      seo: {
+        title: 'Vende Builderforce — Programa de referidos y asociados de ventas',
+        description: 'Únete al programa de referidos y asociados de ventas de Builderforce. Gestiona prospección, leads y objetivos, y colabora con Builderforce desde un único lienzo de ventas persistente.',
+        ogTitle: 'Crece con Builderforce',
+      },
+      hero: {
+        eyebrow: 'Programa de referidos y asociados de ventas',
+        titleLine1: 'Vende Builderforce.',
+        titleLine2: 'Construye un pipeline que sea tuyo.',
+        lede: 'Consigue los materiales, el espacio de ventas conectado y el apoyo directo que necesitas para presentar Builderforce a los equipos adecuados, y gana según las tarifas de referido y venta asignadas a tu programa.',
+        primaryCta: 'Hazte asociado de ventas',
+        secondaryCta: 'Acceso de asociados',
+        finePrint: 'La participación en el programa y el derecho a comisión están sujetos a aprobación y a los términos que aparecen en tu cuenta.',
+      },
+      heroPanel: {
+        aria: 'Resumen del espacio de trabajo del asociado de ventas',
+        status: 'Espacio de ventas',
+        title: 'Del objetivo de ingresos a la siguiente acción',
+        pipelineLabel: 'Pipeline',
+        pipelineValue: 'Contactos → Ganado',
+        goalsLabel: 'Objetivos',
+        goalsValue: 'Cadencia semanal',
+        step1: 'Apunta al mercado adecuado',
+        step2: 'Lanza prospección coordinada',
+        step3: 'Sigue altas y conversiones',
+        step4: 'Mejora con el acompañamiento de Builderforce',
+      },
+      pitch: {
+        eyebrow: 'Lo que vendes en realidad',
+        title: 'Un método, no una lista de funciones',
+        body: 'La objeción más dura de esta categoría es «ya tenemos herramientas de IA». La respuesta no es una lista de funciones más larga: es que Builderforce vende una forma de trabajar. Lee la idea, elige la prueba más barata que responda la pregunta real y luego construye. Quien se ha quemado con un desarrollo de seis meses que nunca validó entiende esa frase al instante, y es la misma frase que el producto muestra en pantalla.',
+      },
+      capabilities: {
+        eyebrow: 'Tu sistema operativo de ventas',
+        title: 'Todo centrado en un único lienzo',
+        intro: 'Esto es más que un enlace de referido. Tu cuenta de asociado reúne el CRM, las campañas, la agenda y el acompañamiento esenciales para que cada acción tenga contexto.',
+        items: {
+          canvas: { title: 'Un lienzo de ventas', text: 'Planifica y ejecuta el trabajo comercial y de marketing en un espacio persistente y vinculado a tu cuenta, en el que tu equipo y Builderforce pueden colaborar.' },
+          crm: { title: 'CRM y pipeline', text: 'Sube contactos, organiza listas, cualifica leads, sigue etapas y ve dónde está cada oportunidad en tu pipeline.' },
+          targeting: { title: 'Segmentación de mercado', text: 'Define los mercados y audiencias a los que quieres llegar y construye campañas enfocadas a su alrededor.' },
+          campaigns: { title: 'Campañas de email', text: 'Crea la prospección, organiza los seguimientos y conecta la actividad de campaña con los contactos y oportunidades que pretende mover.' },
+          goals: { title: 'Objetivos y acompañamiento', text: 'Fija objetivos semanales de actividad e ingresos, ve las acciones necesarias para cerrar la brecha y pide orientación individual a Builderforce.' },
+          meetings: { title: 'Reuniones y calendario', text: 'Conecta tu calendario, agenda reuniones con clientes potenciales e invita al superadministrador de Builderforce cuando quieras apoyo en una llamada.' },
+        },
+      },
+      visibility: {
+        eyebrow: 'Un programa con visibilidad',
+        title: 'Sabe cuándo tu trabajo se convierte en ingresos',
+        body: 'Recibe notificaciones cuando los usuarios atribuidos se registran y cuando convierten. Tu panel conecta actividad, oportunidades, referidos y ganancias para que puedas centrarte en la siguiente mejor acción.',
+        check1: 'Notificaciones de alta y conversión',
+        check2: 'Tarifas de referido y venta ligadas a los precios',
+        check3: 'Objetivos de ingresos traducidos a metas de pipeline',
+        check4: 'Solicitudes de reunión directas y apoyo en operaciones',
+      },
+      materials: {
+        eyebrow: 'Kit de ventas',
+        title: 'Empieza con materiales aprobados',
+        intro: 'Usa estos recursos para prospección y descubrimiento. El dossier público de prensa y producto sigue disponible en el <media>Kit de prensa</media>.',
+        download: 'Descargar →',
+        items: {
+          discovery: { label: 'GUÍA', title: 'Guía de descubrimiento de ventas', text: 'Preguntas de cualificación, disparadores de impacto y un marco práctico para el siguiente paso.' },
+          outbound: { label: 'PLAYBOOK', title: 'Playbook de email saliente', text: 'Una secuencia concisa de tres contactos con el posicionamiento aprobado de Builderforce.' },
+          contacts: { label: 'CSV', title: 'Plantilla de contactos CRM', text: 'Campos listos para importar de contactos, mercados objetivo y etapas de pipeline.' },
+        },
+      },
+      steps: {
+        eyebrow: 'Cómo funciona',
+        one: { title: 'Crea tu cuenta de asociado', text: 'Elige el tipo de cuenta Asociado de ventas y envía los datos de tu programa.' },
+        two: { title: 'Define tu mercado y tu objetivo de ingresos', text: 'Construye un plan de pipeline en torno a la audiencia y el resultado que quieres perseguir.' },
+        three: { title: 'Trabaja desde tu lienzo', text: 'Gestiona contactos, campañas, reuniones, seguimientos y acompañamiento en un solo lugar.' },
+      },
+      cta: {
+        eyebrow: '¿Listo para empezar?',
+        title: 'Convierte tu red de contactos en un motor de ventas repetible.',
+        button: 'Únete al programa',
+      },
+    },
+    about: {
+      method: {
+        eyebrow: 'Cómo ocurre el trabajo en realidad',
+      },
+    },
+    pricing: {
+      methodNote: 'Leer una idea y elegir una prueba es gratis en todos los planes. Solo construir consume presupuesto de ejecución, y ese es el punto: los dos actos que deciden si el caro merece la pena no cuestan nada.',
+    },
+    featuresPage: {
+      methodBadge: 'El método',
+    },
+  },
+
+  fr: {
+    methodology: {
+      eyebrow: 'La méthode',
+      title: 'De l’idée au réel',
+      lede: 'Quatre étapes disent où vous en êtes. Trois actes disent ce que vous faites. L’acte du milieu porte tout le parti pris : lire une idée coûte peu, la construire non, et choisir la preuve qui mérite d’être menée est la décision la plus lourde de conséquences du premier mois de n’importe quel projet.',
+      step: {
+        read: {
+          title: 'Lire',
+          question: 'Qu’avez-vous réellement dit ?',
+          body: 'Collez une idée, un brief, un appel d’offres ou un règlement de concours — rien n’a besoin d’être mis au propre. Cela revient sous forme de spécification : ce que la chose doit faire, les capacités qu’elle nomme et les limites que le brief a lui-même posées. Lire n’écrit rien et ne construit rien.',
+        },
+        prove: {
+          title: 'Prouver',
+          question: 'À quelle question êtes-vous prêt à payer pour répondre ?',
+          body: 'Huit façons de rendre l’idée réelle, classées face à votre spécification, de la moins chère à la plus chère. Chacune s’ouvre sur la question qu’elle tranche et porte une condition d’arrêt — le chiffre qui stopperait le projet — fixée avant la construction, pas après le résultat.',
+        },
+        build: {
+          title: 'Construire',
+          question: 'Est-ce réel, et où puis-je l’ouvrir ?',
+          body: 'La preuve choisie est matérialisée : fichiers sur le canevas, endpoints en service, tickets sur le tableau, site publié et une adresse que vous pouvez envoyer à quelqu’un. Les agents reprennent les tickets de construction à partir de là.',
+        },
+      },
+      spends: {
+        yes: 'Consomme du budget d’exécution',
+        no: 'Ne coûte rien',
+      },
+      arcHead: 'Où se placent les trois actes',
+      arcQuestion: {
+        idea: 'Et si… ?',
+        make: 'Construisez-le.',
+        run: 'Exploitez-le comme une entreprise.',
+        measure: 'Est-ce que ça marche ?',
+        market: 'Vendez, achetez, recrutez, faites-vous trouver.',
+        expand: 'Faites-le grandir.',
+        admin: 'Paramètres.',
+      },
+      arcNote: 'Mesurer est ce qui fait de cet arc une boucle et non une ligne : la condition d’arrêt fixée au moment de Prouver y est jugée, et la réponse retourne à Idée. Une preuve sans condition capable d’échouer n’est qu’un lancement avec des étapes en plus.',
+      proofsHead: 'Huit façons de rendre une idée réelle',
+      proofsLede: 'Classées comme le produit les classe : les moins chères d’abord. La recommandation ne commence jamais par le système complet, car l’échec coûteux n’est pas de construire lentement la mauvaise chose. C’est de construire la chose qui a l’air juste avant d’avoir vérifié que quelqu’un la voulait.',
+      proofsNote: 'Toutes les options sont toujours proposées. C’est un conseil sur ce qu’il faut mener en premier, pas un filtre — masquer une option en ferait un verdict plutôt qu’une recommandation.',
+      liveBadge: 'Publie une adresse',
+      fidelity: 'Fidélité',
+      effort: 'Effort',
+      proof: {
+        'demo-video': {
+          name: 'Vidéo de démo',
+          question: 'Pouvez-vous me montrer ce que c’est ?',
+          summary: 'Un montage minuté et un script de narration, pour qu’une démo enregistrable de 90 secondes existe dès aujourd’hui.',
+        },
+        'clickable-prototype': {
+          name: 'Prototype cliquable',
+          question: 'Quelqu’un peut-il vraiment aller au bout sans aide ?',
+          summary: 'Un parcours cliquable du flux, instrumenté, sans back-end ni données.',
+        },
+        'smoke-test': {
+          name: 'Test de fumée',
+          question: 'Est-ce que quelqu’un en veut vraiment ?',
+          summary: 'Une landing « fausse porte », une liste d’attente et une console de demande jugée face à un seuil fixé à l’avance.',
+        },
+        'wizard-of-oz': {
+          name: 'Magicien d’Oz',
+          question: 'Le résultat vaut-il d’être payé, avant qu’on sache l’automatiser ?',
+          summary: 'Un vrai front-end avec un humain derrière, sur une horloge de SLA, empruntant les routes que le système construit utilisera.',
+        },
+        poc: {
+          name: 'Preuve de concept',
+          question: 'La partie difficile fonctionne-t-elle vraiment, assez fiablement ?',
+          summary: 'L’étape la plus risquée isolée derrière un banc d’essai, avec un taux de réussite jugé face à une barre fixée à l’avance.',
+        },
+        pilot: {
+          name: 'Pilote',
+          question: 'Est-ce que ça tient avec de vraies personnes, à une taille où se tromper reste survivable ?',
+          summary: 'Un déploiement borné avec une cohorte nommée, une boucle de retour hebdomadaire et des critères de sortie écrits.',
+        },
+        'phone-line': {
+          name: 'Ligne téléphonique',
+          question: 'Les clients peuvent-ils l’atteindre par téléphone — et peut-elle les rappeler ?',
+          summary: 'Un numéro entrant qui répond et comprend, plus un endpoint qui passe des appels sortants.',
+        },
+        'live-system': {
+          name: 'Système en production',
+          question: 'Est-ce que ça tourne vraiment, et savons-nous l’exploiter ?',
+          summary: 'Le système complet en service à une vraie adresse, avec une console d’exploitation et un runbook d’astreinte.',
+        },
+      },
+      ctaRealize: 'Rendez quelque chose réel →',
+      ctaCanvas: 'Ouvrir le canevas',
+    },
+    sell: {
+      seo: {
+        title: 'Vendre Builderforce — Programme de parrainage et d’associés commerciaux',
+        description: 'Rejoignez le programme de parrainage et d’associés commerciaux de Builderforce. Menez votre prospection, gérez vos leads, suivez vos objectifs et collaborez avec Builderforce depuis un canevas commercial persistant.',
+        ogTitle: 'Grandissez avec Builderforce',
+      },
+      hero: {
+        eyebrow: 'Programme de parrainage et d’associés commerciaux',
+        titleLine1: 'Vendez Builderforce.',
+        titleLine2: 'Construisez un pipeline qui vous appartient.',
+        lede: 'Obtenez les supports, l’espace de vente connecté et l’accompagnement direct nécessaires pour présenter Builderforce aux bonnes équipes — et gagnez selon les taux de parrainage et de vente attribués à votre programme.',
+        primaryCta: 'Devenir associé commercial',
+        secondaryCta: 'Connexion associé',
+        finePrint: 'La participation au programme et l’éligibilité aux commissions sont soumises à approbation et aux conditions affichées dans votre compte.',
+      },
+      heroPanel: {
+        aria: 'Aperçu de l’espace de travail de l’associé commercial',
+        status: 'Espace commercial',
+        title: 'De l’objectif de revenus à la prochaine action',
+        pipelineLabel: 'Pipeline',
+        pipelineValue: 'Contacts → Gagné',
+        goalsLabel: 'Objectifs',
+        goalsValue: 'Cadence hebdomadaire',
+        step1: 'Viser le bon marché',
+        step2: 'Lancer une prospection coordonnée',
+        step3: 'Suivre inscriptions et conversions',
+        step4: 'Progresser avec le coaching Builderforce',
+      },
+      pitch: {
+        eyebrow: 'Ce que vous vendez réellement',
+        title: 'Une méthode, pas une liste de fonctionnalités',
+        body: 'L’objection la plus dure de cette catégorie est « nous avons déjà des outils d’IA ». La réponse n’est pas une liste de fonctionnalités plus longue : c’est que Builderforce vend une façon de travailler. Lire l’idée, choisir la preuve la moins chère qui répond à la vraie question, puis construire. Ceux qui se sont brûlés sur six mois de développement jamais validés comprennent cette phrase immédiatement — et c’est la phrase même que le produit affiche à l’écran.',
+      },
+      capabilities: {
+        eyebrow: 'Votre système d’exploitation commercial',
+        title: 'Tout centré sur un seul canevas',
+        intro: 'C’est plus qu’un lien de parrainage. Votre compte associé réunit le CRM, les campagnes, l’agenda et le coaching essentiels pour que chaque action ait du contexte.',
+        items: {
+          canvas: { title: 'Un canevas commercial', text: 'Planifiez et exécutez le travail commercial et marketing dans un espace persistant, adossé à votre compte, où votre équipe et Builderforce peuvent collaborer.' },
+          crm: { title: 'CRM et pipeline', text: 'Importez des contacts, organisez des listes, qualifiez des leads, suivez les étapes et voyez où se situe chaque opportunité dans votre pipeline.' },
+          targeting: { title: 'Ciblage de marché', text: 'Définissez les marchés et audiences que vous voulez atteindre, puis bâtissez des campagnes ciblées autour d’eux.' },
+          campaigns: { title: 'Campagnes e-mail', text: 'Créez la prospection, organisez les relances et reliez l’activité de campagne aux contacts et opportunités qu’elle doit faire avancer.' },
+          goals: { title: 'Objectifs et coaching', text: 'Fixez des objectifs hebdomadaires d’activité et de revenus, voyez les actions nécessaires pour combler l’écart et demandez un accompagnement individuel à Builderforce.' },
+          meetings: { title: 'Réunions et agenda', text: 'Connectez votre agenda, planifiez des rendez-vous prospects et invitez le superadministrateur Builderforce quand vous voulez du soutien en visio.' },
+        },
+      },
+      visibility: {
+        eyebrow: 'Un programme lisible',
+        title: 'Sachez quand votre travail devient du revenu',
+        body: 'Recevez des notifications quand les utilisateurs qui vous sont attribués s’inscrivent et quand ils convertissent. Votre tableau de bord relie activité, opportunités, parrainages et gains pour que vous puissiez vous concentrer sur la meilleure action suivante.',
+        check1: 'Notifications d’inscription et de conversion',
+        check2: 'Taux de parrainage et de vente indexés sur les tarifs',
+        check3: 'Objectifs de revenus traduits en cibles de pipeline',
+        check4: 'Demandes de rendez-vous directes et appui sur les affaires',
+      },
+      materials: {
+        eyebrow: 'Boîte à outils commerciale',
+        title: 'Commencez avec des supports validés',
+        intro: 'Utilisez ces ressources pour la prospection et la découverte. Le dossier public presse et produit reste disponible dans le <media>kit média</media>.',
+        download: 'Télécharger →',
+        items: {
+          discovery: { label: 'GUIDE', title: 'Guide de découverte commerciale', text: 'Questions de qualification, relances sur l’impact et un cadre pratique pour l’étape suivante.' },
+          outbound: { label: 'PLAYBOOK', title: 'Playbook e-mail sortant', text: 'Une séquence concise en trois touches avec le positionnement Builderforce validé.' },
+          contacts: { label: 'CSV', title: 'Modèle de contacts CRM', text: 'Champs prêts à importer pour les contacts, les marchés cibles et les étapes du pipeline.' },
+        },
+      },
+      steps: {
+        eyebrow: 'Comment ça marche',
+        one: { title: 'Créez votre compte associé', text: 'Choisissez le type de compte Associé commercial et transmettez les informations de votre programme.' },
+        two: { title: 'Fixez votre marché et votre objectif de revenus', text: 'Bâtissez un plan de pipeline autour de l’audience et du résultat que vous voulez viser.' },
+        three: { title: 'Menez le travail depuis votre canevas', text: 'Gérez contacts, campagnes, réunions, relances et coaching au même endroit.' },
+      },
+      cta: {
+        eyebrow: 'Prêt à commencer ?',
+        title: 'Transformez votre réseau en une mécanique commerciale reproductible.',
+        button: 'Rejoindre le programme',
+      },
+    },
+    about: {
+      method: {
+        eyebrow: 'Comment le travail se fait réellement',
+      },
+    },
+    pricing: {
+      methodNote: 'Lire une idée et choisir une preuve est gratuit sur tous les forfaits. Seule la construction consomme du budget d’exécution — et c’est bien le principe : les deux actes qui décident si le coûteux en vaut la peine ne coûtent rien.',
+    },
+    featuresPage: {
+      methodBadge: 'La méthode',
+    },
+  },
+
+  de: {
+    methodology: {
+      eyebrow: 'Die Methode',
+      title: 'Von der Idee zum Realen',
+      lede: 'Vier Phasen sagen, wo Sie stehen. Drei Schritte sagen, was Sie tun. Der mittlere Schritt trägt die ganze Haltung: Eine Idee zu lesen ist billig, sie zu bauen nicht — und zu entscheiden, welcher Nachweis den Aufwand wert ist, ist die folgenreichste Entscheidung im ersten Monat eines jeden Vorhabens.',
+      step: {
+        read: {
+          title: 'Lesen',
+          question: 'Was haben Sie eigentlich gesagt?',
+          body: 'Fügen Sie eine Idee, ein Briefing, eine Ausschreibung oder Wettbewerbsregeln ein — nichts muss vorher aufgeräumt werden. Zurück kommt eine Spezifikation: was die Sache leisten muss, welche Fähigkeiten sie benennt und welche Grenzen das Briefing selbst gesetzt hat. Lesen schreibt nichts und baut nichts.',
+        },
+        prove: {
+          title: 'Beweisen',
+          question: 'Für welche Frage sind Sie bereit, Geld auszugeben?',
+          body: 'Acht Wege, es real zu machen, gegen Ihre Spezifikation sortiert — das Günstigste zuerst. Jeder beginnt mit der Frage, die er beantwortet, und trägt eine Abbruchbedingung: die Zahl, die das Vorhaben stoppen würde, festgelegt vor dem Bau statt nach dem Ergebnis.',
+        },
+        build: {
+          title: 'Bauen',
+          question: 'Ist es real, und wo kann ich es öffnen?',
+          body: 'Der gewählte Nachweis wird materialisiert: Dateien auf dem Canvas, aktive Endpunkte, Tickets auf dem Board, die veröffentlichte Site und eine Adresse, die Sie jemandem schicken können. Agenten übernehmen die Build-Tickets ab dort.',
+        },
+      },
+      spends: {
+        yes: 'Verbraucht Ausführungsbudget',
+        no: 'Kostet nichts',
+      },
+      arcHead: 'Wo die drei Schritte sitzen',
+      arcQuestion: {
+        idea: 'Was wäre, wenn?',
+        make: 'Bauen Sie es.',
+        run: 'Betreiben Sie es als Unternehmen.',
+        measure: 'Funktioniert es?',
+        market: 'Verkaufen, kaufen, einstellen, gefunden werden.',
+        expand: 'Lassen Sie es wachsen.',
+        admin: 'Einstellungen.',
+      },
+      arcNote: 'Messen macht daraus eine Schleife statt einer Linie: Die beim Beweisen gesetzte Abbruchbedingung wird dort bewertet, und die Antwort geht zurück an Idee. Ein Nachweis ohne Bedingung, die scheitern kann, ist ein Launch mit Zwischenschritten.',
+      proofsHead: 'Acht Wege, eine Idee real zu machen',
+      proofsLede: 'Sortiert, wie das Produkt sie sortiert: das Günstigste zuerst. Die Empfehlung beginnt nie mit dem ganzen System, denn der teure Fehlschlag ist nicht, langsam das Falsche zu bauen. Er ist, das richtig Aussehende zu bauen, bevor jemand geprüft hat, ob es überhaupt jemand wollte.',
+      proofsNote: 'Alle Optionen werden immer angeboten. Das ist ein Rat dazu, was zuerst laufen sollte, kein Filter — eine Option zu verbergen würde daraus ein Urteil statt einer Empfehlung machen.',
+      liveBadge: 'Veröffentlicht eine Adresse',
+      fidelity: 'Detailtreue',
+      effort: 'Aufwand',
+      proof: {
+        'demo-video': {
+          name: 'Demo-Video',
+          question: 'Können Sie mir zeigen, was das ist?',
+          summary: 'Ein getakteter Clip und ein Sprechertext, damit heute schon eine aufnehmbare 90-Sekunden-Demo existiert.',
+        },
+        'clickable-prototype': {
+          name: 'Klickbarer Prototyp',
+          question: 'Kommt jemand ohne Hilfe wirklich bis zum Ende?',
+          summary: 'Ein instrumentierter Klickdurchlauf des Ablaufs, ohne Backend und ohne Daten.',
+        },
+        'smoke-test': {
+          name: 'Rauchtest',
+          question: 'Will das überhaupt jemand?',
+          summary: 'Eine Fake-Door-Landingpage, eine Warteliste und eine Nachfrage-Konsole, gemessen an einem vorab gesetzten Schwellenwert.',
+        },
+        'wizard-of-oz': {
+          name: 'Wizard of Oz',
+          question: 'Ist das Ergebnis Geld wert, bevor wir es automatisieren können?',
+          summary: 'Ein echtes Frontend mit einem Menschen dahinter, auf SLA-Uhr, über dieselben Routen, die das gebaute System nutzen wird.',
+        },
+        poc: {
+          name: 'Machbarkeitsnachweis',
+          question: 'Funktioniert der schwierige Teil wirklich, zuverlässig genug?',
+          summary: 'Der riskanteste Schritt isoliert hinter einem Testrahmen, mit einer Erfolgsquote gegen eine vorab gesetzte Latte.',
+        },
+        pilot: {
+          name: 'Pilot',
+          question: 'Hält es mit echten Menschen stand, in einer Größe, in der wir einen Irrtum überleben?',
+          summary: 'Ein begrenzter Lauf mit einer benannten Gruppe, wöchentlicher Feedbackschleife und schriftlichen Ausstiegskriterien.',
+        },
+        'phone-line': {
+          name: 'Telefonleitung',
+          question: 'Erreichen Kunden das per Telefon — und erreicht es sie?',
+          summary: 'Eine eingehende Nummer, die abnimmt und versteht, plus ein Endpunkt, der ausgehende Anrufe tätigt.',
+        },
+        'live-system': {
+          name: 'Live-System',
+          question: 'Läuft es tatsächlich, und können wir es betreiben?',
+          summary: 'Das ganze System unter einer echten Adresse, mit Betriebskonsole und Rufbereitschafts-Runbook.',
+        },
+      },
+      ctaRealize: 'Machen Sie etwas real →',
+      ctaCanvas: 'Canvas öffnen',
+    },
+    sell: {
+      seo: {
+        title: 'Builderforce verkaufen — Empfehlungs- und Vertriebspartnerprogramm',
+        description: 'Treten Sie dem Empfehlungs- und Vertriebspartnerprogramm von Builderforce bei. Steuern Sie Ansprache, Leads und Ziele und arbeiten Sie mit Builderforce auf einem dauerhaften Vertriebs-Canvas zusammen.',
+        ogTitle: 'Wachsen Sie mit Builderforce',
+      },
+      hero: {
+        eyebrow: 'Empfehlungs- und Vertriebspartnerprogramm',
+        titleLine1: 'Verkaufen Sie Builderforce.',
+        titleLine2: 'Bauen Sie eine Pipeline, die Ihnen gehört.',
+        lede: 'Erhalten Sie die Unterlagen, den vernetzten Vertriebsarbeitsbereich und die direkte Unterstützung, um Builderforce den richtigen Teams vorzustellen — und verdienen Sie nach den Empfehlungs- und Vertriebssätzen Ihres Programms.',
+        primaryCta: 'Vertriebspartner werden',
+        secondaryCta: 'Partner-Anmeldung',
+        finePrint: 'Programmteilnahme und Provisionsanspruch stehen unter Genehmigungsvorbehalt und richten sich nach den in Ihrem Konto angezeigten Bedingungen.',
+      },
+      heroPanel: {
+        aria: 'Überblick über den Arbeitsbereich des Vertriebspartners',
+        status: 'Vertriebs-Arbeitsbereich',
+        title: 'Vom Umsatzziel zur nächsten Aktion',
+        pipelineLabel: 'Pipeline',
+        pipelineValue: 'Kontakte → Gewonnen',
+        goalsLabel: 'Ziele',
+        goalsValue: 'Wöchentlicher Takt',
+        step1: 'Den richtigen Markt anvisieren',
+        step2: 'Abgestimmte Ansprache starten',
+        step3: 'Anmeldungen und Conversions verfolgen',
+        step4: 'Mit Builderforce-Coaching besser werden',
+      },
+      pitch: {
+        eyebrow: 'Was Sie tatsächlich verkaufen',
+        title: 'Eine Methode, keine Funktionsliste',
+        body: 'Der härteste Einwand in dieser Kategorie lautet „Wir haben bereits KI-Werkzeuge". Die Antwort ist keine längere Funktionsliste — sie lautet, dass Builderforce eine Arbeitsweise verkauft: die Idee lesen, den günstigsten Nachweis wählen, der die eigentliche Frage beantwortet, und dann bauen. Wer sich an einem halbjährigen, nie validierten Projekt die Finger verbrannt hat, versteht diesen Satz sofort — und es ist derselbe Satz, den das Produkt selbst auf den Bildschirm bringt.',
+      },
+      capabilities: {
+        eyebrow: 'Ihr Vertriebs-Betriebssystem',
+        title: 'Alles auf einem einzigen Canvas',
+        intro: 'Das ist mehr als ein Empfehlungslink. Ihr Partnerkonto vereint die nötigen CRM-, Kampagnen-, Termin- und Coaching-Werkzeuge, damit jede Aktion Kontext hat.',
+        items: {
+          canvas: { title: 'Ein Vertriebs-Canvas', text: 'Planen und erledigen Sie Vertriebs- und Marketingarbeit in einem dauerhaften, kontogestützten Arbeitsbereich, in dem Ihr Team und Builderforce zusammenarbeiten können.' },
+          crm: { title: 'CRM und Pipeline', text: 'Laden Sie Kontakte hoch, ordnen Sie Listen, qualifizieren Sie Leads, verfolgen Sie Phasen und sehen Sie, wo jede Opportunity in Ihrer Pipeline steht.' },
+          targeting: { title: 'Marktausrichtung', text: 'Definieren Sie die Märkte und Zielgruppen, die Sie erreichen wollen, und bauen Sie fokussierte Kampagnen darum herum.' },
+          campaigns: { title: 'E-Mail-Kampagnen', text: 'Erstellen Sie die Ansprache, organisieren Sie Nachfassaktionen und verbinden Sie Kampagnenaktivität mit den Kontakten und Opportunities, die sie bewegen soll.' },
+          goals: { title: 'Ziele und Coaching', text: 'Setzen Sie wöchentliche Aktivitäts- und Umsatzziele, sehen Sie die nötigen Schritte zur Lücke und bitten Sie Builderforce um Einzelberatung.' },
+          meetings: { title: 'Meetings und Kalender', text: 'Verbinden Sie Ihren Kalender, planen Sie Interessententermine und laden Sie den Builderforce-Superadmin ein, wenn Sie Unterstützung im Gespräch möchten.' },
+        },
+      },
+      visibility: {
+        eyebrow: 'Ein Programm mit Durchblick',
+        title: 'Wissen, wann Ihre Arbeit zu Umsatz wird',
+        body: 'Sie erhalten Benachrichtigungen, wenn zugeordnete Nutzer sich anmelden und wenn sie konvertieren. Ihr Dashboard verbindet Aktivität, Opportunities, Empfehlungen und Erträge, damit Sie sich auf die nächstbeste Aktion konzentrieren können.',
+        check1: 'Benachrichtigungen zu Anmeldung und Conversion',
+        check2: 'An die Preise gekoppelte Empfehlungs- und Vertriebssätze',
+        check3: 'Umsatzziele, übersetzt in Pipeline-Vorgaben',
+        check4: 'Direkte Terminanfragen und Deal-Unterstützung',
+      },
+      materials: {
+        eyebrow: 'Vertriebs-Toolkit',
+        title: 'Starten Sie mit freigegebenen Unterlagen',
+        intro: 'Nutzen Sie diese Ressourcen für Akquise und Bedarfsermittlung. Die öffentliche Presse- und Produktmappe bleibt im <media>Media-Kit</media> verfügbar.',
+        download: 'Herunterladen →',
+        items: {
+          discovery: { label: 'LEITFADEN', title: 'Leitfaden zur Bedarfsermittlung', text: 'Qualifizierungsfragen, Impulse zur Wirkung und ein praktikabler Rahmen für den nächsten Schritt.' },
+          outbound: { label: 'PLAYBOOK', title: 'Playbook für Outbound-E-Mails', text: 'Eine knappe Sequenz aus drei Kontakten mit der freigegebenen Builderforce-Positionierung.' },
+          contacts: { label: 'CSV', title: 'CRM-Kontaktvorlage', text: 'Importfertige Felder für Kontakte, Zielmärkte und Pipeline-Phasen.' },
+        },
+      },
+      steps: {
+        eyebrow: 'So funktioniert es',
+        one: { title: 'Legen Sie Ihr Partnerkonto an', text: 'Wählen Sie den Kontotyp Vertriebspartner und reichen Sie Ihre Programmangaben ein.' },
+        two: { title: 'Legen Sie Markt und Umsatzziel fest', text: 'Bauen Sie einen Pipeline-Plan rund um die Zielgruppe und das Ergebnis, das Sie verfolgen wollen.' },
+        three: { title: 'Führen Sie die Arbeit auf Ihrem Canvas aus', text: 'Verwalten Sie Kontakte, Kampagnen, Meetings, Nachfassaktionen und Coaching an einem Ort.' },
+      },
+      cta: {
+        eyebrow: 'Bereit anzufangen?',
+        title: 'Machen Sie aus Ihrem Netzwerk eine wiederholbare Vertriebsbewegung.',
+        button: 'Dem Programm beitreten',
+      },
+    },
+    about: {
+      method: {
+        eyebrow: 'Wie die Arbeit tatsächlich abläuft',
+      },
+    },
+    pricing: {
+      methodNote: 'Eine Idee zu lesen und einen Nachweis zu wählen ist in jedem Tarif kostenlos. Nur das Bauen verbraucht Ausführungsbudget — und genau das ist der Punkt: Die beiden Schritte, die entscheiden, ob der teure sich lohnt, kosten nichts.',
+    },
+    featuresPage: {
+      methodBadge: 'Die Methode',
+    },
+  },
+};

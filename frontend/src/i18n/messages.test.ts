@@ -28,6 +28,7 @@ import {
   destTitleKey
 } from '@/lib/publicDestinations';
 import { FAMILIES, FAMILY_IDS, kindLabelKey } from '@/lib/marketplaceFamilies';
+import { METHOD_STEPS, PROOF_FORMS, methodStepKey, proofFormKey } from '@/lib/methodology';
 import { RESUME_TEMPLATES } from '@/lib/canvasResume';
 
 import { listWidgets } from '@/lib/widgets/registry';
@@ -233,7 +234,15 @@ describe('message catalogs', () => {
         ...(group.tabs ?? []).map((tab) => `nav.${tab.labelKey}`),
       ]),
       ...bottomNav.map(({ labelKey }) => `nav.${labelKey}`),
-      ...STAGES.flatMap((stage) => [`nav.stage.${stage}`, `featuresPage.arcQuestion.${stage}`]),
+      // A stage's NAME is the rail's (`nav.stage.*`); its QUESTION belongs to
+      // the methodology registry, which /features' arc table and
+      // <MethodologySection> both read — it used to live under `featuresPage`,
+      // where a shared component had no business reaching for it.
+      ...STAGES.flatMap((stage) => [`nav.stage.${stage}`, `methodology.arcQuestion.${stage}`]),
+      // Read → Prove → Build, and the eight proof forms, as rendered on
+      // /features, /about, /pricing and /sell-builderforce.
+      ...METHOD_STEPS.flatMap((step) => (['title', 'question', 'body'] as const).map((f) => `methodology.${methodStepKey(step, f)}`)),
+      ...PROOF_FORMS.flatMap(({ key }) => (['name', 'question', 'summary'] as const).map((f) => `methodology.${proofFormKey(key, f)}`)),
       ...['domains', 'seats', 'destinations', 'features'].map((stat) => `featuresPage.stat.${stat}`),
       ...FOOTER_COLUMNS.map((column) => `footer.${column.titleKey}`),
       ...familyKeys,

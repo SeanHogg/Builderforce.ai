@@ -26,6 +26,7 @@ import {
   invalidateConnectorCatalog,
   isReservedConnectorKey,
   resolveConnector,
+  type ConnectorOrigin,
   type ResolvedConnector,
 } from './connectorRegistry';
 import { invalidateConnectedConnectors } from './connectorTools';
@@ -53,7 +54,9 @@ export interface ConnectorSummary {
   description: string;
   category: string;
   icon: string;
-  origin: 'builtin' | 'tenant';
+  /** Restating the union here is how "Marketplace" would have been silently
+   *  mislabelled "Custom" — take it from the registry, which owns it. */
+  origin: ConnectorOrigin;
   status: 'published' | 'draft';
   /** Row id — null for built-ins, which have no row. */
   id: string | null;

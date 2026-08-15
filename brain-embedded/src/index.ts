@@ -254,6 +254,23 @@ export {
 } from './provenance';
 export type { MessageProvenance, ProvenanceAccount } from './provenance';
 
+// WHICH model name a viewer is allowed to see — the routed product ("Builderforce
+// Free" / "Builderforce PRO") vs the upstream id. One rule for every surface.
+export {
+  BUILDERFORCE_PRODUCT_NAME,
+  DEFAULT_MODEL_IDENTITY,
+  displayModelName,
+  isUserConfiguredModelRef,
+  productForPlan,
+  productModelName,
+  revealsModelId,
+} from './modelIdentity';
+export type { ModelIdentityContext, RoutedProduct } from './modelIdentity';
+
+// What a thumbs press is ABOUT: the model that served the turn + the MCP tool it ran.
+export { ratedTurnContext, ratedTurnTool } from './turnRating';
+export type { RatableMessage, RatedTurnContext } from './turnRating';
+
 // The model the last completion actually resolved to — what `builtin_session_current_model`
 // is answered with, and what a host can show as "running on X".
 export { getLastResolvedModel, setLastResolvedModel } from './lastResolvedModel';

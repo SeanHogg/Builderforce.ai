@@ -16,7 +16,7 @@
  * re-fetched on each of those repaints. `invalidateModelSurface()` drops it.
  */
 
-import { premiumCostLabel, type ChatModelOptions, type PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
+import { premiumCostLabel, productForPlan, type ChatModelOptions, type ModelIdentityContext, type PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
 import type { AuthedFetch } from './authedFetch';
 
 /** The subset of `GET /llm/v1/models` this webview consumes. Also feeds the shared
@@ -32,6 +32,11 @@ export interface ModelSurface {
   canUsePremiumModels?: boolean;
   canChooseModel?: boolean;
   canUseFrontierModels?: boolean;
+  /** The tenant's resolved plan ('free' | 'pro' | 'teams') — names the routing product
+   *  the composer and the provenance chip show ("Builderforce Free" / "… PRO"). */
+  effectivePlan?: string;
+  /** A premium override lifts a free plan onto the paid product. */
+  premium?: boolean;
 }
 
 export interface ComposerModelSurface {
@@ -39,8 +44,9 @@ export interface ComposerModelSurface {
   surface: ModelSurface;
   /** Everything the `/` menu can offer, grouped by who pays. */
   options: ChatModelOptions;
-  /** False ⇒ the gateway rejects a pin, so the menu must not offer one. */
-  canChooseModel: boolean;
+  /** Who is reading: the routing product funding their turns, and whether the gateway
+   *  would accept a pin. Drives BOTH the menu's list and every model name shown. */
+  identity: ModelIdentityContext;
 }
 
 interface CatalogModel {
@@ -54,7 +60,7 @@ interface CatalogModel {
 const EMPTY: ComposerModelSurface = {
   surface: {},
   options: { byo: [], free: [], plan: [], paid: [] },
-  canChooseModel: false,
+  identity: { product: 'free', canChoose: false },
 };
 
 let cache: { key: string; value: Promise<ComposerModelSurface> } | undefined;
@@ -114,7 +120,10 @@ async function fetchSurface(
       plan,
       paid,
     },
-    canChooseModel,
+    identity: {
+      product: productForPlan(surface.premium === true || (surface.effectivePlan ?? 'free') !== 'free'),
+      canChoose: canChooseModel,
+    },
   };
 }
 

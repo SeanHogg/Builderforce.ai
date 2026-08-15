@@ -858,21 +858,27 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     return c.json({ ok: true, dispatched, total: hostRows.length });
   });
 
-  // PATCH /messages/:id/feedback — store thumbs-up/down on a message
+  // PATCH /messages/:id/feedback — store thumbs-up/down on a message AND file the
+  // durable rating fact (model × action/MCP tool) the learned router ranks on.
   router.patch('/messages/:id/feedback', async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid message id' }, 400);
 
-    const body = await c.req.json<{ feedback: 'up' | 'down' | null }>();
+    const body = await c.req.json<{ feedback: 'up' | 'down' | null; toolName?: string | null; actionType?: string | null }>();
     if (body.feedback !== 'up' && body.feedback !== 'down' && body.feedback !== null) {
       return c.json({ error: 'Invalid feedback value' }, 400);
     }
 
     const result = await brainService.setMessageFeedback(
+      c.env as Env,
       id,
       c.get('tenantId') as number,
       c.get('userId') as string,
       body.feedback,
+      // WHICH tool the rated turn ran comes from the client: it renders the trace
+      // and already knows, whereas the server would have to reconstruct the turn's
+      // step rows to guess at it.
+      { toolName: body.toolName ?? null, actionType: body.actionType ?? null },
     );
     if ('error' in result) return c.json({ error: result.error }, 404);
     return c.json(result);

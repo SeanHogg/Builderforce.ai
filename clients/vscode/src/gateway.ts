@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { productForPlan, type ModelIdentityContext } from "@seanhogg/builderforce-brain-embedded";
 
 /** Single source of truth for the SecretStorage key (DRY). */
 export const SECRET_KEY = "builderforce.apiKey";
@@ -130,6 +131,10 @@ export interface ModelChoices {
   byo: ByoChoices;
   /** Frontier models this tenant may teach an Evermind with. */
   teacherModels: string[];
+  /** Who is reading: the routing product ("Builderforce Free" / "… PRO") funding this
+   *  tenant's unpinned turns, plus whether the gateway would accept a pin. The picker
+   *  names its routed row from this instead of a bare "Auto". */
+  identity: ModelIdentityContext;
   /**
    * WHY premium is unavailable, and the exact step that unlocks it. The picker
    * used to drop this and just omit the Premium group, so a tenant who could see
@@ -166,6 +171,9 @@ interface ModelsResponse {
   teacherModels?: string[];
   byo?: { providers?: string[]; models?: ByoModel[] };
   premiumInfo?: PremiumInfo;
+  /** Resolved plan ('free' | 'pro' | 'teams') + premium override — the routing product. */
+  effectivePlan?: string;
+  premium?: boolean;
 }
 
 /** One paid OpenRouter model from `GET /llm/v1/catalog`. `pool` is set when the free/
@@ -224,6 +232,10 @@ export async function getModels(
     canUseFrontierModels,
     byo,
     teacherModels: json.teacherModels ?? [],
+    identity: {
+      product: productForPlan(json.premium === true || (json.effectivePlan ?? 'free') !== 'free'),
+      canChoose: canChooseModel,
+    },
     ...(json.premiumInfo ? { premiumInfo: json.premiumInfo } : {}),
   };
   modelsCache = { ts: Date.now(), data };

@@ -14,6 +14,7 @@ import HealthPanel from '@/components/admin/panels/HealthPanel';
 import CronPanel from '@/components/admin/panels/CronPanel';
 import BillingPanel from '@/components/admin/panels/BillingPanel';
 import UsagePanel from '@/components/admin/panels/UsagePanel';
+import LlmRatingsPanel from '@/components/admin/panels/LlmRatingsPanel';
 import UsersPanel from '@/components/admin/panels/UsersPanel';
 import GuestSessionsPanel from '@/components/admin/panels/GuestSessionsPanel';
 import CreationSessionsPanel from '@/components/admin/panels/CreationSessionsPanel';
@@ -66,6 +67,7 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   permissions: PermissionsPanel,
   modules: ModulesPanel,
   usage: UsagePanel,
+  llmRatings: LlmRatingsPanel,
   traces: LlmTracesPanel,
   personas: PersonasPanel,
   governance: GovernancePanel,

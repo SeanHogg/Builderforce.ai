@@ -10,6 +10,11 @@ import type { Env } from '../../env';
 import { llmUsageLog, tenantApiKeys } from '../../infrastructure/database/schema';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 import { invalidateKeyCache } from '../../infrastructure/auth/keyResolutionCache';
+import {
+  deserializeScopes as sharedDeserializeScopes,
+  hasScope as sharedHasScope,
+  serializeScopes as sharedSerializeScopes,
+} from '../shared/scopeList';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Endpoint scopes — single source of truth for the per-scope service-token model
@@ -33,20 +38,16 @@ export function isTenantApiScope(v: unknown): v is TenantApiScope {
   return typeof v === 'string' && (TENANT_API_SCOPES as readonly string[]).includes(v);
 }
 
+// The MECHANICS of a stored scope list (parse, serialise, test) live in
+// `application/shared/scopeList.ts` — one implementation shared with publisher
+// API keys and extension install grants, which store the answer the same way.
+// Only the VOCABULARY is this module's, so only the vocabulary is bound here.
 function serializeScopes(scopes: string[] | null | undefined): string | null {
-  if (!scopes || scopes.length === 0) return null;
-  const clean = scopes.filter(isTenantApiScope);
-  return clean.length ? JSON.stringify(clean) : null;
+  return sharedSerializeScopes(scopes, TENANT_API_SCOPES);
 }
 
 export function deserializeScopes(value: string | null | undefined): string[] | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((s) => typeof s === 'string') : null;
-  } catch {
-    return null;
-  }
+  return sharedDeserializeScopes(value);
 }
 
 /**
@@ -55,8 +56,7 @@ export function deserializeScopes(value: string | null | undefined): string[] | 
  *   - non-empty scopes    → must include the required scope
  */
 export function keyHasScope(scopes: string[] | null, required: TenantApiScope): boolean {
-  if (!scopes || scopes.length === 0) return true;
-  return scopes.includes(required);
+  return sharedHasScope(scopes, required);
 }
 
 export interface TenantApiKeyRow {

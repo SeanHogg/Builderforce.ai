@@ -47,7 +47,6 @@ import { ChatModeToggle } from '@/components/brain/ChatModeToggle';
 import { WorkOptionsPicker } from '@/components/brain/WorkOptionsPicker';
 import { CapabilityArtifactNotice } from '@/components/brain/CapabilityArtifactNotice';
 import { AllowanceBanner } from '@/components/brain/AllowanceBanner';
-import { QueuedTurnsNotice } from '@/components/brain/QueuedTurnsNotice';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { Select } from '@/components/Select';
 import { fetchProjects, createProject } from '@/lib/api';
@@ -595,7 +594,7 @@ export function BrainPanel({
   // — because the run loop needs it to fail over when a model will not emit tool
   // calls; the diagnostics capture below reads the same cached object.
   const llmModels = useLlmModels();
-  const { options: modelOptions, canChooseModel } = useChatModelOptions();
+  const { options: modelOptions, identity: modelIdentity } = useChatModelOptions();
   const selectedModel = modelSelection.mode === 'model' ? modelSelection.model : undefined;
   // Tool-call failover: the SHARED selector over that surface, so "which model next"
   // is decided in one place for every host rather than per surface.
@@ -912,6 +911,8 @@ export function BrainPanel({
     copy: tTimeline('copy'),
     copied: tTimeline('copied'),
     replay: tTimeline('replay'),
+    rateUp: tTimeline('rateUp'),
+    rateDown: tTimeline('rateDown'),
     apply: tTimeline('apply'),
     createFile: tTimeline('createFile'),
     preview: tTimeline('preview'),
@@ -1366,6 +1367,7 @@ export function BrainPanel({
       disabled={false}
       running={conv.sending}
       onStop={conv.stop}
+      queuedCount={queuedTurns.count}
       rows={2}
       submitOnEnter={false}
       onAttach={conv.attach}
@@ -1379,7 +1381,7 @@ export function BrainPanel({
       accountSettingsHref="/settings"
       modelSelection={modelSelection}
       modelOptions={modelOptions}
-      canChooseModel={canChooseModel}
+      modelIdentity={modelIdentity}
       onModelSelectionChange={setModelSelection}
       autoMode={autoApprove}
       onAutoModeChange={setAutoApproveMode}
@@ -1578,6 +1580,7 @@ export function BrainPanel({
               isRunning={conv.sending}
               loading={conv.loadingMessages}
               labels={timelineLabels}
+              modelIdentity={modelIdentity}
               onApplyCode={timelineApplyCode}
               onCreateFile={timelineCreateFile}
               // Answering an ask_user card posts the choice as the next user turn.
@@ -1588,6 +1591,10 @@ export function BrainPanel({
               renderStreaming={renderTimelineStreaming}
               renderAssistantActions={renderTimelineAssistantActions}
               onReplayMessage={onReplayTimelineMessage}
+              // Thumbs live in the shared action row now; the press files a durable
+              // rating against the model + MCP tool that served the turn.
+              onRateMessage={conv.rateMessage}
+              ratings={conv.ratings}
             />
           </div>
           {/* Composer chrome uses the shared --chat-ctl-* metrics (globals.css) so the
@@ -1598,7 +1605,6 @@ export function BrainPanel({
             {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
             {promptComposer}
             {conv.uploading && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
-            <QueuedTurnsNotice count={queuedTurns.count} />
           </div>
         </>
       )}
@@ -1842,9 +1848,9 @@ function MessageActions({ msg, conv, projectId, capability, chatTitle, suggestio
         isLatest={msg.id === lastAssistantId}
         onRetry={(prompt) => { void conv.send(prompt); }}
       />
+      {/* Thumbs are no longer here — they live in the shared <BrainTimeline> action
+          row so the Canvas and the editor rate turns too. */}
       <ChatMessageActions
-        feedback={conv.feedbackMap[msg.id]}
-        onFeedback={(value) => conv.submitFeedback(msg, value)}
         projectId={projectId}
         capability={capability}
         chatTitle={chatTitle}

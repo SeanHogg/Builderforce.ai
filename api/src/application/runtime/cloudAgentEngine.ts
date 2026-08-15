@@ -65,6 +65,7 @@ import { classifyTaskAction } from '../llm/classifyTask';
 import { deriveAllocationCategory } from '../llm/allocationCategories';
 import { normalizeActionType, learnedRoutingEnabled, type ActionType } from '../llm/actionTypes';
 import { getRoutingTable, MIN_SAMPLES, type RoutingScope } from '../llm/routingTable';
+import { qualityEvidence } from '../llm/modelQualityScore';
 import type { ActionModelRankStat } from '../llm/LlmProxyService';
 import { resolveTenantModel } from '../llm/tenantModelService';
 import { reasoningParamsForModel } from '../llm/reasoningCapability';
@@ -590,7 +591,7 @@ export async function emitModelSelection(
   const learnedNote = args.actionType
     ? ` Action=${args.actionType}; ${
         learnedSeed
-          ? `learned routing ranked '${args.pick.model}' #1 from ${args.pick.seedSamples} prior ${args.actionType} run(s)${args.pick.biasApplied ? ', client SSM bias applied' : ''}.`
+          ? `learned routing ranked '${args.pick.model}' #1 from ${args.pick.seedSamples} prior ${args.actionType} observation(s) — scored runs and human ratings${args.pick.biasApplied ? ', client SSM bias applied' : ''}.`
           : `learned routing had too few samples (cold-start) — kept the curated default.`
       }`
     : '';
@@ -631,9 +632,11 @@ export interface LearnedRoutingInputs {
 }
 
 /** True when a scope's per-action stat list has at least one model at/above the
- *  sample floor — i.e. it can actually change the seed. */
+ *  evidence floor — i.e. it can actually change the seed. Counts scored runs AND
+ *  human thumbs, the same measure `rankModelsForAction` gates on, so a scope full
+ *  of chat ratings is no longer reported as cold. */
 function scopeHasSignal(stats: ReadonlyArray<ActionModelRankStat> | undefined): boolean {
-  return !!stats && stats.some((s) => s.n >= MIN_SAMPLES);
+  return !!stats && stats.some((s) => qualityEvidence(s) >= MIN_SAMPLES);
 }
 
 /**

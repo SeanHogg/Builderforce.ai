@@ -1,5 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, type BrainMessage, type BrainTraceEvent, type MessageProvenance } from '@seanhogg/builderforce-brain-embedded';
+import {
+  DEFAULT_MODEL_IDENTITY,
+  displayModelName,
+  parseDirectedRecipient,
+  parseMessageAuthor,
+  parseMessageProvenance,
+  type BrainMessage,
+  type BrainTraceEvent,
+  type MessageProvenance,
+  type ModelIdentityContext,
+} from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
 import { Avatar } from './ParticipantBadge';
 import { parseAskUser, stripAskUser, QuestionCard, askUserAnchorId, DEFAULT_ASK_USER_LABELS } from './askUser';
@@ -22,6 +32,9 @@ export interface BrainTimelineLabels {
   /** Per-message "send this again" action — re-asks the model with the same text,
    *  from a user turn or an assistant one. */
   replay: string;
+  /** Thumbs up / down on an assistant reply. */
+  rateUp: string;
+  rateDown: string;
   apply: string;
   createFile: string;
   /** Heading for the change preview shown on an edit_file / write_file tool step. */
@@ -81,6 +94,8 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   copy: 'Copy',
   copied: 'Copied',
   replay: 'Send again',
+  rateUp: 'Good response',
+  rateDown: 'Bad response',
   apply: 'Apply',
   createFile: 'Create file',
   preview: 'Preview',
@@ -108,17 +123,30 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
 };
 
 /**
- * The per-reply provenance chip: which model actually served this turn, and whose
- * account paid for it. A positive confirmation on EVERY assistant turn that the
- * tenant is (or is not) on their own connected frontier account — so "why didn't it
- * use my paid Claude?" is answered inline instead of only surfacing on an empty
- * reply. The `shared_byo_unused` state is styled as a warning because it's the one
- * the user most wants to catch (a connected account that silently wasn't used).
+ * The per-reply provenance chip: what served this turn, and whose account paid for it.
+ * A positive confirmation on EVERY assistant turn that the tenant is (or is not) on
+ * their own connected frontier account — so "why didn't it use my paid Claude?" is
+ * answered inline instead of only surfacing on an empty reply. The `shared_byo_unused`
+ * state is styled as a warning because it's the one the user most wants to catch (a
+ * connected account that silently wasn't used).
  *
- * The account is optional: when the gateway didn't report one the chip still names
- * the MODEL and simply omits the badge — attribution without a claim we can't back.
+ * WHAT it names depends on who is reading: a turn our routed pool served is named after
+ * the PRODUCT ("Builderforce Free" / "Builderforce PRO") unless the viewer owns the
+ * choice — see `modelIdentity.ts`. The upstream id stays on the message metadata either
+ * way, so diagnostics and usage attribution are unaffected.
+ *
+ * The account is optional: when the gateway didn't report one the chip still names what
+ * ran and simply omits the badge — attribution without a claim we can't back.
  */
-function ProvenanceChip({ prov, labels }: { prov: MessageProvenance; labels: BrainTimelineLabels }) {
+function ProvenanceChip({
+  prov,
+  labels,
+  identity,
+}: {
+  prov: MessageProvenance;
+  labels: BrainTimelineLabels;
+  identity: ModelIdentityContext;
+}) {
   const unused = prov.account === 'shared_byo_unused';
   const badge = prov.account === 'own'
     ? labels.accountOwn
@@ -132,10 +160,13 @@ function ProvenanceChip({ prov, labels }: { prov: MessageProvenance; labels: Bra
     : unused
       ? 'bf-tl__prov--unused'
       : 'bf-tl__prov--shared';
-  const modelTitle = prov.vendor ? `${prov.model} · ${prov.vendor}` : prov.model;
+  // Masked viewers get the product name in the tooltip too — a vendor suffix would
+  // give away exactly what the name is there to abstract.
+  const name = displayModelName(prov.model, identity, { account: prov.account });
+  const modelTitle = prov.vendor && name === prov.model ? `${name} · ${prov.vendor}` : name;
   return (
     <div className={`bf-tl__prov ${variant}`}>
-      <span className="bf-tl__prov-model" title={modelTitle}>{prov.model}</span>
+      <span className="bf-tl__prov-model" title={modelTitle}>{name}</span>
       {badge && <span className="bf-tl__prov-badge">{badge}</span>}
       {prov.evermind ? (
         <span className="bf-tl__prov-evermind" title={labels.ranOnEvermind}>{`🧠 Evermind v${prov.evermind.version}`}</span>
@@ -144,6 +175,9 @@ function ProvenanceChip({ prov, labels }: { prov: MessageProvenance; labels: Bra
   );
 }
 
+/** +1 up, -1 down, 0 = cleared. Mirrors the `llm_action_ratings.rating` domain. */
+export type MessageRating = 1 | -1 | 0;
+
 export interface BrainTimelineProps {
   messages: BrainMessage[];
   trace: BrainTraceEvent[];
@@ -151,6 +185,9 @@ export interface BrainTimelineProps {
   isRunning: boolean;
   loading?: boolean;
   labels?: Partial<BrainTimelineLabels>;
+  /** Who is reading — decides whether a reply's provenance chip may name the upstream
+   *  model or shows the routing product instead. Omitted ⇒ masked (fail closed). */
+  modelIdentity?: ModelIdentityContext;
   /** Override the assistant display name (defaults to labels.assistant). */
   assistantName?: string;
   /** Replaces the built-in empty state entirely. */
@@ -167,6 +204,15 @@ export interface BrainTimelineProps {
   /** Re-send a message's text as the next turn. When omitted the "send again" action
    *  hides itself, so a read-only transcript offers only copy. */
   onReplayMessage?: (msg: BrainMessage, role: 'user' | 'assistant') => void;
+  /**
+   * Rate an assistant reply. Wiring it renders the thumbs; omitting it hides them,
+   * so a read-only transcript (or a surface with no signed-in rater) offers none.
+   * The host is responsible for filing the rating against the model that served the
+   * turn — see `llm_action_ratings` / `POST /api/llm/ratings`.
+   */
+  onRateMessage?: (msg: BrainMessage, rating: MessageRating) => void;
+  /** The rating THIS viewer has already given, keyed by message id. */
+  ratings?: Record<number, 1 | -1>;
   onInternalLink?: (href: string) => void;
   onApplyCode?: (code: string) => void;
   onCreateFile?: (path: string, content: string) => void;
@@ -233,7 +279,8 @@ function CopyButton({ text, labels, icon = false }: { text: string; labels: Brai
 }
 
 /**
- * The action row every message carries: copy it, and send it again.
+ * The action row every message carries: copy it, send it again, and — on an
+ * assistant reply — say whether it was any good.
  *
  * It lives HERE rather than in each host's own action bar because all three surfaces
  * (the web Brain panel, the Canvas dock, the VS Code webview) mount this same
@@ -244,6 +291,13 @@ function CopyButton({ text, labels, icon = false }: { text: string; labels: Brai
  * "Send again" is deliberately offered on BOTH roles: replaying a user turn re-asks
  * the question, and replaying an assistant turn feeds its answer back as the next
  * prompt — which is how you ask the model to build on what it just said.
+ *
+ * The THUMBS moved here for the same reason, and because of what they are now for:
+ * every press is filed against the model that served the turn and the MCP tool it
+ * ran, so it teaches the learned router which model is good at which kind of work
+ * (`llm_action_ratings`, migration 0465). While they lived in the web app's own
+ * action bar, the Canvas and the editor — a large share of all model calls — could
+ * not contribute a single rating.
  */
 function MessageActions({
   message,
@@ -251,14 +305,24 @@ function MessageActions({
   text,
   labels,
   onReplay,
+  onRate,
+  rating,
 }: {
   message: BrainMessage;
   role: 'user' | 'assistant';
   text: string;
   labels: BrainTimelineLabels;
   onReplay?: (msg: BrainMessage, role: 'user' | 'assistant') => void;
+  onRate?: (msg: BrainMessage, rating: MessageRating) => void;
+  rating?: MessageRating;
 }) {
   if (!text.trim()) return null;
+  // Pressing the thumb you already gave clears it — "no opinion" is the absence of
+  // a rating, so it deletes the row rather than storing a third state.
+  const rate = (next: 1 | -1) => (event: React.MouseEvent) => {
+    event.stopPropagation();
+    onRate?.(message, rating === next ? 0 : next);
+  };
   return (
     <>
       <CopyButton text={text} labels={labels} icon />
@@ -272,6 +336,32 @@ function MessageActions({
         >
           <span aria-hidden>↻</span>
         </button>
+      )}
+      {onRate && role === 'assistant' && (
+        <>
+          <button
+            type="button"
+            className="bf-tl__act"
+            title={labels.rateUp}
+            aria-label={labels.rateUp}
+            aria-pressed={rating === 1}
+            data-state={rating === 1 ? 'done' : undefined}
+            onClick={rate(1)}
+          >
+            <span aria-hidden>👍</span>
+          </button>
+          <button
+            type="button"
+            className="bf-tl__act"
+            title={labels.rateDown}
+            aria-label={labels.rateDown}
+            aria-pressed={rating === -1}
+            data-state={rating === -1 ? 'done' : undefined}
+            onClick={rate(-1)}
+          >
+            <span aria-hidden>👎</span>
+          </button>
+        </>
       )}
     </>
   );
@@ -397,12 +487,15 @@ function BrainTimelineInner({
   isRunning,
   loading,
   labels: labelOverrides,
+  modelIdentity = DEFAULT_MODEL_IDENTITY,
   assistantName,
   emptyState,
   renderMessage,
   renderStreaming,
   renderAssistantActions,
   onReplayMessage,
+  onRateMessage,
+  ratings,
   onInternalLink,
   onApplyCode,
   onCreateFile,
@@ -539,10 +632,18 @@ function BrainTimelineInner({
                     />
                   )}
                   <div className="bf-tl__actions">
-                    <MessageActions message={node.message} role="assistant" text={bodyText} labels={labels} onReplay={onReplayMessage} />
+                    <MessageActions
+                      message={node.message}
+                      role="assistant"
+                      text={bodyText}
+                      labels={labels}
+                      onReplay={onReplayMessage}
+                      onRate={onRateMessage}
+                      rating={ratings?.[node.message.id]}
+                    />
                     {renderAssistantActions?.(node.message)}
                   </div>
-                  {prov && <ProvenanceChip prov={prov} labels={labels} />}
+                  {prov && <ProvenanceChip prov={prov} labels={labels} identity={modelIdentity} />}
                 </div>
               </li>
             );

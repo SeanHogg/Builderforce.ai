@@ -84,6 +84,13 @@ export interface PublishRequest {
   currency?: string;
   trial?: ListingTrialPolicy;
   listingId?: string | null;
+  /**
+   * A staged snapshot to promote instead of re-reading the board.
+   *
+   * Sent by the Releases panel so the build that passed its checks is the build that
+   * goes on sale. Omitted by the publish form, which has nothing staged to promote.
+   */
+  fromSnapshotId?: string | null;
 }
 
 const AUTHED = '/api/creation-listings';

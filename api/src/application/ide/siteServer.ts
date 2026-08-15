@@ -37,7 +37,17 @@ import {
   resolveSiteForHost,
   type SiteRecord,
 } from './siteHosting';
-import { submitSiteRecord } from './siteData';
+import { listOwnedSiteRecords, submitSiteRecord } from './siteData';
+import {
+  SESSION_TTL_MS,
+  requestSiteSignIn,
+  resolveSiteUser,
+  signOutSiteUser,
+  siteSessionCookie,
+  siteSessionCookieHeader,
+  verifySiteSignIn,
+} from './siteAuth';
+import { sendRawEmail } from '../../infrastructure/email/EmailService';
 import {
   flushTrafficDeltas,
   invalidateSiteTraffic,
@@ -227,8 +237,6 @@ async function handleSiteApi(
   path: string,
 ): Promise<Response> {
   const rest = path.slice(SITE_API_PREFIX.length);
-  const match = /^collections\/([a-z0-9-]{1,64})\/?$/i.exec(rest);
-  if (!match) return jsonResponse({ error: 'Unknown endpoint.' }, 404);
 
   if (request.method === 'OPTIONS') {
     // A form posted from the site itself is same-origin, but a static export
@@ -236,6 +244,36 @@ async function handleSiteApi(
     // deliberately open — it can only ever CREATE a record in one collection.
     return new Response(null, { status: 204, headers: corsHeaders() });
   }
+
+  // ── The generated app's own accounts ──────────────────────────────────────
+  // Sign-in for END USERS of the published app (`site_users`), which is a
+  // separate identity space from Builderforce's own — see `siteAuth.ts`. This is
+  // what lets a generated app be something other than a brochure with a form.
+  if (rest.startsWith('auth/')) return handleSiteAuth(env, site, request, rest.slice('auth/'.length));
+
+  const match = /^collections\/([a-z0-9-]{1,64})\/?$/i.exec(rest);
+  if (!match) return jsonResponse({ error: 'Unknown endpoint.' }, 404);
+  const collectionName = match[1]!;
+  const db = buildDatabase(env);
+
+  // A GET is answered ONLY for a signed-in end user, ONLY from collections whose
+  // owner set `read_policy = 'owner'`, and ONLY with that user's own rows. The
+  // module's rule that there is no public read is intact: this is not one.
+  if (request.method === 'GET') {
+    const identity = await resolveSiteUser(db, site.siteId, site.tenantId, siteSessionCookie(request.headers.get('cookie')));
+    if (!identity) return jsonResponse({ error: 'Sign in to read your records.' }, 401);
+    const owned = await listOwnedSiteRecords({
+      db,
+      siteId: site.siteId,
+      tenantId: site.tenantId,
+      collectionName,
+      siteUserId: identity.userId,
+      limit: Number(new URL(request.url).searchParams.get('limit')) || undefined,
+    });
+    if (!owned.ok) return jsonResponse({ error: owned.error }, owned.status);
+    return jsonResponse({ ok: true, records: owned.records }, 200);
+  }
+
   if (request.method !== 'POST') {
     return jsonResponse({ error: 'Use POST to submit.' }, 405);
   }
@@ -246,13 +284,17 @@ async function handleSiteApi(
   const ip = request.headers.get('cf-connecting-ip') ?? undefined;
   const day = utcDay(Date.now());
   const ipHash = ip ? await visitorHash(visitorSalt(env), ip, undefined, day) : null;
+  // A submission from a signed-in end user is OWNED by them, which is what makes
+  // it readable back. Anonymous posts keep owner null and behave exactly as before.
+  const author = await resolveSiteUser(db, site.siteId, site.tenantId, siteSessionCookie(request.headers.get('cookie')));
 
   const result = await submitSiteRecord({
-    db: buildDatabase(env),
+    db,
     siteId: site.siteId,
     tenantId: site.tenantId,
-    collectionName: match[1]!,
+    collectionName,
     body,
+    siteUserId: author?.userId ?? null,
     ipHash,
     userAgent: request.headers.get('user-agent'),
     referrer: request.headers.get('referer'),
@@ -260,6 +302,64 @@ async function handleSiteApi(
 
   if (!result.ok) return jsonResponse({ error: result.error }, result.status);
   return jsonResponse({ ok: true, id: result.recordId }, 201);
+}
+
+/**
+ * `/__api/auth/*` — request a code, redeem it, read the session, end it.
+ *
+ * Every answer here is deliberately uninformative about whether an address is
+ * known: `request` always reports success, so the endpoint cannot be used to
+ * enumerate a site's users. The code itself is delivered out of band.
+ */
+async function handleSiteAuth(
+  env: Env,
+  site: SiteRecord,
+  request: Request,
+  action: string,
+): Promise<Response> {
+  const db = buildDatabase(env);
+  const cookie = siteSessionCookie(request.headers.get('cookie'));
+
+  if (action === 'me' && request.method === 'GET') {
+    const identity = await resolveSiteUser(db, site.siteId, site.tenantId, cookie);
+    return identity
+      ? jsonResponse({ ok: true, signedIn: true, user: identity }, 200)
+      : jsonResponse({ ok: true, signedIn: false, user: null }, 200);
+  }
+
+  if (action === 'signout' && request.method === 'POST') {
+    await signOutSiteUser(db, site.siteId, site.tenantId, cookie);
+    return jsonResponse({ ok: true }, 200, { 'set-cookie': siteSessionCookieHeader(null, 0) });
+  }
+
+  if (action === 'request' && request.method === 'POST') {
+    const body = await readSubmission(request);
+    const started = await requestSiteSignIn(db, site.siteId, site.tenantId, (body as { email?: unknown } | null)?.email);
+    if (started.ok) {
+      // Delivery is best-effort and its failure must not tell the caller whether
+      // the address exists. A code that could not be sent simply expires.
+      try {
+        await deliverSiteSignInCode(env, new URL(request.url).hostname, started.email, started.code);
+      } catch (error) {
+        reportCaughtError(error, { source: 'application/ide/siteServer.ts', operation: 'deliverSiteSignInCode' });
+      }
+    }
+    // Always the same answer — see this function's contract.
+    return jsonResponse({ ok: true, sent: true }, 200);
+  }
+
+  if (action === 'verify' && request.method === 'POST') {
+    const body = await readSubmission(request) as { email?: unknown; code?: unknown } | null;
+    const verified = await verifySiteSignIn(db, site.siteId, site.tenantId, body?.email, body?.code);
+    if (!verified.ok) return jsonResponse({ error: verified.error }, verified.status);
+    return jsonResponse(
+      { ok: true, user: { userId: verified.userId, email: verified.email } },
+      200,
+      { 'set-cookie': siteSessionCookieHeader(verified.token, Math.floor(SESSION_TTL_MS / 1000)) },
+    );
+  }
+
+  return jsonResponse({ error: 'Unknown endpoint.' }, 404);
 }
 
 /**
@@ -343,16 +443,45 @@ async function readSubmission(request: Request): Promise<unknown> {
 function corsHeaders(): Record<string, string> {
   return {
     'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'POST, OPTIONS',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
     'access-control-allow-headers': 'content-type',
     'access-control-max-age': '86400',
   };
 }
 
-function jsonResponse(body: unknown, status: number): Response {
+function jsonResponse(body: unknown, status: number, extraHeaders?: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', ...corsHeaders() },
+    headers: { 'content-type': 'application/json; charset=utf-8', ...corsHeaders(), ...extraHeaders },
+  });
+}
+
+/**
+ * Deliver an end user's sign-in code.
+ *
+ * Plain, unbranded and deliberately minimal: this mail is sent on behalf of a
+ * TENANT'S app, not on behalf of Builderforce, so it must not carry Builderforce
+ * marketing, an unsubscribe footer for a list the recipient is not on, or any
+ * claim about who is writing to them beyond the app's own name.
+ *
+ * `sendRawEmail` rather than the lifecycle sender for the same reason: there is
+ * no consent question to ask about a code the person just requested, and no
+ * category for them to opt out of.
+ */
+async function deliverSiteSignInCode(env: Env, host: string, email: string, code: string): Promise<void> {
+  // The app names itself by the host the visitor is on — which is the name they
+  // will recognise, and is correct for a custom domain as well as a platform one.
+  const appName = host;
+  await sendRawEmail(env as Parameters<typeof sendRawEmail>[0], {
+    to: email,
+    subject: `${code} is your ${appName} sign-in code`,
+    html: [
+      '<div style="font-family:system-ui,-apple-system,sans-serif;max-width:480px">',
+      `<p>Your sign-in code for <strong>${appName}</strong>:</p>`,
+      `<p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:24px 0">${code}</p>`,
+      '<p style="color:#666;font-size:13px">It expires in 10 minutes. If you did not ask to sign in, ignore this message — nothing has changed.</p>',
+      '</div>',
+    ].join(''),
   });
 }
 

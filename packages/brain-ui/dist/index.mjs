@@ -1,6 +1,12 @@
 // src/BrainTimeline.tsx
 import React2, { useEffect, useMemo as useMemo3, useRef, useState as useState3 } from "react";
-import { parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance } from "@seanhogg/builderforce-brain-embedded";
+import {
+  DEFAULT_MODEL_IDENTITY,
+  displayModelName,
+  parseDirectedRecipient,
+  parseMessageAuthor,
+  parseMessageProvenance
+} from "@seanhogg/builderforce-brain-embedded";
 
 // src/Markdown.tsx
 import React, { useMemo, useState } from "react";
@@ -454,6 +460,8 @@ var DEFAULT_TIMELINE_LABELS = {
   copy: "Copy",
   copied: "Copied",
   replay: "Send again",
+  rateUp: "Good response",
+  rateDown: "Bad response",
   apply: "Apply",
   createFile: "Create file",
   preview: "Preview",
@@ -479,13 +487,18 @@ var DEFAULT_TIMELINE_LABELS = {
   reconcileTitle: "Reconciled {count} learned memories in Evermind v{version}",
   reconcileHint: "The answer restated these recalled learnings, so it updates them (write-through cognition)."
 };
-function ProvenanceChip({ prov, labels }) {
+function ProvenanceChip({
+  prov,
+  labels,
+  identity
+}) {
   const unused = prov.account === "shared_byo_unused";
   const badge = prov.account === "own" ? labels.accountOwn : unused ? labels.accountByoUnused : prov.account === "shared" ? labels.accountShared : null;
   const variant = prov.account === "own" ? "bf-tl__prov--own" : unused ? "bf-tl__prov--unused" : "bf-tl__prov--shared";
-  const modelTitle = prov.vendor ? `${prov.model} \xB7 ${prov.vendor}` : prov.model;
+  const name = displayModelName(prov.model, identity, { account: prov.account });
+  const modelTitle = prov.vendor && name === prov.model ? `${name} \xB7 ${prov.vendor}` : name;
   return /* @__PURE__ */ jsxs4("div", { className: `bf-tl__prov ${variant}`, children: [
-    /* @__PURE__ */ jsx4("span", { className: "bf-tl__prov-model", title: modelTitle, children: prov.model }),
+    /* @__PURE__ */ jsx4("span", { className: "bf-tl__prov-model", title: modelTitle, children: name }),
     badge && /* @__PURE__ */ jsx4("span", { className: "bf-tl__prov-badge", children: badge }),
     prov.evermind ? /* @__PURE__ */ jsx4("span", { className: "bf-tl__prov-evermind", title: labels.ranOnEvermind, children: `\u{1F9E0} Evermind v${prov.evermind.version}` }) : null
   ] });
@@ -541,9 +554,15 @@ function MessageActions({
   role,
   text,
   labels,
-  onReplay
+  onReplay,
+  onRate,
+  rating
 }) {
   if (!text.trim()) return null;
+  const rate = (next) => (event) => {
+    event.stopPropagation();
+    onRate?.(message, rating === next ? 0 : next);
+  };
   return /* @__PURE__ */ jsxs4(Fragment2, { children: [
     /* @__PURE__ */ jsx4(CopyButton, { text, labels, icon: true }),
     onReplay && /* @__PURE__ */ jsx4(
@@ -559,7 +578,35 @@ function MessageActions({
         },
         children: /* @__PURE__ */ jsx4("span", { "aria-hidden": true, children: "\u21BB" })
       }
-    )
+    ),
+    onRate && role === "assistant" && /* @__PURE__ */ jsxs4(Fragment2, { children: [
+      /* @__PURE__ */ jsx4(
+        "button",
+        {
+          type: "button",
+          className: "bf-tl__act",
+          title: labels.rateUp,
+          "aria-label": labels.rateUp,
+          "aria-pressed": rating === 1,
+          "data-state": rating === 1 ? "done" : void 0,
+          onClick: rate(1),
+          children: /* @__PURE__ */ jsx4("span", { "aria-hidden": true, children: "\u{1F44D}" })
+        }
+      ),
+      /* @__PURE__ */ jsx4(
+        "button",
+        {
+          type: "button",
+          className: "bf-tl__act",
+          title: labels.rateDown,
+          "aria-label": labels.rateDown,
+          "aria-pressed": rating === -1,
+          "data-state": rating === -1 ? "done" : void 0,
+          onClick: rate(-1),
+          children: /* @__PURE__ */ jsx4("span", { "aria-hidden": true, children: "\u{1F44E}" })
+        }
+      )
+    ] })
   ] });
 }
 function toolPreview(args) {
@@ -639,12 +686,15 @@ function BrainTimelineInner({
   isRunning,
   loading,
   labels: labelOverrides,
+  modelIdentity = DEFAULT_MODEL_IDENTITY,
   assistantName,
   emptyState,
   renderMessage,
   renderStreaming,
   renderAssistantActions,
   onReplayMessage,
+  onRateMessage,
+  ratings,
   onInternalLink,
   onApplyCode,
   onCreateFile,
@@ -735,10 +785,21 @@ function BrainTimelineInner({
                 }
               ),
               /* @__PURE__ */ jsxs4("div", { className: "bf-tl__actions", children: [
-                /* @__PURE__ */ jsx4(MessageActions, { message: node.message, role: "assistant", text: bodyText, labels, onReplay: onReplayMessage }),
+                /* @__PURE__ */ jsx4(
+                  MessageActions,
+                  {
+                    message: node.message,
+                    role: "assistant",
+                    text: bodyText,
+                    labels,
+                    onReplay: onReplayMessage,
+                    onRate: onRateMessage,
+                    rating: ratings?.[node.message.id]
+                  }
+                ),
                 renderAssistantActions?.(node.message)
               ] }),
-              prov && /* @__PURE__ */ jsx4(ProvenanceChip, { prov, labels })
+              prov && /* @__PURE__ */ jsx4(ProvenanceChip, { prov, labels, identity: modelIdentity })
             ] })
           ] }, node.key);
         }
@@ -976,6 +1037,7 @@ import { useEffect as useEffect2, useMemo as useMemo4, useRef as useRef2, useSta
 import {
   activeModelKey,
   buildModelItems,
+  DEFAULT_MODEL_IDENTITY as DEFAULT_MODEL_IDENTITY2,
   filterModelItems,
   MODEL_CATEGORIES,
   modelCategoryLabel,
@@ -1068,10 +1130,11 @@ function PromptOptionsMenu({
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
-  const items = useMemo4(() => model ? buildModelItems(model.options, labels) : [], [model, labels]);
+  const identity = model?.identity ?? DEFAULT_MODEL_IDENTITY2;
+  const items = useMemo4(() => model ? buildModelItems(model.options, labels, identity) : [], [model, labels, identity]);
   const inUse = useMemo4(
-    () => model ? modelInUse(model.selection, items, labels, model.effective) : null,
-    [model, items, labels]
+    () => model ? modelInUse(model.selection, items, labels, model.effective, identity) : null,
+    [model, items, labels, identity]
   );
   const categories = useMemo4(
     () => MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category)),
@@ -1079,7 +1142,7 @@ function PromptOptionsMenu({
   );
   const visible = useMemo4(() => filterModelItems(items, labels, query, filter), [items, labels, query, filter]);
   if (!mode && !memory && !autoMode && !session && !onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
-  const canChoose = model?.canChoose !== false;
+  const canChoose = identity.canChoose;
   const activeKey = model ? activeModelKey(model.selection) : "";
   const activeMode = mode?.choices.find((choice) => choice.value === mode.value);
   const title = [
@@ -1366,7 +1429,13 @@ import {
   perMillionUsd,
   byoVendorLabel,
   MODEL_CATEGORIES as MODEL_CATEGORIES2,
-  PROJECT_EVERMIND_MODEL_PREFIX
+  PROJECT_EVERMIND_MODEL_PREFIX,
+  BUILDERFORCE_PRODUCT_NAME,
+  DEFAULT_MODEL_IDENTITY as DEFAULT_MODEL_IDENTITY3,
+  displayModelName as displayModelName2,
+  productForPlan,
+  productModelName,
+  revealsModelId
 } from "@seanhogg/builderforce-brain-embedded";
 
 // src/HealthRing.tsx
@@ -4416,6 +4485,7 @@ function Row2({ item, onAction }) {
 }
 export {
   Avatar,
+  BUILDERFORCE_PRODUCT_NAME,
   BrainTimeline,
   ChatErrorBanner,
   ChatTicketsPanel,
@@ -4423,6 +4493,7 @@ export {
   DEFAULT_CHAT_ERROR_LABELS,
   DEFAULT_CHAT_TICKETS_LABELS,
   DEFAULT_EVERMIND_LABELS,
+  DEFAULT_MODEL_IDENTITY3 as DEFAULT_MODEL_IDENTITY,
   DEFAULT_PROJECT360_LABELS,
   DEFAULT_PROJECT_LIST_LABELS,
   DEFAULT_PROMPT_OPTIONS_LABELS,
@@ -4450,6 +4521,7 @@ export {
   buildSettledTimeline,
   buildTimeline,
   byoVendorLabel,
+  displayModelName2 as displayModelName,
   evermindLearnedStatus,
   evermindNextAction,
   filterModelItems2 as filterModelItems,
@@ -4462,7 +4534,10 @@ export {
   parseAskUser,
   perMillionUsd,
   premiumCostLabel,
+  productForPlan,
+  productModelName,
   promptOptionsLabels,
+  revealsModelId,
   selectPendingAskUser,
   serializeAskUser,
   splitThinkSegments,

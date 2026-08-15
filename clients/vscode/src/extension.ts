@@ -1055,7 +1055,7 @@ async function signOut(
  */
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   try {
-    const { models, freeModels, configuredModels, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo } =
+    const { models, freeModels, configuredModels, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo, identity } =
       await getModels(context.secrets, true);
 
     // When premium is locked, the gateway tells us WHY and which step opens it.
@@ -1100,6 +1100,7 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
         paid: canUsePremiumModels ? premiumModels : [],
       },
       labels,
+      identity,
     );
 
     // One separator per funding tier, in the builder's cost order. `auto` and the BYO

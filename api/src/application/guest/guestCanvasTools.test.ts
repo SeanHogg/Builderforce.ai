@@ -128,6 +128,37 @@ describe('restrictGuestTools', () => {
     expect(GUEST_GATED_CANVAS_TOOLS).toContain(CANVAS_IMAGE_TOOL);
   });
 
+  /**
+   * The social vocabulary, by name, because absence here has now cost a whole session.
+   *
+   * 2026-08-15 (ui 2026.8.17 / api 2026.8.11): all five were account-required, the
+   * canvas system prompt named every one of them unconditionally, and the model — asked
+   * to connect the user's accounts and post to all of them — answered "you would need to
+   * connect your existing accounts to a social media management platform". Nothing on
+   * the board, and a recommendation to go and use a competitor, from inside the product
+   * that does it. They are guest-gated now: advertised, admitted, and self-gating on
+   * credentials in the browser like `canvas_add_image`.
+   */
+  it('admits the social tools so "connect my accounts" gets the real reason', () => {
+    const social = [
+      'canvas_connect_social_account', 'canvas_add_social_feed', 'canvas_refresh_social_feed',
+      'canvas_create_social_campaign', 'canvas_publish_social_campaign',
+    ];
+    for (const name of social) expect(GUEST_GATED_CANVAS_TOOLS).toContain(name);
+    // Pinning reads the feed tile already on the board — a local document operation.
+    expect(GUEST_SAFE_CANVAS_TOOLS).toContain('canvas_pin_social_post');
+
+    const body = {
+      messages: [{ role: 'user', content: 'connect all my social accounts and post to them' }],
+      tools: social.map((name) => tool(name)),
+      tool_choice: 'auto',
+    } as ChatCompletionRequest;
+
+    restrictGuestTools(body);
+
+    expect((body.tools as Array<{ function: { name: string } }>).map((t) => t.function.name)).toEqual(social);
+  });
+
   it('classifies every canvas tool exactly once', () => {
     expect(new Set(CREATION_CANVAS_TOOLS).size).toBe(CREATION_CANVAS_TOOLS.length);
     expect(CREATION_CANVAS_TOOLS.length).toBe(

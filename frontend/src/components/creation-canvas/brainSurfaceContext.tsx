@@ -44,6 +44,12 @@ export interface BrainSurfaceContextValue {
   joinedCollaborator: BrainSurfaceCollaborator | null;
   /** Re-send a transcript message as the next canvas turn ("send again"). */
   onReplayMessage: (message: BrainMessage, role: 'user' | 'assistant') => void;
+  /** Rate a Brain reply on this board. Undefined on a board with nothing to file a
+   *  rating against (a guest session, or a turn with no resolved model), which hides
+   *  the thumbs rather than offering a control that would silently do nothing. */
+  onRateMessage?: (message: BrainMessage, rating: 1 | -1 | 0) => void;
+  /** This viewer's thumb per message id, so a press stays lit. */
+  ratings?: Record<number, 1 | -1>;
   /** The guest wall this conversation ran into, so BOTH placements offer the same
    *  way forward. Null on every signed-in board. */
   guestSignup: GuestSignupPrompt | null;

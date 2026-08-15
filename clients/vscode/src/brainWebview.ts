@@ -105,6 +105,8 @@ function buildLabels(): Record<string, string> {
     "tl.copy": t("Copy"),
     "tl.copied": t("Copied"),
     "tl.replay": t("Send again"),
+    "tl.rateUp": t("Good response"),
+    "tl.rateDown": t("Bad response"),
     "tl.apply": t("Apply"),
     "tl.createFile": t("Create file"),
     "tl.preview": t("Preview"),

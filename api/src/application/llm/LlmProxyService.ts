@@ -71,6 +71,7 @@ import { validateJsonSchema } from './jsonSchemaValidator';
 import { parseClientReasoningIntent } from './reasoningCapability';
 import { estimateTokensFromChars } from './tokenUsage';
 import type { ActionType } from './actionTypes';
+import { blendedQualityScore, qualityEvidence } from './modelQualityScore';
 import { PROVIDER_VENDOR_MAP, byoVendorIdsFromCredentials, type TenantVendorKeys } from './tenantProviderKeyService';
 import {
   bareModelId,
@@ -2007,6 +2008,10 @@ export interface ActionModelRankStat {
   n: number;
   avgScore: number;
   avgCostMc: number;
+  /** Human thumbs on this (action, model) — see `modelQualityScore.ts`. Optional:
+   *  absent on blobs written before migration 0465. */
+  ratedUp?: number;
+  ratedDown?: number;
 }
 
 export interface RankModelsOptions {
@@ -2022,10 +2027,14 @@ export const DEFAULT_MIN_SAMPLES = 8;
 /**
  * Learned-routing reorder (PURE — no I/O). Stable-reorders the curated, plan-reachable
  * coding pool so the empirically-best model for this action type leads:
- *   • a model is ELIGIBLE to lead only with `n >= minSamples` samples;
- *   • eligible models sort by `avgScore (+ bias)` desc, ties broken by lower
- *     `avgCostMc`, then by the curated index (stable);
- *   • every model below the sample floor keeps the curated order, appended after;
+ *   • a model is ELIGIBLE to lead only with `minSamples` observations, counting BOTH
+ *     scored runs and human thumbs ({@link qualityEvidence}) — a model with no runs
+ *     but a dozen ratings is not cold, and treating it as cold is how chat-quality
+ *     feedback ends up changing nothing;
+ *   • eligible models sort by `blendedQualityScore (+ bias)` desc — run outcomes and
+ *     human satisfaction, each weighted by how much evidence it has — ties broken by
+ *     lower `avgCostMc`, then by the curated index (stable);
+ *   • every model below the floor keeps the curated order, appended after;
  *   • when NO model clears the floor, the curated order is returned UNCHANGED
  *     (cold-start safety — routing degrades to today's static order).
  * The optional `bias` only nudges ordering AMONG already-eligible models (a nudge on
@@ -2049,12 +2058,12 @@ export function rankModelsForAction(
   const rest: string[] = [];
   for (const m of reachable) {
     const s = statByModel.get(m);
-    if (s && s.n >= minSamples) eligible.push(m);
+    if (s && qualityEvidence(s) >= minSamples) eligible.push(m);
     else rest.push(m);
   }
   if (eligible.length === 0) return [...reachable]; // cold-start: static order unchanged.
 
-  const scoreOf = (m: string): number => (statByModel.get(m)!.avgScore) + (bias[m] ?? 0);
+  const scoreOf = (m: string): number => blendedQualityScore(statByModel.get(m)!) + (bias[m] ?? 0);
   eligible.sort((a, b) => {
     const d = scoreOf(b) - scoreOf(a);
     if (d !== 0) return d;
@@ -2166,7 +2175,8 @@ export interface PickCloudModelResult {
   /** The learned reorder of the plan-reachable coding pool (soft-seed branch only) —
    *  surfaced so the caller can explain the choice on the timeline. */
   ranked?: string[];
-  /** Samples behind the chosen seed (the leading ranked model), 0 when cold/curated. */
+  /** Observations behind the chosen seed — scored runs PLUS human thumbs
+   *  ({@link qualityEvidence}). 0 when cold/curated. */
   seedSamples?: number;
   /** True when the SSM bias map was non-empty and could affect ordering. */
   biasApplied?: boolean;
@@ -2244,7 +2254,10 @@ export function pickCloudModel(
   const bias = opts?.bias && Object.keys(opts.bias).length > 0 ? opts.bias : undefined;
   const ranked = rankModelsForAction(fitting, opts?.actionStats, { minSamples: opts?.minSamples, bias });
   const seed = ranked[0] ?? reachable[0] ?? CODING_DEFAULT_MODEL;
-  const seedSamples = opts?.actionStats?.find((s) => s.model === seed)?.n ?? 0;
+  // Evidence, not just runs: a seed chosen on a dozen human thumbs and no cloud run
+  // IS a learned seed, and reporting 0 here made the timeline call it "cold-start".
+  const seedStat = opts?.actionStats?.find((s) => s.model === seed);
+  const seedSamples = seedStat ? qualityEvidence(seedStat) : 0;
   return { model: seed, strict: false, ranked, seedSamples, biasApplied: !!bias };
 }
 

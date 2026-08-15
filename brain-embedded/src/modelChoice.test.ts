@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { activeModelKey, buildModelItems, filterModelItems, modelInUse, DEFAULT_MODEL_CHOICE_LABELS as L, type ChatModelOptions } from './modelChoice';
+import { BUILDERFORCE_PRODUCT_NAME, type ModelIdentityContext } from './modelIdentity';
+
+/** A viewer entitled to pick a model (paid plan or a connected provider). */
+const CHOOSER: ModelIdentityContext = { product: 'pro', canChoose: true };
+/** The free / anonymous viewer: routed, no choice, so no upstream id is ever shown. */
+const FREE: ModelIdentityContext = { product: 'free', canChoose: false };
 
 const options: ChatModelOptions = {
   configured: [{ id: 'tenant_model:reviewer', label: 'Review specialist' }],
@@ -71,29 +77,59 @@ describe('filterModelItems', () => {
 });
 
 describe('modelInUse', () => {
-  const items = buildModelItems(options, L);
+  const items = buildModelItems(options, L, CHOOSER);
 
   it('names a strict pin and how it is funded', () => {
-    expect(modelInUse({ mode: 'model', model: 'plan/sonnet' }, items, L)).toEqual({
+    expect(modelInUse({ mode: 'model', model: 'plan/sonnet' }, items, L, undefined, CHOOSER)).toEqual({
       name: 'plan/sonnet',
       detail: L.planDetail,
     });
     expect(activeModelKey({ mode: 'model', model: 'plan/sonnet' })).toBe('model:plan/sonnet');
   });
 
-  it('reports what auto actually resolved to, not just "Auto"', () => {
-    expect(modelInUse({ mode: 'auto' }, items, L, 'free/qwen')).toEqual({ name: 'free/qwen', detail: L.freeDetail });
-    expect(modelInUse({ mode: 'auto' }, items, L)).toEqual({ name: L.autoLabel, detail: L.autoDetail });
+  it('reports what auto resolved to for a viewer who may pin, and the product otherwise', () => {
+    expect(modelInUse({ mode: 'auto' }, items, L, 'free/qwen', CHOOSER)).toEqual({ name: 'free/qwen', detail: L.freeDetail });
+    expect(modelInUse({ mode: 'auto' }, items, L, undefined, CHOOSER))
+      .toEqual({ name: BUILDERFORCE_PRODUCT_NAME.pro, detail: L.autoDetail });
+  });
+
+  it('never leaks the upstream model a routed FREE turn landed on', () => {
+    // The reported bug: a free-plan composer announced "minimaxai/minimax-m3" next to a
+    // menu that would not let the user change it. Free viewers see the product, always —
+    // including when the host reports what the cascade actually resolved to.
+    for (const effective of [undefined, 'minimaxai/minimax-m3', 'plan/sonnet']) {
+      expect(modelInUse({ mode: 'auto' }, items, L, effective, FREE))
+        .toEqual({ name: BUILDERFORCE_PRODUCT_NAME.free, detail: L.autoDetail });
+    }
+    // Even a pin that somehow survived on the selection is masked — the gateway would
+    // ignore it for this tenant anyway, so naming it would state something untrue.
+    expect(modelInUse({ mode: 'model', model: 'minimaxai/minimax-m3' }, items, L, undefined, FREE).name)
+      .toBe(BUILDERFORCE_PRODUCT_NAME.free);
+  });
+
+  it('defaults to the masked identity when a host wires none', () => {
+    expect(modelInUse({ mode: 'auto' }, items, L, 'minimaxai/minimax-m3').name)
+      .toBe(BUILDERFORCE_PRODUCT_NAME.free);
   });
 
   it('describes a project-Evermind pin as the plan feature it is, not a metered model', () => {
-    expect(modelInUse({ mode: 'auto' }, items, L, 'project_evermind:12')).toEqual({
-      name: L.evermindLabel,
-      detail: L.evermindDetail,
-    });
+    // Named on BOTH tiers: it is the user's OWN learned head, not an upstream model.
+    for (const identity of [CHOOSER, FREE]) {
+      expect(modelInUse({ mode: 'auto' }, items, L, 'project_evermind:12', identity)).toEqual({
+        name: L.evermindLabel,
+        detail: L.evermindDetail,
+      });
+    }
   });
 
   it('describes the BYO pool', () => {
-    expect(modelInUse({ mode: 'byo_pool' }, items, L)).toEqual({ name: L.poolLabel, detail: L.poolDetail });
+    expect(modelInUse({ mode: 'byo_pool' }, items, L, undefined, FREE)).toEqual({ name: L.poolLabel, detail: L.poolDetail });
+  });
+});
+
+describe('buildModelItems · routed row', () => {
+  it('names the routed row after the product that funds it', () => {
+    expect(buildModelItems(options, L, CHOOSER)[0]).toMatchObject({ key: 'auto', label: BUILDERFORCE_PRODUCT_NAME.pro });
+    expect(buildModelItems(options, L, FREE)[0]).toMatchObject({ key: 'auto', label: BUILDERFORCE_PRODUCT_NAME.free });
   });
 });

@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
+import MethodologySection from '@/components/marketing/MethodologySection';
+import RelatedArticles from '@/components/blog/RelatedArticles';
 import { Icon } from '@/components/ui/Icon';
 import { REFERENCE_DOMAINS, REFERENCE_FOUNDATIONS } from '@/lib/publicDestinations';
 import styles from './AboutPage.module.css';
@@ -84,6 +86,16 @@ export default async function AboutPage() {
           <h2>{t('thesis.title')}</h2>
           <p>{t('thesis.body')}</p>
         </div>
+      </section>
+
+      {/* The thesis above says a company is a system. This says how the system
+          is actually worked — the same component /features, /pricing and
+          /sell-builderforce render, so "what Builderforce does" has one answer
+          across the site instead of four. `full`: nothing else on this page
+          states the arc or the proof ladder. */}
+      <section className={styles.method}>
+        <MethodologySection variant="full" />
+        <RelatedArticles surface="methodology" embedded />
       </section>
 
       <section className={styles.promises}>

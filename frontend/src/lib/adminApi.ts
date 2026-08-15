@@ -612,6 +612,37 @@ export interface VendorHealthRow extends VendorHealthSnapshot {
   createdAt: string;
 }
 
+/** One (model × action × MCP tool) bucket of human ratings — mirrors the api's
+ *  `RatingBucket` (application/llm/actionRatings.ts). */
+export interface LlmRatingBucket {
+  model: string;
+  actionType: string;
+  /** Null when the rated turns executed no tool (a prose-only reply). */
+  toolName: string | null;
+  up: number;
+  down: number;
+  total: number;
+  /** Smoothed 0..1 satisfaction — the same number the learned router blends. */
+  score: number;
+}
+
+/** A head-to-head verdict for one action bucket: who won, over whom, by how much. */
+export interface LlmRatingLeader {
+  actionType: string;
+  toolName: string | null;
+  winner: LlmRatingBucket;
+  runnerUp: LlmRatingBucket;
+  margin: number;
+}
+
+export interface LlmRatingSummary {
+  days: number;
+  totals: { up: number; down: number; total: number; score: number };
+  buckets: LlmRatingBucket[];
+  leaders: LlmRatingLeader[];
+  models: number;
+}
+
 export interface LegalDocument {
   documentType: 'terms' | 'privacy';
   version: string;
@@ -1269,6 +1300,12 @@ export const adminApi = {
 
   async llmUsage(days = 30): Promise<LlmUsageStats> {
     return adminRequest<LlmUsageStats>(`/api/admin/llm-usage?days=${days}`);
+  },
+
+  /** Platform-wide human ratings of model output, rolled up by (model × action ×
+   *  MCP tool). The quality counterpart to {@link llmUsage}'s cost view. */
+  async llmRatings(days = 30): Promise<LlmRatingSummary> {
+    return adminRequest<LlmRatingSummary>(`/api/admin/llm-ratings?days=${days}`);
   },
 
   async llmHealthLatest(): Promise<VendorHealthRow[]> {

@@ -79,6 +79,10 @@ export const GUEST_SAFE_CANVAS_TOOLS = [
   'canvas_update_connection',
   'canvas_delete_connection',
   'canvas_convert_to_drawio',
+  // Lifts one post out of a social feed tile that is ALREADY on this board, in the
+  // browser, over the posts that tile is holding — no request, no tenant. Its sibling
+  // tools, which do reach `/api/social/*`, are in the gated set below.
+  'canvas_pin_social_post',
   // Ranks the résumé objects ALREADY ON THIS BOARD against a posting on this board, in
   // the browser, with no network call — the same deterministic analyzer the résumé
   // builder uses, composed N:1. Guest-safe because it reads nothing but the canvas: a
@@ -184,6 +188,37 @@ export const GUEST_GATED_CANVAS_TOOLS = [
   // only tool a guest-visible description may name — `canvas_create_test_plan`'s
   // description does not, precisely so this classification stays free to change.
   'canvas_publish_tests',
+  // ── Connected social accounts (`/api/social/*`) ──────────────────────────────
+  // Gated rather than absent, for the reason this whole set exists, and on the
+  // strongest evidence yet that the reason is real.
+  //
+  // Measured 2026-08-15 (ui 2026.8.17 / api 2026.8.11), a board opened with "I want to
+  // create a social media campaign. First I want to connect all my social media
+  // accounts and then create a post that goes to all the social media." All five social
+  // tools were account-required and therefore absent, while the SOCIAL block of the
+  // canvas system prompt — which is unconditional — was busy naming every one of them.
+  // The model, holding instructions for tools it had not been given, improvised: "I
+  // can't directly perform those actions. You would need to connect your existing
+  // accounts to a social media management platform." That is false twice over. The
+  // product connects X, LinkedIn, Facebook, Instagram and TikTok through the connector
+  // platform, publishes to all of them from one campaign, and the panel that does it is
+  // on the same canvas. It then fell back to `canvas_add_object` kind `socialCampaign`,
+  // was refused for carrying no authored ledger, and the session ended with nothing on
+  // the board and a recommendation to go and buy a competitor's product.
+  //
+  // Every one of these is a stateless request carrying the tenant token, exactly like
+  // `canvas_add_image` — so the gate is on CREDENTIALS, not on whether the board has
+  // been saved, and a signed-in user on an unsaved board publishes for real.
+  //
+  // `canvas_pin_social_post` is NOT here: it lifts one post out of a feed tile already
+  // on the board, in the browser, with no request of its own — so it belongs with the
+  // local-document tools above. A guest can never hold a feed tile to pin from, and the
+  // answer it gives them ("there is no social feed on this canvas yet") is true.
+  'canvas_connect_social_account',
+  'canvas_add_social_feed',
+  'canvas_refresh_social_feed',
+  'canvas_create_social_campaign',
+  'canvas_publish_social_campaign',
 ] as const;
 
 /**
@@ -196,16 +231,9 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   'canvas_add_inbox',
   'canvas_refresh_inbox',
   'canvas_pin_email',
-  // Connected social accounts (`/api/social/*`) — the tenant's own X / LinkedIn /
-  // Facebook / Instagram / TikTok connections, the feed they publish, and the
-  // campaigns that publish to them. Publishing is manager-gated server-side; these
-  // are account-required for the same reason the mailbox tools are — a guest has no
-  // tenant and therefore no accounts to read or post to.
-  'canvas_add_social_feed',
-  'canvas_refresh_social_feed',
-  'canvas_pin_social_post',
-  'canvas_create_social_campaign',
-  'canvas_publish_social_campaign',
+  // The social tools used to be here. They are guest-GATED now — see the note above
+  // them in GUEST_GATED_CANVAS_TOOLS for the session that moved them, and why absence
+  // was the worse of the two answers.
   // Tenant-scoped Builderforce domain data and canonical project PRDs.
   'canvas_read_domain',
   'canvas_read_project_prds',
@@ -427,5 +455,20 @@ export function canvasImageToolRedirect(kind: string): string {
  * what makes a model improvise.
  */
 export const CANVAS_QA_ACCOUNT_GATE = `canvas_publish_tests needs a free Builderforce account: the QA library, its personas and its scheduled runs are workspace resources, and this board has no workspace behind it. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that saving the suite and running it on a schedule needs a free account, and then point out what the user ALREADY has — every test case on this board carries complete, runnable Playwright source they can download and run locally right now. Do NOT say that the product cannot run tests, cannot generate specs, or is technically limited: the tests exist, and the only thing behind the account is where they are stored and scheduled.`;
+
+/**
+ * Returned to the MODEL when a social tool is called on a canvas with no credentials.
+ *
+ * Written to the same rule as the image and QA gates, plus one clause neither of them
+ * needs: this request has a supported half and an unsupported half, and the model that
+ * failed it (2026-08-15, see the note in the gated set) got BOTH wrong in one sentence.
+ * CONNECTING an existing X / LinkedIn / Facebook / Instagram / TikTok account is a
+ * first-class product capability behind a free account. REGISTERING a brand-new account
+ * on those networks is not something this product does, and never will be — that is a
+ * true limitation, and the only one here. A gate that does not separate them invites the
+ * model to blur them, and blurring them is how a user gets told to go and buy a social
+ * media management platform while looking at one.
+ */
+export const CANVAS_SOCIAL_ACCOUNT_GATE = `Connected social accounts need a free Builderforce account: X, LinkedIn, Facebook Pages, Instagram and TikTok are connected as workspace connections, and this board has no workspace behind it. The account prompt is now open and the canvas is unchanged. Do ALL THREE of these in your reply: say in ONE sentence that connecting the accounts and publishing needs a free account; author the campaign itself on the board right now with canvas_add_object — the copy, the per-network variants, the link and the media brief — so the moment an account is connected there is something to publish; and if the user asked you to REGISTER new accounts on those networks, say plainly that signing up on a social network is something only they can do, and that Builderforce connects the accounts they already have. Do NOT say that you cannot connect social accounts, do NOT suggest a third-party social media management tool, and do NOT describe any of this as a technical limitation: connecting is a built-in capability and it is one click away.`;
 
 export const CANVAS_IMAGE_ACCOUNT_GATE = `${CANVAS_IMAGE_TOOL} needs a free Builderforce account: image search and generation run on the server, not in this browser. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the picture needs a free account, and then build what this canvas CAN hold right now — the authored plan, the labelled layout, the planting list — with canvas_add_object. Do NOT say that you are unable to generate images, that you cannot see or look things up, or that a tool is technically limited: the only reason is the account, and it is one click away.`;

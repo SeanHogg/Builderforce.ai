@@ -63,6 +63,82 @@ export type SpecFieldRender =
   | 'stat' | 'text' | 'chips' | 'list' | 'rows' | 'meter' | 'verdict'
   | 'math' | 'reference' | 'matrix' | 'bars';
 
+/**
+ * What a cross-object derivation may ask the board — see {@link SpecField.derive}.
+ *
+ * TWO questions, deliberately, and no third. `ofKind` is the fan-out ("every submission
+ * on this board"); `byRef` is the join ("the assignment this submission answers"). A
+ * general `find(predicate)` was the obvious third and is the one to refuse: it would let
+ * each derivation invent its own matcher, and the academic vocabulary's refs are already
+ * ambiguous enough — `assignmentRef` is a TITLE, `cohortRef` is "title or courseCode" —
+ * that two spellings of the same join is a question of when, not whether.
+ *
+ * Both are index reads. Nothing here scans.
+ */
+export interface SpecDeriveBoard {
+  /** Every object of one kind, in board order. Empty when there are none. */
+  ofKind(kind: string): readonly Record<string, unknown>[];
+  /**
+   * The one object of `kind` this reference names, or null.
+   *
+   * Matches on `title` first and then on the identifying fields a vocabulary actually
+   * uses as a human-facing key (`courseCode`, `assetTag`, `reference`, `sku`). Case- and
+   * space-insensitive, because these refs are typed by people and by models, and a
+   * gradebook that silently aggregates nothing because somebody wrote "PHYS 2041" is
+   * worse than one that says it found no marks.
+   */
+  byRef(kind: string, ref: unknown): Record<string, unknown> | null;
+}
+
+/** The identifying fields `byRef` will match on, after `title`. Ordered by how
+ *  specific they are: a code identifies more precisely than a name. */
+const REF_KEYS = ['courseCode', 'reference', 'assetTag', 'sku', 'orderNumber', 'name'] as const;
+
+const refKey = (value: unknown): string => String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** The board with no other objects on it. A single frozen instance, so a caller with no
+ *  context (a unit test, a detached card) allocates nothing and re-renders nothing. */
+export const EMPTY_SPEC_BOARD: SpecDeriveBoard = Object.freeze({
+  ofKind: () => [],
+  byRef: () => null,
+});
+
+/**
+ * Index a board once for the derivations that read it.
+ *
+ * Built eagerly rather than lazily: a board is indexed once per render of the cards that
+ * need it, and every derivation on it then reads a `Map`. The lazy alternative saves
+ * nothing measurable and costs the guarantee that the cost is O(N) exactly once.
+ */
+export function makeSpecDeriveBoard(objects: readonly Record<string, unknown>[]): SpecDeriveBoard {
+  const byKind = new Map<string, Record<string, unknown>[]>();
+  const byRefKey = new Map<string, Record<string, unknown>>();
+
+  for (const object of objects) {
+    const kind = typeof object?.kind === 'string' ? object.kind : '';
+    if (!kind) continue;
+    const list = byKind.get(kind);
+    if (list) list.push(object);
+    else byKind.set(kind, [object]);
+
+    for (const key of ['title', ...REF_KEYS]) {
+      const value = refKey(object[key]);
+      // FIRST WINS. Two cards claiming one name is a board somebody has to fix, and
+      // quietly preferring the later one would make which mark counts depend on
+      // insertion order.
+      if (value && !byRefKey.has(`${kind}::${value}`)) byRefKey.set(`${kind}::${value}`, object);
+    }
+  }
+
+  return {
+    ofKind: (kind) => byKind.get(kind) ?? [],
+    byRef: (kind, ref) => {
+      const value = refKey(ref);
+      return value ? byRefKey.get(`${kind}::${value}`) ?? null : null;
+    },
+  };
+}
+
 export interface SpecField {
   name: string;
   render: SpecFieldRender;
@@ -139,8 +215,28 @@ export interface SpecField {
    * Return `undefined` (never a zero) when the inputs are missing. A margin computed
    * against an absent cost reads as 100% and is the most dangerous wrong answer this
    * layer can produce — the refusal `canvasMetricsDerived` already argues for metrics.
+   *
+   * ── THE SECOND ARGUMENT, AND WHY IT ARRIVED LATER ──────────────────────────────
+   * The first version took `(data)` alone, which is enough for arithmetic over one card
+   * — a job's cost, an estimate's total — and is exactly one object short of the case
+   * that motivated this flag in the first place. A `gradebook`'s mean is computed from
+   * the `submission` objects NEXT TO IT; a `submission`'s lateness needs the deadline
+   * on its `assignment`. Those are the fields the academic vocabulary declared `derived`
+   * and never produced, because a mechanism that "will write them later" is a promise,
+   * not a number.
+   *
+   * So a derivation also receives the BOARD, through the narrow port below rather than
+   * a raw array: every cross-object derivation needs the same two questions answered
+   * ("every object of this kind", "the one this ref names"), and letting each write its
+   * own matcher is how two of them come to disagree about whether a ref is a title or
+   * an id. The port indexes once per board, so a board of N objects with M derivations
+   * costs O(N + M) rather than O(N × M).
+   *
+   * A derivation that does not need it declares one parameter and pays nothing: the
+   * arity is what {@link specKindReadsBoard} reads, so a card whose kind never looks
+   * sideways is never subscribed to its neighbours.
    */
-  derive?: (data: Record<string, unknown>) => unknown;
+  derive?: (data: Record<string, unknown>, board: SpecDeriveBoard) => unknown;
   /**
    * A DATE THIS OBJECT IS JUDGED AGAINST — a renewal, a due date, an expiry, a review.
    *
@@ -174,8 +270,18 @@ export interface SpecField {
 export interface SpecObjectSpec {
   kind: string;
   icon: string;
-  /** Mirrors `CreationObjectGroup` in the registry; kept as a string to avoid a cycle. */
-  group: string;
+  /**
+   * The palette section this kind is filed under.
+   *
+   * TYPED, not a string. It was `string` "to avoid a cycle" — but `CreationObjectGroup`
+   * is a pure type, so importing it erases at compile time and there is no cycle to
+   * avoid, while the loose type cost exactly what the palette's own comment predicts it
+   * would: `book`, the publication primitive, declared `group: 'Create'` — a section
+   * that does not exist — and `CREATION_PALETTE_GROUPS` filters by group, so the kind
+   * was registered, authorable by Brain, and unreachable by a person. Nothing errored;
+   * one registry test noticed a set of 176 against a set of 175.
+   */
+  group: CreationObjectGroup;
   /** Default status on a freshly created object. An i18n key suffix under
    *  `<namespace>.status`. Never "Live" or "Ready" on an empty card — an empty card
    *  that reads as a configured one is the defect the registry's own comments record. */
@@ -223,6 +329,10 @@ export const SUMMARY_FIELD: SpecField = {
 
 const SETS: SpecObjectSet[] = [];
 let byKind: Map<string, { spec: SpecObjectSpec; set: SpecObjectSet }> | null = null;
+/** kind → "does any derivation read the board", memoised. Cleared with the index it is
+ *  derived from, so a set registered after the first lookup is not answered from a
+ *  cache computed before it existed. */
+const boardReaders = new Map<string, boolean>();
 
 /**
  * Register one vocabulary.
@@ -236,6 +346,7 @@ let byKind: Map<string, { spec: SpecObjectSpec; set: SpecObjectSet }> | null = n
 export function registerSpecObjectSet(set: SpecObjectSet): void {
   SETS.push(set);
   byKind = null;
+  boardReaders.clear();
 }
 
 function index(): Map<string, { spec: SpecObjectSpec; set: SpecObjectSet }> {
@@ -324,8 +435,31 @@ export function specMutableFields(kind: string): readonly string[] {
  * that either draws a section with nothing in it or hides a number it could have shown.
  * See `SpecField.derive`.
  */
-export function specFieldValue(field: SpecField, data: Record<string, unknown>): unknown {
-  return field.derive ? field.derive(data) : data[field.name];
+export function specFieldValue(
+  field: SpecField,
+  data: Record<string, unknown>,
+  board: SpecDeriveBoard = EMPTY_SPEC_BOARD,
+): unknown {
+  return field.derive ? field.derive(data, board) : data[field.name];
+}
+
+/**
+ * Does any of this kind's derivations look at its neighbours?
+ *
+ * Read off the declared ARITY, which is exact for the arrow functions a spec holds and
+ * needs no second flag to fall out of step with the code beside it. It is what lets the
+ * node body subscribe a `gradebook` to the board and leave a `workOrder` — whose every
+ * derivation is arithmetic over its own rows — subscribed to nothing.
+ *
+ * Memoised on the registry index, so this is a `Map` read per render, not a scan.
+ */
+export function specKindReadsBoard(kind: string): boolean {
+  const cached = boardReaders.get(kind);
+  if (cached !== undefined) return cached;
+  const spec = specObjectSpec(kind);
+  const reads = !!spec?.fields.some((field) => !!field.derive && field.derive.length >= 2);
+  boardReaders.set(kind, reads);
+  return reads;
 }
 
 /**
@@ -339,12 +473,16 @@ export function specFieldValue(field: SpecField, data: Record<string, unknown>):
  * Returns only the fields that actually resolved, so a half-filled object contributes
  * nothing rather than a wall of nulls.
  */
-export function specDerivedValues(kind: string, data: Record<string, unknown>): Record<string, unknown> {
+export function specDerivedValues(
+  kind: string,
+  data: Record<string, unknown>,
+  board: SpecDeriveBoard = EMPTY_SPEC_BOARD,
+): Record<string, unknown> {
   const spec = specObjectSpec(kind);
   if (!spec) return {};
   return Object.fromEntries(spec.fields.flatMap((field) => {
     if (!field.derive || field.restricted) return [];
-    const value = field.derive(data);
+    const value = field.derive(data, board);
     return value === undefined || value === null ? [] : [[field.name, value]];
   }));
 }

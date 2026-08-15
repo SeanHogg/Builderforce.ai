@@ -39,7 +39,7 @@ import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import { AUTHORED_DRAWING_STROKE, AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL, AUTHORED_WEBSITE_ACCENT } from './authoredColors';
 import styles from './CreationCanvas.module.css';
-import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
+import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, llmApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, localCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { answersComplete, defaultInput, questionIds, type ToolResult } from '@/lib/tools';
 
@@ -75,7 +75,6 @@ import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectE
 import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
 import { hiringApi } from '@/lib/hiringApi';
 import { screenCandidates } from '@/lib/canvasResumeScreening';
-import { resumeDocumentFromJson } from '@/lib/canvasResume';
 import { guestLimitRefusal, type GuestLimitRefusal } from '@/lib/guestLimit';
 import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
 import { ApiRequestError } from '@/lib/apiClient';
@@ -87,11 +86,11 @@ import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreatio
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
 import { describeSocialFilter, socialApi, totalEngagement, type SocialCampaign, type SocialFeedFilter, type SocialFeedItem, type SocialNetwork } from '@/lib/socialApi';
-import { isSocialNetworkName, socialCampaignNodeData, socialFeedPatch, socialPostNodeData, socialPostProjection } from '@/lib/canvasSocial';
+import { canvasSocialToolRedirect, isSocialNetworkName, socialCampaignNodeData, socialFeedPatch, socialPostNodeData, socialPostProjection } from '@/lib/canvasSocial';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { appendCanvasVideoSource, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, checkDataUse, findingFingerprint, normalizeQaSteps, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
+import { appendCanvasVideoSource, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, checkDataUse, findingFingerprint, normalizeQaSteps, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CANVAS_SOCIAL_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
 import { getStoredTenantToken } from '@/lib/auth';
 import { claimLocalDraft } from '@/lib/pendingWork';
 import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
@@ -156,7 +155,11 @@ import { DEFAULT_DRAWING_PREFERENCES, readDrawingPreferences, writeDrawingPrefer
 import { useComposerSpace } from './useComposerSpace';
 import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
 import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
-import { activeResumeRevision, initializeResumeFromPatch, preserveResumeSourceForPatch, resumeFamilyFromNode } from '@/lib/canvasResume';
+import {
+  RESUME_TEMPLATES, RESUME_TEMPLATE_IDS, activeResumeRevision, initializeResumeFromPatch,
+  preserveResumeSourceForPatch, resumeDocumentFromNode, resumeFamilyFromNode, resumeNodePatch,
+  resumeTemplateVariants, type ResumeTemplateId,
+} from '@/lib/canvasResume';
 import { renderedCanvasResume, resumeHtmlFile } from '@/lib/canvasResumeRenderer';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
@@ -182,7 +185,6 @@ import { C_SUITE_CANVAS_USE_CASES, PromptUseCasePicker, cSuiteCanvasOwner, cSuit
 import { DOMAINS, getDomainItems, getDomainMetrics, getDomainSummary, getEntityRows, getScopeEntities, isDomain } from '@/lib/kernel/kernelApi';
 import { TwilioCanvasSetup } from './TwilioCanvasSetup';
 import { NEW_CHAT_MODE, normalizeChatMode, useQueuedTurns, type ChatMode } from '@/lib/brain';
-import { QueuedTurnsNotice } from '@/components/brain/QueuedTurnsNotice';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
 import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativeBrief, creativeMeshGeometry, creativePreviewImageUrl, evermindMediaArtifact, generateEvermindMedia, generateServerCreativeArtifact, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, EVERMIND_CREATIVE_KINDS, SERVER_CREATIVE_KINDS, type CreationDeliverable, type CreativeArtifact } from '@/lib/creationDeliverables';
 import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
@@ -242,6 +244,10 @@ const CanvasGamePanel = dynamic(
 );
 const CanvasPublishPanel = dynamic(
   () => import('./CanvasPublishPanel').then((module) => module.CanvasPublishPanel),
+  { ssr: false },
+);
+const CanvasReleasesPanel = dynamic(
+  () => import('./CanvasReleasesPanel').then((module) => module.CanvasReleasesPanel),
   { ssr: false },
 );
 
@@ -944,6 +950,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const recordBrainCompletion = useCallback((completion: CanvasAiCompletion) => {
     brainRuntime.current.completions = [...brainRuntime.current.completions, completion].slice(-50);
   }, []);
+  /**
+   * What the LAST completion of the turn just finished actually ran on — the resolved
+   * model and the tools it called. Stamped onto the assistant message so a thumb
+   * pressed on it (now or after a reload) can be filed against the model that earned
+   * it, exactly as the Brain chat files provenance. Without this the Canvas — a large
+   * share of all model calls — could rate nothing.
+   */
+  const lastTurnProvenance = useCallback((): { model?: string; tools?: string[] } => {
+    const last = brainRuntime.current.completions[brainRuntime.current.completions.length - 1];
+    if (!last?.resolvedModel) return {};
+    return { model: last.resolvedModel, ...(last.toolCalls.length ? { tools: last.toolCalls } : {}) };
+  }, []);
   const disableBrainModel = useCallback((model: string) => {
     if (!model || brainRuntime.current.disabledModels.includes(model)) return;
     brainRuntime.current.disabledModels = [...brainRuntime.current.disabledModels, model];
@@ -990,6 +1008,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [gameFocus, setGameFocus] = useState<string | null>(null);
   /** The object being listed for sale, by node id — `''` publishes the whole board. */
   const [publishFocus, setPublishFocus] = useState<string | null>(null);
+  // Build → Stage → Live for one card. Held separately from `publishFocus` because
+  // they are two different questions: "what is this and what does it cost" is a
+  // form, and "which version is on sale and is the next one fit to be" is a
+  // lifecycle. An empty string means the whole board.
+  const [releaseFocus, setReleaseFocus] = useState<string | null>(null);
   const [creatingBuild, setCreatingBuild] = useState(false);
   const [framePresets, setFramePresets] = useState<FramePreset[]>([]);
   const [serverTemplates, setServerTemplates] = useState<ServerCreationTemplate[]>([]);
@@ -1037,7 +1060,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [brainRunStartedAt, setBrainRunStartedAt] = useState<number | null>(null);
   const [activeAgentIds, setActiveAgentIds] = useState<Set<string>>(() => new Set());
   const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
-  const { options: canvasModelOptions, canChooseModel } = useChatModelOptions();
+  const { options: canvasModelOptions, identity: modelIdentity } = useChatModelOptions();
   const [notice, setNotice] = useState('Session saved');
 
   /**
@@ -2488,6 +2511,28 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [canEdit, localizedTourDefaults, sessionId, setNodes, t, timeline]);
 
   /**
+   * ONE credential check in front of every social tool.
+   *
+   * Gated on CREDENTIALS, not on whether the board is saved — the same distinction
+   * `canvas_add_image` draws and for the same reason: `/api/social/*` is a stateless
+   * request carrying the tenant token, so a signed-in user on an unsaved board connects,
+   * drafts and publishes for real. `persistence` still gates what needs a SAVED SESSION
+   * to point at, which for social is exactly one thing: the campaign's `sessionId` link.
+   *
+   * Read from the token store per call rather than closing over `hasAccount`, so a
+   * sign-in mid-session is reflected on the very next tool call.
+   *
+   * Six tools rather than six copies of this: the model must never be able to reach a
+   * social tool that returns a different reason than its siblings, because the reason IS
+   * the answer the user gets — see CANVAS_SOCIAL_ACCOUNT_GATE.
+   */
+  const socialAccountGate = useCallback((tool: string): { requiresAccount: true; tool: string; error: string } | null => {
+    if (getStoredTenantToken()) return null;
+    requireAccount('social', tSocial('gateTitle'), tSocial('gateBody'));
+    return accountGateResult(tool, CANVAS_SOCIAL_ACCOUNT_GATE);
+  }, [requireAccount, tSocial]);
+
+  /**
    * Read the connected social accounts and BUILD the feed tile — without adding it.
    *
    * Shared by `canvas_add_social_feed` (which stages it as a reviewable proposal) and
@@ -3742,8 +3787,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { error: 'That posting has no requirements to screen against. Author its mustHaves, niceToHaves and responsibilities first — screening against an empty posting ranks nobody honestly.' };
       }
 
+      // Read through the SAME accessor the template engine uses. Reading
+      // `data.resumeDocument` directly found nothing on an imported résumé — that field
+      // is consumed when the family is built and never persisted — so a board full of
+      // real CVs screened as "no parsed resume document".
       const candidates = resumes.flatMap((node) => {
-        const document = resumeDocumentFromJson(node.data.resumeDocument);
+        const document = resumeDocumentFromNode(node.data);
         return document ? [{ ref: node.id, name: String(node.data.title || node.id), document }] : [];
       });
       if (!candidates.length) {
@@ -3784,6 +3833,74 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         reviewedCount: report.reviewedCount,
         ranked: report.ranked.map((entry) => ({ rank: entry.rank, candidate: entry.candidate, score: entry.score, signals: entry.signals })),
         instruction: 'Report the top of this ranking and the reason each one is there, using the evidence and gaps on the shortlist. This is a READING ORDER, not a decision: never say a candidate was rejected, and never restate a score without the gap that goes with it.',
+      };
+    },
+  }, {
+    /**
+     * THE TEMPLATE ENGINE, EXPOSED.
+     *
+     * "Make ten versions of my résumé in different styles" had no route to this engine,
+     * so the only path left was ten `canvas_add_object` calls, each retyping the whole
+     * document. Measured 2026-08-15: the turn spent four minutes, produced nothing, and
+     * hung. One call now renders every requested style from the one document — no model
+     * round-trip per version, and no chance of a variant inventing a job.
+     */
+    name: 'canvas_render_resume_variants',
+    description: `Render one résumé in several visual styles at once, using the built-in template engine. USE THIS — never canvas_add_object — whenever the user asks for their résumé in different styles, templates, designs, layouts or formats, or for "N versions" of it. It re-renders the EXISTING document, so every version states the same history; authoring them by hand would be slower and would let the versions drift apart. Reads the résumé from a resume object, or from a dataset holding an imported JSON Resume. Available templates: ${RESUME_TEMPLATES.map((template) => `${template.id} (${template.industry})`).join(', ')}.`,
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'The resume or dataset object holding the résumé. Omit when exactly one is on the board.' },
+        templateIds: { type: 'array', items: { type: 'string', enum: [...RESUME_TEMPLATE_IDS] }, description: 'Templates to render, in order. Omit to render the requested count across the full catalog.' },
+        count: { type: 'number', description: 'How many styles to render when templateIds is omitted. Capped at the number of templates that exist.' },
+      },
+    },
+    mutates: () => true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; templateIds?: unknown; count?: number };
+      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...staged];
+      const sources = all.filter((node) => resumeDocumentFromNode(node.data) !== null);
+      const source = args.objectId ? all.find((node) => node.id === args.objectId) : sources.length === 1 ? sources[0] : undefined;
+      if (!source) {
+        return { error: sources.length
+          ? `Specify which object holds the résumé. On this canvas: ${sources.map((node) => `${node.id} (${node.data.title})`).join(', ')}`
+          : 'No résumé is on this canvas. Import a JSON Resume, PDF or Word CV first — this restyles a real document and never invents one.' };
+      }
+      const document = resumeDocumentFromNode(source.data);
+      if (!document) return { error: `Object ${source.id} does not hold a readable résumé document, so there is nothing to restyle.` };
+
+      const requested = Array.isArray(args.templateIds)
+        ? args.templateIds.filter((id): id is ResumeTemplateId => RESUME_TEMPLATE_IDS.includes(id as ResumeTemplateId))
+        : [];
+      const count = Math.max(1, Math.min(Number(args.count) || requested.length || RESUME_TEMPLATES.length, RESUME_TEMPLATES.length));
+      // Deduplicated and then topped up from the catalog, so "ten versions" is ten
+      // DIFFERENT designs rather than the same template repeated to reach a number.
+      const templateIds = [...new Set([...requested, ...RESUME_TEMPLATES.map((template) => template.id)])].slice(0, Math.max(count, requested.length));
+
+      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const variants = resumeTemplateVariants(document, templateIds, { title: String(source.data.title || '') });
+      const created: Array<{ id: string; templateId: string; title: string }> = [];
+      for (const variant of variants) {
+        const placed = [...all, ...proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : [])];
+        const node = newNode('resume', nextCanvasObjectPosition(placed, {}, narrowViewport, 'resume'));
+        node.data = {
+          ...node.data,
+          ...resumeNodePatch(variant.family),
+          title: activeResumeRevision(variant.family).title,
+          subtitle: variant.industry,
+          status: t('resumeEditor.statusOriginal'),
+        };
+        node.style = { width: 560, height: 620 };
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Render résumé · ${variant.industry}`, node });
+        created.push({ id: node.id, templateId: variant.templateId, title: String(node.data.title) });
+      }
+      return {
+        ok: true, proposed: true,
+        renderedFrom: source.id,
+        variants: created,
+        instruction: 'These are already on the board, fully rendered. Name the styles you produced in one short line and stop — do NOT create them again with canvas_add_object, and do not retype any résumé content.',
       };
     },
   }, {
@@ -5655,6 +5772,68 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     },
   }, {
     /**
+     * "Connect all my social accounts" — the FIRST thing anyone asks for, and until
+     * now the one thing the social vocabulary could not answer.
+     *
+     * Every other social tool assumes accounts already exist. Asked to connect them,
+     * the model had nothing to call and improvised (2026-08-15, see the note in
+     * `@builderforce/creation-canvas-contract`): it told the user to go and connect
+     * their accounts to "a social media management platform" — while sitting inside
+     * one, one rail icon away from the panel that does it.
+     *
+     * It does NOT take credentials. A token typed into a chat message is a token
+     * written into the conversation, the timeline, the diagnostics report and the
+     * model's context; the connect form is where a secret belongs, and this opens it.
+     * What the tool returns is the thing the model actually lacked — which networks
+     * exist, which are already connected, and exactly what each still needs — so the
+     * reply is a specific instruction rather than a suggestion to look around.
+     */
+    name: 'canvas_connect_social_account',
+    description: 'Open the social panel on this canvas so the user can CONNECT their X, LinkedIn, Facebook Pages, Instagram or TikTok account, and return which networks are available, which are already connected, and what each one still needs before it can publish. Call this whenever the user asks to connect, link, add, hook up or authorise their social accounts, and whenever another social tool reports that no account is connected. This does not ask you for credentials and you must never request a password, token or API key in chat — the panel collects them securely. Relay the returned per-network requirements verbatim.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: { network: { type: 'string', description: 'Highlight one network: x, linkedin, facebook, instagram or tiktok. Omit to show them all.' } },
+    },
+    mutates: false,
+    run: async (raw: unknown) => {
+      const gated = socialAccountGate('canvas_connect_social_account');
+      if (gated) return gated;
+      const wanted = (raw as { network?: string }).network;
+      let networks: Awaited<ReturnType<typeof socialApi.networks>>;
+      let accounts: Awaited<ReturnType<typeof socialApi.accounts>>;
+      try {
+        [networks, accounts] = await Promise.all([socialApi.networks(), socialApi.accounts()]);
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : tSocial('loadFailed') };
+      }
+      // Opening the panel IS the action — the tool has done its work by the time the
+      // model reads this, which is why it reports `opened` rather than proposing a
+      // change the user would have to approve before anything appeared.
+      setSocialOpen(true);
+      const listed = networks.networks.filter((option) => !isSocialNetworkName(wanted) || option.network === wanted);
+      return {
+        ok: true,
+        opened: true,
+        instruction: 'The social panel is open on this canvas, on its Accounts tab. Tell the user to pick their network there and complete the connect form — never ask them for a credential in chat.',
+        networks: listed.map((option) => ({
+          network: option.network,
+          label: option.label,
+          connected: option.connectedCount,
+          requiresMedia: option.requiresMedia,
+          // The non-secret ids three networks cannot post without. Naming them up
+          // front is what stops a connection that looks fine from failing at publish.
+          alsoNeeds: option.accountFields.map((field) => `${field.label} — ${field.help}`),
+        })),
+        connected: accounts.accounts.map((account) => ({
+          network: account.network,
+          name: account.name,
+          ready: account.ready,
+          missing: account.missingFields.map((field) => field.label),
+        })),
+      };
+    },
+  }, {
+    /**
      * "Show me our social feed" — the whole point of a connected account on the board.
      *
      * A dedicated action rather than `canvas_add_object` with authored fields, for the
@@ -5678,6 +5857,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     mutates: true,
     run: async (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const gated = socialAccountGate('canvas_add_social_feed');
+      if (gated) return gated;
       const args = raw as { networks?: string[]; title?: string; query?: string; limit?: number; x?: number; y?: number };
       const filter: SocialFeedFilter = {
         ...(Array.isArray(args.networks) && args.networks.length ? { networks: args.networks.filter(isSocialNetworkName) } : {}),
@@ -5711,6 +5892,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     mutates: true,
     run: async (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const gated = socialAccountGate('canvas_refresh_social_feed');
+      if (gated) return gated;
       const objectId = (raw as { objectId?: string }).objectId;
       const feeds = nodes.filter((node) => node.data.kind === 'socialFeed');
       const target = objectId ? feeds.find((node) => node.id === objectId) : feeds.length === 1 ? feeds[0] : undefined;
@@ -5796,6 +5979,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     mutates: true,
     run: async (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const gated = socialAccountGate('canvas_create_social_campaign');
+      if (gated) return gated;
       const args = raw as {
         name?: string; body?: string; variants?: Record<string, string>; linkUrl?: string;
         mediaUrls?: string[]; networks?: string[]; scheduledAt?: string; x?: number; y?: number;
@@ -5811,8 +5996,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         .filter((account) => account.ready && (wanted.length === 0 || wanted.includes(account.network)))
         .map((account) => account.id);
       if (targets.length === 0) {
-        // Actionable rather than a bare failure: the fix is not on this board.
-        return { error: 'No connected social account is ready to publish. Connect one from the social panel on this canvas first.' };
+        // ACTIONABLE, AND IT OPENS THE THING IT NAMES. Telling a model in chat to "use
+        // the social panel on this canvas" left the user hunting a rail icon for a
+        // panel Brain could not reach — so this opens it, and names the tool that
+        // would have opened it, rather than describing a destination.
+        setSocialOpen(true);
+        return {
+          error: accounts.accounts.length === 0
+            ? 'No social account is connected to this workspace yet, so there is nothing to publish to. The social panel is now open on this canvas — connect X, LinkedIn, Facebook, Instagram or TikTok there, or call canvas_connect_social_account to list what each one needs. Say that in one sentence, and author the campaign copy on the board now so it is ready the moment an account is connected.'
+            : `Connected accounts exist but none is ready to publish: ${accounts.accounts.map((account) => `${account.networkLabel} · ${account.name} needs ${account.missingFields.map((field) => field.label).join(', ') || 'setup'}`).join('; ')}. The social panel is now open — those fields are filled in on the connection itself. Relay exactly which field is missing on which account; do not describe this as the product being unable to post.`,
+          accounts: accounts.accounts.map((account) => ({
+            network: account.network, name: account.name, ready: account.ready,
+            missing: account.missingFields.map((field) => field.label),
+          })),
+        };
       }
 
       let created: Awaited<ReturnType<typeof socialApi.createCampaign>>;
@@ -5825,7 +6022,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           ...(args.linkUrl ? { linkUrl: args.linkUrl } : {}),
           ...(Array.isArray(args.mediaUrls) ? { mediaUrls: args.mediaUrls.map(String) } : {}),
           ...(args.scheduledAt ? { scheduledAt: args.scheduledAt } : {}),
-          ...(sessionId ? { sessionId } : {}),
+          // ONLY A SAVED SESSION. `social_campaigns.session_id` is a uuid FK to
+          // `creation_sessions`, and an unsaved board's id is the literal string
+          // `local-<uuid>` — so sending it unconditionally made every campaign drafted
+          // from an unsaved board fail at the database with an error the user reads as
+          // "posting is broken". The link is what rolls delivery up into this board's
+          // outcome ledger; a board that has no row cannot be in it, and drafting the
+          // campaign matters more than the rollup.
+          ...(persistence === 'server' && sessionId ? { sessionId } : {}),
         });
       } catch (error) {
         return { error: error instanceof Error ? error.message : 'That campaign could not be drafted.' };
@@ -5858,6 +6062,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     mutates: true,
     run: async (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const gated = socialAccountGate('canvas_publish_social_campaign');
+      if (gated) return gated;
       const objectId = (raw as { objectId?: string }).objectId;
       const campaigns = nodes.filter((node) => node.data.kind === 'socialCampaign');
       const target = objectId ? campaigns.find((node) => node.id === objectId) : campaigns.length === 1 ? campaigns[0] : undefined;
@@ -6104,6 +6310,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const wantsPixels = args.kind === 'image' && !authored.outputUrl;
       const emptyDrawing = args.kind === 'drawing' && (!Array.isArray(authored.points) || authored.points.length < 2);
       if (wantsPixels || emptyDrawing) return { error: canvasImageToolRedirect(args.kind) };
+      // THE SAME MISROUTE, ONE DOMAIN OVER. A social feed, a pinned post and a campaign
+      // are READ from connected accounts and from the server's publish ledger, so this
+      // tool can only ever produce a convincing fake of one. Name the tool that reads
+      // the real thing — see `canvasSocialToolRedirect` for the refusal this replaces,
+      // which asked a model to hand-author a campaign id and a published count.
+      const socialRedirect = canvasSocialToolRedirect(args.kind);
+      if (socialRedirect) return { error: socialRedirect };
       // A Course seeds the worked "Build an LLM" sample so a human dragging one
       // out of the palette gets something real to read. That default is a TRAP
       // for a generated object: a course titled "Recruiting and Hiring" with no
@@ -6781,7 +6994,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       };
     },
   }, ...canvasBuildActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [canEdit, canvasBuildActionList, convertObjectToDrawio, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId]);
+  [canEdit, canvasBuildActionList, convertObjectToDrawio, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -7072,7 +7285,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           appendTimeline('system', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:unanswered`);
           setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, subtitle: request, aiResponse: answer.trim() } } : node));
         } else if (answer.trim()) {
-          appendTimeline('assistant', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'brain', ref: 'brain', name: 'Brain' } }, `${requestMessageId}:assistant`);
+          appendTimeline('assistant', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'brain', ref: 'brain', name: 'Brain' }, ...lastTurnProvenance() }, `${requestMessageId}:assistant`);
           setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, subtitle: request, aiResponse: answer.trim() } } : node));
           const promptTargets = effectiveSelectedIds.filter((id) => id !== brainId && nodes.some((node) => node.id === id && node.data.kind !== 'chat'));
           if (promptTargets.length) setEdges((current) => associateBrainWithArtifacts(current, brainId, promptTargets));
@@ -7522,6 +7735,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return;
     }
     setPublishFocus(nodeId ?? '');
+  }, [persistence, requireAccount, sessionId, t]);
+
+  /**
+   * Build → Stage → Live for one card.
+   *
+   * Gated on the same account requirement as publishing, and for the same reason:
+   * a release is a snapshot in the object registry, and a board saved only to this
+   * device has nowhere to keep one.
+   */
+  const openReleasesPanel = useCallback((nodeId?: string) => {
+    if (persistence !== 'server' || !sessionId) {
+      requireAccount('publish', t('publish.accountTitle'), t('publish.accountBody'));
+      return;
+    }
+    setReleaseFocus(nodeId ?? '');
   }, [persistence, requireAccount, sessionId, t]);
 
   /** The project a game ships into, and the game as it stands right now. */
@@ -8171,9 +8399,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * research turn never means a dead input box. Shared with the Brain panel — one
    * queueing rule for every composer in the product.
    */
+  /** Assigned below, once `startCanvasTurn` exists — the queue and the board
+   *  callbacks both need the newest closure without re-registering. */
+  const startCanvasTurnRef = useRef<(text?: string) => void>(() => {});
   const queuedTurns = useQueuedTurns({
     running: thinking,
-    send: (text) => evaluateCanvasRef.current(text),
+    // Flushed turns take the same door every other turn takes — see
+    // `startCanvasTurn`. Re-queueing is impossible here: the queue only flushes
+    // once the run it was held behind has finished.
+    send: (text) => startCanvasTurnRef.current(text),
     resetKey: sessionId,
   });
   /**
@@ -8187,7 +8421,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const stopCanvasRun = useCallback(() => {
     const run = canvasRunRef.current;
-    if (!run) return;
+    // `thinking` is the authority on whether there is anything to stop: a settled
+    // run can leave its handle behind, and a Stop that narrates an interruption
+    // nobody was waiting on is worse than an inert button.
+    if (!run || !thinking) return;
     canvasRunRef.current = null;
     run.abort.abort();
     queuedTurns.clear();
@@ -8200,24 +8437,34 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       correlationId: run.requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'user',
       durationMs: performance.now() - run.startedAt, metadata: { stopped: true },
     }).catch(() => undefined);
-  }, [appendTimeline, persistence, queuedTurns, resolvedScopeMode, scopedNodeIds, sessionId, t]);
+  }, [appendTimeline, persistence, queuedTurns, resolvedScopeMode, scopedNodeIds, sessionId, t, thinking]);
   /**
-   * The composer's submit. A turn typed while Brain is still working joins the
-   * queue instead of being refused, which is what lets the input stay enabled.
+   * THE ONE DOOR every user-initiated turn goes through — the composer, "Send
+   * again" on a transcript message, an object handing Brain a request.
+   *
+   * A turn offered while Brain is still working joins the queue instead of being
+   * refused, which is what lets the composer stay enabled. `evaluateCanvas` drops
+   * a turn on the floor while `thinking` (it is single-flight), so anything that
+   * bypasses this door is silently ignored mid-run.
    */
-  const submitCanvasPrompt = useCallback(() => {
-    const text = prompt.trim();
-    if (!text) return;
-    if (queuedTurns.submit(text)) { setPrompt(''); return; }
-    evaluateCanvasRef.current();
+  const startCanvasTurn = useCallback((text?: string) => {
+    const value = (text ?? prompt).trim();
+    if (!value) return;
+    if (queuedTurns.submit(value)) {
+      if (text === undefined) setPrompt('');
+      return;
+    }
+    evaluateCanvasRef.current(text);
   }, [prompt, queuedTurns]);
+  // eslint-disable-next-line react-hooks/refs
+  startCanvasTurnRef.current = startCanvasTurn;
   const tailorResumeFromNode = useCallback((nodeId: string, request: string) => {
     setSelectedId(nodeId);
     setSelectedIds([nodeId]);
     setScopeMode('selection');
     // Selection/scope are React state. Start the turn after that state commits so
     // the Recruiter receives the intended résumé, not the previous canvas scope.
-    window.setTimeout(() => evaluateCanvasRef.current(`Target Canvas resume object ID: ${nodeId}\n\n${request}`), 0);
+    window.setTimeout(() => startCanvasTurnRef.current(`Target Canvas resume object ID: ${nodeId}\n\n${request}`), 0);
   }, []);
   const detachResumeFromNode = useCallback((nodeId: string, detachedData: Partial<CreationNodeData>) => {
     const detachedId = crypto.randomUUID();
@@ -8413,8 +8660,40 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * memoized, and a fresh closure here would re-parse the whole transcript per token.
    */
   const replayBrainMessage = useCallback((message: BrainMessage) => {
-    evaluateCanvasRef.current(message.content);
+    startCanvasTurnRef.current(message.content);
   }, []);
+  /**
+   * Rate a Brain reply on this board.
+   *
+   * The Canvas has no Brain chat and therefore no brain-message id, so it posts to
+   * the surface-agnostic ratings endpoint keyed on the transcript's own stable
+   * `clientMessageId`. The model and the tool come off the message we stamped at
+   * append time (`lastTurnProvenance`), which is what makes a press on a reloaded
+   * board still attributable rather than anonymous.
+   */
+  const [brainRatings, setBrainRatings] = useState<Record<number, 1 | -1>>({});
+  const rateBrainMessage = useCallback((message: BrainMessage, rating: 1 | -1 | 0) => {
+    const entry = timeline[message.id - 1];
+    const model = entry?.metadata?.model;
+    if (!entry || !model) return;
+    setBrainRatings((prev) => {
+      const next = { ...prev };
+      if (rating === 0) delete next[message.id];
+      else next[message.id] = rating;
+      return next;
+    });
+    void llmApi.rateAction({
+      surface: 'canvas',
+      subjectKind: 'turn',
+      subjectRef: `canvas:${sessionId}:${entry.clientMessageId}`,
+      resolvedModel: model,
+      // The LAST tool of the turn is the one the reply is reporting on, so it is the
+      // one the verdict is about.
+      toolName: entry.metadata?.tools?.[entry.metadata.tools.length - 1] ?? null,
+      projectId: evermindProjectId ?? null,
+      rating,
+    }).catch(() => { /* telemetry: a lost rating must never disturb the board */ });
+  }, [evermindProjectId, sessionId, timeline]);
   /**
    * Exactly one surface renders the conversation. When it is inline, the Brain Object
    * reads this and becomes the chat; the edge dock is not rendered at all. Feeding both
@@ -8443,15 +8722,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     collaborators: brainCollaborators,
     joinedCollaborator,
     onReplayMessage: replayBrainMessage,
+    // A guest board has no tenant to file a rating against, so the thumbs hide
+    // rather than pretend — the component decides its own visibility from this.
+    ...(persistence === 'server' ? { onRateMessage: rateBrainMessage, ratings: brainRatings } : {}),
     guestSignup: guestSignupPrompt,
     onOpen: (nodeId) => { setSelectedId(nodeId); setSelectedIds([nodeId]); openBrainDock(); },
     onModeChange: (mode) => updateBrainDock({ mode }),
     onExecutionDetailChange: (showExecutionDetail) => updateBrainDock({ showExecutionDetail }),
     onClose: () => updateBrainDock({ open: false }),
   }), [
-    brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRunStartedAt,
-    brainSurfaceOpen, brainTrace, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, presentMode,
-    replayBrainMessage, thinking, updateBrainDock,
+    brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRatings, brainRunStartedAt,
+    brainSurfaceOpen, brainTrace, edges, guestSignupPrompt, joinedCollaborator, nodes, openBrainDock, persistence,
+    presentMode, rateBrainMessage, replayBrainMessage, thinking, updateBrainDock,
   ]);
 
   /**
@@ -8502,9 +8784,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         startedAt={brainRunStartedAt}
         variant="composer"
       />
-      {/* Turns waiting behind the running one — the receipt for a composer that
-          never refused input. Self-gating: nothing renders at zero. */}
-      <QueuedTurnsNotice count={queuedTurns.count} />
       {promptStarter}
     </div>
     <div className={styles.promptComposerShell} style={{ '--canvas-prompt-height': `${promptHeight}px` } as CSSProperties}>
@@ -8530,7 +8809,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       className={styles.composer}
       value={prompt}
       onChange={setPrompt}
-      onSubmit={submitCanvasPrompt}
+      onSubmit={startCanvasTurn}
       placeholder={t('askBrain')}
       submitLabel={t('sendBrain')}
       // NEVER disabled while Brain works. An empty composer offers Stop (which
@@ -8539,6 +8818,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // way the canvas read as hung.
       running={thinking}
       onStop={stopCanvasRun}
+      queuedCount={queuedTurns.count}
       rows={1}
       submitOnEnter
       contextControls={<>
@@ -8551,7 +8831,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       modelSelection={modelSelection}
       modelOptions={canvasModelOptions}
       onModelSelectionChange={setModelSelection}
-      canChooseModel={canChooseModel}
+      modelIdentity={modelIdentity}
     // Mode and memory live in the `/` menu now — on a phone this row had grown to
     // eight unlabelled circles, and the two settings that actually decide what a turn
     // does were the two hardest to read. The menu's trigger names the armed mode, so
@@ -8899,6 +9179,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           focusObjectId={publishFocus || null}
           onNotice={setNotice}
         />}
+        {releaseFocus !== null && sessionId && <CanvasReleasesPanel
+          open
+          onClose={() => setReleaseFocus(null)}
+          sessionId={sessionId}
+          objectId={releaseFocus || null}
+          onNotice={setNotice}
+        />}
         {driveOpen && <CanvasDrivePanel
           onImport={(file) => addFilesToCanvas([file], undefined, 'drive_import')}
           onClose={() => setDriveOpen(false)}
@@ -8936,7 +9223,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onPublishListing={() => openPublishPanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(selectedNode.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDrawio={(diagramId) => { const result = convertObjectToDrawio(selectedNode.id, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'drawioAddedStatus' : 'drawioCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} />}
+        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onPublishListing={() => openPublishPanel(selectedNode.id)} onOpenReleases={() => openReleasesPanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(selectedNode.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDrawio={(diagramId) => { const result = convertObjectToDrawio(selectedNode.id, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'drawioAddedStatus' : 'drawioCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} />}
 
         {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
           <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>
@@ -9026,6 +9313,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           collaborators={members.filter((member) => member.userId !== currentUserId)}
           joinedCollaborator={joinedCollaborator}
           onReplayMessage={replayBrainMessage}
+          onRateMessage={brainSurface.onRateMessage}
+          ratings={brainSurface.ratings}
           guestSignup={guestSignupPrompt}
         />}
         {composer}
@@ -9108,7 +9397,7 @@ function GuidedTourInspector({ node, nodes, onChange }: { node: CreationFlowNode
   </section>;
 }
 
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onPublishListing, onEditWorkflow, onBuildWorkflow, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDrawio, onExportArtifact, onAskBrain }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onPublishListing: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDrawio: (diagramId?: string) => string; onExportArtifact: (action: CanvasExportAction) => Promise<string>;
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onPublishListing, onOpenReleases, onEditWorkflow, onBuildWorkflow, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDrawio, onExportArtifact, onAskBrain }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onPublishListing: () => void; onOpenReleases: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDrawio: (diagramId?: string) => string; onExportArtifact: (action: CanvasExportAction) => Promise<string>;
   /** The ONE route from the inspector back to Brain. Learning controls compose
    *  their own request text (see LearningControls.tsx) rather than each adding a
    *  callback to a panel that already takes forty. */
@@ -9458,7 +9747,14 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       {/* The step that used to be missing: an object that runs on this board and
           nowhere else becomes something a stranger can find, buy and play. The
           button decides for itself whether this kind is sellable. */}
-      {tab === 'details' && <SellInMarketplace kind={kind} disabled={!editable} onPublish={onPublishListing} />}
+      {tab === 'details' && (
+        <SellInMarketplace
+          kind={kind}
+          disabled={!editable}
+          onPublish={onPublishListing}
+          onReleases={onOpenReleases}
+        />
+      )}
       {tab === 'details' && canvasExportActionsFor(node.data).length > 0 && <section aria-label={t('copyAndDownload')} style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontSize: 12 }}>{t('copyAndDownload')}</strong>
         <CanvasExportActions data={node.data} onExport={(action) => void runArtifactAction(action)} className={styles.panelActions} />

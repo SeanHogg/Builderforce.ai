@@ -97,6 +97,7 @@ const FOUNDER_LABELS: Record<FounderObjectKind, string> = {
   capTable: 'Cap table', fundingRound: 'Funding round', investorUpdate: 'Investor update',
   dataRoom: 'Data room', contract: 'Contract',
   budget: 'Budget', forecast: 'Forecast', invoice: 'Invoice', bill: 'Bill',
+  account: 'Account',
 };
 
 const FOUNDER_STATUSES: Record<string, string> = {
@@ -107,6 +108,11 @@ const FOUNDER_STATUSES: Record<string, string> = {
   // that it was agreed and then stopped moving, so a default claiming agreement would
   // make the object lie about the one property it exists to carry.
   drafting: 'Drafting', modelling: 'Modelling', received: 'Received',
+  // An account starts a PROSPECT, never a customer: the whole point of the kind is that
+  // it says what a party is to us, and a default claiming a won account would make the
+  // card lie about the one field it exists to carry — the same argument `budget`'s
+  // `drafting` default makes one line up.
+  prospect: 'Prospect',
 };
 
 export const FOUNDER_REGISTRY = lower({ specs: FOUNDER_OBJECT_SPECS, labels: FOUNDER_LABELS, statuses: FOUNDER_STATUSES });

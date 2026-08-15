@@ -12,6 +12,8 @@ import {
 } from '@/lib/publicDestinations';
 import { isSeat, seatHueVar } from '@/lib/seats';
 import type { BurnrateDomainCopy } from '@/components/marketing/BurnrateDomainPage';
+import MethodologySection from '@/components/marketing/MethodologySection';
+import RelatedArticles from '@/components/blog/RelatedArticles';
 import { Icon } from '@/components/ui/Icon';
 
 export const runtime = 'edge';
@@ -21,7 +23,7 @@ export const runtime = 'edge';
  * (PRD 21 §11.10.3).
  *
  * The layout is BurnRateOS's, ported as a *system* rather than as a page: the
- * band rhythm `wash → tint → raised → tint → raised → gradient`, the hero with
+ * band rhythm `wash → tint → raised → … → gradient`, the hero with
  * its overview card, the domain grid with a persona badge per card, the dashed
  * foundation cards, and the closing gradient CTA. Ninety-five marketing pages
  * were already built from those six primitives, and hand-authoring a third
@@ -52,6 +54,7 @@ export default async function FeaturesPage() {
   const t = await getTranslations('featuresPage');
   const tb = await getTranslations('burnrateMarketing');
   const tn = await getTranslations('nav');
+  const tm = await getTranslations('methodology');
 
   // Counted from the registry rather than typed into copy. A marketing number
   // that drifts from the product is the cheapest kind of lie to ship and the
@@ -139,8 +142,27 @@ export default async function FeaturesPage() {
         </div>
       </section>
 
-      {/* ── Band 2 · tint — the domains, one card per owner ─────────────────── */}
+      {/* ── Band 2 · tint — the METHOD, before the catalogue of what it reaches ─
+          It sits here, immediately under the hero, because "what is this" is
+          answered by how the thing works and not by how many destinations it
+          has. The page used to open onto nine domain cards, which answers a
+          question nobody has yet. Rendered by the shared component so this
+          page, /about, /pricing and /sell-builderforce cannot describe the same
+          method four different ways. */}
       <section className="mk-band mk-band--tint">
+        <div className="mk-in">
+          {/* `catalog`, not `full`: band 5 below renders the arc as a table
+              generated from the registry itself, and one page may not show the
+              arc twice. */}
+          <MethodologySection variant="catalog" />
+          {/* The long form, for anyone the four cards left curious. Which posts
+              is decided by RELATED_ARTICLES.methodology, never listed here. */}
+          <RelatedArticles surface="methodology" embedded />
+        </div>
+      </section>
+
+      {/* ── Band 3 · raised — the domains, one card per owner ───────────────── */}
+      <section className="mk-band">
         <div className="mk-in">
           <header className="mk-center">
             <span className="mk-badge">{t('domainsBadge')}</span>
@@ -151,8 +173,8 @@ export default async function FeaturesPage() {
         </div>
       </section>
 
-      {/* ── Band 3 · raised — the foundations, dashed because nobody owns them ─ */}
-      <section className="mk-band">
+      {/* ── Band 4 · tint — the foundations, dashed because nobody owns them ── */}
+      <section className="mk-band mk-band--tint">
         <div className="mk-in">
           <header className="mk-center">
             <span className="mk-badge" style={{ '--seat': 'var(--stage-measure)' } as React.CSSProperties}>
@@ -165,8 +187,8 @@ export default async function FeaturesPage() {
         </div>
       </section>
 
-      {/* ── Band 4 · tint — the arc, straight off the registry ──────────────── */}
-      <section className="mk-band mk-band--tint">
+      {/* ── Band 5 · raised — the arc, straight off the registry ────────────── */}
+      <section className="mk-band">
         <div className="mk-in">
           <header className="mk-center">
             <span className="mk-badge" style={{ '--seat': 'var(--seat-manager)' } as React.CSSProperties}>
@@ -196,7 +218,10 @@ export default async function FeaturesPage() {
                         <span className="mk-stagedot" style={{ '--seat': `var(--stage-${stage})` } as React.CSSProperties} aria-hidden="true" />
                         {tn(`stage.${stage}`)}
                       </th>
-                      <td>{t(`arcQuestion.${stage}`)}</td>
+                      {/* One home for a stage's question: the methodology
+                          registry's copy, which <MethodologySection> renders on
+                          the other three marketing pages. */}
+                      <td>{tm(`arcQuestion.${stage}`)}</td>
                       <td>
                         <span className="mk-rowlist">
                           {rows.map((group) => (
@@ -217,8 +242,8 @@ export default async function FeaturesPage() {
         </div>
       </section>
 
-      {/* ── Band 5 · raised — the questions the merge raises ────────────────── */}
-      <section className="mk-band">
+      {/* ── Band 6 · tint — the questions the merge raises ──────────────────── */}
+      <section className="mk-band mk-band--tint">
         <div className="mk-in">
           <header className="mk-center"><h2>{t('faqTitle')}</h2></header>
           {/* `<details>` rather than the left panel's controlled disclosure: this

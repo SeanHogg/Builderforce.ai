@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { byoVendorLabel, perMillionUsd, type ChatModelOptions } from '@seanhogg/builderforce-brain-ui';
+import { byoVendorLabel, perMillionUsd, productForPlan, type ChatModelOptions, type ModelIdentityContext } from '@seanhogg/builderforce-brain-ui';
 import { llmApi, tenantModelApi, type ByoModel, type PremiumModelInfo, type TenantModel } from './builderforceApi';
 import { getPremiumModelCatalog, type ModelRecord } from './modelCatalog';
 import { getStoredTenantToken } from './auth';
@@ -148,13 +148,32 @@ export function useLlmModels(): LlmModelLists {
 }
 
 /**
+ * WHO IS READING, for every surface that names a model: which routing product funds
+ * their turns ("Builderforce Free" / "Builderforce PRO") and whether the gateway would
+ * accept a pin from them.
+ *
+ * ONE definition, because the same fact drives three separate decisions that must never
+ * disagree: whether the `/` menu offers a model list, what the composer calls the model
+ * in use, and what the per-reply provenance chip names. A free / anonymous viewer is on
+ * the product and is told so; a paid or BYO tenant owns the choice and sees real ids.
+ */
+export function useModelIdentity(): ModelIdentityContext {
+  const lists = useLlmModels();
+  return useMemo(
+    () => ({ product: productForPlan(lists.isPaid), canChoose: lists.canChooseModel }),
+    [lists.isPaid, lists.canChooseModel],
+  );
+}
+
+/**
  * The composer's model surface, grouped by WHO PAYS — the exact shape the shared
  * `/` options menu consumes. Every chat surface (Brain panel, Creation Canvas)
  * reads it from here, so no two composers can offer different lists or price the
  * same premium model differently.
  */
-export function useChatModelOptions(): { options: ChatModelOptions; canChooseModel: boolean } {
+export function useChatModelOptions(): { options: ChatModelOptions; identity: ModelIdentityContext } {
   const lists = useLlmModels();
+  const identity = useModelIdentity();
   const t = useTranslations('chatInput');
   // The two funding lines that carry per-row values (the vendor billed, the metered
   // price) are formatted HERE, through next-intl, and ride each row's `cost` — the
@@ -172,6 +191,6 @@ export function useChatModelOptions(): { options: ChatModelOptions; canChooseMod
         cost: t('paidCostDetail', { input: perMillionUsd(model.pricing.prompt), output: perMillionUsd(model.pricing.completion) }),
       })),
     },
-    canChooseModel: lists.canChooseModel,
-  }), [lists, t]);
+    identity,
+  }), [lists, t, identity]);
 }

@@ -8,7 +8,7 @@
  */
 
 export { BrainTimeline, DEFAULT_TIMELINE_LABELS } from './BrainTimeline';
-export type { BrainTimelineProps, BrainTimelineLabels } from './BrainTimeline';
+export type { BrainTimelineProps, BrainTimelineLabels, MessageRating } from './BrainTimeline';
 
 export { Markdown } from './Markdown';
 export type { MarkdownProps, MarkdownLabels } from './Markdown';
@@ -57,7 +57,9 @@ export type {
   ChatModelSelection,
   ModelCategory,
   ModelChoiceLabels,
+  ModelIdentityContext,
   ModelItem,
+  RoutedProduct,
 } from '@seanhogg/builderforce-brain-embedded';
 export {
   buildModelItems,
@@ -70,6 +72,13 @@ export {
   byoVendorLabel,
   MODEL_CATEGORIES,
   PROJECT_EVERMIND_MODEL_PREFIX,
+  // Model-identity masking: the routed product a viewer is told they run on.
+  BUILDERFORCE_PRODUCT_NAME,
+  DEFAULT_MODEL_IDENTITY,
+  displayModelName,
+  productForPlan,
+  productModelName,
+  revealsModelId,
 } from '@seanhogg/builderforce-brain-embedded';
 
 export { Avatar, ParticipantBadge, initialsOf, avatarColor } from './ParticipantBadge';

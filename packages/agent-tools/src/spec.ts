@@ -35,9 +35,23 @@ export interface AgentExecParams {
   temperature?: number;
 }
 
-/** Where an agent is allowed to run — the `deploy()` targets. */
+/**
+ * Where an agent is allowed to run — the `deploy()` targets.
+ *
+ * `workspace` was called `ide` until the standalone IDE destination was folded
+ * into the canvas. The TARGET is unchanged and still real — an agent that runs
+ * against the in-browser workspace, relayed from the editor — but there is no IDE
+ * route, no IDE surface and no `IDENew.tsx` any more, only a Builder object on a
+ * board. A deploy target named after a destination that no longer exists sends a
+ * reader looking for it, and this type is exported from a published package, so it
+ * was the last place the retired name was visible outside the repo.
+ *
+ * Safe to rename without a migration: these values are compile/deploy-time only.
+ * The persisted `ide_agents.runtime_surface` column is a DIFFERENT vocabulary
+ * (`durable` / `container`) and is untouched.
+ */
 export type AgentSurface =
-  | "ide"
+  | "workspace"
   | "desktop"
   | "cloud-durable"
   | "cloud-container"

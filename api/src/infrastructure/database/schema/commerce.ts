@@ -602,6 +602,20 @@ export const templateLicenses = pgTable('template_licenses', {
   seatLimit:     integer('seat_limit'),
   seatsUsed:     integer('seats_used').notNull().default(0),
   orderId:       integer('order_id'),
+  /**
+   * The publication snapshot this licence was granted against (migration 0466).
+   *
+   * This is what makes "you own v1.1" a fact. Without it the launch and install
+   * paths serve whatever the listing currently points at, so a buyer's copy
+   * silently changes under them every time the seller re-publishes — and a seller
+   * who ships a broken version takes every existing buyer with them.
+   *
+   * NULL means unpinned and resolves to the listing's current snapshot: the
+   * pre-0466 behaviour, kept for licences granted before there was anything to
+   * pin. Never rewritten in place — accepting an update is a new grant, not a
+   * silent move.
+   */
+  snapshotId:    uuid('snapshot_id'),
   startsAt:      timestamp('starts_at').notNull().defaultNow(),
   expiresAt:     timestamp('expires_at'),
   revokedAt:     timestamp('revoked_at'),

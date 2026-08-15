@@ -31,6 +31,14 @@ import { validateFileContentForPath, coerceFileContent } from '@/lib/fileContent
 import { clearBuildFailures, previewErrorFrom, recordBuildFailure, teeOutput, withPreviewErrorReporter } from '@/lib/buildDiagnostics';
 import { canvasBuildActions } from '@/lib/canvasBuildTools';
 import { notifyWorkspaceFilesChanged, subscribeWorkspaceFiles } from '@/lib/workspaceFileEvents';
+import {
+  VISUAL_ARM_MESSAGE,
+  replaceClassNameAtLine,
+  replaceTextAtLine,
+  visualSelectionFrom,
+  withVisualEditor,
+  type VisualSelection,
+} from '@/lib/visualEditor';
 import { isBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
 import { PrdReviewModal, TasksReviewModal } from './ArtifactReviewModals';
@@ -101,6 +109,13 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const [previewDevice, setPreviewDevice] = useState<'web' | 'mobile'>('web');
   const [rightTab, setRightTab] = useState<RightTab>(() => getModality(project.modality).rightTabs[0]);
   const [previewUrl, setPreviewUrl] = useState<string | undefined>();
+  // Point-and-edit. `previewFrameRef` is how the host reaches the overlay injected
+  // into the preview document — it is cross-origin, so postMessage is the channel.
+  const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const [visualArmed, setVisualArmed] = useState(false);
+  const [visualSelection, setVisualSelection] = useState<VisualSelection | null>(null);
+  const [visualDraft, setVisualDraft] = useState<{ text: string; className: string }>({ text: '', className: '' });
+  const [visualError, setVisualError] = useState<string | null>(null);
   const [terminalWriter, setTerminalWriter] = useState<((data: string) => void) | undefined>();
   const [shellWriter, setShellWriter] = useState<WritableStreamDefaultWriter<string> | undefined>();
   const [isRunning, setIsRunning] = useState(false);
@@ -416,10 +431,11 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
       terminalWriter?.('  \x1b[32m✓\x1b[0m Project files ready.\r\n\r\n');
 
       terminalWriter?.('\x1b[36m[2/3] Mounting project files...\x1b[0m\r\n');
-      // The reporter goes into the MOUNTED copy only — never the files on disk and
+      // Both overlays go into the MOUNTED copy only — never the files on disk and
       // never the publish path — so a runtime error inside the preview reaches the
-      // agent while the user's source and their published build stay untouched.
-      await mountFiles(withPreviewErrorReporter(mountContents));
+      // agent, and any element in it can be pointed at, while the user's source and
+      // their published build stay exactly what they wrote.
+      await mountFiles(withVisualEditor(withPreviewErrorReporter(mountContents)));
       terminalWriter?.(`  \x1b[32m✓\x1b[0m Mounted ${Object.keys(mountContents).length} file(s).\r\n\r\n`);
 
       terminalWriter?.('\x1b[36m[3/3] Installing dependencies...\x1b[0m\r\n');
@@ -677,11 +693,65 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     if (!previewUrl) return;
     const onMessage = (event: MessageEvent) => {
       const failure = previewErrorFrom(event.data);
-      if (failure) recordBuildFailure(projectIdNum, failure);
+      if (failure) { recordBuildFailure(projectIdNum, failure); return; }
+      // The other half of the preview conversation: an element the user pointed at.
+      const selected = visualSelectionFrom(event.data);
+      if (selected) { setVisualSelection(selected); setVisualDraft({ text: selected.text ?? '', className: selected.className }); }
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [previewUrl, projectIdNum]);
+
+  /**
+   * Point-and-edit: change what you can see without spending a model turn.
+   *
+   * The overlay is injected into the mounted preview (see `lib/visualEditor.ts`);
+   * this is the host half — arming it, holding the selection, and applying the two
+   * edits that are safe to make without a model checking them.
+   */
+  const armVisual = useCallback((armed: boolean) => {
+    setVisualArmed(armed);
+    if (!armed) setVisualSelection(null);
+    previewFrameRef.current?.contentWindow?.postMessage({ type: VISUAL_ARM_MESSAGE, armed }, '*');
+  }, []);
+
+  // Re-arm after a reload: the overlay is a fresh script in a fresh document and
+  // has no memory of having been armed before the dev server restarted it.
+  useEffect(() => {
+    if (!visualArmed || !previewUrl) return;
+    const id = window.setTimeout(
+      () => previewFrameRef.current?.contentWindow?.postMessage({ type: VISUAL_ARM_MESSAGE, armed: true }, '*'),
+      400,
+    );
+    return () => window.clearTimeout(id);
+  }, [visualArmed, previewUrl]);
+
+  const applyVisualEdit = useCallback(async () => {
+    const selection = visualSelection;
+    if (!selection) return;
+    setVisualError(null);
+    try {
+      let content = await fetchFileContent(project.id, selection.file);
+      if (selection.text !== null && visualDraft.text !== selection.text) {
+        const edited = replaceTextAtLine(content, selection.line, selection.text, visualDraft.text);
+        if (!edited.ok) { setVisualError(edited.reason); return; }
+        content = edited.content;
+      }
+      if (visualDraft.className !== selection.className) {
+        const edited = replaceClassNameAtLine(content, selection.line, visualDraft.className);
+        if (!edited.ok) { setVisualError(edited.reason); return; }
+        content = edited.content;
+      }
+      const valid = validateFileContentForPath(selection.file, content);
+      if (!valid.ok) { setVisualError(valid.reason); return; }
+      await saveFile(project.id, selection.file, content);
+      setFileContents((prev) => ({ ...prev, [selection.file]: content }));
+      if (previewUrl) await writeFileToContainer(selection.file, content).catch(() => { /* best-effort */ });
+      setVisualSelection(null);
+    } catch (error) {
+      setVisualError(error instanceof Error ? error.message : t('visualNoPreview'));
+    }
+  }, [project.id, previewUrl, t, visualDraft, visualSelection, writeFileToContainer]);
 
   /**
    * A file this workspace has open was written from the BOARD.
@@ -1484,9 +1554,78 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
                 {modalityDef.center === 'device' || (modalityDef.enableMobilePreview && previewDevice === 'mobile') ? (
                   <DevicePreview url={previewUrl} onOpenDevicePanel={() => setDevicePanelOpen(true)} />
                 ) : (
-                  <PreviewFrame url={previewUrl} />
+                  <PreviewFrame url={previewUrl} frameRef={previewFrameRef} />
                 )}
               </div>
+              {/* Point-and-edit: the cheap half of changing an app. A class or a
+                  line of copy is an exact, single-line source edit anchored to the
+                  element React itself reported — no model turn, no tokens. */}
+              {previewUrl && (
+                <div
+                  style={{
+                    borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)',
+                    padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 8,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => armVisual(!visualArmed)}
+                      aria-pressed={visualArmed}
+                      title={t('visualEditHint')}
+                      style={{
+                        padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+                        borderRadius: 'var(--radius-md)', minHeight: 32,
+                        border: `1px solid ${visualArmed ? 'var(--accent-primary, #2563eb)' : 'var(--border-subtle)'}`,
+                        background: visualArmed ? 'var(--accent-primary, #2563eb)' : 'var(--bg-deep)',
+                        color: visualArmed ? 'var(--text-on-accent, #fff)' : 'var(--text-secondary)',
+                      }}
+                    >
+                      {visualArmed ? t('visualEditOn') : t('visualEdit')}
+                    </button>
+                    {visualSelection && (
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        {t('visualSelected', { tag: visualSelection.tag, file: visualSelection.file, line: visualSelection.line })}
+                      </span>
+                    )}
+                  </div>
+                  {visualSelection && (
+                    <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))' }}>
+                      {visualSelection.text !== null && (
+                        <label style={{ display: 'grid', gap: 4, fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                          {t('visualText')}
+                          <input
+                            value={visualDraft.text}
+                            onChange={(event) => setVisualDraft((draft) => ({ ...draft, text: event.target.value }))}
+                            style={visualFieldStyle}
+                          />
+                        </label>
+                      )}
+                      <label style={{ display: 'grid', gap: 4, fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                        {t('visualClasses')}
+                        <input
+                          value={visualDraft.className}
+                          onChange={(event) => setVisualDraft((draft) => ({ ...draft, className: event.target.value }))}
+                          style={visualFieldStyle}
+                        />
+                      </label>
+                    </div>
+                  )}
+                  {visualSelection && (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <button type="button" onClick={() => { void applyVisualEdit(); }} style={visualPrimaryButton}>
+                        {t('visualApply')}
+                      </button>
+                      <button type="button" onClick={() => { setVisualSelection(null); setVisualError(null); }} style={visualSecondaryButton}>
+                        {t('visualCancel')}
+                      </button>
+                      {visualError && (
+                        <span role="alert" style={{ fontSize: '0.72rem', color: 'var(--error, #dc2626)' }}>{visualError}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Code Editor */}
@@ -1621,3 +1760,26 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     </div>
   );
 }
+
+/**
+ * Point-and-edit field chrome. Every colour is a theme token so the panel reads
+ * in both themes, and the fields are fluid so the row wraps rather than
+ * overflowing on a narrow viewport.
+ */
+const visualFieldStyle: React.CSSProperties = {
+  width: '100%', minWidth: 0, padding: '6px 8px', fontSize: '0.78rem', minHeight: 32,
+  borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
+  background: 'var(--bg-deep)', color: 'var(--text-primary)',
+};
+
+const visualPrimaryButton: React.CSSProperties = {
+  padding: '6px 14px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', minHeight: 32,
+  borderRadius: 'var(--radius-md)', border: 'none',
+  background: 'var(--accent-primary, #2563eb)', color: 'var(--text-on-accent, #ffffff)',
+};
+
+const visualSecondaryButton: React.CSSProperties = {
+  padding: '6px 14px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', minHeight: 32,
+  borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
+  background: 'var(--bg-deep)', color: 'var(--text-secondary)',
+};

@@ -219,7 +219,7 @@ function targetTables(statement) {
  * shrink, and filing a deliberate decision there would make the number go up when
  * nothing is owed, then dare the next person to pay it down by breaking a feature.
  */
-const SCOPED = /scopedToTenant|scopedToSegment|acrossTenants|tenantId|tenant_id/;
+const SCOPED = /scopedToTenant|scopedToNullableTenant|scopedToSegment|acrossTenants|tenantId|tenant_id/;
 
 /**
  * Conditions are very often accumulated into a local array and spread into the

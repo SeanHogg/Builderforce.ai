@@ -12,6 +12,7 @@
  * route, so there is no client-side TTL store to drift.
  */
 
+import { BUILDERFORCE_PRODUCT_NAME } from '@seanhogg/builderforce-brain-ui';
 import { BRAND } from './content';
 import { apiRequest } from './apiClient';
 import { getOrSetClientCached } from '@/infrastructure/http/readThrough';
@@ -88,7 +89,10 @@ interface CatalogModel {
 export const BUILDERFORCE_MODELS: ModelRecord[] = [
   {
     id: 'builderforce/free',
-    name: `${BRAND.name} (Free)`,
+    // The SHARED product name — the same words the composer, the `/` menu and every
+    // reply's provenance chip use for a routed turn, so the catalog page a visitor
+    // reads and the label they later see in the app are one string.
+    name: BUILDERFORCE_PRODUCT_NAME.free,
     provider: BRAND.legalName,
     description:
       'Our free, smart-routed model. One OpenAI-compatible endpoint that cascades across a curated pool of free open-weight models (Llama, Qwen, Gemma, DeepSeek, Nemotron and more) with automatic failover — no per-token cost, no card required. Includes 10K tokens/day.',
@@ -106,7 +110,7 @@ export const BUILDERFORCE_MODELS: ModelRecord[] = [
   },
   {
     id: 'builderforce/pro',
-    name: `${BRAND.name} PRO`,
+    name: BUILDERFORCE_PRODUCT_NAME.pro,
     provider: BRAND.legalName,
     description:
       'Our paid, frontier-grade routing. The same single endpoint cascades across premium coding models (Claude Sonnet, GPT-4.1, Gemini 2.5 Pro, Qwen 3.5 and more) with prompt caching, vendor-diverse failover and a 1M tokens/day budget. Every model is proxied at the same per-token price the upstream charges.',

@@ -41,8 +41,11 @@ import {
   listingKindsForObjectKind,
   resolveTrialPolicy,
   sessionListingKinds,
+  SNAPSHOT_REASON_PUBLICATION,
+  SNAPSHOT_REASON_STAGE,
   type ListingLaunchMode,
   type ListingTrialPolicy,
+  type MarketplaceListingKindSpec,
 } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -147,7 +150,7 @@ export interface CreationListingView {
 
 /** The body stored on `catalog_items.body`. One shape, so nothing reads a `kind`
  *  and guesses at what else is present. */
-interface ListingBody {
+export interface ListingBody {
   source: { sessionId: string; objectId: string | null; objectKind: string | null };
   snapshotId: string;
   launch: ListingLaunchMode;
@@ -171,6 +174,14 @@ export interface PublishInput {
   trial?: string | null;
   /** Omitted on create; supplied to re-publish an existing listing in place. */
   listingId?: string | null;
+  /**
+   * A STAGED snapshot to promote instead of re-reading the board.
+   *
+   * This is what makes "what was tested is what ships" true. Absent, publish reads
+   * the live board — correct for a seller who never staged, and a silent
+   * substitution for one who did.
+   */
+  fromSnapshotId?: string | null;
 }
 
 export class ListingError extends Error {
@@ -190,25 +201,41 @@ export class ListingError extends Error {
  * still a binding, and a top-level-only strip is a strip that reads as thorough
  * and is not.
  */
-function stripBindings(value: unknown, depth = 0): unknown {
+function stripBindings(value: unknown, removed: Set<string>, depth = 0): unknown {
   if (depth > 12 || value == null) return value ?? null;
-  if (Array.isArray(value)) return value.map((item) => stripBindings(item, depth + 1));
+  if (Array.isArray(value)) return value.map((item) => stripBindings(item, removed, depth + 1));
   if (typeof value !== 'object') return value;
   const out: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    if (isStrippedListingField(key)) continue;
-    out[key] = stripBindings(item, depth + 1);
+    if (isStrippedListingField(key)) {
+      // Recorded rather than merely dropped. A binding disappearing SILENTLY is the
+      // defect Stage exists to surface: a workflow that worked on the seller's board
+      // arrives at a buyer's attached to nothing, and until the seller is told which
+      // field left there is no way for them to know that happened.
+      removed.add(key);
+      continue;
+    }
+    out[key] = stripBindings(item, removed, depth + 1);
   }
   return out;
 }
 
 /** The immutable payload a listing serves forever after. */
-interface ListingSnapshotPayload {
+export interface ListingSnapshotPayload {
   kind: 'object' | 'session';
   title: string;
   /** For an object listing: the one card. For a pack: every card on the board. */
   objects: Array<{ id: string; kind: string; canvasData: unknown; content: unknown }>;
   connections: Array<{ sourceObjectId: string; targetObjectId: string; kind: string | null }>;
+  /**
+   * Field names `stripBindings` removed on the way in.
+   *
+   * Stored ON the snapshot rather than recomputed, because it is a fact about THIS
+   * capture: the seller's board changes, and a list re-derived at read time would
+   * describe a strip that never happened to the copy a buyer holds. Optional because
+   * snapshots written before this seam existed do not carry it.
+   */
+  strippedFields?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -316,7 +343,7 @@ async function claimSlug(db: Db, base: string, ownListingId: string | null): Pro
   return free ?? `${base}-${crypto.randomUUID().slice(0, 6)}`;
 }
 
-async function buildSnapshotPayload(
+export async function buildSnapshotPayload(
   db: Db,
   sessionId: string,
   objectId: string | null,
@@ -335,17 +362,19 @@ async function buildSnapshotPayload(
       : eq(creationSessionObjects.sessionId, sessionId));
   if (!rows.length) throw new ListingError('Nothing to publish — the source is empty', 400);
 
+  const removed = new Set<string>();
   return {
     kind: objectId ? 'object' : 'session',
     title,
     objects: rows.map((row) => ({
       id: row.id,
       kind: row.kind,
-      canvasData: stripBindings(row.canvasData),
-      content: stripBindings(row.content),
+      canvasData: stripBindings(row.canvasData, removed),
+      content: stripBindings(row.content, removed),
     })),
     // A pack's edges are part of the product; a single card has none to carry.
     connections: [],
+    strippedFields: [...removed],
   };
 }
 
@@ -357,11 +386,35 @@ async function buildSnapshotPayload(
  * second row, so a seller who clicks twice does not end up competing with
  * themselves at two URLs.
  */
-export async function publishCreationListing(
+/**
+ * Everything a publish and a STAGE both have to establish before either can write a
+ * snapshot: that the kind accepts this source, that the caller owns the listing, and
+ * that the listing has a registry entry a snapshot can point at.
+ *
+ * Extracted when Stage arrived because the two paths agree on every one of those
+ * questions and differ only in what they do afterwards — publish points the listing
+ * at the new snapshot and makes it public, staging leaves both alone. Two copies of
+ * this validation is how a card becomes stageable as a kind the publish endpoint
+ * would refuse.
+ */
+export interface ListingTarget {
+  listingId: string;
+  /** `objects.id` — the registry row a snapshot's foreign key resolves to. */
+  registryObjectId: string;
+  spec: MarketplaceListingKindSpec;
+  objectKind: string | null;
+  existing: CatalogRow | null;
+  name: string;
+  priceCents: number;
+  trial: ListingTrialPolicy;
+  sellerName: string | null;
+}
+
+export async function resolveListingTarget(
   db: Db,
   env: Env,
   input: PublishInput,
-): Promise<CreationListingView> {
+): Promise<ListingTarget> {
   const spec = listingKindSpec(input.kind);
   if (!spec) throw new ListingError(`Unknown listing kind "${input.kind}"`, 400);
 
@@ -435,34 +488,39 @@ export async function publishCreationListing(
     title: name,
   });
 
-  const payload = await buildSnapshotPayload(db, input.sessionId, input.objectId, name);
-  const [snapshot] = await db
-    .insert(snapshots)
-    .values({
-      tenantId: input.tenantId,
-      objectId: registered.id,
-      // Publication IS the reason — this is the copy a stranger is served, and
-      // calling it 'manual' would lose the one fact that explains why it may
-      // never be deleted while a sale references it.
-      reason: 'publication',
-      payload: payload as unknown as Record<string, unknown>,
-      createdBy: input.userId,
-    })
-    .returning({ id: snapshots.id });
-  if (!snapshot) throw new ListingError('Could not snapshot the creation', 400);
-
-  const body: ListingBody = {
-    source: { sessionId: input.sessionId, objectId: input.objectId, objectKind },
-    snapshotId: snapshot.id,
-    launch: spec.launch,
+  return {
+    listingId,
+    registryObjectId: registered.id,
+    spec,
+    objectKind,
+    existing,
+    name,
+    priceCents,
     trial,
-    seller: { userId: input.userId, name: sellerName },
+    sellerName,
   };
+}
 
+/**
+ * Write the `catalog_items` row for a target.
+ *
+ * `visibility` is a parameter rather than a constant because that single value is
+ * the whole difference between staging and publishing: a staged listing is a real
+ * row with a real registry entry and a real snapshot, and it is `private` with no
+ * `publishedAt` — which is exactly what every browse surface already filters out.
+ * Staging therefore needs no new "is this live" flag for somebody to get wrong.
+ */
+export async function writeListingRow(
+  db: Db,
+  input: PublishInput,
+  target: ListingTarget,
+  body: ListingBody,
+  options: { visibility: 'public' | 'private'; version: string },
+): Promise<CatalogRow> {
+  const { existing, listingId, spec, name, priceCents } = target;
   const slug = existing?.slug ?? await claimSlug(db, slugify(name), listingId);
   const tags = (input.tags ?? []).map((tag) => String(tag).trim().slice(0, 40)).filter(Boolean).slice(0, MAX_TAGS);
   const now = new Date();
-  const nextVersion = existing ? bumpVersion(existing.version) : '1.0.0';
 
   const values = {
     id: listingId,
@@ -474,12 +532,15 @@ export async function publishCreationListing(
     body: body as unknown as Record<string, unknown>,
     category: input.category?.trim().slice(0, 64) ?? null,
     tags: tags as unknown as string[],
-    version: nextVersion,
-    visibility: 'public' as const,
+    version: options.version,
+    visibility: options.visibility,
     priceCents,
     currency: (input.currency ?? 'USD').toUpperCase().slice(0, 8),
     publisherRef: input.userId,
-    publishedAt: existing?.publishedAt ?? now,
+    // Set the first time it actually goes public, and never by a stage. A staged
+    // listing carrying a publish date would appear in the feed the moment somebody
+    // relaxed the visibility filter.
+    publishedAt: existing?.publishedAt ?? (options.visibility === 'public' ? now : null),
     updatedAt: now,
   };
 
@@ -488,14 +549,104 @@ export async function publishCreationListing(
         .where(scopedToTenant(catalogItems, input.tenantId, eq(catalogItems.id, listingId))).returning()
     : await db.insert(catalogItems).values(values).returning();
   if (!row) throw new ListingError('Could not save the listing', 400);
+  return row;
+}
 
-  await invalidateListingCaches(env, slug);
+/**
+ * Read a STAGED snapshot for promotion.
+ *
+ * Tenant-scoped and pinned to `reason = 'stage'` AND to this listing's registry
+ * object: the id arrives from the client, and without all three a seller could
+ * promote any snapshot in the database — including another tenant's private board —
+ * into their own public listing.
+ */
+export async function stagedPayload(
+  db: Db,
+  tenantId: number,
+  registryObjectId: string,
+  snapshotId: string,
+): Promise<ListingSnapshotPayload> {
+  const [row] = await db
+    .select({ payload: snapshots.payload })
+    .from(snapshots)
+    .where(and(
+      eq(snapshots.id, snapshotId),
+      eq(snapshots.tenantId, tenantId),
+      eq(snapshots.objectId, registryObjectId),
+      eq(snapshots.reason, SNAPSHOT_REASON_STAGE),
+    ))
+    .limit(1);
+  const payload = (row?.payload ?? null) as ListingSnapshotPayload | null;
+  if (!payload) throw new ListingError('That staged version no longer exists', 404);
+  return payload;
+}
+
+/**
+ * Publish, or re-publish, one canvas creation.
+ *
+ * Idempotent per source in the sense that matters: publishing the same object
+ * twice UPDATES its listing (new snapshot, bumped version) rather than creating a
+ * second row, so a seller who clicks twice does not end up competing with
+ * themselves at two URLs.
+ *
+ * ── PUBLISHING WHAT WAS TESTED ───────────────────────────────────────────────────
+ * `fromSnapshotId` names a STAGED snapshot to promote. Without it this re-reads the
+ * live board, which means the thing that goes on sale is not the thing the checks
+ * ran against — a seller stages v1.3, edits one card, presses Publish, and ships an
+ * untested build under a tested version number. Promoting COPIES the staged payload
+ * into a new `publication` snapshot rather than relabelling the staged row, so the
+ * candidate stays in the rail and the sold copy is its own immutable record.
+ */
+export async function publishCreationListing(
+  db: Db,
+  env: Env,
+  input: PublishInput,
+): Promise<CreationListingView> {
+  const target = await resolveListingTarget(db, env, input);
+  const { spec, existing, objectKind, name } = target;
+
+  const payload = input.fromSnapshotId
+    ? await stagedPayload(db, input.tenantId, target.registryObjectId, input.fromSnapshotId)
+    : await buildSnapshotPayload(db, input.sessionId, input.objectId, name);
+
+  const [snapshot] = await db
+    .insert(snapshots)
+    .values({
+      tenantId: input.tenantId,
+      objectId: target.registryObjectId,
+      // Publication IS the reason — this is the copy a stranger is served, and
+      // calling it 'manual' would lose the one fact that explains why it may
+      // never be deleted while a sale references it.
+      reason: SNAPSHOT_REASON_PUBLICATION,
+      payload: payload as unknown as Record<string, unknown>,
+      createdBy: input.userId,
+    })
+    .returning({ id: snapshots.id });
+  if (!snapshot) throw new ListingError('Could not snapshot the creation', 400);
+
+  const body: ListingBody = {
+    source: { sessionId: input.sessionId, objectId: input.objectId, objectKind },
+    snapshotId: snapshot.id,
+    launch: spec.launch,
+    trial: target.trial,
+    seller: { userId: input.userId, name: target.sellerName },
+  };
+
+  const row = await writeListingRow(db, input, target, body, {
+    visibility: 'public',
+    // A previously-PUBLISHED listing bumps; one that has only ever existed as a
+    // staged draft starts at 1.0.0 on its first real publish rather than inheriting
+    // the number its candidates were staged under.
+    version: existing?.publishedAt ? bumpVersion(existing.version) : '1.0.0',
+  });
+
+  await invalidateListingCaches(env, row.slug);
   return toView(row, body);
 }
 
 /** `1.0.0` → `1.1.0`. A re-publish is a new minor: the snapshot changed, and a
  *  buyer comparing what they hold against what is live needs the two to differ. */
-function bumpVersion(current: string): string {
+export function bumpVersion(current: string): string {
   const [major, minor] = current.split('.').map((part) => Number.parseInt(part, 10));
   if (major == null || minor == null || !Number.isFinite(major) || !Number.isFinite(minor)) return '1.0.0';
   return `${major}.${minor + 1}.0`;
@@ -696,6 +847,15 @@ export async function launchListing(
   env: Env,
   slug: string,
   entitled: boolean,
+  /**
+   * The snapshot this caller's licence is pinned to, when they have one.
+   *
+   * A buyer must be served THE VERSION THEY BOUGHT, not whatever the seller has
+   * published since. Null — no licence, or one granted before versions were pinned —
+   * falls back to the listing's current snapshot, which is what every caller was
+   * being served before this existed.
+   */
+  heldSnapshotId: string | null = null,
 ): Promise<LaunchPayload | null> {
   const row = await resolveListingBySlug(db, slug);
   if (!row) return null;
@@ -711,7 +871,10 @@ export async function launchListing(
   const open = (row.priceCents ?? 0) === 0 || body.trial === 'full';
   const allowed = open || entitled;
 
-  const payload = await publishedSnapshot(db, env, body.snapshotId);
+  // The buyer's pinned snapshot wins over the listing's current one. Only for a
+  // caller who is actually entitled: an unpinned visitor asking for an old snapshot
+  // id would otherwise be a way to read a superseded build of a paid listing.
+  const payload = await publishedSnapshot(db, env, (allowed && heldSnapshotId) || body.snapshotId);
   if (!payload) return null;
 
   const base: LaunchPayload = { mode, entitled: allowed, title: payload.title };
@@ -740,7 +903,7 @@ export async function launchListing(
  * whose body was tampered with cannot be made to serve some other kind of
  * snapshot (a pre-migration copy of a private board, say).
  */
-async function publishedSnapshot(
+export async function publishedSnapshot(
   db: Db,
   env: Env,
   snapshotId: string,
@@ -750,7 +913,7 @@ async function publishedSnapshot(
       .select({ payload: snapshots.payload })
       .from(snapshots)
       .where(acrossTenants(snapshots, 'public_catalogue',
-        eq(snapshots.id, snapshotId), eq(snapshots.reason, 'publication')))
+        eq(snapshots.id, snapshotId), eq(snapshots.reason, SNAPSHOT_REASON_PUBLICATION)))
       .limit(1);
     return (row?.payload ?? null) as ListingSnapshotPayload | null;
   }, { kvTtlSeconds: SNAPSHOT_TTL_SECONDS });
@@ -797,7 +960,7 @@ function siteUrl(payload: ListingSnapshotPayload): string | null {
 export async function installListingIntoCanvas(
   db: Db,
   env: Env,
-  input: { tenantId: number; userId: string; slug: string },
+  input: { tenantId: number; userId: string; slug: string; heldSnapshotId?: string | null },
 ): Promise<{ sessionId: string; title: string; objectCount: number }> {
   // Visibility is deliberately not a condition: the caller has already been
   // checked for a live licence, and a withdrawn listing is still owned by the
@@ -809,7 +972,11 @@ export async function installListingIntoCanvas(
 
   // Same cached read the launch path uses — an install is a launch that keeps a
   // copy, and two readers of one immutable row should not be two queries.
-  const payload = await publishedSnapshot(db, env, body.snapshotId);
+  //
+  // Pinned to the buyer's own version. This is the defect the pin was added for:
+  // somebody who bought v1.1 and installs a month later was silently handed v1.4,
+  // and if v1.4 was worse they had nowhere to go back to.
+  const payload = await publishedSnapshot(db, env, input.heldSnapshotId || body.snapshotId);
   if (!payload?.objects.length) throw new ListingError('This listing has nothing to install', 400);
 
   const sessionId = crypto.randomUUID();
