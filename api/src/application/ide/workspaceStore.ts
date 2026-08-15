@@ -281,6 +281,32 @@ function parseHistoryKey(key: string, prefix: string): WorkspaceVersion | null {
 }
 
 /**
+ * The stamp an archived version is filed under, which only ever moves FORWARD.
+ *
+ * The key is `<epochMs>/<path>`, so two archives of the same file inside ONE
+ * millisecond produce the same key and the second `put` silently overwrites the
+ * first — a version vanishes from the undo chain exactly when edits come fastest,
+ * which is the autonomous-agent case this history exists for. `Date.now()` has
+ * millisecond resolution; an agent rewriting a file does not have millisecond
+ * pauses. Save-then-immediately-revert loses its "before" the same way.
+ *
+ * So: the wall clock, except when the clock has not advanced since the last
+ * archive, in which case one tick past it. `at` still reads as "when this version
+ * was superseded", nudged forward only far enough to stay distinct; the ORDERING
+ * it is actually used for (prune oldest, list newest-first) becomes exact, and the
+ * drift is bounded by how many archives share a millisecond.
+ *
+ * Per-isolate, deliberately: two isolates archiving the same path in the same
+ * millisecond is the concurrent-write race {@link withSameObjectRetry} already
+ * governs, and a coordinated counter would cost a round-trip on every save.
+ */
+let lastArchiveAt = 0;
+function nextArchiveStamp(): number {
+  lastArchiveAt = Math.max(Date.now(), lastArchiveAt + 1);
+  return lastArchiveAt;
+}
+
+/**
  * Copy the CURRENT content of `path` into history, then prune.
  *
  * A no-op when the file does not exist yet — creating a file destroys nothing, so
@@ -298,7 +324,7 @@ export async function captureWorkspaceVersion(bucket: R2Bucket, projectId: numbe
     // The BODY, not the text: history has to round-trip an image or a font as
     // faithfully as it does a source file, and decoding bytes to a string to
     // re-encode them is how a binary asset gets silently corrupted.
-    await withSameObjectRetry(() => bucket.put(`${historyPrefix(projectId)}${Date.now()}/${path}`, existing.body));
+    await withSameObjectRetry(() => bucket.put(`${historyPrefix(projectId)}${nextArchiveStamp()}/${path}`, existing.body));
     await pruneWorkspaceHistory(bucket, projectId);
   } catch (error) {
     reportCaughtError(error, { source: 'application/ide/workspaceStore.ts', operation: 'captureWorkspaceVersion' });

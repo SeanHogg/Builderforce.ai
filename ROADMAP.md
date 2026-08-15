@@ -138,7 +138,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
 | 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 38 |
-| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 30 |
+| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 31 |
 Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
 
 | Group | Exact open bullets |
@@ -158,7 +158,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 12 | 10 |
 | 13 | 11 |
 | 14 | 38 |
-| 15 | 30 |
+| 15 | 31 |
 ---
 
 
@@ -1474,6 +1474,8 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
 ---
 
 ## 15 · 🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt
+
+- **`site_subscriptions` has no entity-catalog entry, so `check:table-adoption` is red.** *(observed 2026-08-15 while closing the publisher/tenant consolidation)* `0473_embedded_apps.sql` creates `site_subscriptions`; no domain's `entities.ts` declares it, so it is the one consolidated table of 310 that is not reachable through the generic layer at all, and the guard fails on it. The fix is one line — `entity(siteSubscriptions, …)` — and the sibling `site_releases`, `site_users` and `site_user_sessions` are all filed under `growth`, which is almost certainly its home too. The same pass also added two unscoped tenant queries — `application/canvas/convertSessionToApp.ts:95` against `projects` and `application/ide/siteHosting.ts:263` against `projectSites` — so `check:tenant-scope` is red alongside it; both want `scopedToTenant(...)` rather than a bare `eq` on the id. **Blocker: it is another session's actively-landing work** — `0473_embedded_apps.sql` and both files appeared in the tree during this pass, after the publisher migration was complete — so choosing the table's seat or editing those queries now would collide with an author still writing them. Unblocks: `api npm test` reaching the vitest stage.
 
 - **`socialProviders.test.ts` expects five social connector keys and the registry now has eleven.** *(observed 2026-08-15)* `maps every social connector key back to exactly one provider` fails with `expected [ 'x-social', 'linkedin-social', …(9) ] to have a length of 5`. Either six connectors were added without the test being moved, or the test is asserting a count where it means to assert uniqueness — the same weakness the roster tests had before they were changed to name their members. **Blocker: the file is another session's uncommitted, in-flight work** (modified in the tree as this was logged). Unblocks: `api npm test` green.
 

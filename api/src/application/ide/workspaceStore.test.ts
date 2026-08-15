@@ -290,6 +290,32 @@ describe('workspace file history', () => {
     expect(after.length).toBeGreaterThan(1);
   });
 
+  it('keeps both versions when two writes land in the same millisecond', async () => {
+    // The archive key is `<epochMs>/<path>`, so a stamp taken straight from the
+    // clock makes the second write of a burst OVERWRITE the first one's archive
+    // and a version disappears — precisely when an agent is editing fast, which is
+    // what this history exists to undo. Freezing the clock is the honest way to
+    // pin it: it is what a fast machine does anyway, which is how this reached
+    // CI as an intermittent failure rather than as the data loss it is.
+    const frozen = vi.spyOn(Date, 'now').mockReturnValue(1_760_000_000_000);
+    try {
+      const r2 = fakeR2();
+      await writeWorkspaceFile(asBucket(r2), 1, 'App.js', 'v1');
+      await writeWorkspaceFile(asBucket(r2), 1, 'App.js', 'v2');
+      await writeWorkspaceFile(asBucket(r2), 1, 'App.js', 'v3');
+
+      const versions = await listWorkspaceHistory(asBucket(r2), 1, 'App.js');
+      expect(versions).toHaveLength(2);
+      // Newest first, and each still readable as its own distinct content.
+      const contents = await Promise.all(
+        versions.map((version) => readWorkspaceVersion(asBucket(r2), 1, 'App.js', version.at)),
+      );
+      expect(contents).toEqual(['v2', 'v1']);
+    } finally {
+      frozen.mockRestore();
+    }
+  });
+
   it('refuses a version that is not there rather than writing nothing silently', async () => {
     const r2 = fakeR2();
     await writeWorkspaceFile(asBucket(r2), 1, 'App.js', 'x');

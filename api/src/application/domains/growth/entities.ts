@@ -56,6 +56,7 @@ import {
   promoProjects,
   referralEntries,
   siteReleases,
+  siteSubscriptions,
   siteUserSessions,
   siteUsers,
   socialCampaignPosts,
@@ -138,6 +139,11 @@ export const GROWTH_ENTITIES = defineDomainEntities('growth', [
    *  these rows; a seat surface reads them. */
   entity(siteUsers, { readOnly: true }),
   entity(siteUserSessions, { readOnly: true }),
+  /** What an end user of a generated app is PAYING for. Read-only for the same
+   *  reason `purchase_orders` is: a generic PATCH over a subscription row hands
+   *  out paid access for free, and the billing webhook that moves `status` and
+   *  `current_period_end` is only sound while it is the single writer. */
+  entity(siteSubscriptions, { readOnly: true }),
   entity(marketingSessionPrompts, { readOnly: true }),
   entity(marketingHeatmapScreenshots, { readOnly: true }),
   entity(eventRemindersSent, { readOnly: true }),

@@ -405,3 +405,48 @@ describe('a dropped file gets a card before it has been read', () => {
     expect(screen.getByRole('heading', { name: 'Market analysis' })).toBeTruthy();
   });
 });
+
+/**
+ * The sticky note — the one card that is only its text.
+ *
+ * Worth its own coverage because it is the object a Miro import is mostly made of
+ * (`lib/miroImport.ts` maps `sticky_note`, `text` and `shape` onto it), and because
+ * it is the only kind that deliberately breaks the card's shape: no title bar, no
+ * status pill, and a title that is content rather than a name.
+ */
+describe('sticky note', () => {
+  const sticky: CreationNodeData = { kind: 'sticky', title: 'Onboarding is confusing', stickyColor: '#fde68a' };
+
+  it('shows its text and nothing else — no title bar, no status pill', () => {
+    renderNode(sticky);
+    // The text is the whole card, and it is EDITABLE when the board can be edited:
+    // a sticky you cannot type on is a picture of a sticky.
+    expect((screen.getByLabelText('Sticky note text') as HTMLTextAreaElement).value).toBe('Onboarding is confusing');
+    // The header is hidden in CSS rather than branched around, so the card keeps one
+    // structure — but the title must not ALSO be drawn as a heading, or a screen
+    // reader hears the note's text twice.
+    expect(screen.queryByRole('heading', { name: 'Onboarding is confusing' })).toBeNull();
+  });
+
+  it('wears the pigment the author chose, not a theme colour', () => {
+    const { container } = renderNode(sticky);
+    // Author-picked colours are persisted on the object and rendered back as-is —
+    // the rule `authoredColors.ts` states and the reason this is inline style.
+    expect((container.querySelector('article') as HTMLElement).style.background).toContain('253, 230, 138');
+  });
+
+  it('writes what is typed back to the title, because the title IS the text', () => {
+    const onEditData = vi.fn();
+    renderNode({ ...sticky, title: '' }, { onEditData });
+    fireEvent.change(screen.getByLabelText('Sticky note text'), { target: { value: 'Ship the import' } });
+    expect(onEditData).toHaveBeenCalledWith('object-1', { title: 'Ship the import' });
+  });
+
+  it('is read-only, and says it is empty, when the board cannot be edited', () => {
+    // No `onEditData` is how a viewer-role board arrives. A textarea there would
+    // accept keystrokes it could never save.
+    renderNode({ ...sticky, title: '' });
+    expect(screen.queryByLabelText('Sticky note text')).toBeNull();
+    expect(screen.getByText('Empty note')).toBeTruthy();
+  });
+});
