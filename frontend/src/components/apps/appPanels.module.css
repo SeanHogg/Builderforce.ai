@@ -1,0 +1,319 @@
+/*
+ * Chrome shared by the two creator surfaces — the canvas convert panel and the
+ * project app panel.
+ *
+ * ONE stylesheet rather than one per component, because the two are the same
+ * object seen twice: a stack of STATEMENTS about an app. Every colour is a
+ * token so both themes are covered by construction, every radius is on the
+ * five-value scale, and every width is fluid — these render in a 25%-wide
+ * slide-out on a phone as often as in a page column.
+ */
+
+/* --- trigger ------------------------------------------------------------- */
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.trigger:hover {
+  background: var(--surface-interactive-hover);
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+.triggerLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- panel body ---------------------------------------------------------- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.lede {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+}
+
+.hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+}
+
+.error {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-md);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: var(--font-size-small);
+}
+
+/* --- statements ---------------------------------------------------------- */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: clamp(10px, 3vw, 16px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* The statement itself — the sentence the reader is here for. */
+.statement {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-card-title);
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.statementDetail {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.address {
+  display: inline-block;
+  max-width: 100%;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-small);
+  overflow-wrap: anywhere;
+}
+
+.pill {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pillOk {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.pillPending {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.pillMuted {
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+/* Counts. auto-fit so three tiles become one column at 360px without a query. */
+.counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.count {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.countValue {
+  color: var(--text-primary);
+  font-size: var(--font-size-section);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.countLabel {
+  color: var(--text-muted);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  justify-content: space-between;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+}
+
+.rowName {
+  min-width: 0;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+/* --- address field ------------------------------------------------------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.fieldLabel {
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+}
+
+.fieldRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.input {
+  flex: 1 1 10rem;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-body);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 1px;
+}
+
+.verdict {
+  margin: 0;
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.verdictOk {
+  color: var(--success-text);
+}
+
+.verdictBad {
+  color: var(--danger-text);
+}
+
+.verdictChecking {
+  color: var(--text-muted);
+}
+
+/* --- actions ------------------------------------------------------------- */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Worn by both a <button> (convert) and an <a> (open the project), so the
+   inline-flex centring is not optional — a bare anchor would left-align. */
+.primary {
+  display: inline-flex;
+  flex: 1 1 10rem;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 10px 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.primary:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}

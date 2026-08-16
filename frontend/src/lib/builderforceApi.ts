@@ -8079,6 +8079,15 @@ export interface CreationSessionDetail {
   objects: CreationSessionObject[];
   connections: CreationSessionConnection[];
   projectIds: number[];
+  /**
+   * The app this board BECAME, or null — the `app` link role, not a `reference`.
+   *
+   * Structural rather than an import of `lib/embeddedApps`'s `SessionApp`: the
+   * gateway there imports this module for the transport, and a type import back
+   * would close a cycle for a four-field shape. The two are asserted against
+   * each other in `embeddedApps.test.ts`.
+   */
+  app?: { projectId: number; projectKey: string; name: string; subdomain: string | null } | null;
   members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null }>;
   personalViewport?: { x?: number; y?: number; zoom?: number } | null;
 }

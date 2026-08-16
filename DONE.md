@@ -1,3 +1,58 @@
+## ✅ RESOLVED 2026-08-16 — R15a + R15b: the embedded-apps API had no caller; the two creator surfaces now call it (lane W1D)
+
+**The gap.** Conversion shipped complete and unreachable. `POST /api/creation-sessions/:id/convert-to-app`,
+`GET /api/creation-sessions/address-available` and the `app` field on `GET /api/creation-sessions/:id` were
+live, tested and **called by nothing** — so the one click the whole *project IS the app* decision rests on did
+not exist on the board, and a project that had been converted showed no address, no runtime, no data and no
+people. (The register named these `/api/creations/…`; the routes are mounted at `/api/creation-sessions`, and
+the ROADMAP prose is corrected in the same pass.)
+
+**R15a — the one click.** `frontend/src/components/apps/CanvasAppPanel.tsx` takes a `sessionId` and nothing
+else. It reads `app`, the reader's `role` and the board title off one session read and decides its OWN state:
+it renders nothing for a board with no server session, nothing for a reader below `editor` on a board that is
+not yet an app, "Make this a project" for an editor, and what the app became for everybody else.
+`canConvertSession()` mirrors the server's `requireSession(c, 'editor')` rank check in one place, so the button
+and the endpoint cannot disagree about who may press it.
+
+**The address is chosen before the button, not discovered at publish.** `AppAddressField` validates against the
+availability endpoint on a 350 ms debounce and shows the SERVER's normalised label back — there is deliberately
+no client copy of `normalizeSubdomain`, because a second implementation of "what does this name become" is how
+a field looks satisfied and the conversion then fails. A stale answer is discarded unless it is still the
+current input, which is the classic way a live validator ends up green on a taken name.
+
+**R15b — what you own.** `ProjectAppPanel.tsx` takes a `projectId`, renders nothing for a project with no site,
+and otherwise makes four STATEMENTS — address, runtime, data, people. Because operator decision 3 is that
+there is no host choice and no database choice, it carries **no form control at all**; a test asserts zero
+`select`/`input`/`textarea` in its output, so the shape cannot drift back into a settings page. It separates a
+*reserved* address (the site row conversion writes, with no assets) from a *live* one, and shows a custom
+domain only once it is genuinely reachable rather than while its certificate is pending.
+
+**The wiring, in one gateway.** `frontend/src/lib/embeddedApps.ts` holds every call; no component embeds a
+query. The project overview COMPOSES the clients that already existed (`fetchSite`, `siteDomainApi`,
+`siteDataApi`, `siteTrafficApi`) rather than re-declaring four endpoints, issues them concurrently, and lets
+each fail alone. Both reads go through the browser's canonical read-through cache (`getOrSetClientCached` —
+single-flight and bounded), and conversion invalidates every key it changed; the availability check is
+deliberately uncached, matching the server, because a cached "available" that outlives somebody claiming the
+name is a lie the creator acts on.
+
+**A type drift closed on the way.** `CreationSessionDetail` in `lib/builderforceApi.ts` did not declare the
+`app` field the server had already been returning, so the client could not see it without a cast.
+
+**Mounting.** Both components are self-mounting and their two lines are filed to the W1INT mount queue at the
+foot of ROADMAP's Wave 1 section — `CreationCanvas.tsx` and the project page are hubs W1INT owns for the wave,
+and neither is touched here.
+
+**Shipped:** 53 keys under `canvas.app.*` in all five catalogs with real translations, both themes from tokens
+only, 360px-safe (`auto-fit` count tiles, fluid fields, no fixed widths), 33 tests across the gateway and both
+panels, and all nine frontend guards green.
+
+**Left open, with the blocker named:** `R15e` (the `app` answer costs a whole board graph — needs a narrow
+`GET /api/creation-sessions/:id/app`, and `api/**` is outside lane W1D's `owns` set) and the
+`SiteInfo.totalBytes` string/number drift (`frontend/src/lib/api.ts`, likewise outside this lane). Both are in
+the register with their blocker stated.
+
+---
+
 ## ✅ RESOLVED 2026-08-15 — 61 authenticated routes met one generic sentence; they now meet their destination and the method (frontend 2026.8.27)
 
 **The gap.** `https://builderforce.ai/inbox`, signed out, rendered a lock glyph over "This is part of
