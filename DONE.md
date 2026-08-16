@@ -148,6 +148,49 @@ Localized in all five catalogs under `commerce.stage.*`; both themes from tokens
 in `stageChecks.test.ts` cover the deployment harness, the entitlement precedence and every lifecycle
 window; api 24/24 guards and 5,959 tests green.
 
+## ✅ RESOLVED 2026-08-16 — /salary, /references and /interview: three of the five companion routes the ported articles needed
+
+The fifteen career tools landed first (see the entry below). These are the surfaces that are browsable
+PAGES rather than something you run — which is where the indexable value of the ported corpus sits.
+
+**`/salary`, `/salary/<role>`, `/salary/<role>/<city>` — 16 roles × 14 cities = 240 addresses.**
+No new compensation model: `salaryDirectory.ts` is a bounded CATALOG over the existing `analyzeSalary`,
+so the guide and `/tools/salary-calculator` move together and a new role is one row. Fully cached
+(`getOrSetCached`, 24h) — the opposite call from `/analyze`, and for the opposite reason: this keyspace
+is bounded and crawler-hit, where a résumé hash is unbounded with a ~zero hit rate. Every role and leaf
+is emitted into the sitemap from the same catalog read.
+
+**`/interview` → a 16th analyzer.** `buildInterviewKit` already existed; the article's link was remapped
+to `/tools/interview-prep` rather than adding a route, because the question set is a reading over a
+posting and that is exactly what the analyzer kind is.
+
+**`/references` + `/references/shared/<token>` (migration 0476).** A reference list is private until a
+token says otherwise. Two things the guards improved here, both worth keeping:
+
+- `check-shape-lint` flagged `reference_shares` against the kernel's `share_links`. The table stays
+  (share_links is NOT NULL on tenant_id and grants one `objects` row; a reference share is tenant-less
+  and covers a chosen SUBSET) — but the review caught that it was storing the RAW token. It now stores
+  only the SHA-256, the link is shown once at issue time, and `resolveShare` hashes to look up. That is
+  a real security fix that would not have happened without the guard.
+- `check-tenant-column` flagged both tables. Correct and deliberate: a reference belongs to a person's
+  career, not a workspace — the same call `freelancer_profiles` makes. Reasoning is in the migration.
+
+The shared view is `noindex` at the route, renders on the server, and strips contact details unless the
+share was issued with them. Private notes never travel.
+
+**Inherited claims corrected (same class as the earlier pricing pass).** hired.video drove its salary
+pages from `salaryMin`/`salaryMax` on live listings; Builderforce MODELS them. Five assertions across
+three articles ("derived from real active listings", "every salary page shows the sample size",
+"forward-looking") were false once the implementation changed, and now describe the real method. One
+article linked `/salary/staff-product-manager/austin`, a slug the catalog does not have — seniority is a
+dimension of the page, not part of its address.
+
+Verified: api 24/24 guards + 6089 tests; frontend 9/9 guards, `tsgo --noEmit` clean both sides.
+i18n: `salary.*` and `references.*` in all five catalogues with real translations.
+
+Still open: `/companies` and `/reviews`, blocked on a moderation-posture decision. See ROADMAP group 14.
+
+---
 ## ✅ RESOLVED 2026-08-16 — the four W1A blockers, and the paywall hole the second one exposed
 
 R13/R7/R12 shipped earlier the same day with four items their pass could not close without editing files
