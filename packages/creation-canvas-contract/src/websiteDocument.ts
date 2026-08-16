@@ -117,7 +117,7 @@ function renderSection(section: WebsiteSection, ctaHref: string | null): string 
       // entity-encoding for the `srcdoc` ATTRIBUTE position — the browser decodes it back
       // to the real markup before handing it to the sandboxed frame's own parser.
       return isMarkupSectionBody(section)
-        ? `<section class="s">${eyebrow}${heading}<iframe class="content-frame" title="${escapeHtml(section.heading || 'content')}" sandbox="${CONTENT_FRAME_SANDBOX}" srcdoc="${escapeHtml(section.body ?? '')}"></iframe>${cta}</section>`
+        ? `<section class="s">${eyebrow}${heading}<iframe class="content-frame" title="${escapeHtml(section.heading || 'content')}" sandbox="${WEBSITE_CONTENT_FRAME_SANDBOX}" srcdoc="${escapeHtml(section.body ?? '')}"></iframe>${cta}</section>`
         : `<section class="s">${eyebrow}${heading}${body}${cta}</section>`;
     case 'cta':
       return `<section class="s call">${eyebrow}${heading}${body}${cta}</section>`;
@@ -227,14 +227,3 @@ ${STYLES}</style></head>
 <footer>${escapeHtml(brand)}</footer></div>
 ${ordered.length > 1 ? `<script>${SWITCH_SCRIPT}</script>` : ''}</body></html>`;
 }
-
-/**
- * A `content` section whose body is real markup — a model-authored `<form>` plus its
- * `<script>` — rather than prose. Kept here (not re-derived per renderer) so the
- * decision is identical wherever a section gets drawn.
- */
-export function isMarkupSectionBody(section: Pick<WebsiteSection, 'kind' | 'body'>): boolean {
-  return section.kind === 'content' && typeof section.body === 'string' && /<[a-z][^>]*>/i.test(section.body);
-}
-
-export { CONTENT_FRAME_SANDBOX as WEBSITE_CONTENT_FRAME_SANDBOX };

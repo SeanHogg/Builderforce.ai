@@ -28,6 +28,10 @@ export * from './parties';
 // SAME object to static HTML in a Worker — two renderers, and a section vocabulary
 // stated twice is one that drifts until the publisher drops what the editor allows.
 export * from './website';
+// The framework-free HTML renderer for that same vocabulary — one document string
+// shared by the static site publisher and the canvas `app` surface. See its own header
+// for why the pixels live here rather than beside either caller.
+export * from './websiteDocument';
 // `export *` re-exports a binding; it does not bring it INTO scope here, and the
 // kind list below spreads it — without this import the whole contract module
 // throws `PEOPLE_OBJECT_KINDS is not defined` at import time, which takes every
