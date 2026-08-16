@@ -890,6 +890,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(persistence === 'local' ? INITIAL_EDGES : []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  /**
+   * The full inspector rail is the ESCAPE HATCH now, not what clicking a card opens.
+   * Separate from `selectedId` on purpose: selection alone drives drag/copy/delete/frame
+   * exactly as it always has, and clicking a card opens the anchored `CanvasNodePanel`
+   * beside it instead. This tracks which node, if any, asked for the full rail — via the
+   * panel's "open full" button or an action that needs one of the inspector's specialized
+   * tabs (knowledge, test, evaluation, delivery) the anchored panel does not have.
+   */
+  const [inspectorNodeId, setInspectorNodeId] = useState<string | null>(null);
   const [scopeMode, setScopeMode] = useState<'auto' | 'canvas' | 'selection' | 'connected' | 'frame'>('auto');
   const [connectionKind, setConnectionKind] = useState<CreationConnectionKind>('reference');
   const [title, setTitle] = useState('Untitled session');
@@ -2566,11 +2575,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   useEffect(() => { if (guestLimit) openBrainDock(); }, [guestLimit, openBrainDock]);
 
-  const onNodeClick: NodeMouseHandler<CreationFlowNode> = useCallback((_event, node) => {
+  const onNodeClick: NodeMouseHandler<CreationFlowNode> = useCallback((event, node) => {
     setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
     setInspectorFocus(null); setSelectedId(node.id); if (!node.selected) setSelectedIds([node.id]);
     if (node.data.kind === 'chat') openBrainDock();
-  }, [openBrainDock]);
+    // Selecting a card opens the panel ANCHORED to it — the inspector rail is reached
+    // from there, not by clicking the card. A different card selected while the full
+    // rail is open for another one closes that rail rather than retargeting it: a
+    // person who clicked elsewhere asked to look at THAT card, not to keep editing the
+    // old one somewhere off-screen.
+    if (node.data.kind !== 'chat' && event.currentTarget instanceof Element) {
+      openNodePanel(node.id, 'config', event.currentTarget.getBoundingClientRect());
+    }
+  }, [openBrainDock, openNodePanel]);
   // XYFlow subscribes to this callback through its Zustand store. An inline
   // callback is a new subscription every render; immediately writing a fresh
   // `[]` back to React from that subscription can create an update-depth loop
@@ -9096,7 +9113,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
     creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onResumeShare={createResumeShare} onResumeSharesList={listResumeShares} onResumeShareRevoke={revokeResumeShare} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
-      setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]);
+      // Asking for a specific tab (knowledge, test, evaluation, delivery) is asking for
+      // the full rail directly — the anchored panel has no such tab to route through.
+      setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]); setInspectorNodeId(nodeId);
     }} />,
   }), [canRun, cardsEditable, createResumeShare, detachResumeFromNode, exportFromNode, listResumeShares, openBuiltinAgentSurfaceFromNode, openInsertPicker, openNodePanel, revokeResumeShare, runWorkflowFromNode, tailorResumeFromNode, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
@@ -9643,7 +9662,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           editable={canEdit && !lockBlocked}
           onChange={(patch) => updateNodeData(nodePanel.nodeId, patch)}
           onClose={() => setNodePanel(null)}
-          onOpenFull={() => { setNodePanel(null); setSelectedId(nodePanel.nodeId); setSelectedIds([nodePanel.nodeId]); }}
+          onOpenFull={() => { setNodePanel(null); setSelectedId(nodePanel.nodeId); setSelectedIds([nodePanel.nodeId]); setInspectorNodeId(nodePanel.nodeId); }}
         />;
       })()}
 
@@ -10107,7 +10126,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onPublishListing={() => openPublishPanel(selectedNode.id)} onOpenReleases={() => openReleasesPanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(selectedNode.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDiagram={async (format, diagramId) => { const result = await convertObjectToDiagram(selectedNode.id, format, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'diagramAddedStatus' : 'diagramCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} onOpenSurface={(next) => setSurface(next, selectedNode.id)} />}
+        {/* The rail is the escape hatch now, not the default: it renders only for the
+            node that asked for it via `inspectorNodeId` (the anchored panel's "open
+            full" button, or an action naming one of its own specialized tabs), never
+            merely because a card is selected — selecting one opens the panel beside it
+            instead. */}
+        {!presentMode && selectedNode && selectedNode.id === inspectorNodeId && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); setInspectorNodeId(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onPublishListing={() => openPublishPanel(selectedNode.id)} onOpenReleases={() => openReleasesPanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(selectedNode.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDiagram={async (format, diagramId) => { const result = await convertObjectToDiagram(selectedNode.id, format, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'diagramAddedStatus' : 'diagramCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} onOpenSurface={(next) => setSurface(next, selectedNode.id)} />}
 
         {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
           <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>

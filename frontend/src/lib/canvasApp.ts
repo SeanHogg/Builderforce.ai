@@ -27,6 +27,8 @@
  * conclude their Twilio credentials were wrong.
  */
 
+import { renderWebsiteDocument, websitePagesFrom, websiteThemeFrom } from '@builderforce/creation-canvas-contract';
+
 export type CanvasAppFileRole = 'page' | 'style' | 'script' | 'server' | 'config' | 'other';
 
 export interface CanvasAppFile {
@@ -137,12 +139,21 @@ function fileFor(files: readonly CanvasAppFile[], fromDir: string, href: string)
   return files.find((file) => file.path.slice(file.path.lastIndexOf('/') + 1).toLowerCase() === base) ?? null;
 }
 
+/** A filename from a title with nothing a path segment cannot hold. */
+function slugFile(value: string, fallback: string): string {
+  const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return `${slug || fallback}.html`;
+}
+
 /**
  * Every file the session's objects hold, as an app would see them.
  *
- * `code` objects are the app: they carry the path, the language and the source Brain
- * wrote. Nothing else on the board is a file the preview can run — a document is prose
- * and a website is its own `site` surface — so nothing else is projected here.
+ * `code` objects are the app's own files: they carry the path, the language and the
+ * source Brain wrote. A `website`/`prototype` object is ALSO a file the preview can
+ * run — its pages rendered to the same static HTML the site publisher produces — which
+ * is what lets a `website` card holding a form and a `code` card holding the handler it
+ * posts to open as ONE application instead of a static preview beside an orphan file.
+ * A plain `document` stays out: it is prose with no runnable shape.
  */
 export function canvasAppFiles(
   nodes: ReadonlyArray<{ id: string; data: { [key: string]: unknown; kind: string } }>,
@@ -150,18 +161,33 @@ export function canvasAppFiles(
   const files: CanvasAppFile[] = [];
   const seen = new Set<string>();
   for (const node of nodes) {
-    if (node.data.kind !== 'code') continue;
-    const source = typeof node.data.code === 'string' ? node.data.code : '';
-    if (!source.trim()) continue;
-    const declared = typeof node.data.path === 'string' ? node.data.path.trim() : '';
-    const language = typeof node.data.language === 'string' ? node.data.language.trim().toLowerCase() : '';
-    // A card with no path still holds source. Naming it after the object is what keeps
-    // it in the Code reading instead of dropping it silently for want of a filename.
-    const title = typeof node.data.title === 'string' ? node.data.title.trim() : '';
-    const path = (declared || title || 'untitled').replace(/^\.?\//, '');
-    if (seen.has(path)) continue;
-    seen.add(path);
-    files.push({ nodeId: node.id, path, language, source, role: roleFor(path, source) });
+    if (node.data.kind === 'code') {
+      const source = typeof node.data.code === 'string' ? node.data.code : '';
+      if (!source.trim()) continue;
+      const declared = typeof node.data.path === 'string' ? node.data.path.trim() : '';
+      const language = typeof node.data.language === 'string' ? node.data.language.trim().toLowerCase() : '';
+      // A card with no path still holds source. Naming it after the object is what keeps
+      // it in the Code reading instead of dropping it silently for want of a filename.
+      const title = typeof node.data.title === 'string' ? node.data.title.trim() : '';
+      const path = (declared || title || 'untitled').replace(/^\.?\//, '');
+      if (seen.has(path)) continue;
+      seen.add(path);
+      files.push({ nodeId: node.id, path, language, source, role: roleFor(path, source) });
+      continue;
+    }
+    if (node.data.kind === 'website' || node.data.kind === 'prototype') {
+      const pages = websitePagesFrom(node.data);
+      const title = typeof node.data.title === 'string' ? node.data.title.trim() : '';
+      // No `enterPath`/`enterLabel`: the app preview has no shop-window door to open —
+      // that framing belongs to the PUBLISHED site (`siteLandingPage.ts`), not to a
+      // board's own runnable preview.
+      const source = renderWebsiteDocument(pages, websiteThemeFrom(node.data), { brand: title || 'Site' });
+      if (!source) continue;
+      const path = slugFile(title, node.id);
+      if (seen.has(path)) continue;
+      seen.add(path);
+      files.push({ nodeId: node.id, path, language: 'html', source, role: 'page' });
+    }
   }
   return files;
 }

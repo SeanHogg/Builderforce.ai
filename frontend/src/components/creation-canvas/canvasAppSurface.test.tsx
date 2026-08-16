@@ -65,6 +65,41 @@ describe('the app a canvas session is', () => {
   });
 
   /**
+   * The bug this closes: a `website` card with a form and the `code` card its form
+   * posts to are one application, not a static preview beside an orphan file.
+   */
+  it('projects a website object\'s pages into the file list, so it composes with a code backend', () => {
+    const website = { id: 'n5', data: {
+      kind: 'website', title: 'GreenEdge Yard Care',
+      pages: [{
+        id: 'quote', name: 'Quote', path: '/quote', sections: [
+          { id: 'hero', kind: 'hero', heading: 'GreenEdge Yard Care', body: 'Proof of concept', cta: 'Get a quote' },
+          { id: 'form', kind: 'content', heading: 'Request a quote', body: '<form action="/api/quote"><input name="email"></form>' },
+        ],
+      }],
+    } as unknown as CreationNodeData };
+    const backend = card('n6', 'twilio-handler.js', "const twilio = require('twilio');\napp.listen(3000);");
+    const files = canvasAppFiles([website, backend]);
+
+    const site = files.find((file) => file.nodeId === 'n5');
+    expect(site?.role).toBe('page');
+    // The form is sandboxed, not printed as escaped text on the page (same fix as the
+    // `site` surface) — its markup shows up entity-encoded inside the iframe's `srcdoc`.
+    expect(site?.source).toContain('sandbox="allow-scripts allow-forms"');
+    expect(site?.source).toContain('&lt;form action=&quot;/api/quote&quot;&gt;');
+    // The board's own card is still reachable from the projected file.
+    expect(site?.nodeId).toBe('n5');
+    // With no code `index.html` on the board, the site is the entry the app opens on.
+    expect(canvasAppEntry(files)?.nodeId).toBe('n5');
+    expect(canvasApp([website, backend]).server.map((file) => file.nodeId)).toEqual(['n6']);
+  });
+
+  it('does not project a plain document — it has no runnable shape', () => {
+    const doc = { id: 'n7', data: { kind: 'document', title: 'Notes', content: 'Some prose.' } as unknown as CreationNodeData };
+    expect(canvasAppFiles([doc])).toEqual([]);
+  });
+
+  /**
    * The distinction the whole surface rests on. A browser frame cannot run a Node
    * server, and a preview that pretended otherwise would let somebody conclude their
    * Twilio credentials were wrong when the truth is there is no host attached.
