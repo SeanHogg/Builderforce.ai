@@ -105,6 +105,9 @@ export function CanvasReleasesPanel({
    * be reading findings from the wrong question.
    */
   const [delivery, setDelivery] = useState<ListingDelivery | null>(null);
+  /** How many times the sandbox-pending poll (below) has fired for the current
+   *  `staged` build. Reset whenever a fresh `staged` is loaded. */
+  const [sandboxPolls, setSandboxPolls] = useState(0);
 
   const loadRail = useCallback(async () => {
     const next = await creationReleaseApi.rail(sessionId, objectId);
@@ -140,6 +143,7 @@ export function CanvasReleasesPanel({
           const found = await creationReleaseApi.staged(sessionId, objectId, existing.snapshotId);
           if (!live) return;
           setStaged(found);
+          setSandboxPolls(0);
           // The candidate on record decides the toggle, not the other way round: a
           // seller reopening Stage must see the door their staged build was checked
           // against, even if the kind's default is the other one.
@@ -167,6 +171,7 @@ export function CanvasReleasesPanel({
       });
       setStaged(next);
       setDelivery(next.delivery);
+      setSandboxPolls(0);
       await loadRail();
       onNotice(t('noticeStaged', { version: next.version }));
     } catch (cause) {
@@ -175,6 +180,37 @@ export function CanvasReleasesPanel({
       setBusy(false);
     }
   }, [candidate, delivery, sessionId, objectId, loadRail, onNotice, t]);
+
+  /**
+   * WHILE THE STAGE SANDBOX IS STILL VERIFYING, KEEP RE-READING.
+   *
+   * The sandbox check ARRIVES as an ordinary `StageCheck` (`sandbox.pending`) in
+   * `staged.checks` — the exact same list every other finding lives in — so no
+   * new field or component is needed to display it; `CheckGroup` already renders
+   * it. This effect only decides WHEN to re-read: while a run is genuinely in
+   * flight, re-fetch `staged` on a widening interval (3s ×10, 6s ×8, 12s ×6 —
+   * ~2m46s / 24 requests, then stop and leave the last-known state showing) so
+   * "still verifying" resolves to a real pass/fail without the seller having to
+   * reopen the panel.
+   */
+  const sandboxPending = !!staged?.checks.some((entry) => entry.code === 'sandbox.pending');
+
+  useEffect(() => {
+    if (!open || !staged || !sandboxPending || sandboxPolls >= 24) return;
+    let live = true;
+    const delay = sandboxPolls < 10 ? 3_000 : sandboxPolls < 18 ? 6_000 : 12_000;
+    const timer = setTimeout(async () => {
+      try {
+        const next = await creationReleaseApi.staged(sessionId, objectId, staged.snapshotId);
+        if (live) setStaged(next);
+      } catch {
+        // Transient — the next tick retries.
+      } finally {
+        if (live) setSandboxPolls((count) => count + 1);
+      }
+    }, delay);
+    return () => { live = false; clearTimeout(timer); };
+  }, [open, staged, sandboxPending, sandboxPolls, sessionId, objectId]);
 
   /** Promote the STAGED snapshot, so what was checked is what goes on sale. */
   const publish = useCallback(async () => {

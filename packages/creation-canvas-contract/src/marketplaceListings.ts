@@ -838,13 +838,24 @@ export function declaredLimits(checks: readonly StageCheck[]): readonly StageChe
 /**
  * The bound on Stage itself, stated as a finding rather than left implicit.
  *
- * Stage exercises the CAPTURED SNAPSHOT and — for a hosted app — the live address.
- * It does not install the snapshot into a throwaway tenant and drive it, because a
- * disposable tenant needs a lifecycle and a per-press cost nobody has agreed to pay.
- * That is a real limit on what "it passed" means, and a limit the platform knows
- * about is one the buyer is entitled to read. Emitted by every harness, carried onto
- * the listing by `declaredLimits`, and deliberately a `warn`: it is true of every
- * listing on the platform and must never refuse a publish.
+ * ── WHAT THIS MEANT BEFORE THE STAGE SANDBOX EXISTED ─────────────────────────
+ * Originally: Stage exercised only the captured snapshot and — for a hosted app —
+ * the live address, because installing a snapshot into a disposable tenant and
+ * driving it needed a lifecycle and a per-press cost nobody had agreed to pay.
+ *
+ * ── WHAT IT MEANS NOW ─────────────────────────────────────────────────────────
+ * `runtime` and `media` listings ARE driven in a disposable Cloudflare Container
+ * (a real headless browser, dispatched a real touch gesture, a real
+ * `loadedmetadata` measurement) — see `application/marketplace/stageSandboxRuns.ts`.
+ * `system` listings are dry-run in-process with every outbound call stubbed. This
+ * code is unchanged (it rides `declared` on already-published listings), but its
+ * WORDING is now per-harness rather than a single blanket disclaimer — see
+ * `application/marketplace/stageSandboxChecks.ts`'s `notApplicableCheck`. It
+ * still names a real, honest bound: `paged`/`geometry`/`instrument` listings and
+ * a hosted app's address are legitimately never driven, because there is nothing
+ * a sandbox adds over reading the exact copy a buyer receives (or, for an
+ * address, asking it directly). Deliberately a `warn`: true of some listing on
+ * the platform at all times and must never refuse a publish on its own.
  */
 export const STAGE_SANDBOX_LIMIT_CODE = 'stage.sandboxLimit';
 

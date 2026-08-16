@@ -8,16 +8,18 @@
  */
 
 import { signJwt } from '../../infrastructure/auth/JwtService';
+import { TenantRole } from '../../domain/shared/types';
 import type { Env } from '../../env';
 
 /**
  * Mint a short-lived (1h), tenant-scoped JWT the container uses to claim its
  * own run and report back — nothing else. The `claw:` subject prefix skips
  * end-user terms enforcement (machine identity); no `jti`/`sv` so it isn't tied
- * to a user session.
+ * to a user session. `VIEWER` — tighter than QA's `DEVELOPER` — because this
+ * token never reads a credential secret, only its own run row.
  */
 export function mintStageSandboxToken(env: Env, tenantId: number): Promise<string> {
-  return signJwt({ sub: 'claw:stage-sandbox', tid: tenantId }, env.JWT_SECRET, 3600);
+  return signJwt({ sub: 'claw:stage-sandbox', tid: tenantId, role: TenantRole.VIEWER }, env.JWT_SECRET, 3600);
 }
 
 export interface StageSandboxDispatchArgs {

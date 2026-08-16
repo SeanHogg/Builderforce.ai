@@ -100,6 +100,10 @@ class_name = "AgentContainerDO"
 name = "QA_RUNNER_CONTAINER"
 class_name = "QaRunnerContainerDO"
 
+[[durable_objects.bindings]]
+name = "STAGE_SANDBOX_CONTAINER"
+class_name = "StageSandboxContainerDO"
+
 # Long-lived Cloudflare Container for "Cloud Agent (Node/Container)" runs — a
 # persistent Node process with a real shell (build/test/lint). The image lives in
 # api/container; build context is that dir. Requires a Workers Paid plan with
@@ -119,6 +123,17 @@ class_name = "QaRunnerContainerDO"
 image = "./qa-container/Dockerfile"
 max_instances = 3
 name = "builderforce-qa-runner"
+
+# Stage Sandbox — boots one staged marketplace snapshot (runtime/media harness
+# only) in a real headless Chromium and drives it. Dispatched once per Stage
+# press per unique build (deduped by payload hash — see
+# application/marketplace/stageSandboxRuns.ts). Self-contained under
+# api/stage-sandbox (mirrors qa-container). `max_instances` is the cost guard.
+[[containers]]
+class_name = "StageSandboxContainerDO"
+image = "./stage-sandbox/Dockerfile"
+max_instances = 3
+name = "builderforce-stage-sandbox"
 
 [[r2_buckets]]
 binding = "UPLOADS"
@@ -194,6 +209,13 @@ tag = "v10"
 # counter, the roster and a bounded transcript — so an eviction between two sends
 # cannot silently reset the allowance. Storage requires a SQLite-backed class.
 new_sqlite_classes = ["GuestRoomDO"]
+
+[[migrations]]
+tag = "v11"
+# StageSandboxContainerDO backs the Stage Sandbox Cloudflare Container (the
+# disposable headless-Chromium runner behind marketplace Stage checks).
+# Container-control DOs are SQLite-backed.
+new_sqlite_classes = ["StageSandboxContainerDO"]
 
 # Cron triggers — see scheduled() in src/index.ts
 #   "0 9 * * *"   09:00 UTC daily: probe every LLM vendor; email superadmins on status change.

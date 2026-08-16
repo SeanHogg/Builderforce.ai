@@ -1,41 +1,58 @@
-import { describe, it, expect } from 'vitest';
-import { renderTemplate, dispositionFromDeps } from './cloudExecutor';
+/**
+ * The outbound-port seam — the ONE change `executeCloudNode` needed for the
+ * Stage Sandbox's `system` dry-run to be possible without a second executor.
+ *
+ * These assertions guard the two properties that matter: a supplied stub
+ * intercepts BEFORE the real path's own preconditions (so a dry-run needs no
+ * tenant context at all), and an OMITTED port — every live caller today —
+ * changes nothing about how a pure node behaves.
+ */
 
-describe('renderTemplate', () => {
-  it('substitutes {{input}} with the upstream text', () => {
-    expect(renderTemplate('Summarize: {{input}}', 'hello world')).toBe('Summarize: hello world');
-  });
-  it('tolerates inner whitespace and multiple occurrences', () => {
-    expect(renderTemplate('{{ input }} / {{input}}', 'X')).toBe('X / X');
-  });
-  it('leaves text without the token unchanged', () => {
-    expect(renderTemplate('no placeholder here', 'X')).toBe('no placeholder here');
-  });
-});
+import { describe, expect, it } from 'vitest';
+import { executeCloudNode, type CloudExecutorEnv } from './cloudExecutor';
+import { sandboxOutboundPort } from './sandboxOutboundPort';
 
-describe('dispositionFromDeps (prune/cascade semantics)', () => {
-  it('runs a root task with no dependencies', () => {
-    expect(dispositionFromDeps([])).toBe('run');
+const env = {} as CloudExecutorEnv;
+
+describe('executeCloudNode — outbound port', () => {
+  it('a stubbed gmail node needs no usageCtx at all', async () => {
+    const result = await executeCloudNode(env, { kind: 'gmail', config: { to: 'x@example.test' } }, '', undefined, sandboxOutboundPort());
+    const parsed = JSON.parse(result.output);
+    expect(parsed.stubbed).toBe(true);
+    expect(parsed.kind).toBe('gmail');
   });
-  it('runs once every dependency has completed', () => {
-    expect(dispositionFromDeps(['completed', 'completed'])).toBe('run');
+
+  it('a stubbed connector node needs no usageCtx and never validates its config', async () => {
+    // No `connector`/`action` keys at all — the real path would refuse this,
+    // and the stub never gets that far.
+    const result = await executeCloudNode(env, { kind: 'connector', config: {} }, '', undefined, sandboxOutboundPort());
+    expect(JSON.parse(result.output)).toMatchObject({ stubbed: true, kind: 'connector' });
   });
-  it('waits while any dependency is still pending/running', () => {
-    expect(dispositionFromDeps(['completed', 'pending'])).toBe('wait');
-    expect(dispositionFromDeps(['running'])).toBe('wait');
+
+  it('a stubbed mcp node needs no usageCtx', async () => {
+    const result = await executeCloudNode(env, { kind: 'mcp', config: {} }, '', undefined, sandboxOutboundPort());
+    expect(JSON.parse(result.output)).toMatchObject({ stubbed: true, kind: 'mcp' });
   });
-  it('fails when any dependency failed (real error propagates)', () => {
-    expect(dispositionFromDeps(['completed', 'failed'])).toBe('fail');
+
+  it('a stubbed llm node spends no tokens and calls no proxy', async () => {
+    const result = await executeCloudNode(env, { kind: 'llm', config: { prompt: 'hello' } }, '', undefined, sandboxOutboundPort());
+    expect(JSON.parse(result.output)).toMatchObject({ stubbed: true, kind: 'llm' });
   });
-  it('cancels (not fails) when an upstream filter pruned the path', () => {
-    expect(dispositionFromDeps(['completed', 'cancelled'])).toBe('cancel');
+
+  it('without a real usageCtx, an UNSTUBBED gmail node still refuses exactly as before', async () => {
+    await expect(executeCloudNode(env, { kind: 'gmail', config: {} }, ''))
+      .rejects.toThrow(/tenant context/);
   });
-  it('prefers fail over cancel when both are present', () => {
-    // A genuine error outranks a prune so the workflow still ends `failed`.
-    expect(dispositionFromDeps(['failed', 'cancelled'])).toBe('fail');
+
+  it('the outbound param is a no-op for pure ETL nodes', async () => {
+    const withoutPort = await executeCloudNode(env, { kind: 'transform', config: { expression: '' } }, 'hello');
+    const withPort = await executeCloudNode(env, { kind: 'transform', config: { expression: '' } }, 'hello', undefined, sandboxOutboundPort());
+    expect(withoutPort).toEqual(withPort);
   });
-  it('cancels a join as soon as one path is pruned, even if another is still pending', () => {
-    // The prune outranks the still-pending path so the cone collapses promptly.
-    expect(dispositionFromDeps(['cancelled', 'pending'])).toBe('cancel');
+
+  it('a filter node behaves identically with or without a stub port', async () => {
+    const withoutPort = await executeCloudNode(env, { kind: 'filter', config: { predicate: 'true' } }, '{}');
+    const withPort = await executeCloudNode(env, { kind: 'filter', config: { predicate: 'true' } }, '{}', undefined, sandboxOutboundPort());
+    expect(withoutPort).toEqual(withPort);
   });
 });

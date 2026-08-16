@@ -106,6 +106,7 @@ export interface MeterLimits {
   errorEvents: number;
   outboundFetches: number;
   cloudRuns: number;
+  stageSandboxRuns: number;
 }
 
 /**
@@ -124,6 +125,7 @@ export function resolveMeterLimits(input: {
     errorEvents: resolveErrorEventsMonthly(input),
     outboundFetches: resolveOutboundFetchesMonthly(input),
     cloudRuns: resolveCloudRunsMonthly(input),
+    stageSandboxRuns: resolveStageSandboxRunsMonthly(input),
   };
 }
 
@@ -142,13 +144,14 @@ export async function buildConsumptionSnapshot(
   acting?: { actingUserId?: string | null; actingIsSuperadmin?: boolean },
 ): Promise<ConsumptionSnapshot> {
   const ingestionDb = env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
-  const [tokensDaily, ingestionDaily, ingestionByProvider, errorEventsDaily, outboundFetchesDaily, cloudRunsDaily, tenantRows] = await Promise.all([
+  const [tokensDaily, ingestionDaily, ingestionByProvider, errorEventsDaily, outboundFetchesDaily, cloudRunsDaily, stageSandboxRunsDaily, tenantRows] = await Promise.all([
     dailyTenantTextTokens(db, tenantId, monthStart),
     dailyTenantIngestionBytes(ingestionDb, tenantId, monthStart),
     tenantIngestionBytesByProvider(ingestionDb, tenantId, monthStart),
     dailyTenantErrorEvents(db, tenantId, monthStart),
     dailyTenantOutboundFetches(db, tenantId, monthStart),
     dailyTenantCloudRuns(db, tenantId, monthStart),
+    dailyTenantStageSandboxRuns(db, tenantId, monthStart),
     db
       .select({
         plan: tenants.plan,
@@ -184,6 +187,7 @@ export async function buildConsumptionSnapshot(
     errorEvents: errorEventsLimit,
     outboundFetches: outboundFetchesLimit,
     cloudRuns: cloudRunsLimit,
+    stageSandboxRuns: stageSandboxRunsLimit,
   } = resolveMeterLimits({ effectivePlan, tokenDailyLimitOverride: override, isSuperadmin });
 
   // Every meter comes back per-day; the month-to-date total is the day sum (one
@@ -194,6 +198,7 @@ export async function buildConsumptionSnapshot(
   const [errorEventsUsed, errorEventsTrend] = densifyDaily(errorEventsDaily, monthStart);
   const [outboundFetchesUsed, outboundFetchesTrend] = densifyDaily(outboundFetchesDaily, monthStart);
   const [cloudRunsUsed, cloudRunsTrend] = densifyDaily(cloudRunsDaily, monthStart);
+  const [stageSandboxRunsUsed, stageSandboxRunsTrend] = densifyDaily(stageSandboxRunsDaily, monthStart);
 
   return {
     period: { start: monthStart.toISOString(), resetsAt: monthEnd.toISOString() },
@@ -208,6 +213,7 @@ export async function buildConsumptionSnapshot(
     meters: [
       makeMeter('ai_tokens', 'tokens', tokensUsed, tokenLimit, tokensTrend),
       makeMeter('cloud_runs', 'runs', cloudRunsUsed, cloudRunsLimit, cloudRunsTrend),
+      makeMeter('stage_sandbox_runs', 'sandbox_runs', stageSandboxRunsUsed, stageSandboxRunsLimit, stageSandboxRunsTrend),
       { ...makeMeter('ingestion', 'bytes', ingestionUsed, ingestionLimit, ingestionTrend), breakdown: ingestionByProvider },
       makeMeter('error_events', 'events', errorEventsUsed, errorEventsLimit, errorEventsTrend),
       makeMeter('outbound_fetches', 'fetches', outboundFetchesUsed, outboundFetchesLimit, outboundFetchesTrend),

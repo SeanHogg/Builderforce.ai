@@ -335,6 +335,116 @@ describe('harness · system', () => {
   });
 });
 
+describe('the Stage Sandbox composition', () => {
+  const game = (document: string) => input({
+    listingKind: 'game',
+    objectKind: 'game',
+    objects: [object('game', { document, posterUrl: 'https://example.test/p.png' })],
+  });
+
+  it('prefers a sandbox-driven runtime.touch finding over the regex when one is present', async () => {
+    // The document itself has no touch handler (the regex would WARN), but the
+    // sandbox ran a real gesture and observed a real reaction — that verdict wins.
+    const checks = await runStageChecks({
+      ...game('<script>/* no listener */</script>'),
+      sandbox: {
+        status: 'passed', runId: 'run-1', summary: 'Verified', errorMessage: null, lastVerifiedAt: null,
+        findings: [{ code: 'runtime.touch', group: 'runs', severity: 'pass', label: 'Registers touch input, driven and observed' }],
+      },
+    });
+    expect(severityOf(checks, 'runtime.touch')).toBe('pass');
+  });
+
+  it('BLOCKS on a sandbox-reported crash even though the regex would have passed the document', async () => {
+    const checks = await runStageChecks({
+      ...game('<script>addEventListener("touchstart",()=>{throw new Error("boom")})</script>'),
+      sandbox: {
+        status: 'failed', runId: 'run-2', summary: 'Threw', errorMessage: null, lastVerifiedAt: null,
+        findings: [{ code: 'runtime.crash', group: 'runs', severity: 'block', label: 'Threw while booting in the sandbox' }],
+      },
+    });
+    expect(severityOf(checks, 'runtime.crash')).toBe('block');
+    expect(isPublishable(checks)).toBe(false);
+  });
+
+  it('falls back to the regex when no sandbox verdict is present', async () => {
+    const checks = await runStageChecks(game('<script>addEventListener("touchstart",()=>{})</script>'));
+    expect(severityOf(checks, 'runtime.touch')).toBe('pass');
+  });
+
+  it('BLOCKS publish while the sandbox is still queued or running', async () => {
+    for (const status of ['queued', 'running'] as const) {
+      const checks = await runStageChecks({
+        ...game('<script>addEventListener("touchstart",()=>{})</script>'),
+        sandbox: { status, runId: 'run-3', summary: null, errorMessage: null, lastVerifiedAt: null, findings: [] },
+      });
+      expect(severityOf(checks, 'sandbox.pending')).toBe('block');
+      expect(isPublishable(checks)).toBe(false);
+    }
+  });
+
+  it('BLOCKS publish when nothing has verified this exact build', async () => {
+    const checks = await runStageChecks({
+      ...game('<script>addEventListener("touchstart",()=>{})</script>'),
+      sandbox: { status: 'missing', runId: null, summary: null, errorMessage: null, lastVerifiedAt: null, findings: [] },
+    });
+    expect(severityOf(checks, 'sandbox.missing')).toBe('block');
+    expect(isPublishable(checks)).toBe(false);
+  });
+
+  it('fails OPEN when the sandbox itself could not finish, or the quota is exhausted', async () => {
+    const unavailable = await runStageChecks({
+      ...game('<script>addEventListener("touchstart",()=>{})</script>'),
+      sandbox: { status: 'error', runId: 'run-4', summary: null, errorMessage: 'timed out', lastVerifiedAt: null, findings: [] },
+    });
+    expect(severityOf(unavailable, 'sandbox.unavailable')).toBe('warn');
+    expect(isPublishable(unavailable)).toBe(true);
+
+    const capped = await runStageChecks({
+      ...game('<script>addEventListener("touchstart",()=>{})</script>'),
+      sandbox: { status: 'capped', runId: null, summary: null, errorMessage: null, lastVerifiedAt: null, findings: [] },
+    });
+    expect(severityOf(capped, 'sandbox.capped')).toBe('warn');
+    expect(isPublishable(capped)).toBe(true);
+  });
+
+  it('reports a voice clone that does not resolve to a real row differently from one that does', async () => {
+    const reel = (voiceCloneId: string) => input({
+      listingKind: 'creative',
+      objectKind: 'video',
+      objects: [object('video', { durationSeconds: 10, voiceCloneId, posterUrl: 'https://e.test/p.png' })],
+    });
+
+    const stale = await runStageChecks({ ...reel('vc_gone'), voiceClone: async () => 'unknown' });
+    expect(severityOf(stale, 'media.voiceClone')).toBe('block');
+    expect(stale.find((c) => c.code === 'media.voiceClone')?.label).toContain('no longer exists');
+
+    const real = await runStageChecks({ ...reel('vc_real'), voiceClone: async () => 'seller_only' });
+    expect(severityOf(real, 'media.voiceClone')).toBe('block');
+    expect(real.find((c) => c.code === 'media.voiceClone')?.label).not.toContain('no longer exists');
+
+    const transferring = await runStageChecks({ ...reel('vc_real'), voiceClone: async () => 'transfers' });
+    expect(severityOf(transferring, 'media.voiceClone')).toBe('pass');
+  });
+
+  it('uses the system dry-run finding over the static declaration when one is present', async () => {
+    const automation = input({
+      listingKind: 'automation', objectKind: 'workflow',
+      objects: [object('workflow', { steps: [{ kind: 'connector', action: 'sendSms' }] })],
+    });
+
+    const dryRun = await runStageChecks({
+      ...automation,
+      systemDryRun: async () => [{ code: 'system.outbound', group: 'runs', severity: 'block', label: '1 of 1 step(s) failed a stubbed dry run' }],
+    });
+    expect(severityOf(dryRun, 'system.outbound')).toBe('block');
+    expect(isPublishable(dryRun)).toBe(false);
+
+    const noProbe = await runStageChecks(automation);
+    expect(severityOf(noProbe, 'system.outbound')).toBe('pass');
+  });
+});
+
 describe('sells', () => {
   it('warns when a priced listing gives the whole thing away at the URL that sells it', async () => {
     const checks = await runStageChecks(input({

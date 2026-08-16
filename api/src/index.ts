@@ -299,6 +299,7 @@ export { CloudRunnerDO } from './infrastructure/relay/CloudRunnerDO';
 export { ProjectEvermindCoordinatorDO } from './infrastructure/relay/ProjectEvermindCoordinatorDO';
 export { AgentContainerDO } from './infrastructure/relay/AgentContainerDO';
 export { QaRunnerContainerDO } from './infrastructure/relay/QaRunnerContainerDO';
+export { StageSandboxContainerDO } from './infrastructure/relay/StageSandboxContainerDO';
 export { TenantRateLimiterDO } from './infrastructure/ratelimit/TenantRateLimiterDO';
 
 // ---------------------------------------------------------------------------

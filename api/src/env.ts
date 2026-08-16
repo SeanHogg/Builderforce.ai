@@ -309,6 +309,17 @@ export interface Env {
    *  QaRunnerContainerDO via a `[[containers]]` block; binding `QA_RUNNER_CONTAINER`. */
   QA_RUNNER_CONTAINER?: DurableObjectNamespace;
 
+  /** Cloudflare Container runtime for the Stage Sandbox — the disposable
+   *  headless-Chromium runner behind marketplace Stage checks (Playwright image
+   *  at api/stage-sandbox). Dispatched once per Stage press per unique build
+   *  (`idFromName('stage-sandbox:<runId>')`). Optional: when unset,
+   *  `dispatchStageSandbox` returns false and the run row is marked `error`
+   *  (fails open — publish proceeds with a `sandbox.unavailable` warn, exactly
+   *  as every environment without this binding behaved before it existed).
+   *  Backed by StageSandboxContainerDO via a `[[containers]]` block; binding
+   *  `STAGE_SANDBOX_CONTAINER`. */
+  STAGE_SANDBOX_CONTAINER?: DurableObjectNamespace;
+
   /** Internal base URL the Container calls back into for each LLM step / repo
    *  telemetry / PR finalize (the container-op endpoint). Defaults to the public
    *  API origin; override for local/dev. e.g. "https://api.builderforce.ai". */
