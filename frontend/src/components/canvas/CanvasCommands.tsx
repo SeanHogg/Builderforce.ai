@@ -266,6 +266,24 @@ export function PublishCanvasIcon() {
   </svg>;
 }
 
+/** Fold the session bar down to what the canvas IS DOING. A chevron INTO the row it
+ *  collapses, so the direction says where the controls go rather than merely that
+ *  something happens. Its opposite is {@link ExpandBarIcon}. */
+export function CollapseBarIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M9.8 4.2 6 8l3.8 3.8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M13 3.4v9.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>;
+}
+
+/** Bring the folded controls back. */
+export function ExpandBarIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M6.2 4.2 10 8l-3.8 3.8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M3 3.4v9.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>;
+}
+
 /** The menu-opens marker on a worded button. Replaces the `▾` character, which the
  *  session bar drew at a different size and colour to everything beside it. */
 export function DisclosureIcon() {

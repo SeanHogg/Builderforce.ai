@@ -50,7 +50,11 @@ const customerLine: BuiltinTemplate = {
       fieldType: 'secret',
       id: 'auth_token',
       title: 'Twilio auth token',
-      help: 'Used to verify that an inbound webhook really came from Twilio. Without it the endpoint would answer anyone.',
+      // Genuinely Twilio's, unlike the phone-verification template's secret:
+      // this trigger is `verify: 'twilio'`, and Twilio signs X-Twilio-Signature
+      // with the account Auth Token. There is no API-key equivalent, so this
+      // field stays the Auth Token even for accounts that send over an API key.
+      help: 'Twilio Console → Account Info → Auth Token. Used to verify that an inbound webhook really came from Twilio; without it the endpoint would answer anyone. It must be the Auth Token — Twilio signs inbound webhooks with it and offers no API-key equivalent, even though sending should use an API key.',
       required: true,
     },
     {
@@ -142,9 +146,15 @@ const phoneVerification: BuiltinTemplate = {
     {
       kind: 'field',
       fieldType: 'secret',
-      id: 'auth_token',
-      title: 'Twilio auth token',
-      help: 'Verifies that the inbound request came from your application, not from someone spraying codes at your customers.',
+      // NOT the Twilio auth token, despite what this field used to be called.
+      // Both triggers below are `verify: 'hmac'` on endpoints YOUR app calls —
+      // Twilio never signs them, so this is a shared secret between your front
+      // end and this workflow and any long random string does. Naming it after
+      // Twilio's token invited people to paste an account-wide credential into
+      // a workflow config that had no use for it.
+      id: 'signing_secret',
+      title: 'Request signing secret',
+      help: 'Any long random string of your own. Your app signs its calls to these two endpoints with it, so a stranger cannot spray codes at your customers. This is NOT your Twilio auth token — Twilio does not call these endpoints.',
       required: true,
     },
     projectStep('The verification checklist is seeded onto this project’s board.'),
@@ -159,7 +169,7 @@ const phoneVerification: BuiltinTemplate = {
         {
           kind: 'trigger',
           label: 'Verification requested',
-          config: { triggerType: 'webhook', verify: 'hmac', secret: '{{setup.auth_token}}', source: 'verify-start' },
+          config: { triggerType: 'webhook', verify: 'hmac', secret: '{{setup.signing_secret}}', source: 'verify-start' },
         },
         call('Send the code', 'twilio-verify', 'start_verification', {
           serviceSid: '{{setup.service_sid}}',
@@ -177,7 +187,7 @@ const phoneVerification: BuiltinTemplate = {
         {
           kind: 'trigger',
           label: 'Code submitted',
-          config: { triggerType: 'webhook', verify: 'hmac', secret: '{{setup.auth_token}}', source: 'verify-check' },
+          config: { triggerType: 'webhook', verify: 'hmac', secret: '{{setup.signing_secret}}', source: 'verify-check' },
         },
         call('Check the code', 'twilio-verify', 'check_verification', {
           serviceSid: '{{setup.service_sid}}',

@@ -23,7 +23,7 @@
  */
 
 import type { ConnectorManifest } from '../connectorManifest';
-import { b, bo, p, q, qn } from './dsl';
+import { b, bo, p, q, qn, TWILIO_REST_CREDENTIALS } from './dsl';
 
 /**
  * Twilio Conversations — one threaded conversation across SMS, WhatsApp and chat.
@@ -50,10 +50,7 @@ const twilioConversations: ConnectorManifest = {
   docsUrl: 'https://www.twilio.com/docs/conversations/api',
   auth: {
     kind: 'basic',
-    fields: [
-      { key: 'username', label: 'API key SID (or Account SID)', secret: false, required: true, placeholder: 'AC… or SK…' },
-      { key: 'password', label: 'Auth token (or API key secret)', secret: true, required: true },
-    ],
+    fields: [...TWILIO_REST_CREDENTIALS],
   },
   actions: [
     {
@@ -203,10 +200,7 @@ const twilioAssistants: ConnectorManifest = {
   docsUrl: 'https://www.twilio.com/docs/alpha/ai-assistants',
   auth: {
     kind: 'basic',
-    fields: [
-      { key: 'username', label: 'API key SID (or Account SID)', secret: false, required: true, placeholder: 'AC… or SK…' },
-      { key: 'password', label: 'Auth token (or API key secret)', secret: true, required: true },
-    ],
+    fields: [...TWILIO_REST_CREDENTIALS],
   },
   actions: [
     {

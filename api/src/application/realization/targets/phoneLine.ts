@@ -88,6 +88,12 @@ export const phoneLineTarget: RealizationTarget = {
    every route answers **403** — correct, and the single most common reason a
    freshly wired line "does nothing".
 
+> **Auth Token vs API key.** Twilio recommends an API key (\`SK…\` + secret) for
+> calls you MAKE, and the Twilio connector takes one. Calls Twilio makes to YOU
+> are different: \`X-Twilio-Signature\` is signed with the account **Auth Token**
+> and there is no API-key equivalent, so \`TWILIO_AUTH_TOKEN\` above stays the Auth
+> Token. Putting an API key secret there fails every inbound route closed.
+
 \`phone.html\` shows the exact URLs and whether each one is actually serving.
 
 ## Placing outbound calls
@@ -292,7 +298,7 @@ stupid when it is the script being long.
           order: 20,
           title: 'Store TWILIO_AUTH_TOKEN in the project secret vault',
           description:
-            'Every voice and SMS route verifies Twilio\'s signature, and without the token they all answer 403. This is the single most common reason a freshly wired phone line appears to do nothing at all.',
+            'Every voice and SMS route verifies Twilio\'s signature, and without the token they all answer 403. This is the single most common reason a freshly wired phone line appears to do nothing at all. It must be the account Auth Token, not an API key secret — Twilio signs inbound webhooks with the Auth Token only, even when your outbound calls use an API key.',
           kind: 'setup',
         },
         {
@@ -335,7 +341,12 @@ stupid when it is the script being long.
         {
           name: 'TWILIO_AUTH_TOKEN',
           label: 'Twilio auth token',
-          where: 'Twilio Console → Account Info. Required to verify inbound webhook signatures; without it every voice and SMS route answers 403.',
+          // Deliberately the Auth Token and NOT an API key secret. Twilio signs
+          // X-Twilio-Signature with the account's Auth Token and publishes no
+          // API-key equivalent, so a project that (correctly) sends over an API
+          // key still verifies inbound with this. Saying so here is what stops
+          // someone "finishing the migration" and silently 403ing every call.
+          where: 'Twilio Console → Account Info → Auth Token. This must be the Auth Token even if you send over an API key — Twilio signs inbound webhooks with the Auth Token and has no API-key equivalent. Without it every voice and SMS route answers 403.',
         },
         {
           name: 'WEBHOOK_SHARED_SECRET',

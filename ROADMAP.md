@@ -927,9 +927,13 @@ sequenced into waves because nothing in them gates the sell motion.
   **Blocked on an explicit user decision:** the design is done and mocked up interactively
   (https://claude.ai/code/artifact/c935a6ce-18cc-4ea4-bccf-1859a50c20a1) — building it edits the app
   shell, `CreationCanvas.tsx`, `CanvasAppSurface.tsx`, `canvasSessionActions.ts`, the object palette,
-  the inspector, the agent/persona cards and five i18n catalogs, and one open question is called out
-  in the mockup (whether a collapsed command bar keeps the team avatars or hides them the way Make
-  hides everything).
+  the inspector, the agent/persona cards and five i18n catalogs. **Decided 2026-08-16 (operator):**
+  a collapsed command bar KEEPS the team avatars — Make hides everything behind `‹`, but a collapsed
+  team is a team nobody can see is working. The general rule the build must follow is **collapse
+  hides controls, never status**: anything in the bar reporting what the canvas is doing right now
+  (who is on, whether a run is live) survives the collapse; anything you press to make something
+  happen does not. The chips keep their drag-to-board behaviour and availability dot when folded in
+  from `TeamBar`.
 
 - **A SCANNED document dropped on the canvas can never become a résumé, because the canvas keeps no
   bytes to escalate with.** *(registered 2026-08-16 by the "convert this pdf into a resume" pass,

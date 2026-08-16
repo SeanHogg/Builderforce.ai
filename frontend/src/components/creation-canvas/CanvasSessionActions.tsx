@@ -20,6 +20,7 @@ import {
   type CanvasSessionActionId,
 } from '@/lib/canvasSessionActions';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
+import { canvasChromeShows } from '@/lib/canvasChrome';
 import { useContributedSurfaceActions } from './canvasSurfaceActions';
 import styles from './CreationCanvas.module.css';
 
@@ -79,14 +80,22 @@ export interface CanvasSessionActionsProps {
    * remembering which buttons to hide where.
    */
   surface?: CanvasSurfaceId;
+  /**
+   * Whether the bar is folded away. What survives is not decided here — every slot asks
+   * `canvasChromeShows`, so "the roster stays and the buttons go" is one table rather
+   * than a rule each consumer remembers differently.
+   */
+  collapsed?: boolean;
 }
 
-export function CanvasSessionActions({ handlers, variant, surface }: CanvasSessionActionsProps) {
+export function CanvasSessionActions({ handlers, variant, surface, collapsed = false }: CanvasSessionActionsProps) {
   const t = useTranslations('creationCanvas');
   // What the active surface has put in the bar — a runtime's Run/Stop and its readings,
-  // published from the surface itself. Null on every surface that contributes nothing,
-  // so there is no branch here about which surfaces have runtimes.
-  const contributed = useContributedSurfaceActions();
+  // plus what it REPORTS. Both halves are null on a surface that contributes nothing, so
+  // there is no branch here about which surfaces have runtimes.
+  const { controls, status } = useContributedSurfaceActions();
+  const showsControls = canvasChromeShows('surfaceControls', collapsed);
+  const showsActions = canvasChromeShows('actions', collapsed);
 
   /** Name, hover text and ARIA state — decided once, for both chromes. */
   const describe = (def: CanvasSessionActionDef) => {
@@ -130,11 +139,15 @@ export function CanvasSessionActions({ handlers, variant, surface }: CanvasSessi
   }
 
   return <>
-    {/* The surface's own controls come FIRST: on a running app "Stop" is what the reader
-        is reaching for, and burying it behind undo/redo would make the shared bar worse
-        than the second toolbar it replaces. */}
-    {contributed}
-    {canvasSessionClusters(surface).map(({ cluster, actions }) => {
+    {/* What the runtime IS DOING, before what you can do to it — and it survives a
+        collapse, because a folded bar that stops saying an app is running is the exact
+        failure the status/control split exists to prevent. */}
+    {canvasChromeShows('surfaceStatus', collapsed) && status}
+    {/* The surface's own controls come FIRST among the controls: on a running app "Stop"
+        is what the reader is reaching for, and burying it behind undo/redo would make the
+        shared bar worse than the second toolbar it replaces. */}
+    {showsControls && controls}
+    {showsActions && canvasSessionClusters(surface).map(({ cluster, actions }) => {
       const buttons = actions.map((def) => {
         const { handler, active, label, title, ...aria } = describe(def);
         const Glyph = (active && ACTIVE_ACTION_ICON[def.id]) || ACTION_ICON[def.id];

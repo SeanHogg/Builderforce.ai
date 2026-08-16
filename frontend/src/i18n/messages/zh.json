@@ -16504,6 +16504,8 @@
     "canvasViewControls": "画布视图控件",
     "undoCanvasChange": "撤销画布更改",
     "redoCanvasChange": "重做画布更改",
+    "collapseBar": "收起工具栏",
+    "expandBar": "显示工具栏",
     "publishCanvas": "发布",
     "publishCanvasTitle": "发布此画布——先检查，再上线",
     "inviteCollaborators": "邀请协作者",

@@ -121,7 +121,22 @@ export function CanvasAppSurface({ nodes, onExit, onOpenObject }: CanvasAppSurfa
 
   // Into the ONE session bar, for as long as this surface is mounted. See the header:
   // these used to be a second toolbar of this surface's own.
-  useCanvasSurfaceActions(() => (
+  //
+  // Split into what you PRESS and what the runtime REPORTS, because the bar folds away
+  // the first and keeps the second — an app that is running has to keep saying so even
+  // when its Run button is hidden.
+  useCanvasSurfaceActions(() => ({
+    status: (
+      <span
+        className={styles.appAddress}
+        data-running={running}
+        role="status"
+        aria-live="polite"
+      >
+        {running && entryPath ? entryPath : t('stopped')}
+      </span>
+    ),
+    controls: (
     <div className={styles.appBarControls} role="group" aria-label={t('regionLabel')}>
       <button
         type="button"
@@ -167,11 +182,9 @@ export function CanvasAppSurface({ nodes, onExit, onOpenObject }: CanvasAppSurfa
         ))}
       </div>
 
-      <span className={styles.appAddress} aria-live="polite">
-        {running && entryPath ? entryPath : t('stopped')}
-      </span>
     </div>
-  ), [running, reading, viewport, errors, entryPath, app.document, t]);
+    ),
+  }), [running, reading, viewport, errors, entryPath, app.document, t]);
 
   return (
     <section

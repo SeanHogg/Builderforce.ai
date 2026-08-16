@@ -156,6 +156,14 @@
   z-index:20;
 }
 
+/* Folded, the bar reports and does not act: the title, the connection, who is here and
+   what the runtime is doing. It gets SHORTER rather than merely emptier — a 54px band
+   holding four small status marks reads as a bar that has lost its buttons, which is the
+   impression a collapse is supposed to remove. WHAT is on screen is decided in
+   `canvasChrome.ts`, never here; this only sizes what survives. */
+.sessionBar[data-collapsed='true'] { height:40px; gap:10px; }
+.sessionBar[data-collapsed='true'] .titleBlock input { width:min(200px, 30vw); font-size:12px; }
+
 .titleBlock, .sessionActions, .collaborators { display:flex; align-items:center; }
 .titleBlock { gap:9px; min-width:0; }
 .spark { color:#7257ec; font-size:18px; }
@@ -1771,9 +1779,12 @@
 .appReadings button[aria-pressed='true'],.appViewports button[aria-pressed='true'] { background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 1px 2px var(--canvas-shadow); }
 .appErrorCount { min-width:15px; padding:0 4px; border-radius:var(--radius-full); background:var(--tone-danger-bg); color:var(--tone-danger-ink); font-size:9px; font-weight:700; text-align:center; }
 
-/* Where it is running. Capped rather than flexed: in the session bar an unbounded
-   address would push Share and Publish off the end on a laptop. */
+/* Where it is running — STATUS, so it survives a collapsed bar. Capped rather than
+   flexed: in the session bar an unbounded address would push Share and Publish off the
+   end on a laptop. A running app gets the live tint, because when the bar is folded this
+   line is the only thing left saying so. */
 .appAddress { min-width:0; max-width:220px; overflow:hidden; color:var(--canvas-muted); font-family:var(--font-mono,ui-monospace,monospace); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+.appAddress[data-running='true'] { color:var(--tone-success-ink); font-weight:650; }
 
 /* Preview. Same three measures the site surface uses, same reasoning. */
 .appStage { min-height:0; flex:1; display:flex; justify-content:center; padding:16px; background:var(--canvas-board-background); overflow:auto; overscroll-behavior:contain; }

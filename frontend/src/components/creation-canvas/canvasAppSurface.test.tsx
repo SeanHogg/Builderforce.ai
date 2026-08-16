@@ -16,6 +16,7 @@ import {
 import type { CreationNodeData } from './types';
 import { CanvasAppSurface } from './CanvasAppSurface';
 import { CanvasSurfaceActionsProvider, useContributedSurfaceActions } from './canvasSurfaceActions';
+import { canvasChromeShows } from '@/lib/canvasChrome';
 
 /**
  * The surface's controls are PUBLISHED into the session bar, not drawn by the surface —
@@ -23,11 +24,16 @@ import { CanvasSurfaceActionsProvider, useContributedSurfaceActions } from './ca
  * feature was gone. This host stands in for the bar: it renders the contribution exactly
  * where `CanvasSessionActions` does.
  */
-function WithBar({ children }: { children: React.ReactNode }) {
-  return <CanvasSurfaceActionsProvider><Bar />{children}</CanvasSurfaceActionsProvider>;
+function WithBar({ children, collapsed = false }: { children: React.ReactNode; collapsed?: boolean }) {
+  return <CanvasSurfaceActionsProvider><Bar collapsed={collapsed} />{children}</CanvasSurfaceActionsProvider>;
 }
-function Bar() {
-  return <div data-testid="session-bar">{useContributedSurfaceActions()}</div>;
+/** Stands in for `CanvasSessionActions`, applying the same chrome rule it does. */
+function Bar({ collapsed }: { collapsed: boolean }) {
+  const { controls, status } = useContributedSurfaceActions();
+  return <div data-testid="session-bar">
+    {canvasChromeShows('surfaceStatus', collapsed) && status}
+    {canvasChromeShows('surfaceControls', collapsed) && controls}
+  </div>;
 }
 
 /**
@@ -140,6 +146,22 @@ describe('the app surface', () => {
     expect(within(bar).getByRole('button', { name: 'Preview' })).toBeInTheDocument();
     // The surface itself draws no bar — one press, one place.
     expect(within(screen.getByTestId('canvas-app-surface')).queryByRole('button', { name: 'Run' })).toBeNull();
+  });
+
+  /**
+   * The rule the operator settled, applied to a runtime: fold the bar and the Run button
+   * goes, but the app must keep saying it is running. A collapse that silenced that would
+   * leave somebody looking at a canvas with a live preview and nothing on screen saying so.
+   */
+  it('keeps saying it is running after the bar is folded, without the button', () => {
+    const { rerender } = render(<WithBar><CanvasAppSurface nodes={SESSION} onExit={vi.fn()} /></WithBar>);
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    const bar = () => screen.getByTestId('session-bar');
+    expect(within(bar()).getByRole('status')).toHaveTextContent('frontend/index.html');
+
+    rerender(<WithBar collapsed><CanvasAppSurface nodes={SESSION} onExit={vi.fn()} /></WithBar>);
+    expect(within(bar()).queryByRole('button', { name: 'Stop' })).toBeNull();
+    expect(within(bar()).getByRole('status')).toHaveTextContent('frontend/index.html');
   });
 
   /** Withdrawn on unmount: a Run button left in the bar would be wired to a runtime

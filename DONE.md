@@ -56,6 +56,47 @@ Endpoints: `GET /api/templates`, `GET|POST|DELETE /api/templates/:key`,
 `/templates?open=<key>`, the marketplace's `asset:template` chip, and the starting-point
 picker under every prompt bar. Localized in all five catalogs.
 
+## ✅ RESOLVED 2026-08-16 — collapse hides controls, never status
+
+The canvas fills the screen and the bar above it does not change for minutes at a time, so folding
+it away is worth having. What made that dangerous is the half of the bar that REPORTS rather than
+acts: fold away "who is in this session", "is the connection live" and "is a run happening" and the
+operator is working blind on a board other people are editing. **A collapsed team is a team nobody
+can see is working** — the operator's call (2026-08-16), generalised here into a rule the code
+enforces rather than a convention reviewers remember.
+
+**The rule is a table, not a condition.** `lib/canvasChrome.ts` names the eight addressable slots in
+the session bar and declares each `status` or `control`; `canvasChromeShows(slot, collapsed)` is the
+one predicate every consumer asks. Survivors: `title`, `saveState`, `roster`, `surfaceStatus`.
+Folded: `surfaces`, `actions`, `surfaceControls`, `save`. `save` is a *control* despite reading as a
+state — pressing it opens the account gate, and a button you can press is a control however much its
+label sounds like a fact; `saveState` beside it is the fact, and that is the one that stays.
+
+Written as data because "the actions" is not the boundary: the surface switcher is a control and the
+realtime indicator is not, and they sit two elements apart in the same row.
+
+**A runtime contributes BOTH kinds.** `useCanvasSurfaceActions` now publishes
+`{ controls, status }` rather than one opaque node — an app surface's Run/Stop and its three
+readings are controls, the address it is running at is status. So folding the bar takes the Run
+button and the running app **keeps saying it is running** (and takes the success tint, since when
+folded that line is the only thing left saying so). One opaque node would have forced the bar to
+guess, and it would have guessed the same way for both.
+
+**The toggle is the one control never folded away** — a collapse with no way back is a one-way door
+— and it sits last in the row so what it removes vanishes leftwards rather than jumping under the
+cursor. The choice persists (`builderforce:create:barCollapsed`), read in an effect rather than
+during render to avoid a hydration mismatch, and defaults to EXPANDED: a first-time visitor must not
+meet a canvas whose controls are already hidden behind a chevron they have never seen. The phone's
+••• sheet is explicitly never collapsed — it *is* the small screen's expanded state, and folding it
+would leave a phone with no undo and no way to share.
+
+Files: `lib/canvasChrome.ts` (new), `canvasChrome.test.tsx` (new), `canvasSurfaceActions.tsx`,
+`CanvasSessionActions.tsx`, `CanvasAppSurface.tsx`, `CreationCanvas.tsx`,
+`CreationCanvas.module.css`, `CanvasCommands.tsx` (+`CollapseBarIcon`/`ExpandBarIcon`), all five
+i18n catalogs. 10/10 guards green, 386 canvas tests green.
+
+---
+
 ## ✅ RESOLVED 2026-08-16 — one bar per canvas, not one bar per runtime
 
 Adding the `app` surface earlier the same day immediately produced the thing Make's editor exists to

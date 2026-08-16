@@ -16505,6 +16505,8 @@
     "undoCanvasChange": "Undo canvas change",
     "redoCanvasChange": "Redo canvas change",
     "inviteCollaborators": "Invite collaborators",
+    "collapseBar": "Collapse the toolbar",
+    "expandBar": "Show the toolbar",
     "publishCanvas": "Publish",
     "publishCanvasTitle": "Publish this canvas — check it, then put it live",
     "clickToFollow": "click to follow viewport",

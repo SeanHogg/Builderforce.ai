@@ -19,10 +19,11 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, AddObjectIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, ClosePaletteIcon, DepthIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MoreActionsIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, AddObjectIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, ClosePaletteIcon, CollapseBarIcon, DepthIcon, DropToLayersIcon, ExpandBarIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MoreActionsIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
+import { canvasChromeShows, readCanvasBarCollapsed, writeCanvasBarCollapsed } from '@/lib/canvasChrome';
 import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
 import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
@@ -903,6 +904,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const [surfaceTarget, setSurfaceTarget] = useState<string | null>(null);
   const surfaceDef = canvasSurfaceDefinition(surface);
+  /**
+   * Whether the session bar is folded to what the canvas IS DOING.
+   *
+   * Read from storage in an effect rather than as the initial state, the way the surface
+   * preference is: reading `localStorage` during render is a hydration mismatch, and the
+   * bar arriving expanded for one frame is the safe direction to be wrong in.
+   */
+  const [barCollapsed, setBarCollapsedState] = useState(false);
+  useEffect(() => { setBarCollapsedState(readCanvasBarCollapsed()); }, []);
+  const setBarCollapsed = useCallback((next: boolean) => {
+    setBarCollapsedState(next);
+    writeCanvasBarCollapsed(next);
+  }, []);
   const setSurface = useCallback((next: CanvasSurfaceId, targetId: string | null = null) => {
     setSurfaceState(next);
     setSurfaceTarget(canvasSurfaceDefinition(next).scope === 'object' ? targetId : null);
@@ -9370,15 +9384,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       className={`${styles.canvasShell} app-full-height`}
       data-fullscreen={fullscreen ? 'true' : 'false'}
     >
-      <div className={styles.sessionBar}>
+      {/* `data-collapsed` is published so the stylesheet can tighten the row without a
+          second copy of the rule; WHAT is on screen is decided by `canvasChromeShows`
+          per slot, never by CSS. */}
+      <div className={styles.sessionBar} data-collapsed={barCollapsed ? 'true' : 'false'}>
         <div className={styles.titleBlock}><span className={styles.spark}><Icon source="✦" size="1em" /></span><input data-testid="canvas-session-title" aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
         {/* Which surface this canvas is read through — the first thing in the header
             after the title it applies to, because it answers "what am I looking at"
             rather than "what do I do to it". The phone's copy of this decision lives in
             the board's control column; the stylesheet keeps exactly one on screen. */}
-        <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="header" />
+        {canvasChromeShows('surfaces', barCollapsed) && <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="header" />}
         <div className={styles.sessionActions}>
-          <TwilioCanvasSetup active={canvasUsesTwilio} />
+          {canvasChromeShows('actions', barCollapsed) && <TwilioCanvasSetup active={canvasUsesTwilio} />}
+          {/* Not gated: WHO IS HERE is the single most important thing a folded bar can
+              still say. A collapsed roster is a team nobody can see is working, and on a
+              shared board that is somebody editing next to people they cannot see. */}
           <div className={styles.collaborators} aria-label={t('activeCollaborators')} data-tour="creation-collaborators">
             {/* In a shared free session the roster is REAL — showing only "you"
                 while three other people move cards around is a lie the board
@@ -9396,19 +9416,31 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>
           {/* Editor-only capture actions. Renders nothing on the web — it asks the
               host port whether an editor is present rather than being told. */}
-          <CanvasHostActions
+          {canvasChromeShows('actions', barCollapsed) && <CanvasHostActions
             selectedNode={selectedNode ?? null}
             disabled={!canEdit || lockBlocked}
             onCapture={addHostCapture}
             onError={setNotice}
-          />
+          />}
           {/* Everything this session bar DOES to the canvas, from one registry: which
               actions exist, which of them are a set, and where each one lives on a
               phone. The same list renders inside the ••• sheet below, so a small
               screen loses placement rather than losing the action. */}
-          <CanvasSessionActions variant="bar" surface={surface} handlers={sessionActionHandlers} />
-          <button className={`${styles.secondaryButton} ${styles.iconAction} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}><MoreActionsIcon /></button>
-          {persistence === 'local' && <button className={`${styles.secondaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', t('gateSaveTitle'), t('gateSaveBody'))}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>{t('save')}</span></button>}
+          <CanvasSessionActions variant="bar" surface={surface} collapsed={barCollapsed} handlers={sessionActionHandlers} />
+          {canvasChromeShows('actions', barCollapsed) && <button className={`${styles.secondaryButton} ${styles.iconAction} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}><MoreActionsIcon /></button>}
+          {canvasChromeShows('save', barCollapsed) && persistence === 'local' && <button className={`${styles.secondaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', t('gateSaveTitle'), t('gateSaveBody'))}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>{t('save')}</span></button>}
+          {/* The toggle itself is never hidden — a collapse with no way back is a
+              one-way door, and it is the last thing in the row so the controls it
+              removes vanish leftwards rather than jumping under the cursor. */}
+          <button
+            type="button"
+            className={`${styles.secondaryButton} ${styles.iconAction}`}
+            data-testid="canvas-bar-collapse"
+            aria-pressed={barCollapsed}
+            aria-label={barCollapsed ? t('expandBar') : t('collapseBar')}
+            title={barCollapsed ? t('expandBar') : t('collapseBar')}
+            onClick={() => setBarCollapsed(!barCollapsed)}
+          >{barCollapsed ? <ExpandBarIcon /> : <CollapseBarIcon />}</button>
           {moreOpen && <div className={styles.moreMenu} data-testid="canvas-more-menu" aria-label={t('moreActions')}>
             {/* First, because these are the session-bar actions a phone gave up its
                 room for — including the only way to invite anybody, which used to be
@@ -9416,6 +9448,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 draws them, so the section stands down. */}
             <div className={styles.moreMenuPhoneOnly}>
               <span className={styles.moreMenuHeading}>{t('moreMenuSessionActions')}</span>
+              {/* Never collapsed: the ••• sheet IS the phone's expanded state, and folding the
+                  actions out of the one place a phone can reach them would leave a small
+                  screen with no undo and no way to share. */}
               <CanvasSessionActions variant="menu" surface={surface} handlers={sessionActionHandlers} />
             </div>
             <span className={styles.moreMenuHeading}>{t('createAndView')}</span>

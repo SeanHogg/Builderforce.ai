@@ -16504,6 +16504,8 @@
     "canvasViewControls": "Contrôles de vue de la toile",
     "undoCanvasChange": "Annuler la modification",
     "redoCanvasChange": "Rétablir la modification",
+    "collapseBar": "Réduire la barre d'outils",
+    "expandBar": "Afficher la barre d'outils",
     "publishCanvas": "Publier",
     "publishCanvasTitle": "Publier cette toile : la vérifier, puis la mettre en ligne",
     "inviteCollaborators": "Inviter des collaborateurs",

@@ -16504,6 +16504,8 @@
     "canvasViewControls": "Ansichtssteuerung der Leinwand",
     "undoCanvasChange": "Leinwandänderung rückgängig",
     "redoCanvasChange": "Leinwandänderung wiederholen",
+    "collapseBar": "Symbolleiste einklappen",
+    "expandBar": "Symbolleiste einblenden",
     "publishCanvas": "Veröffentlichen",
     "publishCanvasTitle": "Diese Leinwand veröffentlichen – prüfen und live stellen",
     "inviteCollaborators": "Mitarbeiter einladen",

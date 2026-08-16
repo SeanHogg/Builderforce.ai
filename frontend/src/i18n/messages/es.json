@@ -16504,6 +16504,8 @@
     "canvasViewControls": "Controles de vista del lienzo",
     "undoCanvasChange": "Deshacer cambio del lienzo",
     "redoCanvasChange": "Rehacer cambio del lienzo",
+    "collapseBar": "Contraer la barra de herramientas",
+    "expandBar": "Mostrar la barra de herramientas",
     "publishCanvas": "Publicar",
     "publishCanvasTitle": "Publica este lienzo: compruébalo y ponlo en línea",
     "inviteCollaborators": "Invitar colaboradores",

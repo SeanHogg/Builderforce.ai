@@ -1,0 +1,116 @@
+/**
+ * What a COLLAPSED canvas session bar still shows.
+ *
+ * ── THE RULE, IN ONE PLACE ───────────────────────────────────────────────────────
+ * **Collapse hides controls, never status.**
+ *
+ * A canvas fills the screen and the bar above it does not change for minutes at a time,
+ * so being able to fold it away is worth having. What made that dangerous is the thing
+ * the bar reports rather than the things it does: fold away "who is in this session",
+ * "is the connection live" and "is a run happening", and the operator is now working
+ * blind on a board other people are editing. A collapsed team is a team nobody can see
+ * is working.
+ *
+ * So each slot in the bar declares which of the two it IS, and the single predicate
+ * below answers whether it survives. Every consumer — the header, the phone sheet, the
+ * surface that contributes its own controls — asks the same question of the same table,
+ * which is what stops "the roster stays" being true in one place and forgotten in the
+ * next. Adding a slot is a row here; it never becomes an `if (collapsed && slot !== …)`
+ * at a call site.
+ *
+ * ── WHY NOT JUST HIDE THE ACTIONS ────────────────────────────────────────────────
+ * Because "the actions" is not the boundary. The surface switcher is a control and the
+ * save state is not, and they sit two elements apart in the same row. And a runtime that
+ * contributes to the bar contributes BOTH: an app surface's Run button is a control and
+ * the address it is running at is status, so the seam has to carry the distinction too
+ * rather than treating a whole contribution as one or the other.
+ */
+
+/**
+ * The addressable parts of the session bar.
+ *
+ * Named for what they SAY, not for the component that draws them — `roster` is "who is
+ * here", whichever of the three roster shapes the session happens to be in.
+ */
+export type CanvasChromeSlot =
+  /** The session name. Also the only thing that says WHICH canvas this is. */
+  | 'title'
+  /** Saved / saving / "saved on this device", plus the realtime connection state. */
+  | 'saveState'
+  /** Who is in this session right now, and who is typing. */
+  | 'roster'
+  /** Chat / Board / 3D space / App. */
+  | 'surfaces'
+  /** Undo, redo, outcomes, diagnostics, full screen, Share, Publish. */
+  | 'actions'
+  /** A runtime's own controls — an app surface's Run/Stop and its readings. */
+  | 'surfaceControls'
+  /** A runtime's own report — where it is running, and whether it is. */
+  | 'surfaceStatus'
+  /** Sign-up gate for a board saved only to this device. */
+  | 'save';
+
+export type CanvasChromeKind = 'status' | 'control';
+
+/**
+ * Which each slot is. The whole rule is this table plus the predicate under it.
+ *
+ * `save` is a control even though it looks like a state: pressing it opens the account
+ * gate, and a button you can press is a control however much its label reads as a fact.
+ * `saveState` beside it is the fact, and that is the one that stays.
+ */
+const SLOT_KIND: Readonly<Record<CanvasChromeSlot, CanvasChromeKind>> = {
+  title: 'status',
+  saveState: 'status',
+  roster: 'status',
+  surfaceStatus: 'status',
+  surfaces: 'control',
+  actions: 'control',
+  surfaceControls: 'control',
+  save: 'control',
+};
+
+export function canvasChromeKind(slot: CanvasChromeSlot): CanvasChromeKind {
+  return SLOT_KIND[slot];
+}
+
+/**
+ * Whether this slot is on screen. The ONE question every consumer asks — so a slot that
+ * survives a collapse survives it in the header, in the phone sheet and in whatever a
+ * surface contributed, without any of them holding a copy of the rule.
+ */
+export function canvasChromeShows(slot: CanvasChromeSlot, collapsed: boolean): boolean {
+  return !collapsed || SLOT_KIND[slot] === 'status';
+}
+
+/** Every slot that survives a collapse. Exported for the test that reads the rule back,
+ *  and for anything that needs to describe the collapsed bar rather than draw it. */
+export function canvasChromeStatusSlots(): readonly CanvasChromeSlot[] {
+  return (Object.keys(SLOT_KIND) as CanvasChromeSlot[]).filter((slot) => SLOT_KIND[slot] === 'status');
+}
+
+export const CANVAS_BAR_COLLAPSED_KEY = 'builderforce:create:barCollapsed';
+
+/**
+ * Whether the bar was folded away last time. Persisted for the same reason a surface is:
+ * it is a place the operator chose to work, and re-expanding a bar on every reload is
+ * the app overruling a decision they already made.
+ *
+ * Defaults to expanded — a first-time visitor must not meet a canvas whose controls are
+ * hidden behind a chevron they have never seen.
+ */
+export function readCanvasBarCollapsed(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(CANVAS_BAR_COLLAPSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function writeCanvasBarCollapsed(collapsed: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(CANVAS_BAR_COLLAPSED_KEY, String(collapsed));
+  } catch { /* storage can be unavailable in hardened contexts */ }
+}

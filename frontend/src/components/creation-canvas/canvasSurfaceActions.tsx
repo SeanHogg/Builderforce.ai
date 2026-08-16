@@ -30,22 +30,39 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
  * failure mode a shared bar has that two separate bars do not.
  */
 
-export interface CanvasSurfaceActionsValue {
-  /** What the active surface has contributed, or null when it has contributed nothing. */
-  node: ReactNode;
-  /** Publish this surface's controls. Pass null to withdraw them. */
-  publish: (node: ReactNode) => void;
+/**
+ * A surface's contribution, split the way the bar splits.
+ *
+ * Not one node: a runtime contributes BOTH kinds. An app surface's Run/Stop and its
+ * three readings are controls; the address it is running at is what the bar REPORTS, and
+ * `canvasChrome.ts` says status survives a collapse while controls do not. Publishing one
+ * opaque node would force the bar to guess, and it would guess the same way for both.
+ */
+export interface CanvasSurfaceContribution {
+  /** Pressable things — hidden when the bar is folded away. */
+  controls?: ReactNode;
+  /** What the runtime is doing — survives a collapse, because that is the point. */
+  status?: ReactNode;
 }
+
+export interface CanvasSurfaceActionsValue {
+  /** What the active surface has contributed. Both halves are null until one does. */
+  contribution: CanvasSurfaceContribution;
+  /** Publish this surface's contribution. Pass an empty object to withdraw it. */
+  publish: (contribution: CanvasSurfaceContribution) => void;
+}
+
+const EMPTY: CanvasSurfaceContribution = {};
 
 const CanvasSurfaceActionsContext = createContext<CanvasSurfaceActionsValue | null>(null);
 
 export function CanvasSurfaceActionsProvider({ children }: { children: ReactNode }) {
-  const [node, setNode] = useState<ReactNode>(null);
+  const [contribution, setContribution] = useState<CanvasSurfaceContribution>(EMPTY);
   // Wrapped so a surface publishing on every render cannot make the host re-render on
   // every render: the setter identity is stable and the value only changes when the
-  // contributed node does.
-  const publish = useCallback((next: ReactNode) => setNode(() => next), []);
-  const value = useMemo(() => ({ node, publish }), [node, publish]);
+  // contribution does.
+  const publish = useCallback((next: CanvasSurfaceContribution) => setContribution(next), []);
+  const value = useMemo(() => ({ contribution, publish }), [contribution, publish]);
   return <CanvasSurfaceActionsContext.Provider value={value}>{children}</CanvasSurfaceActionsContext.Provider>;
 }
 
@@ -57,23 +74,23 @@ export function CanvasSurfaceActionsProvider({ children }: { children: ReactNode
  * component whose children are re-created every render would do the same work with a
  * lifecycle the caller has to reason about. `deps` is what the caller already knows.
  */
-export function useCanvasSurfaceActions(build: () => ReactNode, deps: readonly unknown[]): void {
+export function useCanvasSurfaceActions(build: () => CanvasSurfaceContribution, deps: readonly unknown[]): void {
   const context = useContext(CanvasSurfaceActionsContext);
   const publish = context?.publish;
   useEffect(() => {
     if (!publish) return;
     publish(build());
-    return () => publish(null);
+    return () => publish(EMPTY);
     // The caller owns the dependency list; `build` is re-created every render by design.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publish, ...deps]);
 }
 
 /**
- * What the active surface has contributed. Renders nothing outside a provider and nothing
- * when no surface has contributed — so the host writes `{surfaceActions}` unconditionally
+ * What the active surface has contributed. Both halves are null outside a provider and
+ * when no surface has contributed anything — so the host writes each half unconditionally
  * rather than asking which surface is on screen.
  */
-export function useContributedSurfaceActions(): ReactNode {
-  return useContext(CanvasSurfaceActionsContext)?.node ?? null;
+export function useContributedSurfaceActions(): CanvasSurfaceContribution {
+  return useContext(CanvasSurfaceActionsContext)?.contribution ?? EMPTY;
 }

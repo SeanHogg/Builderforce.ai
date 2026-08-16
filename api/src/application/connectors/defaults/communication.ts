@@ -8,7 +8,7 @@
  */
 
 import type { ConnectorManifest } from '../connectorManifest';
-import { b, ba, bb, bn, bo, p, q, qn } from './dsl';
+import { b, ba, bb, bn, bo, p, q, qn, TWILIO_ACCOUNT_SID_FIELD, TWILIO_REST_CREDENTIALS } from './dsl';
 
 const slack: ConnectorManifest = {
   key: 'slack',
@@ -112,11 +112,10 @@ const twilio: ConnectorManifest = {
   docsUrl: 'https://www.twilio.com/docs/messaging/api',
   auth: {
     kind: 'basic',
-    fields: [
-      { key: 'accountSid', label: 'Account SID', secret: false, required: true, placeholder: 'AC…' },
-      { key: 'username', label: 'API key SID (or Account SID)', secret: false, required: true },
-      { key: 'password', label: 'Auth token', secret: true, required: true },
-    ],
+    // The account comes first because the base URL above addresses it; the pair
+    // below is the same one every Twilio product takes. See `TWILIO_REST_CREDENTIALS`
+    // — this manifest is the reason it is a primitive.
+    fields: [TWILIO_ACCOUNT_SID_FIELD, ...TWILIO_REST_CREDENTIALS],
   },
   actions: [
     {
@@ -239,8 +238,7 @@ const twilioVerify: ConnectorManifest = {
   auth: {
     kind: 'basic',
     fields: [
-      { key: 'username', label: 'API key SID (or Account SID)', secret: false, required: true, placeholder: 'AC… or SK…' },
-      { key: 'password', label: 'Auth token (or API key secret)', secret: true, required: true },
+      ...TWILIO_REST_CREDENTIALS,
       { key: 'serviceSid', label: 'Verify Service SID', secret: false, required: false, placeholder: 'VA…', help: 'Twilio Console → Verify → Services' },
     ],
   },
@@ -276,10 +274,7 @@ const twilioLookup: ConnectorManifest = {
   docsUrl: 'https://www.twilio.com/docs/lookup/v2-api',
   auth: {
     kind: 'basic',
-    fields: [
-      { key: 'username', label: 'API key SID (or Account SID)', secret: false, required: true },
-      { key: 'password', label: 'Auth token (or API key secret)', secret: true, required: true },
-    ],
+    fields: [...TWILIO_REST_CREDENTIALS],
   },
   actions: [
     {
