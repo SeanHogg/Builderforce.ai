@@ -1295,7 +1295,15 @@
       "groupLabel": "视图模式"
     },
     "createFreeAccount": "创建免费账户",
-    "guestSignupTitle": "势头正好！"
+    "guestSignupTitle": "势头正好！",
+    "pagination": {
+      "label": "分页",
+      "prev": "上一页",
+      "next": "下一页",
+      "pageOf": "第 {page} 页，共 {pages} 页",
+      "pageN": "第 {n} 页"
+    },
+    "resultCount": "{n, plural, =0 {无结果} other {# 条结果}}"
   },
   "prdCreate": {
     "title": "新建 PRD",
@@ -3516,7 +3524,8 @@
         "conversions": "转化",
         "app_installs": "应用安装",
         "video_views": "视频观看"
-      }
+      },
+      "objectiveLabel": "目标"
     }
   },
   "quality": {
@@ -4713,7 +4722,9 @@
     "total": {
       "skills": "技能",
       "personas": "角色",
-      "prompts": "提示词"
+      "prompts": "提示词",
+      "articles": "文章",
+      "listings": "商品"
     },
     "metric": {
       "installs": "安装数",
@@ -4723,7 +4734,8 @@
     },
     "by": {
       "category": "按类别",
-      "source": "按来源"
+      "source": "按来源",
+      "topic": "按主题"
     },
     "top": {
       "installs": "安装数排行",
@@ -5169,16 +5181,17 @@
         "blurb": "平台在哪里运行、由谁掌控，决定了成本、数据驻留和锁定程度。",
         "rows": [
           {
-            "feature": "价格",
+            "feature": "价格模式",
+            "note": "方案会变动，请以厂商当前定价为准",
             "values": {
-              "builderforce": "免费（MIT）",
-              "copilot": "$19/user/mo",
-              "cursor": "$20/user/mo",
+              "builderforce": "免费 + 付费工作区方案",
+              "copilot": "见厂商定价",
+              "cursor": "见厂商定价",
               "claudeCode": "按用量计费",
-              "devin": "$500/mo",
-              "openhands": "免费（MIT）",
-              "aider": "免费（MIT）",
-              "continueDev": "免费（MIT）"
+              "devin": "见厂商定价",
+              "openhands": "开源 + 托管方案",
+              "aider": "开源；模型用量另计",
+              "continueDev": "开源 + 付费方案"
             }
           },
           {
@@ -7139,9 +7152,6 @@
     "badge": "最新文章",
     "desc": "深入剖析、实战教程与诚恳的工具对比，助你构建和部署 AI 智能体 — 从自主 Kanban 执行、语义缓存，到我们与 Copilot、Cursor、Claude Code 和 Devin 的实力较量。",
     "paginationLabel": "博客分页",
-    "prevPage": "上一页",
-    "nextPage": "下一页",
-    "pageN": "第 {n} 页",
     "title": "Builderforce 博客",
     "post": {
       "back": "← 返回博客",
@@ -7151,6 +7161,35 @@
       "browseAll": "浏览全部文章 →",
       "relatedHeading": "相关文章",
       "startFree": "免费开始构建 →"
+    },
+    "readArticle": "阅读文章 →",
+    "searchPlaceholder": "搜索文章…",
+    "empty": "没有符合这些筛选条件的文章。",
+    "clearFilters": "清除筛选",
+    "topic": {
+      "label": "主题",
+      "all": "全部",
+      "compare": "对比",
+      "hiring": "招聘",
+      "careers": "职业发展",
+      "canvas": "创作画布",
+      "learning": "学习",
+      "teamwork": "团队协作",
+      "methodology": "方法论",
+      "evermind": "Evermind 与模型",
+      "agents": "智能体",
+      "devtools": "开发者工具",
+      "delivery": "交付与治理",
+      "more": "更多"
+    },
+    "tag": {
+      "label": "标签",
+      "all": "所有标签"
+    },
+    "insights": {
+      "topTags": "热门标签",
+      "topics": "主题",
+      "tags": "标签"
     }
   },
   "brain": {
@@ -7698,7 +7737,39 @@
     "suggestionTitle": "改进建议",
     "saveAsVersion": "保存为新版本",
     "savedVersion": "已保存 ✓",
-    "copySuggestion": "复制"
+    "copySuggestion": "复制",
+    "allCategories": "所有类别",
+    "categoryLabel": "类别",
+    "sortLabel": "排序",
+    "featured": "精选",
+    "useFailed": "无法复制此提示词。",
+    "colTitle": "标题",
+    "colCategory": "分类",
+    "colUses": "使用次数",
+    "colStars": "收藏数",
+    "colAuthor": "作者",
+    "colActions": "操作",
+    "usePromptCopy": "使用提示词 — 复制到剪贴板",
+    "star": "收藏",
+    "starred": "已收藏 ★",
+    "modelBadge": "模型：{model}",
+    "promptVersionLabel": "提示词（v{v}）",
+    "variablesLabel": "变量",
+    "analysisFailed": "分析失败，请重试。",
+    "saveFailed": "无法保存新版本。",
+    "createTitle": "新建提示词",
+    "createSubmit": "创建提示词",
+    "createValidation": "标题和提示词内容都是必填项。",
+    "createFailed": "无法创建提示词。",
+    "phTitle": "标题",
+    "phDescription": "简短描述",
+    "phCategory": "分类，例如“编程”",
+    "phTags": "标签，用逗号分隔",
+    "phModel": "首选模型（可选）",
+    "phBody": "编写提示词。使用 {ph} 表示需要填写的内容。",
+    "visPrivate": "私密",
+    "visTenant": "我的工作区",
+    "visPublic": "公开"
   },
   "voicePanel": {
     "retry": "重试",
@@ -8580,7 +8651,8 @@
       "nameRequired": "请为提醒命名。",
       "loadFailed": "无法加载您的提醒。",
       "actionFailed": "无法保存该更改。"
-    }
+    },
+    "perHour": "/小时"
   },
   "marketplace": {
     "title": "市场",
@@ -8838,8 +8910,7 @@
       "sortRecent": "最新",
       "sortRating": "评分最高",
       "sortRateAsc": "费率：从低到高",
-      "sortRateDesc": "费率：从高到低",
-      "pageOf": "第 {page} 页，共 {pages} 页"
+      "sortRateDesc": "费率：从高到低"
     },
     "editProfile": "编辑资料",
     "stats": {
@@ -9377,7 +9448,9 @@
       "details": "详情",
       "hideDetails": "隐藏详情",
       "copy": "复制",
-      "copied": "已复制！"
+      "copied": "已复制！",
+      "delete": "删除",
+      "copyFailed": "复制失败"
     },
     "emulate": {
       "loadWorkspacesFailed": "加载用户工作区失败",
@@ -10318,6 +10391,28 @@
       "scoreNote": "满意度会依据样本量向中性收缩，因此一次偶然的点赞无法压过长期良好的记录。学习型路由会将此数值与运行结果一并加权。",
       "emptyTitle": "本周期内尚无评分。",
       "emptyBody": "在 Brain 面板、创作画布和 VS Code 扩展中，每条 AI 回复下方都有评分按钮。每次点击都会记录该轮对话背后的模型与 MCP 工具。"
+    },
+    "pricing": {
+      "title": "定价",
+      "description": "编辑公开定价页所展示的方案表。修改会保留在草稿中，直到发布。",
+      "publishedAt": "上次发布：{date}",
+      "currency": "货币",
+      "managedHost": "托管代理主机（每月）",
+      "name": "方案名称",
+      "descriptionLabel": "方案描述",
+      "monthly": "每月",
+      "yearly": "每年",
+      "suffix": "价格后缀",
+      "minimumSeats": "最少席位数",
+      "features": "功能，每行一项",
+      "excluded": "不包含的内容，每行一项",
+      "ctaLabel": "按钮文字",
+      "ctaHref": "按钮链接",
+      "saveDraft": "保存草稿",
+      "saving": "正在保存…",
+      "publish": "发布",
+      "publishing": "正在发布…",
+      "draftSaved": "草稿已保存。"
     }
   },
   "providerKeys": {
@@ -12273,7 +12368,8 @@
       "remove": "移除",
       "add": "关联工单",
       "addPlaceholder": "工单 #"
-    }
+    },
+    "loading": "正在加载事件…"
   },
   "monitoring": {
     "boardsTitle": "主动监控",
@@ -12653,7 +12749,8 @@
       "free": "免费版",
       "pro": "专业版",
       "teams": "团队版"
-    }
+    },
+    "cycleLabel": "计费周期"
   },
   "policyPacks": {
     "title": "策略包",
@@ -14098,7 +14195,8 @@
       "template_healthcare-clinical-blue": "医疗 · 临床蓝",
       "template_sales-growth-emerald": "销售 · 增长绿",
       "template_actor-headshot-hero": "演员 · 头像主视觉",
-      "template_director-filmography-serif": "导演 · 作品年表衬线"
+      "template_director-filmography-serif": "导演 · 作品年表衬线",
+      "firstPartyTemplate": "Builderforce 模板"
     },
     "videoEditor": {
       "editable": "可编辑",
@@ -17480,6 +17578,7 @@
     "hiringShortlistCreated": "筛选简历",
     "hiringShortlistUpdated": "更新入围名单“{title}”",
     "hiringShortlistFor": "入围名单 — {title}",
+    "resumeImportedFrom": "从“{title}”导入简历",
     "hiringFunnelMeasured": "已统计",
     "hiringFunnelCreated": "统计招聘漏斗",
     "hiringFunnelUpdated": "更新漏斗“{title}”",
@@ -17962,13 +18061,23 @@
         "ship": "发布",
         "controls": "操作方式"
       },
+      "site": {
+        "label": "网站",
+        "open": "打开网站",
+        "viewport": "预览宽度",
+        "desktop": "桌面",
+        "tablet": "平板",
+        "mobile": "手机",
+        "pageCount": "{count, plural, =0 {无页面} other {# 个页面}}"
+      },
       "timeline": {
         "label": "时间轴",
         "open": "打开时间轴",
         "clipCount": "{count, plural, =0 {无片段} other {# 个片段}}"
       },
       "backToBoard": "返回画板",
-      "objectLabel": "{title}（全屏）"
+      "objectLabel": "{title}（全屏）",
+      "switcher": "画布视图"
     },
     "miro": {
       "title": "Miro 白板",
@@ -18011,7 +18120,13 @@
     "diagramAddedStatus": "已添加到图表",
     "connectedSources": "已连接的来源",
     "connectedGateTitle": "登录后即可使用{source}",
-    "connectedGateBody": "{source}读取的是与你的工作区相连的账户，因此需要先登录。免费注册或登录即可——本画布会原样保留。"
+    "connectedGateBody": "{source}读取的是与你的工作区相连的账户，因此需要先登录。免费注册或登录即可——本画布会原样保留。",
+    "founderCompanySynced": "公司已同步：{title}",
+    "founderCompetitorMapStatus": "已标注 {count, number} 个竞争对手",
+    "founderCompetitorMapProposal": "竞争格局图：{title}",
+    "founderMetricLive": "实时",
+    "founderMetricRefreshed": "指标已刷新：{title}",
+    "founderTriggerEvaluated": "触发条件已评估：{title}"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -20296,6 +20411,144 @@
       "accepted": "您已接受对方的引荐请求。",
       "declined": "您已拒绝对方的引荐请求。",
       "withdrawn": "对方已撤回引荐请求。"
-    }
+    },
+    "strengthLabel": "你的优势",
+    "commitmentLabel": "投入程度"
+  },
+  "import": {
+    "title": "导入记录",
+    "modeLabel": "模式",
+    "guidedMode": "向导",
+    "bulkMode": "批量文件",
+    "guidedTab": "向导",
+    "bulkTab": "批量上传",
+    "modeSwitchTitle": "切换导入模式？",
+    "modeSwitchMessage": "两种模式共有的字段会被保留，此页面上的其他内容将丢失。",
+    "switch": "切换",
+    "cancelTitle": "放弃本次导入？",
+    "cancelMessage": "目前已填写的所有内容都将丢失。",
+    "discard": "放弃",
+    "keepEditing": "继续编辑",
+    "back": "上一步",
+    "next": "下一步",
+    "submit": "提交",
+    "submitting": "正在提交…",
+    "done": "完成",
+    "yes": "是",
+    "no": "否",
+    "progressAria": "导入进度",
+    "stepInfo": "开始之前",
+    "stepFields": "详细信息",
+    "stepReview": "检查",
+    "stepSuccess": "完成",
+    "guidedInfoTitle": "开始之前",
+    "guidedInfoBody": "此向导一次创建一条记录，并在填写过程中逐项校验。若要一次导入多条记录，请切换到批量上传。",
+    "guidedFieldsTitle": "记录详情",
+    "guidedReviewTitle": "提交前检查",
+    "guidedReviewBody": "请核对下列内容。点击任意行的“编辑”即可返回修改。",
+    "guidedSubmitSuccess": "记录已创建。",
+    "guidedSubmitError": "无法创建记录。",
+    "guidedSuccessTitle": "记录已创建",
+    "guidedSuccessBody": "请保存下面的编号——它用于在后续导入和导出中标识这条记录。",
+    "referenceIdLabel": "编号",
+    "createAnother": "再创建一条",
+    "fieldName": "名称",
+    "fieldDescription": "描述",
+    "fieldReferenceId": "外部编号",
+    "fieldEnabled": "已启用",
+    "fieldPriority": "优先级",
+    "fieldNotes": "备注",
+    "fieldTooltipName": "唯一且易读的名称（不含特殊字符）。",
+    "fieldTooltipDescription": "对这条记录的简要说明，纯文本。",
+    "fieldTooltipReferenceId": "在外部系统中的编号，必须唯一。",
+    "fieldTooltipEnabled": "导入后这条记录是否处于启用状态。",
+    "fieldTooltipPriority": "低、中或高。不使用可留空。",
+    "fieldTooltipNotes": "自由填写的备注。",
+    "fieldPlaceholderName": "例如 example-name",
+    "fieldPlaceholderDescription": "这条记录的用途",
+    "fieldPlaceholderReferenceId": "例如 GHI-2024-001",
+    "fieldPlaceholderPriority": "无优先级",
+    "fieldPlaceholderNotes": "其他需要记录的内容",
+    "fieldEnabledLabel": "启用这条记录",
+    "priorityLow": "低",
+    "priorityMedium": "中",
+    "priorityHigh": "高",
+    "fieldErrors": {
+      "name": "名称为必填项。"
+    },
+    "bulkUploadTitle": "上传文件",
+    "bulkDownloadTemplate": "下载模板",
+    "bulkTemplateDownloaded": "模板已下载。",
+    "bulkUploadAria": "选择要导入的文件",
+    "bulkDropzoneTitle": "将文件拖到此处，或点击选择文件",
+    "bulkDropzoneHint": "{formats} — 最大 {maxSize}",
+    "bulkFileTooLarge": "该文件超过 {max}。",
+    "bulkUnsupportedFormat": "无法导入 .{ext} 文件，请使用 CSV、JSON 或 XLSX。",
+    "templateExampleName": "示例记录",
+    "templateExampleDescription": "这条记录的用途",
+    "bulkMappingTitle": "匹配你的列",
+    "bulkMappingBody": "共 {rows, number} 行、{cols, number} 列。请选择每一列对应的字段。",
+    "bulkMappingSourceCol": "你的列",
+    "bulkMappingTargetField": "导入为",
+    "bulkMappingPreview": "首个值",
+    "bulkMappingTargetFor": "此列导入为",
+    "bulkMappingIgnore": "忽略此列",
+    "bulkAsyncNote": "超过 {threshold, number} 行的文件将在后台导入——开始后即可离开此页面。",
+    "bulkRunDryRun": "检查文件",
+    "bulkDryRunTitle": "检查结果",
+    "bulkDryRunSummary": "{total, number} 行中有 {valid, number} 行有效。{errors, plural, =0 {没有行存在错误。} other {# 行存在错误。}}",
+    "bulkTotalRows": "文件行数",
+    "bulkValidRows": "有效行",
+    "bulkErrorRows": "错误行",
+    "bulkErrorRow": "行",
+    "bulkErrorColumn": "列",
+    "bulkErrorReason": "原因",
+    "bulkErrorRequiredEmpty": "{field} 为必填项，但此行为空。",
+    "bulkErrorNotBoolean": "{field} 必须为 true 或 false。",
+    "bulkErrorNotPriority": "{field} 必须为低、中或高。",
+    "bulkErrorTruncated": "仅显示 {total, number} 个错误中的前 {shown, number} 个，其余请下载报告查看。",
+    "bulkDownloadErrorReport": "下载错误报告",
+    "bulkImportChoice": "部分行存在错误。要导入哪些内容？",
+    "bulkImportValidOnly": "仅导入 {count, number} 行有效数据",
+    "bulkImportAll": "导入全部行（含错误行）",
+    "bulkImportNow": "导入 {count, number} 行",
+    "bulkImportingTitle": "正在导入…",
+    "bulkImportingProgress": "已完成 {pct, number}%",
+    "bulkImportingDone": "即将完成…",
+    "bulkAsyncProcessing": "{count, number} 行将在后台导入。",
+    "bulkAsyncQueued": "导入已排队，你可以离开此页面。",
+    "bulkSuccessTitle": "导入完成",
+    "bulkImportedCount": "已导入",
+    "bulkSkippedCount": "已跳过",
+    "bulkTotalProcessed": "已处理",
+    "bulkDownloadSummary": "下载摘要",
+    "bulkImportAnother": "导入另一个文件",
+    "summaryMetric": "指标",
+    "summaryValue": "数值",
+    "summaryTotalRows": "已处理行数",
+    "summaryImported": "已导入行数",
+    "summarySkipped": "已跳过行数",
+    "summaryTimestamp": "导入时间"
+  },
+  "emulationBar": {
+    "barAria": "模拟会话",
+    "emulatingWho": "正在模拟 <strong>{name}</strong>（{email}），所属 {tenant}",
+    "switching": "正在切换…",
+    "switchRoleAria": "切换角色",
+    "elapsedAria": "已模拟 {elapsed}",
+    "copyContextTitle": "将本次会话的详细信息复制到剪贴板",
+    "copyContext": "复制会话信息",
+    "debugTitle": "查看此会话拥有的权限",
+    "debug": "调试",
+    "endEmulation": "结束模拟",
+    "ending": "正在结束…"
+  },
+  "mintedApiKey": {
+    "saveNow": "请立即保存此密钥——它只显示一次。",
+    "quickstart": "快速开始",
+    "copyKey": "复制密钥",
+    "copyBaseUrl": "复制基础 URL",
+    "copyQuickstart": "复制快速开始代码",
+    "savedIt": "我已保存"
   }
 }

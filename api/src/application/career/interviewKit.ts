@@ -16,9 +16,8 @@
  * kinds produced here are deliberately named `interviewPrep` so the two never collide.
  */
 
-import { displaySkill, isSkillToken, tokenCounts } from './lexicon';
+import { displaySkill, isSkillToken, tokenCounts, parseResume } from '@builderforce/creation-canvas-contract';
 import { compareResumeToJob } from './jobMatch';
-import { parseResume } from './resumeModel';
 
 export type InterviewType = 'behavioral' | 'technical' | 'situational' | 'leadership' | 'screening';
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resumeDocumentFromText, resumeDocumentIsThin } from './resumeDocument';
+import { resumeDocumentFromText, resumeDocumentIsThin } from '@builderforce/creation-canvas-contract';
 import { jobDocumentFromText } from './jobDocument';
 import { looksLikeBinaryText, stripResumeControlChars } from './resumeExtract';
 import { inferYearsOfExperience, resumeSkillNames } from '../hiring/candidateResumeProjection';

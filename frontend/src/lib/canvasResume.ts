@@ -7,6 +7,7 @@ import {
   isResumeTemplateId,
   masterResumeRevision,
   projectPublicResumeFamily,
+  resumeDocumentFromText,
   resumeFamilyFromValue,
   type CanvasResumeBasics,
   type CanvasResumeDocument,
@@ -292,14 +293,18 @@ export function renderResumeMarkdown(document: CanvasResumeDocument): string {
   return lines.join('\n');
 }
 
-/** Best-effort structure for extracted PDF/Word/text while retaining its full Markdown. */
+/**
+ * Structure for extracted PDF/Word/text, while retaining its full Markdown.
+ *
+ * This used to read only a `# name` heading and a `## Summary` block, which meant a
+ * résumé held as text — every PDF and Word import — reached {@link resumeDocumentFromNode}
+ * with an EMPTY work history. The variant renderer and the candidate screener both read
+ * through that accessor, so a real CV restyled into twelve blank templates and screened
+ * as "no parsed resume document". The reader that already produced a full document for
+ * the upload route now serves this path too; see `resumeDocument.ts` in the contract.
+ */
 export function resumeDocumentFromMarkdown(markdown: string): CanvasResumeDocument {
-  const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
-  const name = stringValue(lines.find((line) => /^#\s+/.test(line))?.replace(/^#\s+/, ''));
-  const summaryStart = lines.findIndex((line) => /^##\s+summary\s*$/i.test(line));
-  const nextHeading = summaryStart >= 0 ? lines.findIndex((line, index) => index > summaryStart && /^##\s+/.test(line)) : -1;
-  const summary = summaryStart >= 0 ? lines.slice(summaryStart + 1, nextHeading >= 0 ? nextHeading : undefined).join('\n').trim() : '';
-  return { basics: { name, summary }, markdown };
+  return { ...resumeDocumentFromText(markdown), markdown };
 }
 
 export function originalResumeRevision(family: CanvasResumeFamily): CanvasResumeRevision {

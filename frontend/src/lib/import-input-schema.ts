@@ -13,64 +13,35 @@ export const DEFAULT_BEGINNER_STEP = 'step-info';
 export interface FieldDirective {
   /** Canonical field key used in templates and exports (must match backend). */
   key: string;
-  /** Human-readable label in UI forms. */
-  label: string;
   /** Required for valid records. */
   required: boolean;
-  /** Help text or tooltip message (null = no tooltip). */
-  tooltip?: string | null;
   /** Executive pattern hint (not enforced, surfaced only for UX). */
   examplePattern?: string | null;
 }
+
+/**
+ * A field's LABEL and TOOLTIP live in the message catalogs, not here.
+ *
+ * They used to be English strings on the directive, which a form rendered
+ * directly — so the guided wizard's review step and the bulk mapping dropdown
+ * said "Reference ID" in French while every other string on the page was
+ * translated. These derive the `import.*` key instead, and the two components
+ * render them through their own translator.
+ */
+export const fieldLabelKey = (key: string): string => `field${key.charAt(0).toUpperCase()}${key.slice(1)}`;
+export const fieldTooltipKey = (key: string): string => `fieldTooltip${key.charAt(0).toUpperCase()}${key.slice(1)}`;
 
 /**
  * Base fields shared across all record types.
  * Extend this per use case and export override availableFields.
  */
 export const BASE_FIELDS: Record<string, FieldDirective> = {
-  name: {
-    key: 'name',
-    label: 'Name',
-    required: true,
-    tooltip: 'Unique, human-readable name (no special characters).',
-    examplePattern: 'example-name',
-  },
-  description: {
-    key: 'description',
-    label: 'Description',
-    required: false,
-    tooltip:
-      'Brief free-form description of the record (optional). Use plain text.',
-    examplePattern: null,
-  },
-  referenceId: {
-    key: 'referenceId',
-    label: 'Reference ID',
-    required: false,
-    tooltip: 'External system reference (optional). Must be unique.',
-    examplePattern: 'GHI-2024-001',
-  },
-  enabled: {
-    key: 'enabled',
-    label: 'Enabled',
-    required: false,
-    tooltip: 'Toggle to enable/disable this record.',
-    examplePattern: null,
-  },
-  priority: {
-    key: 'priority',
-    label: 'Priority',
-    required: false,
-    tooltip: 'Low, Medium, or High priority (null = unused).',
-    examplePattern: 'High',
-  },
-  notes: {
-    key: 'notes',
-    label: 'Notes',
-    required: false,
-    tooltip: 'Free-form notes (optional).',
-    examplePattern: 'Enter additional details',
-  },
+  name: { key: 'name', required: true, examplePattern: 'example-name' },
+  description: { key: 'description', required: false, examplePattern: null },
+  referenceId: { key: 'referenceId', required: false, examplePattern: 'GHI-2024-001' },
+  enabled: { key: 'enabled', required: false, examplePattern: null },
+  priority: { key: 'priority', required: false, examplePattern: 'High' },
+  notes: { key: 'notes', required: false, examplePattern: 'Enter additional details' },
 };
 
 /** Supported record kinds and their available fields. */
@@ -86,16 +57,7 @@ export interface RecordKindInfo {
 export const RECORD_KINDS: Record<string, RecordKindInfo> = {
   manual: {
     kind: 'manual',
-    availableFields: {
-      ...BASE_FIELDS,
-      notes: {
-        key: 'notes',
-        label: 'Notes',
-        required: false,
-        tooltip: 'Free-form notes (optional).',
-        examplePattern: 'Enter additional details',
-      },
-    },
+    availableFields: { ...BASE_FIELDS },
     defaultSortField: 'createdAt',
   },
   /* Add custom kinds here; extend to drive guided wizards step-by-step. */

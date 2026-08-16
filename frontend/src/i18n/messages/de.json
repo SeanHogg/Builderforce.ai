@@ -1295,7 +1295,15 @@
       "groupLabel": "Ansichtsmodus"
     },
     "createFreeAccount": "Kostenloses Konto erstellen",
-    "guestSignupTitle": "Sie sind in Fahrt!"
+    "guestSignupTitle": "Sie sind in Fahrt!",
+    "pagination": {
+      "label": "Seitennummerierung",
+      "prev": "Vorherige Seite",
+      "next": "Nächste Seite",
+      "pageOf": "Seite {page} von {pages}",
+      "pageN": "Seite {n}"
+    },
+    "resultCount": "{n, plural, =0 {Keine Ergebnisse} one {# Ergebnis} other {# Ergebnisse}}"
   },
   "prdCreate": {
     "title": "Neues PRD",
@@ -3516,7 +3524,8 @@
         "conversions": "Conversions",
         "app_installs": "App-Installationen",
         "video_views": "Videoaufrufe"
-      }
+      },
+      "objectiveLabel": "Ziel"
     }
   },
   "quality": {
@@ -4713,7 +4722,9 @@
     "total": {
       "skills": "Skills",
       "personas": "Personas",
-      "prompts": "Prompts"
+      "prompts": "Prompts",
+      "articles": "Artikel",
+      "listings": "Angebote"
     },
     "metric": {
       "installs": "Installationen",
@@ -4723,7 +4734,8 @@
     },
     "by": {
       "category": "Nach Kategorie",
-      "source": "Nach Quelle"
+      "source": "Nach Quelle",
+      "topic": "Nach Thema"
     },
     "top": {
       "installs": "Top nach Installationen",
@@ -5169,16 +5181,17 @@
         "blurb": "Wo die Plattform läuft und wer sie kontrolliert, bestimmt Kosten, Datenresidenz und Lock-in.",
         "rows": [
           {
-            "feature": "Preis",
+            "feature": "Preismodell",
+            "note": "Tarife ändern sich; aktuelle Anbieterpreise prüfen",
             "values": {
-              "builderforce": "Kostenlos (MIT)",
-              "copilot": "19 $/Nutzer/Monat",
-              "cursor": "20 $/Nutzer/Monat",
+              "builderforce": "Kostenlos + kostenpflichtige Workspace-Tarife",
+              "copilot": "Siehe Anbieterpreise",
+              "cursor": "Siehe Anbieterpreise",
               "claudeCode": "Nutzungsbasiert",
-              "devin": "500 $/Monat",
-              "openhands": "Kostenlos (MIT)",
-              "aider": "Kostenlos (MIT)",
-              "continueDev": "Kostenlos (MIT)"
+              "devin": "Siehe Anbieterpreise",
+              "openhands": "Open Source + gehostete Optionen",
+              "aider": "Open Source; Modellnutzung variiert",
+              "continueDev": "Open Source + kostenpflichtige Optionen"
             }
           },
           {
@@ -7139,9 +7152,6 @@
     "badge": "Neueste Artikel",
     "desc": "Tiefgehende Analysen, Tutorials und ehrliche Tool-Vergleiche für das Entwickeln und Bereitstellen von AI-Agenten — von autonomer Kanban-Ausführung und semantischem Caching bis hin dazu, wie wir uns gegen Copilot, Cursor, Claude Code und Devin behaupten.",
     "paginationLabel": "Blog-Seitennummerierung",
-    "prevPage": "Vorherige Seite",
-    "nextPage": "Nächste Seite",
-    "pageN": "Seite {n}",
     "title": "Builderforce-Blog",
     "post": {
       "back": "← Zurück zum Blog",
@@ -7151,6 +7161,35 @@
       "browseAll": "Alle Artikel ansehen →",
       "relatedHeading": "Verwandte Artikel",
       "startFree": "Kostenlos loslegen →"
+    },
+    "readArticle": "Artikel lesen →",
+    "searchPlaceholder": "Artikel suchen…",
+    "empty": "Keine Artikel entsprechen diesen Filtern.",
+    "clearFilters": "Filter zurücksetzen",
+    "topic": {
+      "label": "Thema",
+      "all": "Alle",
+      "compare": "Vergleiche",
+      "hiring": "Recruiting",
+      "careers": "Karriere",
+      "canvas": "Kreativ-Canvas",
+      "learning": "Lernen",
+      "teamwork": "Teamarbeit",
+      "methodology": "Methodik",
+      "evermind": "Evermind & Modelle",
+      "agents": "Agenten",
+      "devtools": "Entwicklerwerkzeuge",
+      "delivery": "Delivery & Governance",
+      "more": "Mehr"
+    },
+    "tag": {
+      "label": "Schlagwort",
+      "all": "Alle Schlagwörter"
+    },
+    "insights": {
+      "topTags": "Top-Schlagwörter",
+      "topics": "Themen",
+      "tags": "Schlagwörter"
     }
   },
   "brain": {
@@ -7698,7 +7737,39 @@
     "suggestionTitle": "Verbesserungsvorschlag",
     "saveAsVersion": "Als neue Version speichern",
     "savedVersion": "Gespeichert ✓",
-    "copySuggestion": "Kopieren"
+    "copySuggestion": "Kopieren",
+    "allCategories": "Alle Kategorien",
+    "categoryLabel": "Kategorie",
+    "sortLabel": "Sortieren",
+    "featured": "Empfohlen",
+    "useFailed": "Dieser Prompt konnte nicht kopiert werden.",
+    "colTitle": "Titel",
+    "colCategory": "Kategorie",
+    "colUses": "Verwendungen",
+    "colStars": "Favoriten",
+    "colAuthor": "Autor",
+    "colActions": "Aktionen",
+    "usePromptCopy": "Prompt verwenden — wird kopiert",
+    "star": "Merken",
+    "starred": "Gemerkt ★",
+    "modelBadge": "Modell: {model}",
+    "promptVersionLabel": "Prompt (v{v})",
+    "variablesLabel": "Variablen",
+    "analysisFailed": "Die Analyse ist fehlgeschlagen. Versuche es erneut.",
+    "saveFailed": "Die neue Version konnte nicht gespeichert werden.",
+    "createTitle": "Neuer Prompt",
+    "createSubmit": "Prompt erstellen",
+    "createValidation": "Titel und Prompt-Text sind beide erforderlich.",
+    "createFailed": "Der Prompt konnte nicht erstellt werden.",
+    "phTitle": "Titel",
+    "phDescription": "Kurze Beschreibung",
+    "phCategory": "Kategorie, z. B. Coding",
+    "phTags": "Tags, durch Komma getrennt",
+    "phModel": "Bevorzugtes Modell (optional)",
+    "phBody": "Schreibe den Prompt. Verwende {ph} für alles, was ausgefüllt wird.",
+    "visPrivate": "Privat",
+    "visTenant": "Mein Workspace",
+    "visPublic": "Öffentlich"
   },
   "voicePanel": {
     "retry": "Wiederholen",
@@ -8580,7 +8651,8 @@
       "nameRequired": "Bitte einen Namen vergeben.",
       "loadFailed": "Ihre Benachrichtigungen konnten nicht geladen werden.",
       "actionFailed": "Die Änderung konnte nicht gespeichert werden."
-    }
+    },
+    "perHour": "/Std."
   },
   "marketplace": {
     "title": "Marktplatz",
@@ -8838,8 +8910,7 @@
       "sortRecent": "Neueste",
       "sortRating": "Bestbewertet",
       "sortRateAsc": "Satz: aufsteigend",
-      "sortRateDesc": "Satz: absteigend",
-      "pageOf": "Seite {page} von {pages}"
+      "sortRateDesc": "Satz: absteigend"
     },
     "editProfile": "Profil bearbeiten",
     "stats": {
@@ -9377,7 +9448,9 @@
       "details": "Details",
       "hideDetails": "Details ausblenden",
       "copy": "Kopieren",
-      "copied": "Kopiert!"
+      "copied": "Kopiert!",
+      "delete": "Löschen",
+      "copyFailed": "Kopieren fehlgeschlagen"
     },
     "emulate": {
       "loadWorkspacesFailed": "Benutzer-Arbeitsbereiche konnten nicht geladen werden",
@@ -10318,6 +10391,28 @@
       "scoreNote": "Die Zufriedenheit wird je nach Stichprobengröße zur Mitte hin geglättet, damit ein einzelner Glückstreffer keine lange gute Bilanz überholt. Der lernende Router verrechnet genau diese Zahl mit den Laufergebnissen.",
       "emptyTitle": "In diesem Zeitraum liegen noch keine Bewertungen vor.",
       "emptyBody": "Die Daumen erscheinen unter jeder KI-Antwort im Brain-Panel, im Creation Canvas und in der VS-Code-Erweiterung. Jeder Klick erfasst das Modell und das MCP-Werkzeug hinter diesem Zug."
+    },
+    "pricing": {
+      "title": "Preise",
+      "description": "Bearbeite die Plan-Tabelle, die die öffentliche Preisseite rendert. Änderungen bleiben im Entwurf, bis sie veröffentlicht werden.",
+      "publishedAt": "Zuletzt veröffentlicht: {date}",
+      "currency": "Währung",
+      "managedHost": "Managed-Agent-Host, monatlich",
+      "name": "Plan-Name",
+      "descriptionLabel": "Plan-Beschreibung",
+      "monthly": "Monatlich",
+      "yearly": "Jährlich",
+      "suffix": "Preis-Suffix",
+      "minimumSeats": "Mindest-Sitzplätze",
+      "features": "Funktionen, eine pro Zeile",
+      "excluded": "Nicht enthalten, eines pro Zeile",
+      "ctaLabel": "Button-Text",
+      "ctaHref": "Button-Link",
+      "saveDraft": "Entwurf speichern",
+      "saving": "Wird gespeichert…",
+      "publish": "Veröffentlichen",
+      "publishing": "Wird veröffentlicht…",
+      "draftSaved": "Entwurf gespeichert."
     }
   },
   "providerKeys": {
@@ -12273,7 +12368,8 @@
       "remove": "Entfernen",
       "add": "Ticket verknüpfen",
       "addPlaceholder": "Ticket-Nr."
-    }
+    },
+    "loading": "Vorfälle werden geladen…"
   },
   "monitoring": {
     "boardsTitle": "Aktive Überwachung",
@@ -12653,7 +12749,8 @@
       "free": "Free",
       "pro": "Pro",
       "teams": "Teams"
-    }
+    },
+    "cycleLabel": "Abrechnungszeitraum"
   },
   "policyPacks": {
     "title": "Richtlinienpakete",
@@ -14098,7 +14195,8 @@
       "template_healthcare-clinical-blue": "Gesundheitswesen · Klinikblau",
       "template_sales-growth-emerald": "Vertrieb · Wachstumsgrün",
       "template_actor-headshot-hero": "Schauspiel · Porträt-Hero",
-      "template_director-filmography-serif": "Regie · Filmografie-Serif"
+      "template_director-filmography-serif": "Regie · Filmografie-Serif",
+      "firstPartyTemplate": "Builderforce-Vorlage"
     },
     "videoEditor": {
       "editable": "Bearbeitbar",
@@ -17480,6 +17578,7 @@
     "hiringShortlistCreated": "Lebensläufe sichten",
     "hiringShortlistUpdated": "Auswahlliste „{title}“ aktualisieren",
     "hiringShortlistFor": "Auswahlliste — {title}",
+    "resumeImportedFrom": "Lebenslauf aus „{title}“ importieren",
     "hiringFunnelMeasured": "Gemessen",
     "hiringFunnelCreated": "Recruiting-Funnel messen",
     "hiringFunnelUpdated": "Funnel „{title}“ aktualisieren",
@@ -17962,13 +18061,23 @@
         "ship": "Veröffentlichen",
         "controls": "Steuerung"
       },
+      "site": {
+        "label": "Website",
+        "open": "Website öffnen",
+        "viewport": "Vorschaubreite",
+        "desktop": "Desktop",
+        "tablet": "Tablet",
+        "mobile": "Handy",
+        "pageCount": "{count, plural, =0 {keine Seiten} one {# Seite} other {# Seiten}}"
+      },
       "timeline": {
         "label": "Zeitleiste",
         "open": "Zeitleiste öffnen",
         "clipCount": "{count, plural, =0 {keine Clips} one {# Clip} other {# Clips}}"
       },
       "backToBoard": "Zurück zum Board",
-      "objectLabel": "{title}, in voller Größe"
+      "objectLabel": "{title}, in voller Größe",
+      "switcher": "Canvas-Ansicht"
     },
     "miro": {
       "title": "Miro-Boards",
@@ -18011,7 +18120,13 @@
     "diagramAddedStatus": "Zum Diagramm hinzugefügt",
     "connectedSources": "Verbundene Quellen",
     "connectedGateTitle": "Melde dich an, um {source} zu nutzen",
-    "connectedGateBody": "{source} liest ein mit deinem Workspace verbundenes Konto und setzt daher eine Anmeldung voraus. Erstelle ein kostenloses Konto oder melde dich an — diese Leinwand bleibt genau so, wie sie ist."
+    "connectedGateBody": "{source} liest ein mit deinem Workspace verbundenes Konto und setzt daher eine Anmeldung voraus. Erstelle ein kostenloses Konto oder melde dich an — diese Leinwand bleibt genau so, wie sie ist.",
+    "founderCompanySynced": "Unternehmen synchronisiert: {title}",
+    "founderCompetitorMapStatus": "{count, plural, one {# Wettbewerber erfasst} other {# Wettbewerber erfasst}}",
+    "founderCompetitorMapProposal": "Wettbewerbskarte: {title}",
+    "founderMetricLive": "Live",
+    "founderMetricRefreshed": "Kennzahl aktualisiert: {title}",
+    "founderTriggerEvaluated": "Auslöser ausgewertet: {title}"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -20296,6 +20411,144 @@
       "accepted": "Sie haben deren Anfrage angenommen.",
       "declined": "Sie haben deren Anfrage abgelehnt.",
       "withdrawn": "Sie haben ihre Anfrage zurückgezogen."
-    }
+    },
+    "strengthLabel": "Deine Stärke",
+    "commitmentLabel": "Einsatz"
+  },
+  "import": {
+    "title": "Datensätze importieren",
+    "modeLabel": "Modus",
+    "guidedMode": "Geführt",
+    "bulkMode": "Massendatei",
+    "guidedTab": "Geführt",
+    "bulkTab": "Massen-Upload",
+    "modeSwitchTitle": "Import-Modus wechseln?",
+    "modeSwitchMessage": "Felder, die es in beiden Modi gibt, bleiben erhalten. Alles andere auf diesem Bildschirm geht verloren.",
+    "switch": "Wechseln",
+    "cancelTitle": "Diesen Import verwerfen?",
+    "cancelMessage": "Alles bisher Eingegebene geht verloren.",
+    "discard": "Verwerfen",
+    "keepEditing": "Weiter bearbeiten",
+    "back": "Zurück",
+    "next": "Weiter",
+    "submit": "Absenden",
+    "submitting": "Wird gesendet…",
+    "done": "Fertig",
+    "yes": "Ja",
+    "no": "Nein",
+    "progressAria": "Import-Fortschritt",
+    "stepInfo": "Bevor du startest",
+    "stepFields": "Details",
+    "stepReview": "Prüfen",
+    "stepSuccess": "Fertig",
+    "guidedInfoTitle": "Bevor du startest",
+    "guidedInfoBody": "Dieser Assistent legt einen Datensatz nach dem anderen an und prüft jedes Feld sofort. Für viele Datensätze auf einmal wechsle zum Massen-Upload.",
+    "guidedFieldsTitle": "Details des Datensatzes",
+    "guidedReviewTitle": "Vor dem Absenden prüfen",
+    "guidedReviewBody": "Prüfe die Werte unten. Über „Bearbeiten“ in einer Zeile kommst du zurück und kannst sie ändern.",
+    "guidedSubmitSuccess": "Datensatz erstellt.",
+    "guidedSubmitError": "Der Datensatz konnte nicht erstellt werden.",
+    "guidedSuccessTitle": "Datensatz erstellt",
+    "guidedSuccessBody": "Bewahre die Referenz unten auf — sie identifiziert diesen Datensatz in späteren Importen und Exporten.",
+    "referenceIdLabel": "Referenz",
+    "createAnother": "Weiteren anlegen",
+    "fieldName": "Name",
+    "fieldDescription": "Beschreibung",
+    "fieldReferenceId": "Referenz-ID",
+    "fieldEnabled": "Aktiviert",
+    "fieldPriority": "Priorität",
+    "fieldNotes": "Notizen",
+    "fieldTooltipName": "Eindeutiger, lesbarer Name (keine Sonderzeichen).",
+    "fieldTooltipDescription": "Kurze Beschreibung des Datensatzes. Reiner Text.",
+    "fieldTooltipReferenceId": "Referenz in einem externen System. Muss eindeutig sein.",
+    "fieldTooltipEnabled": "Ob der Datensatz nach dem Import aktiv ist.",
+    "fieldTooltipPriority": "Niedrig, Mittel oder Hoch. Leer lassen, wenn ungenutzt.",
+    "fieldTooltipNotes": "Freie Notizen.",
+    "fieldPlaceholderName": "z. B. example-name",
+    "fieldPlaceholderDescription": "Wofür dieser Datensatz da ist",
+    "fieldPlaceholderReferenceId": "z. B. GHI-2024-001",
+    "fieldPlaceholderPriority": "Keine Priorität",
+    "fieldPlaceholderNotes": "Alles Weitere, das festgehalten werden sollte",
+    "fieldEnabledLabel": "Diesen Datensatz aktivieren",
+    "priorityLow": "Niedrig",
+    "priorityMedium": "Mittel",
+    "priorityHigh": "Hoch",
+    "fieldErrors": {
+      "name": "Ein Name ist erforderlich."
+    },
+    "bulkUploadTitle": "Datei hochladen",
+    "bulkDownloadTemplate": "Vorlage herunterladen",
+    "bulkTemplateDownloaded": "Vorlage heruntergeladen.",
+    "bulkUploadAria": "Datei zum Importieren auswählen",
+    "bulkDropzoneTitle": "Datei hier ablegen oder klicken, um eine auszuwählen",
+    "bulkDropzoneHint": "{formats} — bis {maxSize}",
+    "bulkFileTooLarge": "Diese Datei ist größer als {max}.",
+    "bulkUnsupportedFormat": ".{ext}-Dateien können nicht importiert werden. Verwende CSV, JSON oder XLSX.",
+    "templateExampleName": "Beispieldatensatz",
+    "templateExampleDescription": "Wofür dieser Datensatz da ist",
+    "bulkMappingTitle": "Spalten zuordnen",
+    "bulkMappingBody": "{rows, plural, one {# Zeile} other {# Zeilen}} in {cols, plural, one {# Spalte} other {# Spalten}}. Wähle, was aus jeder Spalte wird.",
+    "bulkMappingSourceCol": "Deine Spalte",
+    "bulkMappingTargetField": "Wird importiert als",
+    "bulkMappingPreview": "Erster Wert",
+    "bulkMappingTargetFor": "Wird importiert als, für Spalte",
+    "bulkMappingIgnore": "Diese Spalte ignorieren",
+    "bulkAsyncNote": "Dateien mit mehr als {threshold, number} Zeilen werden im Hintergrund importiert — du kannst die Seite verlassen, sobald es losgeht.",
+    "bulkRunDryRun": "Datei prüfen",
+    "bulkDryRunTitle": "Prüfergebnis",
+    "bulkDryRunSummary": "{valid, number} von {total, number} Zeilen sind gültig. {errors, plural, =0 {Keine Zeile hat Fehler.} one {# Zeile hat Fehler.} other {# Zeilen haben Fehler.}}",
+    "bulkTotalRows": "Zeilen in der Datei",
+    "bulkValidRows": "Gültige Zeilen",
+    "bulkErrorRows": "Zeilen mit Fehlern",
+    "bulkErrorRow": "Zeile",
+    "bulkErrorColumn": "Spalte",
+    "bulkErrorReason": "Grund",
+    "bulkErrorRequiredEmpty": "{field} ist erforderlich, diese Zeile lässt es leer.",
+    "bulkErrorNotBoolean": "{field} muss true oder false sein.",
+    "bulkErrorNotPriority": "{field} muss Niedrig, Mittel oder Hoch sein.",
+    "bulkErrorTruncated": "Es werden die ersten {shown, number} von {total, number} Fehlern gezeigt. Lade den Bericht für den Rest.",
+    "bulkDownloadErrorReport": "Fehlerbericht herunterladen",
+    "bulkImportChoice": "Einige Zeilen haben Fehler. Was soll importiert werden?",
+    "bulkImportValidOnly": "Nur die {count, number} gültigen Zeilen",
+    "bulkImportAll": "Alle Zeilen, Fehler eingeschlossen",
+    "bulkImportNow": "{count, number} Zeilen importieren",
+    "bulkImportingTitle": "Import läuft…",
+    "bulkImportingProgress": "{pct, number} % erledigt",
+    "bulkImportingDone": "Wird abgeschlossen…",
+    "bulkAsyncProcessing": "{count, number} Zeilen werden im Hintergrund importiert.",
+    "bulkAsyncQueued": "Import eingereiht. Du kannst die Seite verlassen.",
+    "bulkSuccessTitle": "Import abgeschlossen",
+    "bulkImportedCount": "Importiert",
+    "bulkSkippedCount": "Übersprungen",
+    "bulkTotalProcessed": "Verarbeitet",
+    "bulkDownloadSummary": "Zusammenfassung herunterladen",
+    "bulkImportAnother": "Weitere Datei importieren",
+    "summaryMetric": "Kennzahl",
+    "summaryValue": "Wert",
+    "summaryTotalRows": "Verarbeitete Zeilen",
+    "summaryImported": "Importierte Zeilen",
+    "summarySkipped": "Übersprungene Zeilen",
+    "summaryTimestamp": "Zeitstempel des Imports"
+  },
+  "emulationBar": {
+    "barAria": "Emulations-Sitzung",
+    "emulatingWho": "Emuliert <strong>{name}</strong> ({email}) in {tenant}",
+    "switching": "Wird gewechselt…",
+    "switchRoleAria": "Rolle wechseln",
+    "elapsedAria": "Emuliert seit {elapsed}",
+    "copyContextTitle": "Details dieser Sitzung in die Zwischenablage kopieren",
+    "copyContext": "Kontext kopieren",
+    "debugTitle": "Anzeigen, was diese Sitzung darf",
+    "debug": "Debug",
+    "endEmulation": "Emulation beenden",
+    "ending": "Wird beendet…"
+  },
+  "mintedApiKey": {
+    "saveNow": "Speichere diesen Schlüssel jetzt — er wird nur einmal angezeigt.",
+    "quickstart": "Schnellstart",
+    "copyKey": "Schlüssel kopieren",
+    "copyBaseUrl": "Basis-URL kopieren",
+    "copyQuickstart": "Schnellstart kopieren",
+    "savedIt": "Gespeichert"
   }
 }

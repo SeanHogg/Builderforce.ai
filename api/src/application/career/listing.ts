@@ -30,8 +30,7 @@
  * and an anonymous visitor drafting a listing they have not saved yet.
  */
 
-import { displaySkill, isSkillToken, tokenSet } from './lexicon';
-import { parseResume } from './resumeModel';
+import { displaySkill, isSkillToken, parseResume, tokenSet } from '@builderforce/creation-canvas-contract';
 
 /**
  * What a person is open to.

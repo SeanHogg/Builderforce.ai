@@ -28,6 +28,7 @@ import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { CanvasChatSurface } from './CanvasChatSurface';
 import { CanvasPageSurface } from './CanvasPageSurface';
 import { CanvasPlaySurface } from './CanvasPlaySurface';
+import { CanvasSiteSurface } from './CanvasSiteSurface';
 import { CanvasTimelineSurface } from './CanvasTimelineSurface';
 import { CanvasObjectSurfaceButton } from './CanvasObjectSurfaceButton';
 import { CanvasSurfaceProvider } from './canvasSurfaceContext';
@@ -169,10 +170,11 @@ import { useComposerSpace } from './useComposerSpace';
 import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
 import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
 import {
-  RESUME_TEMPLATES, RESUME_TEMPLATE_IDS, activeResumeRevision, initializeResumeFromPatch,
-  preserveResumeSourceForPatch, resumeDocumentFromNode, resumeFamilyFromNode, resumeNodePatch,
-  resumeTemplateVariants, type ResumeTemplateId,
+  RESUME_TEMPLATES, RESUME_TEMPLATE_IDS, activeResumeRevision, createResumeFamily,
+  initializeResumeFromPatch, preserveResumeSourceForPatch, resumeDocumentFromNode,
+  resumeFamilyFromNode, resumeNodePatch, resumeTemplateVariants, type ResumeTemplateId,
 } from '@/lib/canvasResume';
+import { resumeDocumentFromText, resumeDocumentIsThin } from '@builderforce/creation-canvas-contract';
 import { renderedCanvasResume, resumeHtmlFile } from '@/lib/canvasResumeRenderer';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
@@ -4133,7 +4135,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!source) {
         return { error: sources.length
           ? `Specify which object holds the résumé. On this canvas: ${sources.map((node) => `${node.id} (${node.data.title})`).join(', ')}`
-          : 'No résumé is on this canvas. Import a JSON Resume, PDF or Word CV first — this restyles a real document and never invents one.' };
+          : 'No structured résumé is on this canvas — this restyles a real document and never invents one. If a CV is here as a document, an imported PDF or a Word file, call canvas_import_resume on it FIRST and then restyle the object that produces.' };
       }
       const document = resumeDocumentFromNode(source.data);
       if (!document) return { error: `Object ${source.id} does not hold a readable résumé document, so there is nothing to restyle.` };
@@ -4168,6 +4170,77 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         renderedFrom: source.id,
         variants: created,
         instruction: 'These are already on the board, fully rendered. Name the styles you produced in one short line and stop — do NOT create them again with canvas_add_object, and do not retype any résumé content.',
+      };
+    },
+  }, {
+    /**
+     * THE MISSING FIRST STEP.
+     *
+     * A person drops their CV on the board and asks to turn it into a résumé. Every
+     * tool that follows — restyling, screening, tailoring, the ATS check — needs a
+     * `resume` object, and there was NO tool that made one from a document already on
+     * the canvas. So the model did the only thing left: it asked the person to paste
+     * the text of the file it was looking at (measured 2026-08-16). This reads the
+     * document the importer already extracted and structures it with the same
+     * deterministic reader the upload route uses — no model, no upload, no tokens.
+     */
+    name: 'canvas_import_resume',
+    description: 'Turn a résumé that is already on this canvas as a document, imported PDF, Word file or text into a real `resume` object. USE THIS — never canvas_add_object, and never ask the user to paste their résumé — whenever someone asks to convert, import, parse, structure or "make a resume from" a file on the board. It reads the extracted text and structures it into JSON Resume deterministically, so nothing is invented and nothing is retyped. The resulting object is what canvas_render_resume_variants and canvas_screen_resumes need.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'The document, file or note holding the résumé. Omit when the canvas holds exactly one document.' },
+        title: { type: 'string', description: 'Title for the résumé object. Defaults to the name on the document, or the source file name.' },
+      },
+    },
+    mutates: () => true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; title?: string };
+      const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const all = [...nodes, ...staged];
+      // A résumé that is ALREADY structured is not a source: re-importing it would
+      // replace a parsed document with a re-parse of its own rendering.
+      const candidates = all.filter((node) => canvasDocument(node.data) && resumeDocumentFromNode(node.data) === null);
+      const source = args.objectId ? all.find((node) => node.id === args.objectId) : candidates.length === 1 ? candidates[0] : undefined;
+      if (!source) {
+        return { error: candidates.length
+          ? `Specify which object holds the résumé. On this canvas: ${candidates.map((node) => `${node.id} (${node.data.title})`).join(', ')}`
+          : 'Nothing on this canvas carries readable résumé text. If a file landed as an attachment saying its text could not be extracted, it is a scan with no text layer — say so and ask for a PDF or Word file with real text, or for the text itself. Do NOT ask the user to paste a document whose text this canvas already holds.' };
+      }
+      const markdown = canvasDocument(source.data)?.markdown?.trim() ?? '';
+      if (!markdown) {
+        return { error: `Object ${source.id} carries no readable text, so there is nothing to structure. If it is a scanned PDF, say that plainly rather than guessing at its contents.` };
+      }
+
+      const document = resumeDocumentFromText(markdown);
+      const embedded = typeof document.basics?.name === 'string' ? document.basics.name.trim() : '';
+      const fileName = typeof source.data.fileName === 'string' ? source.data.fileName.replace(/\.[^.]+$/, '') : '';
+      const title = String(args.title ?? '').trim() || embedded || fileName || String(source.data.title || t('resumeEditor.untitledVersion'));
+      const family = createResumeFamily({ title, markdown, document });
+
+      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const node = newNode('resume', nextCanvasObjectPosition(all, { x: source.position.x + 460, y: source.position.y }, narrowViewport, 'resume'));
+      node.data = { ...node.data, ...resumeNodePatch(family), title, status: t('resumeEditor.statusOriginal') };
+      node.style = { width: 560, height: 620 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('resumeImportedFrom', { title: String(source.data.title || '') }), node });
+
+      // A structure this thin means the source had no recognisable sections. It is
+      // still the person's résumé and still lands on the board — but the turn must
+      // say so, because the alternative is a confident empty document.
+      const thin = resumeDocumentIsThin(document);
+      return {
+        ok: true, proposed: true,
+        objectId: node.id,
+        importedFrom: source.id,
+        name: embedded,
+        workEntries: Array.isArray(document.work) ? document.work.length : 0,
+        educationEntries: Array.isArray(document.education) ? document.education.length : 0,
+        skills: Array.isArray(document.skills) ? document.skills.length : 0,
+        thin,
+        instruction: thin
+          ? 'The résumé is on the board, but few sections were recognised. Say which ones came through and offer to fill the rest from what the person tells you — do NOT invent employers, dates or skills, and do not retype the document.'
+          : 'The résumé is on the board, fully structured. Report what came through in one short line and offer the next step — restyling with canvas_render_resume_variants, or screening against a posting. Do NOT retype any of its content.',
       };
     },
   }, {
@@ -9228,6 +9301,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     >
       <div className={styles.sessionBar}>
         <div className={styles.titleBlock}><span className={styles.spark}><Icon source="✦" size="1em" /></span><input data-testid="canvas-session-title" aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
+        {/* Which surface this canvas is read through — the first thing in the header
+            after the title it applies to, because it answers "what am I looking at"
+            rather than "what do I do to it". The phone's copy of this decision lives in
+            the board's control column; the stylesheet keeps exactly one on screen. */}
+        <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="header" />
         <div className={styles.sessionActions}>
           <TwilioCanvasSetup active={canvasUsesTwilio} />
           <div className={styles.collaborators} aria-label={t('activeCollaborators')} data-tour="creation-collaborators">
@@ -9485,9 +9563,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             // `onToggleThreeD` is deliberately NOT passed: it would draw a second control
             // for the decision the surface switcher below already owns.
             extraControls={<>
-              {/* Which surface this canvas is read through. One control for one
-                  decision — the same component drives the phone-sized stack. */}
-              <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="rail" />
+              {/* The surface switcher used to sit here, which put "change what this
+                  canvas is" among zoom / fit / arrange at the same size and weight. It
+                  now lives in the session header, with words. The rail keeps only what
+                  it is actually for: navigating and reading THIS board. */}
               {/* Pan vs marquee. A one-finger (or left-button) drag can only do one of
                   them, so the choice is explicit rather than inferred — and making it
                   explicit is what gives touch a marquee at all, since the modifier-key
@@ -9598,6 +9677,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               // Shipping opens OVER the surfacerather than replacing it: distribution is
               // a panel about a build you are still looking at.
               onShip={() => openGamePanel(surfaceNode.id)}
+            /> : null,
+            site: surfaceNode ? <CanvasSiteSurface
+              data={surfaceNode.data}
+              onExit={() => setSurface('graph')}
+              {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
             /> : null,
             timeline: surfaceNode ? <CanvasTimelineSurface
               data={surfaceNode.data}

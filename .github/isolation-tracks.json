@@ -7,7 +7,8 @@
     "frontend/src/lib/builderforceApi.ts",
     "README.md",
     "api/package.json",
-    "frontend/package.json"
+    "frontend/package.json",
+    "frontend/src/i18n/messages/*.json"
   ],
   "tracks": [
     {
@@ -80,7 +81,13 @@
         "frontend/src/components/workflow-builder/**",
         "frontend/src/components/LlmStudioPanel*",
         "frontend/src/components/ide/Voice*",
-        "frontend/src/components/QaContent.tsx"
+        "frontend/src/components/QaContent.tsx",
+        "frontend/src/components/site-editor/**",
+        "frontend/src/components/creation-canvas/CanvasReleasesPanel.tsx",
+        "frontend/src/components/commerce/**",
+        "frontend/src/components/apps/**",
+        "frontend/src/app/marketplace/listing/**",
+        "packages/creation-canvas-contract/src/marketplaceListings.ts"
       ]
     },
     {
@@ -185,7 +192,7 @@
       "id": "T9",
       "name": "Platform · DB · CI",
       "steward": true,
-      "migrationBand": [190, null],
+      "migrationBand": [190, 899],
       "owns": [
         "api/migrations/**",
         "api/scripts/**",
@@ -212,6 +219,72 @@
         "frontend/src/components/QaContent.tsx"
       ],
       "excludes": []
+    },
+    {
+      "id": "W1A",
+      "name": "Wave 1 · Site delivery",
+      "migrationBand": null,
+      "owns": [
+        "api/src/application/ide/siteServer.*",
+        "api/src/application/ide/publishStaticSite.*",
+        "api/src/application/ide/siteReleases.*",
+        "api/src/application/ide/siteHosting.*",
+        "api/src/application/ide/customDomain.*",
+        "frontend/src/lib/visualEditor.*",
+        "frontend/src/components/site-editor/**"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "W1B",
+      "name": "Wave 1 · Listing & Stage",
+      "migrationBand": [900, 909],
+      "owns": [
+        "api/src/application/marketplace/creationListings.*",
+        "api/src/application/marketplace/creationReleases.*",
+        "api/src/application/marketplace/stageChecks.*",
+        "packages/creation-canvas-contract/src/marketplaceListings.ts",
+        "frontend/src/components/creation-canvas/CanvasReleasesPanel.tsx",
+        "frontend/src/app/marketplace/listing/**",
+        "frontend/src/lib/creationListings.*"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "W1C",
+      "name": "Wave 1 · Money",
+      "migrationBand": [910, 919],
+      "owns": [
+        "api/src/application/marketplace/listingCommerce.*",
+        "api/src/application/marketplace/takeRate.*",
+        "api/src/application/marketplace/siteSubscriptions.*",
+        "api/src/application/marketplace/siteBilling.*",
+        "api/src/application/ide/siteAuth.*",
+        "api/src/presentation/routes/creationListingRoutes.ts",
+        "api/src/infrastructure/payment/**",
+        "frontend/src/components/commerce/**"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "W1D",
+      "name": "Wave 1 · Creator surfaces",
+      "migrationBand": null,
+      "owns": [
+        "frontend/src/components/apps/**",
+        "frontend/src/lib/embeddedApps.*"
+      ],
+      "excludes": []
+    },
+    {
+      "id": "W1E",
+      "name": "Wave 1 · App-user loop",
+      "migrationBand": [920, 929],
+      "owns": [
+        "api/src/application/ide/siteData.*"
+      ],
+      "excludes": []
     }
-  ]
+  ],
+  "$sharedHubsNote": "frontend/src/i18n/messages/*.json is a shared hub under protest, not by design. Localization is a standing rule, so a track that could not edit the catalogs could not finish a UI change — but the store is partitioned by LOCALE, a presentation axis, so no bounded context owns its own vocabulary. A track appends only under its own DOMAIN namespace (commerce.*, growth.*, canvas.* — the same boundary schema/<domain>.ts draws) and serializes. ROADMAP W0-2 repartitions the source by domain (messages/<domain>/{en,zh,es,fr,de}.json, folded into the existing per-locale published asset by frontend/scripts/publish-message-catalogs.mjs); when it lands, remove this entry from sharedHubs and give each lane its own directory."
 }

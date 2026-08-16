@@ -28,6 +28,7 @@ import {
   destTitleKey
 } from '@/lib/publicDestinations';
 import { FAMILIES, FAMILY_IDS, kindLabelKey } from '@/lib/marketplaceFamilies';
+import { BLOG_TOPICS } from '@/lib/blogTopics';
 import { METHOD_STEPS, PROOF_FORMS, methodStepKey, proofFormKey } from '@/lib/methodology';
 import { destinationPitchKey, teaserDestinationIds } from '@/lib/routeMarketing';
 import { RESUME_TEMPLATES } from '@/lib/canvasResume';
@@ -256,6 +257,10 @@ describe('message catalogs', () => {
       ...['domains', 'seats', 'destinations', 'features'].map((stat) => `featuresPage.stat.${stat}`),
       ...FOOTER_COLUMNS.map((column) => `footer.${column.titleKey}`),
       ...familyKeys,
+      // Every blog topic chip's label. The registry is a data table, so a new
+      // topic is a row — and a row without a label renders its own dotted key
+      // in the filter bar, in five languages.
+      ...BLOG_TOPICS.map((topic) => `blog.topic.${topic.labelKey}`),
       // A widget's title, its group heading, and — now that WidgetCard renders it
       // — its optional one-line description. `descKey` had no assertion while it
       // had no consumer, so a widget could declare one the catalogs didn't have.

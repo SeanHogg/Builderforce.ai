@@ -17,8 +17,7 @@
  * it is the difference between a screening tool and an automated way to launder a bias.
  */
 
-import { displaySkill, isSkillToken, skillGroupOf, tokenCounts, tokenSet } from './lexicon';
-import { parseResume } from './resumeModel';
+import { displaySkill, isSkillToken, parseResume, skillGroupOf, tokenCounts, tokenSet } from '@builderforce/creation-canvas-contract';
 
 export interface KeywordOverlap {
   /** Skill keywords the posting names that the résumé also contains. */

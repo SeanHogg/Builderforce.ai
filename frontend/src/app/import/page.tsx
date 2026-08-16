@@ -21,6 +21,7 @@ const GUIDED_TO_BULK_FIELD_MAP: Record<string, string> = {
 
 export default function ImportPage() {
   const t = useTranslations('import');
+  const tCommon = useTranslations('common');
   const confirm = useConfirm();
 
   const [mode, setMode] = useState<ImportMode>('guided');
@@ -36,7 +37,7 @@ export default function ImportPage() {
         message: t('modeSwitchMessage'),
         destructive: false,
         confirmLabel: t('switch'),
-        cancelLabel: t('cancel'),
+        cancelLabel: tCommon('cancel'),
       });
       if (!confirmed) return;
 

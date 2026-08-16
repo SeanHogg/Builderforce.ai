@@ -26,19 +26,35 @@ export interface ParsedFileResult {
   error?: string;
 }
 
+/**
+ * Why a row failed, as a CODE rather than a sentence.
+ *
+ * This module runs outside React and has no translator, so a `reason` composed
+ * here could only ever be English — and it is rendered straight into the dry-run
+ * table and the downloadable error report. The code plus the field it concerns is
+ * everything the presentation layer needs to say it in the reader's language.
+ */
+export type RowErrorCode = 'requiredEmpty' | 'notBoolean' | 'notPriority';
+
 /** A single row-level validation error */
 export interface RowValidationError {
   rowNumber: number;
   column: string;
-  reason: string;
+  code: RowErrorCode;
+  /** The canonical field the column was mapped to, as the message's argument. */
+  field: string;
 }
 
-/** Result of a dry-run validation pass (FR-3.6) */
+/**
+ * Result of a dry-run validation pass (FR-3.6).
+ *
+ * No `summary` sentence: the three counts ARE the summary, and the one place it
+ * is shown composes it from them through the catalog.
+ */
 export interface DryRunValidation {
   totalRows: number;
   validCount: number;
   errorCount: number;
-  summary: string;
   errors: RowValidationError[];
 }
 
@@ -262,11 +278,7 @@ export function executeDryRun(
 
       if (value === undefined || value === null || String(value).trim() === '') {
         if (targetField === 'name') {
-          errors.push({
-            rowNumber,
-            column: srcHeader,
-            reason: `Required field "${targetField}" is empty`,
-          });
+          errors.push({ rowNumber, column: srcHeader, code: 'requiredEmpty', field: targetField });
         }
       }
     }
@@ -285,22 +297,14 @@ export function executeDryRun(
       if (targetField === 'enabled') {
         const lower = strVal.toLowerCase();
         if (!['true', 'false', '1', '0', 'yes', 'no'].includes(lower)) {
-          errors.push({
-            rowNumber,
-            column: srcHeader,
-            reason: `Field "${targetField}" must be a boolean value (true/false)`,
-          });
+          errors.push({ rowNumber, column: srcHeader, code: 'notBoolean', field: targetField });
         }
       }
 
       if (targetField === 'priority') {
         const normalized = strVal.charAt(0).toUpperCase() + strVal.slice(1).toLowerCase();
         if (!['Low', 'Medium', 'High'].includes(normalized)) {
-          errors.push({
-            rowNumber,
-            column: srcHeader,
-            reason: `Field "${targetField}" must be one of: Low, Medium, High`,
-          });
+          errors.push({ rowNumber, column: srcHeader, code: 'notPriority', field: targetField });
         }
       }
     }
@@ -309,22 +313,23 @@ export function executeDryRun(
   const validCount = parsed.rows.length - new Set(errors.map((e) => e.rowNumber)).size;
   const errorCount = parsed.rows.length - validCount;
 
-  return {
-    totalRows: parsed.rows.length,
-    validCount,
-    errorCount,
-    summary: `${validCount} of ${parsed.rows.length} rows valid. ${errorCount} row(s) with errors.`,
-    errors,
-  };
+  return { totalRows: parsed.rows.length, validCount, errorCount, errors };
 }
 
 // ── Report generation (FR-3.7, FR-3.9) ───────────────────────
 
 /**
  * Generate a CSV error report for download (FR-3.7).
+ *
+ * A downloaded file is UI too, so its column headings and its reasons are the
+ * caller's translated strings: the caller already renders the same reason into
+ * the on-screen table, and passing it in is what keeps the two identical.
  */
-export function generateCSVErrorReport(errors: RowValidationError[]): string {
-  const header = 'Row Number,Column,Reason';
+export function generateCSVErrorReport(
+  errors: Array<{ rowNumber: number; column: string; reason: string }>,
+  headings: { rowNumber: string; column: string; reason: string },
+): string {
+  const header = [headings.rowNumber, headings.column, headings.reason].map(escapeCSVField).join(',');
   const lines = errors.map((e) =>
     `${e.rowNumber},${escapeCSVField(e.column)},${escapeCSVField(e.reason)}`,
   );
@@ -333,17 +338,22 @@ export function generateCSVErrorReport(errors: RowValidationError[]): string {
 
 /**
  * Generate a CSV import summary report for download (FR-3.9).
+ *
+ * `labels` for the same reason as above. The timestamp is ISO-8601 rather than a
+ * formatted date on purpose — it is a machine field in a spreadsheet, and one
+ * unambiguous instant beats five locale renderings of it.
  */
 export function generateImportSummaryReport(
   totalRows: number,
   imported: number,
   skipped: number,
+  labels: { metric: string; value: string; totalRows: string; imported: string; skipped: string; timestamp: string },
 ): string {
   return [
-    'Metric,Value',
-    `Total rows processed,${totalRows}`,
-    `Rows imported,${imported}`,
-    `Rows skipped,${skipped}`,
-    `Import timestamp,${new Date().toISOString()}`,
+    `${escapeCSVField(labels.metric)},${escapeCSVField(labels.value)}`,
+    `${escapeCSVField(labels.totalRows)},${totalRows}`,
+    `${escapeCSVField(labels.imported)},${imported}`,
+    `${escapeCSVField(labels.skipped)},${skipped}`,
+    `${escapeCSVField(labels.timestamp)},${new Date().toISOString()}`,
   ].join('\n');
 }

@@ -1647,6 +1647,30 @@
 .playControls { display:flex; flex:none; flex-wrap:wrap; gap:6px; margin:0; padding:0; list-style:none; }
 .playControls li { padding:4px 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-muted); font-size:10px; }
 
+/* A site is drawn at a WIDTH, so the stage is a backdrop and the frame is the artefact.
+   The three widths are the real device measures the site was authored against, capped at
+   the room available so a phone viewing a desktop site still scrolls in one direction
+   only. `--site-width` is the one number the three states change. */
+.siteStage { min-height:0; flex:1; display:flex; justify-content:center; padding:16px 16px 24px; background:var(--canvas-board-background); overflow:auto; overscroll-behavior:contain; }
+.siteStage[data-viewport='desktop'] { --site-width:1180px; }
+.siteStage[data-viewport='tablet'] { --site-width:820px; }
+.siteStage[data-viewport='mobile'] { --site-width:390px; }
+.siteFrame { align-self:flex-start; width:min(100%,var(--site-width,1180px)); border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); box-shadow:0 10px 34px var(--canvas-shadow); overflow:hidden; }
+/* One renderer, two hosts. On the board the preview draws its own edge because the card
+   around it has none to spare; here the frame IS the edge, so the inner border and radius
+   stand down rather than drawing a second rounded box 1px inside the first. Height goes
+   to content — the stage scrolls, not the site, so a long page reads as a long page. */
+.siteFrame .websitePreview { border:0; border-radius:0; overflow:visible; }
+.siteMeta { display:flex; flex:none; align-items:center; gap:10px; }
+.siteMeta small { color:var(--canvas-muted); font-size:10px; white-space:nowrap; }
+.siteViewports { display:flex; align-items:center; gap:2px; padding:2px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
+.siteViewports button {
+  min-height:24px; padding:3px 9px; border:0; border-radius:var(--radius-sm);
+  background:transparent; color:var(--canvas-muted); font-family:inherit; font-size:11px; font-weight:650; cursor:pointer;
+}
+.siteViewports button:hover,.siteViewports button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.siteViewports button[aria-pressed='true'] { background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 1px 2px var(--canvas-shadow); }
+
 /* Time needs width, which is the whole reason this surface exists. */
 .timelineStage { min-height:0; flex:1; display:flex; flex-direction:column; width:min(100%,1440px); margin:0 auto; padding:14px 16px 20px; }
 .timelineMeta { display:flex; flex:none; align-items:baseline; gap:6px; }
@@ -1673,6 +1697,28 @@
 /* The phone-sized surface stack. Plain buttons rather than rail controls, sized by the
    same rules as every other command in `.mobileCanvasActions`. */
 .surfaceSwitcherButton { display:grid; place-items:center; padding:0; border:0; background:transparent; color:inherit; cursor:pointer; }
+
+/* ── The surface switcher, in the session header ──────────────────────────────────
+   A segmented control rather than three separate buttons, because these three are one
+   decision with one answer: the shared trough is what says "pick one of these", and the
+   lit segment is what says which. It reads its colours from the canvas tokens, so it is
+   correct in both themes without a single theme-specific rule.
+   `flex:none` matters — the title input beside it is `flex:1` on narrow desktops and
+   would otherwise squeeze the labels out one character at a time. */
+.surfaceTabs { display:flex; flex:none; align-items:center; gap:2px; padding:3px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
+.surfaceTab {
+  display:inline-flex; align-items:center; gap:6px; min-height:28px; padding:5px 10px;
+  border:0; border-radius:var(--radius-sm); background:transparent;
+  color:var(--canvas-muted); font-family:inherit; font-size:12px; font-weight:650; cursor:pointer;
+}
+.surfaceTab > svg { display:block; width:15px; height:15px; }
+.surfaceTab:hover,.surfaceTab:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.surfaceTab[aria-pressed='true'] { background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 1px 2px var(--canvas-shadow); }
+.surfaceTab[aria-pressed='true'] > svg { color:var(--canvas-accent); }
+/* Between the phone breakpoint and a roomy desktop the words go and the glyphs stay —
+   the group is still one lit segment in a trough, which is the part that carries the
+   meaning. `aria-label` keeps the name, so nothing is lost to a screen reader. */
+@media (max-width:1180px) { .surfaceTab > span { display:none; } .surfaceTab { padding:5px 8px; } }
 
 .brainDock { position:absolute; z-index:17; top:0; bottom:0; box-sizing:border-box; display:flex; flex-direction:column; width:var(--brain-dock-size,330px); border:1px solid var(--canvas-brain-border); background:var(--canvas-brain-surface); color:var(--canvas-ink); box-shadow:0 0 44px var(--canvas-shadow); }
 .brainDock[data-side='left'] { left:0; border-left:0; border-radius:0 var(--radius-lg) var(--radius-lg) 0; }
@@ -1751,6 +1797,10 @@
   .canvasShell { flex:1; height:100%; min-height:0; }
   .undoRedoGroup { display:none; }
   .saved,.secondaryButton { display:none; }
+  /* The header has already given up its save button and its collaborators by here, so
+     the segmented switcher stands down too and the phone's own control column carries
+     the surface decision. Exactly ONE of the two is ever on screen. */
+  .surfaceTabs { display:none; }
   .sessionBar { height:50px; gap:7px; padding:0 8px; }.sessionActions { flex:none; gap:5px; }.titleBlock { flex:1; gap:3px; min-width:0; }.titleBlock input { width:100%; min-width:0; padding-inline:5px; font-size:13px; }.spark,.collaborators { display:none; }
   .flowWrap {
     /* On a phone the dock is a bottom sheet, so it claims NO side. The width is

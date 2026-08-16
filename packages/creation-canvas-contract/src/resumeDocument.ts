@@ -27,7 +27,7 @@ import type {
   CanvasResumeEducation,
   CanvasResumeSkill,
   CanvasResumeWork,
-} from '@builderforce/creation-canvas-contract';
+} from './resume';
 import { matchDateRange, parseResume, type ParsedResume, type ResumeSectionKind } from './resumeModel';
 
 /** Bullet glyphs, matching the set `parseResume` strips. */

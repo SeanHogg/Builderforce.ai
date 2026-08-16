@@ -16,8 +16,7 @@
  * describe it. That is the whole difference between a career tool and a horoscope.
  */
 
-import { SKILL_GROUPS, displaySkill, isSkillToken, tokenSet } from './lexicon';
-import { parseResume } from './resumeModel';
+import { SKILL_GROUPS, displaySkill, isSkillToken, parseResume, tokenSet } from '@builderforce/creation-canvas-contract';
 
 export interface RoleProfile {
   id: string;

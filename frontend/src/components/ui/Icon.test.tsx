@@ -9,6 +9,15 @@ describe('Icon', () => {
     expect(iconName('⚙')).toBe('settings');
   });
 
+  it('reads a glyph the same with or without its presentation selector', () => {
+    // `✉` (U+2709) and `✉️` (U+2709 U+FE0F) are one glyph to a reader and two
+    // keys to a Record. The Inbox rail writes the bare form, the map held the
+    // selector form, and its marketing hero rendered the fallback squares.
+    expect(iconName('✉')).toBe('mail');
+    expect(iconName('✉️')).toBe('mail');
+    expect(iconName('⚙️')).toBe('settings');
+  });
+
   it('uses a professional neutral fallback instead of rendering an unknown glyph', () => {
     const { container } = render(<Icon source="🪄" data-testid="icon" />);
     expect(iconName('🪄')).toBe('apps');

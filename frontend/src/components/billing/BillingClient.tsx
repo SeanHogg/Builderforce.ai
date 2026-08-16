@@ -131,7 +131,7 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
             {[
               { label: t('plan'), value: t(`planName.${subscription.effectivePlan}`) },
               { label: t('status'), value: subscription.billingStatus },
-              { label: t('cycle'), value: subscription.billingCycle ? t(`cycle.${subscription.billingCycle}`) : t('none') },
+              { label: t('cycleLabel'), value: subscription.billingCycle ? t(`cycle.${subscription.billingCycle}`) : t('none') },
               { label: t('seats'), value: subscription.seatCount == null ? t('none') : String(subscription.seatCount) },
               { label: t('billingEmail'), value: subscription.billingEmail ?? t('none') },
             ].map(({ label, value }) => (

@@ -8,6 +8,7 @@ import {
   indexableTeaserRoutes,
   isNoindexTeaserRoute,
   marketedRoutes,
+  noindexTeaserRoutes,
   teaserDestinationIds,
 } from './routeMarketing';
 
@@ -113,5 +114,16 @@ describe('indexing', () => {
   it('lists no route twice', () => {
     const routes = indexableTeaserRoutes();
     expect(new Set(routes).size).toBe(routes.length);
+  });
+
+  it('agrees with itself about what is excluded', () => {
+    // The robots file, the sitemap and the page's own meta tag all read these
+    // two functions, so a route in both lists would be invited and refused at
+    // the same time — which is what the static robots.txt had been doing.
+    const indexable = new Set(indexableTeaserRoutes());
+    for (const route of noindexTeaserRoutes()) {
+      expect(indexable.has(route)).toBe(false);
+      expect(isNoindexTeaserRoute(route)).toBe(true);
+    }
   });
 });

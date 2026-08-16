@@ -7,7 +7,7 @@ import { DonutChart } from '@/components/charts/DonutChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { colorAt } from '@/components/charts/chartColors';
-import { catalogAnalyticsApi, type CatalogAnalytics } from '@/lib/builderforceApi';
+import { catalogAnalyticsApi, type CatalogAnalytics, type CatalogAnalyticsKind } from '@/lib/builderforceApi';
 
 /**
  * CatalogInsightsBar — the shared, data-driven summary strip for the marketplace
@@ -25,31 +25,53 @@ export interface CatalogInsightsItem {
   name: string;
   /** Category / source bucket for the breakdown donut (null → "uncategorized"). */
   group: string | null;
-  /** Primary engagement metric (installs / uses). */
-  primary: number;
+  /** Primary engagement metric (installs / uses). Omit for a catalogue that
+   *  counts no engagement — an article is read off-platform, so the blog has
+   *  nothing to rank its rows by and supplies `bars` instead. */
+  primary?: number;
   /** Secondary engagement metric (likes / stars). */
   secondary?: number;
 }
 
+/** An explicit ranked bar chart, for a catalogue whose ranking is not per-item. */
+export interface CatalogInsightsBars {
+  title: string;
+  data: { key: string; label: string; value: number }[];
+}
+
 export interface CatalogInsightsBarProps {
   /** Drives the "total" label. */
-  entity: 'skills' | 'personas' | 'prompts';
+  entity: 'skills' | 'personas' | 'prompts' | 'articles' | 'listings';
   items: CatalogInsightsItem[];
-  /** Which localized label to use for the primary/secondary metrics. */
-  primaryMetric: 'installs' | 'usage';
+  /** Which localized label to use for the primary/secondary metrics. Omit when
+   *  the catalogue carries no engagement numbers — the tiles and the derived
+   *  top-N bar are then skipped rather than rendered as a column of zeroes. */
+  primaryMetric?: 'installs' | 'usage';
   secondaryMetric?: 'likes' | 'stars';
   /** Which localized label to use for the breakdown donut. */
-  groupKind: 'category' | 'source';
+  groupKind: 'category' | 'source' | 'topic';
   /** When true, fetch + render the server-side adoption TREND (installs/usage
    *  over time) behind a window toggle. Requires an authed tenant session — pass
    *  it only when signed in so the tenant-scoped endpoint isn't hit anonymously. */
   showTrend?: boolean;
+  /** Replaces the derived top-N bar. Use when ranking is by something other than
+   *  a number on the row (the blog ranks TAGS, not articles). */
+  bars?: CatalogInsightsBars;
+  /** Stat tiles appended to the totals row, for facts only the page knows. */
+  extraStats?: { key: string; label: string; value: string }[];
 }
 
 const TOP_GROUPS = 6;
 const WINDOWS = [7, 30, 90] as const;
 
-export function CatalogInsightsBar({ entity, items, primaryMetric, secondaryMetric, groupKind, showTrend }: CatalogInsightsBarProps) {
+/** The catalogues the analytics endpoint keeps a time series for. */
+const ANALYTICS_KINDS = new Set<string>(['skills', 'personas', 'prompts']);
+
+function isAnalyticsKind(entity: string): entity is CatalogAnalyticsKind {
+  return ANALYTICS_KINDS.has(entity);
+}
+
+export function CatalogInsightsBar({ entity, items, primaryMetric, secondaryMetric, groupKind, showTrend, bars, extraStats }: CatalogInsightsBarProps) {
   const t = useTranslations('catalogInsights');
   const ta = useTranslations('catalogAnalytics');
 
@@ -75,7 +97,7 @@ export function CatalogInsightsBar({ entity, items, primaryMetric, secondaryMetr
       .filter((i) => (i.primary || 0) > 0)
       .sort((a, b) => (b.primary || 0) - (a.primary || 0))
       .slice(0, 6)
-      .map((i) => ({ key: i.key, label: i.name, value: i.primary }));
+      .map((i) => ({ key: i.key, label: i.name, value: i.primary ?? 0 }));
 
     return { total, sumPrimary, sumSecondary, segments, topBars };
   }, [items, t]);
@@ -84,7 +106,10 @@ export function CatalogInsightsBar({ entity, items, primaryMetric, secondaryMetr
   const [windowDays, setWindowDays] = useState<(typeof WINDOWS)[number]>(30);
   const [trend, setTrend] = useState<CatalogAnalytics | null>(null);
   useEffect(() => {
-    if (!showTrend) { setTrend(null); return; }
+    // Only three catalogues have a server-side adoption series behind them; the
+    // rest are asked for their trend by NOT asking, rather than by firing a
+    // request the analytics endpoint has no kind for.
+    if (!showTrend || !isAnalyticsKind(entity)) { setTrend(null); return; }
     let alive = true;
     catalogAnalyticsApi.get(entity, windowDays)
       .then((r) => { if (alive) setTrend(r); })
@@ -119,8 +144,11 @@ export function CatalogInsightsBar({ entity, items, primaryMetric, secondaryMetr
     >
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
         <InsightStat label={t(`total.${entity}`)} value={model.total.toLocaleString()} />
-        <InsightStat label={t(`metric.${primaryMetric}`)} value={model.sumPrimary.toLocaleString()} color={colorAt(1)} />
-        {secondaryMetric && <InsightStat label={t(`metric.${secondaryMetric}`)} value={model.sumSecondary.toLocaleString()} color={colorAt(6)} />}
+        {primaryMetric && <InsightStat label={t(`metric.${primaryMetric}`)} value={model.sumPrimary.toLocaleString()} color={colorAt(1)} />}
+        {primaryMetric && secondaryMetric && <InsightStat label={t(`metric.${secondaryMetric}`)} value={model.sumSecondary.toLocaleString()} color={colorAt(6)} />}
+        {extraStats?.map((stat, idx) => (
+          <InsightStat key={stat.key} label={stat.label} value={stat.value} color={colorAt(idx + 2)} />
+        ))}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
@@ -135,12 +163,19 @@ export function CatalogInsightsBar({ entity, items, primaryMetric, secondaryMetr
             ariaLabel={t(`by.${groupKind}`)}
           />
         </div>
-        {model.topBars.length > 0 && (
+        {/* An explicit `bars` wins over the derived top-N: a catalogue that
+            supplies one is ranking by something the rows do not carry. */}
+        {bars && bars.data.length > 0 ? (
+          <div>
+            <div style={sectionTitle}>{bars.title}</div>
+            <BarChart data={bars.data} maxRows={6} labelWidth={130} ariaLabel={bars.title} />
+          </div>
+        ) : primaryMetric && model.topBars.length > 0 ? (
           <div>
             <div style={sectionTitle}>{t(`top.${primaryMetric}`)}</div>
             <BarChart data={model.topBars} maxRows={6} labelWidth={130} ariaLabel={t(`top.${primaryMetric}`)} />
           </div>
-        )}
+        ) : null}
       </div>
 
       {showTrend && trendModel && (

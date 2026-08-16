@@ -27,6 +27,9 @@ const AUTHORING_SURFACE: Partial<Record<CreationObjectKind, CanvasSurfaceId>> = 
   // A running build. Already a full-surface runtime before this existed; it just wore a
   // bespoke `gameFocus` boolean instead of a surface id.
   game: 'play',
+  // Pages you move between, at a width you pick. A prototype is the same object earlier
+  // in its life — same `pages[]`, same theme, same sections — so it reads the same way.
+  website: 'site', prototype: 'site',
   // Time. Both kinds persist a `CanvasVideoTimeline`, which is tracks × seconds.
   video: 'timeline', voice: 'timeline',
 };

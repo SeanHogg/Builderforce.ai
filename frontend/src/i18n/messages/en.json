@@ -1295,7 +1295,15 @@
       "groupLabel": "View mode"
     },
     "createFreeAccount": "Create a free account",
-    "guestSignupTitle": "You're on a roll!"
+    "guestSignupTitle": "You're on a roll!",
+    "pagination": {
+      "label": "Pagination",
+      "prev": "Previous page",
+      "next": "Next page",
+      "pageOf": "Page {page} of {pages}",
+      "pageN": "Page {n}"
+    },
+    "resultCount": "{n, plural, =0 {No results} one {# result} other {# results}}"
   },
   "prdCreate": {
     "title": "New PRD",
@@ -3516,7 +3524,8 @@
         "conversions": "Conversions",
         "app_installs": "App installs",
         "video_views": "Video views"
-      }
+      },
+      "objectiveLabel": "Objective"
     }
   },
   "quality": {
@@ -4713,7 +4722,9 @@
     "total": {
       "skills": "Skills",
       "personas": "Personas",
-      "prompts": "Prompts"
+      "prompts": "Prompts",
+      "articles": "Articles",
+      "listings": "Listings"
     },
     "metric": {
       "installs": "Installs",
@@ -4723,7 +4734,8 @@
     },
     "by": {
       "category": "By category",
-      "source": "By source"
+      "source": "By source",
+      "topic": "By topic"
     },
     "top": {
       "installs": "Top by installs",
@@ -7140,9 +7152,6 @@
     "badge": "Latest Articles",
     "desc": "Ideas, tutorials, and product guidance for creating with AI—covering the canvas, workflows, models, agents, governance, and the path from concept to delivery.",
     "paginationLabel": "Blog pagination",
-    "prevPage": "Previous page",
-    "nextPage": "Next page",
-    "pageN": "Page {n}",
     "title": "Builderforce Blog",
     "post": {
       "back": "← Back to Blog",
@@ -7152,6 +7161,35 @@
       "browseAll": "Browse all articles →",
       "relatedHeading": "Related articles",
       "startFree": "Start building for free →"
+    },
+    "readArticle": "Read article →",
+    "searchPlaceholder": "Search articles…",
+    "empty": "No articles match those filters.",
+    "clearFilters": "Clear filters",
+    "topic": {
+      "label": "Topic",
+      "all": "All",
+      "compare": "Comparisons",
+      "hiring": "Hiring",
+      "careers": "Careers",
+      "canvas": "Creation canvas",
+      "learning": "Learning",
+      "teamwork": "Teamwork",
+      "methodology": "Methodology",
+      "evermind": "Evermind & models",
+      "agents": "Agents",
+      "devtools": "Developer tools",
+      "delivery": "Delivery & governance",
+      "more": "More"
+    },
+    "tag": {
+      "label": "Tag",
+      "all": "All tags"
+    },
+    "insights": {
+      "topTags": "Top tags",
+      "topics": "Topics",
+      "tags": "Tags"
     }
   },
   "brain": {
@@ -7699,7 +7737,39 @@
     "suggestionTitle": "Suggested improvement",
     "saveAsVersion": "Save as new version",
     "savedVersion": "Saved ✓",
-    "copySuggestion": "Copy"
+    "copySuggestion": "Copy",
+    "allCategories": "All categories",
+    "categoryLabel": "Category",
+    "sortLabel": "Sort",
+    "featured": "Featured",
+    "useFailed": "Could not copy this prompt.",
+    "colTitle": "Title",
+    "colCategory": "Category",
+    "colUses": "Uses",
+    "colStars": "Stars",
+    "colAuthor": "Author",
+    "colActions": "Actions",
+    "usePromptCopy": "Use prompt — copies it",
+    "star": "Star",
+    "starred": "Starred ★",
+    "modelBadge": "Model: {model}",
+    "promptVersionLabel": "Prompt (v{v})",
+    "variablesLabel": "Variables",
+    "analysisFailed": "The analysis failed. Try again.",
+    "saveFailed": "Could not save the new version.",
+    "createTitle": "New prompt",
+    "createSubmit": "Create prompt",
+    "createValidation": "A title and a prompt body are both required.",
+    "createFailed": "Could not create the prompt.",
+    "phTitle": "Title",
+    "phDescription": "Short description",
+    "phCategory": "Category, e.g. Coding",
+    "phTags": "Tags, comma separated",
+    "phModel": "Preferred model (optional)",
+    "phBody": "Write the prompt. Use {ph} for anything the reader fills in.",
+    "visPrivate": "Private",
+    "visTenant": "My workspace",
+    "visPublic": "Public"
   },
   "voicePanel": {
     "retry": "Retry",
@@ -8581,7 +8651,8 @@
       "nameRequired": "Give the alert a name.",
       "loadFailed": "Your alerts could not be loaded.",
       "actionFailed": "That change could not be saved."
-    }
+    },
+    "perHour": "/hr"
   },
   "marketplace": {
     "title": "Marketplace",
@@ -8839,8 +8910,7 @@
       "sortRecent": "Most recent",
       "sortRating": "Top rated",
       "sortRateAsc": "Rate: low to high",
-      "sortRateDesc": "Rate: high to low",
-      "pageOf": "Page {page} of {pages}"
+      "sortRateDesc": "Rate: high to low"
     },
     "editProfile": "Edit profile",
     "stats": {
@@ -9378,7 +9448,9 @@
       "details": "Details",
       "hideDetails": "Hide details",
       "copy": "Copy",
-      "copied": "Copied!"
+      "copied": "Copied!",
+      "delete": "Delete",
+      "copyFailed": "Copy failed"
     },
     "emulate": {
       "loadWorkspacesFailed": "Failed to load user workspaces",
@@ -10319,6 +10391,28 @@
       "scoreNote": "Satisfaction is smoothed toward neutral by sample size, so one lucky thumbs-up cannot outrank a long good record. The learned router blends this exact number with run outcomes.",
       "emptyTitle": "No ratings yet in this period.",
       "emptyBody": "Thumbs appear under every AI reply in the Brain panel, the Creation Canvas and the VS Code extension. Each press records the model and the MCP tool behind that turn."
+    },
+    "pricing": {
+      "title": "Pricing",
+      "description": "Edit the plan table the public pricing page renders. Changes stay in the draft until published.",
+      "publishedAt": "Last published: {date}",
+      "currency": "Currency",
+      "managedHost": "Managed agent host, monthly",
+      "name": "Plan name",
+      "descriptionLabel": "Plan description",
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "suffix": "Price suffix",
+      "minimumSeats": "Minimum seats",
+      "features": "Features, one per line",
+      "excluded": "Not included, one per line",
+      "ctaLabel": "Button label",
+      "ctaHref": "Button link",
+      "saveDraft": "Save draft",
+      "saving": "Saving…",
+      "publish": "Publish",
+      "publishing": "Publishing…",
+      "draftSaved": "Draft saved."
     }
   },
   "providerKeys": {
@@ -12274,7 +12368,8 @@
       "remove": "Remove",
       "add": "Link ticket",
       "addPlaceholder": "Ticket #"
-    }
+    },
+    "loading": "Loading incidents…"
   },
   "monitoring": {
     "boardsTitle": "Active Monitoring",
@@ -12654,7 +12749,8 @@
       "free": "Free",
       "pro": "Pro",
       "teams": "Teams"
-    }
+    },
+    "cycleLabel": "Billing cycle"
   },
   "policyPacks": {
     "title": "Policy packs",
@@ -14099,7 +14195,8 @@
       "template_healthcare-clinical-blue": "Healthcare · Clinical blue",
       "template_sales-growth-emerald": "Sales · Growth emerald",
       "template_actor-headshot-hero": "Actor · Headshot hero",
-      "template_director-filmography-serif": "Director · Filmography serif"
+      "template_director-filmography-serif": "Director · Filmography serif",
+      "firstPartyTemplate": "Builderforce template"
     },
     "videoEditor": {
       "editable": "Editable",
@@ -17481,6 +17578,7 @@
     "hiringShortlistCreated": "Screen resumes",
     "hiringShortlistUpdated": "Update shortlist “{title}”",
     "hiringShortlistFor": "Shortlist — {title}",
+    "resumeImportedFrom": "Import résumé from “{title}”",
     "hiringFunnelMeasured": "Measured",
     "hiringFunnelCreated": "Measure hiring funnel",
     "hiringFunnelUpdated": "Update funnel “{title}”",
@@ -17963,13 +18061,23 @@
         "ship": "Ship it",
         "controls": "Controls"
       },
+      "site": {
+        "label": "Site",
+        "open": "Open the site",
+        "viewport": "Preview width",
+        "desktop": "Desktop",
+        "tablet": "Tablet",
+        "mobile": "Phone",
+        "pageCount": "{count, plural, =0 {no pages} one {# page} other {# pages}}"
+      },
       "timeline": {
         "label": "Timeline",
         "open": "Open the timeline",
         "clipCount": "{count, plural, =0 {no clips} one {# clip} other {# clips}}"
       },
       "backToBoard": "Back to the board",
-      "objectLabel": "{title}, at full size"
+      "objectLabel": "{title}, at full size",
+      "switcher": "Canvas view"
     },
     "miro": {
       "title": "Miro boards",
@@ -18012,7 +18120,13 @@
     "diagramAddedStatus": "Added to diagram",
     "connectedSources": "Connected sources",
     "connectedGateTitle": "Sign in to use {source}",
-    "connectedGateBody": "{source} reads an account connected to your workspace, so it needs you signed in. Create a free account or sign in — this board stays exactly as it is."
+    "connectedGateBody": "{source} reads an account connected to your workspace, so it needs you signed in. Create a free account or sign in — this board stays exactly as it is.",
+    "founderCompanySynced": "Company synced: {title}",
+    "founderCompetitorMapStatus": "{count, plural, one {# competitor mapped} other {# competitors mapped}}",
+    "founderCompetitorMapProposal": "Competitor map: {title}",
+    "founderMetricLive": "Live",
+    "founderMetricRefreshed": "Metric refreshed: {title}",
+    "founderTriggerEvaluated": "Trigger evaluated: {title}"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -20297,6 +20411,144 @@
       "accepted": "You accepted their introduction request.",
       "declined": "You declined their introduction request.",
       "withdrawn": "They withdrew their introduction request."
-    }
+    },
+    "strengthLabel": "Your strength",
+    "commitmentLabel": "Commitment"
+  },
+  "import": {
+    "title": "Import records",
+    "modeLabel": "Mode",
+    "guidedMode": "Guided",
+    "bulkMode": "Bulk file",
+    "guidedTab": "Guided",
+    "bulkTab": "Bulk upload",
+    "modeSwitchTitle": "Switch import mode?",
+    "modeSwitchMessage": "Fields that exist in both modes are carried over. Anything else on this screen is lost.",
+    "switch": "Switch",
+    "cancelTitle": "Discard this import?",
+    "cancelMessage": "Everything entered so far will be lost.",
+    "discard": "Discard",
+    "keepEditing": "Keep editing",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit",
+    "submitting": "Submitting…",
+    "done": "Done",
+    "yes": "Yes",
+    "no": "No",
+    "progressAria": "Import progress",
+    "stepInfo": "Before you start",
+    "stepFields": "Details",
+    "stepReview": "Review",
+    "stepSuccess": "Done",
+    "guidedInfoTitle": "Before you start",
+    "guidedInfoBody": "This wizard creates one record at a time and checks each field as you go. To load many records at once, switch to bulk upload.",
+    "guidedFieldsTitle": "Record details",
+    "guidedReviewTitle": "Review before submitting",
+    "guidedReviewBody": "Check the values below. Use Edit on any line to go back and change it.",
+    "guidedSubmitSuccess": "Record created.",
+    "guidedSubmitError": "The record could not be created.",
+    "guidedSuccessTitle": "Record created",
+    "guidedSuccessBody": "Keep the reference below — it identifies this record in later imports and exports.",
+    "referenceIdLabel": "Reference",
+    "createAnother": "Create another",
+    "fieldName": "Name",
+    "fieldDescription": "Description",
+    "fieldReferenceId": "Reference ID",
+    "fieldEnabled": "Enabled",
+    "fieldPriority": "Priority",
+    "fieldNotes": "Notes",
+    "fieldTooltipName": "Unique, human-readable name (no special characters).",
+    "fieldTooltipDescription": "Brief free-form description of the record. Plain text.",
+    "fieldTooltipReferenceId": "Reference in an external system. Must be unique.",
+    "fieldTooltipEnabled": "Whether this record is active once imported.",
+    "fieldTooltipPriority": "Low, Medium or High. Leave empty if unused.",
+    "fieldTooltipNotes": "Free-form notes.",
+    "fieldPlaceholderName": "e.g. example-name",
+    "fieldPlaceholderDescription": "What this record is for",
+    "fieldPlaceholderReferenceId": "e.g. GHI-2024-001",
+    "fieldPlaceholderPriority": "No priority",
+    "fieldPlaceholderNotes": "Anything else worth recording",
+    "fieldEnabledLabel": "Enable this record",
+    "priorityLow": "Low",
+    "priorityMedium": "Medium",
+    "priorityHigh": "High",
+    "fieldErrors": {
+      "name": "A name is required."
+    },
+    "bulkUploadTitle": "Upload a file",
+    "bulkDownloadTemplate": "Download template",
+    "bulkTemplateDownloaded": "Template downloaded.",
+    "bulkUploadAria": "Choose a file to import",
+    "bulkDropzoneTitle": "Drop a file here, or click to choose one",
+    "bulkDropzoneHint": "{formats} — up to {maxSize}",
+    "bulkFileTooLarge": "That file is larger than {max}.",
+    "bulkUnsupportedFormat": ".{ext} files cannot be imported. Use CSV, JSON or XLSX.",
+    "templateExampleName": "Example record",
+    "templateExampleDescription": "What this record is for",
+    "bulkMappingTitle": "Match your columns",
+    "bulkMappingBody": "{rows, plural, one {# row} other {# rows}} across {cols, plural, one {# column} other {# columns}}. Choose what each column becomes.",
+    "bulkMappingSourceCol": "Your column",
+    "bulkMappingTargetField": "Imports as",
+    "bulkMappingPreview": "First value",
+    "bulkMappingTargetFor": "Imports as, for column",
+    "bulkMappingIgnore": "Ignore this column",
+    "bulkAsyncNote": "Files over {threshold, number} rows are imported in the background — you can leave this page once it starts.",
+    "bulkRunDryRun": "Check the file",
+    "bulkDryRunTitle": "Check results",
+    "bulkDryRunSummary": "{valid, number} of {total, number} rows are valid. {errors, plural, =0 {No rows have errors.} one {# row has errors.} other {# rows have errors.}}",
+    "bulkTotalRows": "Rows in file",
+    "bulkValidRows": "Valid rows",
+    "bulkErrorRows": "Rows with errors",
+    "bulkErrorRow": "Row",
+    "bulkErrorColumn": "Column",
+    "bulkErrorReason": "Reason",
+    "bulkErrorRequiredEmpty": "{field} is required and this row leaves it empty.",
+    "bulkErrorNotBoolean": "{field} must be true or false.",
+    "bulkErrorNotPriority": "{field} must be Low, Medium or High.",
+    "bulkErrorTruncated": "Showing the first {shown, number} of {total, number} errors. Download the report for the rest.",
+    "bulkDownloadErrorReport": "Download error report",
+    "bulkImportChoice": "Some rows have errors. What should be imported?",
+    "bulkImportValidOnly": "Only the {count, number} valid rows",
+    "bulkImportAll": "Every row, errors included",
+    "bulkImportNow": "Import {count, number} rows",
+    "bulkImportingTitle": "Importing…",
+    "bulkImportingProgress": "{pct, number}% complete",
+    "bulkImportingDone": "Finishing up…",
+    "bulkAsyncProcessing": "{count, number} rows will be imported in the background.",
+    "bulkAsyncQueued": "Import queued. You can leave this page.",
+    "bulkSuccessTitle": "Import complete",
+    "bulkImportedCount": "Imported",
+    "bulkSkippedCount": "Skipped",
+    "bulkTotalProcessed": "Processed",
+    "bulkDownloadSummary": "Download summary",
+    "bulkImportAnother": "Import another file",
+    "summaryMetric": "Metric",
+    "summaryValue": "Value",
+    "summaryTotalRows": "Rows processed",
+    "summaryImported": "Rows imported",
+    "summarySkipped": "Rows skipped",
+    "summaryTimestamp": "Import timestamp"
+  },
+  "emulationBar": {
+    "barAria": "Emulation session",
+    "emulatingWho": "Emulating <strong>{name}</strong> ({email}) in {tenant}",
+    "switching": "Switching…",
+    "switchRoleAria": "Switch role",
+    "elapsedAria": "Emulating for {elapsed}",
+    "copyContextTitle": "Copy this session’s details to the clipboard",
+    "copyContext": "Copy context",
+    "debugTitle": "Show what this session is allowed to do",
+    "debug": "Debug",
+    "endEmulation": "End emulation",
+    "ending": "Ending…"
+  },
+  "mintedApiKey": {
+    "saveNow": "Save this key now — it is shown once.",
+    "quickstart": "Quickstart",
+    "copyKey": "Copy key",
+    "copyBaseUrl": "Copy base URL",
+    "copyQuickstart": "Copy quickstart",
+    "savedIt": "I saved it"
   }
 }

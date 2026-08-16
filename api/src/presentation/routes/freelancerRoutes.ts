@@ -33,7 +33,7 @@ import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { extractResumeText } from '../../application/career/resumeExtract';
-import { resumeDocumentFromText } from '../../application/career/resumeDocument';
+import { resumeDocumentFromText } from '@builderforce/creation-canvas-contract';
 import {
   readProfileResume,
   resolvePersonalTenantId,

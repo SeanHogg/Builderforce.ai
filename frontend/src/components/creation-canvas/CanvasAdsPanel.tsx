@@ -361,7 +361,7 @@ export function CanvasAdsPanel({ onClose }: CanvasAdsPanelProps) {
             <input value={name} onChange={(event) => setName(event.target.value)} required />
           </label>
           <label>
-            <span>{t('objective')}</span>
+            <span>{t('objectiveLabel')}</span>
             <select value={objective} onChange={(event) => setObjective(event.target.value as AdObjective)}>
               {objectives.map((option) => <option key={option} value={option}>{t(`objective.${option}`)}</option>)}
             </select>

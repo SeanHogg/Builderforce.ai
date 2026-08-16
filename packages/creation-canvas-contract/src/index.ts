@@ -10,6 +10,14 @@ export * from './dataScience';
 export * from './triggers';
 export * from './operations';
 export * from './resume';
+// The deterministic résumé READER — plain text to a JSON Resume document, no model.
+// It lives beside the `CanvasResumeDocument` type it produces rather than in the API
+// because BOTH callers need it: the tenantless upload route, and the canvas turning a
+// dropped PDF into a résumé in the visitor's own browser. Two copies would give the
+// scorer a bullet the document builder had dropped.
+export * from './resumeLexicon';
+export * from './resumeModel';
+export * from './resumeDocument';
 // The counterparty vocabulary — `PARTY_ROLES`, `ACCOUNT_RELATIONSHIPS`, `partyRef`.
 // Declared in this package rather than in either consumer because the canvas `account`
 // kind, the API's `party_roles` writer and the kernel's own role column must mean the

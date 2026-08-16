@@ -19,9 +19,9 @@
  */
 
 import {
-  STRONG_VERBS, displaySkill, isSkillToken, skillGroupOf, toneCounts, tokenCounts,
-} from './lexicon';
-import { isTooShortToScore, parseResume, type ParsedResume, type ResumeBullet } from './resumeModel';
+  STRONG_VERBS, displaySkill, isSkillToken, isTooShortToScore, parseResume, skillGroupOf,
+  toneCounts, tokenCounts, type ParsedResume, type ResumeBullet,
+} from '@builderforce/creation-canvas-contract';
 
 export interface ScoreCategory {
   key: 'ats' | 'content' | 'keywords' | 'format' | 'impact';

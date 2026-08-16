@@ -205,7 +205,7 @@ function ProfileEditor({
 
       <div className={styles.grid}>
         <label className={styles.field}>
-          <span className={styles.label}>{t('strength')}</span>
+          <span className={styles.label}>{t('strengthLabel')}</span>
           <select className={styles.select} value={draft.strength} onChange={(e) => set('strength', e.target.value)}>
             {COFOUNDER_STRENGTHS.map((value) => <option key={value} value={value}>{t(`strength.${value}`)}</option>)}
           </select>
@@ -217,7 +217,7 @@ function ProfileEditor({
           </select>
         </label>
         <label className={styles.field}>
-          <span className={styles.label}>{t('commitment')}</span>
+          <span className={styles.label}>{t('commitmentLabel')}</span>
           <select className={styles.select} value={draft.commitment} onChange={(e) => set('commitment', e.target.value)}>
             {COFOUNDER_COMMITMENTS.map((value) => <option key={value} value={value}>{t(`commitment.${value}`)}</option>)}
           </select>

@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest';
 import {
   analyzeSalary, compareOffers, compareOptions, compareResumeToJob, computeRunway,
   consolidateResumes, declaredRoleSkillTokens, draftListingFromResume, extractSkills,
-  isSkillToken, listingReadiness, normalizeDateToken, optimizeResume, parseResume,
+  listingReadiness, optimizeResume,
   planForTarget, postingTypesFor, profileBlocks, ROLE_PROFILES, resumeSentiment,
   screenCandidate, scoreResume, suggestTargets, summarizeResume, tailorResume,
   type CareerListing,
 } from './index';
+import { isSkillToken, normalizeDateToken, parseResume } from '@builderforce/creation-canvas-contract';
 
 /**
  * The property under test throughout is REPRODUCIBILITY. Every reading in this domain is

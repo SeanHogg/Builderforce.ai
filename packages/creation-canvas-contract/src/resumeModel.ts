@@ -15,7 +15,7 @@
  * refusing to answer, because refusing is the one outcome that helps nobody.
  */
 
-import { STRONG_VERBS, WEAK_OPENERS, canonicalize, isSkillToken, tokenSet } from './lexicon';
+import { STRONG_VERBS, WEAK_OPENERS, canonicalize, isSkillToken, tokenSet } from './resumeLexicon';
 
 /** A canonical résumé section. Unknown headings collapse to `other`. */
 export type ResumeSectionKind =

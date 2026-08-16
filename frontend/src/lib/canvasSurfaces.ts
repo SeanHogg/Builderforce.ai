@@ -34,7 +34,7 @@
  * preference all read the flags.
  */
 
-export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'page' | 'play' | 'timeline';
+export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'page' | 'play' | 'site' | 'timeline';
 
 /**
  * What a surface is ABOUT.
@@ -100,7 +100,11 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // object cannot be restored without it.
   { id: 'page', scope: 'object', order: 3, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   { id: 'play', scope: 'object', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
-  { id: 'timeline', scope: 'object', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  // A site is pages AND a width. It is not the `page` surface with more room: that one
+  // draws ONE sheet at a reading measure, and a website is a set of pages you move
+  // between at a width you choose. Two axes the sheet does not have, so two surfaces.
+  { id: 'site', scope: 'object', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'timeline', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
 ];
 
 /**

@@ -51,7 +51,7 @@ describe('canvas surface registry', () => {
    */
   it('keeps object-scoped surfaces out of the rail and out of the stored preference', () => {
     const objectScoped = CANVAS_SURFACES.filter((def) => def.scope === 'object');
-    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'timeline']);
+    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'site', 'timeline']);
     // None persists: a page cannot be reopened without knowing which page.
     expect(objectScoped.every((def) => !def.persist)).toBe(true);
     // None draws the board or its objects — each is about exactly one.
@@ -66,6 +66,11 @@ describe('canvas surface registry', () => {
     expect(creationObjectSurface('game')).toBe('play');
     expect(creationObjectSurface('video')).toBe('timeline');
     expect(creationObjectSurface('voice')).toBe('timeline');
+    // A site is pages AND a width — two axes a single sheet does not have, which is why
+    // it is not folded into `page` however much both of them are "a document".
+    expect(creationObjectSurface('website')).toBe('site');
+    expect(creationObjectSurface('prototype')).toBe('site');
+    expect(creationObjectSurface('document')).toBe('page');
     // A card IS the whole object for most kinds, and should stay that way.
     expect(creationObjectSurface('task')).toBeNull();
     expect(creationObjectSurface('sticky')).toBeNull();
@@ -133,6 +138,20 @@ describe('the chat surface on the canvas', () => {
   beforeEach(() => { window.localStorage.clear(); });
 
   /**
+   * The surface switcher, and the ONE way these tests reach a surface button.
+   *
+   * `screen.getAllByRole('button', { name })` computes an accessible name for every
+   * button in the document, and a mounted canvas has the whole palette in it — measured
+   * at 7–10s per test that used it, and 16s for the one below that called it twelve
+   * times, against a 60s ceiling. Scoping to the group the switcher already declares
+   * turns each of those into a handful of nodes: same control, same assertion, ~10x less
+   * work. (`puts the surface decision in the session header` is what proves the buttons
+   * are in this group and nowhere else, so scoping here asserts nothing away.)
+   */
+  const switcher = () => screen.getByRole('group', { name: 'Canvas view' });
+  const surfaceButton = (name: string) => within(switcher()).getByRole('button', { name });
+
+  /**
    * The whole point of the placement: chat is the canvas with the board stood down, not
    * a second product. So exactly ONE transcript is on screen — the edge dock stands down
    * rather than narrating the same conversation twice — and the board is one press away
@@ -145,7 +164,7 @@ describe('the chat surface on the canvas', () => {
     expect(board()).toHaveAttribute('data-view', 'graph');
     expect(screen.getByRole('log', { name: 'Brain chat history' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Chat' })[0]!);
+    fireEvent.click(surfaceButton('Chat'));
 
     expect(board()).toHaveAttribute('data-view', 'chat');
     const surface = screen.getByTestId('canvas-chat-surface');
@@ -169,14 +188,14 @@ describe('the chat surface on the canvas', () => {
     render(<CreationCanvas sessionId="surface-chat-placement-test" persistence="local" />);
     expect(screen.getByRole('button', { name: 'Show the chat in the Brain object' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Chat' })[0]!);
+    fireEvent.click(surfaceButton('Chat'));
     expect(screen.queryByRole('button', { name: 'Show the chat in the Brain object' })).not.toBeInTheDocument();
   });
 
   it('hands the board back from inside the conversation, and remembers the choice', () => {
     render(<CreationCanvas sessionId="surface-chat-return-test" persistence="local" />);
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Chat' })[0]!);
+    fireEvent.click(surfaceButton('Chat'));
     expect(window.localStorage.getItem(CANVAS_SURFACE_STORAGE_KEY)).toBe('chat');
 
     const surface = screen.getByTestId('canvas-chat-surface');
@@ -193,15 +212,45 @@ describe('the chat surface on the canvas', () => {
    * registry needing to know that 3D is special.
    */
   /**
-   * The rail lists BOARD surfaces. If an object surface leaked into it, pressing it with
-   * nothing selected would open a runtime with no object — a screen showing nothing.
+   * The switcher lists BOARD surfaces. If an object surface leaked into it, pressing it
+   * with nothing selected would open a runtime with no object — a screen showing nothing.
    */
-  it('never offers an object surface on the rail', () => {
+  it('never offers an object surface on the switcher', () => {
     render(<CreationCanvas sessionId="surface-rail-scope-test" persistence="local" />);
-    for (const name of ['Page', 'Play', 'Timeline']) {
+    for (const name of ['Page', 'Play', 'Site', 'Timeline']) {
       expect(screen.queryAllByRole('button', { name })).toHaveLength(0);
     }
     expect(screen.getAllByRole('button', { name: 'Board' }).length).toBeGreaterThan(0);
+  });
+
+  /**
+   * WHERE the decision is made, not just that it can be. The three surfaces used to render
+   * as unlabelled `ControlButton`s inside React Flow's zoom rail, at the same size and
+   * weight as zoom-in and fit-view, which is why nobody found them. They now sit in the
+   * session header as one named group with drawn labels.
+   *
+   * The assertions are on placement rather than on class names: a rule that reads "not
+   * inside the rail" is what a future refactor has to keep true, and a hashed CSS-module
+   * class is not.
+   */
+  it('puts the surface decision in the session header, not on the zoom rail', () => {
+    render(<CreationCanvas sessionId="surface-placement-test" persistence="local" />);
+
+    const group = screen.getByRole('group', { name: 'Canvas view' });
+    for (const name of ['Chat', 'Board', '3D space']) {
+      const button = within(group).getByRole('button', { name });
+      // The label is DRAWN, not only announced — the whole defect was three glyphs that
+      // said nothing about which one was a conversation.
+      expect(button).toHaveTextContent(name);
+      // …and never inside React Flow's own control rail.
+      expect(button.closest('.react-flow__controls')).toBeNull();
+    }
+    // The rail keeps what it is actually for. If this ever finds a surface button again,
+    // the switcher has been duplicated rather than moved.
+    const rail = document.querySelector('.react-flow__controls');
+    for (const name of ['Chat', '3D space']) {
+      expect(rail && within(rail as HTMLElement).queryByRole('button', { name })).toBeFalsy();
+    }
   });
 
   /**
@@ -240,7 +289,41 @@ describe('the chat surface on the canvas', () => {
     fireEvent.click(screen.getByTestId('canvas-palette-task'));
     expect(screen.queryByTestId('open-page-surface')).not.toBeInTheDocument();
     expect(screen.queryByTestId('open-play-surface')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('open-site-surface')).not.toBeInTheDocument();
     expect(screen.queryByTestId('open-timeline-surface')).not.toBeInTheDocument();
+  });
+
+  /**
+   * The site runtime end to end. Its own axis is the WIDTH — the one thing a 455px card
+   * could never offer — so the surface is only worth having if that control is real and
+   * if changing it does not quietly re-author the object the author designed at desktop.
+   */
+  it('opens a site at a width the reader picks, without re-authoring the object', () => {
+    render(<CreationCanvas sessionId="surface-site-open-test" persistence="local" />);
+    const board = () => document.querySelector<HTMLElement>('[data-view]')!;
+
+    fireEvent.click(screen.getByTestId('canvas-palette-website'));
+    const open = screen.getByTestId('open-site-surface');
+    expect(open).toHaveAccessibleName('Open the site');
+
+    fireEvent.click(open);
+    expect(board()).toHaveAttribute('data-view', 'site');
+    const surface = screen.getByTestId('canvas-site-surface');
+    expect(within(surface).getByText('Site')).toBeInTheDocument();
+
+    // The width starts at what the object IS, and the reader can move it.
+    const stage = surface.querySelector<HTMLElement>('[data-viewport]')!;
+    expect(stage).toHaveAttribute('data-viewport', 'desktop');
+    fireEvent.click(within(surface).getByRole('button', { name: 'Phone' }));
+    expect(surface.querySelector('[data-viewport]')).toHaveAttribute('data-viewport', 'mobile');
+
+    // Looking is not authoring: the object's own viewport is untouched, so the board
+    // preview and any export still draw the site the author designed.
+    fireEvent.click(within(surface).getByRole('button', { name: 'Back to the board' }));
+    expect(board()).toHaveAttribute('data-view', 'graph');
+    fireEvent.click(screen.getByTestId('open-site-surface'));
+    expect(screen.getByTestId('canvas-site-surface').querySelector('[data-viewport]'))
+      .toHaveAttribute('data-viewport', 'desktop');
   });
 
   it('lets exactly one surface be lit, and returns to the board when it is pressed again', () => {
@@ -249,9 +332,9 @@ describe('the chat surface on the canvas', () => {
       .filter((name) => screen.getAllByRole('button', { name }).some((button) => button.getAttribute('aria-pressed') === 'true'));
 
     expect(lit()).toEqual(['Board']);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Chat' })[0]!);
+    fireEvent.click(surfaceButton('Chat'));
     expect(lit()).toEqual(['Chat']);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Chat' })[0]!);
+    fireEvent.click(surfaceButton('Chat'));
     expect(lit()).toEqual(['Board']);
   });
 });

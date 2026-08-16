@@ -5,7 +5,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
-import { BASE_FIELDS, MAX_FILE_SIZE_BYTES, type FieldDirective } from '@/lib/import-input-schema';
+import { BASE_FIELDS, MAX_FILE_SIZE_BYTES, fieldLabelKey, type FieldDirective } from '@/lib/import-input-schema';
 import {
   parseFile,
   generateCSVTemplate,
@@ -15,6 +15,7 @@ import {
   IMPORT_ASYNC_THRESHOLD_ROWS,
   type DryRunValidation,
   type ParsedFileResult,
+  type RowValidationError,
 } from '@/lib/importHelpers';
 
 /**
@@ -41,6 +42,7 @@ const CANONICAL_FIELDS: FieldDirective[] = Object.values(BASE_FIELDS);
 
 export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: BulkImportProps) {
   const t = useTranslations('import');
+  const tCommon = useTranslations('common');
   const confirmDialog = useConfirm();
   const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +68,18 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
 
   // ── Helpers ──────────────────────────────────────────────────
   const canonicalFieldKeys = useMemo(() => CANONICAL_FIELDS.map((f) => f.key), []);
+
+  /**
+   * A row error's sentence, said here rather than in `importHelpers` — which has
+   * no translator. Written as three literal keys instead of one interpolated
+   * `t(\`bulkError.${code}\`)` so `check-i18n-keys` can see all three.
+   */
+  const reasonFor = useCallback((error: RowValidationError): string => {
+    const field = t(fieldLabelKey(error.field));
+    if (error.code === 'requiredEmpty') return t('bulkErrorRequiredEmpty', { field });
+    if (error.code === 'notBoolean') return t('bulkErrorNotBoolean', { field });
+    return t('bulkErrorNotPriority', { field });
+  }, [t]);
 
   const validateFile = useCallback((f: File): string | null => {
     if (f.size > MAX_FILE_SIZE_BYTES) {
@@ -162,7 +176,10 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
 
   const handleDownloadErrorReport = useCallback(() => {
     if (!dryRunResult?.errors?.length) return;
-    const csv = generateCSVErrorReport(dryRunResult.errors);
+    const csv = generateCSVErrorReport(
+      dryRunResult.errors.map((e) => ({ rowNumber: e.rowNumber, column: e.column, reason: reasonFor(e) })),
+      { rowNumber: t('bulkErrorRow'), column: t('bulkErrorColumn'), reason: t('bulkErrorReason') },
+    );
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -170,7 +187,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
     a.download = 'import-errors.csv';
     a.click();
     URL.revokeObjectURL(url);
-  }, [dryRunResult]);
+  }, [dryRunResult, reasonFor, t]);
 
   const handleImport = useCallback(async () => {
     if (!parsed || !dryRunResult) return;
@@ -206,6 +223,14 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
       dryRunResult?.totalRows ?? 0,
       importedCount,
       skippedCount,
+      {
+        metric: t('summaryMetric'),
+        value: t('summaryValue'),
+        totalRows: t('summaryTotalRows'),
+        imported: t('summaryImported'),
+        skipped: t('summarySkipped'),
+        timestamp: t('summaryTimestamp'),
+      },
     );
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -214,7 +239,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
     a.download = 'import-summary.csv';
     a.click();
     URL.revokeObjectURL(url);
-  }, [dryRunResult, importedCount, skippedCount]);
+  }, [dryRunResult, importedCount, skippedCount, t]);
 
   const handleCancel = useCallback(async () => {
     const confirmed = await confirmDialog({
@@ -299,7 +324,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
 
         <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>
           <button type="button" onClick={handleCancel} style={ghostBtnStyle}>
-            {t('cancel')}
+            {tCommon('cancel')}
           </button>
         </div>
       </div>
@@ -350,7 +375,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
                         <option value="">{t('bulkMappingIgnore')}</option>
                         {CANONICAL_FIELDS.map((f) => (
                           <option key={f.key} value={f.key}>
-                            {f.label}{f.required ? ' *' : ''}
+                            {t(fieldLabelKey(f.key))}{f.required ? ' *' : ''}
                           </option>
                         ))}
                       </select>
@@ -377,7 +402,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
           </button>
           <div style={{ display: 'flex', gap: 12 }}>
             <button type="button" onClick={handleCancel} style={ghostBtnStyle}>
-              {t('cancel')}
+              {tCommon('cancel')}
             </button>
             <button type="button" onClick={handleRunDryRun} style={primaryBtnStyle}>
               {t('bulkRunDryRun')}
@@ -403,7 +428,11 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
         </div>
 
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 20 }}>
-          {dryRunResult.summary}
+          {t('bulkDryRunSummary', {
+            valid: dryRunResult.validCount,
+            total: dryRunResult.totalRows,
+            errors: dryRunResult.errorCount,
+          })}
         </p>
 
         {/* Row-level errors (FR-3.6) */}
@@ -422,7 +451,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
                   <tr key={i}>
                     <td style={tdStyle}>{err.rowNumber}</td>
                     <td style={tdStyle}>{err.column}</td>
-                    <td style={{ ...tdStyle, color: 'var(--coral-bright)' }}>{err.reason}</td>
+                    <td style={{ ...tdStyle, color: 'var(--coral-bright)' }}>{reasonFor(err)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -480,7 +509,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
           </button>
           <div style={{ display: 'flex', gap: 12 }}>
             <button type="button" onClick={handleCancel} style={ghostBtnStyle}>
-              {t('cancel')}
+              {tCommon('cancel')}
             </button>
             <button type="button" onClick={handleImport} style={primaryBtnStyle}>
               {t('bulkImportNow', { count: importMode === 'valid-only' ? dryRunResult.validCount : dryRunResult.totalRows })}

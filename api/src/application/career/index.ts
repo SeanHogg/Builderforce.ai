@@ -20,9 +20,6 @@
  * belongs in the tool layer, not here.
  */
 
-export * from './lexicon';
-export * from './resumeModel';
-export * from './resumeDocument';
 export * from './resumeExtract';
 export * from './resumeAnalysis';
 export * from './jobMatch';

@@ -2,7 +2,6 @@
 
 import { useTranslations } from 'next-intl';
 import {
-  CanvasRailToggle,
   ChatSurfaceIcon,
   GraphSurfaceIcon,
   ThreeDIcon,
@@ -28,13 +27,22 @@ import styles from './CreationCanvas.module.css';
  * the 3D command a TOGGLE — the behaviour the rail has always had — without the registry
  * needing to know that 3D is special.
  *
- * The two variants differ only in button chrome: the desktop rail's commands are React
- * Flow `ControlButton`s (so they inherit the rail's own styling) and the phone stack's
- * are plain buttons the canvas stylesheet sizes. Which surfaces exist, what they are
- * called, which one is lit and what a press does are decided ONCE, above the split.
+ * ── WHY THIS IS NO LONGER ON THE COMMAND RAIL ────────────────────────────────────
+ * It used to render as three React Flow `ControlButton`s inside the zoom rail, which put
+ * "change what this canvas IS" among zoom-in, fit-view, arrange, files and outline at the
+ * same size, weight and colour, with nothing marking the three as a set and nothing
+ * showing which was lit. The surface decision is not a navigation command — it is the
+ * answer to "what am I looking at" — so on a desktop it belongs in the session header,
+ * with WORDS. A glyph can say "zoom"; only a label can say "Chat".
+ *
+ * The phone keeps the compact stack: its header is already down to a title and a save
+ * button by 860px, so the labelled segment has nowhere to go and the board's own control
+ * column is where every other view command already lives. The two variants therefore
+ * differ only in button chrome — which surfaces exist, what they are called, which one is
+ * lit and what a press does are decided ONCE, above the split.
  */
 
-/** Only the board-scoped surfaces reach the rail, so only they need a rail glyph. */
+/** Only the board-scoped surfaces reach the switcher, so only they need a glyph. */
 const SURFACE_ICON: Record<string, () => React.JSX.Element> = {
   chat: ChatSurfaceIcon,
   graph: GraphSurfaceIcon,
@@ -44,17 +52,17 @@ const SURFACE_ICON: Record<string, () => React.JSX.Element> = {
 export interface CanvasSurfaceSwitcherProps {
   surface: CanvasSurfaceId;
   onChange: (surface: CanvasSurfaceId) => void;
-  /** `rail` = the desktop command rail; `mobile` = the phone-sized action stack. */
-  variant: 'rail' | 'mobile';
+  /** `header` = the desktop session bar; `mobile` = the phone-sized action stack. */
+  variant: 'header' | 'mobile';
 }
 
 export function CanvasSurfaceSwitcher({ surface, onChange, variant }: CanvasSurfaceSwitcherProps) {
   const t = useTranslations('creationCanvas');
-  // The rail's contents are decided by the registry, not filtered here: an object-scoped
-  // surface has no answer to "press this with nothing selected", so it is never offered.
+  // The contents are decided by the registry, not filtered here: an object-scoped surface
+  // has no answer to "press this with nothing selected", so it is never offered.
   const ordered = boardCanvasSurfaces();
 
-  return <>{ordered.map((def) => {
+  const tabs = ordered.map((def) => {
     const Glyph = SURFACE_ICON[def.id];
     const pressed = surface === def.id;
     // A pressed surface hands the board back. Without it the lit command is inert, and
@@ -63,8 +71,9 @@ export function CanvasSurfaceSwitcher({ surface, onChange, variant }: CanvasSurf
     // Stable accessible name — it names the surface, not the current state, so it does
     // not change under a screen reader when the mode flips.
     const label = t(`surface.${def.id}.label` as 'surface.chat.label');
-    const activeTitle = t(`surface.${def.id}.active` as 'surface.chat.active');
-    const inactiveTitle = t(`surface.${def.id}.enter` as 'surface.chat.enter');
+    const title = pressed
+      ? t(`surface.${def.id}.active` as 'surface.chat.active')
+      : t(`surface.${def.id}.enter` as 'surface.chat.enter');
 
     if (variant === 'mobile') {
       return <button
@@ -74,17 +83,24 @@ export function CanvasSurfaceSwitcher({ surface, onChange, variant }: CanvasSurf
         onClick={press}
         aria-pressed={pressed}
         aria-label={label}
-        title={pressed ? activeTitle : inactiveTitle}
+        title={title}
       ><Glyph /></button>;
     }
 
-    return <CanvasRailToggle
+    // The label is drawn, not just announced: `aria-label` still carries it so the
+    // accessible name survives the narrow-viewport rule that hides the text.
+    return <button
       key={def.id}
-      pressed={pressed}
+      type="button"
+      className={styles.surfaceTab}
       onClick={press}
-      label={label}
-      activeTitle={activeTitle}
-      inactiveTitle={inactiveTitle}
-    ><Glyph /></CanvasRailToggle>;
-  })}</>;
+      aria-pressed={pressed}
+      aria-label={label}
+      title={title}
+    ><Glyph /><span>{label}</span></button>;
+  });
+
+  if (variant === 'mobile') return <>{tabs}</>;
+
+  return <div className={styles.surfaceTabs} role="group" aria-label={t('surface.switcher')}>{tabs}</div>;
 }

@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useToast } from '@/components/ToastProvider';
 import type { GuidedStep } from '@/lib/import-input-schema';
-import { BASE_FIELDS } from '@/lib/import-input-schema';
+import { BASE_FIELDS, fieldLabelKey } from '@/lib/import-input-schema';
 
 /**
  * Guided (Interactive) Wizard Component
@@ -33,6 +33,7 @@ const STEP_LABEL_KEYS: Record<GuidedStep, string> = {
 
 export default function GuidedWizard({ initialValues, onDataChange, onCancel }: GuidedWizardProps) {
   const t = useTranslations('import');
+  const tCommon = useTranslations('common');
   const confirmDialog = useConfirm();
   const toast = useToast();
 
@@ -184,7 +185,7 @@ export default function GuidedWizard({ initialValues, onDataChange, onCancel }: 
               {t('next')}
             </button>
             <button type="button" onClick={handleCancel} style={ghostBtnStyle}>
-              {t('cancel')}
+              {tCommon('cancel')}
             </button>
           </div>
         </div>
@@ -289,7 +290,7 @@ export default function GuidedWizard({ initialValues, onDataChange, onCancel }: 
             </button>
             <div style={{ display: 'flex', gap: 12 }}>
               <button type="button" onClick={handleCancel} style={ghostBtnStyle}>
-                {t('cancel')}
+                {tCommon('cancel')}
               </button>
               <button type="button" onClick={handleNext} style={primaryBtnStyle}>
                 {t('next')}
@@ -320,13 +321,13 @@ export default function GuidedWizard({ initialValues, onDataChange, onCancel }: 
 
           <div style={{ background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', padding: 20, marginBottom: 24 }}>
             {entries.map(([key]) => {
-              const field = BASE_FIELDS[key];
+              const label = t(fieldLabelKey(key));
               const value = key === 'enabled'
                 ? (record.enabled === 'true' ? t('yes') : t('no'))
                 : record[key] ?? '—';
               return (
                 <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-subtle)', fontSize: 14 }}>
-                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{field.label}</span>
+                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</span>
                   <span style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 12 }}>
                     <span>{value}</span>
                     {/* FR-2.6 inline edit link */}
@@ -334,9 +335,9 @@ export default function GuidedWizard({ initialValues, onDataChange, onCancel }: 
                       type="button"
                       onClick={() => setStep('step-fields')}
                       style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13, textDecoration: 'underline' }}
-                      aria-label={`${t('edit')} ${field.label}`}
+                      aria-label={`${tCommon('edit')} ${label}`}
                     >
-                      {t('edit')}
+                      {tCommon('edit')}
                     </button>
                   </span>
                 </div>
@@ -350,7 +351,7 @@ export default function GuidedWizard({ initialValues, onDataChange, onCancel }: 
             </button>
             <div style={{ display: 'flex', gap: 12 }}>
               <button type="button" onClick={handleCancel} style={ghostBtnStyle}>
-                {t('cancel')}
+                {tCommon('cancel')}
               </button>
               <button type="button" onClick={handleNext} disabled={submitting} style={primaryBtnStyle}>
                 {submitting ? t('submitting') : t('submit')}
@@ -394,8 +395,9 @@ export default function GuidedWizard({ initialValues, onDataChange, onCancel }: 
 // ── Sub-components ─────────────────────────────────────────────
 
 function ProgressBar({ current, total, labels }: { current: number; total: number; labels: string[] }) {
+  const t = useTranslations('import');
   return (
-    <nav aria-label="Progress" style={{ marginBottom: 20 }}>
+    <nav aria-label={t('progressAria')} style={{ marginBottom: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
         <span>{`${current} / ${total}`}</span>
         <span>{labels[current]}</span>

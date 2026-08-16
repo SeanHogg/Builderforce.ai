@@ -66,6 +66,7 @@ interface Props {
 
 export function MintedTenantApiKeyDisplay({ rawKey, name, onDismiss }: Props) {
   const t = useTranslations('mintedApiKey');
+  const tCommon = useTranslations('common');
   // Which of the three buttons is confirming — per-item state the shared hook's single
   // flag cannot represent, so only the write itself comes from the shared module.
   const [copied, setCopied] = useState<'key' | 'url' | 'snippet' | null>(null);
@@ -103,13 +104,13 @@ const client = new BuilderforceClient({
 
       <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
         <button type="button" onClick={() => copy('key', rawKey)} style={buttonStyle}>
-          {copied === 'key' ? `✓ ${t('copied')}` : t('copyKey')}
+          {copied === 'key' ? `✓ ${tCommon('copied')}` : t('copyKey')}
         </button>
         <button type="button" onClick={() => copy('url', BUILDERFORCE_BASE_URL)} style={buttonStyle}>
-          {copied === 'url' ? `✓ ${t('copied')}` : t('copyBaseUrl')}
+          {copied === 'url' ? `✓ ${tCommon('copied')}` : t('copyBaseUrl')}
         </button>
         <button type="button" onClick={() => copy('snippet', snippet)} style={buttonStyle}>
-          {copied === 'snippet' ? `✓ ${t('copied')}` : t('copyQuickstart')}
+          {copied === 'snippet' ? `✓ ${tCommon('copied')}` : t('copyQuickstart')}
         </button>
         <button type="button" onClick={onDismiss} style={{ ...buttonStyle, background: 'none' }}>
           {t('savedIt')}

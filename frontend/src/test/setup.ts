@@ -21,8 +21,9 @@ import { vi } from 'vitest';
  *
  * So the DOM half is behind a document check. The 23 `src/lib` files that carry
  * their own `@vitest-environment jsdom` docblock still get the matchers,
- * because they genuinely have a document; the 134 that do not, do not — and
- * none of them uses a jest-dom matcher (asserted below, so this cannot rot).
+ * because they genuinely have a document; the 134 that do not, do not — and none
+ * of them uses a jest-dom matcher, which `setupEnvironment.test.ts` asserts by
+ * reading them, so the gate cannot rot into a confusing "not a function".
  */
 if (typeof document !== 'undefined') {
   // The `/vitest` entry, not the bare package: it registers the matchers against

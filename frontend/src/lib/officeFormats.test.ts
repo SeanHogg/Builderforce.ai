@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PAGE_BREAK_MARKER, decodeXmlText, docxXmlToMarkdown, openZip, readDocx, readPptx, readXlsx, rtfToText,
+  PAGE_BREAK_MARKER, decodeXmlText, docxXmlToMarkdown, openZip, readDocx, readPdf, readPptx, readXlsx, rtfToText,
 } from './officeFormats';
 
 const encoder = new TextEncoder();
@@ -210,5 +210,84 @@ describe('rtfToText', () => {
 describe('decodeXmlText', () => {
   it('decodes named and numeric entities', () => {
     expect(decodeXmlText('a &amp; b &lt;c&gt; &#8212; &#x2014;')).toBe('a & b <c> — —');
+  });
+});
+
+/**
+ * A PDF written the way every modern producer writes one: a subset CID font
+ * under `/Encoding /Identity-H`, hex strings holding GLYPH INDICES rather than
+ * characters, and a `/ToUnicode` CMap that maps them back. Assembled here rather
+ * than checked in as a binary so the shape under test is readable, and written
+ * with uncompressed streams so the assertions are about the parser and not about
+ * the platform's inflate.
+ */
+function makePdf(options: { contentsAsArrayObject?: boolean } = {}): Uint8Array {
+  // Glyph indices are arbitrary; the CMap below is the only thing that gives
+  // them meaning, which is exactly the property under test.
+  const glyphs: Record<string, string> = { S: '0024', e: '0048', a: '0044', n: '0051', ' ': '0003', H: '002B', o: '0052', g: '004A' };
+  const hex = (word: string) => [...word].map((character) => glyphs[character] ?? '0003').join('');
+  const cmap = [
+    '/CIDInit /ProcSet findresource begin 12 dict begin begincmap',
+    '1 begincodespacerange <0000> <FFFF> endcodespacerange',
+    `${Object.keys(glyphs).length} beginbfchar`,
+    ...Object.entries(glyphs).map(([character, code]) => `<${code}> <${character.charCodeAt(0).toString(16).padStart(4, '0')}>`),
+    'endbfchar',
+    'endcmap CMapName currentdict /CMap defineresource pop end end',
+  ].join('\n');
+  const content = [
+    'BT', '/F1 12 Tf', '1 0 0 -1 72 100 Tm', `[<${hex('Sean Hogg')}>] TJ`, 'ET',
+    'BT', '/F1 12 Tf', '1 0 0 -1 72 120 Tm', `[<${hex('Sean')}>] TJ`, 'ET',
+  ].join('\n');
+
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    options.contentsAsArrayObject
+      ? '<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 5 0 R >> >> /Contents 9 0 R >>'
+      : '<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    '<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAA+Test /Encoding /Identity-H /DescendantFonts [ << /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAA+Test /DW 600 /W [3 [300]] >> ] /ToUnicode 6 0 R >>',
+    `<< /Length ${cmap.length} >>\nstream\n${cmap}\nendstream`,
+    '<< /Unused true >>',
+    '<< /Unused true >>',
+    '[ 4 0 R ]',
+  ];
+  const body = objects.map((dict, index) => `${index + 1} 0 obj\n${dict}\nendobj\n`).join('');
+  return encoder.encode(`%PDF-1.7\n${body}trailer\n<< /Root 1 0 R >>\n%%EOF\n`);
+}
+
+describe('readPdf', () => {
+  it('reads a subset CID font through its ToUnicode CMap instead of showing glyph indices', async () => {
+    const document = await readPdf(makePdf());
+    expect(document?.pageCount).toBe(1);
+    expect(document?.text).toContain('Sean Hogg');
+  });
+
+  it('keeps separately positioned lines apart', async () => {
+    const document = await readPdf(makePdf());
+    expect(document?.text?.split('\n').filter(Boolean)).toEqual(['Sean Hogg', 'Sean']);
+  });
+
+  it('follows a /Contents reference that points at an array of streams', async () => {
+    const document = await readPdf(makePdf({ contentsAsArrayObject: true }));
+    expect(document?.text).toContain('Sean Hogg');
+  });
+
+  it('is null for bytes that are not a PDF', async () => {
+    expect(await readPdf(encoder.encode('# Just markdown'))).toBeNull();
+  });
+
+  it('reports pages without text rather than pretending to have read them', async () => {
+    const page = '<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>';
+    const drawing = '0 0 612 792 re\nf';
+    const body = [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      page,
+      `<< /Length ${drawing.length} >>\nstream\n${drawing}\nendstream`,
+    ].map((dict, index) => `${index + 1} 0 obj\n${dict}\nendobj\n`).join('');
+    const document = await readPdf(encoder.encode(`%PDF-1.7\n${body}%%EOF\n`));
+    expect(document?.pageCount).toBe(1);
+    expect(document?.text).toBeNull();
   });
 });

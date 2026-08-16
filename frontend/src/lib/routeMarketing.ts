@@ -373,6 +373,24 @@ export function indexableTeaserRoutes(): string[] {
 }
 
 /**
+ * The teaser routes that must stay OUT of the index, as paths.
+ *
+ * The third consumer of the same decision, and the reason it is derived: a
+ * static `public/robots.txt` disallowed `/projects`, `/security`, `/skills`,
+ * `/personas`, `/workforce`, `/brainstorm` and `/training` while `sitemap.ts`
+ * submitted every one of them and the page's own robots meta said `index`. Three
+ * files, three answers, and the sitemap's answer was the one nobody could act on
+ * — a crawler that is told not to fetch a URL never reads the meta tag that
+ * would have let it in.
+ */
+export function noindexTeaserRoutes(): string[] {
+  const destinations = destinationTeaserRoutes()
+    .filter(({ group }) => isNoindexDestination(group))
+    .map(({ route }) => route);
+  return [...new Set([...NOINDEX_TEASER_ROUTES, ...destinations])].sort();
+}
+
+/**
  * Should this route tell crawlers to stay away? Consumed by robots metadata.
  *
  * The generic tier is noindex BY DEFAULT, and that is the interesting half: its
@@ -381,10 +399,16 @@ export function indexableTeaserRoutes(): string[] {
  * place in the index by being a marketed surface or a named destination.
  */
 export function isNoindexTeaserRoute(pathname: string): boolean {
-  if (NOINDEX_TEASER_ROUTES.has(pathname)) return true;
-  if (getRouteMarketing(pathname)) return false;
+  // Which surface's copy this route renders — its own, or the one it INHERITS by
+  // prefix. The distinction decides the next two lines: `/admin/sales` renders
+  // Platform Admin's copy without ever having been marketed, and an exact-match
+  // test let it back into the index under a route whose parent is excluded.
+  const marketed = REGISTRY[pathname] ? pathname : longestPrefixMatch(pathname, REGISTRY)?.key;
+  if (marketed && NOINDEX_TEASER_ROUTES.has(marketed)) return true;
+  if (REGISTRY[pathname]) return false;
   const group = destinationForRoute(pathname);
-  return group ? isNoindexDestination(group) : true;
+  if (group) return isNoindexDestination(group);
+  return !marketed;
 }
 
 /** Longest-prefix match of `pathname` against a `key → value` map. */

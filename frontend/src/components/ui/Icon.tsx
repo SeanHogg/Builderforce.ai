@@ -128,8 +128,23 @@ const PATHS: Record<IconName, ReactNode> = {
   workspace: <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 9v11"/></>,
 };
 
+/**
+ * U+FE0E / U+FE0F are presentation selectors: `✉` and `✉️` are the same glyph to
+ * a reader and two different strings to a `Record`. That is why the map above
+ * grew pairs — `⚙`/`⚙️`, `🛠`/`🛠️`, `🗺`/`🗺️` — one per time somebody hit it, and
+ * why the Inbox rail's `✉` fell through the `'✉️'` entry to the fallback and
+ * rendered a grid of squares on its marketing page. Normalizing the KEYS as well
+ * as the lookup retires the whole class rather than adding a twelfth pair.
+ */
+const stripPresentationSelectors = (value: string): string => value.replace(/[\uFE0E\uFE0F]/g, '');
+
+const ICON_BY_SOURCE: Record<string, IconName> = Object.fromEntries(
+  Object.entries(LEGACY_ICON).map(([source, name]) => [stripPresentationSelectors(source), name]),
+);
+
 export function iconName(source: string): IconName {
-  return LEGACY_ICON[source] ?? (source in PATHS ? source as IconName : 'apps');
+  const key = stripPresentationSelectors(source);
+  return ICON_BY_SOURCE[key] ?? (key in PATHS ? key as IconName : 'apps');
 }
 
 export function Icon({ name, source, size = 20, ...props }: {

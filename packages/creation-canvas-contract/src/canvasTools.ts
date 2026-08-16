@@ -97,6 +97,13 @@ export const GUEST_SAFE_CANVAS_TOOLS = [
   // work. Gating it would leave `canvas_add_object` as the only route, which is the
   // path that spent four minutes retyping the document and produced nothing.
   'canvas_render_resume_variants',
+  // The step BEFORE both of those, and guest-safe for the same reason: it reads text
+  // the visitor's own browser already extracted from the file they dropped, and runs
+  // the deterministic JSON Resume reader over it — no network, no tenant, no model.
+  // Gating it would leave a logged-out visitor with their CV on the board and no way
+  // to make it a résumé, which is the exact dead end that had the model asking people
+  // to paste a document the canvas was already holding.
+  'canvas_import_resume',
   // The free diagnostics and calculators. `GET /api/tools`, `GET /api/tools/:id` and
   // `POST /api/tools/:id/compute` are unauthenticated by design (they power the
   // marketing surface), so a visitor asking "how mature is our delivery?" gets a real

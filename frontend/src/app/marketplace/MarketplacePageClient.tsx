@@ -7,7 +7,7 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { contrastText } from '@/lib/contrastText';
@@ -36,7 +36,10 @@ import ArtifactAssigner from '@/components/ArtifactAssigner';
 import { KnowledgeMarketSection } from './KnowledgeMarketSection';
 import { CreationsSection } from './CreationsSection';
 import { SellerEarnings } from './SellerEarnings';
-import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { type ViewMode } from '@/components/ViewToggle';
+import { CatalogToolbar } from '@/components/CatalogToolbar';
+import { Pagination } from '@/components/Pagination';
+import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { AgentCard } from '@/components/workforce/AgentCard';
 import { AgentOwnerActions } from '@/components/workforce/AgentOwnerActions';
@@ -91,6 +94,9 @@ const VIEW_TOGGLE_SECTIONS = new Set<MarketplaceCategory>(['all', 'personas', 's
 const TALENT_DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
 
 const TALENT_PAGE_SIZE = 24;
+
+/** Rows per page for the in-memory grids (listings, agents). */
+const GRID_PAGE_SIZE = 12;
 
 const talentCardStyle: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18,
@@ -222,6 +228,10 @@ export default function MarketplacePageClient() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<MarketplaceCategory>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('card');
+  // One page cursor for the two in-memory grids (listings and agents). They are
+  // never on screen together, so a second piece of state would only be a second
+  // thing to remember to reset.
+  const [gridPage, setGridPage] = useState(1);
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
   const [stats, setStats] = useState<Record<string, ArtifactStats>>({});
   const [installed, setInstalled] = useState<Set<string>>(new Set());
@@ -536,6 +546,56 @@ export default function MarketplacePageClient() {
         (a.skills && a.skills.some((s) => s.toLowerCase().includes(q)))
     );
 
+  // ── Paging for the two in-memory grids ───────────────────────────────────
+  // The listing and agent grids rendered every match at once, which is why the
+  // storefront's "all" view grew to a scroll of a hundred-odd cards. Both page
+  // through the SAME shared control the blog and the prompt library use.
+  const listingPages = Math.max(1, Math.ceil(filtered.length / GRID_PAGE_SIZE));
+  const agentPages = Math.max(1, Math.ceil(filteredAgents.length / GRID_PAGE_SIZE));
+  const pagedPages = category === 'workforce' ? agentPages : listingPages;
+  const pagedPage = Math.min(gridPage, pagedPages);
+  const pageSlice = <T,>(rows: T[]): T[] =>
+    rows.slice((pagedPage - 1) * GRID_PAGE_SIZE, pagedPage * GRID_PAGE_SIZE);
+  const visibleListings = pageSlice(filtered);
+  const visibleAgents = pageSlice(filteredAgents);
+
+  // Narrowing the results returns to page 1, or a filter applied from page 4
+  // lands on an empty grid.
+  useEffect(() => { setGridPage(1); }, [search, family, kind, category, viewMode]);
+
+  /**
+   * How many rows the toolbar reports.
+   *
+   * Only the sections whose result set THIS component owns can be counted here;
+   * the ones that fetch their own rows (creations, knowledge, models, gigs)
+   * report their own, so a count is omitted rather than guessed.
+   */
+  const resultCount =
+    category === 'workforce' ? filteredAgents.length
+    : category === 'talent' ? talentTotal
+    : category === 'personas' || category === 'skills' || category === 'all' ? filtered.length
+    : undefined;
+
+  // The insights strip reads the listings this component holds — the personas
+  // and skills whose rows carry installs and likes. The families that fetch
+  // their own rows have their own counters and are left to them.
+  const insightItems: CatalogInsightsItem[] = useMemo(() => {
+    if (!(category === 'personas' || category === 'skills' || category === 'all')) return [];
+    return filtered.map((item) => {
+      const stat = stats[key(item.type, item.artifactSlug)];
+      return {
+        key: item.id,
+        name: item.name,
+        group: item.type,
+        primary: stat?.installs ?? item.downloads,
+        secondary: stat?.likes ?? item.likes,
+      };
+    });
+    // `filtered` is derived fresh each render, so the memo keys off the inputs
+    // that actually decide it rather than off its identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listings, stats, search, category]);
+
   const handleHire = useCallback(async (agentId: string) => {
     // Hiring requires an account — route anonymous users to sign in (mirrors the
     // Publish tab gate) instead of firing an auth-only POST that 401s silently.
@@ -661,42 +721,20 @@ export default function MarketplacePageClient() {
           filter. Renders nothing for somebody who has published nothing. */}
       <SellerEarnings />
 
-      <div
-        style={{
-          position: 'sticky',
-          top: -16,
-          zIndex: 15,
-          background: 'color-mix(in srgb, var(--bg) 68%, transparent)',
-          backdropFilter: 'blur(6px)',
-          padding: '12px 0 16px',
-          display: 'flex',
-          alignItems: isMobile ? 'stretch' : 'center',
-          flexDirection: isMobile ? 'column' : 'row',
-          gap: 12,
-          flexWrap: 'wrap',
-          marginBottom: 16,
-          borderBottom: '1px solid var(--border)',
-        }}
+      {/* The shared catalogue toolbar — the same control set /prompts and /blog
+          carry, so the three browsing surfaces read identically. Only the views
+          that actually READ `viewMode` are handed the toggle: an inclusion list,
+          because the exclusion list it replaced kept handing a dead control to
+          every section added after it. */}
+      <CatalogToolbar
+        sticky
+        search={search}
+        onSearch={setSearch}
+        searchPlaceholder={searchPlaceholder}
+        view={VIEW_TOGGLE_SECTIONS.has(category) ? viewMode : undefined}
+        onView={VIEW_TOGGLE_SECTIONS.has(category) ? setViewMode : undefined}
+        resultCount={resultCount}
       >
-        <input
-          type="search"
-          placeholder={searchPlaceholder}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{
-            flex: 1,
-            minWidth: isMobile ? 0 : 200,
-            maxWidth: isMobile ? '100%' : 360,
-            width: isMobile ? '100%' : undefined,
-            padding: '8px 12px',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--border)',
-            background: 'var(--bg-elevated)',
-            color: 'var(--text)',
-            fontSize: 'var(--font-size-small)',
-          }}
-          aria-label={searchPlaceholder}
-        />
         {/* Talent-only sub-filters (discipline + sort) mirror the retired /talent page. */}
         {category === 'talent' && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
@@ -722,15 +760,19 @@ export default function MarketplacePageClient() {
             </Select>
           </div>
         )}
-        {/* Only the views that actually READ `viewMode` offer the toggle — an
-            inclusion list, because the exclusion list it replaced kept handing a
-            dead control to every section added after it. */}
-        {VIEW_TOGGLE_SECTIONS.has(category) && (
-          <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
-            <ViewToggle value={viewMode} onChange={setViewMode} />
-          </div>
-        )}
-      </div>
+      </CatalogToolbar>
+
+      {/* The corpus at a glance, for the two families whose rows carry
+          engagement numbers. Self-gating: renders nothing without signal. */}
+      {category !== 'publish' && insightItems.length > 0 && (
+        <CatalogInsightsBar
+          entity="listings"
+          items={insightItems}
+          primaryMetric="installs"
+          secondaryMetric="likes"
+          groupKind="category"
+        />
+      )}
 
       {category === 'publish' ? (
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
@@ -878,15 +920,9 @@ export default function MarketplacePageClient() {
                 </Link>
               ))}
             </div>
-            {talentPages > 1 && (
-              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center', marginTop: 24 }}>
-                <button type="button" disabled={talentPage <= 1} onClick={() => setTalentPage((p) => p - 1)}
-                  style={{ ...filterControlStyle, cursor: talentPage <= 1 ? 'default' : 'pointer', opacity: talentPage <= 1 ? 0.5 : 1 }}>←</button>
-                <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{tt('filter.pageOf', { page: talentPage, pages: talentPages })}</span>
-                <button type="button" disabled={talentPage >= talentPages} onClick={() => setTalentPage((p) => p + 1)}
-                  style={{ ...filterControlStyle, cursor: talentPage >= talentPages ? 'default' : 'pointer', opacity: talentPage >= talentPages ? 0.5 : 1 }}>→</button>
-              </div>
-            )}
+            {/* Server-paged, so it takes the compact density — a numbered strip
+                would advertise pages this grid has not fetched. */}
+            <Pagination compact page={talentPage} pageCount={talentPages} onChange={setTalentPage} />
           </>
         )
       ) : category === 'company' ? (
@@ -939,7 +975,7 @@ export default function MarketplacePageClient() {
                 </tr>
               </thead>
               <tbody>
-                {filteredAgents.map((agent) => {
+                {visibleAgents.map((agent) => {
                   const owner = isAgentOwner(agent, tenant?.id);
                   return (
                   <tr key={agent.id} style={trStyle}>
@@ -991,7 +1027,7 @@ export default function MarketplacePageClient() {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 16 }}>
-            {filteredAgents.map((agent) => (
+            {visibleAgents.map((agent) => (
               <AgentCard
                 key={agent.id}
                 agent={agent}
@@ -1007,6 +1043,7 @@ export default function MarketplacePageClient() {
             ))}
           </div>
         )}
+        <Pagination page={pagedPage} pageCount={agentPages} onChange={setGridPage} />
         {/* An agent published off the canvas is a community agent — same chip,
             same grid, one catalogue rather than two that never meet. */}
         {creationKind && <CreationsSection search={search} kind={creationKind} />}
@@ -1031,7 +1068,7 @@ export default function MarketplacePageClient() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((item) => {
+              {visibleListings.map((item) => {
                 const typeIcon = item.emoji ?? (item.type === 'persona' ? '🎭' : '⚡');
                 const k = key(item.type, item.artifactSlug);
                 const stat = stats[k] ?? { likes: item.likes, installs: item.downloads, liked: false };
@@ -1113,7 +1150,7 @@ export default function MarketplacePageClient() {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-          {filtered.map((item) => {
+          {visibleListings.map((item) => {
             const typeColor = item.type === 'persona' ? 'var(--accent)' : 'var(--success)';
             const typeIcon = item.emoji ?? (item.type === 'persona' ? '🎭' : '⚡');
             const k = key(item.type, item.artifactSlug);
@@ -1258,6 +1295,12 @@ export default function MarketplacePageClient() {
             );
           })}
         </div>
+      )}
+
+      {/* The listing grids' pager. The workforce grid carries its own above,
+          and the self-fetching sections page their own rows. */}
+      {(category === 'all' || category === 'personas' || category === 'skills') && (
+        <Pagination page={pagedPage} pageCount={listingPages} onChange={setGridPage} />
       )}
 
       {/* One line saying what this family IS, so the four are distinguishable

@@ -3,7 +3,7 @@
 import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
@@ -14,9 +14,13 @@ import {
   type CreatePromptBody,
 } from '@/lib/builderforceApi';
 import { getStoredUser } from '@/lib/auth';
-import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { type ViewMode } from '@/components/ViewToggle';
+import { CatalogToolbar } from '@/components/CatalogToolbar';
+import { FilterChips, type FilterChip } from '@/components/FilterChips';
+import { Pagination } from '@/components/Pagination';
 import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
 import { PromptVersionDiff } from '@/components/prompts/PromptVersionDiff';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import type { PromptAnalysis } from '@/lib/builderforceApi';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
@@ -30,8 +34,12 @@ const card: React.CSSProperties = {
 
 type Tab = 'public' | 'mine';
 
+/** Prompts per page. Matches the marketplace's grid so the two pages page alike. */
+const PAGE_SIZE = 12;
+
 export default function PromptsPage() {
   const t = useTranslations('promptsPage');
+  const tCommon = useTranslations('common');
   const isAuthed = !!getStoredUser();
   const [tab, setTab] = useState<Tab>('public');
   const [prompts, setPrompts] = useState<PromptSummary[]>([]);
@@ -39,6 +47,8 @@ export default function PromptsPage() {
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [sort, setSort] = useState<'popular' | 'recent' | 'featured'>('popular');
+  const [category, setCategory] = useState('');
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<PromptPublicView | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -73,6 +83,36 @@ export default function PromptsPage() {
   }, [tab, q, sort]);
   useBrainDataRefresh(['prompts'], reloadPrompts);
 
+  // Categories are DERIVED from the loaded corpus, never declared: the field is
+  // free text on the create form, so a hand-kept list would be wrong the first
+  // time somebody publishes a prompt under a category nobody thought of.
+  const categoryChips: FilterChip[] = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of prompts) {
+      const key = p.category?.trim();
+      if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [
+      { id: '', label: t('allCategories'), count: prompts.length },
+      ...[...counts.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([id, count]) => ({ id, label: id, count })),
+    ];
+  }, [prompts, t]);
+
+  const results = useMemo(
+    () => (category ? prompts.filter((p) => p.category?.trim() === category) : prompts),
+    [prompts, category],
+  );
+
+  const pageCount = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const visible = results.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Any narrowing returns to page 1 — otherwise a filter applied from page 4
+  // lands on an empty grid.
+  useEffect(() => { setPage(1); }, [category, tab, sort]);
+
   const openDetail = async (p: PromptSummary) => {
     try {
       const view = await promptLibraryApi.getPublic(p.slug);
@@ -91,7 +131,7 @@ export default function PromptsPage() {
       // Shared write; a refused clipboard resolves false rather than throwing, so the
       // usage-count update below still runs exactly as it did with the old `.catch(() => {})`.
       await copyTextToClipboard(fresh.body);
-      setToast(t('copiedToast'));
+      setToast(tCommon('copied'));
       setSelected(fresh);
       setPrompts((prev) => prev.map((x) => (x.slug === p.slug ? { ...x, usageCount: fresh.usageCount } : x)));
       setTimeout(() => setToast(null), 2500);
@@ -126,52 +166,61 @@ export default function PromptsPage() {
         />
       )}
 
-      {/* Tabs + view toggle */}
+      {/* Tabs — WHOSE prompts, above the controls that browse them. */}
       <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
         <button type="button" className={`btn ${tab === 'public' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('public')}>{t('tabPublic')}</button>
         {isAuthed && <button type="button" className={`btn ${tab === 'mine' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('mine')}>{t('tabMine')}</button>}
-        <div style={{ marginLeft: 'auto' }}>
-          <ViewToggle value={viewMode} onChange={setViewMode} />
-        </div>
       </div>
 
-      {/* Search + sort (public gallery) */}
-      {tab === 'public' && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-          <input
-            type="search"
-            className="input"
-            style={{ maxWidth: 320 }}
-            placeholder={t('searchPlaceholder')}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') loadPublic(q); }}
-          />
-          <Select className="input" style={{ maxWidth: 150 }} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
-            <option value="popular">{t('sortPopular')}</option>
-            <option value="recent">{t('sortRecent')}</option>
-            <option value="featured">{t('sortFeatured')}</option>
-          </Select>
-        </div>
-      )}
-
-      {tab === 'public' && !loading && !error && (
+      {!loading && !error && (
         <CatalogInsightsBar
           entity="prompts"
           items={prompts.map((p): CatalogInsightsItem => ({ key: p.id, name: p.title, group: p.category ?? null, primary: p.usageCount, secondary: p.starCount }))}
           primaryMetric="usage"
           secondaryMetric="stars"
           groupKind="category"
-          showTrend={isAuthed}
+          showTrend={isAuthed && tab === 'public'}
         />
       )}
+
+      {!loading && !error && (
+        <div style={{ marginBottom: 12 }}>
+          <FilterChips chips={categoryChips} value={category} onChange={setCategory} ariaLabel={t('categoryLabel')} />
+        </div>
+      )}
+
+      {/* Search + sort + count + view — the same bar the marketplace and the blog
+          carry, so the three catalogues browse identically. */}
+      <CatalogToolbar
+        search={q}
+        onSearch={setQ}
+        onSubmit={() => { if (tab === 'public') loadPublic(q); }}
+        searchPlaceholder={t('searchPlaceholder')}
+        view={viewMode}
+        onView={setViewMode}
+        resultCount={loading ? undefined : results.length}
+      >
+        {tab === 'public' && (
+          <Select
+            className="input"
+            style={{ maxWidth: 160 }}
+            value={sort}
+            onChange={(e) => setSort(e.target.value as typeof sort)}
+            aria-label={t('sortLabel')}
+          >
+            <option value="popular">{t('sortPopular')}</option>
+            <option value="recent">{t('sortRecent')}</option>
+            <option value="featured">{t('sortFeatured')}</option>
+          </Select>
+        )}
+      </CatalogToolbar>
 
       {loading && <div style={card}>{t('loading')}</div>}
       {error && <div style={{ ...card, borderColor: 'var(--danger)', color: 'var(--danger)' }}>{error}</div>}
 
       {!loading && !error && viewMode === 'card' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-          {prompts.map((p) => (
+          {visible.map((p) => (
             <button key={p.id} onClick={() => openDetail(p)} style={{ ...card, textAlign: 'left', cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontWeight: 700, fontSize: 'var(--font-size-body)' }}>{p.title}</span>
@@ -189,7 +238,7 @@ export default function PromptsPage() {
               </div>
             </button>
           ))}
-          {prompts.length === 0 && (
+          {results.length === 0 && (
             <div style={{ ...card, gridColumn: '1 / -1', color: 'var(--text-muted)' }}>
               {tab === 'mine' ? t('emptyMine') : t('emptyPublic')}
             </div>
@@ -198,7 +247,7 @@ export default function PromptsPage() {
       )}
 
       {!loading && !error && viewMode === 'table' && (
-        prompts.length === 0 ? (
+        results.length === 0 ? (
           <div style={{ ...card, color: 'var(--text-muted)' }}>
             {tab === 'mine' ? t('emptyMine') : t('emptyPublic')}
           </div>
@@ -216,7 +265,7 @@ export default function PromptsPage() {
                 </tr>
               </thead>
               <tbody>
-                {prompts.map((p) => (
+                {visible.map((p) => (
                   <tr key={p.id} style={trStyle}>
                     <td style={{ ...tdStyle, fontWeight: 600 }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -229,7 +278,7 @@ export default function PromptsPage() {
                     <td style={tdMutedStyle}>{p.starCount}</td>
                     <td style={tdMutedStyle}>{p.authorName ?? '—'}</td>
                     <td style={tdStyle}>
-                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => openDetail(p)}>{t('view')}</button>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => openDetail(p)}>{tCommon('view')}</button>
                     </td>
                   </tr>
                 ))}
@@ -238,6 +287,8 @@ export default function PromptsPage() {
           </div>
         )
       )}
+
+      {!loading && !error && <Pagination page={currentPage} pageCount={pageCount} onChange={setPage} />}
 
       {selected && (
         <PromptDetail
@@ -298,13 +349,20 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
   };
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 90, display: 'flex', justifyContent: 'flex-end' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(560px, 100%)', height: '100%', background: 'var(--bg-base)', borderLeft: '1px solid var(--border-subtle)', padding: 24, overflowY: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-          <h2 style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 700, margin: 0 }}>{prompt.title}</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 'var(--font-size-section)', cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
-        </div>
-        {prompt.description && <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)' }}>{prompt.description}</p>}
+    // The canonical drawer, not a hand-rolled one: this panel used to declare its
+    // own scrim, its own 560px box and its own `×`, which is how it shipped
+    // without Esc, without a portal (so it stacked under the marketing header)
+    // and without the reader's width control.
+    <SlideOutPanel
+      open
+      onClose={onClose}
+      title={prompt.title}
+      crumb={t('title')}
+      width="sheet"
+      widthStorageKey="prompts"
+    >
+      <div style={{ padding: 24 }}>
+        {prompt.description && <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', marginTop: 0 }}>{prompt.description}</p>}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0 16px' }}>
           {prompt.category && <span className="badge badge-gray">{prompt.category}</span>}
           {prompt.tags.map((t) => <span key={t} className="badge badge-gray">#{t}</span>)}
@@ -364,12 +422,13 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
           {prompt.authorName && <span>{t('byAuthor', { name: prompt.authorName })}</span>}
         </div>
       </div>
-    </div>
+    </SlideOutPanel>
   );
 }
 
 function CreatePromptForm({ onCreated, onError }: { onCreated: () => void; onError: (e: string) => void }) {
   const t = useTranslations('promptsPage');
+  const tCommon = useTranslations('common');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
@@ -432,7 +491,7 @@ function CreatePromptForm({ onCreated, onError }: { onCreated: () => void; onErr
         />
         <div>
           <button type="button" className="btn btn-primary" onClick={submit} disabled={saving}>
-            {saving ? t('savingLabel') : t('createSubmit')}
+            {saving ? tCommon('saving') : t('createSubmit')}
           </button>
         </div>
       </div>

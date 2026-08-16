@@ -1,3 +1,64 @@
+## ✅ RESOLVED 2026-08-15 — 61 authenticated routes met one generic sentence; they now meet their destination and the method (frontend 2026.8.27)
+
+**The gap.** `https://builderforce.ai/inbox`, signed out, rendered a lock glyph over "This is part of
+Builderforce.ai" and a paragraph that named no page, no feature and no reason to want an account. So did
+`/insights`, `/incidents`, `/growth`, every `/seat/*`, every `/freelancer/*` and 55 others: `routeMarketing.ts`
+hand-writes copy for 25 surfaces, and everything else fell to one `DEFAULT` constant. The teaser is the LAST
+thing a locked-out visitor sees, and for two thirds of the product it was the closest thing to a 404 a working
+page can be.
+
+**Three tiers instead of one default.** `getRouteMarketing()` now returns `null` rather than a default — a
+default returned from the registry is a default nobody can see coming — and `<RouteMarketing>` resolves the
+fallbacks it alone can choose between:
+
+1. **Marketed surface** — hand-authored hero, highlights, FAQ. Unchanged.
+2. **Destination** — no entry, but the route belongs to a `NAV_GROUPS` row, resolved with `findActiveGroup`,
+   *the same function that decides which rail row is lit for a signed-in user*. The hero is the destination's
+   own `nav.group.*` name, its icon and a `routeMarketing.destination.*` pitch; the "what's inside" band is its
+   tab list, rendered from `nav.tab.*`. Nothing is retyped, so a new destination is a marketing page the day it
+   is a menu row — **in five languages** — or `routeMarketing.test.ts` + `messages.test.ts` fail.
+3. **Generic** — neither of those. The METHOD, not a lock: `<MethodologySection>` with the arc, Read → Prove →
+   Build, and the eight proof forms, under "Idea to real, on one canvas".
+
+**The method now renders on every teaser**, with `activeStage` marking where THIS destination sits in the arc
+("Inbox is a RUN surface — you are here"), which turns a generic band into an answer about the page the visitor
+was actually denied. A route that carries its own highlights shows the loop alone; one that has nothing else to
+say shows the full catalogue.
+
+**Four defects found on the way, all fixed in the same pass.**
+- **`/brainstorm` and `/training` carried a full body and no base row**, so their highlights and FAQ rendered
+  under the generic hero — a Brain Storm page titled "This is part of Builderforce.ai" for months. A `DETAILS`
+  key without a `REGISTRY` base is now a test failure.
+- **Surface `href`s were used as registry KEYS**, so `/projects?tab=portfolio` and the VS Code marketplace URL
+  registered keys no pathname can equal, and last-wins had `/projects` titled "Workforce Kanban & Templates".
+  Query stripped, external links skipped, first-wins.
+- **`robots.txt` contradicted the sitemap and won.** A static `public/robots.txt` last touched in April
+  disallowed `/projects`, `/security`, `/skills`, `/personas`, `/workforce`, `/brainstorm`, `/training`,
+  `/content-manager` and `/workflows` — nine routes `sitemap.ts` submits and the pages themselves declare
+  indexable. A `Disallow` beats a `<meta name=robots>`, because the crawler never fetches the page to read the
+  meta, so those pages could not rank at all. It is now `app/robots.ts`, DERIVED from
+  `noindexTeaserRoutes()` — one registry feeding robots, sitemap and meta, with `robots.test.ts` asserting the
+  three cannot disagree. `/embed/` keeps its trailing slash so the prefix does not swallow `/embedded`.
+- **`✉` ≠ `✉️`.** The Inbox rail writes the bare glyph, `LEGACY_ICON` held the presentation-selector form, and
+  the hero rendered fallback squares. `iconName()` normalizes U+FE0E/U+FE0F on both the keys and the lookup,
+  which retires the whole class (the map had already grown `⚙`/`⚙️`, `🛠`/`🛠️`, `🗺`/`🗺️` pairs one incident at
+  a time).
+
+**Indexing is now decided once.** An operator console or a personal console (`/admin`, `/admin/sales`,
+`/settings`, `/tenants`, `/agent-worker`, `/sales`, `/freelancer/*` — superadmin rows DERIVED, never listed)
+stays out; a named destination goes in; and the generic tier is `noindex` by construction, because the same
+body at forty URLs is duplicate content by definition.
+
+**Files touched.** `lib/routeMarketing.ts` (+`destinationForRoute`, `noindexTeaserRoutes`, three-tier
+resolution), `components/RouteMarketing.tsx`, `components/marketing/MethodologySection.tsx` + `.module.css`
+(`activeStage`), `components/ui/Icon.tsx`, `app/robots.ts` (new; `public/robots.txt` deleted),
+`i18n/messages/{en,zh,es,fr,de}.json` (28 destination pitches + generic hero + `insideHeading` +
+`methodology.youAreHere`, real translations in all five), and new/updated tests: `lib/routeMarketing.test.ts`
+(14), `app/robots.test.ts` (5), `Icon.test.tsx` (+1), `i18n/messages.test.ts` (destination ratchet).
+**Verified:** 8/8 frontend guards, `tsgo --noEmit` clean, and rendered in a real browser at 1280 and 360 px in
+both themes — `/inbox` → "Inbox", `/insights` → 9 tab chips + "you are here" on Measure, `/compile` → the
+method, zero horizontal overflow.
+
 ## ✅ RESOLVED 2026-08-16 — A 401 nobody could have avoided stopped filing itself as a support ticket (frontend 2026.8.26)
 
 **The gap.** A support ticket arrived at 01:05 UTC reporting `401 Missing or malformed Authorization

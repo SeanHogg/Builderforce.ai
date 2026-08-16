@@ -42,13 +42,14 @@
 import {
   analyzeSalary, auditProfile, buildCoachingPlan, buildInterviewKit, compareOffers,
   compareOptions, compareResumeToJob, computeRunway, consolidateResumes, draftListingFromResume,
-  employerResearchBrief, extractSkills, listingReadiness, optimizeResume, parseResume,
+  employerResearchBrief, extractSkills, listingReadiness, optimizeResume,
   planForTarget, profileBlocks, PROFILE_VENDORS, roastResume, ROLE_PROFILES, resumeSentiment,
   screenCandidate, scoreResume, suggestTargets, summarizeResume, tailorResume, valueProposition,
   normalizeSeeking, normalizeWorkMode, postingTypesFor,
   type CareerListing, type InterviewType, type OfferInput, type ProfileVendor, type SeekingMode,
   type WorkOption,
 } from '../career';
+import { parseResume } from '@builderforce/creation-canvas-contract';
 import { replayRoute, type BuiltinCtx, type BuiltinTool } from './builtinToolContext';
 
 type Json = Record<string, unknown>;
