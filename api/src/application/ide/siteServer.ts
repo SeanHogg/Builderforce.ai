@@ -310,6 +310,7 @@ async function handleSiteApi(
     ipHash,
     userAgent: request.headers.get('user-agent'),
     referrer: request.headers.get('referer'),
+    env,
   });
 
   if (!result.ok) return jsonResponse({ error: result.error }, result.status);
@@ -510,7 +511,12 @@ export async function tryServeHostedSite(
   // authored one.
   if (landingPageApplies(site, url)) {
     const visitor = await resolveSiteVisitor(env, buildDatabase(env), site, request);
-    if (!visitor.entitled) {
+    // A not-yet-entitled visitor sees the shop window to subscribe, same as always.
+    // A LIVE subscriber holding an old version sees it ONCE MORE, on this same
+    // document, for the commerce widget to offer the update — never a second
+    // rendering, and `ENTER_APP_PARAM` (already respected by `landingPageApplies`)
+    // is how either visitor reaches the app instead.
+    if (!visitor.entitled || visitor.updateAvailable) {
       const landing = await serveLandingDocument(env, site);
       if (landing) {
         await count(landing.bytes, true);

@@ -32,6 +32,9 @@ const AUTHORING_SURFACE: Partial<Record<CreationObjectKind, CanvasSurfaceId>> = 
   website: 'site', prototype: 'site',
   // Time. Both kinds persist a `CanvasVideoTimeline`, which is tracks × seconds.
   video: 'timeline', voice: 'timeline',
+  // A place: camera, props, colliders. No card can preview a space you walk through,
+  // any more than one previews a running build — same reason `game` opens in `play`.
+  world: 'world',
 };
 
 /**

@@ -285,6 +285,14 @@ export const tasks = pgTable('tasks', {
    *  sync on publish so the board can badge "Published" without a reverse scan. */
   hireable:          boolean('hireable').notNull().default(false),
   jobPostingId:      varchar('job_posting_id', { length: 36 }),
+  /** App-user loop (0920, R10): this ticket was RAISED by a submission to a
+   *  `site_collections.raises_tickets` collection, and the back-ref to that
+   *  submission. Same shape as jobPostingId just above — a plain, FK-less column;
+   *  the growth domain (`site_records`) is the owner and delivery references it
+   *  only by id. Null on every ticket opened any other way. Read backwards by
+   *  {@link notifySiteRecordTicketDone} when the ticket reaches Done, which is the
+   *  return leg that closes the loop back to the person who reported it. */
+  originSiteRecordId: bigint('origin_site_record_id', { mode: 'number' }),
   /** Lifecycle metrics (migration 0117). completedAt is the REAL timestamp the
    *  task entered a done-class lane (replaces the updatedAt proxy); null once it
    *  leaves. lastWorkedAt is the latest "work stopped" signal (baseline for
@@ -1600,6 +1608,19 @@ export const realizations = pgTable('realizations', {
   /** 'planned' → 'building' → 'built' → 'failed' */
   status:        varchar('status', { length: 16 }).notNull().default('planned'),
   error:         text('error'),
+  /**
+   * 'met' | 'missed' | 'abandoned'. `met`/`missed` are rolled up from the
+   * decisive call a generated proof's own console recorded — never typed here
+   * directly. `abandoned` is the one value a person sets: it has no number to
+   * compute, only a judgement to make. See `application/realization/realizationVerdict.ts`.
+   */
+  verdict:       varchar('verdict', { length: 16 }),
+  /** The number that decided it, straight from the console that computed it —
+   *  e.g. `{ metricLabel: 'Signups', metricValue: 31, target: 25, sample: 500 }`. */
+  verdictMetric: jsonb('verdict_metric'),
+  /** When the verdict was recorded. Distinct from `updatedAt`, which a rebuild
+   *  also bumps without touching the verdict. */
+  decidedAt:     timestamp('decided_at'),
   createdByUserId: varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),

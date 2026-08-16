@@ -43,7 +43,11 @@
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveSiteUser, siteSessionCookie } from './siteAuth';
-import { siteSubscriptionState, type SiteSubscriptionState } from '../marketplace/siteSubscriptions';
+import {
+  siteSubscriptionState,
+  subscriptionUpdateAvailable,
+  type SiteSubscriptionState,
+} from '../marketplace/siteSubscriptions';
 import { entitledToListing } from '../marketplace/creationListings';
 import { siteListing } from './siteListing';
 import type { SiteRecord } from './siteHosting';
@@ -55,9 +59,16 @@ export interface SiteVisitor {
   /** True when this person should be served the APP rather than the shop window. */
   entitled: boolean;
   subscription: SiteSubscriptionState;
+  /** True for a LIVE subscriber holding a version older than what the seller
+   *  currently sells. Always false for anyone else — a stranger and a lapsed
+   *  subscriber are shown the shop window regardless, and neither has "a version"
+   *  to be behind on. */
+  updateAvailable: boolean;
 }
 
-const ANONYMOUS: SiteVisitor = { siteUserId: null, email: null, entitled: false, subscription: 'none' };
+const ANONYMOUS: SiteVisitor = {
+  siteUserId: null, email: null, entitled: false, subscription: 'none', updateAvailable: false,
+};
 
 export async function resolveSiteVisitor(
   env: Env,
@@ -73,12 +84,16 @@ export async function resolveSiteVisitor(
   // definition.
   if (!identity) return ANONYMOUS;
 
-  const { state } = await siteSubscriptionState(db, site.tenantId, site.siteId, identity.userId);
+  const { state, subscription } = await siteSubscriptionState(db, site.tenantId, site.siteId, identity.userId);
   // A lapsed subscriber is never entitled, whatever the seller has since decided —
   // including a seller who has since made the app free, because the shop window is
-  // where they find that out.
+  // where they find that out. Never behind on a version either — there is nothing
+  // live to be behind ON.
   if (state === 'lapsed') {
-    return { siteUserId: identity.userId, email: identity.email, entitled: false, subscription: state };
+    return {
+      siteUserId: identity.userId, email: identity.email, entitled: false, subscription: state,
+      updateAvailable: false,
+    };
   }
 
   const listing = await siteListing(env, db, site);
@@ -89,6 +104,11 @@ export async function resolveSiteVisitor(
     // seller's own terms decide, through the rule the marketplace already owns.
     entitled: listing ? entitledToListing(listing, state === 'live') : true,
     subscription: state,
+    // A version can only be "behind" for a LIVE, PAID subscriber — a free app has
+    // no subscription row to hold one, and `subscriptionUpdateAvailable` already
+    // reads false with no held row.
+    updateAvailable: state === 'live'
+      && subscriptionUpdateAvailable(subscription?.snapshotId ?? null, listing?.currentSnapshotId ?? null),
   };
 }
 

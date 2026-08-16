@@ -124,9 +124,13 @@ export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose 
             <span className={styles.objectPickerIcon} aria-hidden><Icon source={item.icon} size={18} /></span>
             <span>
               <b>{t(`object.${item.kind}` as 'object.note')}</b>
-              {/* The group is the caption while searching, because a result list that
+              {/* The mockup's per-module line: what this kind actually does, not just
+                  its name. Search still appends the group, because a result list that
                   spans sixteen groups is unreadable without saying which is which. */}
-              {searching && <small>{t(`group.${item.group}` as 'group.Build')}</small>}
+              <small>
+                {t(`objectDescription.${item.kind}` as 'objectDescription.note')}
+                {searching && <> · {t(`group.${item.group}` as 'group.Build')}</>}
+              </small>
             </span>
           </button>)}
         </div>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import ProjectBackendPanel from '@/components/ProjectBackendPanel';
+import { useConfirm } from '@/components/ConfirmProvider';
 import {
   challengeApi,
   realizationApi,
@@ -268,6 +269,101 @@ function BuiltView({
   );
 }
 
+const verdictColor: Record<'met' | 'missed' | 'abandoned', string> = {
+  met: 'var(--success)',
+  missed: 'var(--danger)',
+  abandoned: 'var(--text-secondary)',
+};
+
+/**
+ * What the success criteria decided — or the prompt to go find out.
+ *
+ * `verdict` is never typed here. `met`/`missed` arrive already decided,
+ * rolled up server-side from the number the proof's own console recorded;
+ * this only renders what it is handed and offers the one call that IS a
+ * person's to make.
+ */
+function VerdictCard({
+  realization,
+  onAbandon,
+  abandoning,
+  t,
+}: {
+  realization: Realization;
+  onAbandon: () => void;
+  abandoning: boolean;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const { verdict, verdictMetric, decidedAt } = realization;
+
+  if (!verdict) {
+    if (realization.status !== 'built') return null;
+    return (
+      <Section heading={t('verdictHeading')}>
+        <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+          {t('verdictNoneYet')}
+        </p>
+        <div>
+          <button
+            type="button"
+            onClick={onAbandon}
+            disabled={abandoning}
+            style={{ ...secondaryButton, opacity: abandoning ? 0.6 : 1, fontSize: 13, padding: '8px 14px' }}
+          >
+            {abandoning ? t('abandoning') : t('markAbandoned')}
+          </button>
+        </div>
+      </Section>
+    );
+  }
+
+  const rawValue = typeof verdictMetric?.metricValue === 'number' ? verdictMetric.metricValue : null;
+  const rawTarget = typeof verdictMetric?.target === 'number' ? verdictMetric.target : null;
+  const metricLabel = typeof verdictMetric?.metricLabel === 'string' ? verdictMetric.metricLabel : null;
+  // A rate (0–1, e.g. the POC harness's pass rate) reads as a percentage; a
+  // count (e.g. signups) reads as itself. Both fields are fractional together
+  // or whole together, so testing one decides the other.
+  const isRate = rawValue !== null && rawTarget !== null && rawValue <= 1 && rawTarget <= 1;
+  const format = (n: number) => (isRate ? `${Math.round(n * 100)}%` : String(n));
+  const metricValue = rawValue === null ? null : format(rawValue);
+  const target = rawTarget === null ? null : format(rawTarget);
+
+  return (
+    <Section heading={t('verdictHeading')}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+        <span style={{ ...chip, borderColor: verdictColor[verdict], color: verdictColor[verdict], fontWeight: 700 }}>
+          {t(`verdictValue.${verdict}`)}
+        </span>
+        {decidedAt && (
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            {t('decidedOn', { date: new Date(decidedAt).toLocaleDateString() })}
+          </span>
+        )}
+      </div>
+      {metricLabel && metricValue !== null && (
+        <div style={{ fontSize: 14, color: 'var(--text-primary)' }}>
+          {target !== null
+            ? t('verdictMetricAgainstTarget', { label: metricLabel, value: metricValue, target })
+            : t('verdictMetric', { label: metricLabel, value: metricValue })}
+        </div>
+      )}
+      {verdict === 'abandoned' && typeof verdictMetric?.note === 'string' && verdictMetric.note && (
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{verdictMetric.note}</p>
+      )}
+      {verdict !== 'abandoned' && (
+        <button
+          type="button"
+          onClick={onAbandon}
+          disabled={abandoning}
+          style={{ ...secondaryButton, opacity: abandoning ? 0.6 : 1, fontSize: 13, padding: '8px 14px', alignSelf: 'start' }}
+        >
+          {abandoning ? t('abandoning') : t('markAbandoned')}
+        </button>
+      )}
+    </Section>
+  );
+}
+
 export default function RealizePage() {
   const t = useTranslations('realize');
 
@@ -290,7 +386,9 @@ export default function RealizePage() {
   const [history, setHistory] = useState<Realization[]>([]);
   const [reading, setReading] = useState(false);
   const [building, setBuilding] = useState(false);
+  const [abandoning, setAbandoning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const refresh = useCallback(async () => {
     try {
@@ -399,6 +497,22 @@ export default function RealizePage() {
       setChallengeId(found.challengeId);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('readFailed'));
+    }
+  };
+
+  const abandon = async () => {
+    if (!realization || abandoning) return;
+    if (!(await confirm({ message: t('abandonConfirm'), confirmLabel: t('markAbandoned'), destructive: true }))) return;
+    setAbandoning(true);
+    setError(null);
+    try {
+      const updated = await realizationApi.abandon(realization.id);
+      setRealization(updated);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('abandonFailed'));
+    } finally {
+      setAbandoning(false);
     }
   };
 
@@ -553,6 +667,10 @@ export default function RealizePage() {
 
         {buildResult && <BuiltView result={buildResult} t={t} />}
 
+        {realization?.status === 'built' && (
+          <VerdictCard realization={realization} onAbandon={() => void abandon()} abandoning={abandoning} t={t} />
+        )}
+
         {/* Once a project exists the panel is the live view: which endpoints are
             actually serving, the secret they fail closed without, and what has
             reached them. */}
@@ -586,6 +704,11 @@ export default function RealizePage() {
                   <span style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                     <span style={chip}>{targets.find((x) => x.key === r.targetKey)?.name ?? r.targetKey}</span>
                     <span style={chip}>{t(`status.${r.status}`)}</span>
+                    {r.verdict && (
+                      <span style={{ ...chip, borderColor: verdictColor[r.verdict], color: verdictColor[r.verdict] }}>
+                        {t(`verdictValue.${r.verdict}`)}
+                      </span>
+                    )}
                   </span>
                 </button>
               ))}

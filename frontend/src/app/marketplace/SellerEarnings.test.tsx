@@ -63,8 +63,11 @@ describe('SellerEarnings', () => {
     hasTenant = true;
     mineMock.mockResolvedValue([listing()]);
     earningsMock.mockResolvedValue({
-      earnings: { earnedCents: 2500, paidCents: 1000, availableCents: 1500, salesCount: 4 },
-      takeRateBps: 1000,
+      earnings: {
+        earnedCents: 2500, paidCents: 1000, availableCents: 1500, salesCount: 4,
+        takeRate: { bps: 1000, lifetimeCents: 21_000_000, thresholdCents: 20_000_000, underThreshold: false },
+      },
+      configuredTakeRateBps: 1000,
     });
 
     render(<SellerEarnings />);
@@ -75,14 +78,39 @@ describe('SellerEarnings', () => {
     expect(await screen.findByText('$25.00')).toBeInTheDocument();
     expect(screen.getByText('$10.00')).toBeInTheDocument();
     expect(screen.getByText('$15.00')).toBeInTheDocument();
+    // Past the threshold: the charged rate, not a silent 0.
+    expect(screen.getByText('The platform keeps 10% of each sale.')).toBeInTheDocument();
+  });
+
+  it('tells an under-threshold seller they are keeping everything, and how far to the fee', async () => {
+    hasTenant = true;
+    mineMock.mockResolvedValue([listing()]);
+    earningsMock.mockResolvedValue({
+      earnings: {
+        earnedCents: 900, paidCents: 0, availableCents: 900, salesCount: 1,
+        takeRate: { bps: 0, lifetimeCents: 900, thresholdCents: 20_000_000, underThreshold: true },
+      },
+      configuredTakeRateBps: 1500,
+    });
+
+    render(<SellerEarnings />);
+
+    // The 0% promise must be visible, not merely computed — this is the exact
+    // regression R15d closed: the route used to send the flat configured rate
+    // (15%) in this slot instead of the seller's actually-resolved rate (0%).
+    await waitFor(() => expect(screen.getByText(/keeping 100%/i)).toBeInTheDocument());
+    expect(screen.getByText(/\$199,991\.00/)).toBeInTheDocument();
   });
 
   it('renders nothing for a workspace that has published nothing', async () => {
     hasTenant = true;
     mineMock.mockResolvedValue([]);
     earningsMock.mockResolvedValue({
-      earnings: { earnedCents: 0, paidCents: 0, availableCents: 0, salesCount: 0 },
-      takeRateBps: 1000,
+      earnings: {
+        earnedCents: 0, paidCents: 0, availableCents: 0, salesCount: 0,
+        takeRate: { bps: 0, lifetimeCents: 0, thresholdCents: 20_000_000, underThreshold: true },
+      },
+      configuredTakeRateBps: 1500,
     });
 
     const { container } = render(<SellerEarnings />);

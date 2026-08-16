@@ -5,8 +5,9 @@
  *   POST   /api/realizations/plan             read an idea, rank the proofs (writes nothing)
  *   GET    /api/realizations                  the workspace's proofs
  *   POST   /api/realizations                  choose a target and plan it
- *   GET    /api/realizations/:id
+ *   GET    /api/realizations/:id               also rolls up the proof's own console's verdict
  *   POST   /api/realizations/:id/build        build it, publish it, wire its forms
+ *   PATCH  /api/realizations/:id/verdict      park it — the one verdict a person sets
  *   DELETE /api/realizations/:id
  *
  * Plan and BUILD are separate calls, for the same reason they are on challenges:
@@ -27,6 +28,7 @@ import { parseBrief, type ChallengeSpec } from '../../application/challenge/pars
 import type { ChallengePlan } from '../../application/challenge/planChallenge';
 import { planRealization } from '../../application/realization/planRealization';
 import {
+  abandonRealization,
   createRealization,
   deleteRealization,
   getRealization,
@@ -34,6 +36,7 @@ import {
   setRealizationOutcome,
   toRealizationView,
 } from '../../application/realization/realizationStore';
+import { syncRealizationVerdict } from '../../application/realization/realizationVerdict';
 import { ingressForPlanning, realize } from '../../application/realization/realizeService';
 import { REALIZATION_TARGETS, realizationTargetByKey, recommendRealizations } from '../../application/realization/targets';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
@@ -170,9 +173,34 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
   });
 
   router.get('/:id', async (c) => {
-    const row = await getRealization(db, c.get('tenantId') as number, c.req.param('id'));
+    const tenantId = c.get('tenantId') as number;
+    const row = await getRealization(db, tenantId, c.req.param('id'));
     if (!row) return c.json({ error: 'Realization not found' }, 404);
-    return c.json({ realization: toRealizationView(row) });
+    // Rolled up here, not stored eagerly: a console's write is untrusted until
+    // read back server-side, and a person opening this proof to check on it is
+    // exactly the moment "what did it tell us?" should already be answered.
+    const synced = await syncRealizationVerdict(db, tenantId, row);
+    return c.json({ realization: toRealizationView(synced) });
+  });
+
+  /**
+   * Park it. The one verdict a person sets rather than the console: abandoning
+   * is a judgement call with no number to compute, so it does not go through
+   * the same rollup as `met`/`missed`.
+   */
+  router.patch('/:id/verdict', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{ verdict?: unknown; note?: unknown }>().catch(() => ({}) as never);
+    if (body.verdict !== 'abandoned') {
+      return c.json(
+        { error: 'Only "abandoned" may be set here — met and missed are recorded from the proof\'s own console.' },
+        400,
+      );
+    }
+    const note = typeof body.note === 'string' ? body.note : undefined;
+    const updated = await abandonRealization(db, tenantId, c.req.param('id'), note);
+    if (!updated) return c.json({ error: 'Realization not found' }, 404);
+    return c.json({ realization: toRealizationView(updated) });
   });
 
   /**

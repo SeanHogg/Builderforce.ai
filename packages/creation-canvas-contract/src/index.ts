@@ -305,6 +305,11 @@ export const CREATION_OBJECT_KINDS = [
   'workflow', 'project', 'website', 'build', 'dashboard', 'chat', 'agent', 'staff', 'evaluation', 'dataset',
   'table', 'spreadsheet', 'chart', 'map', 'report', 'kpi', 'prototype', 'code', 'browser', 'llm', 'voice', 'video',
   'image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template',
+  // A place, not a picture: a walkable 3D scene with placed props and a real camera.
+  // Distinct from `model3d` (one generated mesh, previewed on a card) and from the
+  // `scene3d` SURFACE (a temporary reading of the flat board) — `world` is authored
+  // object state of its own, opened full-size the same way `game`/`website` are.
+  'world',
   'document', 'slides', 'diagram', 'knowledge', 'file', 'url', 'note', 'drawing', 'frame', 'comment', 'timer',
   // The UNTYPED escape hatch, and the only one on this list.
   //

@@ -23,7 +23,7 @@
  */
 
 import { esc, renderProofShell, INGRESS_PRELUDE } from '../proofShell';
-import { audienceOf, capabilityLabel, criteriaFrom, goalHeadline } from './shared';
+import { audienceOf, capabilityLabel, criteriaFrom, goalHeadline, verdictRecorderScript, VERDICT_COLLECTION } from './shared';
 import type { RealizationTarget, RealizeContext, RealizationOutput } from '../realizationTarget';
 
 const COLLECTION = 'waitlist';
@@ -137,6 +137,11 @@ function renderDemandConsole(ctx: RealizeContext, target: number, sample: number
       <p class="muted" style="font-size:13px;margin:12px 0 0">
         Decided against the threshold written in <code>smoke-test/charter.md</code>, not against how it feels.
       </p>
+      <button type="button" id="record-verdict" style="display:none;margin-top:12px"></button>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">
+        Recording writes today's count to this proof's record, permanently. Do it once you are ready to call it —
+        not the moment the number first looks good.
+      </p>
     </div>
     <div class="card">
       <p class="label">Sample needed</p>
@@ -160,7 +165,9 @@ function renderDemandConsole(ctx: RealizeContext, target: number, sample: number
   </section>`;
 
   const script = `${INGRESS_PRELUDE}
+${verdictRecorderScript()}
   var TARGET = ${target};
+  var SAMPLE = ${sample};
 
   function verdict(count) {
     if (count >= TARGET) return ['ok', 'threshold met — build it'];
@@ -176,6 +183,17 @@ function renderDemandConsole(ctx: RealizeContext, target: number, sample: number
 
     var v = verdict(count);
     document.getElementById('verdict').innerHTML = '<span class="pill ' + v[0] + '">' + v[1] + '</span>';
+
+    var recordBtn = document.getElementById('record-verdict');
+    if (count > 0) {
+      var decided = count >= TARGET ? 'met' : 'missed';
+      recordBtn.style.display = '';
+      recordBtn.disabled = false;
+      recordBtn.textContent = 'Record verdict — ' + decided;
+      recordBtn.onclick = function () {
+        recordVerdict('record-verdict', decided, 'Signups', count, TARGET, { sample: SAMPLE });
+      };
+    }
 
     document.getElementById('rows').innerHTML = records.length
       ? records.map(function (r) {
@@ -326,13 +344,13 @@ not in a purchase somebody thinks they made.
           order: 40,
           title: 'Call it on day 14',
           description:
-            'Open demand.html, read the verdict against the charter, and write the decision down. A smoke test with no decision at the end is just a page that existed for two weeks.',
+            'Open demand.html and click "Record verdict" — it writes the current count and the call it decides straight to this proof\'s record, so the decision survives a refresh. A smoke test with no decision at the end is just a page that existed for two weeks.',
           kind: 'setup',
         },
       ],
       requiredConnectors: [],
       requiredSecrets: [],
-      requiredCollections: [COLLECTION],
+      requiredCollections: [COLLECTION, VERDICT_COLLECTION],
       successCriteria: criteriaFrom(spec, [
         `At least ${sample} visitors reached the landing page from a named source.`,
         `The signup count is recorded against the ${target} threshold, and a build-or-park decision is written down.`,

@@ -32,7 +32,7 @@
  * pastes its id.
  */
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
@@ -575,9 +575,39 @@ export async function suspendSubscriptionsForListing(
  * never reaches this path at all. `hosted` is null in both cases rather than a
  * fabricated `operating`, so a caller can tell "fine" from "not applicable".
  */
+/**
+ * The version a subscriber holds, versus the version currently on sale.
+ *
+ * `latestSnapshotId` is null for a listing that has never carried one (nothing to
+ * offer), in which case `updateAvailable` is always false — the absence of a fact
+ * must never read as "an update is available".
+ */
+export interface VersionOffer {
+  heldSnapshotId: string | null;
+  latestSnapshotId: string | null;
+  updateAvailable: boolean;
+}
+
+/**
+ * THE ONE COMPARISON — a subscriber holds a version permanently and is OFFERED an
+ * update, never moved without accepting, so "is there something to offer" can only
+ * ever mean "does what they hold differ from what the seller currently sells".
+ * Shared rather than restated: `siteVisitor.ts`'s entry-document fork asks this
+ * same question (should this visitor see the offer at all?) from a different join
+ * path (the SITE's current listing rather than the subscriber's own row), and two
+ * copies of "differs from" is how one of them special-cases a null and the other
+ * does not.
+ */
+export function subscriptionUpdateAvailable(heldSnapshotId: string | null, latestSnapshotId: string | null): boolean {
+  return !!latestSnapshotId && heldSnapshotId !== latestSnapshotId;
+}
+
 export interface SubscriberStanding {
   subscription: SiteSubscriptionView | null;
   hosted: HostedListingStatus | null;
+  /** Null when there is no subscription to hold a version at all — a free app
+   *  (which never rows in `site_subscriptions`) has nothing to be offered. */
+  versionOffer: VersionOffer | null;
 }
 
 export async function subscriberStanding(
@@ -597,6 +627,12 @@ export async function subscriberStanding(
  * waiting for a download. The listing id stays out of `SubscriberStanding` itself
  * because that shape is serialised to the site user and an internal join key is not
  * theirs to receive.
+ *
+ * The listing is joined by the SUBSCRIBER's own `catalogItemId` rather than looked
+ * up fresh from the project — `completeSiteSubscription` pins it at subscribe time
+ * and a re-publish never replaces the row, only bumps `body.snapshotId`, so this is
+ * the direct path to "what does this subscriber's seller currently sell" with no
+ * second lookup of the site's project.
  */
 async function standingWithListing(
   db: Db,
@@ -606,8 +642,14 @@ async function standingWithListing(
   const [row] = await db
     .select({
       catalogItemId: siteSubscriptions.catalogItemId,
+      heldSnapshotId: siteSubscriptions.snapshotId,
+      latestBody: catalogItems.body,
     })
     .from(siteSubscriptions)
+    .leftJoin(catalogItems, and(
+      eq(catalogItems.id, siteSubscriptions.catalogItemId),
+      eq(catalogItems.tenantId, input.tenantId),
+    ))
     .where(scopedToTenant(
       siteSubscriptions,
       input.tenantId,
@@ -619,12 +661,59 @@ async function standingWithListing(
   const { subscription } = await siteSubscriptionState(
     db, input.tenantId, input.siteId, input.siteUserId,
   );
+  const latestSnapshotId = (row?.latestBody as { snapshotId?: string } | null)?.snapshotId ?? null;
   return {
     standing: {
       subscription,
       hosted: listingId ? await hostedListingStatus(db, env, listingId) : null,
+      versionOffer: subscription ? {
+        heldSnapshotId: subscription.snapshotId,
+        latestSnapshotId,
+        updateAvailable: subscriptionUpdateAvailable(subscription.snapshotId, latestSnapshotId),
+      } : null,
     },
     listingId,
+  };
+}
+
+/**
+ * ACCEPT THE OFFERED UPDATE.
+ *
+ * Moves the subscriber onto the version the seller currently sells. Deliberately
+ * the ONLY way `site_subscriptions.snapshot_id` moves outside of the initial
+ * subscribe — a buyer holds a version permanently and is offered an update, never
+ * moved without accepting, which is the whole reason the column exists rather than
+ * every reader following the listing's live snapshot.
+ */
+export async function acceptSiteSubscriptionUpdate(
+  db: Db,
+  env: Env,
+  input: { tenantId: number; siteId: number; siteUserId: number },
+): Promise<SiteSubscriptionView> {
+  const { standing } = await standingWithListing(db, env, input);
+  if (!standing.subscription) throw new ListingError('You are not subscribed to this app', 403);
+  const offer = standing.versionOffer;
+  if (!offer?.updateAvailable || !offer.latestSnapshotId) {
+    throw new ListingError('You are already on the latest version', 400);
+  }
+  const [row] = await db
+    .update(siteSubscriptions)
+    .set({ snapshotId: offer.latestSnapshotId, updatedAt: new Date() })
+    .where(scopedToTenant(
+      siteSubscriptions,
+      input.tenantId,
+      eq(siteSubscriptions.siteId, input.siteId),
+      eq(siteSubscriptions.siteUserId, input.siteUserId),
+    ))
+    .returning();
+  if (!row) throw new ListingError('Could not record the update', 400);
+  return {
+    id: row.id,
+    status: row.status as SubscriptionStatus,
+    priceCents: row.priceCents,
+    currency: row.currency,
+    snapshotId: row.snapshotId,
+    currentPeriodEndISO: row.currentPeriodEnd?.toISOString() ?? null,
   };
 }
 

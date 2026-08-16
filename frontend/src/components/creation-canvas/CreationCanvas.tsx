@@ -99,6 +99,13 @@ import { canvasNoticesFrom } from '@/lib/canvasNotices';
 import { canvasTranscriptForModel } from '@/lib/canvasTranscript';
 import { approvalGuidance, evaluateGate, readProvenance, type ApprovalMode } from '@/lib/canvasApprovalGate';
 import { sheetFormulaGuidance } from '@/lib/canvasSheet';
+import { makeSpecDeriveBoard, specRefKey } from '@/lib/specObjects';
+import { learnersFromCohort } from '@/lib/academic/gradebook';
+import { statsOf, curriculumMapProblems, mappingRows } from '@/lib/academic/derivations';
+import { applyRubric, applyLatePolicy, hoursLate, parseLatePolicy, rubricFromNode, rubricProblems, type CriterionSelection } from '@/lib/academic/marking';
+import { parseRosterCsv, type RosterRow } from '@/lib/academic/roster';
+import { parseReferences, entryRowFromRecord } from '@/lib/academic/citations';
+import { pullLtiRoster, pushLtiScore } from '@/lib/ltiApi';
 import { FORMULA_FUNCTIONS } from '@/lib/canvasFormula';
 import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -187,11 +194,16 @@ import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode'
 import { canvasStrokes, drawingPatch, DRAWING_TOOLS, eraseStrokes, strokesSvg, type CanvasDrawingTool, type CanvasStroke } from '@/lib/canvasDrawing';
 import { DEFAULT_DRAWING_PREFERENCES, readDrawingPreferences, writeDrawingPreferences, type DrawingPreferences } from './drawingPreferences';
 import { useComposerSpace } from './useComposerSpace';
-import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
+import {
+  fileToDataUrl, importCanvasFile, type AttachmentBytesStrategy, type ImportTranslator,
+} from '@/lib/canvasFileImport';
+import { uploadAttachmentSource } from '@/lib/canvasAttachmentUploadApi';
+import { importResumeFromAttachment } from '@/lib/resumeImportApi';
 import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
 import {
   RESUME_TEMPLATES, RESUME_TEMPLATE_IDS, activeResumeRevision, createResumeFamily,
-  initializeResumeFromPatch, preserveResumeSourceForPatch, resumeDocumentFromNode,
+  initializeResumeFromPatch, preserveResumeSourceForPatch, renderResumeMarkdown,
+  resumeDocumentFromJson, resumeDocumentFromNode,
   resumeFamilyFromNode, resumeNodePatch, resumeTemplateVariants, type ResumeTemplateId,
 } from '@/lib/canvasResume';
 import { resumeDocumentFromText, resumeDocumentIsThin } from '@builderforce/creation-canvas-contract';
@@ -2252,6 +2264,29 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     };
   }, [canEdit, persistedObjectIds, persistence, selectedId, sessionId]);
 
+  /**
+   * How a dropped file's bytes survive past the import that could not read
+   * them, so a later tool can still escalate it (OCR on a scan, a multimodal
+   * read on a corrupted document). A signed-in, server-persisted session has a
+   * tenant to scope an R2 upload to and later bill that read to, so its bytes
+   * go there and only a key stays on the canvas object. A local/guest canvas
+   * has neither, so the alternative is to keep the bytes inline as base64 —
+   * unrealized cost if the draft is only ever a scratch board, but not lost if
+   * the person later signs in and the draft is claimed, at which point the
+   * same object can still be escalated.
+   */
+  const attachmentBytesStrategy: AttachmentBytesStrategy = useCallback(async (file: File) => {
+    if (persistence === 'server') {
+      try {
+        return { sourceFileKey: await uploadAttachmentSource(file) };
+      } catch {
+        return null;
+      }
+    }
+    const url = await fileToDataUrl(file);
+    return url ? { sourceDataUrl: url } : null;
+  }, [persistence]);
+
   /** Filling an existing Dataset object from a file reads it through the same
    * engine as a drop, so a workbook picked here loads exactly as one dropped on
    * the board rather than failing on a format only this path never learned. */
@@ -3066,7 +3101,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // explains why the agent could not read it.
       const importDone = journal.current.begin('user', 'file.import', `${file.name} · ${Math.max(1, Math.round(file.size / 1024))}KB`);
       try {
-        const imported = await importCanvasFile(file, importLabel);
+        const imported = await importCanvasFile(file, importLabel, attachmentBytesStrategy);
         const [first, ...rest] = imported.objects;
         if (!first) throw new Error('The file produced no object');
         importDone({ ok: true, detail: `→ ${imported.objects.map((object) => object.kind).join(', ')}` });
@@ -3105,7 +3140,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // Never overwrite something the person is part-way through typing.
     if (suggestion) setPrompt((current) => current.trim() ? current : suggestion);
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds, source } });
-  }, [canEdit, importLabel, openBrainDock, sessionId, setNodes, t]);
+  }, [attachmentBytesStrategy, canEdit, importLabel, openBrainDock, sessionId, setNodes, t]);
 
   const attachCanvasArtifact = useCallback(
     (file: File) => addFilesToCanvas([file], undefined, 'composer_attachment'),
@@ -4340,9 +4375,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
      * the text of the file it was looking at (measured 2026-08-16). This reads the
      * document the importer already extracted and structures it with the same
      * deterministic reader the upload route uses — no model, no upload, no tokens.
+     *
+     * A SCAN has no extracted text for that deterministic reader to find — it
+     * lands as a `file` attachment instead of a `document`. Its bytes survive
+     * that landing (see `attachmentBytesStrategy`), so when there is no
+     * readable document this falls back to escalating the attachment's
+     * retained bytes through the same OCR route the résumé editor's own file
+     * picker already uses. That costs a model call and needs a tenant to bill
+     * it to, so it only runs on a signed-in, server-persisted session.
      */
     name: 'canvas_import_resume',
-    description: 'Turn a résumé that is already on this canvas as a document, imported PDF, Word file or text into a real `resume` object. USE THIS — never canvas_add_object, and never ask the user to paste their résumé — whenever someone asks to convert, import, parse, structure or "make a resume from" a file on the board. It reads the extracted text and structures it into JSON Resume deterministically, so nothing is invented and nothing is retyped. The resulting object is what canvas_render_resume_variants and canvas_screen_resumes need.',
+    description: 'Turn a résumé that is already on this canvas — as a document, imported PDF, Word file, text, or a scanned/photographed attachment — into a real `resume` object. USE THIS — never canvas_add_object, and never ask the user to paste their résumé — whenever someone asks to convert, import, parse, structure or "make a resume from" a file on the board. A document with real text is structured deterministically; a scan with no text layer is OCR’d server-side (signed-in sessions only). The resulting object is what canvas_render_resume_variants and canvas_screen_resumes need.',
     parameters: {
       type: 'object', additionalProperties: false,
       properties: {
@@ -4351,7 +4394,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       },
     },
     mutates: () => true,
-    run: (raw: unknown) => {
+    run: async (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { objectId?: string; title?: string };
       const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
@@ -4359,18 +4402,47 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // A résumé that is ALREADY structured is not a source: re-importing it would
       // replace a parsed document with a re-parse of its own rendering.
       const candidates = all.filter((node) => canvasDocument(node.data) && resumeDocumentFromNode(node.data) === null);
-      const source = args.objectId ? all.find((node) => node.id === args.objectId) : candidates.length === 1 ? candidates[0] : undefined;
+      // A scan carries no `canvasDocument` — its markdown was never extracted — but
+      // if its bytes were retained at drop time, it is still a résumé source.
+      const scanCandidates = all.filter((node) => node.data.kind === 'file'
+        && (typeof node.data.sourceFileKey === 'string' || typeof node.data.sourceDataUrl === 'string'));
+      const source = args.objectId
+        ? all.find((node) => node.id === args.objectId)
+        : candidates.length === 1 ? candidates[0]
+          : candidates.length === 0 && scanCandidates.length === 1 ? scanCandidates[0]
+            : undefined;
       if (!source) {
-        return { error: candidates.length
-          ? `Specify which object holds the résumé. On this canvas: ${candidates.map((node) => `${node.id} (${node.data.title})`).join(', ')}`
+        const named = [...candidates, ...scanCandidates];
+        return { error: named.length
+          ? `Specify which object holds the résumé. On this canvas: ${named.map((node) => `${node.id} (${node.data.title})`).join(', ')}`
           : 'Nothing on this canvas carries readable résumé text. If a file landed as an attachment saying its text could not be extracted, it is a scan with no text layer — say so and ask for a PDF or Word file with real text, or for the text itself. Do NOT ask the user to paste a document whose text this canvas already holds.' };
       }
-      const markdown = canvasDocument(source.data)?.markdown?.trim() ?? '';
-      if (!markdown) {
-        return { error: `Object ${source.id} carries no readable text, so there is nothing to structure. If it is a scanned PDF, say that plainly rather than guessing at its contents.` };
+
+      let markdown = canvasDocument(source.data)?.markdown?.trim() ?? '';
+      let document = markdown ? resumeDocumentFromText(markdown) : null;
+      let ocr: { provider: string; model: string } | null = null;
+
+      if (!document) {
+        const sourceFileKey = typeof source.data.sourceFileKey === 'string' ? source.data.sourceFileKey : undefined;
+        const sourceDataUrl = typeof source.data.sourceDataUrl === 'string' ? source.data.sourceDataUrl : undefined;
+        if (!sourceFileKey && !sourceDataUrl) {
+          return { error: `Object ${source.id} carries no readable text, so there is nothing to structure. If it is a scanned PDF, say that plainly rather than guessing at its contents.` };
+        }
+        if (persistence !== 'server') {
+          return { error: `Object ${source.id} is a scan with no text layer. Reading it takes a model call billed to a workspace, which needs a signed-in, saved Creation Canvas session — ask the person to sign in, then try again.` };
+        }
+        const attachmentName = typeof source.data.fileName === 'string' ? source.data.fileName : String(source.data.title || 'attachment');
+        try {
+          const result = await importResumeFromAttachment({ fileName: attachmentName, sourceFileKey, sourceDataUrl });
+          document = resumeDocumentFromJson(result.document);
+          ocr = { provider: result.provider, model: result.model };
+        } catch (error) {
+          return { error: `Reading the scan failed: ${error instanceof Error ? error.message : String(error)}` };
+        }
+        if (!document) return { error: `Object ${source.id} could not be read into a résumé — the scan may be unclear, or not a résumé.` };
+        markdown = renderResumeMarkdown(document);
       }
 
-      const document = resumeDocumentFromText(markdown);
       const embedded = typeof document.basics?.name === 'string' ? document.basics.name.trim() : '';
       const fileName = typeof source.data.fileName === 'string' ? source.data.fileName.replace(/\.[^.]+$/, '') : '';
       const title = String(args.title ?? '').trim() || embedded || fileName || String(source.data.title || t('resumeEditor.untitledVersion'));
@@ -4395,6 +4467,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         educationEntries: Array.isArray(document.education) ? document.education.length : 0,
         skills: Array.isArray(document.skills) ? document.skills.length : 0,
         thin,
+        ...(ocr ? { readVia: 'ocr' as const, provider: ocr.provider, model: ocr.model } : {}),
         instruction: thin
           ? 'The résumé is on the board, but few sections were recognised. Say which ones came through and offer to fill the rest from what the person tells you — do NOT invent employers, dates or skills, and do not retype the document.'
           : 'The résumé is on the board, fully structured. Report what came through in one short line and offer the next step — restyling with canvas_render_resume_variants, or screening against a posting. Do NOT retype any of its content.',

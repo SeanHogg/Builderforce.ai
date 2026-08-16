@@ -92,11 +92,24 @@ export interface LaunchPayload {
   hosted?: HostedListingStatus;
 }
 
+/** Mirrors the server's `ResolvedTakeRate` — the SELLER's rate right now, not the
+ *  platform default, so a creator under the lifetime threshold reads 0 rather than
+ *  whatever the configured fee happens to be. */
+export interface ResolvedTakeRate {
+  bps: number;
+  lifetimeCents: number;
+  thresholdCents: number;
+  underThreshold: boolean;
+}
+
 export interface SellerEarnings {
   earnedCents: number;
   paidCents: number;
   availableCents: number;
   salesCount: number;
+  /** The rate this seller pays on their NEXT sale, and how far they are from the
+   *  threshold — 0 while `underThreshold` is true. */
+  takeRate: ResolvedTakeRate;
 }
 
 export interface PublishRequest {
@@ -184,8 +197,10 @@ export const creationListingApi = {
       `${AUTHED}/acquired`,
     ).then((r) => r.acquired),
 
+  /** `configuredTakeRateBps` is the platform's flat fee — what starts once
+   *  `earnings.takeRate.underThreshold` turns false; it is not what was charged. */
   earnings: () =>
-    apiRequest<{ earnings: SellerEarnings; takeRateBps: number }>(`${AUTHED}/earnings`),
+    apiRequest<{ earnings: SellerEarnings; configuredTakeRateBps: number }>(`${AUTHED}/earnings`),
 
   payout: () =>
     apiRequest<{ ok: boolean; amountCents: number; error?: string }>(`${AUTHED}/payout`, {

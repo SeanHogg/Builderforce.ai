@@ -10,6 +10,8 @@ vi.mock('./siteAuth', () => ({
 }));
 vi.mock('../marketplace/siteSubscriptions', () => ({
   siteSubscriptionState: (...args: unknown[]) => siteSubscriptionState(...args),
+  // The real, pure comparison — no reason to fake the one thing under test here.
+  subscriptionUpdateAvailable: (held: string | null, latest: string | null) => !!latest && held !== latest,
 }));
 vi.mock('./siteListing', () => ({
   siteListing: (...args: unknown[]) => siteListing(...args),
@@ -93,6 +95,31 @@ describe('who is at the door', () => {
     siteSubscriptionState.mockResolvedValue({ state: 'none', subscription: null });
     siteListing.mockResolvedValue({ ...paid, trial: 'full' });
     await expect(resolveSiteVisitor(env, db, site, signedIn)).resolves.toMatchObject({ entitled: true });
+  });
+
+  it('tells a live subscriber holding an old version that an update is available', async () => {
+    siteSubscriptionState.mockResolvedValue({ state: 'live', subscription: { snapshotId: 'snap-1' } });
+    siteListing.mockResolvedValue({ ...paid, currentSnapshotId: 'snap-2' });
+    await expect(resolveSiteVisitor(env, db, site, signedIn))
+      .resolves.toMatchObject({ entitled: true, updateAvailable: true });
+  });
+
+  it('says nothing is available once the subscriber holds the current version', async () => {
+    siteSubscriptionState.mockResolvedValue({ state: 'live', subscription: { snapshotId: 'snap-2' } });
+    siteListing.mockResolvedValue({ ...paid, currentSnapshotId: 'snap-2' });
+    await expect(resolveSiteVisitor(env, db, site, signedIn))
+      .resolves.toMatchObject({ updateAvailable: false });
+  });
+
+  it('never offers an update to a stranger or a lapsed subscriber', async () => {
+    siteSubscriptionState.mockResolvedValue({ state: 'none', subscription: null });
+    siteListing.mockResolvedValue({ ...paid, priceCents: 0, currentSnapshotId: 'snap-2' });
+    await expect(resolveSiteVisitor(env, db, site, signedIn))
+      .resolves.toMatchObject({ updateAvailable: false });
+
+    siteSubscriptionState.mockResolvedValue({ state: 'lapsed', subscription: null });
+    await expect(resolveSiteVisitor(env, db, site, signedIn))
+      .resolves.toMatchObject({ updateAvailable: false });
   });
 
   it('does not repossess: a WITHDRAWN listing stays open to a live subscriber', async () => {

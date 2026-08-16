@@ -296,3 +296,53 @@ export const deriveParticipantPoolConsentRate: SpecDerive = (data) => derivePerc
 
 /** `bibliography.entryCount` — see the field's hint for what it means. */
 export const deriveBibliographyEntryCount: SpecDerive = (data) => deriveRows(data.entries).length || undefined;
+
+// ---------------------------------------------------------------------------
+// curriculumMap.validate — structural problems the coverage figure cannot show
+// ---------------------------------------------------------------------------
+//
+// `deriveCurriculumMapCoverage` and `deriveCurriculumMapGaps` above answer "how much of
+// the programme is assured" — a number an accreditor reads. They cannot say WHY an
+// outcome has no evidence: it might genuinely be unassessed, or it might be a typo — an
+// outcome declared as "LO3" and mapped as "L03". `curriculumMapProblems` is the second
+// question, asked by the `validate` action, and it is deliberately not folded into the
+// coverage derivation: a card renders coverage on every view, and a validation pass is
+// something a programme lead runs deliberately and reads the detail of.
+
+export type CurriculumMapProblem =
+  | { code: 'noOutcomes' }
+  | { code: 'noMapping' }
+  | { code: 'unmappedOutcome'; outcome: string }
+  | { code: 'unknownColumn'; column: string };
+
+/** Structural problems in one `curriculumMap` object, read against the board so an
+ *  "unknown column" means an assessment that genuinely is not on this board rather than
+ *  one this object simply has not heard of yet. */
+export function curriculumMapProblems(data: Record<string, unknown>, board: SpecDeriveBoard): readonly CurriculumMapProblem[] {
+  const problems: CurriculumMapProblem[] = [];
+  const outcomeCodes = deriveRows(data.outcomes)
+    .map((row) => String(row.code ?? '').trim())
+    .filter(Boolean);
+  if (!outcomeCodes.length) problems.push({ code: 'noOutcomes' });
+
+  const mapping = data.mapping && typeof data.mapping === 'object' && !Array.isArray(data.mapping)
+    ? data.mapping as Record<string, unknown>
+    : null;
+  const rows = mapping ? deriveRows(mapping.rows) : [];
+  if (!rows.length) problems.push({ code: 'noMapping' });
+
+  const mappedCodes = new Set(rows.map((row) => String(row.label ?? row.code ?? '').trim()).filter(Boolean));
+  for (const code of outcomeCodes) {
+    if (!mappedCodes.has(code)) problems.push({ code: 'unmappedOutcome', outcome: code });
+  }
+
+  const columns = mapping && Array.isArray(mapping.columns)
+    ? mapping.columns.map((column) => String(column ?? '').trim()).filter(Boolean)
+    : [];
+  for (const column of columns) {
+    if (!board.byRef('assignment', column) && !board.byRef('lecture', column)) {
+      problems.push({ code: 'unknownColumn', column });
+    }
+  }
+  return problems;
+}

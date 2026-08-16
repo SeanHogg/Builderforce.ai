@@ -101,6 +101,14 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         // nobody looks at again.
         derive: deriveCohortProgress,
       },
+      {
+        name: 'ltiIssuer', render: 'stat', label: 'ltiIssuer', bookkeeping: true,
+        hint: 'The connected LMS platform issuer URL, if this cohort is bound to one through LTI (e.g. "https://canvas.instructure.com"). Leave empty for a cohort whose roster is imported by CSV — the `import` action falls back to that when this is unset.',
+      },
+      {
+        name: 'ltiMembershipsUrl', render: 'stat', label: 'ltiMembershipsUrl', bookkeeping: true,
+        hint: 'The NRPS membership-service URL the connected LMS issued for this course context. Set together with `ltiIssuer` — both are required before `import` can pull a roster instead of reading a CSV.',
+      },
       SUMMARY_FIELD,
     ],
   },
@@ -141,6 +149,10 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         // percentage is one they have to reverse-engineer before they can.
         hint: 'Submissions marked so far. Counted from the submissions on the board that carry a mark.',
         derive: deriveAssignmentMarkedCount,
+      },
+      {
+        name: 'ltiLineItemUrl', render: 'stat', label: 'ltiLineItemUrl', bookkeeping: true,
+        hint: 'The AGS line-item URL the connected LMS issued for this specific assignment, if it was launched through LTI. When set (and the cohort carries `ltiIssuer`), marking a submission also pushes the score back through it.',
       },
       SOURCES_FIELD,
     ],
@@ -185,6 +197,11 @@ export const ACADEMIC_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         columns: ['source', 'edits', 'characters', 'firstAt', 'lastAt'],
         hint: 'The authorship ledger the canvas itself writes: one row per source (learner | assistant | imported | collaborator) with how many edits and characters came from it and when. This is evidence, not an estimate.',
         derived: true,
+      },
+      {
+        name: 'placements', render: 'rows', label: 'placements',
+        columns: ['criterion', 'levelIndex', 'comment'],
+        hint: 'Your placement of this submission against the assignment\'s rubric, BEFORE marking: one row per criterion as {criterion, levelIndex, comment}. `criterion` must match a rubric row label exactly; `levelIndex` is zero-based into the rubric\'s levels, worst to best. Write one row per criterion, then invoke the `mark` action — it computes `mark`, `markBreakdown` and `feedback` from exactly these placements and the assignment\'s late policy. Never write `mark` directly; a mark with no placements behind it is an assertion, not a marking.',
       },
       { name: 'mark', render: 'stat', label: 'mark', hint: 'Awarded mark. Written by the marking action against the rubric.', derived: true },
       { name: 'markBreakdown', render: 'rows', label: 'markBreakdown', columns: ['criterion', 'level', 'marks', 'comment'], hint: 'Per-criterion marks and the comment given.', derived: true },

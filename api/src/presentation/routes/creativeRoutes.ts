@@ -28,7 +28,7 @@
  *
  * Not cached: a generative call keyed on a free-text brief.
  */
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { HonoEnv } from '../../env';
 import { ideProxy, readProxyChoice } from '../../application/llm/LlmProxyService';
@@ -101,6 +101,27 @@ function stripFence(text: string): string {
 
 const RESUME_IMPORT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'rtf', 'txt', 'md', 'markdown', 'json', 'png', 'jpg', 'jpeg', 'webp']);
 const RESUME_IMPORT_MAX_BYTES = 20 * 1024 * 1024;
+const ATTACHMENT_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
+
+/** One R2 write, scoped to the caller's tenant and user, for every route that needs to
+ * keep a file's bytes past the request that received them. */
+async function storeTenantFile(
+  c: Context<HonoEnv>,
+  scope: string,
+  extension: string,
+  bytes: ArrayBuffer,
+  contentType: string,
+  originalName: string,
+  purpose: string,
+): Promise<string | null> {
+  if (!c.env.UPLOADS) return null;
+  const key = `${c.get('tenantId')}/${c.get('userId')}/${scope}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${extension || 'bin'}`;
+  await c.env.UPLOADS.put(key, bytes, {
+    httpMetadata: { contentType },
+    customMetadata: { originalName, tenantId: String(c.get('tenantId')), purpose },
+  });
+  return key;
+}
 const RESUME_EXTRACTION_PROMPT = `Extract this resume into one JSON Resume object. Return JSON only.
 Rules:
 - Copy facts exactly; never invent employers, dates, credentials, metrics, contact details, or skills.
@@ -148,26 +169,61 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
     }
   });
 
-  /** Parse text, Office/PDF files, and photographed scans into canonical JSON Resume. */
+  /**
+   * Parse text, Office/PDF files, and photographed scans into canonical JSON Resume.
+   *
+   * The file arrives one of three ways: fresh bytes in `file` (the résumé editor's
+   * own picker), a `sourceFileKey` already sitting in R2 (a canvas attachment
+   * uploaded there at drop time by a signed-in session — see `/attachments/upload`),
+   * or an inline `dataUrl` (a canvas attachment kept as base64 on a local/guest
+   * session that has since signed in and is escalating it now that a tenant
+   * exists to bill the read to). Whichever it is, it becomes the same `fileBytes`.
+   */
   router.post('/resume/import', async (c) => {
     const form = await c.req.formData();
     const file = form.get('file') as unknown;
     const extractedText = String(form.get('text') ?? '').trim().slice(0, 80_000);
-    if (!file || typeof file !== 'object' || !('arrayBuffer' in file) || !('name' in file)) return c.json({ error: 'A resume file is required' }, 400);
-    const resumeFile = file as File;
-    const extension = (resumeFile.name.split('.').pop() ?? '').toLowerCase();
-    if (!RESUME_IMPORT_EXTENSIONS.has(extension)) return c.json({ error: 'Unsupported resume file type' }, 415);
-    if (!resumeFile.size || resumeFile.size > RESUME_IMPORT_MAX_BYTES) return c.json({ error: 'Resume files must be between 1 byte and 20MB' }, 413);
-    const fileBytes = await resumeFile.arrayBuffer();
+    const existingKey = String(form.get('sourceFileKey') ?? '').trim();
+    const inlineDataUrl = String(form.get('dataUrl') ?? '').trim();
+    const suppliedName = String(form.get('fileName') ?? '').trim();
 
+    let fileBytes: ArrayBuffer;
+    let fileName: string;
+    let mimeType: string;
     let sourceFileKey: string | null = null;
-    if (c.env.UPLOADS) {
-      sourceFileKey = `${c.get('tenantId')}/${c.get('userId')}/resumes/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${extension || 'bin'}`;
-      await c.env.UPLOADS.put(sourceFileKey, fileBytes, {
-        httpMetadata: { contentType: resumeFile.type || 'application/octet-stream' },
-        customMetadata: { originalName: resumeFile.name, tenantId: String(c.get('tenantId')), purpose: 'resume-source' },
-      });
+
+    if (file && typeof file === 'object' && 'arrayBuffer' in file && 'name' in file) {
+      const resumeFile = file as File;
+      fileBytes = await resumeFile.arrayBuffer();
+      fileName = resumeFile.name;
+      mimeType = resumeFile.type || 'application/octet-stream';
+    } else if (existingKey) {
+      if (!existingKey.startsWith(`${c.get('tenantId')}/`)) return c.json({ error: 'Attachment does not belong to this workspace' }, 403);
+      if (!c.env.UPLOADS) return c.json({ error: 'File storage is not configured' }, 503);
+      const stored = await c.env.UPLOADS.get(existingKey);
+      if (!stored) return c.json({ error: 'Attachment could not be found' }, 404);
+      fileBytes = await stored.arrayBuffer();
+      fileName = suppliedName || existingKey.split('/').pop() || 'attachment';
+      mimeType = stored.httpMetadata?.contentType || 'application/octet-stream';
+      sourceFileKey = existingKey;
+    } else if (/^data:[^;]+;base64,/.test(inlineDataUrl)) {
+      const [, declaredType, base64] = /^data:([^;]+);base64,(.+)$/s.exec(inlineDataUrl) ?? [];
+      mimeType = declaredType || 'application/octet-stream';
+      const binary = atob(base64 ?? '');
+      const decoded = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) decoded[i] = binary.charCodeAt(i);
+      fileBytes = decoded.buffer;
+      fileName = suppliedName || 'attachment';
+    } else {
+      return c.json({ error: 'A resume file is required' }, 400);
     }
+
+    const extension = (fileName.split('.').pop() ?? '').toLowerCase();
+    if (!RESUME_IMPORT_EXTENSIONS.has(extension)) return c.json({ error: 'Unsupported resume file type' }, 415);
+    if (!fileBytes.byteLength || fileBytes.byteLength > RESUME_IMPORT_MAX_BYTES) return c.json({ error: 'Resume files must be between 1 byte and 20MB' }, 413);
+
+    // A key we already hold (or just decoded) is kept as-is; only fresh bytes get a new one.
+    if (!sourceFileKey) sourceFileKey = await storeTenantFile(c, 'resumes', extension, fileBytes, mimeType, fileName, 'resume-source');
     if (extension === 'json') {
       try {
         const document = JSON.parse(new TextDecoder().decode(fileBytes)) as unknown;
@@ -178,11 +234,11 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
       }
     }
 
-    const dataUrl = extractedText ? null : `data:${resumeFile.type || 'application/octet-stream'};base64,${bytesBase64(fileBytes)}`;
+    const dataUrl = extractedText ? null : `data:${mimeType};base64,${bytesBase64(fileBytes)}`;
     const content: unknown = extractedText
       ? `${RESUME_EXTRACTION_PROMPT}\n\nSOURCE RESUME:\n${extractedText}`
       : extension === 'pdf' || extension === 'doc' || extension === 'docx'
-        ? [{ type: 'text', text: RESUME_EXTRACTION_PROMPT }, { type: 'file', file: { filename: resumeFile.name, file_data: dataUrl } }]
+        ? [{ type: 'text', text: RESUME_EXTRACTION_PROMPT }, { type: 'file', file: { filename: fileName, file_data: dataUrl } }]
         : [{ type: 'text', text: RESUME_EXTRACTION_PROMPT }, { type: 'image_url', image_url: { url: dataUrl } }];
     try {
       const { proxy } = await tenantProxyForPlan(c.env, c.get('tenantId'));
@@ -201,6 +257,30 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
     } catch (error) {
       return c.json({ error: 'Resume extraction failed', detail: error instanceof Error ? error.message : String(error), sourceFileKey }, 502);
     }
+  });
+
+  /**
+   * Keep a canvas attachment's bytes past the drop that brought it in, so a file
+   * the browser could not read (a scanned PDF, a corrupted DOCX) can still be
+   * escalated to server-side OCR/multimodal reading later — by `/resume/import`
+   * today, and by any future reader of a `file`-kind canvas object. Signed-in
+   * only: the alternative for a session with no tenant is to keep the bytes
+   * inline on the canvas object instead of calling this route at all.
+   */
+  router.post('/attachments/upload', async (c) => {
+    if (!c.env.UPLOADS) return c.json({ error: 'File storage is not configured' }, 503);
+    const form = await c.req.formData();
+    const file = form.get('file') as unknown;
+    if (!file || typeof file !== 'object' || !('arrayBuffer' in file) || !('name' in file)) return c.json({ error: 'A file is required' }, 400);
+    const attachment = file as File;
+    if (!attachment.size || attachment.size > ATTACHMENT_UPLOAD_MAX_BYTES) return c.json({ error: 'File must be between 1 byte and 20MB' }, 413);
+    const extension = (attachment.name.split('.').pop() ?? '').toLowerCase();
+    const sourceFileKey = await storeTenantFile(
+      c, 'attachments', extension, await attachment.arrayBuffer(),
+      attachment.type || 'application/octet-stream', attachment.name, 'canvas-attachment-source',
+    );
+    if (!sourceFileKey) return c.json({ error: 'File storage is not configured' }, 503);
+    return c.json({ sourceFileKey });
   });
 
   /**

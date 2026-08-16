@@ -9,6 +9,7 @@ import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
 import { useModelIdentity } from '@/lib/useLlmModels';
 import { Icon } from '@/components/ui/Icon';
+import { LegalStrip } from '@/components/legal/LegalStrip';
 import type { Edge } from '@xyflow/react';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition, creationObjectName } from './creationObjectRegistry';
@@ -44,6 +45,14 @@ import {
  *
  * The prompt is NOT in here — it stays in the centre of the page where every chat
  * product people already use puts it.
+ *
+ * The docked placement alone also carries the copyright/version/Terms/Privacy row
+ * (`LegalStrip`) as its own footer, in normal flow below the transcript — the shell's
+ * `LegalCorner` stands down on a stage route (see its own doc) because that row would
+ * otherwise have nowhere in flow to sit; this panel is that "nowhere", and a real docked
+ * panel is where it belongs rather than floating over the board as chrome of its own.
+ * The inline placement (the Brain Object on the graph) does not carry it — there is no
+ * panel there for it to be the footer of.
  */
 
 /** How far one arrow-key press resizes the surface. */
@@ -356,6 +365,7 @@ export function BrainDock({
         ratings={ratings}
         guestSignup={guestSignup}
       />
+      <LegalStrip className={styles.brainDockLegal} />
     </aside>
   );
 }

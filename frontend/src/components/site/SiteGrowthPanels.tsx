@@ -284,6 +284,20 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
     }
   }, [load, newName, projectId, t]);
 
+  const [togglingId, setTogglingId] = useState<number | null>(null);
+  const toggleRaisesTickets = useCallback(async (collection: SiteCollection) => {
+    setTogglingId(collection.id);
+    setError('');
+    try {
+      await siteDataApi.updateCollection(projectId, collection.id, { raisesTickets: !collection.raisesTickets });
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('genericError'));
+    } finally {
+      setTogglingId(null);
+    }
+  }, [load, projectId, t]);
+
   if (!collections) return null;
 
   return (
@@ -311,6 +325,16 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
               <div style={label}>{t('endpoint')}</div>
               <DnsValue>{`POST ${collection.endpoint}`}</DnsValue>
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13, color: 'var(--text-primary, var(--bg-elevated))' }}>
+              <input
+                type="checkbox"
+                checked={collection.raisesTickets}
+                disabled={togglingId === collection.id}
+                onChange={() => toggleRaisesTickets(collection)}
+              />
+              {t('raisesTickets')}
+            </label>
+            <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>{t('raisesTicketsHint')}</p>
             <button type="button" style={{ ...button, marginTop: 10 }} onClick={() => openCollection(collection.id)}>
               {openId === collection.id ? t('hideSubmissions') : t('viewSubmissions')}
             </button>

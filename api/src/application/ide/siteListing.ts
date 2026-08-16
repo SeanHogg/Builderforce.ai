@@ -52,9 +52,16 @@ const APP_LISTING_KIND = 'app';
 const SITE_LISTING_TTL_SECONDS = 600;
 
 /** What sells a site, and on what terms. The slug is what a shop window's
- *  checkout button needs; the facts are what the access rule needs. */
+ *  checkout button needs; the facts are what the access rule needs. `name` and
+ *  `currency` are what the commerce widget needs to say "Subscribe to X — $Y/mo"
+ *  without a second query of its own. */
 export interface SiteListing extends ListingAccessFacts {
   slug: string;
+  name: string;
+  currency: string;
+  /** The version currently on sale — what an existing subscriber is OFFERED, never
+   *  moved onto without accepting. Null for a listing that has never published one. */
+  currentSnapshotId: string | null;
 }
 
 /**
@@ -73,11 +80,14 @@ export async function resolveSiteListing(
   const [row] = await db
     .select({
       slug: catalogItems.slug,
+      name: catalogItems.name,
+      currency: catalogItems.currency,
       visibility: catalogItems.visibility,
       priceCents: catalogItems.priceCents,
-      // Projected here rather than by pulling the whole JSONB body across: the
-      // access rule needs exactly one key out of it.
+      // Projected here rather than by pulling the whole JSONB body across: each
+      // reader needs exactly one key out of it.
       trial: sql<string | null>`${catalogItems.body} ->> 'trial'`,
+      currentSnapshotId: sql<string | null>`${catalogItems.body} ->> 'snapshotId'`,
     })
     .from(creationSessionProjectLinks)
     .innerJoin(creationSessions, eq(creationSessions.id, creationSessionProjectLinks.sessionId))
@@ -105,9 +115,12 @@ export async function resolveSiteListing(
   if (!row) return null;
   return {
     slug: row.slug,
+    name: row.name,
+    currency: row.currency,
     visibility: row.visibility,
     priceCents: row.priceCents,
     trial: (row.trial as ListingAccessFacts['trial']) ?? null,
+    currentSnapshotId: row.currentSnapshotId ?? null,
   };
 }
 

@@ -125,6 +125,22 @@ async function dataUrl(file: File): Promise<string | null> {
   });
 }
 
+/** Exported for callers building an {@link AttachmentBytesStrategy}: the same
+ * base64 read this module uses for images, reused for the guest/local-canvas
+ * branch of that strategy. */
+export const fileToDataUrl = dataUrl;
+
+/**
+ * Where a file's bytes end up when an attachment that could not be read in the
+ * browser is worth keeping for a later, server-side escalation (OCR, a
+ * multimodal read) — an R2 key for a signed-in, tenant-owned session, or the
+ * bytes themselves, inline, for a local/guest canvas with no tenant to upload
+ * to or bill that read to. Returning `null` means "do not retain" — either the
+ * caller has no strategy, or the upload/read failed.
+ */
+export type AttachmentBytesReference = { sourceFileKey: string } | { sourceDataUrl: string };
+export type AttachmentBytesStrategy = (file: File) => Promise<AttachmentBytesReference | null>;
+
 async function bytes(file: File): Promise<Uint8Array> {
   return new Uint8Array(await file.arrayBuffer());
 }
@@ -321,7 +337,12 @@ async function diagramObjects(file: File, t: ImportTranslator): Promise<Imported
   return converted ? [diagramObject(file, converted, notation, t)] : null;
 }
 
-function attachmentObject(file: File, t: ImportTranslator, extra: Record<string, unknown> = {}): ImportedCanvasObject {
+function attachmentObject(
+  file: File,
+  t: ImportTranslator,
+  extra: Record<string, unknown> = {},
+  retained: AttachmentBytesReference | null = null,
+): ImportedCanvasObject {
   return {
     kind: 'file',
     data: {
@@ -331,6 +352,7 @@ function attachmentObject(file: File, t: ImportTranslator, extra: Record<string,
       status: t('statusAttached'),
       mimeType: file.type || 'application/octet-stream',
       fileSize: file.size,
+      ...(retained ?? {}),
       ...extra,
     },
   };
@@ -385,8 +407,12 @@ function noticeFor(objects: ImportedCanvasObject[], file: File, t: ImportTransla
  * as an attachment rather than being rejected, so a drop always produces
  * something on the board.
  */
-export async function importCanvasFile(file: File, t: ImportTranslator): Promise<CanvasFileImport> {
-  const objects = await deriveObjects(file, t);
+export async function importCanvasFile(
+  file: File,
+  t: ImportTranslator,
+  retainAttachmentBytes?: AttachmentBytesStrategy,
+): Promise<CanvasFileImport> {
+  const objects = await deriveObjects(file, t, retainAttachmentBytes);
   const resolved = objects.length ? objects : [attachmentObject(file, t)];
   return {
     objects: resolved,
@@ -395,7 +421,7 @@ export async function importCanvasFile(file: File, t: ImportTranslator): Promise
   };
 }
 
-async function deriveObjects(file: File, t: ImportTranslator): Promise<ImportedCanvasObject[]> {
+async function deriveObjects(file: File, t: ImportTranslator, retainAttachmentBytes?: AttachmentBytesStrategy): Promise<ImportedCanvasObject[]> {
   const extension = fileExtension(file.name);
   const oversized = file.size > MAX_PARSEABLE_BYTES;
   // A file past the parse ceiling still lands, but as an attachment — and it
@@ -524,11 +550,16 @@ async function deriveObjects(file: File, t: ImportTranslator): Promise<ImportedC
         })];
       }
       if (read) {
+        // A scan has no text layer to read here, but it can still be OCR'd
+        // server-side — IF its bytes survive past this function. Without a
+        // strategy (or when one fails) it lands exactly as before: honest, but
+        // a dead end for any tool that would otherwise escalate it.
+        const retained = retainAttachmentBytes ? await retainAttachmentBytes(file).catch(() => null) : null;
         return [attachmentObject(file, t, {
           subtitle: t('pdfPages', { pages: read.pageCount }),
           status: t('statusTextUnavailable'),
           pageCount: read.pageCount,
-        })];
+        }, retained)];
       }
     }
 
@@ -543,8 +574,12 @@ async function deriveObjects(file: File, t: ImportTranslator): Promise<ImportedC
     }
   } catch {
     // A malformed container falls through to the attachment path: the person
-    // still gets their file on the board, labelled honestly.
-    return [attachmentObject(file, t, { status: t('statusUnreadable') })];
+    // still gets their file on the board, labelled honestly. Its bytes are
+    // worth keeping too — a container that fails to parse in the browser
+    // (a scanned PDF chief among them) is exactly the case a server-side
+    // multimodal read can still salvage.
+    const retained = retainAttachmentBytes ? await retainAttachmentBytes(file).catch(() => null) : null;
+    return [attachmentObject(file, t, { status: t('statusUnreadable') }, retained)];
   }
 
   /**

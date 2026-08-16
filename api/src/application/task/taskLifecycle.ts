@@ -251,6 +251,16 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
       .catch((error) => {
         reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "recordStatusTransition" });
       });
+    // App-user loop return leg (0920, R10): if this ticket was RAISED by a
+    // site_records submission, tell whoever filed it that it's done. Dynamic
+    // import for the same reason as the Validator call above — siteTicketBridge
+    // pulls in laneEntryTrigger, which reaches runtimeRoutes. The function itself
+    // never throws; this catch only covers a failed dynamic import.
+    await import('../ide/siteTicketBridge')
+      .then((m) => m.notifySiteRecordTicketDone(env, db, taskId))
+      .catch((error) => {
+        reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "recordStatusTransition" });
+      });
   }
 }
 

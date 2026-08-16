@@ -40,6 +40,8 @@ import {
   SOURCES_FIELD,
   SUMMARY_FIELD,
   registerSpecObjectSet,
+  specMutableFields,
+  type SpecDeriveBoard,
   type SpecField,
   type SpecObjectSpec,
 } from './specObjects';
@@ -132,7 +134,67 @@ const CURRENCY_FIELD: FounderField = {
  * values readable, is its own change. What this closes is the part that made that change
  * impossible: there was no object to point at.
  */
-const COUNTERPARTY_HINT = 'The legal name of the counterparty, as it appears on the paperwork. Where an `account` object for them is on this board, use that account\'s title verbatim — it is the ONE object every commercial reference points at, so matching it is what joins this to their other invoices, their contract and their renewal. Author the account first if it is missing.';
+export const COUNTERPARTY_HINT = 'The legal name of the counterparty, as it appears on the paperwork. Where an `account` object for them is on this board, use that account\'s title verbatim — it is the ONE object every commercial reference points at, so matching it is what joins this to their other invoices, their contract and their renewal. Author the account first if it is missing.';
+
+/**
+ * THE shared resolver `invoice.customer`, `bill.vendor`, `contract.counterparty` and
+ * `placement.client` bind through — one match rule instead of four call sites each
+ * inventing their own.
+ *
+ * ── WHY THIS IS A LIVE LOOKUP AND NOT A STORED ID ────────────────────────────────
+ * `party_roles` already holds the counterparty; a second id column on every invoice,
+ * bill, contract and placement would be the same fact stored twice, and the two would
+ * disagree the day an account is renamed. So the join happens at READ time, off the
+ * display name the field already carries — which is also the read-time fallback the
+ * roadmap calls for: a board saved yesterday has only the string, and resolving it live
+ * against whichever `account` objects exist today costs nothing extra and loses nothing.
+ *
+ * Matches on the account's title first (`byRef`, case/space-insensitive), then on
+ * `alsoKnownAs` — the list that exists precisely so a second account is not created for
+ * a company already on the board under a different name.
+ */
+export function resolveCounterpartyAccount(label: unknown, board: SpecDeriveBoard): Record<string, unknown> | null {
+  const name = typeof label === 'string' ? label.trim() : '';
+  if (!name) return null;
+  const direct = board.byRef('account', name);
+  if (direct) return direct;
+  const key = name.toLowerCase();
+  return board.ofKind('account').find((account) => {
+    const aliases = Array.isArray(account.alsoKnownAs) ? account.alsoKnownAs : [];
+    return aliases.some((alias) => typeof alias === 'string' && alias.trim().toLowerCase() === key);
+  }) ?? null;
+}
+
+/**
+ * The companion field a counterparty field carries its resolution through.
+ *
+ * READ-ONLY and `derive`d rather than authored: the resolution is a fact about the
+ * BOARD (which accounts exist right now), not about the invoice, bill, contract or
+ * placement it renders on — storing it would be the drift `SpecField.derive` exists to
+ * prevent. Absent entirely when the source field is empty, so a card with no
+ * counterparty yet does not draw a section telling it so.
+ */
+export function counterpartyAccountField(sourceField: string): FounderField {
+  return {
+    name: `${sourceField}Account`,
+    render: 'verdict',
+    label: 'counterpartyAccount',
+    hint: `READ-ONLY. Resolved automatically by matching \`${sourceField}\` against the \`account\` objects on this board — never author it directly.`,
+    derived: true,
+    derive: (data, board) => {
+      const name = typeof data[sourceField] === 'string' ? (data[sourceField] as string).trim() : '';
+      if (!name) return undefined;
+      const account = resolveCounterpartyAccount(name, board);
+      if (!account) return `No \`account\` matches "${name}" yet — author one to link this.`;
+      const title = typeof account.title === 'string' && account.title.trim() ? account.title.trim() : name;
+      const relationship = typeof account.relationship === 'string' && account.relationship ? account.relationship : 'contact';
+      const owner = typeof account.owner === 'string' ? account.owner.trim() : '';
+      return owner
+        ? `Linked to \`account\` "${title}" (${relationship}), owned by ${owner}.`
+        : `Linked to \`account\` "${title}" (${relationship}).`;
+    },
+  };
+}
 
 export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
   // ── Who we are ────────────────────────────────────────────────────────────────
@@ -507,6 +569,7 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     actions: ['issue', 'record-payment', 'chase'],
     fields: [
       { name: 'customer', render: 'stat', label: 'customer', hint: `The party that owes this. ${COUNTERPARTY_HINT}` },
+      counterpartyAccountField('customer'),
       { name: 'invoiceNumber', render: 'stat', label: 'invoiceNumber', hint: 'Your own reference for it.' },
       CURRENCY_FIELD,
       { name: 'amount', render: 'stat', label: 'amount', hint: `${EXACT_MONEY_HINT} The total payable including tax.` },
@@ -527,6 +590,7 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     actions: ['approve', 'schedule-payment', 'dispute'],
     fields: [
       { name: 'vendor', render: 'stat', label: 'vendor', hint: `The party owed — a bill without its counterparty cannot be checked against what was agreed. ${COUNTERPARTY_HINT}` },
+      counterpartyAccountField('vendor'),
       { name: 'reference', render: 'stat', label: 'reference', hint: "The vendor's own invoice reference." },
       CURRENCY_FIELD,
       { name: 'amount', render: 'stat', label: 'amount', hint: `${EXACT_MONEY_HINT} The total payable including tax.` },
@@ -547,6 +611,7 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     actions: ['review', 'sign'],
     fields: [
       { name: 'counterparty', render: 'stat', label: 'counterparty', hint: COUNTERPARTY_HINT },
+      counterpartyAccountField('counterparty'),
       { name: 'contractType', render: 'stat', label: 'contractType', hint: 'msa | sow | nda | employment | vendor | formation.' },
       { name: 'effectiveAt', render: 'stat', label: 'effectiveAt', hint: 'ISO start date.' },
       { name: 'renewsAt', render: 'stat', label: 'renewsAt', hint: 'ISO renewal or expiry date — the field that makes a contract something the board can warn about. Bind a `trigger` with comparator "due-within" to be told before an auto-renewal rather than after it.', deadline: true },
@@ -644,10 +709,19 @@ export const FOUNDER_BOOKKEEPING_FIELDS: readonly string[] = [
   ...new Set(FOUNDER_OBJECT_SPECS.flatMap((spec) => spec.fields.filter((field) => field.bookkeeping).map((field) => field.name))),
 ];
 
-/** The authorable fields for one founder kind, in declaration order. */
+/**
+ * The authorable fields for one founder kind, in declaration order.
+ *
+ * A thin alias over `specMutableFields` — kept because the founder vocabulary's own
+ * importers already call it by this name. It used to duplicate the filter instead of
+ * calling it, which meant a `derived` founder field (there were none until
+ * `counterpartyAccountField`) would have been advertised as writable here while the
+ * real registry (`FOUNDER_MUTABLE_FIELDS`, built from the same generic function)
+ * correctly refused it — two answers to "can Brain write this" that only agreed by
+ * accident of no founder field having tested the difference yet.
+ */
 export function founderMutableFields(kind: FounderObjectKind): readonly string[] {
-  const spec = SPEC_BY_KIND.get(kind);
-  return spec ? ['content', ...spec.fields.map((field) => field.name)] : ['content'];
+  return specMutableFields(kind);
 }
 
 /**

@@ -37,6 +37,10 @@ import {
   registerSpecObjectSet, SOURCES_FIELD, SUMMARY_FIELD,
   type SpecField, type SpecObjectSpec,
 } from './specObjects';
+// `placement.client` is the fourth of the four counterparty call sites the shared
+// resolver joins to `account` — see `COUNTERPARTY_HINT` and `counterpartyAccountField`
+// on the founder vocabulary, which owns the `account` kind itself.
+import { COUNTERPARTY_HINT, counterpartyAccountField } from './founderObjects';
 
 /** i18n namespace for every hiring label, status, field and column. */
 export const HIRING_NAMESPACE = 'creationCanvas.hiring';
@@ -294,6 +298,8 @@ export const HIRING_OBJECT_SPECS: readonly SpecObjectSpec[] = [
     fields: [
       { name: 'candidateRef', render: 'stat', label: 'candidateRef', hint: 'Who was placed, by id.', bookkeeping: true },
       { name: 'postingRef', render: 'stat', label: 'postingRef', hint: 'What they were placed into, by id.', bookkeeping: true },
+      { name: 'client', render: 'stat', label: 'client', hint: `The employer paying the placement fee. ${COUNTERPARTY_HINT}` },
+      counterpartyAccountField('client'),
       { name: 'startedAt', render: 'stat', label: 'startedAt', hint: 'ISO date they actually started. The event the fee and the guarantee both run from.' },
       { name: 'feeAmount', render: 'stat', label: 'feeAmount', hint: MONEY_HINT },
       { name: 'feeBasis', render: 'stat', label: 'feeBasis', hint: 'How the fee was calculated: "20% of first-year base" or "fixed retainer, 3 instalments".' },

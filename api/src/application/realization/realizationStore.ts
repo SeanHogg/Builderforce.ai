@@ -15,6 +15,14 @@ import type { ChallengePlan } from '../challenge/planChallenge';
 import type { ChallengeSpec } from '../challenge/parseBrief';
 import type { RealizationKey } from './realizationTarget';
 
+/** The closed verdict vocabulary — what a proof's success criteria decided. */
+export const REALIZATION_VERDICTS = ['met', 'missed', 'abandoned'] as const;
+export type RealizationVerdict = (typeof REALIZATION_VERDICTS)[number];
+
+export function isRealizationVerdict(v: unknown): v is RealizationVerdict {
+  return typeof v === 'string' && (REALIZATION_VERDICTS as readonly string[]).includes(v);
+}
+
 /** The shape handed to the client. `spec`/`plan`/`result` are stored documents. */
 export interface RealizationView {
   id: string;
@@ -29,11 +37,18 @@ export interface RealizationView {
   plan: ChallengePlan | Record<string, never>;
   result: Record<string, unknown>;
   error: string | null;
+  /** What the success criteria decided — null until a console has called it, or
+   *  a person has parked the idea. Never typed for `met`/`missed`. */
+  verdict: RealizationVerdict | null;
+  /** The number that decided it, straight from the console that computed it. */
+  verdictMetric: Record<string, unknown> | null;
+  /** When the verdict was recorded. Distinct from `updatedAt`. */
+  decidedAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
 
-type Row = typeof realizations.$inferSelect;
+export type Row = typeof realizations.$inferSelect;
 
 export function toRealizationView(row: Row): RealizationView {
   return {
@@ -49,6 +64,9 @@ export function toRealizationView(row: Row): RealizationView {
     plan: (row.plan ?? {}) as ChallengePlan,
     result: (row.result ?? {}) as Record<string, unknown>,
     error: row.error,
+    verdict: isRealizationVerdict(row.verdict) ? row.verdict : null,
+    verdictMetric: (row.verdictMetric ?? null) as Record<string, unknown> | null,
+    decidedAt: row.decidedAt ? new Date(row.decidedAt).toISOString() : null,
     createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
     updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
   };
@@ -137,6 +155,54 @@ export async function setRealizationOutcome(
     .where(scopedToTenant(realizations, tenantId, eq(realizations.id, id)))
     .returning();
   return row ?? null;
+}
+
+/**
+ * Record what the success criteria decided.
+ *
+ * The single write path for all three verdicts. `application/realization/realizationVerdict.ts`
+ * calls it with `met`/`missed` rolled up from a console's own recorded call;
+ * the `/verdict` route calls it directly for `abandoned`, the one value a
+ * person sets. Neither caller types the DATE — it is always either the
+ * console submission's own timestamp or `new Date()` at the moment of the
+ * call, never a value read off a form.
+ */
+export async function setRealizationVerdict(
+  db: Db,
+  tenantId: number,
+  id: string,
+  args: {
+    verdict: RealizationVerdict;
+    verdictMetric: Record<string, unknown>;
+    decidedAt: Date;
+  },
+): Promise<Row | null> {
+  const [row] = await db
+    .update(realizations)
+    .set({
+      verdict: args.verdict,
+      verdictMetric: args.verdictMetric,
+      decidedAt: args.decidedAt,
+      updatedAt: new Date(),
+    })
+    .where(scopedToTenant(realizations, tenantId, eq(realizations.id, id)))
+    .returning();
+  return row ?? null;
+}
+
+/** Park an idea. The one verdict with no number to compute — a judgement, not
+ *  a threshold — so it is set directly rather than rolled up from a console. */
+export async function abandonRealization(
+  db: Db,
+  tenantId: number,
+  id: string,
+  note?: string | null,
+): Promise<Row | null> {
+  return setRealizationVerdict(db, tenantId, id, {
+    verdict: 'abandoned',
+    verdictMetric: note?.trim() ? { note: note.trim().slice(0, 500) } : {},
+    decidedAt: new Date(),
+  });
 }
 
 /** Delete the realization RECORD. The project and the published site it produced

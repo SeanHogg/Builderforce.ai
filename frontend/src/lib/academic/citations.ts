@@ -746,3 +746,26 @@ export function citationsFromBibliographyNode(data: Readonly<Record<string, unkn
 export function citationStyleOf(data: Readonly<Record<string, unknown>>): CitationStyle {
   return isCitationStyle(data.citationStyle) ? data.citationStyle : 'apa';
 }
+
+/**
+ * The inverse of {@link citationsFromBibliographyNode}: one parsed record, as the row a
+ * `bibliography.entries` field stores. `authors` is joined on `; ` rather than kept as
+ * an array — the field is a `rows` table, and `parseAuthors` already accepts that
+ * spelling back, so the two functions round-trip exactly.
+ */
+export function entryRowFromRecord(record: CitationRecord): Record<string, unknown> {
+  return {
+    citationKey: record.key,
+    citationType: record.type,
+    authors: record.authors.join('; '),
+    year: record.year,
+    workTitle: record.title,
+    container: record.container ?? '',
+    publisher: record.publisher ?? '',
+    volume: record.volume ?? '',
+    issue: record.issue ?? '',
+    pages: record.pages ?? '',
+    doi: record.doi ?? '',
+    url: record.url ?? '',
+  };
+}

@@ -905,26 +905,6 @@ sequenced into waves because nothing in them gates the sell motion.
 
 ### Canvas surfaces
 
-- **The canvas chrome is consolidated; the board itself matches the mockup's INTERACTION
-  model except for one deliberately-scoped-down piece.** *(re-scoped 2026-08-16 — the
-  2026-08-16 audit's remaining items were closed this pass; see DONE.md)* The mockup is
-  https://claude.ai/code/artifact/c935a6ce-18cc-4ea4-bccf-1859a50c20a1. What is left open:
-  - **The marketing header still frames the board.** DELIBERATE, not an oversight — `AppShell`
-    documents it ("the header follows the VISITOR") and the `operator-shell-header-follows-visitor`
-    decision is that a guest reaching a canvas from the marketing site must keep every way back
-    into the product at the exact moment they are deciding whether to sign up. Reversing it is a
-    product decision, not a layout one. **Blocked on an explicit user decision**: if the canvas
-    should take the whole window for guests too, the session pill needs the mockup's back arrow to
-    replace the nav it removes.
-  - **The six category circles open a real, searchable, data-filled popover
-    (`CanvasObjectPicker`) — but its rows carry a name and an icon, not the mockup's
-    per-module DESCRIPTION line.** Adding one honestly means one authored sentence per
-    kind in `CREATION_PALETTE_GROUPS` (~180 kinds today) translated into all five
-    catalogs — content-authoring at a scale that does not fit inside this pass alongside
-    the rest of the audit, and risks either AI-generic filler or a partially-translated
-    catalog if rushed. Scoped out on purpose rather than done badly. Unblocks: the picker
-    reading as the mockup's real popover rather than its honest half-step.
-
 - **A SCANNED document dropped on the canvas can never become a résumé, because the canvas keeps no
   bytes to escalate with.** *(registered 2026-08-16 by the "convert this pdf into a resume" pass,
   which fixed every other link in that chain — see DONE.md)* A PDF with a real text layer now reads

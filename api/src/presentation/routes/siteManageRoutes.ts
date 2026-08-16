@@ -153,6 +153,7 @@ export function createSiteManageRoutes(db: Db): Hono<HonoEnv> {
       acceptsPublicWrites?: boolean;
       audienceId?: number | null;
       dailyWriteCap?: number;
+      raisesTickets?: boolean;
     }>().catch(() => ({}) as never);
     const result = await updateCollection(db, c.get('tenantId') as number, collectionId, body);
     if (!result.ok) return c.json({ error: result.error }, result.status);

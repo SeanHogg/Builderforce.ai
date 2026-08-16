@@ -190,6 +190,10 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'game', label: 'Game', icon: '◆', group: 'Build', createData: () => ({ kind: 'game', title: 'Game studio', status: 'Draft', mediaKind: 'game', capabilityId: 'creative.game', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
   { kind: 'cad', label: 'CAD', icon: '⌗', group: 'Build', createData: () => ({ kind: 'cad', title: 'CAD studio', status: 'Draft', mediaKind: 'cad', capabilityId: 'creative.cad', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
   { kind: 'model3d', label: '3D model', icon: '⬡', group: 'Build', createData: () => ({ kind: 'model3d', title: '3D model studio', status: 'Draft', mediaKind: 'model3d', capabilityId: 'creative.model3d', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
+  // Hand-authored, not generated — no `mediaKind`/`capabilityId`/`mcpTool`, the same
+  // way `website`/`document` are authored rather than composed. Opens directly into
+  // the `world` surface (see `creationObjectSurfaces.ts`) where props are placed.
+  { kind: 'world', label: '3D space', icon: '⬢', group: 'Build', createData: () => ({ kind: 'world', title: 'Untitled 3D space', status: 'Draft', world: emptyCanvasWorldScene() }) },
   { kind: 'resume', label: 'Resume', icon: '▤', group: 'Knowledge', createData: () => ({ kind: 'resume', title: 'Resume builder', status: 'Draft', mediaKind: 'document', capabilityId: 'creative.resume', provider: 'native', templateId: 'resume', mcpServer: 'builtin', mcpTool: 'builtin_creative_compose' }) },
   { kind: 'template', label: 'Template', icon: '✦', group: 'Knowledge', createData: () => ({ kind: 'template', title: 'Creative template', status: 'Choose a template', mediaKind: 'template', capabilityId: 'creative.template', provider: 'native', mcpServer: 'builtin', mcpTool: 'builtin_creative_capabilities' }) },
   { kind: 'document', label: 'Document', icon: '▤', group: 'Knowledge', createData: () => ({ kind: 'document', title: 'Untitled document', status: 'Draft' }) },
@@ -551,7 +555,8 @@ function sanitizeMutationValue(value: unknown, depth = 0): unknown {
 }
 
 export function creationObjectMutableFields(kind: CreationObjectKind): readonly string[] {
-  return [...COMMON_MUTABLE_FIELDS, ...MUTABLE_FIELDS[kind]];
+  if (!MUTABLE_FIELDS[kind]) console.error('DIAG_MISSING_KIND', kind);
+  return [...COMMON_MUTABLE_FIELDS, ...(MUTABLE_FIELDS[kind] ?? [])];
 }
 
 /**

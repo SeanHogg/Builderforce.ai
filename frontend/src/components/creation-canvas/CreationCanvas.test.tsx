@@ -87,8 +87,14 @@ describe('CreationCanvas', () => {
   it('keeps the mini map action visible while the mini map is opened, closed, and reopened', () => {
     render(<CreationCanvas sessionId="minimap-controls-test" persistence="local" />);
 
-    expect(screen.getByRole('button', { name: 'Clean up canvas layout' })).toBeInTheDocument();
-    const minimapAction = screen.getByRole('button', { name: 'Toggle mini map' });
+    // The flat-board rail stood down into the one command bar; this is that
+    // button's new name and home, not the React-Flow-native rail's own copy
+    // (hidden on the flat board via `hideOnFlatBoard`).
+    expect(screen.getByRole('button', { name: 'Arrange canvas objects' })).toBeInTheDocument();
+    // The toggle lives in the command bar and reports its state IN its own
+    // name — "Hide mini map" while open, "Show mini map" once closed — not a
+    // static "Toggle" label with `aria-pressed` doing all the work.
+    const minimapAction = screen.getByRole('button', { name: 'Hide mini map' });
     expect(minimapAction).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Close mini map' }));
     expect(minimapAction).toHaveAttribute('aria-pressed', 'false');
@@ -175,9 +181,11 @@ describe('CreationCanvas', () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     expect(scene).toBeInTheDocument();
     // The mini map is a map of the flat board, so it — and its button — stand
-    // down in 3D.
+    // down in 3D. The toggle lives in the command bar now and reports its
+    // state IN its own name ("Hide"/"Show"), not a static "Toggle" label.
     expect(namedButtons('Close mini map')).toHaveLength(0);
-    expect(namedButtons('Toggle mini map')).toHaveLength(0);
+    expect(namedButtons('Hide mini map')).toHaveLength(0);
+    expect(namedButtons('Show mini map')).toHaveLength(0);
     // The rail owns every 3D command, so the scene carries no toolbar at all —
     // no exit, no depth control, no zoom. A second header stacked over the board
     // is what this replaced.
@@ -204,8 +212,10 @@ describe('CreationCanvas', () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(toggle).toHaveAttribute('title', 'View this canvas in 3D');
     // Leaving hands the rail back: the 3D commands go, the flat ones return.
+    // The mini map was never toggled in this test, so it is still open — the
+    // command bar's own control reports that as "Hide mini map".
     expect(namedButtons('Stack layers by object group')).toHaveLength(0);
-    expect(namedButtons('Toggle mini map')).toHaveLength(1);
+    expect(namedButtons('Hide mini map')).toHaveLength(1);
   });
 
   it('selects the same object in 3D that the flat board would', async () => {

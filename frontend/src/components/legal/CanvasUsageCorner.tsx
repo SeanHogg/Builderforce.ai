@@ -12,10 +12,12 @@ import { ConsumptionMeterCard } from '@/components/UsageMeter';
  * never as a row the board has to reserve height for.
  *
  * It does NOT carry the copyright/version/Terms/Privacy row `LegalCorner`
- * renders elsewhere — a creation surface is the one place that strip is
- * clutter, not information the operator is there for. `LegalCorner` still
- * stands down on a stage route, so the canvas simply has no legal row at all;
- * it stays reachable from the app shell footer everywhere else.
+ * renders elsewhere — that row floating loose over the board, spanning from
+ * this corner toward the canvas's own toolbar, read as one strip of clutter
+ * competing with the board's chrome rather than two purposeful pieces. On a
+ * stage route it now lives instead as the docked Brain panel's own footer
+ * (`BrainDock`), in normal flow the way `LegalCorner` sits in the shell —
+ * chrome belonging to a real panel, never floating over the board itself.
  */
 export default function CanvasUsageCorner() {
   const pathname = usePathname() || '';

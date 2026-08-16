@@ -1,14 +1,8 @@
 'use client';
 
-import { useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { useTranslations } from 'next-intl';
 import { isStageRoute } from '@/lib/workbenchPolicy';
-import { useLegalDocs } from './useLegalDocs';
-import LegalDocModal, { type LegalModalType } from './LegalDocModal';
-import LegalDocLink from './LegalDocLink';
-import ProductUpdatesTrigger from '../releaseNotes/ProductUpdatesTrigger';
-import { BRAND } from '@/lib/content';
+import { LegalStrip } from './LegalStrip';
 
 /**
  * Copyright + version + Terms/Privacy strip for the operator shell, in the
@@ -32,9 +26,6 @@ import { BRAND } from '@/lib/content';
  */
 export default function LegalCorner() {
   const pathname = usePathname() || '';
-  const { appVersion, apiVersion, legal, termsVersion, privacyVersion } = useLegalDocs();
-  const t = useTranslations('legal');
-  const [modalType, setModalType] = useState<LegalModalType | null>(null);
 
   /**
    * IT STANDS DOWN ON A STAGE ROUTE, and decides that itself.
@@ -45,39 +36,12 @@ export default function LegalCorner() {
    * bar, and a flow row under the board is simply the last strip of chrome eating height
    * the artefact should have.
    *
-   * This row is deliberately NOT replaced on a stage route — `CanvasUsageCorner` floats
-   * only the usage meters there, because the copyright/version/Terms/Privacy strip is
-   * clutter on a creation surface, not information the operator needs while working. The
-   * strip stays reachable everywhere else this component renders.
+   * Nothing here is lost on a canvas either: `BrainDock` renders the SAME row (via
+   * `LegalStrip`) as its own footer, in the normal flow of the docked Brain panel rather
+   * than floating over the board — this component's job on a stage route is simply to
+   * get out of the way of that one.
    */
   if (isStageRoute(pathname)) return null;
 
-  return (
-    <>
-      <div className="legal-corner" role="group" aria-label={t('navLabel')}>
-        <span>
-          <span className="legal-corner-brand">{BRAND.name} </span>© {BRAND.year}
-        </span>
-        <ProductUpdatesTrigger
-          appVersion={appVersion}
-          apiVersion={apiVersion}
-          className="legal-corner-link"
-        />
-        <LegalDocLink
-          type="terms"
-          docVersion={termsVersion}
-          className="legal-corner-link"
-          onOpen={setModalType}
-        />
-        <LegalDocLink
-          type="privacy"
-          docVersion={privacyVersion}
-          className="legal-corner-link"
-          onOpen={setModalType}
-        />
-      </div>
-
-      <LegalDocModal type={modalType} legal={legal} onClose={() => setModalType(null)} />
-    </>
-  );
+  return <LegalStrip className="legal-corner" />;
 }

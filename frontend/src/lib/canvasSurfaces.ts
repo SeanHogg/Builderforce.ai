@@ -34,7 +34,7 @@
  * preference all read the flags.
  */
 
-export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'app' | 'page' | 'play' | 'site' | 'timeline';
+export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'app' | 'page' | 'play' | 'site' | 'timeline' | 'world';
 
 /**
  * What a surface is ABOUT.
@@ -117,6 +117,12 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   // between at a width you choose. Two axes the sheet does not have, so two surfaces.
   { id: 'site', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   { id: 'timeline', scope: 'object', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  // A `world` object is a place with its own camera and props, not a page — it does
+  // not fit the sheet/build/track shapes above any more than they fit each other. It
+  // does not persist as the active surface for the same reason they don't: a surface
+  // bound to one object snaps back to the board on reload, not into an editor whose
+  // target it has to re-find.
+  { id: 'world', scope: 'object', order: 8, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
 ];
 
 /**

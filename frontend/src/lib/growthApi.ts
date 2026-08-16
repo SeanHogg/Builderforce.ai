@@ -64,6 +64,8 @@ export interface SiteCollection {
   audienceId: number | null;
   recordCount: number;
   dailyWriteCap: number;
+  /** Does a submission here open a ticket on this project's board? */
+  raisesTickets: boolean;
   createdAt: string;
   /** Absolute URL a form should post to — computed server-side. */
   endpoint: string;
@@ -91,7 +93,7 @@ export const siteDataApi = {
   updateCollection: (
     projectId: number | string,
     collectionId: number,
-    patch: { acceptsPublicWrites?: boolean; audienceId?: number | null; dailyWriteCap?: number },
+    patch: { acceptsPublicWrites?: boolean; audienceId?: number | null; dailyWriteCap?: number; raisesTickets?: boolean },
   ): Promise<SiteCollection> =>
     apiRequest(`${siteBase(projectId)}/collections/${collectionId}`, {
       method: 'PATCH',

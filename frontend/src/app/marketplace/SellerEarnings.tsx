@@ -43,7 +43,7 @@ export function SellerEarnings() {
   const { hasTenant } = useAuth();
   const [listings, setListings] = useState<CreationListing[]>([]);
   const [earnings, setEarnings] = useState<Earnings | null>(null);
-  const [takeRateBps, setTakeRateBps] = useState(0);
+  const [configuredTakeRateBps, setConfiguredTakeRateBps] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -64,7 +64,7 @@ export function SellerEarnings() {
       ]);
       setListings(mine);
       setEarnings(money.earnings);
-      setTakeRateBps(money.takeRateBps);
+      setConfiguredTakeRateBps(money.configuredTakeRateBps);
     } catch {
       // An unentitled visitor simply has no seller surface; this panel is
       // additive and must never become the reason the page errors.
@@ -130,9 +130,23 @@ export function SellerEarnings() {
         </div>
       )}
 
-      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>
-        {t('takeRateNote', { rate: (takeRateBps / 100).toFixed(takeRateBps % 100 === 0 ? 0 : 2) })}
-      </p>
+      {earnings && (
+        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>
+          {earnings.takeRate.underThreshold
+            // The single most persuasive fact for a seller under the threshold: the
+            // platform is taking NOTHING right now, and this is the number that
+            // proves it rather than an internal constant nobody outside this panel
+            // ever reads.
+            ? t('takeRateZero', {
+              rate: bpsToRate(configuredTakeRateBps),
+              threshold: formatListingPrice(earnings.takeRate.thresholdCents),
+              remaining: formatListingPrice(
+                Math.max(0, earnings.takeRate.thresholdCents - earnings.takeRate.lifetimeCents),
+              ),
+            })
+            : t('takeRateNote', { rate: bpsToRate(earnings.takeRate.bps) })}
+        </p>
+      )}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         <button
@@ -188,6 +202,12 @@ export function SellerEarnings() {
       </ul>
     </section>
   );
+}
+
+/** Basis points as a trimmed percentage string — whole for a round rate, two
+ *  decimals otherwise, so "1500" reads "15" and "1050" reads "10.50". */
+function bpsToRate(bps: number): string {
+  return (bps / 100).toFixed(bps % 100 === 0 ? 0 : 2);
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

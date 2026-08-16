@@ -318,10 +318,21 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
     }
   });
 
-  /** Earned, paid, available — plus the rate the split was made at. */
+  /**
+   * Earned, paid, available — plus the rate the split was made at.
+   *
+   * `earnings.takeRate` is this SELLER's resolved rate (0 while under the lifetime
+   * threshold), which is what a payout was actually cut at. `configuredTakeRateBps`
+   * is the platform's flat rate — what the fee becomes once they cross it — sent
+   * alongside so a seller under the threshold can be told both "you keep 100%
+   * today" and "here is what starts afterwards" from one call. A prior version of
+   * this route sent the flat configured rate ALONE, under the key `takeRateBps` —
+   * so a seller who owed nothing was told they were being charged the platform
+   * default, which is the exact inverse of the 0%-under-threshold promise.
+   */
   router.get('/earnings', async (c) => {
     const earnings = await sellerEarnings(db, c.env, c.get('tenantId') as number, c.get('userId') as string);
-    return c.json({ earnings, takeRateBps: platformTakeRateBps(c.env) });
+    return c.json({ earnings, configuredTakeRateBps: platformTakeRateBps(c.env) });
   });
 
   /** Send the available balance to the seller's default payout destination. */

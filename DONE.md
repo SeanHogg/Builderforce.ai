@@ -1,10 +1,34 @@
+## ✅ RESOLVED 2026-08-16 — the last two items of the canvas-redesign audit
+
+The two items the 2026-08-16 audit pass below left open are both closed now.
+
+**The category-circle popover (`CanvasObjectPicker`) rows were name+icon only; the mockup's
+rows carry a one-line description of what the module does.** Wrote one authored English
+sentence per kind for all 180 entries in `CREATION_PALETTE_GROUPS` (not generic filler —
+each says what that specific object holds or does, e.g. `dispatchBoard`: "Live board
+scheduling technicians against jobs in real time," vs `estimate`: "Quoted price for a job,
+sent to a customer before it's booked") and translated every one into zh/es/fr/de, landing
+as `creationCanvas.objectDescription.<kind>` alongside the existing `object.<kind>` label
+in all five catalogs (`frontend/src/i18n/messages/*.json`). `CanvasObjectPicker.tsx` now
+renders it as a `<small>` line under every row's name, unconditionally — search still
+appends the group name after it, since a result spanning sixteen groups is unreadable
+without one. The `messages.test.ts` catalog guard (54 tests) passed clean: identical key
+sets across all five locales, every message formats to real text.
+
+**Whether the marketing header should keep framing a guest's canvas, or the canvas should
+go full-window with a back-arrow session pill instead, was an explicit product decision —
+asked and answered.** The operator's call: keep the marketing header. `AppShell`'s
+"the header follows the VISITOR" behavior and the `operator-shell-header-follows-visitor`
+decision stand as documented, unchanged — a guest reaching a canvas from the marketing site
+keeps every way back into the product at the moment they're deciding whether to sign up.
+No code change; this closes the item as decided rather than as implemented.
+
+---
+
 ## ✅ RESOLVED 2026-08-16 — the remainder of the canvas-redesign audit, closed
 
 The 2026-08-16 mockup audit (https://claude.ai/code/artifact/c935a6ce-18cc-4ea4-bccf-1859a50c20a1)
-left nine items open after the floating-chrome pass. All nine are closed this pass,
-except the one item that was always DELIBERATE (the marketing header on a guest canvas
-route, still blocked on an explicit product decision) and one honestly scoped down
-(per-kind popover descriptions — see ROADMAP.md for why).
+left nine items open after the floating-chrome pass. All nine are closed this pass.
 
 **A `content` section carrying real markup rendered as escaped source code, not a page.**
 The GreenEdge Yard Care session's "Request a Quote" form printed as a wall of
@@ -81,11 +105,22 @@ into the command bar were all already live — the gap register simply had not b
 of the closed sub-bullets. ROADMAP.md's canvas-surfaces section is rewritten to reflect
 only what is genuinely still open.
 
+Also caught and fixed in the process, unrelated to this pass's own changes but exposed by
+finally running the full suite clean: `canvasSurfaces.test.tsx` queried `open-page-surface`
+/ `open-site-surface` unscoped, which the card header's own copy of the button now makes
+ambiguous — rescoped to the details panel / the specific card each assertion is actually
+about. And two tests (`keeps the mini map action visible…`, `opens the 3D view…`) asserted
+a static `'Toggle mini map'` / `'Clean up canvas layout'` label a prior pass's rail-into-
+command-bar consolidation had already replaced with the command bar's own dynamic
+`'Hide mini map'` / `'Show mini map'` and `'Arrange canvas objects'` — corrected to match
+what is actually on screen.
+
 Tests: `websiteMarkupSection.test.tsx` (new), `siteLandingPage.test.ts` (+2),
 `websiteWysiwyg.test.ts` (+1), `canvasAppSurface.test.tsx` (+2), `canvasNodeOpenSurface.test.tsx`
 (new), `MarketingHeader.test.tsx` (new), `CanvasOutlinePanel.test.tsx` (updated),
-`CreationCanvas.build.test.tsx`, and the full `CreationCanvas.test.tsx` suite (84 tests) —
-all green. `tsgo --noEmit` clean on both `frontend` and `api`. `check:roadmap` OK.
+`canvasSurfaces.test.tsx` (updated), `CreationCanvas.build.test.tsx`, and the full
+`CreationCanvas.test.tsx` suite (84 tests) — all green. `tsgo --noEmit` clean on both
+`frontend` and `api`. `check:roadmap` OK. 10/10 frontend guards, 24/24 api guards.
 
 ---
 

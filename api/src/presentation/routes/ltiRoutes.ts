@@ -130,6 +130,7 @@ export function createLtiRoutes() {
       ok: true,
       capability: context.capability,
       canReturnGrades: canReturnGrades(context),
+      issuer: context.issuer,
       context: {
         courseCode: context.contextLabel,
         courseTitle: context.contextTitle,
@@ -138,7 +139,17 @@ export function createLtiRoutes() {
         resourceLinkTitle: context.resourceLinkTitle,
       },
       user: { ref: context.subject, name: context.name, email: context.email },
-      services: { roster: !!context.membershipsUrl, grades: canReturnGrades(context) },
+      // The actual service URLs, not just whether they exist: a client that only
+      // learns `roster: true` still cannot call `/api/lti/roster`, which needs
+      // `membershipsUrl` in its body. Safe to return — neither URL is a secret, the
+      // service ACCESS TOKEN they are called with is minted server-side and never
+      // leaves this response.
+      services: {
+        roster: !!context.membershipsUrl,
+        grades: canReturnGrades(context),
+        membershipsUrl: context.membershipsUrl,
+        lineItemUrl: context.lineItemUrl,
+      },
     });
   });
 

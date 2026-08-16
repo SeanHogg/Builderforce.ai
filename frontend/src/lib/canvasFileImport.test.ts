@@ -247,6 +247,45 @@ describe('importCanvasFile', () => {
     expect(imported.notice).toContain('noticeFile');
   });
 
+  describe('a file that lands as an attachment but could still be escalated', () => {
+    /** A PDF with one page and no extractable text — a scan, in miniature.
+     * Same shape as the `readPdf` fixture in officeFormats.test.ts: a page
+     * whose content stream is a drawing operator, never a text-showing one. */
+    function scannedPdf(): Uint8Array {
+      const drawing = '0 0 612 792 re\nf';
+      const body = [
+        '<< /Type /Catalog /Pages 2 0 R >>',
+        '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+        '<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>',
+        `<< /Length ${drawing.length} >>\nstream\n${drawing}\nendstream`,
+      ].map((dict, index) => `${index + 1} 0 obj\n${dict}\nendobj\n`).join('');
+      return new TextEncoder().encode(`%PDF-1.7\n${body}%%EOF\n`);
+    }
+
+    it('asks a strategy to retain the bytes of a scanned PDF, and keeps what it returns', async () => {
+      const retain = async () => ({ sourceFileKey: 'tenant-1/user-1/attachments/scan.pdf' });
+      const imported = await importCanvasFile(file('scan.pdf', scannedPdf(), 'application/pdf'), t, retain);
+      const [object] = imported.objects;
+      expect(object?.kind).toBe('file');
+      expect(object?.data.sourceFileKey).toBe('tenant-1/user-1/attachments/scan.pdf');
+    });
+
+    it('retains nothing when there is no strategy, exactly as before', async () => {
+      const imported = await importCanvasFile(file('scan.pdf', scannedPdf(), 'application/pdf'), t);
+      const [object] = imported.objects;
+      expect(object?.data.sourceFileKey).toBeUndefined();
+      expect(object?.data.sourceDataUrl).toBeUndefined();
+    });
+
+    it('retains nothing when the strategy fails', async () => {
+      const retain = async () => { throw new Error('upload failed'); };
+      const imported = await importCanvasFile(file('scan.pdf', scannedPdf(), 'application/pdf'), t, retain);
+      const [object] = imported.objects;
+      expect(object?.data.sourceFileKey).toBeUndefined();
+      expect(object?.data.sourceDataUrl).toBeUndefined();
+    });
+  });
+
   it('routes every visible string through the catalog', async () => {
     const seen: string[] = [];
     const record: ImportTranslator = (key, values) => { seen.push(key); return t(key, values); };

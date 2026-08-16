@@ -27,10 +27,13 @@
 
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { siteCollections, siteRecords } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isSendableEmail, normalizeEmail } from '../shared/dnsVerification';
 import { addAudienceMembers } from '../marketing/campaignEngine';
+import { raiseTicketForSiteRecord } from './siteTicketBridge';
 
 /** The collection every published site gets for free. */
 export const DEFAULT_COLLECTION = 'signups';
@@ -142,6 +145,13 @@ export interface SubmitInput {
    * therefore never returned to anyone but the tenant.
    */
   siteUserId?: number | null;
+  /**
+   * Present only from the live HTTP path (never from a test). Needed to raise a
+   * board ticket when the collection has `raisesTickets` set — {@link
+   * raiseTicketForSiteRecord} needs it to fire the lane-entry funnel. Omitting it
+   * simply skips the ticket side effect, same as omitting `ipHash`.
+   */
+  env?: Env;
 }
 
 export type SubmitResult =
@@ -168,6 +178,8 @@ export async function submitSiteRecord(input: SubmitInput): Promise<SubmitResult
       audienceId: siteCollections.audienceId,
       dailyWriteCap: siteCollections.dailyWriteCap,
       tenantId: siteCollections.tenantId,
+      projectId: siteCollections.projectId,
+      raisesTickets: siteCollections.raisesTickets,
     })
     .from(siteCollections)
     .where(and(eq(siteCollections.siteId, siteId), eq(siteCollections.name, name), eq(siteCollections.tenantId, tenantId)))
@@ -228,6 +240,23 @@ export async function submitSiteRecord(input: SubmitInput): Promise<SubmitResult
     audienceAdded = added.added > 0;
   }
 
+  // Close the OTHER loop (0920, R10): a submission to a collection the tenant
+  // flagged as feedback becomes a ticket the workforce can act on. Best-effort
+  // for the same reason as the audience add just above — the submission has
+  // already succeeded and must not be lost because ticket creation failed.
+  if (collection.raisesTickets && input.env && record?.id != null) {
+    await raiseTicketForSiteRecord(input.env, db, {
+      tenantId,
+      projectId: collection.projectId,
+      collectionName: name,
+      recordId: record.id,
+      payload: sanitized.payload,
+      email: sanitized.email,
+    }).catch((error) => {
+      reportCaughtError(error, { source: 'application/ide/siteData.ts', operation: 'raiseTicketForSiteRecord' });
+    });
+  }
+
   return { ok: true, recordId: record?.id ?? null, accepted: true, audienceAdded };
 }
 
@@ -242,6 +271,8 @@ export interface CollectionView {
   audienceId: number | null;
   recordCount: number;
   dailyWriteCap: number;
+  /** Does a submission here open a board ticket (0920, R10)? */
+  raisesTickets: boolean;
   createdAt: Date;
 }
 
@@ -258,6 +289,7 @@ export async function listCollections(
       audienceId: siteCollections.audienceId,
       recordCount: siteCollections.recordCount,
       dailyWriteCap: siteCollections.dailyWriteCap,
+      raisesTickets: siteCollections.raisesTickets,
       createdAt: siteCollections.createdAt,
     })
     .from(siteCollections)
@@ -297,6 +329,7 @@ export async function createCollection(
       audienceId: siteCollections.audienceId,
       recordCount: siteCollections.recordCount,
       dailyWriteCap: siteCollections.dailyWriteCap,
+      raisesTickets: siteCollections.raisesTickets,
       createdAt: siteCollections.createdAt,
     });
   return { ok: true, collection: row! };
@@ -452,12 +485,12 @@ export type UpdateCollectionResult =
   | { ok: true; collection: CollectionView }
   | { ok: false; status: 404; error: string };
 
-/** Toggle public writes / link an audience / set the daily cap. */
+/** Toggle public writes / link an audience / set the daily cap / raise tickets. */
 export async function updateCollection(
   db: Db,
   tenantId: number,
   collectionId: number,
-  patch: { acceptsPublicWrites?: boolean; audienceId?: number | null; dailyWriteCap?: number },
+  patch: { acceptsPublicWrites?: boolean; audienceId?: number | null; dailyWriteCap?: number; raisesTickets?: boolean },
 ): Promise<UpdateCollectionResult> {
   const set: Record<string, unknown> = { updatedAt: sql`NOW()` };
   if (typeof patch.acceptsPublicWrites === 'boolean') set.acceptsPublicWrites = patch.acceptsPublicWrites;
@@ -465,6 +498,7 @@ export async function updateCollection(
   if (typeof patch.dailyWriteCap === 'number' && Number.isFinite(patch.dailyWriteCap)) {
     set.dailyWriteCap = Math.max(0, Math.trunc(patch.dailyWriteCap));
   }
+  if (typeof patch.raisesTickets === 'boolean') set.raisesTickets = patch.raisesTickets;
 
   const [row] = await db
     .update(siteCollections)
@@ -477,6 +511,7 @@ export async function updateCollection(
       audienceId: siteCollections.audienceId,
       recordCount: siteCollections.recordCount,
       dailyWriteCap: siteCollections.dailyWriteCap,
+      raisesTickets: siteCollections.raisesTickets,
       createdAt: siteCollections.createdAt,
     });
   if (!row) return { ok: false, status: 404, error: 'Collection not found.' };

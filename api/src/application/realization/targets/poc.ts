@@ -20,7 +20,7 @@
  */
 
 import { esc, renderProofShell, INGRESS_PRELUDE } from '../proofShell';
-import { criteriaFrom, goalHeadline, headlineCapabilities } from './shared';
+import { criteriaFrom, goalHeadline, headlineCapabilities, verdictRecorderScript, VERDICT_COLLECTION } from './shared';
 import type { RealizationTarget, RealizeContext, RealizationOutput } from '../realizationTarget';
 
 /** Trials a run performs. Small enough to sit through, large enough that one
@@ -46,6 +46,7 @@ function renderHarness(ctx: RealizeContext): string {
       <p class="muted" style="font-size:13px;margin:12px 0 0">
         Against the bar in <code>poc/hypothesis.md</code>, set before the first run.
       </p>
+      <button type="button" id="record-verdict" style="display:none;margin-top:12px"></button>
     </div>
     <div class="card">
       <p class="label">Trials</p>
@@ -86,6 +87,7 @@ function renderHarness(ctx: RealizeContext): string {
   <footer>${esc(spec.title)} — ${esc(goalHeadline(spec))}</footer>`;
 
   const script = `${INGRESS_PRELUDE}
+${verdictRecorderScript()}
   var THRESHOLD = ${DEFAULT_PASS_RATE};
   var results = [];
 
@@ -99,12 +101,23 @@ function renderHarness(ctx: RealizeContext): string {
     document.getElementById('rate-bar').style.width = Math.round(rate * 100) + '%';
 
     var el = document.getElementById('verdict');
+    var recordBtn = document.getElementById('record-verdict');
     if (judged.length < ${TRIALS}) {
       el.innerHTML = '<span class="pill">' + judged.length + ' of ${TRIALS} judged</span>';
-    } else if (rate >= THRESHOLD) {
-      el.innerHTML = '<span class="pill ok">clears the bar — build it</span>';
+      recordBtn.style.display = 'none';
     } else {
-      el.innerHTML = '<span class="pill bad">below the bar — this is the finding</span>';
+      var decided = rate >= THRESHOLD ? 'met' : 'missed';
+      if (rate >= THRESHOLD) {
+        el.innerHTML = '<span class="pill ok">clears the bar — build it</span>';
+      } else {
+        el.innerHTML = '<span class="pill bad">below the bar — this is the finding</span>';
+      }
+      recordBtn.style.display = '';
+      recordBtn.disabled = false;
+      recordBtn.textContent = 'Record verdict — ' + decided;
+      recordBtn.onclick = function () {
+        recordVerdict('record-verdict', decided, 'Pass rate', rate, THRESHOLD, { trials: ${TRIALS} });
+      };
     }
 
     document.getElementById('trials').innerHTML = results.length
@@ -303,7 +316,7 @@ ${Math.round(TRIALS * (1 - DEFAULT_PASS_RATE))} failures with something in commo
           order: 40,
           title: 'Run the trials and record what the failures had in common',
           description:
-            'The pass rate decides go or no-go. The pattern in the failures is the specification for the next attempt, and it is lost if the run is not written up the same day.',
+            'The pass rate decides go or no-go — once every trial is judged, click "Record verdict" on the harness to write that rate to this proof\'s record permanently. The pattern in the failures is the specification for the next attempt, and it is lost if it is not written up the same day.',
           kind: 'setup',
         },
         {
@@ -316,7 +329,7 @@ ${Math.round(TRIALS * (1 - DEFAULT_PASS_RATE))} failures with something in commo
       ],
       requiredConnectors: [],
       requiredSecrets: [],
-      requiredCollections: [],
+      requiredCollections: [VERDICT_COLLECTION],
       successCriteria: criteriaFrom(spec, [
         `${TRIALS} trials run against real inputs, each judged pass or fail.`,
         `The pass rate is recorded against the pre-registered ${Math.round(DEFAULT_PASS_RATE * 100)}% bar, and a go/no-go decision is written down.`,

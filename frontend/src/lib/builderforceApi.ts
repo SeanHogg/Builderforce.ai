@@ -8499,6 +8499,20 @@ export interface RealizationRecommendation {
   recommended: boolean;
 }
 
+/** What the success criteria decided. Mirrors `REALIZATION_VERDICTS` on the API. */
+export type RealizationVerdict = 'met' | 'missed' | 'abandoned';
+
+/** The number that decided it — shape varies by target (a signup count against
+ *  a sample, a pass rate against a trial count), so this stays loose rather
+ *  than forcing one schema onto every proof. */
+export interface RealizationVerdictMetric {
+  metricLabel?: string;
+  metricValue?: number;
+  target?: number;
+  note?: string;
+  [key: string]: unknown;
+}
+
 export interface Realization {
   id: string;
   challengeId: string | null;
@@ -8512,6 +8526,10 @@ export interface Realization {
   spec: ChallengeSpec;
   plan: ChallengePlan;
   error: string | null;
+  /** Null until a console has called it, or a person has parked the idea. */
+  verdict: RealizationVerdict | null;
+  verdictMetric: RealizationVerdictMetric | null;
+  decidedAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -8562,6 +8580,14 @@ export const realizationApi = {
 
   remove: (id: string): Promise<{ ok: boolean }> =>
     request<{ ok: boolean }>(`/api/realizations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  /** Park it. The one verdict typed by a person rather than read from a
+   *  console — met/missed only ever come from the proof's own console. */
+  abandon: (id: string, note?: string): Promise<Realization> =>
+    request<{ realization: Realization }>(`/api/realizations/${encodeURIComponent(id)}/verdict`, {
+      method: 'PATCH',
+      body: JSON.stringify({ verdict: 'abandoned', ...(note ? { note } : {}) }),
+    }).then((r) => r.realization),
 };
 
 // ---------------------------------------------------------------------------
