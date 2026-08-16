@@ -98,28 +98,35 @@ describe('CreationCanvas', () => {
   });
 
   it('publishes the docked Brain footprint on whichever edge it claims', () => {
-    // The command rail, the mini map and the 3D scene are pinned to the board's
-    // edges and step aside from these two numbers. A dock that claims an edge
-    // without publishing it is painted straight over the only canvas controls
-    // there are, which is exactly how the rail disappeared under a left dock.
+    // The command rail, the mini map, the 3D scene AND every floating chrome card are
+    // pinned to an edge and step aside from these two numbers. A dock that claims an edge
+    // without publishing it is painted straight over the only canvas controls there are,
+    // which is exactly how the rail disappeared under a left dock.
+    //
+    // They are published on the SHELL, not on the board. That moved when the chrome band
+    // became four floating cards: the cards are siblings of the board, so a reservation
+    // only the board could see would have left the session pill and the command bar as
+    // the two things that DO sit under the dock. Custom properties inherit, so the board
+    // still reads them from here.
     const { container } = render(<CreationCanvas sessionId="brain-dock-footprint-test" persistence="local" />);
     const board = () => container.querySelector<HTMLElement>('[data-brain-side]')!;
+    const shell = () => container.querySelector<HTMLElement>('[data-fullscreen]')!;
 
     expect(board()).toHaveAttribute('data-brain-side', 'right');
     expect(board()).toHaveAttribute('data-brain-open', 'true');
-    expect(board().style.getPropertyValue('--brain-dock-right')).toBe('330px');
-    expect(board().style.getPropertyValue('--brain-dock-left')).toBe('0px');
+    expect(shell().style.getPropertyValue('--brain-dock-right')).toBe('330px');
+    expect(shell().style.getPropertyValue('--brain-dock-left')).toBe('0px');
 
     fireEvent.click(screen.getByRole('button', { name: 'Dock Brain to the left' }));
     expect(board()).toHaveAttribute('data-brain-side', 'left');
-    expect(board().style.getPropertyValue('--brain-dock-left')).toBe('330px');
-    expect(board().style.getPropertyValue('--brain-dock-right')).toBe('0px');
+    expect(shell().style.getPropertyValue('--brain-dock-left')).toBe('330px');
+    expect(shell().style.getPropertyValue('--brain-dock-right')).toBe('0px');
 
     // A closed Brain claims nothing, so the board takes its full width back.
     fireEvent.click(screen.getByRole('button', { name: 'Close Brain chat' }));
     expect(board()).toHaveAttribute('data-brain-side', 'none');
     expect(board()).toHaveAttribute('data-brain-open', 'false');
-    expect(board().style.getPropertyValue('--brain-dock-left')).toBe('0px');
+    expect(shell().style.getPropertyValue('--brain-dock-left')).toBe('0px');
   });
 
   /**
@@ -907,11 +914,13 @@ describe('CreationCanvas', () => {
   });
 
   it('moves Brain into its Object rather than putting a second chat on the board', () => {
-    render(<CreationCanvas sessionId="brain-inline-test" persistence="local" />);
+    const { container } = render(<CreationCanvas sessionId="brain-inline-test" persistence="local" />);
 
     // Docked: the edge panel holds the conversation and the Object is Brain's mark.
     const dock = screen.getByRole('complementary', { name: 'Brain chat' });
-    const board = dock.parentElement;
+    // The reservation is published on the shell — see the footprint test for why it
+    // moved off the board when the chrome band became four floating cards.
+    const shell = container.querySelector<HTMLElement>('[data-fullscreen]');
     expect(screen.getByRole('button', { name: 'Open Brain chat' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Show the chat in the Brain object' }));
@@ -925,13 +934,13 @@ describe('CreationCanvas', () => {
     // The Object IS the chat now, so the anchor's way back to a panel is gone too.
     expect(screen.queryByRole('button', { name: 'Open Brain chat' })).not.toBeInTheDocument();
     // An inline Brain is an Object on the board, so the board gives up no width.
-    expect(board?.style.getPropertyValue('--brain-dock-right')).toBe('0px');
+    expect(shell?.style.getPropertyValue('--brain-dock-right')).toBe('0px');
     expect(JSON.parse(localStorage.getItem('builderforce:create:brain-dock')!)).toMatchObject({ mode: 'inline' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Dock Brain to the edge' }));
     expect(screen.getByRole('complementary', { name: 'Brain chat' })).toHaveAttribute('data-mode', 'docked');
     expect(screen.getAllByRole('log', { name: 'Brain chat history' })).toHaveLength(1);
-    expect(board?.style.getPropertyValue('--brain-dock-right')).toBe('330px');
+    expect(shell?.style.getPropertyValue('--brain-dock-right')).toBe('330px');
   });
 
   it('collapses the Brain Object to its mark while the conversation is docked', () => {

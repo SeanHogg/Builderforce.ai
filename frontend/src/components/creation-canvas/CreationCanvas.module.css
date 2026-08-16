@@ -180,7 +180,7 @@
   box-shadow:0 1px 2px var(--canvas-shadow), 0 14px 34px -14px var(--canvas-shadow);
 }
 
-.sessionPill { top:14px; left:14px; gap:7px; padding:6px 10px 6px 8px; min-width:0; }
+.sessionPill { top:14px; left:calc(14px + var(--brain-dock-left, 0px)); gap:7px; padding:6px 10px 6px 8px; min-width:0; }
 /* The title and the state read as one phrase, so they stack rather than sitting side by
    side — at 13px the connection light beside a 250px input pushed the pill past a third
    of the window and started colliding with the surface chips. */
@@ -196,9 +196,16 @@
 /* On the canvas, framing nothing. This is the piece the redesign is most often judged
    by: the old switcher sat inside a band that drew a hard line across the window under
    it, so the board began below the chrome instead of behind it. */
-.surfaceChips { top:14px; left:50%; transform:translateX(-50%); padding:4px; gap:4px; }
+/* Centred on the OPEN board, not on the window: with Brain docked to one edge, a card
+   centred on the viewport sits a third of the way under it. Same correction the minimap
+   and the prompt dock already make, from the same two variables. */
+.surfaceChips {
+  top:14px; padding:4px; gap:4px;
+  left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2);
+  transform:translateX(-50%);
+}
 
-.topRightCard { top:14px; right:14px; gap:6px; padding:6px; }
+.topRightCard { top:14px; right:calc(14px + var(--brain-dock-right, 0px)); gap:6px; padding:6px; }
 
 /* ── THE ONE COMMAND BAR ──────────────────────────────────────────────────────────
    Bottom centre, over the board rather than under it. It holds Run, whatever the
@@ -206,8 +213,10 @@
    `data-surface` is published so a surface-specific rule has somewhere to hang without
    this file needing to know which surfaces exist. */
 .commandBar {
-  bottom:14px; left:50%; transform:translateX(-50%);
-  gap:7px; padding:6px 7px; flex-wrap:nowrap;
+  bottom:14px; gap:7px; padding:6px 7px; flex-wrap:nowrap;
+  left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2);
+  transform:translateX(-50%);
+  max-width:calc(100% - 28px - var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px));
 }
 .commandBarDivider { flex:none; width:1px; height:22px; background:var(--canvas-line); }
 .commandBarCollapse {

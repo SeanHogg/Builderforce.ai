@@ -9414,6 +9414,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       ref={shellRef}
       className={`${styles.canvasShell} app-full-height`}
       data-fullscreen={fullscreen ? 'true' : 'false'}
+      style={{
+        // The dock owns one edge of the board; every other floating panel is pushed in
+        // by exactly its width so nothing can ever sit underneath it.
+        //
+        // Declared on the SHELL rather than on the board, which is where it used to live:
+        // the chrome now floats as a sibling of the board rather than inside it, so a
+        // reservation that only the board could see would have let the session pill and
+        // the command bar be the two things that DO sit underneath the dock.
+        '--brain-dock-left': `${brainDock.side === 'left' ? brainDockReserved : 0}px`,
+        '--brain-dock-right': `${brainDock.side === 'right' ? brainDockReserved : 0}px`,
+      } as CSSProperties}
     >
       {/* ── THE FLOATING CHROME ────────────────────────────────────────────────────
           There is no chrome band any more. The board takes the whole shell and each
@@ -9633,12 +9644,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ref={flowWrapRef}
         className={styles.flowWrap}
         data-tour="creation-board"
-        style={{
-          // The dock owns one edge of the board; every other floating panel is
-          // pushed in by exactly its width so nothing can ever sit underneath it.
-          '--brain-dock-left': `${brainDock.side === 'left' ? brainDockReserved : 0}px`,
-          '--brain-dock-right': `${brainDock.side === 'right' ? brainDockReserved : 0}px`,
-        } as CSSProperties}
         data-brain-side={brainDockReserved > 0 ? brainDock.side : 'none'}
         // A phone renders the DOCKED placement as one bottom sheet, so what the board
         // loses there is the bottom edge — not a side. The phone layout moves the
