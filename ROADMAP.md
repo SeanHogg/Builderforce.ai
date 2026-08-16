@@ -955,10 +955,31 @@ sequenced into waves because nothing in them gates the sell motion.
     product decision, not a layout one. **Blocked on an explicit user decision**: if the canvas
     should take the whole window for guests too, the session pill needs the mockup's back arrow to
     replace the nav it removes.
-  - **A node has no build affordances**: no centre `+` opening the object palette as an icon picker
-    at the node, no clock badge opening anchored schedule settings, no severity-coloured
-    message/error badge opening an anchored list that names the consequence and carries the link
-    that FIXES it. (The drag handles ARE now real targets — see DONE.md.)
+  - **SELECTING a card still opens the far-right rail, not a panel beside it.** The anchored panel
+    is BUILT (`CanvasNodePanel`) and opens from a card's badges and its settings button, but
+    `Inspector` is unchanged — `.inspector` is `position:absolute; top:14px; right:14px; bottom:14px`,
+    a full-height rail pinned to the window edge. So the single commonest way anybody opens
+    configuration still lands in the place the anchoring was meant to replace. Fixing it = routing
+    selection through `CanvasNodePanel` and demoting the rail to the "open full" escape hatch it is
+    already labelled as.
+  - **The canvas bottom-right corner is now EMPTY.** `LegalCorner` was stood down on stage routes
+    this session, and the operator's ask is the opposite: usage/consumption widgets for the
+    different features SHOULD live there, together with the copyright and version line. The
+    consumption data already exists (`AiUsageCard`, `insights/AiConsumptionHeader`,
+    `insights/widgets/aiImpactWidgets`) — what is missing is a canvas-corner surface that reads it.
+    Must be a read-through cached read, not a per-render recompute.
+  - **`Sign in to keep your work` still occupies the bottom-left rail** (`Sidebar.tsx:265`). It is
+    to be removed; the offer moves into the top-right CTA below.
+  - **The marketing header's CTA never changes once work exists.** `MarketingHeader.tsx:335`/`:379`
+    render a fixed `Get Started →` to `/register`. Once a visitor has started interacting with a
+    canvas it should read "Keep your work" in a DIFFERENT colour from the standard blue — the offer
+    is only meaningful after there is something to lose, and it is the replacement for the
+    bottom-left strip.
+  - **The chat surface names neither the session nor who is in it.** `CanvasChatSurface`'s header is
+    `✦ Brain`; the session title lives only in the floating pill and the participants only in the
+    command bar. In chat the session name belongs at the far left of the conversation, and the
+    participants belong IN the conversation — they are part of it, and adding one to the chat should
+    add them to the board.
   - **Config is still a full-height right rail**, not a panel ANCHORED beside the card it configures
     with a bottom-left "Advanced settings" toggle hiding the long tail of fields.
   - **People are not nodes.** A built-in seat (CTO, from the `role:<key>` catalog) and a custom

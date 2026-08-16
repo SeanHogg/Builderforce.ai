@@ -104,15 +104,16 @@ describe('the floating command bar', () => {
 
   it('adds the object the picker was asked for', () => {
     render(<CreationCanvas sessionId="command-bar-pick" persistence="local" />);
+    // Counted, not asserted-present: a new session is seeded with demo objects and one of
+    // them is already a website, so "there is a website on the board" was true before the
+    // press and would have passed whether or not the picker did anything.
+    const websites = () => document.querySelectorAll('[data-node-kind="website"]').length;
+    const before = websites();
 
     fireEvent.click(screen.getByTestId('canvas-quick-add-build'));
     fireEvent.click(within(screen.getByTestId('canvas-object-picker')).getByTestId('canvas-picker-website'));
 
-    // `getAllBy`: React Flow renders a node and a measurement copy under jsdom, so the
-    // testid legitimately matches more than once for ONE object on the board.
-    const drawn = screen.getAllByTestId('canvas-node-website');
-    expect(drawn.length).toBeGreaterThan(0);
-    expect(new Set(drawn.map((node) => node.getAttribute('data-node-id'))).size).toBe(1);
+    expect(websites()).toBe(before + 1);
     // It closes behind itself — a picker that stays open over the thing it just made is
     // a picker in the way.
     expect(screen.queryByTestId('canvas-object-picker')).toBeNull();
