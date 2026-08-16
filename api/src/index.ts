@@ -163,6 +163,7 @@ import { createIntegrationRoutes }  from './presentation/routes/integrationRoute
 import { createIntegrationCatalogRoutes } from './presentation/routes/integrationCatalogRoutes';
 import { createDataSourceRoutes }  from './presentation/routes/dataSourceRoutes';
 import { createConnectorRoutes }    from './presentation/routes/connectorRoutes';
+import { createTemplateRoutes }     from './presentation/routes/templateRoutes';
 import { createContributorRoutes }  from './presentation/routes/contributorRoutes';
 import { runRepoActivitySweep }      from './application/contributors/runRepoActivitySweep';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
@@ -834,6 +835,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // and one bounded SELECT. Same credential store, same encryption secret.
   app.route('/api/data-sources',    createDataSourceRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));
   app.route('/api/connectors',      createConnectorRoutes(db));
+  // Templates extend those two: a template IS a guided setup over the connector
+  // catalogue that produces a workflow, so it is registered beside them.
+  app.route('/api/templates',       createTemplateRoutes(db));
   app.route('/api/contributors',    createContributorRoutes(db));
   app.route('/api/dev-teams',       createDevTeamRoutes(db));
   app.route('/api/reports',         createReportRoutes(db));

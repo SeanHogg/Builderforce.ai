@@ -133,7 +133,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
 | 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 36 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 152 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 153 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
@@ -153,7 +153,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 7 | 25 |
 | 8 | 3 |
 | 9 | 36 |
-| 10 | 152 |
+| 10 | 153 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
@@ -892,6 +892,27 @@ sequenced into waves because nothing in them gates the sell motion.
 ## 10 · 🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas
 
 ### Canvas surfaces
+
+- **Four full-width bands of chrome before a single object is drawn, and a graph you cannot build by
+  hand.** *(registered 2026-08-16 by the "resemble Make's UI/UX" review pass)* A `/create` session
+  spends the marketing header, the session bar, the fixed prompt composer and the ALWAYS-ON team bar
+  on chrome that never changes during a session — two of them permanent full-width bands, one of
+  them a logged-out marketing nav. Separately, the board can only be built by prompting: a node has
+  no visible connector handle to drag, no centre `+` to insert the next step, no clock to schedule
+  it, and its inspector is a full-height right rail forty controls deep with nothing tying it to the
+  card it configures. Fixing it = nine moves, most of them relocations: one floating session pill;
+  the team folded into a single floating command bar (Run · schedule · tools · avatars · +); surface
+  chips floating ON the canvas rather than in a band above it; the prompt gaining float / dock-into-
+  Brain / closed states; config panels ANCHORED beside their node with a bottom-left "Advanced
+  settings" toggle; real 26×44px drag handles on both sides of every node; a centre `+` opening the
+  existing object palette as a visual icon picker at the node; and a per-step clock badge opening
+  anchored schedule settings. This is what turns the canvas from "describe it and hope" into
+  something a non-developer can assemble, and it reclaims roughly 180px of vertical room.
+  **Blocked on an explicit user decision:** the design is done and mocked up interactively
+  (https://claude.ai/code/artifact/c935a6ce-18cc-4ea4-bccf-1859a50c20a1) — building it edits the app
+  shell, `CreationCanvas.tsx`, the object palette, the inspector and five i18n catalogs, and one
+  open question is called out in the mockup (whether a collapsed command bar keeps the team avatars
+  or hides them the way Make hides everything).
 
 - **A SCANNED document dropped on the canvas can never become a résumé, because the canvas keeps no
   bytes to escalate with.** *(registered 2026-08-16 by the "convert this pdf into a resume" pass,

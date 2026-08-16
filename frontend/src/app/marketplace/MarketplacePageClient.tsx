@@ -34,6 +34,7 @@ import { isAgentOwner } from '@/lib/agentPermissions';
 import { formatAgentPrice } from '@/lib/agentPresentation';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 import { KnowledgeMarketSection } from './KnowledgeMarketSection';
+import { TemplateGallery } from '@/components/templates/TemplateGallery';
 import { CreationsSection } from './CreationsSection';
 import { SellerEarnings } from './SellerEarnings';
 import { type ViewMode } from '@/components/ViewToggle';
@@ -64,7 +65,7 @@ import { signInHref } from '@/lib/auth';
 // verb that was never a category — became the primary button. This stays the
 // INTERNAL section discriminator; the families above it are the vocabulary a
 // person sees, and `SECTION_BY_KIND` is the one place the two meet.
-type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'workforce' | 'talent' | 'models' | 'gigs' | 'publish' | 'company' | 'knowledge' | 'creations';
+type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'workforce' | 'talent' | 'models' | 'gigs' | 'publish' | 'company' | 'knowledge' | 'creations' | 'templates';
 
 /** (family, kind) → which section renders. A table, so a new kind is a row. */
 const SECTION_BY_KIND: Record<string, MarketplaceCategory> = {
@@ -76,6 +77,7 @@ const SECTION_BY_KIND: Record<string, MarketplaceCategory> = {
   'asset:skill': 'skills',
   'asset:persona': 'personas',
   'asset:knowledge': 'knowledge',
+  'asset:template': 'templates',
   'company:business': 'company',
   'company:storefront': 'company',
   // Every sellable canvas kind renders the SAME feed, so these rows are read
@@ -943,6 +945,12 @@ export default function MarketplacePageClient() {
         <MarketplaceGigsSection search={search} />
       ) : category === 'knowledge' ? (
         <KnowledgeMarketSection search={search} />
+      ) : category === 'templates' ? (
+        // The SAME gallery `/templates` renders, reading the SAME catalogue the
+        // starting-point picker reads. A template listed here and a template
+        // offered in the prompt bar are one row, not two lists that agree by
+        // accident — which is the drift this consolidation exists to end.
+        <TemplateGallery search={search} />
       ) : category === 'creations' ? (
         // What people BUILT on the canvas, on sale and runnable. One kind per
         // chip, filtered server-side by the same registry the seller published

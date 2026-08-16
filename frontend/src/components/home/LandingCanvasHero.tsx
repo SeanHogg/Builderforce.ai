@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import BrainBackdrop from '@/components/BrainBackdrop';
 import { ChatInput } from '@/components/ChatInput';
 import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
+import { applyTemplateEntry } from '@/lib/templates/apply';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { NEW_CHAT_MODE, type ChatMode } from '@/lib/brain';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -322,6 +323,7 @@ function Composer({ value, onChange, onSubmit, chatMode, onChatModeChange, onEng
   onEngage: () => void;
 }) {
   const t = useTranslations('home');
+  const router = useRouter();
   return (
     <div
       className={styles.promptWrap}
@@ -343,7 +345,17 @@ function Composer({ value, onChange, onSubmit, chatMode, onChatModeChange, onEng
         chatMode={chatMode}
         onChatModeChange={onChatModeChange}
       />
-      <PromptUseCasePicker placement="bottom" onSelect={onChange} />
+      {/* The hero has a composer and nothing else — no board to place a pack on
+          and no workspace to install into — so it declares only `onPrompt`.
+          `applyTemplateEntry` reports the entries it cannot run rather than
+          leaving a press with no effect, and the hero sends those to the
+          templates gallery, where they can be set up properly. */}
+      <PromptUseCasePicker placement="bottom" onSelect={(entry) => {
+        applyTemplateEntry(entry, {
+          onPrompt: (prompt) => onChange(prompt),
+          onInstall: (key) => router.push(`/templates/${encodeURIComponent(key)}`),
+        });
+      }} />
     </div>
   );
 }

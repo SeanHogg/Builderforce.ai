@@ -1,7 +1,16 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
-import { C_SUITE_CANVAS_OWNERS, C_SUITE_CANVAS_USE_CASES, C_SUITE_CANVAS_WORKFLOWS, PromptUseCasePicker, cSuiteCanvasOwner, cSuiteCanvasWorkflow, executiveCanvasPrompt } from './PromptUseCasePicker';
+import { PromptUseCasePicker } from './PromptUseCasePicker';
+import { C_SUITE_CANVAS_OWNERS, C_SUITE_CANVAS_USE_CASES, C_SUITE_CANVAS_WORKFLOWS, cSuiteCanvasOwner, cSuiteCanvasWorkflow, executiveCanvasPrompt } from '@/lib/templates/promptUseCases';
+
+// The picker now renders the merged catalogue, whose workspace half comes from
+// the API. These tests are about the picker and the prompt sources, so the
+// installable half is stubbed empty — its own behaviour is covered by the
+// gallery and the server's template tests.
+vi.mock('@/lib/templates/api', () => ({
+  templatesApi: { list: () => Promise.resolve({ templates: [], categories: [] }) },
+}));
 
 vi.mock('next-intl', () => ({
   useTranslations: () => Object.assign(
@@ -65,9 +74,13 @@ describe('PromptUseCasePicker', () => {
     expect(root).toHaveAttribute('data-open', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Wireframe' }));
 
-    expect(onSelect).toHaveBeenCalledWith('Create a product wireframe.', {
-      id: 'wireframe', category: 'apps', label: 'Wireframe', prompt: 'Create a product wireframe.',
-    });
+    // One argument now: the ENTRY. The caller decides what to do with it, which
+    // is what lets the same menu seed a prompt, drop a pack and open a setup.
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'wireframe',
+      name: 'Wireframe',
+      action: { kind: 'prompt', prompt: 'Create a product wireframe.' },
+    }));
     expect(tab).toHaveAttribute('aria-expanded', 'false');
   });
 
@@ -94,9 +107,15 @@ describe('PromptUseCasePicker', () => {
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'finance.runway.snapshot' } });
     fireEvent.click(screen.getByRole('button', { name: 'Runway snapshot' }));
 
-    expect(onSelect).toHaveBeenCalledWith(
-      expect.stringContaining('runway KPI'),
-      expect.objectContaining({ id: 'finance.runway.snapshot', categoryLabel: 'Finance' }),
-    );
+    // The execution contract now rides ON the entry rather than being composed
+    // at the call site, so every surface offering it runs the same prompt.
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'finance.runway.snapshot',
+      categoryLabel: 'Finance',
+      action: expect.objectContaining({
+        kind: 'prompt',
+        prompt: expect.stringContaining('canvas_prepare_executive_use_case'),
+      }),
+    }));
   });
 });

@@ -1,3 +1,51 @@
+## ✅ RESOLVED 2026-08-16 — the canvas could build an app and never run it: the `app` surface
+
+Ask Brain for an SMS sender and four cards land — `backend/server.js`, `frontend/index.html`, a
+rendered page, a setup note. The session bar offered Chat / Board / 3D space / Share / Save, and
+**nothing on that screen ran them, tested them or shipped them**. The only route to a URL was
+`SellInMarketplace`, in a selected card's inspector, behind `isPublishableObjectKind` — three clicks
+deep, framed as commerce, invisible until you had clicked the right card.
+
+**The hole was structural, not a missing button.** Every runtime surface in `lib/canvasSurfaces.ts`
+was `scope: 'object'` — one card opened full size — and `creationObjectSurfaces.ts` binds `site` to
+the `website`/`prototype` kinds only. An application spread across three cards matched nothing, and
+no surface in the registry could read many objects as one artifact.
+
+**`app` is the fourth board surface**, `{ scope: 'board', order: 3, persist: true }`, and the first
+entry on either axis that is about the SESSION. `lib/canvasApp.ts` is the new projection: it gathers
+every `code` object into one file list, picks the entry page (`index.html` if there is one), and
+assembles ONE document with sibling stylesheets and scripts inlined — a `srcDoc` has no origin to
+resolve `href="styles.css"` against, which is how a preview shows a correct page with none of its
+styling and no explanation.
+
+**It does not pretend to run what a browser cannot.** Server files are separated by ROLE from the
+source itself (`require(`, `module.exports`, `process.env`, `.listen(`) rather than by folder
+convention, named in the Console, and the injected instrumentation reports every `fetch` to a host
+that is not attached — "no host is attached to this preview" instead of a bare `Failed to fetch`
+that reads as a bad credential. The frame runs under `CANVAS_APP_FRAME_SANDBOX`, `allow-scripts`
+without `allow-same-origin`, asserted by test.
+
+**Publishing became a permanent noun.** A `publish` session action sits beside Share in the registry
+(so it inherits the phone-overflow rules), and both it and the surface's own button open the SAME
+`CanvasReleasesPanel` lifecycle scoped to the whole board. One gate, two doors — a URL for builders,
+a listing for sellers. No stage/check logic was reimplemented; that panel still owns all of it.
+
+**Two defects closed on the way.** `CanvasSurfaceSwitcher` read `SURFACE_ICON[def.id]` into
+`<Glyph />` unguarded, so a board surface added by following the registry's own three-step
+instructions **crashed the session bar** — the fourth step was undocumented. It now degrades to the
+label. And `CanvasFilesPanel`'s inline four-call "reveal this node" became `revealObject`, which the
+app surface also needs plus the one the library did not: handing the board back.
+
+Research behind the shape (Lovable, v0, Bolt, Replit, Figma Make, FlutterFlow, Base44) and the
+mockup: https://claude.ai/code/artifact/310f4049-c2d4-463a-ade7-c557262c237f
+
+Files: `lib/canvasApp.ts` (new), `CanvasAppSurface.tsx` (new), `canvasAppSurface.test.tsx` (new),
+`lib/canvasSurfaces.ts`, `lib/canvasSessionActions.ts`, `CanvasSurfaceSwitcher.tsx`,
+`CanvasSessionActions.tsx`, `CanvasCommands.tsx`, `CreationCanvas.tsx`, `CreationCanvas.module.css`,
+all five i18n catalogs. 10/10 guards green, 1105 canvas tests green.
+
+---
+
 ## ✅ RESOLVED 2026-08-16 — the other half of the canvas session bar, and the five actions a phone never had
 
 The Chat / Board / 3D switcher answers *what am I looking at*. The eight buttons beside it answer

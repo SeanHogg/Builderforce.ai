@@ -7100,7 +7100,8 @@
         "label": "投资人更新",
         "prompt": "根据画布上的内容起草本期投资人更新：有真实数字的亮点与不足、各项常规指标及其变化，以及具体的请求支持事项。"
       }
-    ]
+    ],
+    "setupSteps": "{count} 个步骤"
   },
   "home": {
     "heroBadge": "画布 · 人类 + AI 智能体",
@@ -9750,7 +9751,8 @@
         "model": "模型",
         "skill": "技能",
         "persona": "角色",
-        "knowledge": "知识"
+        "knowledge": "知识",
+        "template": "模板"
       },
       "note": {
         "talent": "人与零工。对一次会话而言，人和智能体是同类参与者，但并非同类listing——一个有档期与费率，另一个有价格与席位。",
@@ -19171,7 +19173,9 @@
       "inspect": "画布工具",
       "session": "共享与发布"
     },
-    "moreMenuSessionActions": "此画布"
+    "moreMenuSessionActions": "此画布",
+    "templateCategoryAutomation": "自动化",
+    "templateCategoryPrompt": "提示词"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -21614,6 +21618,51 @@
         "readOnly": "该应用停机时间过长。计费已停止，你可以导出自己录入的全部数据。",
         "released": "该应用已被弃置。计费已停止，你可以免费将已发布的版本取到自己的画板上。"
       }
+    }
+  },
+  "templates": {
+    "title": "模板",
+    "subtitle": "可自行完成配置的现成起点。回答几个问题，一套可运行的自动化流程、它的执行计划以及需要你处理的事项就会一并进入你的工作区。",
+    "searchPlaceholder": "搜索模板",
+    "filterCategory": "按类别筛选",
+    "allCategories": "全部类别",
+    "empty": "没有符合条件的模板。",
+    "loading": "正在加载模板…",
+    "loadingSetup": "正在确认所需内容…",
+    "setupSteps": "{count} 个步骤",
+    "startSetup": "开始配置 · {count} 个步骤",
+    "connectedOf": "已连接 {connected}/{total}",
+    "allConnected": "可以开始配置",
+    "needsConnected": "需要连接的服务",
+    "whatItCreates": "将会创建的内容",
+    "workingMeans": "成功的标志是",
+    "progress": "已完成 {done}/{total}",
+    "optional": "（可选）",
+    "install": "开始配置",
+    "installing": "正在配置…",
+    "installed": "配置完成",
+    "installedBody": "以下内容已加入你的工作区。",
+    "openOutput": "打开",
+    "installFailed": "无法完成配置。",
+    "setupFailed": "无法确认所需内容。",
+    "setupIncomplete": "还有几项未填写，已在下方标出。",
+    "unsupportedStep": "当前版本不支持该步骤类型（{kind}）。",
+    "timezoneFor": "{title} — 时区",
+    "category": {
+      "marketing": "市场营销",
+      "sales": "销售",
+      "hiring": "招聘",
+      "support": "客户支持",
+      "operations": "运营",
+      "finance": "财务",
+      "engineering": "工程",
+      "messaging": "消息通讯",
+      "analytics": "数据分析",
+      "other": "其他"
+    },
+    "outputKind": {
+      "workflow": "一套自动化流程",
+      "tasks": "看板上的待办事项"
     }
   }
 }

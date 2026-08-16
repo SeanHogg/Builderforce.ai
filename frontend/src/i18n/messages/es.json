@@ -7100,7 +7100,8 @@
         "label": "Informe a inversores",
         "prompt": "Redacta el informe a inversores de este periodo con lo que hay en este lienzo: logros y problemas con cifras reales, las métricas habituales con su variación, y peticiones concretas."
       }
-    ]
+    ],
+    "setupSteps": "{count, plural, one {# paso} other {# pasos}}"
   },
   "home": {
     "heroBadge": "Lienzo · Personas + agentes de IA",
@@ -9750,7 +9751,8 @@
         "model": "Modelos",
         "skill": "Habilidades",
         "persona": "Perfiles",
-        "knowledge": "Conocimiento"
+        "knowledge": "Conocimiento",
+        "template": "Plantillas"
       },
       "note": {
         "talent": "Personas y encargos. Para una sesión, una persona y un agente son el mismo tipo de participante, pero no el mismo tipo de anuncio: una tiene disponibilidad y tarifa; el otro, precio y puesto.",
@@ -19171,7 +19173,9 @@
       "inspect": "Herramientas del lienzo",
       "session": "Compartir y publicar"
     },
-    "moreMenuSessionActions": "Este lienzo"
+    "moreMenuSessionActions": "Este lienzo",
+    "templateCategoryAutomation": "Automatizaciones",
+    "templateCategoryPrompt": "Indicaciones"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -21614,6 +21618,51 @@
         "readOnly": "Esta aplicación lleva demasiado tiempo caída. Se ha detenido el cobro y puedes exportar todo lo que hayas introducido.",
         "released": "Esta aplicación ha sido abandonada. Se ha detenido el cobro y puedes llevarte la versión publicada a un tablero propio, sin coste."
       }
+    }
+  },
+  "templates": {
+    "title": "Plantillas",
+    "subtitle": "Puntos de partida listos que se configuran solos. Responde unas preguntas y en tu espacio aparecerán una automatización que funciona, su calendario y el trabajo que necesita de ti.",
+    "searchPlaceholder": "Buscar plantillas",
+    "filterCategory": "Filtrar por categoría",
+    "allCategories": "Todas las categorías",
+    "empty": "Ninguna plantilla coincide con lo que buscas.",
+    "loading": "Cargando plantilla…",
+    "loadingSetup": "Comprobando qué necesita…",
+    "setupSteps": "{count, plural, one {# paso} other {# pasos}}",
+    "startSetup": "Configurar · {count, plural, one {# paso} other {# pasos}}",
+    "connectedOf": "{connected} de {total} conectadas",
+    "allConnected": "Lista para configurar",
+    "needsConnected": "Qué necesita tener conectado",
+    "whatItCreates": "Qué crea",
+    "workingMeans": "Sabrás que funciona cuando",
+    "progress": "{done} de {total} listos",
+    "optional": "(opcional)",
+    "install": "Configurar",
+    "installing": "Configurando…",
+    "installed": "Configurada",
+    "installedBody": "Esto es lo que se ha creado en tu espacio.",
+    "openOutput": "Abrir",
+    "installFailed": "No se ha podido configurar.",
+    "setupFailed": "No se ha podido comprobar qué necesita.",
+    "setupIncomplete": "Faltan algunas respuestas: están marcadas abajo.",
+    "unsupportedStep": "Esta versión no admite este tipo de paso ({kind}).",
+    "timezoneFor": "{title} — zona horaria",
+    "category": {
+      "marketing": "Marketing",
+      "sales": "Ventas",
+      "hiring": "Contratación",
+      "support": "Soporte",
+      "operations": "Operaciones",
+      "finance": "Finanzas",
+      "engineering": "Ingeniería",
+      "messaging": "Mensajería",
+      "analytics": "Analítica",
+      "other": "Otros"
+    },
+    "outputKind": {
+      "workflow": "una automatización",
+      "tasks": "trabajo en tu tablero"
     }
   }
 }

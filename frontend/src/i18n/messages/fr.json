@@ -7100,7 +7100,8 @@
         "label": "Point investisseurs",
         "prompt": "Rédige le point investisseurs de la période à partir de ce canevas : points forts et points faibles chiffrés, les métriques habituelles avec leur variation, et des demandes précises."
       }
-    ]
+    ],
+    "setupSteps": "{count, plural, one {# étape} other {# étapes}}"
   },
   "home": {
     "heroBadge": "Canevas · Humains + agents IA",
@@ -9750,7 +9751,8 @@
         "model": "Modèles",
         "skill": "Compétences",
         "persona": "Personas",
-        "knowledge": "Connaissances"
+        "knowledge": "Connaissances",
+        "template": "Modèles"
       },
       "note": {
         "talent": "Des personnes et des missions. Pour une session, une personne et un agent sont le même type de participant, mais pas le même type d’annonce : l’une a des disponibilités et un tarif, l’autre un prix et un siège.",
@@ -19171,7 +19173,9 @@
       "inspect": "Outils de la toile",
       "session": "Partager et publier"
     },
-    "moreMenuSessionActions": "Cette toile"
+    "moreMenuSessionActions": "Cette toile",
+    "templateCategoryAutomation": "Automatisations",
+    "templateCategoryPrompt": "Invites"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -21614,6 +21618,51 @@
         "readOnly": "Cette application est hors service depuis trop longtemps. La facturation est arrêtée et vous pouvez exporter tout ce que vous y avez saisi.",
         "released": "Cette application est abandonnée. La facturation est arrêtée et vous pouvez récupérer gratuitement la version publiée sur un tableau à vous."
       }
+    }
+  },
+  "templates": {
+    "title": "Modèles",
+    "subtitle": "Des points de départ prêts à l’emploi qui se configurent seuls. Répondez à quelques questions et une automatisation opérationnelle, son planning et les tâches qu’elle vous confie arrivent dans votre espace.",
+    "searchPlaceholder": "Rechercher un modèle",
+    "filterCategory": "Filtrer par catégorie",
+    "allCategories": "Toutes les catégories",
+    "empty": "Aucun modèle ne correspond à votre recherche.",
+    "loading": "Chargement du modèle…",
+    "loadingSetup": "Vérification de ce qui est nécessaire…",
+    "setupSteps": "{count, plural, one {# étape} other {# étapes}}",
+    "startSetup": "Configurer · {count, plural, one {# étape} other {# étapes}}",
+    "connectedOf": "{connected} sur {total} connectées",
+    "allConnected": "Prêt à configurer",
+    "needsConnected": "Ce qui doit être connecté",
+    "whatItCreates": "Ce qu’il crée",
+    "workingMeans": "Vous saurez que cela fonctionne quand",
+    "progress": "{done} sur {total} terminés",
+    "optional": "(facultatif)",
+    "install": "Configurer",
+    "installing": "Configuration en cours…",
+    "installed": "Configuré",
+    "installedBody": "Voici ce qui a été créé dans votre espace.",
+    "openOutput": "Ouvrir",
+    "installFailed": "Impossible de configurer ce modèle.",
+    "setupFailed": "Impossible de vérifier ce qui est nécessaire.",
+    "setupIncomplete": "Il manque quelques réponses — elles sont signalées ci-dessous.",
+    "unsupportedStep": "Ce type d’étape ({kind}) n’est pas pris en charge par cette version.",
+    "timezoneFor": "{title} — fuseau horaire",
+    "category": {
+      "marketing": "Marketing",
+      "sales": "Ventes",
+      "hiring": "Recrutement",
+      "support": "Assistance",
+      "operations": "Opérations",
+      "finance": "Finance",
+      "engineering": "Ingénierie",
+      "messaging": "Messagerie",
+      "analytics": "Analytique",
+      "other": "Autre"
+    },
+    "outputKind": {
+      "workflow": "une automatisation",
+      "tasks": "du travail sur votre tableau"
     }
   }
 }

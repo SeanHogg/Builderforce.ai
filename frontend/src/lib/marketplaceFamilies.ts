@@ -133,6 +133,9 @@ export type PublishAction =
 const PUBLISH_ROUTE: Record<string, { href: string; requiresAuth: boolean }> = {
   'asset:persona': { href: '/personas', requiresAuth: true },
   'asset:knowledge': { href: '/knowledge/new', requiresAuth: true },
+  // A template is published from the gallery that owns it — the skill form's
+  // slug/version/repo fields describe nothing about a guided setup.
+  'asset:template': { href: '/templates', requiresAuth: true },
 };
 
 /** Chips nobody can publish into. The provider catalogue owns the model list;
@@ -183,7 +186,11 @@ export const FAMILIES: Record<FamilyId, MarketplaceFamily> = {
     publishKey: 'publishAsset',
     flow: 'asset',
     hueVar: '--seat-ceo',
-    kinds: familyKinds('asset', ['model', 'skill', 'persona', 'knowledge']),
+    // `template` leads the asset kinds: a template is the only asset that comes
+    // with its own guided setup and produces something that keeps running, so
+    // it is the one a visitor is most likely to be able to use on the day they
+    // arrive. It is published from `/templates`, not from the skill form.
+    kinds: familyKinds('asset', ['template', 'model', 'skill', 'persona', 'knowledge']),
     noteKey: 'note.asset',
   },
 };

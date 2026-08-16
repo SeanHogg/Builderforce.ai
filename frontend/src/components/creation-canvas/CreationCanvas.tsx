@@ -201,7 +201,11 @@ import { useSectionTour } from '@/components/onboarding/useSectionTour';
 import { canvasTourDesignFromNode, defaultCanvasTourDesign, type CanvasTourDesign } from '@/lib/onboarding/canvasTourDesign';
 import { useChatModelOptions } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
-import { C_SUITE_CANVAS_USE_CASES, PromptUseCasePicker, cSuiteCanvasOwner, cSuiteCanvasWorkflow, executiveCanvasPrompt } from '@/components/PromptUseCasePicker';
+import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
+import { C_SUITE_CANVAS_USE_CASES, cSuiteCanvasOwner, cSuiteCanvasWorkflow } from '@/lib/templates/promptUseCases';
+import { applyTemplateEntry } from '@/lib/templates/apply';
+import { useTemplateCatalog } from '@/lib/templates/useTemplateCatalog';
+import { matchesTemplateQuery } from '@/lib/templates/contract';
 import { DOMAINS, getDomainItems, getDomainMetrics, getDomainSummary, getEntityRows, getScopeEntities, isDomain } from '@/lib/kernel/kernelApi';
 import { TwilioCanvasSetup } from './TwilioCanvasSetup';
 import { NEW_CHAT_MODE, normalizeChatMode, useQueuedTurns, type ChatMode } from '@/lib/brain';
@@ -912,7 +916,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templateSearch, setTemplateSearch] = useState('');
   const [templateKind, setTemplateKind] = useState<CreationObjectKind | 'all'>('all');
-  const [templateCategory, setTemplateCategory] = useState<CreationTemplate['category'] | 'all'>('all');
+  // The category filter is now over template SOURCES rather than the packs'
+  // own two-value `category` field, because the browser renders every source.
+  const [templateCategory, setTemplateCategory] = useState<'all' | 'pack' | 'workspace' | 'prompt'>('all');
+  // The one catalogue, shared with the prompt picker. Installable templates are
+  // fetched only while the browser is open — a guest canvas never opens it.
+  const templateEntries = useTemplateCatalog({ includeWorkspace: templateOpen });
   const [paletteSearch, setPaletteSearch] = useState('');
   const [collapsedPaletteGroups, setCollapsedPaletteGroups] = useState<Set<CreationObjectGroup>>(new Set());
   const [palettePreferencesReady, setPalettePreferencesReady] = useState(false);
@@ -9214,9 +9223,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   ));
 
   const promptStarter = !presentMode && <div className={styles.promptStarter} data-tour="creation-prompt-starter">
-    <PromptUseCasePicker placement="top" align="end" onSelect={(nextPrompt, useCase) => {
-      setPrompt(executiveCanvasPrompt(useCase) ?? nextPrompt);
-      if (useCase.id === 'twilio-ai-journey') setTwilioPromptSelected(true);
+    {/* One menu, every source. A prompt seeds the composer, a pack lands on the
+        board, and an installable template opens its guided setup — dispatched by
+        `applyTemplateEntry` so this surface never branches on where an entry
+        came from. The executive execution contract now rides on the entry, so
+        it no longer has to be re-composed here. */}
+    <PromptUseCasePicker placement="top" align="end" onSelect={(entry) => {
+      applyTemplateEntry(entry, {
+        onPrompt: (nextPrompt) => {
+          setPrompt(nextPrompt);
+          if (entry.id === 'twilio-ai-journey') setTwilioPromptSelected(true);
+        },
+        onPack: (template) => applyTemplate(template),
+        onInstall: (key) => router.push(`/templates/${encodeURIComponent(key)}`),
+      });
     }} />
   </div>;
 
@@ -9450,8 +9470,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>}
           {templateOpen && <div className={styles.templateMenu}>
             <header><div><strong>{t('canvasTemplates')}</strong><small>{t('marketplacePacks')}</small></div><button onClick={() => setTemplateOpen(false)} aria-label={t('closeTemplates')}>×</button></header>
-            <div className={styles.templateFilters}><input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} placeholder={t('searchTemplates')} aria-label={t('searchTemplates')} /><select value={templateCategory} onChange={(event) => setTemplateCategory(event.target.value as typeof templateCategory)} aria-label={t('filterTemplateCategory')}><option value="all">{t('allCategories')}</option><option value="Marketplace template">{t('templateCategoryMarketplace')}</option><option value="Object pack">{t('templateCategoryObjectPack')}</option></select><select value={templateKind} onChange={(event) => setTemplateKind(event.target.value as typeof templateKind)} aria-label={t('filterTemplateKind')}><option value="all">{t('allMediaKinds')}</option>{[...new Set(CREATION_TEMPLATES.flatMap((template) => template.objects.map((object) => object.kind)))].sort().map((kind) => <option key={kind} value={kind}>{t(`object.${kind}`)}</option>)}</select></div>
-            {CREATION_TEMPLATES.filter((template) => templateCategory === 'all' || template.category === templateCategory).filter((template) => templateKind === 'all' || template.objects.some((object) => object.kind === templateKind)).filter((template) => `${templateText(template, 'name')} ${templateText(template, 'description')} ${template.objects.map((object) => `${object.kind} ${object.title ?? ''}`).join(' ')}`.toLowerCase().includes(templateSearch.trim().toLowerCase())).map((template) => <button key={template.id} onClick={() => applyTemplate(template)}><b>{templateText(template, 'name')}</b><small>{t('templateMeta', { category: templateCategoryLabel(template.category), count: template.objects.length })}</small><span>{templateText(template, 'description')}</span><i>{[...new Set(template.objects.map((object) => t(`object.${object.kind}`)))].join(' · ')}</i></button>)}
+            <div className={styles.templateFilters}><input value={templateSearch} onChange={(event) => setTemplateSearch(event.target.value)} placeholder={t('searchTemplates')} aria-label={t('searchTemplates')} /><select value={templateCategory} onChange={(event) => setTemplateCategory(event.target.value as typeof templateCategory)} aria-label={t('filterTemplateCategory')}><option value="all">{t('allCategories')}</option><option value="pack">{t('templateCategoryObjectPack')}</option><option value="workspace">{t('templateCategoryAutomation')}</option><option value="prompt">{t('templateCategoryPrompt')}</option></select><select value={templateKind} onChange={(event) => setTemplateKind(event.target.value as typeof templateKind)} aria-label={t('filterTemplateKind')}><option value="all">{t('allMediaKinds')}</option>{[...new Set(CREATION_TEMPLATES.flatMap((template) => template.objects.map((object) => object.kind)))].sort().map((kind) => <option key={kind} value={kind}>{t(`object.${kind}`)}</option>)}</select></div>
+            {/* ONE catalogue. This browser used to iterate `CREATION_TEMPLATES`
+                with its own search and its own category names, while the prompt
+                picker below iterated a different list entirely — so a person
+                could not find an installable automation from here at all. Both
+                now render `useTemplateCatalog` and dispatch through
+                `applyTemplateEntry`. The object-kind filter still applies only
+                to packs, because only a pack HAS object kinds. */}
+            {templateEntries
+              .filter((entry) => templateCategory === 'all'
+                || (templateCategory === 'pack' && entry.source === 'pack')
+                || (templateCategory === 'workspace' && entry.source === 'workspace')
+                || (templateCategory === 'prompt' && (entry.source === 'canvas' || entry.source === 'executive')))
+              .filter((entry) => templateKind === 'all' || (entry.action.kind === 'pack' && entry.action.template.objects.some((object) => object.kind === templateKind)))
+              .filter((entry) => matchesTemplateQuery(entry, templateSearch))
+              .map((entry) => <button key={entry.id} onClick={() => { applyTemplateEntry(entry, { onPrompt: (nextPrompt) => { setPrompt(nextPrompt); setTemplateOpen(false); }, onPack: (template) => applyTemplate(template), onInstall: (key) => router.push(`/templates/${encodeURIComponent(key)}`) }); }}><b>{entry.name}</b><small>{entry.action.kind === 'pack' ? t('templateMeta', { category: entry.categoryLabel, count: entry.action.template.objects.length }) : entry.categoryLabel}</small><span>{entry.summary}</span><i>{entry.keywords.slice(0, 6).join(' · ')}</i></button>)}
             {!!serverTemplates.length && <><h4>{t('savedAccount')}</h4>{serverTemplates.map((template) => <button key={template.id} onClick={() => applyServerTemplate(template)}><b>{template.name}</b><small>{template.visibility === 'tenant' ? t('sharedWithTenant') : t('private')} · {template.category}</small><span>{template.description}</span></button>)}</>}
             {!!framePresets.length && <><h4>{t('reusableFrames')}</h4>{framePresets.map((preset) => <button key={preset.id} onClick={() => addFramePreset(preset)}><b>{preset.name}</b><small><span>{t('privateCustomFrame')}</span> · {t('thisDevice')}</small></button>)}</>}
           </div>}

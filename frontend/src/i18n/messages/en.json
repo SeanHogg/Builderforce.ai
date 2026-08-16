@@ -7100,7 +7100,8 @@
         "label": "Investor update",
         "prompt": "Draft this period's investor update from what is on this canvas: highlights and lowlights with real numbers, the standing metrics with their change, and specific asks."
       }
-    ]
+    ],
+    "setupSteps": "{count, plural, one {# step} other {# steps}}"
   },
   "home": {
     "heroBadge": "Canvas · Humans + AI agents",
@@ -9750,7 +9751,8 @@
         "model": "Models",
         "skill": "Skills",
         "persona": "Personas",
-        "knowledge": "Knowledge"
+        "knowledge": "Knowledge",
+        "template": "Templates"
       },
       "note": {
         "talent": "People and gigs. A person and an agent are the same kind of participant to a session, but not the same kind of listing — one has availability and a rate, the other a price and a seat.",
@@ -19171,7 +19173,9 @@
       "inspect": "Canvas tools",
       "session": "Share and publish"
     },
-    "moreMenuSessionActions": "This canvas"
+    "moreMenuSessionActions": "This canvas",
+    "templateCategoryAutomation": "Automations",
+    "templateCategoryPrompt": "Prompts"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -21614,6 +21618,51 @@
         "readOnly": "This app has been down too long. Billing has stopped and you can export everything you put in.",
         "released": "This app has been abandoned. Billing has stopped and you can take the published build onto a board of your own, at no charge."
       }
+    }
+  },
+  "templates": {
+    "title": "Templates",
+    "subtitle": "Packaged starting points that set themselves up. Answer a few questions and a working automation, its schedule and the work it needs from you all land in your workspace.",
+    "searchPlaceholder": "Search templates",
+    "filterCategory": "Filter by category",
+    "allCategories": "All categories",
+    "empty": "No templates match what you are looking for.",
+    "loading": "Loading template…",
+    "loadingSetup": "Working out what this needs…",
+    "setupSteps": "{count, plural, one {# step} other {# steps}}",
+    "startSetup": "Set it up · {count, plural, one {# step} other {# steps}}",
+    "connectedOf": "{connected} of {total} connected",
+    "allConnected": "Ready to set up",
+    "needsConnected": "What it needs connected",
+    "whatItCreates": "What it creates",
+    "workingMeans": "You will know it works when",
+    "progress": "{done} of {total} done",
+    "optional": "(optional)",
+    "install": "Set it up",
+    "installing": "Setting it up…",
+    "installed": "Set up",
+    "installedBody": "Here is what landed in your workspace.",
+    "openOutput": "Open",
+    "installFailed": "Could not set this up.",
+    "setupFailed": "Could not work out what this needs.",
+    "setupIncomplete": "A few answers are still missing — they are marked below.",
+    "unsupportedStep": "This step type ({kind}) is not supported by this version.",
+    "timezoneFor": "{title} — timezone",
+    "category": {
+      "marketing": "Marketing",
+      "sales": "Sales",
+      "hiring": "Hiring",
+      "support": "Support",
+      "operations": "Operations",
+      "finance": "Finance",
+      "engineering": "Engineering",
+      "messaging": "Messaging",
+      "analytics": "Analytics",
+      "other": "Other"
+    },
+    "outputKind": {
+      "workflow": "an automation",
+      "tasks": "work on your board"
     }
   }
 }

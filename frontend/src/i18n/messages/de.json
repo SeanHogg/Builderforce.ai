@@ -7100,7 +7100,8 @@
         "label": "Investoren-Update",
         "prompt": "Entwirf das Investoren-Update dieser Periode aus dem, was auf diesem Canvas steht: Erfolge und Rückschläge mit echten Zahlen, die laufenden Kennzahlen mit ihrer Veränderung, und konkrete Bitten."
       }
-    ]
+    ],
+    "setupSteps": "{count, plural, one {# Schritt} other {# Schritte}}"
   },
   "home": {
     "heroBadge": "Leinwand · Menschen + KI-Agenten",
@@ -9750,7 +9751,8 @@
         "model": "Modelle",
         "skill": "Skills",
         "persona": "Personas",
-        "knowledge": "Wissen"
+        "knowledge": "Wissen",
+        "template": "Vorlagen"
       },
       "note": {
         "talent": "Menschen und Aufträge. Für eine Sitzung sind Mensch und Agent dieselbe Art Teilnehmer, aber nicht dieselbe Art Eintrag: der eine hat Verfügbarkeit und Stundensatz, der andere Preis und Sitz.",
@@ -19171,7 +19173,9 @@
       "inspect": "Leinwand-Werkzeuge",
       "session": "Teilen und veröffentlichen"
     },
-    "moreMenuSessionActions": "Diese Leinwand"
+    "moreMenuSessionActions": "Diese Leinwand",
+    "templateCategoryAutomation": "Automatisierungen",
+    "templateCategoryPrompt": "Prompts"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -21614,6 +21618,51 @@
         "readOnly": "Diese App ist zu lange ausgefallen. Die Abrechnung wurde gestoppt und du kannst alles exportieren, was du eingegeben hast.",
         "released": "Diese App wurde aufgegeben. Die Abrechnung wurde gestoppt und du kannst den veröffentlichten Stand kostenlos auf ein eigenes Board holen."
       }
+    }
+  },
+  "templates": {
+    "title": "Vorlagen",
+    "subtitle": "Fertige Startpunkte, die sich selbst einrichten. Beantworten Sie ein paar Fragen, und eine laufende Automatisierung, ihr Zeitplan und die Aufgaben, die sie Ihnen überlässt, landen in Ihrem Arbeitsbereich.",
+    "searchPlaceholder": "Vorlagen durchsuchen",
+    "filterCategory": "Nach Kategorie filtern",
+    "allCategories": "Alle Kategorien",
+    "empty": "Keine Vorlage passt zu Ihrer Suche.",
+    "loading": "Vorlage wird geladen…",
+    "loadingSetup": "Wird geprüft, was benötigt wird…",
+    "setupSteps": "{count, plural, one {# Schritt} other {# Schritte}}",
+    "startSetup": "Einrichten · {count, plural, one {# Schritt} other {# Schritte}}",
+    "connectedOf": "{connected} von {total} verbunden",
+    "allConnected": "Bereit zum Einrichten",
+    "needsConnected": "Was verbunden sein muss",
+    "whatItCreates": "Was dabei entsteht",
+    "workingMeans": "Sie erkennen den Erfolg daran, dass",
+    "progress": "{done} von {total} erledigt",
+    "optional": "(optional)",
+    "install": "Einrichten",
+    "installing": "Wird eingerichtet…",
+    "installed": "Eingerichtet",
+    "installedBody": "Das ist in Ihrem Arbeitsbereich entstanden.",
+    "openOutput": "Öffnen",
+    "installFailed": "Einrichtung nicht möglich.",
+    "setupFailed": "Es ließ sich nicht ermitteln, was benötigt wird.",
+    "setupIncomplete": "Es fehlen noch einige Angaben – sie sind unten markiert.",
+    "unsupportedStep": "Dieser Schritttyp ({kind}) wird von dieser Version nicht unterstützt.",
+    "timezoneFor": "{title} – Zeitzone",
+    "category": {
+      "marketing": "Marketing",
+      "sales": "Vertrieb",
+      "hiring": "Recruiting",
+      "support": "Support",
+      "operations": "Betrieb",
+      "finance": "Finanzen",
+      "engineering": "Entwicklung",
+      "messaging": "Messaging",
+      "analytics": "Analyse",
+      "other": "Sonstiges"
+    },
+    "outputKind": {
+      "workflow": "eine Automatisierung",
+      "tasks": "Aufgaben auf Ihrem Board"
     }
   }
 }
