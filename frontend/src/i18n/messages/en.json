@@ -17993,7 +17993,8 @@
         "paged": "reads it, reflows it and proofs it",
         "geometry": "checks it can actually be made",
         "instrument": "takes it, then reads the results on zero responses",
-        "system": "dry-runs it with every outbound step stubbed"
+        "system": "dry-runs it with every outbound step stubbed",
+        "deployment": "the live address"
       },
       "state": {
         "draft": "Draft",
@@ -18025,7 +18026,8 @@
       "revertConfirm": "Put it back on sale",
       "noticeStaged": "Staged v{version}.",
       "noticePublished": "v{version} is live.",
-      "noticeReverted": "Back on the v{from} build, published as v{version}."
+      "noticeReverted": "Back on the v{from} build, published as v{version}.",
+      "previewHead": "v{version}, exactly as a buyer receives it"
     },
     "rateUp": "Good response",
     "rateDown": "Bad response",
@@ -19903,9 +19905,6 @@
     "buy": "Buy it",
     "openInCanvas": "Open in my canvas",
     "previewOnly": "This is a preview. Buy it to use the working version.",
-    "playFrameTitle": "Playing {name}",
-    "siteFrameTitle": "{name}, live",
-    "nothingToShow": "Nothing to show yet.",
     "kind": {
       "game": "Game",
       "app": "App",
@@ -20550,5 +20549,27 @@
     "copyBaseUrl": "Copy base URL",
     "copyQuickstart": "Copy quickstart",
     "savedIt": "I saved it"
+  },
+  "commerce": {
+    "stage": {
+      "playFrameTitle": "Playing {name}",
+      "siteFrameTitle": "{name}, running live",
+      "nothingToShow": "Nothing to show yet.",
+      "declaredHead": "Known limits",
+      "deliveryLegend": "What the buyer receives",
+      "delivery": {
+        "copy": "The thing itself",
+        "hosted": "Access to your running app"
+      },
+      "deliveryHint": {
+        "copy": "It lands on a board in their workspace and they own it. You can never reach it again.",
+        "hosted": "You keep running it; they get an account and a subscription. Your address is checked before it goes on sale."
+      },
+      "hosted": {
+        "grace": "This app has stopped answering. The seller has {days} days to bring it back before your subscription pauses.",
+        "readOnly": "This app has been down too long. Billing has stopped and you can export everything you put in.",
+        "released": "This app has been abandoned. Billing has stopped and you can take the published build onto a board of your own, at no charge."
+      }
+    }
   }
 }

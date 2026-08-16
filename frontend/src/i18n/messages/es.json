@@ -17993,7 +17993,8 @@
         "paged": "lo lee, lo readapta y saca una prueba",
         "geometry": "comprueba que se pueda fabricar de verdad",
         "instrument": "lo responde y luego lee los resultados sin respuestas",
-        "system": "lo ejecuta en seco con cada paso saliente simulado"
+        "system": "lo ejecuta en seco con cada paso saliente simulado",
+        "deployment": "la dirección en vivo"
       },
       "state": {
         "draft": "Borrador",
@@ -18025,7 +18026,8 @@
       "revertConfirm": "Ponerla en venta",
       "noticeStaged": "v{version} preparada.",
       "noticePublished": "La v{version} está en venta.",
-      "noticeReverted": "De vuelta a la compilación v{from}, publicada como v{version}."
+      "noticeReverted": "De vuelta a la compilación v{from}, publicada como v{version}.",
+      "previewHead": "v{version}, tal como la recibe quien la compra"
     },
     "rateUp": "Buena respuesta",
     "rateDown": "Mala respuesta",
@@ -19903,9 +19905,6 @@
     "buy": "Comprar",
     "openInCanvas": "Abrir en mi lienzo",
     "previewOnly": "Esto es una vista previa. Cómpralo para usar la versión funcional.",
-    "playFrameTitle": "Jugando a {name}",
-    "siteFrameTitle": "{name}, en vivo",
-    "nothingToShow": "Todavía no hay nada que mostrar.",
     "kind": {
       "game": "Juego",
       "app": "Aplicación",
@@ -20550,5 +20549,27 @@
     "copyBaseUrl": "Copiar URL base",
     "copyQuickstart": "Copiar inicio rápido",
     "savedIt": "Ya la guardé"
+  },
+  "commerce": {
+    "stage": {
+      "playFrameTitle": "Jugando a {name}",
+      "siteFrameTitle": "{name}, funcionando en vivo",
+      "nothingToShow": "Todavía no hay nada que mostrar.",
+      "declaredHead": "Limitaciones conocidas",
+      "deliveryLegend": "Qué recibe quien lo compra",
+      "delivery": {
+        "copy": "La creación en sí",
+        "hosted": "Acceso a tu aplicación en marcha"
+      },
+      "deliveryHint": {
+        "copy": "Aterriza en un tablero de su espacio de trabajo y pasa a ser suya. Tú ya no podrás tocarla.",
+        "hosted": "Tú la sigues ejecutando; quien compra obtiene una cuenta y una suscripción. Comprobamos tu dirección antes de ponerla a la venta."
+      },
+      "hosted": {
+        "grace": "Esta aplicación ha dejado de responder. Quien la vende tiene {days} días para restablecerla antes de que se pause tu suscripción.",
+        "readOnly": "Esta aplicación lleva demasiado tiempo caída. Se ha detenido el cobro y puedes exportar todo lo que hayas introducido.",
+        "released": "Esta aplicación ha sido abandonada. Se ha detenido el cobro y puedes llevarte la versión publicada a un tablero propio, sin coste."
+      }
+    }
   }
 }

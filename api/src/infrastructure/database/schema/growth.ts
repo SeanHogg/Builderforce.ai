@@ -39,7 +39,8 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { objects } from './kernel';
+import { sql } from 'drizzle-orm';
+import { catalogItems, objects } from './kernel';
 import { creationSessions } from './canvas';
 import { tenants } from './identity';
 import { mailboxConnections } from './integrations';
@@ -1681,4 +1682,71 @@ export const promoProjects = pgTable('promo_projects', {
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_promo_projects_status').on(t.tenantId, t.status, t.dueAt),
+]);
+
+// ── Hosted listing lifecycle ───────────────────────────────────────────────
+
+/**
+ * WHAT A SUBSCRIBER IS OWED WHEN A HOSTED APP GOES DARK.
+ *
+ * ── THE GAP THIS FILLS ────────────────────────────────────────────────────
+ * Withdrawing a listing takes the storefront away and leaves every holder
+ * where they were — the licence rule already says so, and for a `copy` that
+ * settles it, because the buyer holds their own cards. It settles nothing for
+ * a `hosted` listing, where what the buyer holds is ACCESS to an instance the
+ * SELLER runs. Nothing about withdrawing a storefront obliges anyone to keep
+ * that instance alive, so until this row existed the platform had no written
+ * position on abandonment: a seller could stop paying their cloud bill and
+ * every subscriber simply found a dead address.
+ *
+ * `resolveHostedLifecycle` in the shared contract derives the four states
+ * (operating → grace → readOnly → released) from ONE column here —
+ * `unreachable_since` — plus the clock. Nothing stores the state, for the same
+ * reason nothing stores a release's state: a state column is a second copy of
+ * a derivable fact, and it is wrong for exactly as long as a sweep is late.
+ *
+ * ── WHY IT IS A TABLE AND NOT A COLUMN ON `catalog_items` ─────────────────
+ * These four facts exist only for a listing whose `delivery` is `hosted`,
+ * which is one kind out of fourteen. Four nullable columns on the catalogue
+ * row every listing shares would be a partial dependency on a value in
+ * another column — and `catalog_items` is the kernel table policy packs,
+ * templates and presets also live in.
+ *
+ * ── WHY IT IS IN GROWTH AND NOT COMMERCE ─────────────────────────────────
+ * It is a fact about a PUBLISHED SITE's operation, which is what this context
+ * already holds (`site_collections`, `site_records`, `site_traffic_daily`).
+ * The commerce side of the same listing — the subscription, the money — is a
+ * different context and refers to the listing by id, never by import.
+ */
+export const hostedListingLifecycle = pgTable('hosted_listing_lifecycle', {
+  /** `catalog_items.id`. One row per hosted listing, so the PK is the FK. */
+  listingId:        uuid('listing_id').primaryKey().references(() => catalogItems.id, { onDelete: 'cascade' }),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /**
+   * When the seller took the storefront down.
+   *
+   * Recorded because nothing else holds it: `catalog_items.updated_at` moves
+   * for a price change. It does NOT start the abandonment clock — a withdrawn
+   * app that is still serving is a seller who stopped selling, not one who
+   * stopped running it.
+   */
+  withdrawnAt:      timestamp('withdrawn_at'),
+  /**
+   * First moment the address was observed not serving, and still dark since.
+   *
+   * THE column the whole lifecycle derives from. Cleared the moment a probe
+   * succeeds, so a four-minute deploy does not spend a subscriber's month.
+   */
+  unreachableSince: timestamp('unreachable_since'),
+  lastProbeAt:      timestamp('last_probe_at'),
+  lastProbeOk:      boolean('last_probe_ok'),
+  /** The address that was asked, so a seller reading a breach knows which one. */
+  lastProbeUrl:     varchar('last_probe_url', { length: 1024 }),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  // The sweep's only query: every listing currently dark, oldest first. Partial
+  // on `unreachable_since` because the healthy majority is never scanned.
+  index('idx_hosted_lifecycle_dark').on(t.unreachableSince).where(sql`${t.unreachableSince} IS NOT NULL`),
+  index('idx_hosted_lifecycle_tenant').on(t.tenantId, t.updatedAt),
 ]);

@@ -12,6 +12,16 @@
  * commercially; STAGE captures a candidate, runs its harness over it, and refuses to
  * publish while anything is a blocker.
  *
+ * ── AND THE PRODUCT ITSELF ───────────────────────────────────────────────────────
+ * For a while it was only those two, which left a hole in the middle: a seller read a
+ * VERDICT about their own creation without ever seeing it. Every piece needed to
+ * close that already existed and none of them were joined up — the server returns the
+ * right launch shape per mode, and the marketplace page already renders all five. The
+ * obstacle was addressing: the public launch path resolves by SLUG and a staged
+ * version deliberately has none. It now resolves by SNAPSHOT ID for the seller, under
+ * the same entitlement rule, through the SAME component the buyer's page uses. The
+ * preview is the product, bounded — never a metadata card or a screenshot.
+ *
  * ── WHY THE CHECKS ARE NOT COMPUTED HERE ─────────────────────────────────────────
  * The findings arrive from the server, which ran them against the SNAPSHOT — the
  * copy a buyer actually receives, after every seller binding has been stripped and
@@ -33,8 +43,12 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import {
   STAGE_CHECK_GROUPS,
   blockingChecks,
+  declaredLimits,
+  deliveriesForKind,
   isPublishable,
   listingKindSpec,
+  resolveDelivery,
+  type ListingDelivery,
   type StageCheck,
   type StageCheckGroup,
 } from '@builderforce/creation-canvas-contract';
@@ -45,6 +59,12 @@ import {
   type StagedRelease,
 } from '@/lib/creationReleases';
 import { creationListingApi, type PublishCandidate } from '@/lib/creationListings';
+import {
+  DeclaredLimits,
+  HostedStatusNote,
+  LAUNCH_STAGE_CSS,
+  LaunchStage,
+} from '@/lib/creationListings.launch';
 import styles from './CreationCanvas.module.css';
 
 export interface CanvasReleasesPanelProps {
@@ -74,6 +94,17 @@ export function CanvasReleasesPanel({
   const [staged, setStaged] = useState<StagedRelease | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * Which door this listing opens.
+   *
+   * Null means "whatever the kind declares first", which is what the server would
+   * pick anyway — `resolveDelivery` is the one derivation and this holds an override
+   * of it, never a second copy. It matters here because it decides WHICH HARNESS
+   * runs: the same website is a runnable document when you sell the build and a live
+   * address when you sell access, and a seller choosing after they have staged would
+   * be reading findings from the wrong question.
+   */
+  const [delivery, setDelivery] = useState<ListingDelivery | null>(null);
 
   const loadRail = useCallback(async () => {
     const next = await creationReleaseApi.rail(sessionId, objectId);
@@ -106,7 +137,13 @@ export function CanvasReleasesPanel({
         // silently becomes today's board.
         const existing = next.releases.find((release) => release.state === 'staged');
         if (existing?.snapshotId) {
-          setStaged(await creationReleaseApi.staged(sessionId, objectId, existing.snapshotId));
+          const found = await creationReleaseApi.staged(sessionId, objectId, existing.snapshotId);
+          if (!live) return;
+          setStaged(found);
+          // The candidate on record decides the toggle, not the other way round: a
+          // seller reopening Stage must see the door their staged build was checked
+          // against, even if the kind's default is the other one.
+          setDelivery(found.delivery);
         }
       } catch (cause) {
         if (live) setError(cause instanceof Error ? cause.message : String(cause));
@@ -125,9 +162,11 @@ export function CanvasReleasesPanel({
         objectId,
         kind: candidate.kinds[0] ?? '',
         name: candidate.title,
+        delivery: delivery ?? undefined,
         listingId: candidate.existingListingId,
       });
       setStaged(next);
+      setDelivery(next.delivery);
       await loadRail();
       onNotice(t('noticeStaged', { version: next.version }));
     } catch (cause) {
@@ -135,7 +174,7 @@ export function CanvasReleasesPanel({
     } finally {
       setBusy(false);
     }
-  }, [candidate, sessionId, objectId, loadRail, onNotice, t]);
+  }, [candidate, delivery, sessionId, objectId, loadRail, onNotice, t]);
 
   /** Promote the STAGED snapshot, so what was checked is what goes on sale. */
   const publish = useCallback(async () => {
@@ -148,6 +187,10 @@ export function CanvasReleasesPanel({
         objectId,
         kind: candidate.kinds[0] ?? '',
         name: candidate.title,
+        // The door the STAGED candidate was checked against, not whatever the toggle
+        // says now — publishing what was tested is the point of promoting a snapshot,
+        // and the delivery decides which questions were asked of it.
+        delivery: staged.delivery,
         listingId: candidate.existingListingId,
         fromSnapshotId: staged.snapshotId,
       });
@@ -220,6 +263,13 @@ export function CanvasReleasesPanel({
 
         {rail && candidate && (
           <>
+            <DeliveryChoice
+              kindId={candidate.kinds[0] ?? ''}
+              chosen={delivery}
+              busy={busy}
+              onChoose={setDelivery}
+            />
+
             <p className={styles.releaseHarness}>
               <span>{kindSpec?.icon ?? '📦'}</span>
               <span>{t('harnessLine', { harness: t(`harness.${staged?.harness ?? rail.harness ?? 'system'}`) })}</span>
@@ -239,6 +289,23 @@ export function CanvasReleasesPanel({
               ))}
             </section>
 
+            {/* ── The product ──────────────────────────────────────────────
+                Above the findings on purpose: a seller reads "is it right" before
+                they read "what is wrong with it", and a verdict over something you
+                cannot see is the defect this closes. Rendered by the buyer's own
+                component so there is nothing here that could agree with the listing
+                page today and drift from it tomorrow. */}
+            {staged && (
+              <>
+                <style>{LAUNCH_STAGE_CSS}</style>
+                <p className={styles.publishHint}>
+                  {t('previewHead', { version: staged.version })}
+                </p>
+                <HostedStatusNote hosted={staged.launch.hosted} />
+                <LaunchStage launch={staged.launch} name={staged.payload.title} />
+              </>
+            )}
+
             {/* ── The findings ─────────────────────────────────────────── */}
             {staged && (
               <>
@@ -251,6 +318,11 @@ export function CanvasReleasesPanel({
                 {STAGE_CHECK_GROUPS.map((group) => (
                   <CheckGroup key={group} group={group} checks={staged.checks} />
                 ))}
+
+                {/* Exactly what a buyer will read on the listing, shown to the seller
+                    BEFORE they publish it — the same derivation, so there is no
+                    version of this where the seller is surprised by their own page. */}
+                <DeclaredLimits checks={declaredLimits(staged.checks)} />
 
                 {!!staged.payload.strippedFields?.length && (
                   <div className={styles.checkGroup}>
@@ -286,6 +358,78 @@ export function CanvasReleasesPanel({
         )}
       </div>
     </SlideOutPanel>
+  );
+}
+
+/**
+ * WHICH DOOR THIS LISTING OPENS — but only when the kind opens two.
+ *
+ * Almost every sellable kind hands over the thing itself and has nothing to choose:
+ * a book cannot be a subscription. So this decides its own visibility from the
+ * registry rather than taking a `canChooseDelivery` prop the caller would have to
+ * compute — one listing kind gaining a second door is a registry entry, not an edit
+ * here or at the call site.
+ *
+ * It sits ABOVE the harness line because it is what selects the harness: sell the
+ * build and the captured document is checked; sell access and the live address is.
+ */
+export function DeliveryChoice({
+  kindId,
+  chosen,
+  busy,
+  onChoose,
+}: {
+  kindId: string;
+  chosen: ListingDelivery | null;
+  busy: boolean;
+  onChoose: (delivery: ListingDelivery) => void;
+}) {
+  const t = useTranslations('commerce.stage');
+  const offered = deliveriesForKind(kindId);
+  if (offered.length < 2) return null;
+  // The effective value, from the one derivation the server uses — so the control
+  // shows what WOULD happen rather than an empty state that means "the default".
+  const effective = resolveDelivery(kindId, chosen);
+
+  return (
+    <fieldset className="cl-delivery">
+      {/* Scoped here rather than in the canvas stylesheet: this control belongs to
+          the listing surface and nothing else in the canvas renders one. Every value
+          is a theme token, and the grid wraps rather than fixing a width, so it holds
+          in both themes and at 360px. */}
+      <style>{`
+        .cl-delivery { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+                       padding: 12px 14px; margin: 0 0 12px; display: grid; gap: 8px; }
+        .cl-delivery legend { padding: 0 6px; font-size: var(--font-size-eyebrow);
+                              font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+                              color: var(--text-secondary); }
+        .cl-delivery label { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px;
+                             align-items: start; padding: 8px 10px; cursor: pointer;
+                             border-radius: var(--radius-md); border: 1px solid transparent; }
+        .cl-delivery label[data-selected="true"] { border-color: var(--border-strong, var(--border-subtle));
+                                                   background: var(--surface-card); }
+        .cl-delivery input { margin: 3px 0 0; grid-row: span 2; }
+        .cl-delivery span { font-size: var(--font-size-small); font-weight: 600;
+                            color: var(--text-primary); }
+        .cl-delivery small { font-size: var(--font-size-eyebrow); color: var(--text-secondary);
+                             line-height: 1.5; }
+      `}</style>
+      <legend>{t('deliveryLegend')}</legend>
+      {offered.map((option) => (
+        <label key={option} data-selected={option === effective}>
+          <input
+            type="radio"
+            name="listing-delivery"
+            value={option}
+            checked={option === effective}
+            disabled={busy}
+            onChange={() => onChoose(option)}
+          />
+          <span>{t(`delivery.${option}`)}</span>
+          <small>{t(`deliveryHint.${option}`)}</small>
+        </label>
+      ))}
+    </fieldset>
   );
 }
 

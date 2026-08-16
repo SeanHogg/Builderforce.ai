@@ -183,10 +183,23 @@ describe('withdrawal does not repossess', () => {
     expect(typeof listings.resolveListingBySlug).toBe('function');
 
     const source = await readListingSource();
-    // The browse surfaces still filter; the buyer paths must not.
-    expect(source).toContain("if (row.visibility !== 'public' && !entitled) return null;");
+    // The browse surfaces still filter; the buyer paths must not. The rule that
+    // decides who still gets through is CALLED rather than restated here — the same
+    // export the creator's landing page and the subscribe surface call — so this
+    // pins the call and the gate on its answer rather than a copy of the condition.
+    expect(source).toMatch(/resolveListingAccess\(\{/);
+    expect(source).toContain('if (!access.visible) return null;');
     // And the install path goes through the same unfiltered resolver.
     expect(source).toMatch(/resolveListingBySlug\(db, input\.slug\)/);
+  });
+
+  it('states the rule once, and the launch path holds no second copy of it', async () => {
+    const source = await readListingSource();
+    // The exact shape the named export exists to prevent: a price test standing in
+    // for entitlement. Two of these is how a paid product becomes free at one of the
+    // three URLs that sell it, silently, at the two that got it right.
+    expect(source).not.toMatch(/priceCents\s*\?\?\s*0\)\s*===\s*0\s*\|\|/);
+    expect(source).not.toMatch(/trial === 'full'/);
   });
 });
 

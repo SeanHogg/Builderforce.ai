@@ -15,7 +15,13 @@
  */
 
 import { apiRequest } from './apiClient';
-import type { ListingLaunchMode, ListingTrialPolicy } from '@builderforce/creation-canvas-contract';
+import type {
+  HostedLifecycle,
+  ListingDelivery,
+  ListingLaunchMode,
+  ListingTrialPolicy,
+  StageCheck,
+} from '@builderforce/creation-canvas-contract';
 
 export interface CreationListing {
   id: string;
@@ -31,6 +37,14 @@ export interface CreationListing {
   currency: string;
   trial: ListingTrialPolicy;
   launch: ListingLaunchMode;
+  /**
+   * The thing (`copy`), or access to it (`hosted`). Both shop windows read this.
+   *
+   * Optional on the WIRE type though the server always sends it: a page rendered
+   * from a response cached before this field existed must degrade to the kind's
+   * default rather than crash the storefront.
+   */
+  delivery?: ListingDelivery;
   icon: string;
   installCount: number;
   rating: number | null;
@@ -38,7 +52,19 @@ export interface CreationListing {
   updatedAtISO: string;
   sellerRef: string | null;
   sellerName: string | null;
+  /** Limits Stage found and the seller shipped with. Declared, not discovered.
+   *  Optional for the same reason `delivery` is — an older cached response. */
+  declared?: StageCheck[];
   source?: { sessionId: string; objectId: string | null; objectKind: string | null };
+}
+
+/** Whether the thing a subscriber pays for is still serving, and what they may do
+ *  if it is not. Present only on a `hosted` listing's launch. */
+export interface HostedListingStatus extends HostedLifecycle {
+  listingId: string;
+  withdrawnAtISO: string | null;
+  lastProbeAtISO: string | null;
+  lastProbeUrl: string | null;
 }
 
 export interface PublishCandidate {
@@ -63,6 +89,7 @@ export interface LaunchPayload {
   document?: string;
   url?: string;
   objects?: Array<{ id: string; kind: string; canvasData: unknown; content: unknown }>;
+  hosted?: HostedListingStatus;
 }
 
 export interface SellerEarnings {
@@ -83,6 +110,8 @@ export interface PublishRequest {
   priceCents?: number;
   currency?: string;
   trial?: ListingTrialPolicy;
+  /** Which door the listing opens. Validated server-side against the kind. */
+  delivery?: ListingDelivery;
   listingId?: string | null;
   /**
    * A staged snapshot to promote instead of re-reading the board.
@@ -104,7 +133,11 @@ export const creationListingApi = {
   publish: (input: PublishRequest) =>
     apiRequest<{ listing: CreationListing }>(AUTHED, {
       method: 'POST',
+      // 409 is the gate refusing a creation that is not fit to sell, and it carries
+      // the first blocker in its message — a normal outcome the panel shows, not a
+      // fault. Without it here the transport would throw it away as a system error.
       body: JSON.stringify(input),
+      expectedErrors: [400, 404, 409],
     }).then((r) => r.listing),
 
   mine: () => apiRequest<{ listings: CreationListing[] }>(`${AUTHED}/mine`).then((r) => r.listings),

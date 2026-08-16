@@ -65,8 +65,23 @@ export type ListingLaunchMode = (typeof LISTING_LAUNCH_MODES)[number];
  *                 zero responses: stable ids, scoring, an honest empty state.
  *  - `system`     something that runs against other systems. Dry-run it with every
  *                 outbound step stubbed and every seller binding gone.
+ *  - `deployment` something whose product IS the running system. Ask the ADDRESS,
+ *                 not the capture.
+ *
+ * ── WHY THE SEVENTH IS NOT LIKE THE OTHER SIX ────────────────────────────────────
+ * The first six all read the CAPTURED SNAPSHOT, because for a game, a book or a pack
+ * the snapshot is what the buyer receives. That is exactly wrong for a `hosted`
+ * listing: what the buyer receives is ACCESS to something the seller keeps running,
+ * and the snapshot is a description of it. An app whose address 404s has a perfectly
+ * well-formed snapshot, so every one of the six passes it — which is how a dead
+ * service came to be sellable.
+ *
+ * `deployment` is therefore selected by DELIVERY rather than by output shape, and it
+ * is the one runner that does I/O. See `resolveListingHarness`.
  */
-export const LISTING_HARNESSES = ['media', 'runtime', 'paged', 'geometry', 'instrument', 'system'] as const;
+export const LISTING_HARNESSES = [
+  'media', 'runtime', 'paged', 'geometry', 'instrument', 'system', 'deployment',
+] as const;
 export type ListingHarness = (typeof LISTING_HARNESSES)[number];
 
 /**
@@ -502,6 +517,211 @@ export function requiresWorkspace(delivery: ListingDelivery): boolean {
   return delivery === 'copy';
 }
 
+// ---------------------------------------------------------------------------
+// The entitlement rule — ONE derivation, both shop windows
+// ---------------------------------------------------------------------------
+
+/** Why this visitor got what they got. Stable — it is an i18n key and a test
+ *  assertion, not prose. */
+export const LISTING_ACCESS_REASONS = ['free', 'openTrial', 'licence', 'preview', 'withdrawn'] as const;
+export type ListingAccessReason = (typeof LISTING_ACCESS_REASONS)[number];
+
+export interface ListingAccess {
+  /**
+   * May this caller see the listing AT ALL.
+   *
+   * False only for a WITHDRAWN listing seen by somebody who never bought it. A
+   * withdrawn listing is not deleted — it is simply gone from the shop window, and
+   * still there for the people who hold it.
+   */
+  visible: boolean;
+  /** True for the product; false means this caller gets the bounded preview. */
+  entitled: boolean;
+  reason: ListingAccessReason;
+}
+
+export interface ListingAccessInput {
+  priceCents: number;
+  /** `full` opens the whole thing to non-buyers; `preview` withholds the payload. */
+  trial?: string | null;
+  /** `catalog_items.visibility`. Omitted means "not asking about the shop window". */
+  visibility?: string | null;
+  /**
+   * Does this caller hold a live claim — a licence on a `copy`, a live subscription
+   * on a `hosted` app, or the seller looking at their own staged candidate.
+   *
+   * A BOOLEAN and not a licence row on purpose: this module is the shared contract
+   * and may not know what a licence, a subscription or a seller session is. The
+   * caller answers "does this person have a claim" from its own domain and this
+   * answers "so what do they get" — which is the half that must not be reimplemented.
+   */
+  hasLicence: boolean;
+}
+
+/**
+ * WHAT THIS VISITOR GETS: the product, the preview, or nothing.
+ *
+ * ── WHY THIS IS A NAMED FUNCTION AND NOT THREE LINES INSIDE `launchListing` ───────
+ * The marketplace listing page and the creator's own landing page are TWO SHOP
+ * WINDOWS ONTO ONE PRODUCT, and a `hosted` app adds a third caller — the subscribe
+ * surface, which has to answer "is this person already in" with the same rule the
+ * launch endpoint uses. Three callers deriving `priceCents === 0 || trial === 'full'
+ * || paid` independently is three chances for a paid product to be free at one of
+ * the three URLs that sell it, and the failure is silent at the two that got it
+ * right.
+ *
+ * So: one derivation, exported from the module both the API and the web app already
+ * import, called by the launch path (`creationListings.ts`), by the landing-page
+ * fork and by the subscribe surface. A second copy is the defect, not a convenience.
+ *
+ * The precedence is deliberate and is the whole rule:
+ *   1. a claim beats everything — a withdrawn listing still runs for its holders;
+ *   2. free, or a trial the seller deliberately opened, runs for anyone;
+ *   3. withdrawn is invisible to everybody else;
+ *   4. otherwise: the bounded preview.
+ */
+export function resolveListingAccess(input: ListingAccessInput): ListingAccess {
+  if (input.hasLicence) return { visible: true, entitled: true, reason: 'licence' };
+
+  // A seller may deliberately give a paid thing away as a demo; `resolveTrialPolicy`
+  // is what decided that, and this only reads the decision.
+  const open = (input.priceCents ?? 0) === 0 || input.trial === 'full';
+  const withdrawn = input.visibility != null && input.visibility !== 'public';
+
+  // Withdrawn beats `open`: a free listing taken off sale is off sale. Without this
+  // ordering, "unpublish" would do nothing at all to anything free.
+  if (withdrawn) return { visible: false, entitled: false, reason: 'withdrawn' };
+  if (open) {
+    return { visible: true, entitled: true, reason: (input.priceCents ?? 0) === 0 ? 'free' : 'openTrial' };
+  }
+  return { visible: true, entitled: false, reason: 'preview' };
+}
+
+// ---------------------------------------------------------------------------
+// What happens to a HOSTED app when nobody is running it any more
+// ---------------------------------------------------------------------------
+
+/**
+ * THE LIFE OF A HOSTED LISTING AFTER THE SELLER STOPS.
+ *
+ * ── THE QUESTION WITHDRAWAL DOES NOT ANSWER ──────────────────────────────────────
+ * Withdrawing a listing takes the storefront away and leaves every existing holder
+ * exactly where they were — that already falls out of the licence rule
+ * (`resolveListingAccess`, precedence 1) and needs nothing new. It is the right
+ * answer for a `copy`, where the buyer holds their own cards and the seller can
+ * never reach them again.
+ *
+ * It is not an answer at all for a `hosted` app, because the buyer holds ACCESS to
+ * an instance THE SELLER RUNS. Nothing about withdrawing a storefront obliges anyone
+ * to keep that instance alive, and until this existed the platform had no written
+ * position on what a subscriber is owed when it goes dark. "The licence outlives the
+ * listing" is unenforceable when the licence is a promise about somebody else's
+ * server.
+ *
+ * ── THE FOUR STATES ──────────────────────────────────────────────────────────────
+ *   operating   the address answers. Nothing is owed beyond the subscription.
+ *   grace       it stopped answering. Transient outages are the common case, so the
+ *               seller gets a window, subscribers keep their subscription, and
+ *               billing CONTINUES — a deploy that takes four minutes must not
+ *               refund a month.
+ *   readOnly    the window closed. Billing STOPS, and each subscriber may export the
+ *               data they put in. The app is no longer expected to serve.
+ *   released    still dark after the read-only window. The product is abandoned:
+ *               every live subscriber may TAKE the published build as a `copy`, at
+ *               no charge, onto a board of their own.
+ *
+ * ── WHY IT IS DERIVED AND NOT STORED ─────────────────────────────────────────────
+ * Same reason `ListingReleaseState` is derived: the state is a function of two facts
+ * the row already holds — when it was first seen dark, and what time it is now — and
+ * a stored state column is a second copy that goes stale the moment a sweep does not
+ * run. Deriving it here means the seller's panel, the subscriber's page and the
+ * billing sweep cannot disagree about whether a month is owed.
+ *
+ * ── WHY THE WINDOWS ARE HERE ─────────────────────────────────────────────────────
+ * They are the PROMISE, and the promise is quoted to a buyer before they subscribe
+ * and to a seller before they publish. A number that lives only in a cron job is a
+ * promise nobody can read.
+ */
+export const HOSTED_LIFECYCLE_STATES = ['operating', 'grace', 'readOnly', 'released'] as const;
+export type HostedLifecycleState = (typeof HOSTED_LIFECYCLE_STATES)[number];
+
+/** How long a dark address is treated as an outage rather than an abandonment. */
+export const HOSTED_GRACE_DAYS = 14;
+/** How long after that subscribers may still get their data out before the build
+ *  itself is released to them. */
+export const HOSTED_READ_ONLY_DAYS = 30;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export interface HostedLifecycle {
+  state: HostedLifecycleState;
+  /** When the clock started; null while the address is answering. */
+  darkSinceISO: string | null;
+  /** Whole days until the NEXT transition, or null when there is not one. */
+  daysUntilNextState: number | null;
+  /** May the platform still charge for this subscription this period. */
+  billable: boolean;
+  /** May a subscriber pull the data they put into the app. */
+  subscriberMayExport: boolean;
+  /** May a subscriber take the published build itself, as a `copy`, for nothing. */
+  subscriberMayTake: boolean;
+}
+
+export function resolveHostedLifecycle(input: {
+  /** First moment the address was observed not serving. Null = it answers. */
+  unreachableSinceISO?: string | null;
+  nowISO?: string;
+}): HostedLifecycle {
+  const dark = input.unreachableSinceISO ? Date.parse(input.unreachableSinceISO) : NaN;
+  if (!Number.isFinite(dark)) {
+    return {
+      state: 'operating',
+      darkSinceISO: null,
+      daysUntilNextState: null,
+      billable: true,
+      subscriberMayExport: false,
+      subscriberMayTake: false,
+    };
+  }
+  const now = input.nowISO ? Date.parse(input.nowISO) : Date.now();
+  const days = Math.max(0, (now - dark) / DAY_MS);
+  const darkSinceISO = new Date(dark).toISOString();
+
+  if (days < HOSTED_GRACE_DAYS) {
+    return {
+      state: 'grace',
+      darkSinceISO,
+      daysUntilNextState: Math.ceil(HOSTED_GRACE_DAYS - days),
+      billable: true,
+      subscriberMayExport: false,
+      subscriberMayTake: false,
+    };
+  }
+  if (days < HOSTED_GRACE_DAYS + HOSTED_READ_ONLY_DAYS) {
+    return {
+      state: 'readOnly',
+      darkSinceISO,
+      daysUntilNextState: Math.ceil(HOSTED_GRACE_DAYS + HOSTED_READ_ONLY_DAYS - days),
+      // Billing stops the moment the outage stops being an outage. Charging for a
+      // month of nothing is the part a subscriber would be right to call theft.
+      billable: false,
+      subscriberMayExport: true,
+      subscriberMayTake: false,
+    };
+  }
+  return {
+    state: 'released',
+    darkSinceISO,
+    daysUntilNextState: null,
+    billable: false,
+    subscriberMayExport: true,
+    // The end of the promise: nobody is running it, so the people paying for it get
+    // the build. This is why the rule has to exist BEFORE the first hosted sale —
+    // it is a term of that sale, not a remedy invented after one goes wrong.
+    subscriberMayTake: true,
+  };
+}
+
 /**
  * OBJECT KINDS WHOSE OUTPUT SHAPE OVERRIDES THEIR LISTING KIND'S DEFAULT.
  *
@@ -553,7 +773,25 @@ const HARNESS_BY_OBJECT_KIND: Readonly<Record<string, ListingHarness>> = {
  * listing kind's default, which is `system`: the right question for a board is
  * whether it still stands up in an empty workspace.
  */
-export function resolveListingHarness(kindId: string, objectKind?: string | null): ListingHarness {
+export function resolveListingHarness(
+  kindId: string,
+  objectKind?: string | null,
+  /**
+   * What the buyer actually receives.
+   *
+   * Checked FIRST, and it overrules the source kind. A `website` sold as a `copy` is
+   * a runnable document and belongs to `runtime`; the same `website` sold as `hosted`
+   * is an address somebody keeps operating, and asking the captured document whether
+   * it works answers a question nobody is buying. The output shape is the right axis
+   * for everything the buyer TAKES AWAY, and the wrong one for the single case where
+   * the product stays where it is.
+   *
+   * Optional so the pre-publish hint — a seller choosing a kind before they have
+   * chosen a delivery — keeps its existing two-argument call.
+   */
+  delivery?: ListingDelivery | string | null,
+): ListingHarness {
+  if (delivery === 'hosted') return 'deployment';
   if (objectKind) {
     const override = HARNESS_BY_OBJECT_KIND[objectKind];
     if (override) return override;
@@ -577,6 +815,38 @@ export function blockingChecks(checks: readonly StageCheck[]): readonly StageChe
 export function isPublishable(checks: readonly StageCheck[]): boolean {
   return blockingChecks(checks).length === 0;
 }
+
+/**
+ * WHAT THE SELLER LEARNED IN STAGE, ON ITS WAY TO THE BUYER.
+ *
+ * ── THE RULE THIS ENCODES ────────────────────────────────────────────────────────
+ * A limitation a seller is shown in Stage is DECLARED on the listing, not discovered
+ * by the buyer. Every `warn` is by definition a fact about the buyer's environment
+ * that the seller was told and chose to ship with — a font that may substitute, a
+ * 1.2mm wall, a dashboard bound to nothing, the bound on what Stage itself could
+ * verify. Showing those only to the seller turns the panel into a private
+ * disclaimer, which is worse than not running the checks: it means the platform
+ * knows and the buyer does not.
+ *
+ * Blockers are absent because a listing carrying one cannot be published at all.
+ * So this is exactly the warnings, in the order Stage sorted them.
+ */
+export function declaredLimits(checks: readonly StageCheck[]): readonly StageCheck[] {
+  return checks.filter((check) => check.severity === 'warn');
+}
+
+/**
+ * The bound on Stage itself, stated as a finding rather than left implicit.
+ *
+ * Stage exercises the CAPTURED SNAPSHOT and — for a hosted app — the live address.
+ * It does not install the snapshot into a throwaway tenant and drive it, because a
+ * disposable tenant needs a lifecycle and a per-press cost nobody has agreed to pay.
+ * That is a real limit on what "it passed" means, and a limit the platform knows
+ * about is one the buyer is entitled to read. Emitted by every harness, carried onto
+ * the listing by `declaredLimits`, and deliberately a `warn`: it is true of every
+ * listing on the platform and must never refuse a publish.
+ */
+export const STAGE_SANDBOX_LIMIT_CODE = 'stage.sandboxLimit';
 
 /**
  * FIELDS THAT NEVER LEAVE THE SELLER'S TENANT.

@@ -17993,7 +17993,8 @@
         "paged": "liest es, formatiert es um und zieht einen Andruck",
         "geometry": "prüft, ob es sich wirklich fertigen lässt",
         "instrument": "beantwortet es und liest dann die Auswertung ohne Antworten",
-        "system": "lässt es trocken laufen, jeder ausgehende Schritt simuliert"
+        "system": "lässt es trocken laufen, jeder ausgehende Schritt simuliert",
+        "deployment": "die Live-Adresse"
       },
       "state": {
         "draft": "Entwurf",
@@ -18025,7 +18026,8 @@
       "revertConfirm": "Wieder verkaufen",
       "noticeStaged": "v{version} geprüft.",
       "noticePublished": "v{version} ist im Verkauf.",
-      "noticeReverted": "Zurück auf den Stand v{from}, veröffentlicht als v{version}."
+      "noticeReverted": "Zurück auf den Stand v{from}, veröffentlicht als v{version}.",
+      "previewHead": "v{version}, genau so, wie Käufer sie erhalten"
     },
     "rateUp": "Gute Antwort",
     "rateDown": "Schlechte Antwort",
@@ -19903,9 +19905,6 @@
     "buy": "Kaufen",
     "openInCanvas": "In meinem Canvas öffnen",
     "previewOnly": "Das ist eine Vorschau. Kaufe es, um die funktionierende Version zu nutzen.",
-    "playFrameTitle": "{name} wird gespielt",
-    "siteFrameTitle": "{name}, live",
-    "nothingToShow": "Noch nichts zu zeigen.",
     "kind": {
       "game": "Spiel",
       "app": "App",
@@ -20550,5 +20549,27 @@
     "copyBaseUrl": "Basis-URL kopieren",
     "copyQuickstart": "Schnellstart kopieren",
     "savedIt": "Gespeichert"
+  },
+  "commerce": {
+    "stage": {
+      "playFrameTitle": "{name} wird gespielt",
+      "siteFrameTitle": "{name}, live in Betrieb",
+      "nothingToShow": "Noch nichts anzuzeigen.",
+      "declaredHead": "Bekannte Einschränkungen",
+      "deliveryLegend": "Was Käufer erhalten",
+      "delivery": {
+        "copy": "Die Sache selbst",
+        "hosted": "Zugang zu deiner laufenden App"
+      },
+      "deliveryHint": {
+        "copy": "Sie landet auf einem Board im Arbeitsbereich der Käufer und gehört ihnen. Du kommst nie wieder daran.",
+        "hosted": "Du betreibst sie weiter; Käufer erhalten ein Konto und ein Abonnement. Deine Adresse wird vor dem Verkauf geprüft."
+      },
+      "hosted": {
+        "grace": "Diese App antwortet nicht mehr. Der Verkäufer hat {days} Tage Zeit, sie zurückzuholen, bevor dein Abonnement pausiert.",
+        "readOnly": "Diese App ist zu lange ausgefallen. Die Abrechnung wurde gestoppt und du kannst alles exportieren, was du eingegeben hast.",
+        "released": "Diese App wurde aufgegeben. Die Abrechnung wurde gestoppt und du kannst den veröffentlichten Stand kostenlos auf ein eigenes Board holen."
+      }
+    }
   }
 }

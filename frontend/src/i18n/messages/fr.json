@@ -17993,7 +17993,8 @@
         "paged": "le lit, le reflue et en tire une épreuve",
         "geometry": "vérifie qu’il est réellement fabricable",
         "instrument": "y répond, puis lit ses résultats sans aucune réponse",
-        "system": "l’exécute à blanc, chaque étape sortante étant simulée"
+        "system": "l’exécute à blanc, chaque étape sortante étant simulée",
+        "deployment": "l’adresse en service"
       },
       "state": {
         "draft": "Brouillon",
@@ -18025,7 +18026,8 @@
       "revertConfirm": "La remettre en vente",
       "noticeStaged": "v{version} préparée.",
       "noticePublished": "La v{version} est en vente.",
-      "noticeReverted": "Retour à la version v{from}, publiée sous le numéro v{version}."
+      "noticeReverted": "Retour à la version v{from}, publiée sous le numéro v{version}.",
+      "previewHead": "v{version}, exactement telle que l’acheteur la reçoit"
     },
     "rateUp": "Bonne réponse",
     "rateDown": "Mauvaise réponse",
@@ -19903,9 +19905,6 @@
     "buy": "Acheter",
     "openInCanvas": "Ouvrir dans mon canevas",
     "previewOnly": "Ceci est un aperçu. Achetez-le pour utiliser la version fonctionnelle.",
-    "playFrameTitle": "Vous jouez à {name}",
-    "siteFrameTitle": "{name}, en ligne",
-    "nothingToShow": "Rien à afficher pour l’instant.",
     "kind": {
       "game": "Jeu",
       "app": "Application",
@@ -20550,5 +20549,27 @@
     "copyBaseUrl": "Copier l’URL de base",
     "copyQuickstart": "Copier le démarrage rapide",
     "savedIt": "C’est enregistré"
+  },
+  "commerce": {
+    "stage": {
+      "playFrameTitle": "Lecture de {name}",
+      "siteFrameTitle": "{name}, en fonctionnement",
+      "nothingToShow": "Rien à afficher pour l’instant.",
+      "declaredHead": "Limites connues",
+      "deliveryLegend": "Ce que reçoit l’acheteur",
+      "delivery": {
+        "copy": "La création elle-même",
+        "hosted": "L’accès à votre application en service"
+      },
+      "deliveryHint": {
+        "copy": "Elle arrive sur un tableau de son espace de travail et lui appartient. Vous ne pourrez plus y toucher.",
+        "hosted": "Vous continuez à l’exécuter ; l’acheteur obtient un compte et un abonnement. Votre adresse est vérifiée avant la mise en vente."
+      },
+      "hosted": {
+        "grace": "Cette application ne répond plus. Le vendeur dispose de {days} jours pour la rétablir avant la suspension de votre abonnement.",
+        "readOnly": "Cette application est hors service depuis trop longtemps. La facturation est arrêtée et vous pouvez exporter tout ce que vous y avez saisi.",
+        "released": "Cette application est abandonnée. La facturation est arrêtée et vous pouvez récupérer gratuitement la version publiée sur un tableau à vous."
+      }
+    }
   }
 }

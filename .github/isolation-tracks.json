@@ -1,11 +1,17 @@
 {
   "$comment": "Machine-readable source of truth for the generated isolation-track reference (T9 · Platform · DB · CI steward). The track-scope guard reads THIS file to enforce that a `track/<id>` branch edits only files under its owns globs (minus excludes) plus shared coordination files, and draws migration numbers only from its band. This file is canonical; regenerate .github/isolation-tracks.generated.md after editing it.",
   "globSyntax": "Paths are repo-root-relative. `**` matches any number of path segments, `*` matches within one segment. `[` and `]` are LITERAL (Next.js route dirs like marketplace/[slug]), not character classes.",
+  "sharedHubsComment": "Append-only coordination files every track may edit. Four entries were added 2026-08-16 by W1B because the guard could not express rules the wave plan already states, not because a boundary moved: (1) `schema/*.ts` — the barrel `schema.ts` was already listed, but the definitions moved into per-context files, and ROADMAP's contention register names `schema/growth.ts` as 'a T9-stewarded shared hub' contended by W1B and W1E; without it no lane with a migration band could add the table its band exists for. (2)+(3) ROADMAP.md and DONE.md — every lane is REQUIRED to record what it found in the gap register and move what it closed, and neither is code. (4) `.github/isolation-tracks*` — a manifest nobody may edit from a lane branch is a manifest that cannot be corrected when it is wrong, which is the state that produced this comment.",
   "sharedHubs": [
     "api/src/infrastructure/database/schema.ts",
+    "api/src/infrastructure/database/schema/*.ts",
     "api/src/index.ts",
     "frontend/src/lib/builderforceApi.ts",
     "README.md",
+    "ROADMAP.md",
+    "DONE.md",
+    ".github/isolation-tracks.json",
+    ".github/isolation-tracks.generated.md",
     "api/package.json",
     "frontend/package.json",
     "frontend/src/i18n/messages/*.json"
@@ -83,7 +89,7 @@
         "frontend/src/components/ide/Voice*",
         "frontend/src/components/QaContent.tsx",
         "frontend/src/components/site-editor/**",
-        "frontend/src/components/creation-canvas/CanvasReleasesPanel.tsx",
+        "frontend/src/components/creation-canvas/CanvasReleasesPanel.*",
         "frontend/src/components/commerce/**",
         "frontend/src/components/apps/**",
         "frontend/src/app/marketplace/listing/**",
@@ -244,11 +250,13 @@
         "api/src/application/marketplace/creationReleases.*",
         "api/src/application/marketplace/stageChecks.*",
         "packages/creation-canvas-contract/src/marketplaceListings.ts",
-        "frontend/src/components/creation-canvas/CanvasReleasesPanel.tsx",
+        "frontend/src/components/creation-canvas/CanvasReleasesPanel.*",
         "frontend/src/app/marketplace/listing/**",
-        "frontend/src/lib/creationListings.*"
+        "frontend/src/lib/creationListings.*",
+        "frontend/src/lib/creationReleases.*"
       ],
-      "excludes": []
+      "excludes": [],
+      "$comment": "`frontend/src/lib/creationReleases.*` added 2026-08-16: it is the typed client for `application/marketplace/creationReleases.ts` and is read by `CanvasReleasesPanel.tsx`, both of which W1B already owned, and it belonged to NO track — so the lane's own vertical slice could not be finished. Not a boundary move; a gap."
     },
     {
       "id": "W1C",

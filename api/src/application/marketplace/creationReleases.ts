@@ -50,17 +50,23 @@ import {
   bumpVersion,
   buildSnapshotPayload,
   invalidateListingCaches,
+  launchPayloadFor,
   resolveListingTarget,
   writeListingRow,
+  type LaunchPayload,
   type ListingBody,
   type ListingSnapshotPayload,
   type PublishInput,
 } from './creationListings';
 import { runStageChecks, type StageObject } from './stageChecks';
+import { deploymentProbe } from './stageChecks.probe';
 import {
   SNAPSHOT_REASON_PUBLICATION,
   SNAPSHOT_REASON_STAGE,
+  resolveDelivery,
+  type ListingDelivery,
   type ListingHarness,
+  type ListingLaunchMode,
   type ListingReleaseState,
   type StageCheck,
 } from '@builderforce/creation-canvas-contract';
@@ -95,10 +101,29 @@ export interface StagedRelease {
   snapshotId: string;
   version: string;
   harness: ListingHarness;
+  /** What this candidate would hand over. Decides the harness, so it is reported. */
+  delivery: ListingDelivery;
   checks: StageCheck[];
   /** The staged payload, so Stage can render exactly what a buyer would receive
    *  rather than re-reading the seller's board. */
   payload: ListingSnapshotPayload;
+  /**
+   * THE STAGED VERSION AS A BUYER WOULD RECEIVE IT.
+   *
+   * ── THE GAP THIS CLOSES ────────────────────────────────────────────────────────
+   * Stage listed every version, ran the harness and refused the publish on a
+   * blocker — so a seller read a VERDICT about their own product without ever seeing
+   * it. Every piece needed to fix that already existed and none of them were joined
+   * up: `launchPayloadFor` returns the right shape per mode and `ListingLaunch`
+   * already renders all five. What stood in the way was addressing: the launch path
+   * resolves by public SLUG, and a staged candidate deliberately has none.
+   *
+   * So this resolves by SNAPSHOT ID instead, for the seller, under the same
+   * entitlement rule and through the same renderer. The preview IS the product,
+   * bounded — the real thing running on the sample the seller chose, never a
+   * metadata card or a screenshot of one.
+   */
+  launch: LaunchPayload;
 }
 
 export interface ReleaseQuery {
@@ -196,7 +221,8 @@ export async function listReleases(db: Db, query: ReleaseQuery): Promise<Release
   }
 
   const body = listing.body as ListingBody | null;
-  const harness = resolveListingHarness(listing.kind, body?.source?.objectKind ?? null);
+  const delivery = resolveDelivery(listing.kind, body?.delivery ?? null);
+  const harness = resolveListingHarness(listing.kind, body?.source?.objectKind ?? null, delivery);
 
   const rows = await db
     .select({
@@ -308,7 +334,12 @@ export async function stageRelease(db: Db, env: Env, input: PublishInput): Promi
     snapshotId: (target.existing?.body as ListingBody | null)?.snapshotId ?? snapshot.id,
     launch: target.spec.launch,
     trial: target.trial,
+    delivery: target.delivery,
     seller: { userId: input.userId, name: target.sellerName },
+    // Deliberately NOT carried over from a previous publish: `declared` describes
+    // the build ON SALE, and a stage has not changed which build that is. It is
+    // rewritten by `publishCreationListing` when — and only when — one goes live.
+    declared: (target.existing?.body as ListingBody | null)?.declared,
   };
 
   await writeListingRow(db, input, target, body, {
@@ -326,18 +357,16 @@ export async function stageRelease(db: Db, env: Env, input: PublishInput): Promi
   });
   const staged = rail.releases.find((release) => release.snapshotId === snapshot.id);
 
-  return {
+  return stagedView(db, env, payload, {
     snapshotId: snapshot.id,
     version: staged?.version ?? '1.0.0',
-    harness: resolveListingHarness(target.spec.id, target.objectKind),
-    checks: checksForPayload(payload, {
-      listingKind: target.spec.id,
-      objectKind: target.objectKind,
-      priceCents: target.priceCents,
-      trial: target.trial,
-    }),
-    payload,
-  };
+    listingKind: target.spec.id,
+    objectKind: target.objectKind,
+    launch: target.spec.launch,
+    priceCents: target.priceCents,
+    trial: target.trial,
+    delivery: target.delivery,
+  });
 }
 
 /**
@@ -351,6 +380,17 @@ export async function stageRelease(db: Db, env: Env, input: PublishInput): Promi
 export async function checksForStagedRelease(
   db: Db,
   query: ReleaseQuery & { snapshotId: string },
+  /**
+   * Present when the caller can reach the network.
+   *
+   * Optional, and only here: this is a RE-READ of findings, while the two paths that
+   * actually decide anything — `stageRelease` and `publishCreationListing` — both hold
+   * an `Env` and both always probe. Absent, the deployment harness says it could not
+   * re-check rather than inventing a verdict, which is a `warn` and never a gate.
+   * (The route that supplies it is another lane's file this wave; the one-line change
+   * is queued for the integration step.)
+   */
+  env?: Env,
 ): Promise<StagedRelease> {
   const listing = await listingForSource(db, query.tenantId, query.sessionId, query.objectId);
   if (!listing) throw new ListingError('Nothing has been staged for this yet', 404);
@@ -371,39 +411,67 @@ export async function checksForStagedRelease(
   const rail = await listReleases(db, query);
   const release = rail.releases.find((entry) => entry.snapshotId === query.snapshotId);
 
-  return {
+  return stagedView(db, env ?? null, payload, {
     snapshotId: query.snapshotId,
     version: release?.version ?? listing.version,
-    harness: resolveListingHarness(listing.kind, objectKind),
-    checks: checksForPayload(payload, {
-      listingKind: listing.kind,
-      objectKind,
-      priceCents: listing.priceCents ?? 0,
-      trial: body?.trial ?? 'preview',
-    }),
-    payload,
-  };
+    listingKind: listing.kind,
+    objectKind,
+    launch: body?.launch ?? listingKindSpec(listing.kind)?.launch ?? 'preview',
+    priceCents: listing.priceCents ?? 0,
+    trial: body?.trial ?? 'preview',
+    delivery: resolveDelivery(listing.kind, body?.delivery ?? null),
+  });
 }
 
-/** The one call into the runners, so a caller cannot assemble a different input
- *  shape and get a different verdict for the same snapshot. */
-function checksForPayload(
+/**
+ * THE ONE ASSEMBLY OF A STAGED RELEASE.
+ *
+ * Both paths that produce one — capturing a new candidate and re-reading an existing
+ * one — come through here, so a caller cannot compose a different input shape and get
+ * a different verdict, or a different preview, for the same snapshot. That is the
+ * same reasoning the checks themselves are centralised for, applied one level up now
+ * that a staged release carries a rendered preview as well as findings.
+ */
+async function stagedView(
+  db: Db,
+  env: Env | null,
   payload: ListingSnapshotPayload,
   meta: {
+    snapshotId: string;
+    version: string;
     listingKind: string;
     objectKind: string | null;
+    launch: ListingLaunchMode;
     priceCents: number;
     trial: string;
+    delivery: ListingDelivery;
   },
-): StageCheck[] {
-  return runStageChecks({
+): Promise<StagedRelease> {
+  const checks = await runStageChecks({
     listingKind: meta.listingKind,
     objectKind: meta.objectKind,
     objects: (payload.objects ?? []) as readonly StageObject[],
     priceCents: meta.priceCents,
     trial: meta.trial,
+    delivery: meta.delivery,
     strippedFields: payload.strippedFields ?? [],
+    probe: env ? deploymentProbe(db, env) : null,
   });
+
+  return {
+    snapshotId: meta.snapshotId,
+    version: meta.version,
+    harness: resolveListingHarness(meta.listingKind, meta.objectKind, meta.delivery),
+    delivery: meta.delivery,
+    checks,
+    payload,
+    // `entitled: true`, and it is not a shortcut: this snapshot belongs to the caller,
+    // who was authenticated into the seller's own workspace before the listing behind
+    // it was resolved. Showing a seller the bounded preview of their own candidate
+    // would reproduce the exact defect this closes — a verdict about a product nobody
+    // can see.
+    launch: launchPayloadFor(payload, meta.launch, true),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -473,19 +541,4 @@ export async function revertListing(
 
   await invalidateListingCaches(env, listing.slug);
   return { version, snapshotId: input.snapshotId };
-}
-
-/**
- * Which listing kinds this canvas card could be sold as, with the harness each one
- * would be exercised by.
- *
- * Read by the panel so a seller sees what will be CHECKED before they commit to a
- * kind — the difference between "publish and find out" and a decision.
- */
-export function harnessForKinds(kinds: readonly string[], objectKind: string | null) {
-  return kinds.map((kind) => ({
-    kind,
-    icon: listingKindSpec(kind)?.icon ?? '📦',
-    harness: resolveListingHarness(kind, objectKind),
-  }));
 }

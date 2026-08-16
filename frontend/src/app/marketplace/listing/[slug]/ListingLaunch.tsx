@@ -3,18 +3,13 @@
 /**
  * RUNNING somebody else's creation.
  *
- * ── THE ONE SECURITY INVARIANT ON THIS PAGE ──────────────────────────────────────
- * A game's document is HTML a language model wrote from a free-text brief, and it
- * is about to execute in a visitor's browser on our origin's page. The frame is
- * `sandbox="allow-scripts"` and NEVER `allow-same-origin`, and it is fed by
- * `srcDoc` rather than a blob URL. Either relaxation lets that code reach the
- * app's session — the same invariant `gameNode.test.tsx` pins on the canvas, held
- * here too because this is the surface where the code is a STRANGER's.
- *
- * ── WHY THE PRIMARY BUTTON IS NOT A BRANCH PER KIND ──────────────────────────────
- * `launch.mode` arrives from the server, derived from the listing's kind in the
- * shared registry. Five modes, five renderers, and a sixth sellable kind adds a
- * registry entry rather than a case here.
+ * ── WHAT IS HERE AND WHAT IS NOT ─────────────────────────────────────────────────
+ * This is the BUYING half — price, sign in, acquire, come back from the processor,
+ * install. Rendering the thing itself is `LaunchStage` in `lib/creationListings.
+ * launch.tsx`, shared with the creator's landing page and with Stage in the canvas,
+ * because a preview that is a second renderer is a preview that AGREES WITH the
+ * product rather than one that IS it. That module also carries the sandbox invariant
+ * that governs running a stranger's HTML.
  *
  * ── PREVIEW VS PRODUCT ───────────────────────────────────────────────────────────
  * The server decides which one this visitor gets and says so in `entitled`. This
@@ -28,6 +23,12 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { signInHref } from '@/lib/auth';
+import {
+  DeclaredLimits,
+  HostedStatusNote,
+  LAUNCH_STAGE_CSS,
+  LaunchStage,
+} from '@/lib/creationListings.launch';
 import {
   creationListingApi,
   formatListingPrice,
@@ -151,24 +152,12 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
         .mpl-btn[disabled] { opacity: .55; cursor: not-allowed; }
         .mpl-btn-ghost { background: var(--surface-card); color: var(--text-primary);
                          border: 1px solid var(--border-subtle); }
-        .mpl-stage { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
-                     background: var(--surface-card); overflow: hidden; }
-        .mpl-frame { display: block; width: 100%; height: min(70vh, 640px); border: 0;
-                     background: var(--bg-base); }
-        .mpl-objects { display: grid; gap: 10px; padding: 16px;
-                       grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
-        .mpl-object { border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
-                      padding: 12px 14px; background: var(--bg-base); min-width: 0; }
-        .mpl-object h3 { margin: 0 0 4px; font-size: var(--font-size-small);
-                         color: var(--text-primary); }
-        .mpl-object pre { margin: 0; font-size: var(--font-size-eyebrow); color: var(--text-secondary);
-                          white-space: pre-wrap; word-break: break-word; max-height: 140px;
-                          overflow: auto; }
         .mpl-note { margin: 0; font-size: var(--font-size-small); color: var(--text-secondary); }
         .mpl-error { margin: 0; padding: 10px 14px; border-radius: var(--radius-md);
                      background: var(--tone-danger-bg); color: var(--tone-danger-ink);
                      border-left: 3px solid var(--tone-danger-mark);
                      font-size: var(--font-size-small); }
+        ${LAUNCH_STAGE_CSS}
       `}</style>
 
       <div className="mpl-cta">
@@ -195,73 +184,19 @@ export function ListingLaunch({ listing }: { listing: CreationListing }) {
 
       {error && <p className="mpl-error" role="alert">{error}</p>}
 
-      {launch && <LaunchStage launch={launch} listing={listing} />}
+      {/* Before the product, because it is the thing a buyer needs to know BEFORE
+          they subscribe: whether what they would be paying for is still running. */}
+      <HostedStatusNote hosted={launch?.hosted} />
+
+      {launch && <LaunchStage launch={launch} name={listing.name} />}
 
       {launch && !launch.entitled && (
         <p className="mpl-note">{t('previewOnly')}</p>
       )}
+
+      {/* What the seller was told in Stage and shipped with. Declared here so it is
+          not something the buyer finds out afterwards. Decides its own visibility. */}
+      <DeclaredLimits checks={listing.declared} />
     </section>
   );
-}
-
-/** One renderer per launch mode. The mode is data; this is the only place that
- *  turns it into pixels. */
-function LaunchStage({ launch, listing }: { launch: LaunchPayload; listing: CreationListing }) {
-  const t = useTranslations('marketplaceListing');
-
-  if (launch.mode === 'play' && launch.document) {
-    return (
-      <div className="mpl-stage">
-        {/* allow-scripts and NOTHING else. `allow-same-origin` beside it would
-            give model-authored code from a stranger's brief the run of this
-            origin — the session included. */}
-        <iframe
-          className="mpl-frame"
-          title={t('playFrameTitle', { name: listing.name })}
-          sandbox="allow-scripts"
-          srcDoc={launch.document}
-        />
-      </div>
-    );
-  }
-
-  if (launch.mode === 'open' && launch.url) {
-    return (
-      <div className="mpl-stage">
-        <iframe
-          className="mpl-frame"
-          title={t('siteFrameTitle', { name: listing.name })}
-          sandbox="allow-scripts allow-forms allow-popups"
-          src={launch.url}
-        />
-      </div>
-    );
-  }
-
-  if (launch.objects?.length) {
-    return (
-      <div className="mpl-stage">
-        <div className="mpl-objects">
-          {launch.objects.slice(0, 12).map((object) => (
-            <article key={object.id} className="mpl-object">
-              <h3>{object.kind}</h3>
-              <pre>{summarise(object.canvasData)}</pre>
-            </article>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  return <p className="mpl-note">{t('nothingToShow')}</p>;
-}
-
-/** A short, readable digest of a canvas card for the preview grid. Bounded on
- *  purpose — this is a shop window, not a data dump. */
-function summarise(data: unknown): string {
-  if (!data || typeof data !== 'object') return '';
-  const entries = Object.entries(data as Record<string, unknown>)
-    .filter(([, value]) => typeof value === 'string' || typeof value === 'number')
-    .slice(0, 6);
-  return entries.map(([key, value]) => `${key}: ${String(value).slice(0, 80)}`).join('\n');
 }

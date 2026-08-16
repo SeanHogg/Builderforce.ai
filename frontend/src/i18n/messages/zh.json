@@ -17993,7 +17993,8 @@
         "paged": "阅读、重排并校样",
         "geometry": "检查是否真的能制作出来",
         "instrument": "先作答，再在零回复下查看结果",
-        "system": "在所有对外步骤都被拦截的情况下试运行"
+        "system": "在所有对外步骤都被拦截的情况下试运行",
+        "deployment": "线上地址"
       },
       "state": {
         "draft": "草稿",
@@ -18025,7 +18026,8 @@
       "revertConfirm": "重新上架",
       "noticeStaged": "已预演 v{version}。",
       "noticePublished": "v{version} 已上线。",
-      "noticeReverted": "已回到 v{from} 的构建，并发布为 v{version}。"
+      "noticeReverted": "已回到 v{from} 的构建，并发布为 v{version}。",
+      "previewHead": "v{version}，与买家收到的完全一致"
     },
     "rateUp": "回答很好",
     "rateDown": "回答不佳",
@@ -19903,9 +19905,6 @@
     "buy": "立即购买",
     "openInCanvas": "在我的画板中打开",
     "previewOnly": "这是预览版。购买后即可使用完整版本。",
-    "playFrameTitle": "正在试玩 {name}",
-    "siteFrameTitle": "{name}（在线）",
-    "nothingToShow": "暂无可展示的内容。",
     "kind": {
       "game": "游戏",
       "app": "应用",
@@ -20550,5 +20549,27 @@
     "copyBaseUrl": "复制基础 URL",
     "copyQuickstart": "复制快速开始代码",
     "savedIt": "我已保存"
+  },
+  "commerce": {
+    "stage": {
+      "playFrameTitle": "正在运行 {name}",
+      "siteFrameTitle": "{name}，正在线上运行",
+      "nothingToShow": "暂无可显示的内容。",
+      "declaredHead": "已知限制",
+      "deliveryLegend": "买家获得什么",
+      "delivery": {
+        "copy": "作品本身",
+        "hosted": "访问你运行中的应用"
+      },
+      "deliveryHint": {
+        "copy": "作品会进入他们工作区的画板并归他们所有，你将无法再接触它。",
+        "hosted": "由你继续运行；他们获得账号与订阅。上架前会先检查你的地址是否可用。"
+      },
+      "hosted": {
+        "grace": "该应用已停止响应。卖家还有 {days} 天将其恢复，否则你的订阅将暂停。",
+        "readOnly": "该应用停机时间过长。计费已停止，你可以导出自己录入的全部数据。",
+        "released": "该应用已被弃置。计费已停止，你可以免费将已发布的版本取到自己的画板上。"
+      }
+    }
   }
 }

@@ -11,10 +11,12 @@
 
 import { apiRequest } from './apiClient';
 import type {
+  ListingDelivery,
   ListingHarness,
   ListingReleaseState,
   StageCheck,
 } from '@builderforce/creation-canvas-contract';
+import type { LaunchPayload } from './creationListings';
 
 export interface ReleaseView {
   /** Null on the DRAFT row — the board has moved on and nothing is captured. */
@@ -39,6 +41,8 @@ export interface StagedRelease {
   snapshotId: string;
   version: string;
   harness: ListingHarness;
+  /** What this candidate would hand over. Decides which harness ran. */
+  delivery: ListingDelivery;
   checks: StageCheck[];
   payload: {
     kind: 'object' | 'session';
@@ -46,6 +50,15 @@ export interface StagedRelease {
     objects: Array<{ id: string; kind: string; canvasData: unknown; content: unknown }>;
     strippedFields?: string[];
   };
+  /**
+   * The staged version as a BUYER would receive it.
+   *
+   * The same shape the public launch endpoint returns, from the same server
+   * function, so the panel renders it with the same component the marketplace page
+   * uses. A seller was previously shown a verdict about a product they could not
+   * see; this is the product.
+   */
+  launch: LaunchPayload;
 }
 
 /** What staging needs to know. The same shape publish takes, because the same
@@ -60,6 +73,9 @@ export interface StageRequest {
   priceCents?: number;
   currency?: string;
   trial?: string;
+  /** Which door the listing opens. Decides which harness runs, so it is staged
+   *  with the candidate rather than chosen later at publish. */
+  delivery?: ListingDelivery;
   listingId?: string | null;
 }
 

@@ -34,18 +34,24 @@
 import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import {
   LISTING_KIND_IDS,
+  declaredLimits,
   isListingKind,
+  isPublishable,
   isPublishableObjectKind,
   isStrippedListingField,
   listingKindSpec,
   listingKindsForObjectKind,
+  resolveDelivery,
+  resolveListingAccess,
   resolveTrialPolicy,
   sessionListingKinds,
   SNAPSHOT_REASON_PUBLICATION,
   SNAPSHOT_REASON_STAGE,
+  type ListingDelivery,
   type ListingLaunchMode,
   type ListingTrialPolicy,
   type MarketplaceListingKindSpec,
+  type StageCheck,
 } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -53,6 +59,7 @@ import {
   catalogItems,
   creationSessionMembers,
   creationSessionObjects,
+  creationSessionProjectLinks,
   creationSessions,
   objects,
   snapshots,
@@ -67,6 +74,15 @@ import {
 } from '../../infrastructure/cache/readThroughCache';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { registerObject } from '../kernel/ObjectRegistry';
+import { liveUrl, runStageChecks, runnableDocument, type StageObject } from './stageChecks';
+import { deploymentProbe, watchHostedListing } from './stageChecks.probe';
+import {
+  hostedListingStatus,
+  isHostedListing,
+  recordHostedProbe,
+  recordHostedWithdrawal,
+  type HostedListingStatus,
+} from './creationListings.hosted';
 
 // ---------------------------------------------------------------------------
 // Cache keys
@@ -137,6 +153,8 @@ export interface CreationListingView {
   currency: string;
   trial: ListingTrialPolicy;
   launch: ListingLaunchMode;
+  /** What the buyer receives: the thing (`copy`), or access to it (`hosted`). */
+  delivery: ListingDelivery;
   icon: string;
   installCount: number;
   rating: number | null;
@@ -144,6 +162,15 @@ export interface CreationListingView {
   updatedAtISO: string;
   sellerRef: string | null;
   sellerName: string | null;
+  /**
+   * Limits Stage found and the seller shipped with — on the PUBLIC projection too.
+   *
+   * The inherited rule, made structural: a limitation a seller learns in Stage is
+   * DECLARED on the listing rather than discovered by the buyer. Present on the
+   * public card and the public detail read, because a disclosure only the seller can
+   * see is not a disclosure.
+   */
+  declared: readonly StageCheck[];
   /** Source coordinates — seller-only. Absent on every public projection. */
   source?: { sessionId: string; objectId: string | null; objectKind: string | null };
 }
@@ -155,7 +182,27 @@ export interface ListingBody {
   snapshotId: string;
   launch: ListingLaunchMode;
   trial: ListingTrialPolicy;
+  /**
+   * What the buyer receives.
+   *
+   * STORED rather than re-derived from the kind on every read, because the kind
+   * declares what a listing MAY offer and the seller chooses from that set — an `app`
+   * can be sold either way, and a listing that re-derived its own delivery would
+   * silently become whichever one happens to be first in the registry. It is also the
+   * fact the deployment harness selects on, and the fact the hosted-lifecycle sweep
+   * finds its work by.
+   */
+  delivery: ListingDelivery;
   seller: { userId: string; name: string | null };
+  /**
+   * The warnings the staged build carried when it went on sale.
+   *
+   * Written at publish, from the checks run over the PROMOTED snapshot — so it
+   * describes the build a buyer receives rather than whatever the seller's board says
+   * today. Absent on rows published before this existed, which read as "nothing
+   * declared" rather than as an error.
+   */
+  declared?: StageCheck[];
 }
 
 export interface PublishInput {
@@ -172,6 +219,11 @@ export interface PublishInput {
   priceCents?: number;
   currency?: string;
   trial?: string | null;
+  /**
+   * Which door this listing opens. Validated against the kind's `deliveries`, so a
+   * client cannot sell a book as a subscription no matter what it posts.
+   */
+  delivery?: string | null;
   /** Omitted on create; supplied to re-publish an existing listing in place. */
   listingId?: string | null;
   /**
@@ -407,6 +459,18 @@ export interface ListingTarget {
   name: string;
   priceCents: number;
   trial: ListingTrialPolicy;
+  /** Resolved once here, so the panel, the harness and the buy button agree. */
+  delivery: ListingDelivery;
+  /**
+   * The project this board IS, when it is one.
+   *
+   * Read from the `app` link rather than taken from the client: that link is the
+   * operator decision "the project IS the app" written down (migration 0473), and it
+   * is the only fact that lets a hosted listing be put under the platform's standing
+   * deployment watch. Null for every board that has not been converted, which is
+   * every `copy` listing and is not an error.
+   */
+  projectId: number | null;
   sellerName: string | null;
 }
 
@@ -455,6 +519,11 @@ export async function resolveListingTarget(
     throw new ListingError(`A ${spec.id} cannot be sold`, 400);
   }
   const trial = resolveTrialPolicy(spec.id, priceCents, input.trial ?? null);
+  // The KIND is the authority on what may be offered; the seller picks from that set.
+  // Resolved once, here, and carried on the target — the harness selects on it, the
+  // body stores it and the buy button reads it, and three derivations of one choice
+  // is how a listing offers a subscription to something nobody is running.
+  const delivery = resolveDelivery(spec.id, input.delivery ?? null);
 
   const existing = input.listingId
     ? (await db.select().from(catalogItems)
@@ -465,6 +534,21 @@ export async function resolveListingTarget(
   if (existing && existing.publisherRef !== input.userId) {
     throw new ListingError('Only the publisher can update this listing', 403);
   }
+
+  // Only a HOSTED listing has anything to do with a project, so only a hosted publish
+  // pays for the lookup — an extra round-trip on every book and every pack to answer
+  // a question none of them ask is the kind of cost that never shows up in one trace
+  // and always shows up in the bill.
+  const [appLink] = delivery === 'hosted'
+    ? await db
+        .select({ projectId: creationSessionProjectLinks.projectId })
+        .from(creationSessionProjectLinks)
+        .where(and(
+          eq(creationSessionProjectLinks.sessionId, input.sessionId),
+          eq(creationSessionProjectLinks.linkKind, 'app'),
+        ))
+        .limit(1)
+    : [];
 
   const [seller] = await db
     .select({ displayName: users.displayName, username: users.username })
@@ -497,6 +581,8 @@ export async function resolveListingTarget(
     name,
     priceCents,
     trial,
+    delivery,
+    projectId: appLink?.projectId ?? null,
     sellerName,
   };
 }
@@ -596,6 +682,17 @@ export async function stagedPayload(
  * untested build under a tested version number. Promoting COPIES the staged payload
  * into a new `publication` snapshot rather than relabelling the staged row, so the
  * candidate stays in the rail and the sold copy is its own immutable record.
+ *
+ * ── THE GATE RUNS HERE, NOT ONLY IN THE PANEL ────────────────────────────────────
+ * The Releases panel already refuses to publish while a blocker stands. That is the
+ * seller's experience of the rule, and it is not the rule: a panel is a client, and a
+ * gate that only exists in a client is a gate a different client does not have. So
+ * the checks run again over the payload ACTUALLY BEING PUBLISHED and refuse it here.
+ * It is also the only place the promoted build is in hand — a seller may stage v1.3,
+ * edit a card, and publish without restaging.
+ *
+ * Every WARNING those checks produced is written onto the listing (`declared`), so
+ * the limits the seller was shown are the limits the buyer reads.
  */
 export async function publishCreationListing(
   db: Db,
@@ -608,6 +705,27 @@ export async function publishCreationListing(
   const payload = input.fromSnapshotId
     ? await stagedPayload(db, input.tenantId, target.registryObjectId, input.fromSnapshotId)
     : await buildSnapshotPayload(db, input.sessionId, input.objectId, name);
+
+  const checks = await runStageChecks({
+    listingKind: spec.id,
+    objectKind,
+    objects: (payload.objects ?? []) as readonly StageObject[],
+    priceCents: target.priceCents,
+    trial: target.trial,
+    delivery: target.delivery,
+    strippedFields: payload.strippedFields ?? [],
+    probe: deploymentProbe(db, env),
+  });
+  if (!isPublishable(checks)) {
+    // 409 rather than 400: the request is well-formed and the seller is entitled to
+    // make it — the CREATION is not ready. The panel shows the findings; the message
+    // names the first one so a caller without a panel is not told merely "no".
+    const first = checks.find((entry) => entry.severity === 'block');
+    throw new ListingError(
+      `This cannot go on sale yet — ${first?.label ?? 'a check refused it'}`,
+      409,
+    );
+  }
 
   const [snapshot] = await db
     .insert(snapshots)
@@ -629,7 +747,9 @@ export async function publishCreationListing(
     snapshotId: snapshot.id,
     launch: spec.launch,
     trial: target.trial,
+    delivery: target.delivery,
     seller: { userId: input.userId, name: target.sellerName },
+    declared: [...declaredLimits(checks)],
   };
 
   const row = await writeListingRow(db, input, target, body, {
@@ -639,6 +759,30 @@ export async function publishCreationListing(
     // the number its candidates were staged under.
     version: existing?.publishedAt ? bumpVersion(existing.version) : '1.0.0',
   });
+
+  // A hosted listing that just went on sale is now something strangers depend on, so
+  // it joins the standing watch — and its lifecycle clock is seeded from the probe
+  // that just passed rather than from the first sweep to notice it hours later.
+  // Re-publishing an existing hosted listing re-opens its shop window too.
+  if (target.delivery === 'hosted') {
+    const address = liveUrl(payload.objects as readonly StageObject[]);
+    await Promise.all([
+      recordHostedProbe(db, env, {
+        tenantId: input.tenantId, listingId: row.id, url: address, ok: true,
+      }),
+      recordHostedWithdrawal(db, env, {
+        tenantId: input.tenantId, listingId: row.id, withdrawn: false,
+      }),
+      address && target.projectId != null
+        ? watchHostedListing(db, {
+            tenantId: input.tenantId,
+            projectId: target.projectId,
+            projectName: name,
+            deployedUrl: address,
+          })
+        : Promise.resolve(),
+    ]);
+  }
 
   await invalidateListingCaches(env, row.slug);
   return toView(row, body);
@@ -652,8 +796,24 @@ export function bumpVersion(current: string): string {
   return `${major}.${minor + 1}.0`;
 }
 
-/** Take a listing off the public catalogue. The row and every sold snapshot stay —
- *  a buyer's licence outlives the seller's decision to stop selling. */
+/**
+ * Take a listing off the public catalogue.
+ *
+ * ── WHAT WITHDRAWING MEANS, FOR EACH OF THE TWO DELIVERIES ───────────────────────
+ * The row and every sold snapshot stay. For a `copy` that settles it: the buyer holds
+ * their own cards on their own board, `resolveListingAccess` keeps letting them
+ * through on their licence, and the seller can never reach them again. Withdrawal is
+ * a decision to stop SELLING and nothing more.
+ *
+ * For a `hosted` listing the same sentence is only half of one, because what the
+ * buyer holds is ACCESS to an instance THE SELLER RUNS. Withdrawal still means the
+ * storefront closes and existing subscribers keep working — but nothing here can make
+ * the seller keep a cloud bill paid, so the platform records WHEN the shop window
+ * closed and the hosted lifecycle (`creationListings.hosted.ts`) governs what
+ * subscribers are owed if the address later goes dark. Explicitly NOT the same
+ * timestamp: withdrawing is not abandoning, and starting an abandonment clock against
+ * a seller who is still serving would be wrong on both facts.
+ */
 export async function unpublishCreationListing(
   db: Db,
   env: Env,
@@ -669,8 +829,11 @@ export async function unpublishCreationListing(
       eq(catalogItems.tenantId, tenantId),
       eq(catalogItems.publisherRef, userId),
     ))
-    .returning({ slug: catalogItems.slug });
+    .returning({ slug: catalogItems.slug, body: catalogItems.body });
   if (!row) throw new ListingError('Listing not found', 404);
+  if (isHostedListing(row.body as ListingBody | null)) {
+    await recordHostedWithdrawal(db, env, { tenantId, listingId, withdrawn: true });
+  }
   await invalidateListingCaches(env, row.slug);
 }
 
@@ -696,6 +859,10 @@ function toView(row: CatalogRow, body: ListingBody | null, includeSource = true)
     currency: row.currency ?? 'USD',
     trial: body?.trial ?? 'preview',
     launch: body?.launch ?? spec?.launch ?? 'preview',
+    // A row published before `delivery` was stored falls back to what its kind
+    // declares first, which is the value `resolveDelivery` would have chosen for it.
+    delivery: resolveDelivery(row.kind, body?.delivery ?? null),
+    declared: body?.declared ?? [],
     icon: spec?.icon ?? '📦',
     installCount: row.installCount,
     rating: row.rating == null ? null : Number(row.rating),
@@ -808,6 +975,44 @@ export interface LaunchPayload {
   document?: string;
   url?: string;
   objects?: ListingSnapshotPayload['objects'];
+  /** Present only for a `hosted` listing: whether the thing the buyer subscribes to
+   *  is still serving, and what they may do if it is not. */
+  hosted?: HostedListingStatus;
+}
+
+/**
+ * TURN A SNAPSHOT INTO WHAT THE VIEWER SEES.
+ *
+ * ── WHY THIS IS ITS OWN FUNCTION ─────────────────────────────────────────────────
+ * Two callers need exactly this and they reach the snapshot by different routes:
+ * the public launch endpoint resolves a listing by its public SLUG, and the seller's
+ * Stage preview resolves a candidate by SNAPSHOT ID — a staged version deliberately
+ * has no slug, which is precisely why a seller could read a verdict about their own
+ * product without ever seeing it. What happens once you HAVE the payload is identical
+ * for both, and it has to be: the whole promise of the preview is that it is the real
+ * thing running, not a second renderer that agrees for now.
+ *
+ * The `entitled` flag is an ARGUMENT rather than something derived here, because the
+ * two callers establish it differently — `resolveListingAccess` for a visitor, "you
+ * are the seller of your own candidate" for Stage — and one function deciding both
+ * would have to know about licences AND sessions.
+ */
+export function launchPayloadFor(
+  payload: ListingSnapshotPayload,
+  mode: ListingLaunchMode,
+  entitled: boolean,
+): LaunchPayload {
+  const base: LaunchPayload = { mode, entitled, title: payload.title };
+  if (!entitled) {
+    // The preview is the METADATA of the thing, never the thing. Returning the
+    // objects "but with a flag" is how a paid product ends up in a network tab.
+    return { ...base, mode: 'preview', objects: payload.objects.map((object) => ({
+      id: object.id, kind: object.kind, canvasData: object.canvasData, content: null,
+    })) };
+  }
+  if (mode === 'play') return { ...base, document: gameDocument(payload) ?? undefined };
+  if (mode === 'open') return { ...base, url: siteUrl(payload) ?? undefined };
+  return { ...base, objects: payload.objects };
 }
 
 /**
@@ -859,40 +1064,40 @@ export async function launchListing(
 ): Promise<LaunchPayload | null> {
   const row = await resolveListingBySlug(db, slug);
   if (!row) return null;
-  // Withdrawn: only the people who already own it may still run it. To everybody
-  // else it is simply gone, which is what withdrawing it meant.
-  if (row.visibility !== 'public' && !entitled) return null;
   const body = row.body as ListingBody | null;
   if (!body) return null;
 
+  // THE rule, called rather than restated. `resolveListingAccess` answers both
+  // halves at once — may this caller see the listing, and do they get the product or
+  // the preview — and it is the same call the creator's own landing page and the
+  // subscribe surface make, so two shop windows onto one product cannot disagree
+  // about who has paid for it.
+  const access = resolveListingAccess({
+    priceCents: row.priceCents ?? 0,
+    trial: body.trial,
+    visibility: row.visibility,
+    hasLicence: entitled,
+  });
+  // Withdrawn: only the people who already hold it may still run it. To everybody
+  // else it is simply gone, which is what withdrawing it meant.
+  if (!access.visible) return null;
+
   const spec = listingKindSpec(row.kind);
   const mode = body.launch ?? spec?.launch ?? 'preview';
-  // A free listing, or one whose seller opened the trial, is entitled for everyone.
-  const open = (row.priceCents ?? 0) === 0 || body.trial === 'full';
-  const allowed = open || entitled;
 
   // The buyer's pinned snapshot wins over the listing's current one. Only for a
   // caller who is actually entitled: an unpinned visitor asking for an old snapshot
   // id would otherwise be a way to read a superseded build of a paid listing.
-  const payload = await publishedSnapshot(db, env, (allowed && heldSnapshotId) || body.snapshotId);
+  const payload = await publishedSnapshot(db, env, (access.entitled && heldSnapshotId) || body.snapshotId);
   if (!payload) return null;
 
-  const base: LaunchPayload = { mode, entitled: allowed, title: payload.title };
-  if (!allowed) {
-    // The preview is the METADATA of the thing, never the thing. Returning the
-    // objects "but with a flag" is how a paid product ends up in a network tab.
-    return { ...base, mode: 'preview', objects: payload.objects.map((object) => ({
-      id: object.id, kind: object.kind, canvasData: object.canvasData, content: null,
-    })) };
-  }
-
-  if (mode === 'play') {
-    return { ...base, document: gameDocument(payload) ?? undefined };
-  }
-  if (mode === 'open') {
-    return { ...base, url: siteUrl(payload) ?? undefined };
-  }
-  return { ...base, objects: payload.objects };
+  const launch = launchPayloadFor(payload, mode, access.entitled);
+  // A subscriber's app is a thing that can stop existing without them being told.
+  // Carried on the launch rather than left to a second call, because the person who
+  // needs it is looking at the address right now.
+  return isHostedListing(body)
+    ? { ...launch, hosted: await hostedListingStatus(db, env, row.id) }
+    : launch;
 }
 
 /**
@@ -919,25 +1124,29 @@ export async function publishedSnapshot(
   }, { kvTtlSeconds: SNAPSHOT_TTL_SECONDS });
 }
 
-/** A game's playable HTML, from the one card the listing is. */
+/**
+ * A game's playable HTML, from the one card the listing is.
+ *
+ * `runnableDocument` was extracted in `stageChecks.ts` precisely so "is there
+ * something to run" and "here is the thing to run" could not disagree — and then the
+ * launch path kept its own copy anyway, which meant a card Stage passed could still
+ * hand a buyer nothing. One reading, called from both.
+ */
 function gameDocument(payload: ListingSnapshotPayload): string | null {
-  for (const object of payload.objects) {
-    const content = (object.content ?? {}) as Record<string, unknown>;
-    const data = (object.canvasData ?? {}) as Record<string, unknown>;
-    const doc = content.document ?? content.html ?? data.document ?? data.html;
-    if (typeof doc === 'string' && doc.trim()) return doc;
-  }
-  return null;
+  return runnableDocument(payload.objects as readonly StageObject[]);
 }
 
-/** A published site's live address. */
+/**
+ * A published site's live address.
+ *
+ * Delegated to the harness's reading rather than repeated here. This file used to
+ * carry its own copy that looked only at `canvasData`, so a card keeping its address
+ * on `content` was VERIFIED by Stage at one URL and OPENED by the buyer at none —
+ * two readings of "where does this thing live" is exactly how a deployment harness
+ * comes to certify an address nobody is sent to.
+ */
 function siteUrl(payload: ListingSnapshotPayload): string | null {
-  for (const object of payload.objects) {
-    const data = (object.canvasData ?? {}) as Record<string, unknown>;
-    const url = data.siteUrl ?? data.url;
-    if (typeof url === 'string' && /^https:\/\//i.test(url)) return url;
-  }
-  return null;
+  return liveUrl(payload.objects as readonly StageObject[]);
 }
 
 /**

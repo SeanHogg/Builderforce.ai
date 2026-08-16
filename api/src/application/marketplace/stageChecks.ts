@@ -15,19 +15,26 @@
  * would pass while the product is broken — so every function here reads the
  * SNAPSHOT, which is the thing a buyer will actually receive.
  *
- * ── WHY SIX RUNNERS AND NOT ONE PER KIND ─────────────────────────────────────────
+ * ── WHY SEVEN RUNNERS AND NOT ONE PER KIND ───────────────────────────────────────
  * `harness` in the shared contract is the argument in full. Briefly: what must be
  * asked of a creation follows the SHAPE OF ITS OUTPUT, not its name. A game and an
  * app are both booted and driven; a book and a comic are both read, reflowed and
  * proofed. Thirty-odd sellable things collapse to six shapes, so there are six
- * runners here and a new sellable kind is a registry entry rather than a seventh.
+ * runners here and a new sellable kind is a registry entry rather than an eighth.
  *
- * ── WHY IT IS PURE ───────────────────────────────────────────────────────────────
- * Every export takes the snapshot payload and returns findings. No database, no
- * fetch, no clock. That makes the gate testable against a literal payload, and it
- * means the same function can run on the server (where it decides) and be trusted by
- * the panel (which only displays). A check that needed I/O would be a check that
- * could not be asserted in CI.
+ * The SEVENTH is not a seventh output shape — it is the one case where the paragraph
+ * above does not apply. A `hosted` listing sells access to a running instance rather
+ * than a copy of anything, so the thing to exercise is the ADDRESS. See
+ * `deploymentChecks`.
+ *
+ * ── WHY IT IS (STILL) PURE ───────────────────────────────────────────────────────
+ * Every runner takes the snapshot payload and returns findings. No database, no
+ * clock, and no `fetch` — the one runner that must ask a live address takes a
+ * `DeploymentProbe` PORT and calls it. That keeps the gate assertable against a
+ * literal payload and a stub probe, which is the difference between a rule CI can
+ * hold and a rule that only runs in production. It is also what stops a second
+ * HTTP-check implementation appearing on the platform: the adapter behind the port
+ * delegates to the one that already exists.
  *
  * ── SEVERITY IS A PROMISE ────────────────────────────────────────────────────────
  * `block` refuses the publish and must therefore be reserved for things that are
@@ -39,7 +46,9 @@
  */
 
 import {
+  STAGE_SANDBOX_LIMIT_CODE,
   resolveListingHarness,
+  type ListingDelivery,
   type ListingHarness,
   type StageCheck,
   type StageCheckGroup,
@@ -58,6 +67,32 @@ export interface StageObject {
   content: unknown;
 }
 
+/**
+ * WHAT AN ADDRESS ANSWERED, AS A PORT.
+ *
+ * The `deployment` runner is the only one that cannot be answered from the capture,
+ * and rather than let one runner reach for `fetch` — which would make the whole
+ * module untestable and would put a second HTTP-check implementation on the platform
+ * — it takes this. The adapter that implements it (`stageChecks.probe.ts`) delegates
+ * to the ONE http-check the platform already has.
+ */
+export interface DeploymentProbeResult {
+  /** The origin that was asked, after normalisation. Null when there was none. */
+  url: string | null;
+  /** Is anything at all served at `/`. A deleted deployment often still resolves. */
+  root: 'ok' | 'breach' | 'unknown';
+  /**
+   * Did the backend's own readiness route answer with the engine's marker.
+   *
+   * `unknown` is NOT a failure: a published static site has no generated backend and
+   * therefore no health route, and blocking on its absence would refuse every site
+   * that is working perfectly.
+   */
+  health: 'ok' | 'breach' | 'unknown';
+}
+
+export type DeploymentProbe = (origin: string) => Promise<DeploymentProbeResult>;
+
 /** Everything a runner is allowed to look at. */
 export interface StageInput {
   listingKind: string;
@@ -65,9 +100,19 @@ export interface StageInput {
   objects: readonly StageObject[];
   priceCents: number;
   trial: string;
+  /**
+   * What the buyer receives. Decides the harness before the output shape does —
+   * a `hosted` listing is exercised at its address, not in its capture.
+   *
+   * Optional so a caller that has not chosen one yet resolves exactly as before.
+   */
+  delivery?: ListingDelivery | null;
   /** Field names removed by `stripBindings` on the way into the snapshot. The
    *  seller is told what left, rather than finding out from a buyer. */
   strippedFields: readonly string[];
+  /** Supplied by the server for a `hosted` listing. Absent, the deployment runner
+   *  says so rather than passing something it never asked. */
+  probe?: DeploymentProbe | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,8 +170,15 @@ export function runnableDocument(objects: readonly StageObject[]): string | null
   return null;
 }
 
-/** A live URL on the snapshot, if the creation is something already deployed. */
-function liveUrl(objects: readonly StageObject[]): string | null {
+/**
+ * A live URL on the snapshot, if the creation is something already deployed.
+ *
+ * Exported because the LAUNCH path needs the identical reading: `creationListings`
+ * hands a buyer whatever this finds, and a second copy of "where does this thing
+ * live" is how Stage comes to verify one address while the buyer is sent to another.
+ * `https` only, deliberately — an `http` address is not something to sell access to.
+ */
+export function liveUrl(objects: readonly StageObject[]): string | null {
   for (const object of objects) {
     const data = fields(object);
     const url = data.siteUrl ?? data.url;
@@ -549,29 +601,140 @@ function systemChecks(input: StageInput): StageCheck[] {
   return found;
 }
 
-const RUNNERS: Readonly<Record<ListingHarness, (input: StageInput) => StageCheck[]>> = {
+/**
+ * 7 · DEPLOYMENT — ask the ADDRESS, because the address is the product.
+ *
+ * ── THE DEFECT THIS CLOSES ───────────────────────────────────────────────────────
+ * Every runner above reads the captured snapshot, which is right for everything the
+ * buyer takes away and wrong for the one thing they do not. A `hosted` listing sells
+ * ACCESS to an instance the seller keeps running: its snapshot can be flawless while
+ * the service behind it was deleted last week, and `runtime` — the harness an `app`
+ * used to resolve to — would pass it, because a well-formed URL string is all it
+ * ever looked at. So an app whose address 404s was sellable.
+ *
+ * ── WHY A BODY MARKER AND NOT A STATUS CODE ──────────────────────────────────────
+ * A status code is not enough on either side. A Function URL whose Lambda has been
+ * deleted can still answer 200 from an edge, and a Cloud Run revision that failed to
+ * start answers 503 through a load balancer that is itself perfectly healthy. The
+ * generated engine emits `BACKEND_HEALTH_MARKER` only when it is the thing replying
+ * — which is exactly the assertion `MonitoringService` already makes of a deployed
+ * backend, and exactly the one nobody was making at publish time.
+ *
+ * ── WHAT BLOCKS AND WHAT DOES NOT ────────────────────────────────────────────────
+ * Nothing served at `/` blocks: there is no reading of that which is compatible with
+ * selling a subscription. A backend health route that answers `breach` blocks for the
+ * same reason. A health route that is simply ABSENT does not, because a published
+ * static site legitimately has none, and refusing those would refuse every site that
+ * works.
+ */
+async function deploymentChecks(input: StageInput): Promise<StageCheck[]> {
+  const found: StageCheck[] = [];
+  const url = liveUrl(input.objects);
+
+  if (!url) {
+    found.push(check(
+      'deployment.address', 'runs', 'block', 'No address to sell access to',
+      'This listing hands the buyer ACCESS to something you keep running, and the snapshot carries no https address. Publish the project first, or sell it as a copy instead.',
+    ));
+    return found;
+  }
+
+  if (input.probe === undefined || input.probe === null) {
+    // NOT a pass, and not a gate either. Both paths that decide anything — capturing
+    // a candidate and publishing one — always supply a probe, so reaching here means
+    // a caller is REDISPLAYING findings without network access. Saying "not checked
+    // here" is honest; inventing either verdict is not, and blocking would leave a
+    // seller staring at a permanent blocker they cannot clear by fixing anything.
+    found.push(check(
+      'deployment.address', 'runs', 'warn', 'The address was not re-checked here',
+      `${url} is checked when you stage and again when you publish. This view is showing findings that were already recorded.`,
+    ));
+    return found;
+  }
+
+  const result = await input.probe(url);
+
+  found.push(result.root === 'ok'
+    ? check('deployment.address', 'runs', 'pass', 'The address is serving', result.url ?? url)
+    : check(
+        'deployment.address', 'runs', 'block',
+        result.root === 'breach' ? 'The address is not serving' : 'The address could not be reached',
+        `${result.url ?? url} answered nothing a visitor could use. A buyer's subscription starts at this URL, so there is nothing to sell until it does.`,
+      ));
+
+  if (result.health === 'ok') {
+    found.push(check('deployment.health', 'runs', 'pass', 'The backend answers its own readiness route'));
+  } else if (result.health === 'breach') {
+    found.push(check(
+      'deployment.health', 'runs', 'block', 'The backend is not the thing answering',
+      'The readiness route replied without the engine\'s own marker — an edge, a proxy or a parked page is answering for a backend that is not running. Redeploy the project before selling access to it.',
+    ));
+  } else {
+    // Absent, not broken. Said out loud so the seller knows which of the two Stage
+    // actually established, and DECLARED on the listing so the buyer does too.
+    found.push(check(
+      'deployment.health', 'travels', 'warn', 'No backend readiness route',
+      'Checked that the address serves, but this deployment has no generated backend to ask, so nothing here proves the data side works. Static sites are expected to look like this.',
+    ));
+  }
+
+  return found;
+}
+
+/**
+ * WHAT STAGE COULD NOT ASK, ON EVERY LISTING.
+ *
+ * Emitted by every harness, so it cannot be missed off one. It is a `warn`, which
+ * means `declaredLimits` carries it onto the listing and a buyer reads the same
+ * sentence the seller did — the inherited rule, applied to the platform's own
+ * limitation rather than only to the seller's.
+ */
+function sandboxLimitCheck(harness: ListingHarness): StageCheck {
+  return check(
+    STAGE_SANDBOX_LIMIT_CODE, 'runs', 'warn', 'Checked without being run in a sandbox',
+    harness === 'deployment'
+      ? 'The live address was asked whether it is serving. Nothing here installed the product into a clean workspace and drove it, so behaviour that only appears in use is not covered.'
+      : 'Every finding above is read from the exact copy a buyer receives. Nothing here booted it in a throwaway workspace and drove it, so behaviour that only appears at run time is not covered.',
+  );
+}
+
+/**
+ * The runner registry.
+ *
+ * Deliberately typed to allow a Promise: `deployment` is the one runner that has to
+ * ask something outside this process, and widening the return type is what let it
+ * join the registry as DATA rather than as an `if` in front of it.
+ */
+const RUNNERS: Readonly<Record<ListingHarness, (input: StageInput) => StageCheck[] | Promise<StageCheck[]>>> = {
   media: mediaChecks,
   runtime: runtimeChecks,
   paged: pagedChecks,
   geometry: geometryChecks,
   instrument: instrumentChecks,
   system: systemChecks,
+  deployment: deploymentChecks,
 };
 
 /**
  * Run the harness this creation belongs to, plus the two groups every creation
- * shares, and return the findings newest-severity-first.
+ * shares, and return the findings worst-severity-first.
  *
  * Sorted by severity rather than by group because a seller reads this column to
  * answer one question — "may I publish" — and a blocker three rows below four passes
  * is a blocker somebody misses.
+ *
+ * Async because ONE of the seven runners is: the deployment harness asks a live
+ * address, and a synchronous entry point would have meant either a second entry
+ * point beside it (two ways to get a verdict is how the panel and the gate come to
+ * disagree) or the deployment check living outside the registry.
  */
-export function runStageChecks(input: StageInput): StageCheck[] {
-  const harness = resolveListingHarness(input.listingKind, input.objectKind);
+export async function runStageChecks(input: StageInput): Promise<StageCheck[]> {
+  const harness = resolveListingHarness(input.listingKind, input.objectKind, input.delivery ?? null);
   const rank: Record<StageCheckSeverity, number> = { block: 0, warn: 1, pass: 2 };
   return [
-    ...RUNNERS[harness](input),
+    ...await RUNNERS[harness](input),
     ...travelChecks(input),
     ...sellChecks(input),
+    sandboxLimitCheck(harness),
   ].sort((a, b) => rank[a.severity] - rank[b.severity]);
 }

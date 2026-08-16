@@ -1,3 +1,97 @@
+## ✅ RESOLVED 2026-08-16 — Stage now asks the ADDRESS, shows the seller their product, and a hosted app has a written afterlife (W1B · api 2026.8.16, migration 0900)
+
+**R8 — an app whose address 404s was sellable.** `resolveListingHarness` picked one of six runners over
+the CAPTURED SNAPSHOT, which is right for everything a buyer takes away and exactly wrong for the one
+thing they do not. A `hosted` listing sells ACCESS to an instance the seller keeps running: its snapshot
+can be flawless while the service behind it was deleted last week, and `runtime` — the harness an `app`
+resolved to — passed it, because a well-formed URL string was all it ever read.
+
+A **seventh `deployment` harness** now exists, selected by DELIVERY rather than by output shape, and it is
+the only runner that does I/O. It asks the live address three things and refuses the publish on two of
+them:
+
+- **is anything served at `/`** — a `block`. There is no reading of "no" that is compatible with selling
+  a subscription.
+- **does the backend answer its own readiness route with `BACKEND_HEALTH_MARKER`** — the assertion a
+  status code cannot make. A Function URL whose Lambda has been deleted still answers 200 from an edge;
+  a Cloud Run revision that failed to start answers 503 through a load balancer that is itself healthy.
+- **is the reply a static host's index page instead** — then the deployment simply HAS no backend, which
+  is what a published static site looks like, and refusing those would refuse every site that works. It
+  is declared on the listing, not blocked.
+
+Distinguishing the last two is the whole difficulty: "2xx without the marker" means an edge answering for
+a dead backend *or* a static host serving index.html for any path, and guessing either way costs
+something real. The probe asks the readiness route three ways — for the engine's marker, for a page, and
+for its status alone — and the three answers name the cause between them.
+
+**Nothing here re-implements an HTTP check.** The probe has no `fetch` of its own: both assertions go
+through `MonitoringService.evaluateMonitor`, the platform's single `http_check`, which is the same rule
+`watchDeployedBackend` configures for every self-hosted backend. `stageChecks.ts` stays assertable in CI
+because the runner takes a `DeploymentProbe` PORT and the adapter (`stageChecks.probe.ts`) implements it.
+
+**And the watch is now standing, not a one-off.** A hosted listing that goes live is registered with
+`watchDeployedBackend` at PUBLISH time, so `runMonitorSweep` keeps asking every five minutes and opens an
+incident when it stops answering. The project id comes from the `linkKind = 'app'` link — migration
+0473's "the project IS the app", read rather than taken from a client.
+
+**The gate moved to the server.** The panel already refused a publish while a blocker stood; a gate that
+exists only in a client is a gate a different client does not have. `publishCreationListing` now runs the
+checks over the payload actually being promoted and answers **409** with the first blocker's own words.
+
+**Stage shows the seller their product, not a verdict about it.** The panel listed every version, ran the
+harness and refused the publish — so a seller read a report on something they could not see. Every piece
+needed already existed and none were joined up; the obstacle was addressing, since the launch path
+resolves by public SLUG and a staged candidate deliberately has none. It now resolves by **snapshot id**
+for the seller, under the same entitlement rule, and renders through the SAME component the buyer's page
+uses (`lib/creationListings.launch.tsx`, shared by the marketplace listing, the creator's landing page and
+Stage). A second renderer would have made the preview a thing that AGREES WITH the product rather than one
+that IS it.
+
+**The entitlement rule is now one named function.** `resolveListingAccess` in the shared contract answers
+both halves at once — may this caller see the listing, and do they get the product or the preview — and
+`launchListing` calls it instead of deriving `priceCents === 0 || trial === 'full' || paid` inline. It is
+the declared cross-lane seam: W1A's landing-page fork and W1C's subscribe surface call the same export.
+Its precedence is the rule: a claim beats everything (a withdrawn listing still runs for its holders),
+then free-or-open-trial, then withdrawn is invisible, then the bounded preview. A source-text test now
+refuses a second copy of the derivation inside the launch path.
+
+**R9 — withdrawal now has written semantics for a hosted app, and abandonment has any at all.** Flipping
+visibility while licences outlive it settles a `copy` completely: the buyer holds their own cards and the
+seller can never reach them again. It settles half of a `hosted` listing, because nothing on our side
+obliges a seller to keep a cloud bill paid. `hosted_listing_lifecycle` (migration **0900**, `schema/growth.ts`)
+records when the shop window closed and when the address was first seen dark — deliberately NOT the same
+timestamp, because withdrawing is not abandoning — and `resolveHostedLifecycle` derives four states from
+the second one plus the clock, storing none of them:
+
+| state | what it means | billing | the subscriber may |
+|---|---|---|---|
+| `operating` | the address answers | charged | — |
+| `grace` (14d) | it stopped answering; outages are the common case | **still charged** — a four-minute deploy must not refund a month | wait |
+| `readOnly` (+30d) | the window closed | **stopped** | export everything they put in |
+| `released` | still dark | stopped | **take the published build as a copy, free** |
+
+`runHostedListingSweep` keeps asking, through the same probe Stage uses, so a listing cannot pass Stage on
+one definition of "serving" and be marked dark by another.
+
+**Limits a seller learns in Stage are DECLARED on the listing.** Every `warn` the checks produce over the
+promoted snapshot is written to `ListingBody.declared` at publish and rendered on the public listing page —
+including the platform's OWN limit, `stage.sandboxLimit`, which states in the buyer's own words that
+nothing installed the product into a throwaway workspace and drove it. A limitation the platform knows
+about is one the buyer is entitled to read; a disclosure only the seller can see is not a disclosure.
+
+**Four duplications closed on the way**, each of which could have made two surfaces disagree about one
+fact: `siteUrl` and `gameDocument` in `creationListings.ts` were second readings of `liveUrl` and
+`runnableDocument` — so a card keeping its address on `content` was verified by Stage at one URL and
+opened by the buyer at none; the launch renderer was a private copy inside the marketplace page; and
+`ListingDelivery` was declared in the contract and consumed by NOTHING, so the choice between "sell the
+build" and "sell access" existed in the vocabulary and nowhere in the data. It is now stored on
+`ListingBody`, chosen in the Releases panel (only for the one kind that offers two doors), and it is what
+selects the harness. `harnessForKinds` was deleted — no callers.
+
+Localized in all five catalogs under `commerce.stage.*`; both themes from tokens; 360px-safe. 44 assertions
+in `stageChecks.test.ts` cover the deployment harness, the entitlement precedence and every lifecycle
+window; api 24/24 guards and 5,959 tests green.
+
 ## ✅ RESOLVED 2026-08-15 — 61 authenticated routes met one generic sentence; they now meet their destination and the method (frontend 2026.8.27)
 
 **The gap.** `https://builderforce.ai/inbox`, signed out, rendered a lock glyph over "This is part of

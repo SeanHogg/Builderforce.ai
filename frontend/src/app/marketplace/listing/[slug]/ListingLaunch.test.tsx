@@ -98,3 +98,74 @@ describe('ListingLaunch', () => {
     await waitFor(() => expect(launchMock).toHaveBeenCalledWith('space-game', false));
   });
 });
+
+/**
+ * The inherited rule, asserted where it is kept: a limitation the SELLER learned in
+ * Stage is declared on the listing rather than discovered by the buyer.
+ */
+describe('declared limits', () => {
+  it('shows the buyer every limit the staged build shipped with', async () => {
+    launchMock.mockResolvedValue({ mode: 'play', entitled: true, title: 'x', document: '<p>p</p>' });
+    renderLaunch(listing({
+      declared: [
+        { code: 'stage.sandboxLimit', group: 'runs', severity: 'warn', label: 'Checked without being run in a sandbox' },
+        { code: 'runtime.touch', group: 'runs', severity: 'warn', label: 'No touch input found', detail: 'Keyboard-only.' },
+      ],
+    }));
+    const panel = await screen.findByRole('region', { name: 'Known limits' });
+    // The platform's OWN limit, in the buyer's words — not only the seller's.
+    expect(panel).toHaveTextContent('Checked without being run in a sandbox');
+    // Label AND detail: the sentence that tells a buyer what the limit costs them
+    // is the half a summary would drop.
+    expect(panel).toHaveTextContent('No touch input found — Keyboard-only.');
+  });
+
+  it('renders nothing at all when there is nothing to declare', async () => {
+    launchMock.mockResolvedValue({ mode: 'play', entitled: true, title: 'x', document: '<p>p</p>' });
+    renderLaunch(listing({ declared: [] }));
+    await screen.findByText('Free');
+    // A "Known limits" heading over an empty list reads as a missing feature, so the
+    // component decides its own visibility rather than taking a `show` prop.
+    expect(screen.queryByRole('region', { name: 'Known limits' })).toBeNull();
+  });
+});
+
+/**
+ * R9, at the only moment it matters: BEFORE somebody subscribes to something that is
+ * no longer running.
+ */
+describe('a hosted app that has gone dark', () => {
+  const hostedLaunch = (state: 'operating' | 'grace' | 'readOnly' | 'released', days: number | null): LaunchPayload => ({
+    mode: 'open', entitled: true, title: 'Acme Ops', url: 'https://acme.example',
+    hosted: {
+      listingId: 'l1', withdrawnAtISO: null, lastProbeAtISO: null, lastProbeUrl: null,
+      state, darkSinceISO: state === 'operating' ? null : '2026-07-01T00:00:00.000Z',
+      daysUntilNextState: days,
+      billable: state === 'operating' || state === 'grace',
+      subscriberMayExport: state === 'readOnly' || state === 'released',
+      subscriberMayTake: state === 'released',
+    },
+  });
+
+  it('warns during grace, and says how long the seller has left', async () => {
+    launchMock.mockResolvedValue(hostedLaunch('grace', 9));
+    renderLaunch(listing({ kind: 'app', launch: 'open', delivery: 'hosted' }));
+    expect(await screen.findByRole('status'))
+      .toHaveTextContent('The seller has 9 days to bring it back before your subscription pauses.');
+  });
+
+  it('tells a subscriber they may take the build once it is abandoned', async () => {
+    launchMock.mockResolvedValue(hostedLaunch('released', null));
+    renderLaunch(listing({ kind: 'app', launch: 'open', delivery: 'hosted' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/take the published build/i);
+  });
+
+  it('says nothing while it is simply working', async () => {
+    launchMock.mockResolvedValue(hostedLaunch('operating', null));
+    renderLaunch(listing({ kind: 'app', launch: 'open', delivery: 'hosted' }));
+    await waitFor(() => expect(launchMock).toHaveBeenCalled());
+    // A banner on the overwhelmingly common state is noise, and noise is what makes
+    // the other three states invisible.
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+});
