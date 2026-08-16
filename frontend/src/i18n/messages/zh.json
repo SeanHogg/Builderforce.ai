@@ -1119,6 +1119,97 @@
       }
     }
   },
+  "references": {
+    "title": "推荐人",
+    "lede": "愿意为你背书的人，集中在一处——他们是谁、如何认识你、能证明什么。在你生成链接之前，这些内容都不会公开。",
+    "loading": "正在加载推荐人…",
+    "loadFailed": "无法加载你的推荐人。",
+    "actionFailed": "无法保存该更改。",
+    "nameRequired": "请填写姓名。",
+    "empty": "尚未添加推荐人。先添加第一位愿意为你背书的人。",
+    "addTitle": "添加推荐人",
+    "add": "添加推荐人",
+    "remove": "删除",
+    "addSubtitle": "一位清楚该证明哪两件事的推荐人，胜过三位只被告知“可能会有人来电”的推荐人。",
+    "listTitle": "{count} 位推荐人",
+    "canSpeakTo": "可以证明",
+    "includeInShare": "包含在链接中",
+    "selectToShare": "请至少选择一位推荐人再分享。",
+    "linkOnce": "请立即复制——此链接只显示一次，无法找回。",
+    "untitledShare": "未命名链接",
+    "shareTitle": "分享链接",
+    "copy": "复制",
+    "copied": "已复制",
+    "revoke": "撤销",
+    "shareSubtitle": "链接只显示你选中的推荐人，一旦撤销即刻失效。",
+    "includeContact": "包含邮箱和电话",
+    "createShare": "{count, plural, =0 {创建链接} other {创建包含 # 位推荐人的链接}}",
+    "shareMeta": "{count} 位推荐人 · {views} 次查看",
+    "field": {
+      "name": "姓名",
+      "title": "职位",
+      "company": "公司",
+      "email": "邮箱",
+      "phone": "电话",
+      "relationship": "如何认识你",
+      "canSpeakTo": "他们能证明你工作中的哪些方面？"
+    },
+    "status": {
+      "draft": "草稿",
+      "requested": "已邀请",
+      "confirmed": "已确认",
+      "declined": "已婉拒"
+    },
+    "shared": {
+      "metaTitle": "共享的推荐人",
+      "title": "推荐人",
+      "empty": "此链接不包含任何推荐人。",
+      "ledeWithContact": "已与你共享，含联系方式，请注意保密。",
+      "ledeNoContact": "已与你共享。联系方式已被有意隐去，请向候选人索取。",
+      "goneTitle": "此链接已失效",
+      "goneBody": "它已被撤销或已过期。请向发送者索取新的链接。"
+    }
+  },
+  "salary": {
+    "backToIndex": "← 全部薪资指南",
+    "backToRole": "← {role} 薪资",
+    "modelNote": "这些区间根据职位、级别、地区和工作模式建模，所有系数均已在上方列出，因此这个数字是可以讨论的。",
+    "calculatorCta": "测算你自己的数字 →",
+    "index": {
+      "metaTitle": "按职位和城市划分的薪资指南",
+      "metaDescription": "涵盖工程、数据、产品、设计与市场销售共十六个职位、十四座城市的建模薪资区间。",
+      "title": "薪资指南",
+      "lede": "一个职位在不同城市、不同级别的薪酬。每个区间都给出下四分位、中位数和上四分位——因为谈判时依据的是锚点，而不是平均值。",
+      "unavailable": "薪资指南暂时不可用，请稍后再试。"
+    },
+    "role": {
+      "metaTitle": "{role} 各城市薪资",
+      "metaDescription": "{role} 的薪资中位数为 {median}，覆盖 {cities} 座城市，并给出各自的下四分位、中位数与上四分位区间。",
+      "title": "{role} 薪资",
+      "lede": "中级 {role} 的全国薪资中位数为 {median}，典型区间为 {low} 至 {high}。选择下方城市查看当地区间与职级阶梯。",
+      "byCity": "按城市",
+      "bySeniority": "按级别"
+    },
+    "city": {
+      "metaTitle": "{city} 的 {role} 薪资",
+      "metaDescription": "{city} 的 {role} 薪资：中位数 {median}，典型区间 {low} 至 {high}，并含完整职级阶梯。",
+      "title": "{city} 的 {role} 薪资",
+      "lede": "{city} 的中级 {role} 薪资中位数为 {median}，典型区间为 {low} 至 {high}。",
+      "anchorLabel": "锚定于",
+      "anchorHint": "如果由你先报数字，请锚定在上四分位，并给出一个下限你仍能接受的区间。",
+      "assumptions": "这个区间是如何得出的",
+      "elsewhere": "其他城市的 {role} 薪资"
+    },
+    "table": {
+      "city": "城市",
+      "seniority": "级别",
+      "low": "下限 (P25)",
+      "median": "中位数",
+      "high": "上限 (P75)",
+      "spread": "区间",
+      "vsNational": "对比全国"
+    }
+  },
   "tools": {
     "outOf5": "满分 5.0",
     "breakdown": "明细",
@@ -16633,7 +16724,7 @@
       "campaignScheduled": "已为 {count} 个账号排期。",
       "campaignUpdateFailed": "无法更新该活动。",
       "boardMedia": "从本画布附加",
-      "boardMediaHelp": "所选图片会自动发布到公开链接 — Instagram 和 TikTok 需要通过它来获取图片。"
+      "boardMediaHelp": "所选图片和视频会自动发布到公开链接 — Instagram 和 TikTok 需要通过它来获取媒体。"
     },
     "noticeGuestLimitRoom": "此共享会话今天的 {limit} 条免费消息已用完。免费注册即可继续——您的画布会一并保留。",
     "founder": {

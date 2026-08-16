@@ -593,8 +593,12 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         status: projectSites.status,
         version_token: projectSites.versionToken,
         asset_count: projectSites.assetCount,
-        // int8 arrives as a string from the driver; Drizzle's bigint mapper would
-        // turn it into a number and change this field's type on the wire.
+        // Read as TEXT because Drizzle's bigint mapper is the thing that would
+        // truncate; the value is then coerced ONCE below, so what leaves this
+        // route is a JSON number matching `SiteInfo.totalBytes`. It used to leave
+        // as a string against a client type that said `number`, so every consumer
+        // was doing arithmetic on a string and the next `totalBytes + x` would
+        // have concatenated. Same call `siteReleases.listReleases` already makes.
         total_bytes: sql<string>`${projectSites.totalBytes}::text`,
         published_at: projectSites.publishedAt,
       })
@@ -609,7 +613,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         status: row.status,
         versionToken: row.version_token,
         assetCount: row.asset_count,
-        totalBytes: row.total_bytes,
+        totalBytes: Number(row.total_bytes ?? 0),
         publishedAt: row.published_at,
         url: `https://${row.subdomain}.${HOSTING_APEX}`,
         pathUrl: `/api/sites/${row.subdomain}/`,

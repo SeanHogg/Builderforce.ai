@@ -95,7 +95,19 @@ import {
  * `marketplaceRoutes.ts`, deliberately: two invalidation strategies for two public
  * catalogues is how one of them goes stale for a fortnight without anyone noticing.
  */
-const LISTINGS_VERSION_KEY = 'marketplace:creations:list';
+/**
+ * Exported because it is the invalidation signal for readers OUTSIDE this
+ * module, not just for the browse feed.
+ *
+ * `application/ide/siteListing.ts` caches which listing sells a hosted site and
+ * the seller facts that decide access to it, and both answers change on exactly
+ * the writes that bump this token. Folding the token into that cache's KEY means
+ * a publish, a re-publish, a price change or a withdrawal orphans it
+ * automatically — no call from here into the hosting side, no import cycle, and
+ * no reader this module has to remember exists. The alternative, a list of
+ * invalidation callbacks, is a list somebody eventually forgets to add to.
+ */
+export const LISTINGS_VERSION_KEY = 'marketplace:creations:list';
 const LISTINGS_TTL_SECONDS = 120;
 
 /** A single listing's public payload. Bounded keyspace (one key per slug), so it
@@ -963,6 +975,65 @@ export async function sellerListings(
 // ---------------------------------------------------------------------------
 // Launch — what a visitor actually gets
 // ---------------------------------------------------------------------------
+
+/**
+ * The three seller-controlled facts that decide access, and nothing else.
+ *
+ * A narrow interface on purpose. The full `catalog_items` row is 20 columns and
+ * a JSONB body; a caller that has to hold all of it in order to ask "may this
+ * person in" cannot cache the answer's inputs, and one that cannot cache them
+ * reads the catalogue on every request to a public website.
+ */
+export interface ListingAccessFacts {
+  /** `public` = on sale. Anything else is withdrawn. */
+  visibility: string;
+  priceCents: number | null;
+  trial: ListingTrialPolicy | null;
+}
+
+/** Project a listing row onto {@link ListingAccessFacts}. Exported so a caller
+ *  that caches the inputs projects them the same way `launchListing` does. */
+export function listingAccessFacts(row: CatalogRow): ListingAccessFacts {
+  return {
+    visibility: row.visibility,
+    priceCents: row.priceCents,
+    trial: (row.body as ListingBody | null)?.trial ?? null,
+  };
+}
+
+/**
+ * IS THIS CALLER ENTITLED TO THE PRODUCT, RATHER THAN THE PREVIEW?
+ *
+ * ── THE ONE RULE, AND THE ONLY COPY OF IT ────────────────────────────────────
+ * `hasPaid` is the caller's own fact — a purchase on record, or a live
+ * subscription. This function folds in the SELLER's: a free listing, or one
+ * whose trial is `full`, is entitled for everybody, and a WITHDRAWN listing is
+ * entitled for nobody who had not already bought it (withdrawing takes a thing
+ * off sale; it does not repossess it).
+ *
+ * It is a pure function over three values precisely so that both shop windows
+ * can call it. `launchListing` asks it for the marketplace listing page;
+ * `application/ide/siteVisitor.ts` asks it for the creator's own address. Two
+ * copies of this sentence is a paid product served free at one address, or a
+ * paying customer locked out at the other — and whichever one is wrong,
+ * somebody is owed something.
+ *
+ * ── WHY IT IS NOW A ONE-LINE DELEGATION ──────────────────────────────────────
+ * Merged 2026-08-16: two lanes reached the same conclusion in the same week and
+ * wrote it twice — this, and `resolveListingAccess` in the shared contract. The
+ * contract's copy is the survivor because it is the one the FRONTEND can import,
+ * and because it answers both halves (may they see it, do they get the product)
+ * where this answers only the second. This name and this shape are kept so
+ * `siteVisitor.ts` needs no edit; what it must never regain is a body of its own.
+ */
+export function entitledToListing(facts: ListingAccessFacts, hasPaid: boolean): boolean {
+  return resolveListingAccess({
+    priceCents: facts.priceCents ?? 0,
+    trial: facts.trial,
+    visibility: facts.visibility,
+    hasLicence: hasPaid,
+  }).entitled;
+}
 
 export interface LaunchPayload {
   mode: ListingLaunchMode;

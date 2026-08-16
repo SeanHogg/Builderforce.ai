@@ -1119,6 +1119,97 @@
       }
     }
   },
+  "references": {
+    "title": "Referenzen",
+    "lede": "Die Menschen, die für Sie bürgen, an einem Ort — wer sie sind, woher sie Sie kennen und was sie bestätigen können. Nichts davon ist öffentlich, bis Sie einen Link erstellen.",
+    "loading": "Referenzen werden geladen…",
+    "loadFailed": "Ihre Referenzen konnten nicht geladen werden.",
+    "actionFailed": "Diese Änderung konnte nicht gespeichert werden.",
+    "nameRequired": "Ein Name ist erforderlich.",
+    "empty": "Noch keine Referenzen. Fügen Sie die erste Person hinzu, die für Sie bürgen würde.",
+    "addTitle": "Referenz hinzufügen",
+    "add": "Referenz hinzufügen",
+    "remove": "Entfernen",
+    "addSubtitle": "Eine Referenz, die weiß, welche zwei Punkte sie bestätigen soll, ist mehr wert als drei, denen man nur sagte „es könnte ein Anruf kommen“.",
+    "listTitle": "{count, plural, one {# Referenz} other {# Referenzen}}",
+    "canSpeakTo": "Kann bestätigen",
+    "includeInShare": "In Link aufnehmen",
+    "selectToShare": "Wählen Sie mindestens eine Referenz zum Teilen.",
+    "linkOnce": "Jetzt kopieren — er wird nur einmal angezeigt und lässt sich nicht wiederherstellen.",
+    "untitledShare": "Link ohne Titel",
+    "shareTitle": "Link teilen",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "revoke": "Widerrufen",
+    "shareSubtitle": "Ein Link zeigt nur die ausgewählten Referenzen und funktioniert nicht mehr, sobald Sie ihn widerrufen.",
+    "includeContact": "E-Mail und Telefon einschließen",
+    "createShare": "{count, plural, =0 {Link erstellen} one {Link mit # Referenz erstellen} other {Link mit # Referenzen erstellen}}",
+    "shareMeta": "{count, plural, one {# Referenz} other {# Referenzen}} · {views, plural, one {# Aufruf} other {# Aufrufe}}",
+    "field": {
+      "name": "Name",
+      "title": "Position",
+      "company": "Unternehmen",
+      "email": "E-Mail",
+      "phone": "Telefon",
+      "relationship": "Woher sie Sie kennt",
+      "canSpeakTo": "Was kann sie über Ihre Arbeit bestätigen?"
+    },
+    "status": {
+      "draft": "Entwurf",
+      "requested": "Angefragt",
+      "confirmed": "Bestätigt",
+      "declined": "Abgelehnt"
+    },
+    "shared": {
+      "metaTitle": "Geteilte Referenzen",
+      "title": "Referenzen",
+      "empty": "Dieser Link enthält keine Referenzen.",
+      "ledeWithContact": "Mit Ihnen geteilt, inklusive Kontaktdaten. Bitte behandeln Sie diese vertraulich.",
+      "ledeNoContact": "Mit Ihnen geteilt. Kontaktdaten wurden bewusst zurückgehalten — fragen Sie die Kandidatin oder den Kandidaten danach.",
+      "goneTitle": "Dieser Link ist nicht mehr verfügbar",
+      "goneBody": "Er wurde widerrufen oder ist abgelaufen. Bitten Sie den Absender um einen neuen."
+    }
+  },
+  "salary": {
+    "backToIndex": "← Alle Gehaltsguides",
+    "backToRole": "← {role}-Gehälter",
+    "modelNote": "Diese Bandbreiten werden aus Rolle, Senioritätsstufe, Region und Arbeitsmodell modelliert — alle Multiplikatoren stehen oben, damit die Zahl verhandelbar bleibt.",
+    "calculatorCta": "Eigene Zahl modellieren →",
+    "index": {
+      "metaTitle": "Gehaltsguides nach Rolle und Stadt",
+      "metaDescription": "Modellierte Gehaltsbandbreiten für Engineering, Data, Produkt, Design und Vertrieb — sechzehn Rollen, vierzehn Städte.",
+      "title": "Gehaltsguides",
+      "lede": "Was eine Rolle zahlt, nach Stadt und Senioritätsstufe. Jede Bandbreite zeigt unteres Quartil, Median und oberes Quartil — denn verhandelt wird gegen den Ankerwert, nicht gegen den Durchschnitt.",
+      "unavailable": "Die Gehaltsguides sind kurzzeitig nicht verfügbar. Bitte versuchen Sie es gleich erneut."
+    },
+    "role": {
+      "metaTitle": "{role}-Gehalt nach Stadt",
+      "metaDescription": "Das mittlere {role}-Gehalt liegt bei {median}, verglichen über {cities} Städte mit unterem, mittlerem und oberem Quartil.",
+      "title": "{role}-Gehalt",
+      "lede": "Ein {role} auf mittlerer Stufe hat einen landesweiten Median von {median}, mit einer typischen Bandbreite von {low} bis {high}. Wählen Sie eine Stadt für die lokale Bandbreite.",
+      "byCity": "Nach Stadt",
+      "bySeniority": "Nach Senioritätsstufe"
+    },
+    "city": {
+      "metaTitle": "{role}-Gehalt in {city}",
+      "metaDescription": "{role}-Gehalt in {city}: Median {median}, typische Bandbreite von {low} bis {high} sowie die vollständige Senioritätsleiter.",
+      "title": "{role}-Gehalt in {city}",
+      "lede": "Ein {role} auf mittlerer Stufe in {city} hat einen Median von {median}, mit einer typischen Bandbreite von {low} bis {high}.",
+      "anchorLabel": "Ankern bei",
+      "anchorHint": "Wenn Sie zuerst eine Zahl nennen, ankern Sie am oberen Quartil und geben Sie eine Spanne an, deren Untergrenze Sie noch akzeptieren würden.",
+      "assumptions": "Wie diese Bandbreite entstanden ist",
+      "elsewhere": "{role}-Gehalt anderswo"
+    },
+    "table": {
+      "city": "Stadt",
+      "seniority": "Stufe",
+      "low": "Unten (P25)",
+      "median": "Median",
+      "high": "Oben (P75)",
+      "spread": "Spanne",
+      "vsNational": "Vs landesweit"
+    }
+  },
   "tools": {
     "outOf5": "von 5,0",
     "breakdown": "Aufschlüsselung",
@@ -16633,7 +16724,7 @@
       "campaignScheduled": "Für {count} Konten geplant.",
       "campaignUpdateFailed": "Diese Kampagne konnte nicht aktualisiert werden.",
       "boardMedia": "Aus dieser Leinwand anhängen",
-      "boardMediaHelp": "Ausgewählte Bilder werden automatisch unter einer öffentlichen URL veröffentlicht — genau das brauchen Instagram und TikTok, um sie abzurufen."
+      "boardMediaHelp": "Ausgewählte Bilder und Videos werden automatisch unter einer öffentlichen URL veröffentlicht — genau das brauchen Instagram und TikTok, um sie abzurufen."
     },
     "noticeGuestLimitRoom": "Diese geteilte Sitzung hat ihre {limit} kostenlosen Nachrichten für heute aufgebraucht. Melden Sie sich kostenlos an, um weiterzumachen – Ihr Canvas kommt mit.",
     "founder": {

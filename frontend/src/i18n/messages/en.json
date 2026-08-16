@@ -1119,6 +1119,97 @@
       }
     }
   },
+  "references": {
+    "title": "References",
+    "lede": "The people who will vouch for you, in one place — who they are, how they know you, and what they can confirm. Nothing here is public until you issue a link.",
+    "loading": "Loading references…",
+    "loadFailed": "Could not load your references.",
+    "actionFailed": "That change could not be saved.",
+    "nameRequired": "A name is required.",
+    "empty": "No references yet. Add the first person who would vouch for you.",
+    "addTitle": "Add a reference",
+    "add": "Add reference",
+    "remove": "Remove",
+    "addSubtitle": "A reference briefed on the two things to confirm is worth three who were told \"they might call\".",
+    "listTitle": "{count, plural, one {# reference} other {# references}}",
+    "canSpeakTo": "Can speak to",
+    "includeInShare": "Include in link",
+    "selectToShare": "Choose at least one reference to share.",
+    "linkOnce": "Copy this now — it is shown once and cannot be recovered.",
+    "untitledShare": "Untitled link",
+    "shareTitle": "Share a link",
+    "copy": "Copy",
+    "copied": "Copied",
+    "revoke": "Revoke",
+    "shareSubtitle": "A link shows only the references you pick, and stops working the moment you revoke it.",
+    "includeContact": "Include email and phone",
+    "createShare": "{count, plural, =0 {Create link} one {Create link with # reference} other {Create link with # references}}",
+    "shareMeta": "{count, plural, one {# reference} other {# references}} · {views, plural, one {# view} other {# views}}",
+    "field": {
+      "name": "Name",
+      "title": "Their title",
+      "company": "Company",
+      "email": "Email",
+      "phone": "Phone",
+      "relationship": "How they know you",
+      "canSpeakTo": "What can they confirm about your work?"
+    },
+    "status": {
+      "draft": "Draft",
+      "requested": "Asked",
+      "confirmed": "Confirmed",
+      "declined": "Declined"
+    },
+    "shared": {
+      "metaTitle": "Shared references",
+      "title": "References",
+      "empty": "This link does not include any references.",
+      "ledeWithContact": "Shared with you, including contact details. Please treat them as confidential.",
+      "ledeNoContact": "Shared with you. Contact details were deliberately withheld — ask the candidate for them.",
+      "goneTitle": "This link is no longer available",
+      "goneBody": "It was revoked or has expired. Ask the person who sent it for a new one."
+    }
+  },
+  "salary": {
+    "backToIndex": "← All salary guides",
+    "backToRole": "← {role} salaries",
+    "modelNote": "These bands are modelled from role, seniority, region and work mode — every multiplier is listed above so the number is one you can argue with.",
+    "calculatorCta": "Model your own figure →",
+    "index": {
+      "metaTitle": "Salary Guides by Role and City",
+      "metaDescription": "Modelled pay bands for engineering, data, product, design and go-to-market roles across sixteen roles and fourteen cities.",
+      "title": "Salary guides",
+      "lede": "What a role pays, by city and by seniority. Every band shows the low, the median and the upper quartile — because the number you negotiate against is the anchor, not the average.",
+      "unavailable": "Salary guides are briefly unavailable. Try again shortly."
+    },
+    "role": {
+      "metaTitle": "{role} Salary by City",
+      "metaDescription": "Median {role} pay is {median}, compared across {cities} cities with low, median and upper-quartile bands for each.",
+      "title": "{role} salary",
+      "lede": "A mid-level {role} has a national median of {median}, with a typical band from {low} to {high}. Pick a city below to see the local band and the ladder.",
+      "byCity": "By city",
+      "bySeniority": "By seniority"
+    },
+    "city": {
+      "metaTitle": "{role} Salary in {city}",
+      "metaDescription": "{role} pay in {city}: median {median}, with a typical band from {low} to {high} and a full seniority ladder.",
+      "title": "{role} salary in {city}",
+      "lede": "A mid-level {role} in {city} has a median of {median}, with a typical band from {low} to {high}.",
+      "anchorLabel": "Anchor at",
+      "anchorHint": "If you name a number first, anchor at the upper quartile and give a range whose bottom you would still accept.",
+      "assumptions": "How this band was built",
+      "elsewhere": "{role} pay elsewhere"
+    },
+    "table": {
+      "city": "City",
+      "seniority": "Seniority",
+      "low": "Low (P25)",
+      "median": "Median",
+      "high": "High (P75)",
+      "spread": "Spread",
+      "vsNational": "Vs national"
+    }
+  },
   "tools": {
     "outOf5": "out of 5.0",
     "breakdown": "Breakdown",
@@ -16633,7 +16724,7 @@
       "campaignScheduled": "Scheduled for {count} accounts.",
       "campaignUpdateFailed": "That campaign could not be updated.",
       "boardMedia": "Attach from this board",
-      "boardMediaHelp": "Picked pictures are published to a public URL automatically — that is what Instagram and TikTok need to fetch them."
+      "boardMediaHelp": "Picked pictures and clips are published to a public URL automatically — that is what Instagram and TikTok need to fetch them."
     },
     "noticeGuestLimitRoom": "This shared session has used its {limit} free messages for today. Sign up free to keep going — your canvas comes with you.",
     "founder": {

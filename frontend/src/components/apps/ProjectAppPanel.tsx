@@ -66,9 +66,6 @@ export function ProjectAppPanel({ projectId }: ProjectAppPanelProps) {
   const published = appIsPublished(overview);
   const data = appDataFacts(overview);
   const people = appPeopleFacts(overview);
-  // `total_bytes` crosses the wire as a string (int8 would lose precision as a
-  // number), so it is coerced at the edge rather than trusted to be numeric.
-  const bytes = Number(site.totalBytes) || 0;
 
   return (
     <div className={styles.panel}>
@@ -92,7 +89,7 @@ export function ProjectAppPanel({ projectId }: ProjectAppPanelProps) {
       >
         <p className={styles.statementDetail}>
           {published
-            ? t('runtimeServing', { version: site.versionToken, size: formatBytes(bytes) })
+            ? t('runtimeServing', { version: site.versionToken, size: formatBytes(site.totalBytes) })
             : t('runtimeNothingServed')}
         </p>
       </AppStatement>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { APP_MODALITY, copyableLinkFilter } from './convertSessionToApp';
+import { APP_MODALITY, cachedAppForSession, copyableLinkFilter } from './convertSessionToApp';
 import {
   SESSION_PROJECT_LINK_APP,
   SESSION_PROJECT_LINK_REFERENCE,
@@ -74,5 +74,52 @@ describe('checkSubdomainAvailability', () => {
     const result = await checkSubdomainAvailability(dbWithOwner({ projectId: 7 }), 'mine', 7);
     expect(result.available).toBe(true);
     expect(result.reason).toBe('ok');
+  });
+});
+
+/**
+ * The narrow read behind `GET /api/creation-sessions/:id/app`.
+ *
+ * `app` also rides the full session read, which is right for the canvas — it
+ * makes that read anyway — but every other surface that wants the four-field
+ * answer had to fetch the whole board graph to get it. A board is opened,
+ * closed and reopened constantly, so the read that made that cheap must not
+ * then cost a database round-trip per mount.
+ */
+describe('cachedAppForSession', () => {
+  /** Enough of a db to answer the one three-table join, counting the calls. */
+  function countingDb(row: Record<string, unknown> | null) {
+    const calls = { n: 0 };
+    const db = {
+      select: () => ({
+        from: () => ({
+          innerJoin: () => ({
+            leftJoin: () => ({
+              where: () => ({
+                limit: async () => { calls.n += 1; return row ? [row] : []; },
+              }),
+            }),
+          }),
+        }),
+      }),
+    } as unknown as Parameters<typeof cachedAppForSession>[0];
+    return { db, calls };
+  }
+
+  /** No KV binding: the helper falls back to its in-isolate layer, which is the
+   *  layer this asserts on. A unique session id per test keeps them independent. */
+  const env = {} as unknown as Parameters<typeof cachedAppForSession>[1];
+
+  it('answers from the cache on the second ask', async () => {
+    const { db, calls } = countingDb({ projectId: 42, projectKey: 'SUN', name: 'Sunday RSVP', subdomain: 'sunday-rsvp' });
+    const id = 'session-cache-hit';
+    await expect(cachedAppForSession(db, env, 1, id)).resolves.toMatchObject({ projectId: 42 });
+    await expect(cachedAppForSession(db, env, 1, id)).resolves.toMatchObject({ projectId: 42 });
+    expect(calls.n).toBe(1);
+  });
+
+  it('reports a board that never became an app as null', async () => {
+    const { db } = countingDb(null);
+    await expect(cachedAppForSession(db, env, 1, 'session-never-converted')).resolves.toBeNull();
   });
 });

@@ -37,7 +37,7 @@ import {
   resolveSiteForHost,
   type SiteRecord,
 } from './siteHosting';
-import { exportOwnedSiteRecords, listOwnedSiteRecords, submitSiteRecord } from './siteData';
+import { listOwnedSiteRecords, submitSiteRecord } from './siteData';
 import {
   SESSION_TTL_MS,
   requestSiteSignIn,
@@ -58,15 +58,9 @@ import {
   visitorSalt,
 } from './siteTraffic';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { ListingError } from '../marketplace/creationListings';
-import {
-  cancelSiteSubscription,
-  completeSiteSubscription,
-  startSiteSubscriptionCheckout,
-  subscriberStanding,
-  takeAbandonedBuild,
-} from '../marketplace/siteSubscriptions';
 import { SITE_LANDING_KEY } from './siteLandingPage';
+import { jsonResponse, readSubmission, corsHeaders } from './siteServer.http';
+import { handleSiteBilling } from '../marketplace/siteBilling';
 import { forkedDocumentHeaders, landingPageApplies, resolveSiteVisitor } from './siteVisitor';
 
 /** Path prefix reserved for the site's datastore. A published site cannot use
@@ -380,122 +374,6 @@ async function handleSiteAuth(
   return jsonResponse({ error: 'Unknown endpoint.' }, 404);
 }
 
-/**
- * `/__api/billing/*` — subscribe, read your own subscription, cancel it.
- *
- * Every route here requires a SIGNED-IN end user, resolved from the site's own
- * cookie. There is no anonymous subscribe: a payment with nobody attached is a
- * charge nobody can be given access for, and nobody can cancel.
- *
- * The seller's tenant comes off the resolved SITE, never from the request — it
- * decides whose ledger the money lands in, and taking it from a caller would let
- * anyone direct a payment into their own books.
- */
-async function handleSiteBilling(
-  env: Env,
-  site: SiteRecord,
-  request: Request,
-  action: string,
-): Promise<Response> {
-  const db = buildDatabase(env);
-  const identity = await resolveSiteUser(
-    db, site.siteId, site.tenantId, siteSessionCookie(request.headers.get('cookie')),
-  );
-  if (!identity) return jsonResponse({ error: 'Sign in first.' }, 401);
-
-  if (action === 'me' && request.method === 'GET') {
-    // Subscription AND the app's own lifecycle, from one call. "Am I subscribed" and
-    // "is the thing I subscribed to still running" have one answer between them, and
-    // answering only the first is what let a live subscription to a dead app look
-    // healthy. The flags the caller acts on are derived by the shared contract.
-    const standing = await subscriberStanding(db, env, {
-      tenantId: site.tenantId, siteId: site.siteId, siteUserId: identity.userId,
-    });
-    return jsonResponse({ ok: true, ...standing }, 200);
-  }
-
-  /**
-   * THE TWO REMEDIES A SUBSCRIBER IS OWED WHEN THE APP GOES DARK.
-   *
-   * Both are gated on the hosted lifecycle and nothing else — `subscriberMayExport`
-   * from the read-only window, `subscriberMayTake` once it is released. Deliberately
-   * not gated on a price, a status or a role: three more ways to give a working
-   * product away, and the lifecycle is the only one of the four that means what the
-   * buyer was promised.
-   */
-  if (action === 'export' && request.method === 'GET') {
-    const standing = await subscriberStanding(db, env, {
-      tenantId: site.tenantId, siteId: site.siteId, siteUserId: identity.userId,
-    });
-    if (!standing.hosted?.subscriberMayExport) {
-      return jsonResponse({ error: 'This app is running — use it to read your data.' }, 409);
-    }
-    const collections = await exportOwnedSiteRecords({
-      db, siteId: site.siteId, tenantId: site.tenantId, siteUserId: identity.userId,
-    });
-    return jsonResponse({ ok: true, collections }, 200);
-  }
-
-  if (action === 'take' && request.method === 'GET') {
-    try {
-      const build = await takeAbandonedBuild(db, env, {
-        tenantId: site.tenantId, siteId: site.siteId, siteUserId: identity.userId,
-      });
-      return jsonResponse({ ok: true, build }, 200);
-    } catch (error) {
-      const status = error instanceof ListingError ? error.status : 400;
-      return jsonResponse({ error: error instanceof Error ? error.message : 'Not available.' }, status);
-    }
-  }
-
-  if (action === 'subscribe' && request.method === 'POST') {
-    const body = await readSubmission(request) as { slug?: unknown; returnUrl?: unknown } | null;
-    const slug = String(body?.slug ?? '').trim().slice(0, 160);
-    if (!slug) return jsonResponse({ error: 'Which app?' }, 400);
-    // The return URL is rebuilt from the REQUEST's own origin rather than taken
-    // from the body: a caller-supplied one is an open redirect that a processor
-    // would then send a paying customer to.
-    const returnUrl = new URL(request.url).origin + '/';
-    try {
-      const { checkoutUrl } = await startSiteSubscriptionCheckout(db, env, {
-        siteId: site.siteId,
-        tenantId: site.tenantId,
-        siteUserId: identity.userId,
-        slug,
-        returnUrl,
-      });
-      return jsonResponse({ ok: true, checkoutUrl }, 200);
-    } catch (error) {
-      const status = error instanceof ListingError ? error.status : 400;
-      return jsonResponse({ error: error instanceof Error ? error.message : 'Could not start checkout.' }, status);
-    }
-  }
-
-  if (action === 'complete' && request.method === 'POST') {
-    const body = await readSubmission(request) as { checkoutSessionId?: unknown } | null;
-    const checkoutSessionId = String(body?.checkoutSessionId ?? '').trim().slice(0, 255);
-    if (!checkoutSessionId) return jsonResponse({ error: 'Which checkout?' }, 400);
-    try {
-      const subscription = await completeSiteSubscription(db, env, {
-        siteId: site.siteId,
-        tenantId: site.tenantId,
-        siteUserId: identity.userId,
-        checkoutSessionId,
-      });
-      return jsonResponse({ ok: true, subscription }, 200);
-    } catch (error) {
-      const status = error instanceof ListingError ? error.status : 400;
-      return jsonResponse({ error: error instanceof Error ? error.message : 'Could not complete checkout.' }, status);
-    }
-  }
-
-  if (action === 'cancel' && request.method === 'POST') {
-    const result = await cancelSiteSubscription(db, env, site.tenantId, site.siteId, identity.userId);
-    return jsonResponse({ ok: result.ok }, result.ok ? 200 : 404);
-  }
-
-  return jsonResponse({ error: 'Unknown endpoint.' }, 404);
-}
 
 /**
  * Run the project's canvas handlers for a `/api/<route>` request on the site's
@@ -555,41 +433,8 @@ async function serveSiteBackend(
   });
 }
 
-/** Accept both JSON and classic HTML form encodings, so a plain `<form>` with
- *  no JavaScript works exactly as well as a fetch(). */
-async function readSubmission(request: Request): Promise<unknown> {
-  const type = request.headers.get('content-type') ?? '';
-  try {
-    if (type.includes('application/json')) return await request.json();
-    if (type.includes('form')) {
-      const form = await request.formData();
-      const out: Record<string, unknown> = {};
-      for (const [k, v] of form.entries()) out[k] = typeof v === 'string' ? v : (v as File).name;
-      return out;
-    }
-    // No content-type (or an odd one) — try JSON, then give up.
-    const text = await request.text();
-    return text ? JSON.parse(text) : {};
-  } catch {
-    return null;
-  }
-}
 
-function corsHeaders(): Record<string, string> {
-  return {
-    'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'GET, POST, OPTIONS',
-    'access-control-allow-headers': 'content-type',
-    'access-control-max-age': '86400',
-  };
-}
 
-function jsonResponse(body: unknown, status: number, extraHeaders?: Record<string, string>): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', ...corsHeaders(), ...extraHeaders },
-  });
-}
 
 /**
  * Deliver an end user's sign-in code.
@@ -664,7 +509,7 @@ export async function tryServeHostedSite(
   // cached record — so nothing about serving an app changes for anyone who has not
   // authored one.
   if (landingPageApplies(site, url)) {
-    const visitor = await resolveSiteVisitor(buildDatabase(env), site, request);
+    const visitor = await resolveSiteVisitor(env, buildDatabase(env), site, request);
     if (!visitor.entitled) {
       const landing = await serveLandingDocument(env, site);
       if (landing) {

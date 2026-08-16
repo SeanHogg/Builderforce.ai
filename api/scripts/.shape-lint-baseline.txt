@@ -74,6 +74,7 @@ qa_journey_events
 qa_routing_settings
 qa_runs
 rd_tax_credit_config
+reference_shares
 release_notes
 repo_analysis_runs
 sales_associate_settings

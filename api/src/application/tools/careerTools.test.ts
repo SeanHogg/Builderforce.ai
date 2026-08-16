@@ -33,6 +33,7 @@ const ARTICLE_SLUGS = [
   'career-360',
   'salary-calculator',
   'employer-research',
+  'interview-prep',
   'vendor-sync',
 ] as const;
 
@@ -81,10 +82,9 @@ describe('career tools — the article contract', () => {
       const def = toDefinition(tool);
       expect(def.kind).toBe('analyzer');
       expect((def as { fields: unknown[] }).fields.length).toBeGreaterThan(0);
-      // Through `unknown`: the point of the assertion is that a key the TYPE does
-      // not have is also absent at RUN TIME, and a direct cast to an index signature
-      // no longer compiles now that `ToolDefinition` is a closed union — which would
-      // make the compiler's own guarantee the reason the runtime check disappeared.
+      // Through `unknown` deliberately: the whole point is to probe for a property the
+      // client-safe type does NOT declare, so a direct assertion is one the compiler is
+      // right to refuse.
       expect((def as unknown as Record<string, unknown>).analyze).toBeUndefined();
     }
   });

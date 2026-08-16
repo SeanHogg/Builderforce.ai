@@ -3,6 +3,7 @@ import { BLOG_POSTS } from '@/lib/blogData';
 import { COMPETITOR_SEO, SEO_INTEGRATIONS } from '@/lib/content';
 import { listPublishedSkillSlugs } from '@/lib/marketplaceSeo';
 import { indexableTeaserRoutes } from '@/lib/routeMarketing';
+import { getSalaryDirectory } from '@/lib/salary';
 
 const BASE = 'https://builderforce.ai';
 
@@ -134,5 +135,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
-  return [...staticPages, ...teaserPages, ...blogPages, ...comparePages, ...integrationPages, ...marketplacePages, ...talentPages];
+  // Salary guides — the largest programmatic-SEO surface here: every role page plus
+  // every role×city leaf. Both come from ONE catalog read, so a role added on the
+  // server appears in the sitemap without anyone editing this file. Best-effort:
+  // an unreachable API yields no salary URLs rather than failing the whole sitemap.
+  const salaryDirectory = await getSalaryDirectory();
+  const salaryRoles = salaryDirectory?.roles ?? [];
+  const salaryCities = salaryDirectory?.cities ?? [];
+  const salaryPages: MetadataRoute.Sitemap = [
+    ...salaryRoles.map((role) => ({
+      url: `${BASE}/salary/${role.slug}`,
+      lastModified: now,
+      changeFrequency: 'monthly' as const,
+      priority: 0.6,
+    })),
+    ...salaryRoles.flatMap((role) => salaryCities.map((city) => ({
+      url: `${BASE}/salary/${role.slug}/${city.slug}`,
+      lastModified: now,
+      changeFrequency: 'monthly' as const,
+      priority: 0.5,
+    }))),
+  ];
+
+  return [
+    ...staticPages, ...teaserPages, ...blogPages, ...comparePages,
+    ...integrationPages, ...marketplacePages, ...talentPages, ...salaryPages,
+  ];
 }

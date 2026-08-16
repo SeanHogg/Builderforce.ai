@@ -1119,6 +1119,97 @@
       }
     }
   },
+  "references": {
+    "title": "Referencias",
+    "lede": "Las personas que responderán por ti, en un solo lugar: quiénes son, de qué te conocen y qué pueden confirmar. Nada es público hasta que generas un enlace.",
+    "loading": "Cargando referencias…",
+    "loadFailed": "No se pudieron cargar tus referencias.",
+    "actionFailed": "No se pudo guardar el cambio.",
+    "nameRequired": "El nombre es obligatorio.",
+    "empty": "Aún no hay referencias. Añade a la primera persona que respondería por ti.",
+    "addTitle": "Añadir una referencia",
+    "add": "Añadir referencia",
+    "remove": "Eliminar",
+    "addSubtitle": "Una referencia informada sobre las dos cosas que debe confirmar vale por tres a las que solo se avisó de que \"quizá llamen\".",
+    "listTitle": "{count, plural, one {# referencia} other {# referencias}}",
+    "canSpeakTo": "Puede hablar de",
+    "includeInShare": "Incluir en el enlace",
+    "selectToShare": "Elige al menos una referencia para compartir.",
+    "linkOnce": "Cópialo ahora: se muestra una sola vez y no se puede recuperar.",
+    "untitledShare": "Enlace sin título",
+    "shareTitle": "Compartir un enlace",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "revoke": "Revocar",
+    "shareSubtitle": "Un enlace muestra solo las referencias que elijas y deja de funcionar en cuanto lo revocas.",
+    "includeContact": "Incluir correo y teléfono",
+    "createShare": "{count, plural, =0 {Crear enlace} one {Crear enlace con # referencia} other {Crear enlace con # referencias}}",
+    "shareMeta": "{count, plural, one {# referencia} other {# referencias}} · {views, plural, one {# vista} other {# vistas}}",
+    "field": {
+      "name": "Nombre",
+      "title": "Su cargo",
+      "company": "Empresa",
+      "email": "Correo",
+      "phone": "Teléfono",
+      "relationship": "De qué te conoce",
+      "canSpeakTo": "¿Qué puede confirmar sobre tu trabajo?"
+    },
+    "status": {
+      "draft": "Borrador",
+      "requested": "Solicitada",
+      "confirmed": "Confirmada",
+      "declined": "Rechazada"
+    },
+    "shared": {
+      "metaTitle": "Referencias compartidas",
+      "title": "Referencias",
+      "empty": "Este enlace no incluye ninguna referencia.",
+      "ledeWithContact": "Compartidas contigo, con datos de contacto. Trátalos como confidenciales.",
+      "ledeNoContact": "Compartidas contigo. Los datos de contacto se omitieron deliberadamente; pídeselos a la persona candidata.",
+      "goneTitle": "Este enlace ya no está disponible",
+      "goneBody": "Fue revocado o ha caducado. Pide uno nuevo a quien te lo envió."
+    }
+  },
+  "salary": {
+    "backToIndex": "← Todas las guías salariales",
+    "backToRole": "← Salarios de {role}",
+    "modelNote": "Estas bandas se modelan a partir del puesto, la antigüedad, la región y la modalidad de trabajo; todos los multiplicadores aparecen arriba, así que la cifra es discutible.",
+    "calculatorCta": "Calcula tu propia cifra →",
+    "index": {
+      "metaTitle": "Guías salariales por puesto y ciudad",
+      "metaDescription": "Bandas salariales modeladas para puestos de ingeniería, datos, producto, diseño y ventas en dieciséis roles y catorce ciudades.",
+      "title": "Guías salariales",
+      "lede": "Lo que paga un puesto, por ciudad y por antigüedad. Cada banda muestra el mínimo, la mediana y el cuartil superior, porque la cifra con la que negocias es el ancla, no el promedio.",
+      "unavailable": "Las guías salariales no están disponibles por el momento. Inténtalo de nuevo en unos minutos."
+    },
+    "role": {
+      "metaTitle": "Salario de {role} por ciudad",
+      "metaDescription": "La mediana salarial de {role} es {median}, comparada en {cities} ciudades con bandas mínima, mediana y de cuartil superior.",
+      "title": "Salario de {role}",
+      "lede": "Un {role} de nivel medio tiene una mediana nacional de {median}, con una banda típica de {low} a {high}. Elige una ciudad para ver la banda local y la escala.",
+      "byCity": "Por ciudad",
+      "bySeniority": "Por antigüedad"
+    },
+    "city": {
+      "metaTitle": "Salario de {role} en {city}",
+      "metaDescription": "Salario de {role} en {city}: mediana {median}, con una banda típica de {low} a {high} y la escala completa por antigüedad.",
+      "title": "Salario de {role} en {city}",
+      "lede": "Un {role} de nivel medio en {city} tiene una mediana de {median}, con una banda típica de {low} a {high}.",
+      "anchorLabel": "Ancla en",
+      "anchorHint": "Si das una cifra primero, ánclala en el cuartil superior y ofrece un rango cuyo mínimo aún aceptarías.",
+      "assumptions": "Cómo se construyó esta banda",
+      "elsewhere": "Salario de {role} en otras ciudades"
+    },
+    "table": {
+      "city": "Ciudad",
+      "seniority": "Antigüedad",
+      "low": "Mínimo (P25)",
+      "median": "Mediana",
+      "high": "Máximo (P75)",
+      "spread": "Rango",
+      "vsNational": "Vs nacional"
+    }
+  },
   "tools": {
     "outOf5": "de 5,0",
     "breakdown": "Desglose",
@@ -16633,7 +16724,7 @@
       "campaignScheduled": "Programado para {count} cuentas.",
       "campaignUpdateFailed": "No se pudo actualizar esa campaña.",
       "boardMedia": "Adjuntar desde este lienzo",
-      "boardMediaHelp": "Las imágenes seleccionadas se publican automáticamente en una URL pública: eso es lo que Instagram y TikTok necesitan para descargarlas."
+      "boardMediaHelp": "Las imágenes y los vídeos seleccionados se publican automáticamente en una URL pública: eso es lo que Instagram y TikTok necesitan para descargarlos."
     },
     "noticeGuestLimitRoom": "Esta sesión compartida ya usó sus {limit} mensajes gratuitos de hoy. Regístrate gratis para continuar: tu lienzo te acompaña.",
     "founder": {

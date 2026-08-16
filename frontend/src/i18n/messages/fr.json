@@ -1119,6 +1119,97 @@
       }
     }
   },
+  "references": {
+    "title": "Références",
+    "lede": "Les personnes qui répondront de vous, au même endroit : qui elles sont, d’où elles vous connaissent et ce qu’elles peuvent confirmer. Rien n’est public tant que vous n’émettez pas de lien.",
+    "loading": "Chargement des références…",
+    "loadFailed": "Impossible de charger vos références.",
+    "actionFailed": "Cette modification n’a pas pu être enregistrée.",
+    "nameRequired": "Un nom est requis.",
+    "empty": "Aucune référence pour l’instant. Ajoutez la première personne qui répondrait de vous.",
+    "addTitle": "Ajouter une référence",
+    "add": "Ajouter la référence",
+    "remove": "Supprimer",
+    "addSubtitle": "Une référence briefée sur les deux points à confirmer en vaut trois à qui on a seulement dit « on vous appellera peut-être ».",
+    "listTitle": "{count, plural, one {# référence} other {# références}}",
+    "canSpeakTo": "Peut témoigner de",
+    "includeInShare": "Inclure dans le lien",
+    "selectToShare": "Choisissez au moins une référence à partager.",
+    "linkOnce": "Copiez-le maintenant : il n’est affiché qu’une fois et ne peut pas être récupéré.",
+    "untitledShare": "Lien sans titre",
+    "shareTitle": "Partager un lien",
+    "copy": "Copier",
+    "copied": "Copié",
+    "revoke": "Révoquer",
+    "shareSubtitle": "Un lien n’affiche que les références choisies et cesse de fonctionner dès que vous le révoquez.",
+    "includeContact": "Inclure l’e-mail et le téléphone",
+    "createShare": "{count, plural, =0 {Créer le lien} one {Créer un lien avec # référence} other {Créer un lien avec # références}}",
+    "shareMeta": "{count, plural, one {# référence} other {# références}} · {views, plural, one {# vue} other {# vues}}",
+    "field": {
+      "name": "Nom",
+      "title": "Son poste",
+      "company": "Entreprise",
+      "email": "E-mail",
+      "phone": "Téléphone",
+      "relationship": "D’où elle vous connaît",
+      "canSpeakTo": "Que peut-elle confirmer sur votre travail ?"
+    },
+    "status": {
+      "draft": "Brouillon",
+      "requested": "Sollicitée",
+      "confirmed": "Confirmée",
+      "declined": "Refusée"
+    },
+    "shared": {
+      "metaTitle": "Références partagées",
+      "title": "Références",
+      "empty": "Ce lien ne contient aucune référence.",
+      "ledeWithContact": "Partagées avec vous, coordonnées comprises. Merci de les traiter comme confidentielles.",
+      "ledeNoContact": "Partagées avec vous. Les coordonnées ont été volontairement omises — demandez-les au candidat.",
+      "goneTitle": "Ce lien n’est plus disponible",
+      "goneBody": "Il a été révoqué ou a expiré. Demandez-en un nouveau à la personne qui vous l’a envoyé."
+    }
+  },
+  "salary": {
+    "backToIndex": "← Tous les guides salariaux",
+    "backToRole": "← Salaires {role}",
+    "modelNote": "Ces fourchettes sont modélisées à partir du poste, du niveau, de la région et du mode de travail ; tous les multiplicateurs sont listés ci-dessus, donc le chiffre se discute.",
+    "calculatorCta": "Modélisez votre propre chiffre →",
+    "index": {
+      "metaTitle": "Guides salariaux par poste et par ville",
+      "metaDescription": "Fourchettes salariales modélisées pour les postes en ingénierie, data, produit, design et commercial — seize postes, quatorze villes.",
+      "title": "Guides salariaux",
+      "lede": "Ce que paie un poste, par ville et par niveau. Chaque fourchette montre le minimum, la médiane et le quartile supérieur, car le chiffre sur lequel on négocie est le point d’ancrage, pas la moyenne.",
+      "unavailable": "Les guides salariaux sont momentanément indisponibles. Réessayez d’ici peu."
+    },
+    "role": {
+      "metaTitle": "Salaire {role} par ville",
+      "metaDescription": "Le salaire médian d’un {role} est de {median}, comparé dans {cities} villes avec les fourchettes basse, médiane et haute.",
+      "title": "Salaire {role}",
+      "lede": "Un {role} de niveau intermédiaire a une médiane nationale de {median}, avec une fourchette typique de {low} à {high}. Choisissez une ville pour voir la fourchette locale.",
+      "byCity": "Par ville",
+      "bySeniority": "Par niveau"
+    },
+    "city": {
+      "metaTitle": "Salaire {role} à {city}",
+      "metaDescription": "Salaire {role} à {city} : médiane {median}, fourchette typique de {low} à {high} et l’échelle complète par niveau.",
+      "title": "Salaire {role} à {city}",
+      "lede": "Un {role} de niveau intermédiaire à {city} a une médiane de {median}, avec une fourchette typique de {low} à {high}.",
+      "anchorLabel": "Ancrez à",
+      "anchorHint": "Si vous annoncez un chiffre en premier, ancrez-le au quartile supérieur et donnez une fourchette dont le bas resterait acceptable.",
+      "assumptions": "Comment cette fourchette a été construite",
+      "elsewhere": "Salaire {role} ailleurs"
+    },
+    "table": {
+      "city": "Ville",
+      "seniority": "Niveau",
+      "low": "Bas (P25)",
+      "median": "Médiane",
+      "high": "Haut (P75)",
+      "spread": "Amplitude",
+      "vsNational": "Vs national"
+    }
+  },
   "tools": {
     "outOf5": "sur 5,0",
     "breakdown": "Détail",
@@ -16633,7 +16724,7 @@
       "campaignScheduled": "Programmé pour {count} comptes.",
       "campaignUpdateFailed": "Cette campagne n’a pas pu être mise à jour.",
       "boardMedia": "Joindre depuis ce canevas",
-      "boardMediaHelp": "Les images choisies sont automatiquement publiées sur une URL publique — c'est ce dont Instagram et TikTok ont besoin pour les récupérer."
+      "boardMediaHelp": "Les images et les vidéos choisies sont automatiquement publiées sur une URL publique — c'est ce dont Instagram et TikTok ont besoin pour les récupérer."
     },
     "noticeGuestLimitRoom": "Cette session partagée a utilisé ses {limit} messages gratuits du jour. Inscrivez-vous gratuitement pour continuer — votre canevas vous suit.",
     "founder": {

@@ -51,7 +51,9 @@ import {
   readAssetByToken,
   resolveAssetOrigin,
   updateTemplate,
-  MAX_ASSET_BYTES,
+  assetTooLargeMessage,
+  isAssetKind,
+  maxAssetBytes,
 } from '../../application/marketing/templateLibrary';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 
@@ -225,30 +227,34 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
         db,
         c.get('tenantId') as number,
         resolveAssetOrigin(c.env as Env),
-        kind === 'logo' || kind === 'image' ? kind : undefined,
+        isAssetKind(kind) ? kind : undefined,
       ),
     });
   });
 
   /**
-   * Upload an image. multipart/form-data because the payload is binary — a
-   * base64 JSON body would inflate a 2 MB logo to 2.7 MB on the wire.
+   * Upload an image or a video. multipart/form-data because the payload is
+   * binary — a base64 JSON body would inflate a 2 MB logo to 2.7 MB on the wire.
    *
    * A JSON body `{ source }` is the SECOND encoding of the same act, for a
    * caller that does not hold a `File`: the Creation Canvas, whose generated
-   * pictures live in a `data:` URI or at a stock URL. It is the same route
-   * because it is the same concept — "store this image and give me its public
+   * media lives in a `data:` URI or at a stock URL. It is the same route
+   * because it is the same concept — "store this and give me its public
    * URL" — and a second endpoint would be a second place for the size, type and
    * tenant rules to drift apart from each other.
+   *
+   * The KIND is not restated here. `createAsset` derives it from the bytes, so a
+   * caller that says nothing gets `image` for a PNG and `video` for an MP4; only
+   * `logo` — a role, not a media type — has to be asked for.
    */
   router.post('/assets', manager, async (c) => {
     if ((c.req.header('content-type') ?? '').includes('application/json')) {
       const body = await c.req.json<{ source?: string; name?: string; kind?: string }>().catch(() => ({}) as never);
-      if (!body.source?.trim()) return c.json({ error: 'Supply the image as a data URL or an https URL.' }, 400);
+      if (!body.source?.trim()) return c.json({ error: 'Supply the file as a data URL or an https URL.' }, 400);
       const stored = await createAssetFromSource(db, c.env as Env, c.get('tenantId') as number, {
         source: body.source,
         name: String(body.name ?? 'Image'),
-        kind: body.kind === 'logo' ? 'logo' : 'image',
+        ...(isAssetKind(body.kind) ? { kind: body.kind } : {}),
         createdBy: c.get('userId') as string,
       });
       if (!stored.ok) return c.json({ error: stored.error }, stored.status);
@@ -257,18 +263,23 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
     const form = await c.req.formData().catch(() => null);
     const file = form?.get('file') as File | null;
     if (!file || typeof file.arrayBuffer !== 'function') {
-      return c.json({ error: 'Attach an image file.' }, 400);
+      return c.json({ error: 'Attach a file.' }, 400);
     }
     // Checked before the body is read into memory — the ArrayBuffer below is the
     // whole file, and a size check after it would have already paid the cost.
-    if (file.size > MAX_ASSET_BYTES) return c.json({ error: 'Images must be 2 MB or smaller.' }, 413);
+    // The ceiling depends on WHAT it is; an unknown type gets the smallest one,
+    // and `createAsset` is what refuses it by name a moment later.
+    const mimeType = file.type || 'application/octet-stream';
+    if (file.size > maxAssetBytes(mimeType)) {
+      return c.json({ error: assetTooLargeMessage(mimeType) }, 413);
+    }
 
-    const kindRaw = String(form?.get('kind') ?? 'image');
+    const kindRaw = String(form?.get('kind') ?? '');
     const result = await createAsset(db, c.env as Env, c.get('tenantId') as number, {
       name: String(form?.get('name') ?? file.name ?? 'Image'),
       bytes: await file.arrayBuffer(),
-      mimeType: file.type || 'application/octet-stream',
-      kind: kindRaw === 'logo' ? 'logo' : 'image',
+      mimeType,
+      ...(isAssetKind(kindRaw) ? { kind: kindRaw } : {}),
       source: 'uploaded',
       createdBy: c.get('userId') as string,
     });

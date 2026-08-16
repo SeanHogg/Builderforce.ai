@@ -298,6 +298,8 @@ export interface SiteInfo {
   status: string;
   versionToken: string;
   assetCount: number;
+  /** A real number: the route reads the int8 as text and coerces once, so no
+   *  consumer has to know the column is a bigint. */
   totalBytes: number;
   publishedAt: string | null;
   url: string;
