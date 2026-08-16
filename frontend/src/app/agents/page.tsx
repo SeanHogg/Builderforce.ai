@@ -6,6 +6,7 @@ import { getTranslations } from 'next-intl/server';
 import QuickStart from '@/components/QuickStart';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
+import MarketingFaq from '@/components/marketing/MarketingFaq';
 import FeatureCard from './FeatureCard';
 import NewsletterForm from './NewsletterForm';
 import { CAPABILITY_ICONS } from './capabilityIcons';
@@ -164,12 +165,7 @@ export default async function AgentsHome() {
 
         <section className="cc-faq">
           <h2 className="cc-faq-head">{t('agents.faqHeading')}</h2>
-          {faq.map((q) => (
-            <details key={q.question} className="cc-faq-item">
-              <summary className="cc-faq-q">{q.question}</summary>
-              <p className="cc-faq-a">{q.answer}</p>
-            </details>
-          ))}
+          <MarketingFaq items={faq} />
         </section>
 
         <RelatedArticles surface="agents" heading={t('agents.relatedHeading')} />
@@ -186,19 +182,9 @@ export default async function AgentsHome() {
           font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-section);
           color: var(--text-primary); text-align: center; margin: 0 0 20px;
         }
-        .cc-faq-item {
-          border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
-          background: var(--surface-card); padding: 4px 18px; margin-bottom: 10px;
-        }
-        .cc-faq-q {
-          cursor: pointer; list-style: none; padding: 14px 0;
-          font-family: var(--font-display); font-weight: 600; font-size: var(--font-size-card-title);
-          color: var(--text-primary); display: flex; justify-content: space-between; align-items: center; gap: 12px;
-        }
-        .cc-faq-q::-webkit-details-marker { display: none; }
-        .cc-faq-q::after { content: '+'; color: var(--coral-bright); font-size: var(--font-size-section); line-height: 1; flex-shrink: 0; }
-        .cc-faq-item[open] .cc-faq-q::after { content: '–'; }
-        .cc-faq-a { margin: 0 0 14px; font-size: var(--font-size-body); color: var(--text-secondary); line-height: 1.6; }
+        /* The disclosure itself is MarketingFaq / .mk-q now — this page kept its
+           own bordered-card-with-plus/minus treatment, which is why the same
+           question looked different here than on /features. */
 
         .cc-stars,
         .cc-nebula {

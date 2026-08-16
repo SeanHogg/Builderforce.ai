@@ -12,6 +12,7 @@ import { Icon } from '@/components/ui/Icon';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import JsonLd from '@/components/JsonLd';
 import OAuthButtons from '@/components/OAuthButtons';
+import MarketingFaq from '@/components/marketing/MarketingFaq';
 import PasswordInput from '@/components/PasswordInput';
 import EmailVerificationStep from '@/components/account/EmailVerificationStep';
 import MarketingVisual from '@/components/account/MarketingVisual';
@@ -375,12 +376,7 @@ export default function LoginPageClient() {
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 {t('commonQuestions')}
               </h3>
-              {marketing.faq.map(faq => (
-                <details key={faq.question} style={{ marginBottom: 8 }}>
-                  <summary style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>{faq.question}</summary>
-                  <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.6, marginTop: 4, paddingLeft: 12 }}>{faq.answer}</p>
-                </details>
-              ))}
+              <MarketingFaq items={marketing.faq} />
             </div>
           </div>
         </aside>

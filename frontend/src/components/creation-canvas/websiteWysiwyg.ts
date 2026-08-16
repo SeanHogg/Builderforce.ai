@@ -1,127 +1,51 @@
+/**
+ * The canvas editor's view of an authored website.
+ *
+ * The SHAPE, the section vocabulary, the parser and every block-level operation live in
+ * `@builderforce/creation-canvas-contract` (`website.ts`) because the site publisher
+ * renders the same object to static HTML in a Worker where React does not exist. This
+ * module is deliberately thin: it re-exports that contract so existing imports keep
+ * working, and adds only what is specific to editing a `CreationNodeData` node — the
+ * patch shape the canvas writes back.
+ */
+
+import {
+  activeWebsitePage,
+  deleteWebsiteSection,
+  duplicateWebsiteSection,
+  insertWebsiteSection,
+  moveWebsiteSection,
+  websitePagesFrom,
+  type SectionAddress,
+  type WebsitePage,
+  type WebsiteSectionKind,
+} from '@builderforce/creation-canvas-contract';
 import type { CreationNodeData } from './types';
 
-export type WebsiteSectionKind = 'hero' | 'features' | 'content' | 'stats' | 'testimonial' | 'cta';
+export {
+  WEBSITE_ADDABLE_SECTION_KINDS,
+  WEBSITE_MAX_PAGES,
+  WEBSITE_MAX_SECTIONS,
+  WEBSITE_SECTION_KINDS,
+  WEBSITE_THEME_STYLES,
+  activeWebsitePage,
+  authoredWebsiteProblem,
+  isWebsiteSectionKind,
+  websiteHeroFrom,
+  websitePagesFrom,
+  websiteSectionCapabilities,
+  websiteThemeFrom,
+} from '@builderforce/creation-canvas-contract';
 
-export type WebsiteSection = {
-  id: string;
-  kind: WebsiteSectionKind;
-  eyebrow?: string;
-  heading?: string;
-  body?: string;
-  cta?: string;
-  secondaryCta?: string;
-  items?: Array<{ title?: string; body?: string; value?: string; label?: string }>;
-  quote?: string;
-  author?: string;
-};
-
-export type WebsitePage = {
-  id: string;
-  name: string;
-  path: string;
-  sections: WebsiteSection[];
-};
-
-export type WebsiteTheme = {
-  style: 'editorial' | 'bold' | 'minimal' | 'soft' | 'technical';
-  background?: string;
-  foreground?: string;
-  accent?: string;
-};
-
-const SECTION_KINDS = new Set<WebsiteSectionKind>(['hero', 'features', 'content', 'stats', 'testimonial', 'cta']);
-const THEME_STYLES = new Set<WebsiteTheme['style']>(['editorial', 'bold', 'minimal', 'soft', 'technical']);
-
-function text(value: unknown, max = 2_000): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : undefined;
-}
-
-function slug(value: string, fallback: string): string {
-  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  return normalized || fallback;
-}
-
-function websiteItems(value: unknown): WebsiteSection['items'] {
-  if (!Array.isArray(value)) return undefined;
-  const items = value.slice(0, 8).flatMap((entry) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
-    const record = entry as Record<string, unknown>;
-    const item = {
-      title: text(record.title, 160), body: text(record.body, 600),
-      value: text(record.value, 80), label: text(record.label, 160),
-    };
-    return Object.values(item).some(Boolean) ? [item] : [];
-  });
-  return items.length ? items : undefined;
-}
-
-function websiteSection(value: unknown, index: number): WebsiteSection | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  if (!SECTION_KINDS.has(record.kind as WebsiteSectionKind)) return null;
-  const kind = record.kind as WebsiteSectionKind;
-  const section: WebsiteSection = {
-    id: text(record.id, 100) || `${kind}-${index + 1}`,
-    kind,
-    eyebrow: text(record.eyebrow, 160), heading: text(record.heading, 240), body: text(record.body),
-    cta: text(record.cta, 120), secondaryCta: text(record.secondaryCta, 120),
-    items: websiteItems(record.items), quote: text(record.quote, 1_000), author: text(record.author, 200),
-  };
-  const hasContent = Object.entries(section).some(([key, item]) => !['id', 'kind'].includes(key) && item != null);
-  return hasContent ? section : null;
-}
-
-/** Normalize the authored website contract before it reaches a renderer. */
-export function websitePagesFrom(data: Record<string, unknown>): WebsitePage[] {
-  if (!Array.isArray(data.pages)) return [];
-  return data.pages.slice(0, 8).flatMap((value, pageIndex) => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
-    const record = value as Record<string, unknown>;
-    const name = text(record.name, 100);
-    const sections = Array.isArray(record.sections)
-      ? record.sections.slice(0, 12).map(websiteSection).filter((section): section is WebsiteSection => section != null)
-      : [];
-    if (!name || !sections.length) return [];
-    const id = text(record.id, 100) || slug(name, `page-${pageIndex + 1}`);
-    return [{ id, name, path: text(record.path, 160) || (pageIndex === 0 ? '/' : `/${slug(name, id)}`), sections }];
-  });
-}
-
-export function websiteThemeFrom(data: CreationNodeData): WebsiteTheme {
-  const record = data.websiteTheme && typeof data.websiteTheme === 'object' && !Array.isArray(data.websiteTheme)
-    ? data.websiteTheme as Record<string, unknown> : {};
-  const style = THEME_STYLES.has(record.style as WebsiteTheme['style']) ? record.style as WebsiteTheme['style'] : 'editorial';
-  return {
-    style,
-    background: text(record.background, 32), foreground: text(record.foreground, 32),
-    accent: text(record.accent, 32) || text(data.websiteAccent, 32),
-  };
-}
-
-export function websiteHeroFrom(data: CreationNodeData): { heading: string; body: string; cta: string } {
-  const pages = websitePagesFrom(data);
-  const page = pages.find((candidate) => candidate.id === data.activeWebsitePageId) || pages[0];
-  const hero = page?.sections.find((section) => section.kind === 'hero');
-  return {
-    heading: hero?.heading || text(data.websiteHeadline, 240) || '',
-    body: hero?.body || text(data.websiteBody) || '',
-    cta: hero?.cta || text(data.websiteCta, 120) || '',
-  };
-}
-
-/** AI-created sites must carry a real WYSIWYG experience, not a titled shell. */
-export function authoredWebsiteProblem(value: unknown): string | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return 'Website fields are required.';
-  const fields = value as CreationNodeData;
-  const pages = websitePagesFrom(fields);
-  if (!pages.length) return 'Author fields.pages as WYSIWYG pages with name, path, and renderable sections.';
-  const sections = pages.flatMap((page) => page.sections);
-  if (!sections.some((section) => section.kind === 'hero' && section.heading && section.body && section.cta)) {
-    return 'The WYSIWYG site needs an authored hero section with heading, body, and cta.';
-  }
-  if (sections.length < 2) return 'The WYSIWYG site needs at least one authored section beyond its hero.';
-  return null;
-}
+export type {
+  SectionAddress,
+  WebsitePage,
+  WebsiteSection,
+  WebsiteSectionItem,
+  WebsiteSectionKind,
+  WebsiteTheme,
+  WebsiteThemeStyle,
+} from '@builderforce/creation-canvas-contract';
 
 /** Keep the simple inspector controls editing the rendered hero, not stale legacy fields. */
 export function patchWebsiteHero(data: CreationNodeData, patch: Partial<CreationNodeData>): Partial<CreationNodeData> {
@@ -142,4 +66,45 @@ export function patchWebsiteHero(data: CreationNodeData, patch: Partial<Creation
     ? { ...candidate, sections: candidate.sections.map((section, sectionIndex) => sectionIndex === heroIndex ? nextHero : section) }
     : candidate);
   return { ...patch, pages: nextPages };
+}
+
+/**
+ * The structural edits, expressed as the canvas's own patch.
+ *
+ * ONE wrapper rather than four, because every block operation writes back exactly the
+ * same way — `{ pages }` — and a component that assembled that patch itself would be a
+ * fifth place the write shape could drift. The operation names stay the contract's;
+ * this only decides that a no-op operation produces a no-op patch, so an edit the
+ * document refuses never bumps the canvas revision or marks the board dirty.
+ */
+export type WebsiteStructuralEdit =
+  | { op: 'insert'; kind: WebsiteSectionKind; afterSectionId?: string }
+  | { op: 'move'; sectionId: string; direction: 'up' | 'down' }
+  | { op: 'delete'; sectionId: string }
+  | { op: 'duplicate'; sectionId: string };
+
+export function applyWebsiteEdit(
+  data: CreationNodeData,
+  edit: WebsiteStructuralEdit,
+): Partial<CreationNodeData> | null {
+  const pages = websitePagesFrom(data);
+  if (!pages.length) return null;
+  const activePageId = data.activeWebsitePageId;
+  const address = (sectionId: string): SectionAddress => ({ sectionId });
+
+  const next: WebsitePage[] = edit.op === 'insert'
+    ? insertWebsiteSection(pages, edit.kind, {
+        activePageId,
+        ...(edit.afterSectionId ? { afterSectionId: edit.afterSectionId } : {}),
+      })
+    : edit.op === 'move'
+      ? moveWebsiteSection(pages, address(edit.sectionId), edit.direction, activePageId)
+      : edit.op === 'delete'
+        ? deleteWebsiteSection(pages, address(edit.sectionId), activePageId)
+        : duplicateWebsiteSection(pages, address(edit.sectionId), activePageId);
+
+  // Reference equality IS the refusal signal: every operation returns its input
+  // unchanged when it cannot apply, so this is the one check that keeps a refused
+  // edit from travelling on as a write.
+  return next === pages ? null : { pages: next };
 }

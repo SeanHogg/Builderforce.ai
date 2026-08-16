@@ -22,6 +22,10 @@ import { maybeAutoRunOnLaneEntry } from './taskRoutes';
  * are tracked into a per-project rating (`GET /projects/:projectId/score`) that
  * rolls up to the workspace (`GET /rollup`).
  */
+/** A generous résumé is ~8k characters; 40k leaves room for a pasted portfolio
+ *  without letting one request burn the isolate's CPU budget. */
+const MAX_DOCUMENT_CHARS = 40_000;
+
 export function createToolRoutes(
   toolService: ToolService,
   auditRunner: AuditRunner,
@@ -95,6 +99,30 @@ export function createToolRoutes(
   router.post('/:id/compute', async (c) => {
     const body = await c.req.json<{ input?: Record<string, number> }>().catch(() => ({ input: {} }));
     const result = toolService.compute(c.req.param('id'), body.input ?? {});
+    return result ? c.json({ result }) : c.json({ error: 'Unknown tool' }, 404);
+  });
+
+  /**
+   * Public free analysis — the career analyzers, which read DOCUMENTS rather than
+   * numbers. Same purity guarantee as `/compute`: no tenant data, no vendor call,
+   * no model — just string work over what the caller pasted.
+   *
+   * DELIBERATELY UNCACHED. The usual rule is that a new read path serves through
+   * `getOrSetCached`, and it does not apply here: the cache key would have to be a
+   * hash of a whole résumé, so the keyspace is unbounded and the hit rate is
+   * approximately zero — every document is different, and the same person pasting
+   * twice is the rare case. A KV round trip would cost more than the analysis it
+   * replaces, which is a few milliseconds of tokenising in the isolate.
+   *
+   * Documents are capped so a paste cannot turn into a CPU-time denial of service.
+   */
+  router.post('/:id/analyze', async (c) => {
+    const body = await c.req.json<{ input?: Record<string, string> }>().catch(() => ({ input: {} }));
+    const input: Record<string, string> = {};
+    for (const [key, value] of Object.entries(body.input ?? {})) {
+      if (typeof value === 'string') input[key] = value.slice(0, MAX_DOCUMENT_CHARS);
+    }
+    const result = toolService.analyze(c.req.param('id'), input);
     return result ? c.json({ result }) : c.json({ error: 'Unknown tool' }, 404);
   });
 

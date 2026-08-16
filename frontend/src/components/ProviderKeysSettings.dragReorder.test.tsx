@@ -66,7 +66,7 @@ describe('ProviderKeysSettings — drag to reorder provider priority', () => {
   it('persists the dropped order, inserting the dragged account at the target position', async () => {
     const setPriority = mockApi([ANTHROPIC, OPENAI, CONNECTION]);
     render(<ProviderKeysSettings priorityOpen />);
-    await waitFor(() => expect(row('Anthropic', 1)).toBeInTheDocument(), { timeout: 5000 });
+    await waitFor(() => expect(row('Anthropic', 1)).toBeInTheDocument());
 
     const dt = dataTransfer();
     fireEvent.dragStart(row('Anthropic', 1), { dataTransfer: dt });
@@ -81,7 +81,7 @@ describe('ProviderKeysSettings — drag to reorder provider priority', () => {
     const onLeaderChange = vi.fn();
     mockApi([ANTHROPIC, OPENAI, CONNECTION]);
     render(<ProviderKeysSettings priorityOpen onLeaderChange={onLeaderChange} />);
-    await waitFor(() => expect(row('Anthropic', 1)).toBeInTheDocument(), { timeout: 5000 });
+    await waitFor(() => expect(row('Anthropic', 1)).toBeInTheDocument());
 
     const dt = dataTransfer();
     fireEvent.dragStart(row('OpenRouter', 3), { dataTransfer: dt });
@@ -94,7 +94,7 @@ describe('ProviderKeysSettings — drag to reorder provider priority', () => {
   it('does not persist when an account is dropped back onto itself', async () => {
     const setPriority = mockApi([ANTHROPIC, OPENAI]);
     render(<ProviderKeysSettings priorityOpen />);
-    await waitFor(() => expect(row('Anthropic', 1)).toBeInTheDocument(), { timeout: 5000 });
+    await waitFor(() => expect(row('Anthropic', 1)).toBeInTheDocument());
 
     const dt = dataTransfer();
     fireEvent.dragStart(row('Anthropic', 1), { dataTransfer: dt });
@@ -106,7 +106,7 @@ describe('ProviderKeysSettings — drag to reorder provider priority', () => {
   it('still reorders with the ↑/↓ buttons — the keyboard and touch path', async () => {
     const setPriority = mockApi([ANTHROPIC, OPENAI]);
     render(<ProviderKeysSettings priorityOpen />);
-    await waitFor(() => expect(row('Anthropic', 1)).toBeInTheDocument(), { timeout: 5000 });
+    await waitFor(() => expect(row('Anthropic', 1)).toBeInTheDocument());
 
     fireEvent.click(screen.getByLabelText(/precedence\.moveUp OpenAI$/));
     await waitFor(() => expect(setPriority).toHaveBeenCalledWith(['openai', 'anthropic']));

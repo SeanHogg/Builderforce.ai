@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
+import CompetitorMatrix, { type CompareCategory } from '@/components/marketing/CompetitorMatrix';
+import MarketingFaq, { type MarketingFaqItem } from '@/components/marketing/MarketingFaq';
 import { compareSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import { COMPARE } from '@/lib/content';
@@ -20,8 +22,6 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-type CompareCategory = { id: string; title: string; blurb: string; rows: { feature: string; note?: string; values: Record<string, string> }[] };
-
 // Visible copy from the `compare` catalog (localized in all 5 locales).
 // `content.ts` COMPARE stays canonical English for the
 // crawler-facing JSON-LD (compareSchema); COMPETITORS supplies the stable column
@@ -30,6 +30,7 @@ export default async function ComparePage() {
   const t = await getTranslations();
   const pillars = t.raw('compare.pillars') as { title: string; desc: string }[];
   const categories = t.raw('compare.categories') as CompareCategory[];
+  const faq = t.raw('compare.faq') as MarketingFaqItem[];
 
   return (
     <>
@@ -68,6 +69,12 @@ export default async function ComparePage() {
         .cmp-criterion { border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--surface-card); padding: 20px; }
         .cmp-cat-title { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-body); color: var(--text-primary); margin: 0 0 6px; }
         .cmp-cat-blurb { font-size: var(--font-size-small); color: var(--text-muted); line-height: 1.6; margin: 0; }
+
+        .cmp-faq { padding-top: 16px; padding-bottom: 8px; }
+        .cmp-faq-title {
+          font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-section);
+          color: var(--text-primary); margin: 0 0 18px; text-align: center;
+        }
 
         .cmp-cta { max-width: var(--marketing-max); margin: 0 auto; padding: 40px var(--marketing-gutter) 80px; }
         .cmp-cta-box { max-width: 820px; margin-inline: auto; }
@@ -122,6 +129,16 @@ export default async function ComparePage() {
                 </article>
               ))}
             </div>
+          </section>
+
+          {/* The matrix the criteria cards above are a summary OF. It reads the
+              same `compare.categories` block, so the cards and the table can
+              never disagree about which categories exist. */}
+          <CompetitorMatrix />
+
+          <section className="cmp-section cmp-faq">
+            <h2 className="cmp-faq-title">{t('compare.faqHeading')}</h2>
+            <MarketingFaq items={faq} />
           </section>
 
           <RelatedArticles surface="compare" heading={t('compare.relatedHeading')} />

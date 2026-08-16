@@ -9,13 +9,20 @@ vi.mock('@/components/RoleGate', () => ({ RoleGate: ({ children }: { children: u
 
 /**
  * Both saves go through an AWAITED confirm promise, so the assertion has to
- * survive two microtask hops plus React's commit. Testing Library's 1s default
- * is enough when this file runs alone and is not when it runs as one of 249 test
- * files on a loaded machine — observed 2026-08-15 as a `waitFor` timeout whose
- * rendered DOM still showed the pre-click state. A longer patience weakens
- * nothing: the assertion is unchanged, only how long it is willing to wait.
+ * survive two microtask hops plus React's commit — which is enough when this
+ * file runs alone and is not when it runs as one of 267 on a loaded machine.
+ *
+ * That is why there is NO local timeout here. This file used to carry
+ * `const SAVE_TIMEOUT = { timeout: 5_000 }`, written to raise Testing Library's
+ * 1s default — and by the time the suite grew, `src/test/setup.ts` had
+ * configured `asyncUtilTimeout: 20_000` for every wait in the project. An
+ * explicit `timeout` OVERRIDES the configured one, so the constant that was
+ * added to be more patient had silently become the only thing in the file that
+ * was less patient, applied to exactly the assertion that kept failing. It
+ * failed the full suite again on 2026-08-15 while passing in 472ms alone.
+ *
+ * One place decides how long a wait waits, and it is the setup file.
  */
-const SAVE_TIMEOUT = { timeout: 5_000 };
 
 describe('AgentExecutionControl', () => {
   beforeEach(() => {
@@ -35,7 +42,7 @@ describe('AgentExecutionControl', () => {
     const button = await screen.findByRole('button', { name: 'Disable and stop all agents' });
     await act(async () => { fireEvent.click(button); });
 
-    await waitFor(() => expect(save).toHaveBeenCalledWith(false), SAVE_TIMEOUT);
+    await waitFor(() => expect(save).toHaveBeenCalledWith(false));
     expect(confirmSpy).toHaveBeenCalledOnce();
     expect(await screen.findByText('Status: EXECUTION DISABLED')).toBeInTheDocument();
     expect(screen.getByText('Execution is disabled. 3 active runs stopped.')).toBeInTheDocument();
@@ -49,7 +56,7 @@ describe('AgentExecutionControl', () => {
     const button = await screen.findByRole('button', { name: 'Enable agent execution' });
     await act(async () => { fireEvent.click(button); });
 
-    await waitFor(() => expect(save).toHaveBeenCalledWith(true), SAVE_TIMEOUT);
+    await waitFor(() => expect(save).toHaveBeenCalledWith(true));
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(await screen.findByText('Status: Execution enabled')).toBeInTheDocument();
   });

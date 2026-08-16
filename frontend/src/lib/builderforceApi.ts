@@ -57,6 +57,13 @@ export const toolsApi = {
       method: 'POST', body: JSON.stringify({ input }),
     }).then((r) => r.result),
 
+  /** Public — free analysis of pasted DOCUMENTS (no account). The analyzer kind's
+   *  counterpart to `compute`: same purity, string-valued input. */
+  analyze: (id: string, input: Record<string, string>): Promise<ToolResult> =>
+    webRequest<{ result: ToolResult }>(`/api/tools/${encodeURIComponent(id)}/analyze`, {
+      method: 'POST', body: JSON.stringify({ input }),
+    }).then((r) => r.result),
+
   /** Save a self-assessment / calculator run (manager+). Pass projectId to score
    *  the run against a project (feeds its diagnostic rating). */
   save: (id: string, input: Record<string, number>, projectId?: number | null): Promise<SavedToolRun> =>

@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
+import CompetitorMatrix, { type CompareCategory } from '@/components/marketing/CompetitorMatrix';
+import MarketingFaq, { type MarketingFaqItem } from '@/components/marketing/MarketingFaq';
 import { pageMetadata } from '@/lib/seo';
 import { competitorCompareSchema } from '@/lib/structured-data';
 import {
@@ -19,8 +21,6 @@ import {
 // opt into the Edge Runtime. Invalid slugs 404 via `notFound()` in `resolve()`, so
 // no slug enumeration is needed. Same shape as /integrations/[tool].
 export const runtime = 'edge';
-
-type CompareCategory = { id: string; title: string; blurb: string; rows: { feature: string; note?: string; values: Record<string, string> }[] };
 
 // Resolve the URL slug to its stable key + canonical-English SEO record
 // (content.ts COMPETITOR_SEO drives JSON-LD + routing); the visible copy is
@@ -63,6 +63,11 @@ export default async function CompetitorComparePage({
   const t = await getTranslations();
   const label = t(`compare.competitorLabels.${key}`);
   const categories = t.raw('compare.categories') as CompareCategory[];
+  // Per-vendor narrative. Translated in all five catalogs since the leaf pages
+  // were built, and rendered by none of them until now — every "vs" page showed
+  // the same generic `leaf.*` criteria copy, so all seven read identically.
+  const vendor = (t.raw('compare.competitors') as Record<string, { tagline: string; summary: string; verdict: string }>)[key];
+  const faq = t.raw('compare.faq') as MarketingFaqItem[];
 
   return (
     <>
@@ -87,14 +92,18 @@ export default async function CompetitorComparePage({
         .vs-criterion { border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--surface-card); padding: 20px; }
         .vs-cat { font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-card-title); color: var(--text-primary); margin: 26px 0 10px; }
         .vs-cat-blurb { font-size: var(--font-size-small); color: var(--text-secondary); margin: 0 0 12px; line-height: 1.6; }
+        .vs-verdict { border: 1px solid var(--border-accent); border-radius: var(--radius-xl); background: var(--surface-card); padding: 24px; }
+        .vs-verdict .vs-cat { margin-top: 0; }
       `}</style>
 
       <main className="vs">
         <header className="vs-hero">
-          <div className="vs-eyebrow">{t('compare.leaf.vsLabel', { name: label })}</div>
+          {/* The eyebrow used to repeat `vsLabel` verbatim above the <h1>, so
+              every leaf opened by saying the same sentence twice. */}
+          <div className="vs-eyebrow">{t('compare.hero.eyebrow')}</div>
           <h1 className="vs-title">{t('compare.leaf.vsLabel', { name: seo.name })}</h1>
-          <p className="vs-tagline">{t('compare.leaf.criteriaTitle')}</p>
-          <p className="vs-sub">{t('compare.leaf.criteriaSummary', { name: label })}</p>
+          <p className="vs-tagline">{vendor?.tagline ?? t('compare.leaf.criteriaTitle')}</p>
+          <p className="vs-sub">{vendor?.summary ?? t('compare.leaf.criteriaSummary', { name: label })}</p>
           <div className="vs-cta-row">
             <Link className="vs-btn vs-btn-primary" href="/register">{t('marketing.ctaGetStartedFree')}</Link>
             <Link className="vs-btn vs-btn-ghost" href="/compare">{t('compare.leaf.seeFullComparison')}</Link>
@@ -111,6 +120,24 @@ export default async function CompetitorComparePage({
               </article>
             ))}
           </div>
+        </section>
+
+        {/* Two columns only — Builderforce.ai against this vendor. Somebody who
+            followed a "vs Cursor" link wants that row, not all seven. */}
+        <CompetitorMatrix only={key} />
+
+        {vendor?.verdict && (
+          <section className="vs-section">
+            <div className="vs-verdict">
+              <h2 className="vs-cat">{t('compare.leaf.bottomLine')}</h2>
+              <p className="vs-sub">{vendor.verdict}</p>
+            </div>
+          </section>
+        )}
+
+        <section className="vs-section">
+          <h2 className="vs-cat">{t('compare.leaf.faqHeading')}</h2>
+          <MarketingFaq items={faq} />
         </section>
 
         <RelatedArticles surface={`compare:${key}`} heading={t('compare.leaf.relatedHeading')} />

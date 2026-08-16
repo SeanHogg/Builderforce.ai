@@ -157,14 +157,8 @@
 .formStatus { margin: 14px 0 0; color: var(--success-text); font-size: var(--font-size-small); }
 .formError { color: var(--error-text); }
 
-.faq { display: flex; flex-direction: column; border-top: 1px solid var(--border-subtle); }
-.faqItem { border-bottom: 1px solid var(--border-subtle); }
-.faqItem summary { display: flex; align-items: center; gap: 12px; padding: 18px 4px; color: var(--text-primary); cursor: pointer; list-style: none; font-size: var(--font-size-card-title); font-weight: 650; letter-spacing: -.012em; }
-.faqItem summary::-webkit-details-marker { display: none; }
-.faqItem summary::after { content: '+'; margin-left: auto; color: var(--text-muted); font: 400 1.3rem/1 var(--font-mono); }
-.faqItem[open] summary::after { content: '−'; color: var(--coral-bright); }
-.faqItem summary:focus-visible { outline: 2px solid var(--coral-bright); outline-offset: 2px; }
-.faqItem p { max-width: 74ch; margin: 0; padding: 0 4px 20px; color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.6; }
+/* The homepage FAQ is <MarketingFaq> / `.mk-q` (globals.css) — it was the
+   fourth hand-rolled disclosure treatment for the same kind of question. */
 
 .cta {
   position: relative;

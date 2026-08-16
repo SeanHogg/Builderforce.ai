@@ -12,8 +12,8 @@
  * serve verbatim to logged-out visitors.
  */
 
-export type ToolCategory = 'delivery' | 'finops' | 'governance' | 'quality';
-export type ToolKind = 'calculator' | 'questionnaire' | 'quiz';
+export type ToolCategory = 'delivery' | 'finops' | 'governance' | 'quality' | 'career';
+export type ToolKind = 'calculator' | 'questionnaire' | 'quiz' | 'analyzer';
 
 // ── Shared result shape (rendered by one generic ToolResultView) ──────────────
 
@@ -29,6 +29,13 @@ export interface ToolMetric {
 export interface ToolRecommendation {
   title: string;
   detail: string;
+  /**
+   * How much this one matters. The career analyzers rank their findings, and a
+   * ranked list rendered without its ranking reads as a flat to-do list — which
+   * is exactly the failure the ordering exists to prevent. Absent on the
+   * questionnaire and quiz scorers, whose plans are already ordered by level.
+   */
+  priority?: 'high' | 'medium' | 'low';
 }
 
 export interface ToolResult {
@@ -116,6 +123,35 @@ export interface QuizLevel {
   advance: string;
 }
 
+// ── Analyzer tools ────────────────────────────────────────────────────────────
+// Read a DOCUMENT and score it. The other three kinds all score a set of numbers
+// the person picked from choices we wrote; an analyzer scores prose they wrote
+// themselves, which is why its input map is string-valued rather than numeric.
+//
+// The scoring stays pure and deterministic — no model call. That is the same
+// argument `careerToolCatalog.ts` makes for the MCP rows over these functions:
+// a résumé score that moves when you ask twice is a number people rewrite their
+// documents to chase, and it cannot be unit-tested.
+
+export interface AnalyzerField {
+  id: string;
+  label: string;
+  /** `document` is a long paste (résumé, job description); `line` is one value. */
+  type: 'document' | 'line' | 'select';
+  placeholder?: string;
+  help?: string;
+  /** False for the optional second document (e.g. the JD on a résumé scorer). */
+  required?: boolean;
+  /** For type:'select'. */
+  options?: Array<{ value: string; label: string }>;
+}
+
+export interface AnalyzerTool extends ToolBase {
+  kind: 'analyzer';
+  fields: AnalyzerField[];
+  analyze: (values: Record<string, string>) => ToolResult;
+}
+
 // ── Tool definition (discriminated by kind) ───────────────────────────────────
 
 interface ToolBase {
@@ -150,7 +186,7 @@ export interface QuizTool extends ToolBase {
   score: (answers: Record<string, number>) => ToolResult;
 }
 
-export type Tool = CalculatorTool | QuestionnaireTool | QuizTool;
+export type Tool = CalculatorTool | QuestionnaireTool | QuizTool | AnalyzerTool;
 
 /** Public, client-safe summary (no compute fn). */
 export interface ToolSummary {
@@ -169,7 +205,8 @@ export interface ToolSummary {
 export type ToolDefinition =
   | (ToolSummary & { kind: 'calculator'; about: string; inputs: CalculatorInput[] })
   | (ToolSummary & { kind: 'questionnaire'; about: string; scale: ScaleAnchor[]; sections: QuestionnaireSection[] })
-  | (ToolSummary & { kind: 'quiz'; about: string; levels: QuizLevel[]; questions: QuizQuestion[] });
+  | (ToolSummary & { kind: 'quiz'; about: string; levels: QuizLevel[]; questions: QuizQuestion[] })
+  | (ToolSummary & { kind: 'analyzer'; about: string; fields: AnalyzerField[] });
 
 export function toSummary(t: Tool): ToolSummary {
   return { id: t.id, name: t.name, tagline: t.tagline, icon: t.icon, category: t.category, kind: t.kind };
@@ -181,6 +218,9 @@ export function toDefinition(t: Tool): ToolDefinition {
   }
   if (t.kind === 'quiz') {
     return { ...toSummary(t), kind: 'quiz', about: t.about, levels: t.levels, questions: t.questions };
+  }
+  if (t.kind === 'analyzer') {
+    return { ...toSummary(t), kind: 'analyzer', about: t.about, fields: t.fields };
   }
   return { ...toSummary(t), kind: 'questionnaire', about: t.about, scale: t.scale, sections: t.sections };
 }

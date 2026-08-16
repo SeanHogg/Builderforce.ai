@@ -186,10 +186,15 @@ describe('the chat surface on the canvas', () => {
    */
   it('stops offering to move the conversation into an Object that is not on screen', () => {
     render(<CreationCanvas sessionId="surface-chat-placement-test" persistence="local" />);
-    expect(screen.getByRole('button', { name: 'Show the chat in the Brain object' })).toBeInTheDocument();
+    // By its LABEL, not by role+name. The control carries an explicit `aria-label`, so
+    // this resolves through an attribute selector; the role query it replaces built an
+    // accessible name for every button on a mounted canvas, twice, and cost 9.8s of the
+    // file's runtime on its own. Same element, same accessible name, same assertion.
+    const moveIntoObject = () => screen.queryByLabelText('Show the chat in the Brain object');
+    expect(moveIntoObject()).toBeInTheDocument();
 
     fireEvent.click(surfaceButton('Chat'));
-    expect(screen.queryByRole('button', { name: 'Show the chat in the Brain object' })).not.toBeInTheDocument();
+    expect(moveIntoObject()).not.toBeInTheDocument();
   });
 
   it('hands the board back from inside the conversation, and remembers the choice', () => {
@@ -207,20 +212,19 @@ describe('the chat surface on the canvas', () => {
   });
 
   /**
-   * One decision, one control. Pressing the lit surface returns to the board, which is
-   * what preserves the toggle behaviour the 3D command has always had without the
-   * registry needing to know that 3D is special.
-   */
-  /**
    * The switcher lists BOARD surfaces. If an object surface leaked into it, pressing it
    * with nothing selected would open a runtime with no object — a screen showing nothing.
    */
   it('never offers an object surface on the switcher', () => {
     render(<CreationCanvas sessionId="surface-rail-scope-test" persistence="local" />);
-    for (const name of ['Page', 'Play', 'Site', 'Timeline']) {
-      expect(screen.queryAllByRole('button', { name })).toHaveLength(0);
-    }
-    expect(screen.getAllByRole('button', { name: 'Board' }).length).toBeGreaterThan(0);
+    // The switcher's WHOLE contents, in one read, rather than four name-filtered scans
+    // of the entire canvas. Stronger as well as ~8x cheaper: an object surface leaking
+    // in fails here whatever it is called — including a fifth nobody has added yet —
+    // and the count is pinned to the board surfaces the registry declares, so adding a
+    // board surface without a button (or a button without a surface) also fails.
+    const offered = within(switcher()).getAllByRole('button').map((button) => button.textContent);
+    expect(offered).toEqual(['Chat', 'Board', '3D space']);
+    expect(offered).toHaveLength(boardCanvasSurfaces().length);
   });
 
   /**
@@ -326,10 +330,15 @@ describe('the chat surface on the canvas', () => {
       .toHaveAttribute('data-viewport', 'desktop');
   });
 
+  /**
+   * One decision, one control. Pressing the lit surface returns to the board, which is
+   * what preserves the toggle behaviour the 3D command has always had without the
+   * registry needing to know that 3D is special.
+   */
   it('lets exactly one surface be lit, and returns to the board when it is pressed again', () => {
     render(<CreationCanvas sessionId="surface-switcher-test" persistence="local" />);
     const lit = () => ['Chat', 'Board', '3D space']
-      .filter((name) => screen.getAllByRole('button', { name }).some((button) => button.getAttribute('aria-pressed') === 'true'));
+      .filter((name) => surfaceButton(name).getAttribute('aria-pressed') === 'true');
 
     expect(lit()).toEqual(['Board']);
     fireEvent.click(surfaceButton('Chat'));

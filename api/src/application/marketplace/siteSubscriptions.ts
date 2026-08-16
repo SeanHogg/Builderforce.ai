@@ -88,6 +88,27 @@ export async function activeSiteSubscription(
   siteId: number,
   siteUserId: number,
 ): Promise<SiteSubscriptionView | null> {
+  const { subscription } = await siteSubscriptionState(db, tenantId, siteId, siteUserId);
+  return subscription;
+}
+
+/**
+ * NONE, LIVE, or LAPSED — the three answers, told apart.
+ *
+ * `activeSiteSubscription` collapses "never subscribed" and "subscribed and it ran
+ * out" into the same null, which is right for a gate and wrong for a shop window: a
+ * stranger and a lapsed customer both need to be shown the landing page, but only the
+ * second is a renewal, and a free app has NO subscription at all and must not be gated
+ * on one. Both facts come from one read; asking twice is how they drift.
+ */
+export type SiteSubscriptionState = 'none' | 'live' | 'lapsed';
+
+export async function siteSubscriptionState(
+  db: Db,
+  tenantId: number,
+  siteId: number,
+  siteUserId: number,
+): Promise<{ state: SiteSubscriptionState; subscription: SiteSubscriptionView | null }> {
   const [row] = await db
     .select({
       id: siteSubscriptions.id,
@@ -106,18 +127,22 @@ export async function activeSiteSubscription(
       eq(siteSubscriptions.siteUserId, siteUserId),
     ))
     .limit(1);
-  if (!row || row.cancelledAt || row.status === 'cancelled') return null;
+  if (!row) return { state: 'none', subscription: null };
+  if (row.cancelledAt || row.status === 'cancelled') return { state: 'lapsed', subscription: null };
   // A lapsed period is not access. The renewal webhook moves `current_period_end`
   // forward; until it does, an expired row is refused here rather than being
   // trusted because its status still reads 'active'.
-  if (row.currentPeriodEnd && row.currentPeriodEnd <= new Date()) return null;
+  if (row.currentPeriodEnd && row.currentPeriodEnd <= new Date()) return { state: 'lapsed', subscription: null };
   return {
-    id: row.id,
-    status: row.status as SubscriptionStatus,
-    priceCents: row.priceCents,
-    currency: row.currency,
-    snapshotId: row.snapshotId,
-    currentPeriodEndISO: row.currentPeriodEnd?.toISOString() ?? null,
+    state: 'live',
+    subscription: {
+      id: row.id,
+      status: row.status as SubscriptionStatus,
+      priceCents: row.priceCents,
+      currency: row.currency,
+      snapshotId: row.snapshotId,
+      currentPeriodEndISO: row.currentPeriodEnd?.toISOString() ?? null,
+    },
   };
 }
 

@@ -28,6 +28,7 @@ import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { toolsApi } from '@/lib/builderforceApi';
 import { ToolResultView } from '@/components/tools/ToolResultView';
+import { AnalyzerRunner } from '@/components/tools/AnalyzerRunner';
 import { DataDrivenPanel } from '@/components/tools/DataDrivenPanel';
 import { trackToolRun } from '@/lib/marketingApi';
 import { defaultInput, answersComplete, type ToolDefinition, type ToolResult } from '@/lib/tools';
@@ -147,6 +148,20 @@ export default function ToolRunner({
 
   if (error && !def) return <div role="alert" style={card}>{t('loadError')}: {error}</div>;
   if (!def) return <div role="status" style={{ color: 'var(--muted)' }}>{t('loading')}</div>;
+
+  // An analyzer reads documents rather than scoring answers, so its form and its
+  // endpoint differ — but only here. Every caller still asks for a tool by id and
+  // gets the right runner, which is what keeps the canvas and the reference page
+  // from branching on kind themselves.
+  if (def.kind === 'analyzer') {
+    return (
+      <AnalyzerRunner
+        definition={def}
+        embedded={embedded}
+        onRunComplete={(_, res) => onRunComplete?.({}, res)}
+      />
+    );
+  }
 
   const canRun = answersComplete(def, input);
   const answeredAny = Object.keys(input).length > 0;

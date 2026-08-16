@@ -79,8 +79,21 @@ const SECTION_PATTERNS: ReadonlyArray<readonly [ResumeSectionKind, RegExp]> = [
   ['certifications', /^(certifications?|licen[cs]es?|awards?|accreditations?)\b/i],
 ];
 
-/** Bullet glyphs people paste out of Word, Google Docs and PDFs. */
-const BULLET_GLYPH = /^[\s]*[-–—•·▪◦*‣⁃o]\s+/;
+/**
+ * The bullet glyphs real documents actually use, in ONE place.
+ *
+ * This set and the résumé-document builder's used to be two hand-written character
+ * classes that disagreed — and neither listed `⦁`, which is what Google Docs
+ * writes and therefore what a PDF résumé extracts as. Every highlight on a ten-job CV
+ * was dropped for want of one codepoint (measured 2026-08-16), so the set is exported
+ * and there is now nowhere for a second copy to drift.
+ *
+ * U+F0A7 and U+F0B7 sit in the private-use area and are written below as escapes
+ * rather than as characters: Word draws Symbol-font bullets with them and they
+ * survive PDF extraction verbatim, but pasted literally they are invisible here.
+ */
+export const RESUME_BULLET_GLYPH = /^\s*(?:[-–—*o]|[·•‣⁃∙▪▫▶▸◆◇○●◦❖➔➢⦁»›→]|\uf0a7|\uf0b7)\s+/;
+const BULLET_GLYPH = RESUME_BULLET_GLYPH;
 
 /**
  * Date ranges, in the four families résumés actually use. Ordered most-specific first

@@ -13,6 +13,7 @@ import {
   scoreQuestionnaire,
   scoreQuiz,
 } from './toolTypes';
+import { CAREER_TOOLS } from './careerTools';
 
 const TIER_NAME = ['Low', 'Low', 'Medium', 'High', 'Elite'];
 /**
@@ -840,6 +841,9 @@ export const TOOLS: Tool[] = [
   securityPosture,
   techDebtEstimator,
   buildBuyAgent,
+  // The career analyzers ported from hired.video. Adapters only — every reading
+  // is an `application/career` function the recruiter/hr agents already call.
+  ...CAREER_TOOLS,
 ];
 
 export function getTool(id: string): Tool | undefined {

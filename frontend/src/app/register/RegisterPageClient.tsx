@@ -10,6 +10,7 @@ import { ThemeToggleButton } from '@/app/ThemeProvider';
 import JsonLd from '@/components/JsonLd';
 import { Icon } from '@/components/ui/Icon';
 import OAuthButtons from '@/components/OAuthButtons';
+import MarketingFaq from '@/components/marketing/MarketingFaq';
 import PasswordInput from '@/components/PasswordInput';
 import { registerSchema } from '@/lib/structured-data';
 import { REGISTER_MARKETING } from '@/lib/content';
@@ -232,12 +233,12 @@ export default function RegisterPageClient() {
                 />
               </div>
               <div>
-                <label htmlFor="discountCode" style={labelStyle}>Discount code <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
+                <label htmlFor="discountCode" style={labelStyle}>{tr('discountCodeLabel')} <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>{tr('nameOptional')}</span></label>
                 <input id="discountCode" type="text" autoComplete="off"
                   value={discountCode} onChange={e => { setDiscountCode(e.target.value.toUpperCase()); retainDiscountCode(e.target.value); }}
                   placeholder="ANNUAL50" style={inputStyle} onFocus={focusIn} onBlur={focusOut}
                 />
-                {discountCode && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--coral-bright)' }}>Saved for checkout after signup.</div>}
+                {discountCode && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--coral-bright)' }}>{tr('discountCodeSaved')}</div>}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
@@ -308,7 +309,7 @@ export default function RegisterPageClient() {
 
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                 <input type="checkbox" checked={ageAttested} onChange={e => setAgeAttested(e.target.checked)} style={{ marginTop: 3, accentColor: 'var(--coral-bright)' }} />
-                <span>I confirm I am at least 18 years old. BuilderForce is not directed to children.</span>
+                <span>{tr('ageAttestation')}</span>
               </label>
 
               {error && (
@@ -410,12 +411,7 @@ export default function RegisterPageClient() {
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 {tr('commonQuestions')}
               </h3>
-              {marketing.faq.map(faq => (
-                <details key={faq.question} style={{ marginBottom: 8 }}>
-                  <summary style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>{faq.question}</summary>
-                  <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.6, marginTop: 4, paddingLeft: 12 }}>{faq.answer}</p>
-                </details>
-              ))}
+              <MarketingFaq items={marketing.faq} />
             </div>
           </div>
         </aside>

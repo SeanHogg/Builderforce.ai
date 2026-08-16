@@ -258,6 +258,34 @@ describe('JSON Resume recognition', () => {
   it('holds no résumé for an unrelated dataset', () => {
     expect(resumeDocumentFromNode({ kind: 'dataset', title: 'Sales', rows: [{ region: 'EMEA', total: '12' }] })).toBeNull();
   });
+
+  /**
+   * A résumé held as TEXT — which is every PDF and every Word import — used to reach
+   * this accessor through a reader that recovered only a name and a summary, so the
+   * variant renderer and the candidate screener both saw an empty work history. The
+   * accessor now runs the same deterministic parser the upload route uses.
+   */
+  it('structures a résumé that is held only as text', () => {
+    const family = createResumeFamily({
+      title: 'Sean Hogg',
+      markdown: [
+        'Sean Hogg',
+        'seanhogg@gmail.com',
+        '',
+        'Experience',
+        'Alliance Inspection Management — CIO',
+        'Sep 2021 - Present',
+        '- Reduced operating costs by $1.79M.',
+        '',
+        'Skills',
+        'TypeScript, Kubernetes, PostgreSQL',
+      ].join('\n'),
+    });
+    const document = resumeDocumentFromNode({ kind: 'resume', title: 'Sean Hogg', resumeFamily: family });
+    expect(document?.basics?.name).toBe('Sean Hogg');
+    expect(document?.work?.length).toBeGreaterThan(0);
+    expect(document?.skills?.length).toBeGreaterThan(0);
+  });
 });
 
 /**

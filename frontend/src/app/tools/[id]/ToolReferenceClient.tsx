@@ -35,9 +35,12 @@ export default function ToolReferenceClient({ toolId, fallbackName }: { toolId: 
   const [def, setDef] = useState<ToolDefinition | null>(null);
 
   const name = def?.name ?? fallbackName;
+  // Every kind counts the things a person has to fill in before it will run —
+  // an analyzer's are documents to paste rather than questions to answer.
   const questionCount = def == null ? 0
     : def.kind === 'calculator' ? def.inputs.length
     : def.kind === 'quiz' ? def.questions.length
+    : def.kind === 'analyzer' ? def.fields.length
     : def.sections.reduce((total, section) => total + section.questions.length, 0);
   const canvasPrompt = tRef('canvas.prompt', { name });
 

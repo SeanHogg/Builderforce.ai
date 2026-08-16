@@ -91,6 +91,398 @@ selects the harness. `harnessForKinds` was deleted — no callers.
 Localized in all five catalogs under `commerce.stage.*`; both themes from tokens; 360px-safe. 44 assertions
 in `stageChecks.test.ts` cover the deployment harness, the entitlement precedence and every lifecycle
 window; api 24/24 guards and 5,959 tests green.
+## ✅ RESOLVED 2026-08-16 — The creator's own shop window: R13, R7 and R12, published together (api 2026.8.19 · frontend 2026.8.32)
+
+W1A · Site delivery, the whole lane, in the order the plan demanded — and in ONE pass because splitting
+it is the defect. A landing page shipped without R13 would have published one producer over the other;
+R12 without R7 would have been a structural editor for a page nothing serves.
+
+**R13 — one publish, two sources, atomically.** `publishStaticSite` now renders the landing document and
+writes it into the SAME version prefix as the build, in the same call. A rollback therefore restores the
+brand page and the app it shipped with as one coherent pair. `SITE_LANDING_KEY` (`__landing.html`) is
+reserved: an uploaded asset at that exact path is dropped, so a build cannot overwrite the shop window
+with an artefact of its own — silently, since both are HTML at one key. *(The entry's premise had already
+partly aged: versioned prefixes landed earlier, so a publish no longer replaces the subdomain root. The
+surviving hazard was two producers each claiming the root of the version prefix, which is what this closes.)*
+
+**R7 — the fork, and the end of a dead column.** `project_sites.landing_object_id` (migration 0473) was
+declared and read by nothing; it is now written on every publish, **including as null**, so a creator who
+deletes their `website` card withdraws the shop window rather than leaving a pointer at a source that no
+longer exists. It rides `SITE_LOOKUP_COLUMNS` onto the cached `SiteRecord`, so the serving question costs
+no round trip and a site with no landing page never reaches the database at all. ONE additive fork in
+`tryServeHostedSite`, on the ENTRY DOCUMENT only — an asset, a deep link and a backend call are served
+exactly as before.
+
+`application/ide/siteVisitor.ts` is the one derivation of who is at the door: no session → visitor;
+session with no subscription row → **entitled**, because a FREE app has no subscription to hold and
+requiring one would lock every free app behind a payment that does not exist; live subscription →
+entitled; lapsed or cancelled → returned to the shop window, still signed in, one click from renewing
+rather than facing an error. `siteSubscriptionState` was extracted for it — `activeSiteSubscription`
+collapsed "never subscribed" and "ran out" into the same null, which is right for a gate and wrong for a
+shop window; it now delegates, so the two facts come from one read.
+
+**A defect found and fixed inside the same pass:** the landing page's "Open the app" button pointed at
+`/`, which is the address the fork itself claims — so the shop window was a room with no exit and a
+visitor could never reach the screen that signs them in. `ENTER_APP_PARAM` (`/?app=1`) is the opt-out,
+chosen over an `/app` path convention because the decision on record is that the app keeps every path it
+has today.
+
+**R12 — the structure, and the vocabulary moved to where both renderers read it.** The section vocabulary
+already existed and only the hero could be patched. `packages/creation-canvas-contract/src/website.ts`
+now owns the kinds, the parser, the caps and five total block operations (insert / move / delete /
+duplicate / patch), each returning its input unchanged when it cannot apply — the caller is a click
+handler and an agent turn, neither of which has anywhere useful to put an exception. `hero` is not
+addable and not deletable, because `websiteHeroFrom` resolves exactly one and a second would make "the
+hero" ambiguous for the card preview, the marketplace tile and the published `<title>` alike; deleting a
+page's last section is refused because `websitePagesFrom` drops a sectionless page, so it would delete
+the page as a side effect of editing it.
+
+The move was forced rather than tidy: the publisher renders the same object to HTML in a Worker where
+React does not exist, and a section vocabulary stated twice is one that drifts until the publisher
+silently drops what the editor allows. `CanvasSiteSurface` gained the buttons and `WebsiteBody` a
+`sectionControls` render prop, so the ~455px card is byte-identical to what it drew before — structural
+editing needs to show what moved, which a preview has no room to do. Controls are disabled, never hidden.
+Localized in all five catalogs; the native `<option>`s carry their own opaque background and colour.
+
+**Verified:** api 24/24 guards, 6,058 tests; frontend 9/9 guards, 373 creation-canvas tests; 16 new tests
+across `siteLandingPage`, `siteVisitor` and the block operations — including that authored copy is
+escaped, that the page switcher is the only script in the document, that both colour schemes are defined,
+and that an unpublishable object renders **null** rather than an empty shell that would replace the app
+for every visitor.
+
+**Still open in this group:** R8 (deployment harness), R9 and R11 (decisions), R10 (`raises_tickets` →
+tickets), R15a–d (the creator + subscriber frontend surfaces).
+
+## ✅ RESOLVED 2026-08-16 — Fifteen career tools, one runner: the ported articles stop linking to 404s (api 2026.8.18 · frontend 2026.8.31)
+
+Fifty-six articles ported from hired.video walked readers step-by-step to `/tools/ai-resume-scorer`,
+`/tools/career-360`, `/tools/salary-calculator` and twelve more. None of those URLs existed, so the
+corpus shipped advertising a product that answered 404. All fifteen now resolve.
+
+**The build was almost entirely adapters, because the hard part was already ported.**
+`api/src/application/career/` (PRD 18 T1) already held every reading — `scoreResume`, `compareResumeToJob`,
+`tailorResume`, `planForTarget`, `analyzeSalary`, `auditProfile` and the rest — pure, deterministic and
+unit-tested, and already exposed to the recruiter and hr agents via `careerToolCatalog.ts`. What was
+missing was a path from those functions to a web page. `application/tools/careerTools.ts` is that path
+and contains no scoring of its own.
+
+**One new kind, not fifteen routes.** `ToolKind` gained `analyzer` — read a document, score it — beside
+`calculator`/`questionnaire`/`quiz`. `/tools/[id]` and the hub were not modified to know about career
+tools: they render whatever `GET /api/tools` returns, so the fifteen arrived as registry data. `ToolRunner`
+delegates to a new `AnalyzerRunner` on kind, so no caller — reference page or canvas object — branches.
+
+- `POST /api/tools/:id/analyze` — public and uncached, deliberately: the cache key would be a hash of a
+  whole résumé, so the keyspace is unbounded and the hit rate ~zero. Documents are capped at 40k chars
+  so a paste cannot burn the isolate's CPU budget.
+- `ToolRecommendation.priority` added — the analyzers RANK their findings, and a ranked plan rendered
+  flat is a to-do list. Rendered as a semantic chip (critical/important/minor), not the accent.
+- Analyzers cannot be scored against a project: `compute()` returns null for the kind, so a 0..100 career
+  score can never enter the 0..5 project diagnostic rating.
+- i18n: `tools.analyzer.*`, `tools.priority.*`, `tools.runFailed` and `tools.category.career` in all five
+  catalogues with real translations.
+
+**Two defects the new tests caught before release.** Per-area coverage arrives from `compareResumeToJob`
+already 0..100; multiplying it again rendered "1 of 1 matched" as **10000%**. And `profile-audit` shipped
+with every field optional, so its form ran empty and answered "nothing to read", which reads as broken
+rather than as a prompt. `careerTools.test.ts` now pins the fifteen article slugs as literals — a renamed
+id fails no typecheck and no render, it just 404s a reader — and runs every analyzer against empty,
+whitespace, one-character, 4000-character and punctuation-only input.
+
+Verified: api 24/24 guards + 6058 tests green; frontend 9/9 guards green, `tsgo --noEmit` clean on both.
+
+Still open: the five companion routes (`/salary/*`, `/companies`, `/reviews`, `/references`, `/interview`)
+— browsable pages rather than tools. See the Gap Register entry in ROADMAP.md group 14.
+
+---
+## ✅ RESOLVED 2026-08-16 — "Convert this pdf into a resume" — four failures in one turn, from the glyph up (frontend 2026.8.30 · api 2026.8.17 · VSIX 2026.8.128)
+
+Reported from a live canvas session: a five-page PDF résumé was dropped on the board, the object
+landed as a file icon reading **"Text not extractable"**, and Brain answered *"please copy and paste
+the text from Sean Hogg Resume (2024-11).pdf here"* — asking the person to retype a document the
+product was holding. Three model round-trips, 9.9 seconds, nothing on the canvas. The upload
+endpoint the user remembered from hired.video WAS ported (`career/resumeExtract.ts`, PRD 18 T1) and
+does work — but only from inside the résumé editor's own file picker. Nothing on the path from
+"drop a file on the canvas" reached it. Four separate defects were stacked on that path.
+
+### 1 · The PDF reader could not read any PDF written after about 2005
+
+`readPdf` inflated streams and pulled text out of `(…) Tj` literals. Every PDF a person actually
+drops — Google Docs export, Word "Save as PDF", Pages — embeds **subset fonts under
+`/Encoding /Identity-H`**, where the bytes in a shown string are GLYPH INDICES, not characters, and
+the strings are written in hex (`<0036>`) which the old regex did not match at all. Read as
+characters they decoded to mojibake and the legibility gate correctly refused to show it. The
+glyph→character table was in the file the whole time: every such font carries a `/ToUnicode` CMap.
+
+`lib/office/pdf.ts` is now a real reader — object table, `/ObjStm` expansion, per-page font
+resources (`/F1` points at a different font on page two of the very file that prompted this),
+`/ToUnicode` bfchar + bfrange, `/Widths` and CID `/W` glyph advances, WinAnsi's 0x80–0x9F range, and
+`Tm`/`Td`/`TD`/`T*` line tracking. Measured over nine real CVs plus six unrelated PDFs:
+
+| | before | after |
+|---|---|---|
+| Google Docs export (the reported file) | 0 chars | 7,559 chars, 5 pages |
+| Word 2016 export | 0 chars | 12,110 chars |
+| 8-page CV | 0 chars | 15,447 chars |
+| scanned, image-only, 11 pages | 0 chars in **24.1 s** | 0 chars in **130 ms** |
+
+Two bugs found while measuring were fixed with it. The text LINE origin and the PEN were the same
+variable, so every relative `Td` compounded on the width just drawn and a page that positions each
+glyph separately read as `S e a n H o g g`. And a page whose content shows no text at all was run
+through the full operator tokenizer anyway — 20 MB of vector path data, 24 seconds, to produce the
+nothing a literal `BT|Tj|TJ` test produces in a millisecond.
+
+### 2 · There was no tool that turns a document on the board into a résumé
+
+Every résumé tool downstream — `canvas_render_resume_variants`, `canvas_screen_resumes`, the ATS
+check — needs a `resume` object, and nothing made one from a document already on the canvas. So the
+model did the only thing left and asked for a paste. **`canvas_import_resume`** reads the text the
+importer already extracted and structures it with the same deterministic reader the upload route
+uses — no model, no upload, no tokens — and is guest-safe for exactly that reason. The variant
+renderer's "no résumé here" error now names it instead of dead-ending.
+
+### 3 · The deterministic parser existed, on the wrong side of the wire
+
+`resumeDocumentFromText` lived in `api/application/career/`. The canvas had its own
+`resumeDocumentFromMarkdown`, which recovered **a name and a summary and nothing else**. That stub is
+what `resumeDocumentFromNode` fell back to for any résumé held as text — which is every PDF and Word
+import — so a real CV restyled into twelve blank templates and screened as "no parsed resume
+document". Reader, sectioniser and lexicon moved to `@builderforce/creation-canvas-contract`, beside
+the `CanvasResumeDocument` type they produce; nine API import sites repointed; the stub now delegates.
+One parser, three surfaces.
+
+### 4 · Bullets were dropped for want of one codepoint
+
+Two hand-written bullet character classes that disagreed with each other, and **neither listed
+`⦁` (U+2981)** — which is what Google Docs writes and therefore what a PDF résumé extracts as. Ten
+roles parsed with zero highlights each. One exported `RESUME_BULLET_GLYPH` now, widened to the
+glyphs real documents use including Word's private-use Symbol bullets, and `INLINE_SEPARATOR`
+accepts a separator with space on one side only, so `Alliance Inspection Management ▪Farmington
+Hills` yields the employer without the city glued on.
+
+**End to end, on the reported file:** 5 pages → 7,559 chars → name, label, email, phone, summary,
+**10 roles with real date ranges and 6/10/6/6/5/5/5/5/4/4 highlights**, education, 20 skills. In the
+browser, with no upload and no model.
+
+Guards: 5 new `readPdf` tests over a PDF assembled in the test from an Identity-H subset font and its
+CMap; a `resumeDocumentFromNode` test that a text-only résumé yields real work and skills.
+
+
+Two things, one root cause: the canvas had grown a real second axis and never grew the chrome to
+show it.
+
+### 1 · The switcher moved out of the zoom rail and into the session header
+
+`CanvasSurfaceSwitcher` rendered as three React Flow `ControlButton`s inside the bottom-left zoom
+rail — the same size, weight and colour as zoom-in, zoom-out, fit, arrange, files and outline, with
+nothing marking the three as a set and nothing showing which was lit. Three of nine identical
+glyphs. A person who never hovered the fifth icon never learned the product had a chat mode.
+
+The decision is not a navigation command; it is the answer to *"what am I looking at"*. So on a
+desktop it is now a labelled segmented control in the session bar, next to the title it applies to.
+The `rail` variant is gone — replaced by `header`, which draws the label rather than only announcing
+it. Between 1180px and the phone breakpoint the words drop and the glyphs stay; `aria-label` carries
+the name throughout. Below 860px the header segment stands down entirely and the phone keeps its
+existing control column, so exactly one copy of the decision is ever on screen.
+
+No new state and no second owner: the component already owned the decision and already rendered in
+two chromes. This was a change of mount point and button chrome.
+
+### 2 · `site` — the fourth object surface
+
+`website` and `prototype` are real kinds with real structure — `pages[]`, a theme, six section kinds
+— and `WebsiteBody` already rendered all of it, in a 455px card. A desktop layout drawn at a third of
+its intended width, with the page nav competing with the card's own title, and no way to check the
+phone breakpoint the author was designing for.
+
+It is **not** the `page` surface with more room. A page has one sheet and a reading measure; a site
+has a set of pages you move between and a width that belongs to the artefact. Folding them together
+would have meant a sheet that is 880px of prose for a résumé and 390px of phone chrome for a landing
+page *depending on the kind* — exactly the per-kind branch the registry exists to prevent.
+
+Two decisions worth recording:
+
+- **`WebsiteBody` moved to its own `WebsiteCanvas.tsx`.** It now has two consumers, and a component
+  with two consumers living inside one of them is how the two drift — the board preview and the
+  full-size editor would eventually have disagreed about which page is active, which is precisely
+  what a person switches surfaces to check. One renderer; the surface differs only in the room it is
+  given and the width it asks for. The card passes no viewport and keeps reading `data.viewport`.
+- **The viewport control is local, not persisted.** `data.viewport` is what the site *is* — what the
+  board preview and any export read. The control is what the *reader* is currently checking. Looking
+  at a desktop site at phone width must never quietly re-author it, so it starts from the object's
+  own viewport and stays in the component. Only the page nav writes back, because which page is open
+  genuinely belongs to the object.
+
+### 3 · Found on the way: four locales were publishing stale competitor prices
+
+Verifying catalog parity surfaced `compare.categories[0].rows[0]`. English had been corrected to
+"See vendor pricing" with a `note` reading *"Plans change; verify current vendor pricing"* — and zh /
+es / fr / de still printed hard figures (`$19/user/mo`, `$20/user/mo`, `$500/mo`) with no disclaimer.
+A factual claim about other companies' pricing, live in four languages. All four rows aligned to the
+English shape, note included. Catalogs now at 16,798 keys each with zero drift in either direction.
+
+**Verified:** 335/335 creation-canvas tests across 25 files (16/16 in the surface suite, including
+new coverage for the header placement and the site runtime end-to-end), `tsgo` clean for every file
+touched, and 9/9 guards green. The design-scale ratchet caught two off-scale radii I had written
+(`calc(var(--radius-md) - 2px)` / `- 3px`) — both fixed to `--radius-sm` rather than baselined.
+
+## ✅ RESOLVED 2026-08-15 — The 992-line reader family, and the test file that was slow for a reason nobody had measured
+
+Both items the previous pass logged instead of fixing. Neither needed anything it could not reach.
+
+### 1 · `officeFormats.ts` — 992 lines against the 800-line ceiling
+
+`check:architecture` reported `new violation lib/officeFormats.ts`. The file was never one thing: it
+held the ZIP container, XML decoding, and the `.docx` / `.xlsx` / `.pptx` / PDF / RTF readers, of which
+**the PDF reader alone is 440 lines** of xref walking, object streams, font CMaps and glyph widths that
+shares nothing with Word beyond two `TextDecoder`s.
+
+Split along the file's OWN section banners into `lib/office/`: `container.ts` (the ZIP every OOXML
+format is packed in, plus the XML decoding its parts share), `docx.ts`, `xlsx.ts`, `pptx.ts`, `pdf.ts`,
+`rtf.ts`. Sliced mechanically rather than retyped, so no line changed on the way.
+
+Two decisions worth recording:
+
+- **`officeFormats.ts` survives as the door**, re-exporting the same public surface, so all seven
+  importers — `canvasFileImport`, `canvasDocuments`, `diagramVsdx`, `CreationCanvas` and three test
+  files — are untouched by the split. A rename would have been a second change riding on a refactor.
+- **`PAGE_BREAK_MARKER` moved to `container.ts`.** It was declared in the DOCX section and read by the
+  PDF reader, which would have made `pdf.ts` import from `docx.ts` — a PDF has nothing to do with
+  Word. Both readers emit the marker, so it belongs to the substrate; two copies of one marker string
+  are two ways for a page break to stop being recognised.
+
+The compiler found every cross-module reference: `latin1`, `inflate`, `attribute`, `inlineSafe`,
+`decodeXmlText` and `openZip` were file-private and are now the substrate's declared exports. Largest
+remaining file is `pdf.ts` at 448. Typecheck clean, 100 tests across the four suites that read these
+formats pass, ratchet green.
+
+### 2 · `canvasSurfaces.test.tsx` — the cost was the QUERIES, not the mounts
+
+The previous entry blamed "fourteen full `<CreationCanvas>` mounts" and prescribed fewer mounts. That
+was a guess, and per-test timings say it was wrong:
+
+| test | before |
+|---|---|
+| `lets exactly one surface be lit` (12 role scans) | **16,158 ms** |
+| `stops offering to move the conversation…` (2 scans) | 10,490 ms |
+| `hands the board back…` | 8,885 ms |
+| `never offers an object surface` — no clicks at all, 4 scans | 7,692 ms |
+| every test using `getByTestId` / `within(group)` | **718–1,397 ms** |
+
+Same mount, ten times the cost — so the mount is ~1s and the rest is
+`screen.getAllByRole('button', { name })`, which computes an accessible name for **every button in the
+document**, and a mounted canvas has the whole palette in it. The test that timed out called it twelve
+times.
+
+Fixed at the query, keeping every assertion:
+
+- One `surfaceButton(name)` helper resolving through the `role="group"` the switcher already declares
+  — the same control, a handful of nodes instead of the document. (The test asserting the buttons are
+  in that group and nowhere else is what makes the scoping assert nothing away.)
+- `never offers an object surface on the switcher` now reads the switcher's WHOLE contents in one
+  unfiltered scan instead of four name-filtered ones — **stronger** as well as cheaper, because a
+  leaked object surface now fails whatever it is called, including a fifth nobody has added yet.
+- `stops offering to move the conversation…` queries by `aria-label` (an attribute selector) rather
+  than role+name; the control carries an explicit label, so it is the same element by the same name.
+
+**Result: 40.9s → 9.7s of test time, 16/16 passing**, and the slowest single test is 2.9s against the
+60s ceiling — a 20× margin where it was 1.5×. That is the actual fix for "fails whenever the machine is
+shared", and it is the opposite of the fourth timeout raise this suite has reached for: the guard's
+ceiling is untouched.
+
+### 3 · The "flake" that was a constant pointing the wrong way
+
+The full-suite run after those two fixes came back with one failure —
+`AgentExecutionControl.test.tsx`, the file DONE.md has twice recorded as a load flake, "Testing
+Library's 1s default is not enough … on a loaded machine". It is not a flake, and it was never about
+1s.
+
+The file carried its own `const SAVE_TIMEOUT = { timeout: 5_000 }`, added to RAISE that 1s default.
+Since then `src/test/setup.ts` configured `asyncUtilTimeout: 20_000` for every wait in the project —
+and an explicit `timeout` argument OVERRIDES the configured one. So the constant written to be more
+patient had silently become the only thing in the file that was LESS patient, applied to exactly the
+assertion that kept failing. 472ms alone, timed out in the suite.
+
+Removed, and the sweep for the same shape found **seven more**, all capping below the configured
+patience and none of them asserting speed: three in `CreationCanvas.test.tsx` at **2,000ms** — the
+heaviest mount in the app, so the most likely to starve — and four in
+`ProviderKeysSettings.dragReorder.test.tsx` at 5,000ms. All eight call sites are gone: one place
+decides how long a wait waits, and it is the setup file. 83 + 6 tests across the three files pass.
+
+### 4 · The same disease in the two canvas files that failed next, and what the cost actually is
+
+The next full run failed two more: `CreationCanvas.build.test.tsx` and `CreationCanvas.test.tsx`'s 3D
+test. Both passed alone, so both were the same margin problem — and measuring them corrected the
+diagnosis from §2.
+
+- **`CreationCanvas.build.test.tsx`** — 23.8s / 12.6s / 16.7s / 8.9s per test on an IDLE machine. Its
+  shared `addBuilder()` helper clicked `getByRole('button', { name: 'Builder' })`; every palette entry
+  already carries `data-testid="canvas-palette-<kind>"` for exactly this, and `canvasSurfaces.test.tsx`
+  next door was already using it. Switched (the kind is `build`, not `builder` — the label is
+  "Builder"), plus the one palette query in the fourth test. **62s → 19s, 4/4 passing.**
+
+- **`CreationCanvas.test.tsx` > opens the 3D view** — **46.2s against the 60s ceiling on an idle box**,
+  a 1.3× margin, so it failed whenever anything ran beside it. Eighteen document-wide role queries in
+  one test.
+
+  **The measurement worth keeping:** dropping the NAME filter (one `getAllByRole('button')` scan plus a
+  JS filter) only took it 46s → 41s. So the cost is not accessible-name computation, which is what §2
+  concluded from the switcher file — it is that every role scan re-runs Testing Library's
+  accessibility-visibility check across a document holding the whole canvas palette. A
+  `querySelectorAll('button')` with the same name filter is **9.0s**, and every count the test pins is
+  unchanged.
+
+  The trade is written into the helper rather than hidden: matching literal `<button>` elements would
+  not notice one being hidden from the accessibility tree. That is the right tool for "how many of
+  these exist" and the wrong one for "can a user reach this", so the other 82 tests in the file keep
+  `getByRole`.
+
+### The check that matters
+
+The full frontend suite had gone red three runs in a row, on a different canvas test each time, always
+"passes alone". After the four fixes: **266 files / 2,842 tests / exit 0**, and the wall-clock came down
+from **868s to 503s** — because the query cost that was failing those tests was also most of what the
+suite was spending. A margin problem and a speed problem turned out to be one problem.
+
+Verified: frontend **9/9 guards** and the full suite green, `tsgo --noEmit` clean; api **24/24 guards**.
+`check:roadmap` green with both register entries removed.
+
+---
+
+## ✅ RESOLVED 2026-08-15 — 202 translation keys were rendered as their own dotted path; the guard that lets that happen is closed (frontend 2026.8.28)
+
+**The report.** The prompt library's detail panel showed `promptsPage.usePromptCopy` on its primary button,
+`promptsPage.promptVersionLabel` above the prompt body and `promptsPage.variablesLabel` above the variables —
+literal dotted keys where labels belong. next-intl falls back to the key path when a message is missing, so the
+component was correct and the catalogs simply never got the keys.
+
+**It was not one panel.** A sweep of every `t('…')` in the tree against `en.json` found **202 distinct keys
+across 21 files** with the same defect, because nothing tested source against catalog:
+
+| guard | direction | what it proves |
+| --- | --- | --- |
+| `messages.test.ts` | catalog → catalog | zh/es/fr/de have exactly the keys `en` has; every ICU parses |
+| **`scripts/check-i18n-keys.mjs`** (new) | **source → catalog** | **every key a component renders exists** |
+
+`/import` was the worst of it: the `import` namespace **did not exist at all**, so the mode toggle, both
+wizards, every field label and both downloadable reports rendered raw keys — 121 of the 202.
+
+**Four were a different bug wearing the same clothes.** `billing.cycle`, `cofounder.strength`,
+`cofounder.commitment` and `canvas.ads.objective` are objects of enum values, and each was ALSO being asked for
+as its own control's label. next-intl renders the path when asked to format an object, so the label above each
+`<select>` read `billing.cycle`. They now ask for `*Label`.
+
+**Three English strings that no catalog could reach.** `importHelpers.ts` composed row-validation reasons and a
+dry-run summary as sentences, and `import-input-schema.ts` carried an English `label`/`tooltip` per field — all
+rendered directly, all outside React and therefore outside any translator. The reasons are `RowErrorCode`s now,
+the summary is three counts the component composes through ICU, field labels derive their key via
+`fieldLabelKey()`, and both CSV downloads take their headings from the caller.
+
+**Also:** the prompts detail panel was a hand-rolled drawer — its own scrim, its own `min(560px)` box, its own
+`×` — so it had no Esc, no portal and none of the reader's width control. It is a `SlideOutPanel` now, per the
+convention that primitive was written for.
+
+`check:i18n-keys` runs in `checks.manifest.mjs` (9/9 green), 53 i18n tests pass, `tsgo --noEmit` and eslint are
+clean.
 
 ## ✅ RESOLVED 2026-08-15 — 61 authenticated routes met one generic sentence; they now meet their destination and the method (frontend 2026.8.27)
 

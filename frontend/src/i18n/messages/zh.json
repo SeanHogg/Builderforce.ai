@@ -1131,11 +1131,25 @@
     "featuredDesc": "覆盖六大实践的完整 CMMI 式评估，并提供根据真实交付数据评分的数据驱动版本。",
     "open": "打开",
     "loading": "加载中…",
+    "runFailed": "无法运行此工具。",
+    "priority": {
+      "high": "严重",
+      "medium": "重要",
+      "low": "次要"
+    },
+    "analyzer": {
+      "run": "开始分析",
+      "running": "正在读取…",
+      "optional": "可选",
+      "needsRequired": "请粘贴必填文本后再运行。",
+      "privacy": "你的文本在服务器上分析，不会被存储，也不会发送给任何模型。"
+    },
     "category": {
       "delivery": "交付",
       "finops": "成本与 FinOps",
       "governance": "治理",
-      "quality": "质量"
+      "quality": "质量",
+      "career": "职业与简历"
     },
     "kind": {
       "calculator": "计算器",
@@ -5864,7 +5878,10 @@
         "summary": "Continue.dev 是一个用于单智能体辅助的开源 IDE 扩展。Builderforce.ai 独立于 IDE，通过完整的规划、缺陷修复、重构和评审工作流编排多个专家智能体，并具备审批、审计和持久化记忆。",
         "verdict": "当你想要独立于 IDE 的多智能体交付和治理，而非编辑器内的助手时，选择 Builderforce.ai 而非 Continue.dev。"
       }
-    }
+    },
+    "matrixHeading": "逐项能力对比",
+    "matrixNote": "每一行代表一项能力，每一列代表一款工具。单元格描述的是我们目前所了解的支持情况。各厂商的产品与方案变动频繁，因此对决策至关重要的内容，请对照厂商的最新文档并通过实际试用加以核实。",
+    "matrixScrollHint": "左右滑动表格即可查看全部工具。"
   },
   "promptUseCases": {
     "tabLabel": "选择起点",
@@ -9038,7 +9055,10 @@
     "creating": "正在创建账户…",
     "submit": "创建账户 →",
     "haveAccount": "已有账户？",
-    "signInLink": "登录"
+    "signInLink": "登录",
+    "discountCodeLabel": "优惠码",
+    "discountCodeSaved": "已保存，注册后将在结账时使用。",
+    "ageAttestation": "我确认本人已年满 18 周岁。BuilderForce 并非面向儿童提供。"
   },
   "welcomeRole": {
     "eyebrow": "欢迎",
@@ -18070,7 +18090,21 @@
         "desktop": "桌面",
         "tablet": "平板",
         "mobile": "手机",
-        "pageCount": "{count, plural, =0 {无页面} other {# 个页面}}"
+        "pageCount": "{count, plural, =0 {无页面} other {# 个页面}}",
+        "addSection": "添加",
+        "addSectionPrompt": "添加板块…",
+        "moveUp": "上移",
+        "moveDown": "下移",
+        "duplicate": "复制",
+        "delete": "删除",
+        "sectionTools": "编辑{kind}板块",
+        "section": {
+          "features": "功能",
+          "content": "文字",
+          "stats": "数据",
+          "testimonial": "引言",
+          "cta": "行动号召"
+        }
       },
       "timeline": {
         "label": "时间轴",

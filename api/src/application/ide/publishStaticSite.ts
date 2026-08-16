@@ -30,6 +30,7 @@ import {
 import { ensureDefaultCollection } from './siteData';
 import { ensureProjectBackend } from '../backend';
 import { recordSiteRelease, type ReleaseSource } from './siteReleases';
+import { SITE_LANDING_KEY, landingPageForProject } from './siteLandingPage';
 
 /** A single built file, dist-relative. */
 export interface PublishAsset {
@@ -90,7 +91,7 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
   }
 
   const [current] = await db
-    .select({ subdomain: projectSites.subdomain })
+    .select({ subdomain: projectSites.subdomain, landingObjectId: projectSites.landingObjectId })
     .from(projectSites)
     .where(eq(projectSites.projectId, projectId))
     .limit(1);
@@ -136,11 +137,46 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
 
   let totalBytes = 0;
   for (const asset of assets) {
+    // The landing document's key is reserved. A build that happens to emit a file at
+    // this exact path would otherwise overwrite the creator's shop window with one of
+    // its own artefacts — and silently, since both are HTML at the same key.
+    if (asset.path === SITE_LANDING_KEY) continue;
     totalBytes += asset.size;
     await bucket.put(newPrefix + asset.path, asset.body, {
       httpMetadata: { contentType: contentTypeFor(asset.path) },
     });
   }
+
+  // ── The second source ────────────────────────────────────────────────────────
+  // The landing page is rendered and written HERE, into the same version prefix, in
+  // the same publish. Publishing it separately is what the single-prefix hazard
+  // actually is: two producers each replacing the site's contents, so a deploy
+  // silently drops the brand page or a page republish 404s the app. Written together,
+  // a release is one atomic pair and a rollback restores both.
+  //
+  // Best-effort by design: an app that builds must never fail to ship because its
+  // shop window could not be rendered. A failure here leaves the previous release's
+  // landing page behind — which is stale, and still better than an unpublishable app.
+  let landingObjectId: string | null = null;
+  try {
+    const landing = await landingPageForProject(db, projectId, {
+      brand: projectName || subdomain,
+      preferObjectId: current?.landingObjectId ?? null,
+    });
+    if (landing) {
+      landingObjectId = landing.objectId;
+      totalBytes += landing.html.length;
+      await bucket.put(newPrefix + SITE_LANDING_KEY, landing.html, {
+        httpMetadata: { contentType: 'text/html; charset=utf-8' },
+      });
+    }
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/ide/publishStaticSite.ts',
+      operation: 'renderLandingPage',
+    });
+  }
+
   const [siteRow] = await db
     .insert(projectSites)
     .values({
@@ -153,6 +189,7 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
       versionToken,
       assetCount: assets.length,
       totalBytes,
+      landingObjectId,
       publishedAt: sql`NOW()`,
     })
     .onConflictDoUpdate({
@@ -164,6 +201,10 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
         status: 'active',
         assetCount: assets.length,
         totalBytes,
+        // Written on every publish, including as null: a creator who deletes their
+        // `website` card has withdrawn the shop window, and a stale pointer would go
+        // on serving a landing page whose source no longer exists.
+        landingObjectId,
         publishedAt: sql`NOW()`,
         updatedAt: sql`NOW()`,
       },

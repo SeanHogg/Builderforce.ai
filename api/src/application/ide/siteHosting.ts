@@ -134,6 +134,17 @@ export interface SiteRecord {
   status: string;
   versionToken: string;
   indexDocument: string;
+  /**
+   * The `website` canvas object this site's landing page was rendered from, or null
+   * when the creator has not authored one.
+   *
+   * Carried on the CACHED record rather than read per request: the serving fork asks
+   * "is there a shop window here?" on every root document, and a nullable column that
+   * changes only on publish is exactly the kind of slow-changing fact that must not
+   * cost a round trip on the hot path. The publish invalidates this key, so the answer
+   * cannot outlive the release that changed it.
+   */
+  landingObjectId: string | null;
 }
 
 function siteCacheKey(subdomain: string): string {
@@ -156,6 +167,7 @@ const SITE_LOOKUP_COLUMNS = {
   status: projectSites.status,
   versionToken: projectSites.versionToken,
   indexDocument: projectSites.indexDocument,
+  landingObjectId: projectSites.landingObjectId,
 } as const;
 
 /**

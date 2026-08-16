@@ -47,8 +47,14 @@ vi.mock('@xyflow/react', async () => {
   };
 });
 
+/**
+ * By TESTID, not by role+name. Every palette entry carries
+ * `data-testid="canvas-palette-<kind>"` for exactly this, and a name-filtered role
+ * query has to build an accessible name for every button on a mounted canvas —
+ * the whole palette — which is most of what these four tests were spending.
+ */
 function addBuilder() {
-  fireEvent.click(screen.getByRole('button', { name: 'Builder' }));
+  fireEvent.click(screen.getByTestId('canvas-palette-build'));
 }
 
 // No suite-level timeout override — see the note in `CreationCanvas.test.tsx`:
@@ -98,7 +104,7 @@ describe('Builder objects on the Canvas', () => {
   it('grows an authored Website into a connected Builder that builds a website', async () => {
     render(<CreationCanvas sessionId="builder-from-website-test" persistence="local" />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Website' }));
+    fireEvent.click(screen.getByTestId('canvas-palette-website'));
     fireEvent.click(screen.getByRole('button', { name: 'Build this site with code' }));
 
     await waitFor(() => expect(screen.getByText(/Builder added/)).toBeInTheDocument());
