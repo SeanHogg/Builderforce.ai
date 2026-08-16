@@ -255,19 +255,27 @@ R7 and R15c in one lane and re-create the collision the plan exists to remove.
 
 - `application/ide/siteVisitor.ts` — `resolveSiteVisitor` / `landingPageApplies`, the ONE derivation of
   "is this person entitled to the app on this site". **Owner W1A** (shipped with R7); called by W1C's
-  subscribe surface. It is a different identity space from `launchListing`'s `entitled`, which answers the
-  same question about a WORKSPACE token — the two cannot be one function and must not be one copy either:
-  a `site_user` cookie and a tenant JWT are not interchangeable subjects. One rule per identity space.
+  subscribe surface. It is a different identity space from a WORKSPACE token: a `site_user` cookie and a
+  tenant JWT are not interchangeable subjects, so the HAS-PAID fact is computed per space and always will
+  be — `siteSubscriptionState` here, `holdsLicence` there.
+  **Refined 2026-08-16, and the refinement is the point:** what the two spaces share is not the subject,
+  it is the SELLER's terms — free, full trial, or withdrawn — which are a property of the listing and of
+  nothing else. Keeping those unshared is what produced an actual hole: a site's sign-in is an emailed
+  code anybody can request, so "signed in and not lapsed" handed a PAID app to a stranger. The terms now
+  live once, in `entitledToListing` (`creationListings.ts`), and each identity space passes its own
+  has-paid fact into it. One rule per identity space for WHO you are; one rule overall for WHAT the seller
+  decided.
 - `application/marketplace/siteBilling.*` — the published site's `/__api/billing/{me,subscribe,complete,cancel}`
   handlers, extracted so **W1C owns the money** while **W1A owns the serving fork that mounts them**.
-  Extracting this module is W1C's first commit and W1A rebases onto it.
+  **Extracted 2026-08-16** along with `ide/siteServer.http.ts` (the envelope both share), so W1C inherits
+  the module rather than cutting it; `siteServer.ts` keeps one line, the delegation.
 - `MonitoringService.watchDeployedBackend` — read-only for W1B's `deployment` harness (R8); it already
   does the health assertion and is simply not consulted at publish time.
 
-**Merge order.** W1D and W1E have no dependants and merge whenever they are ready. W1C's `siteBilling`
-extraction lands first so W1A can rebase — and rebases onto a **shipped** W1A, whose R13/R7/R12 landed
-together on 2026-08-16 precisely because splitting them would have published one producer without the
-other. W1INT opens last and merges once.
+**Merge order.** W1D and W1E have no dependants and merge whenever they are ready. W1A's R13/R7/R12
+landed together on 2026-08-16 precisely because splitting them would have published one producer without
+the other, and the `siteBilling` extraction landed with them, so **W1C starts from an already-extracted
+module** rather than owing one. W1INT opens last and merges once.
 
 **Parked inside the wave, deliberately:** the Stage *sandbox* (install the snapshot into a throwaway
 tenant and drive it) stays blocked on an infrastructure decision — a disposable tenant needs a lifecycle

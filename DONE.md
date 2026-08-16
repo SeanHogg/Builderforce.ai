@@ -1,3 +1,97 @@
+## ✅ RESOLVED 2026-08-16 — the four W1A blockers, and the paywall hole the second one exposed
+
+R13/R7/R12 shipped earlier the same day with four items their pass could not close without editing files
+another Wave-1 lane owned. All four close here. One of them turned out to be hiding a live defect.
+
+### 1 · The money left the module that serves bytes
+
+`handleSiteBilling` lived in `application/ide/siteServer.ts`, beside the asset server and the traffic
+counter — so "may this person be charged, and whose ledger does it land in" sat inside the module whose
+job is "read bytes out of R2". It is now **`application/marketplace/siteBilling.ts`**, and `siteServer.ts`
+keeps exactly one line about it: the delegation. The addresses did not move, so every published site is
+unaffected, and **W1C inherits an already-extracted module instead of owing the extraction**.
+
+Its two load-bearing rules are asserted in `siteBilling.test.ts` rather than left to a reader: every route
+refuses an anonymous caller BEFORE it reaches any collaborator that moves money, and the seller's tenant
+comes off the resolved SITE and never off the request.
+
+**`siteServer.http.ts` came out of the same move.** `corsHeaders`, `jsonResponse` and `readSubmission`
+were private to `siteServer.ts` while it held every `/__api/…` handler, and it no longer does. Both
+modules import them, so billing answers in the SAME envelope as the datastore and the auth routes — a
+second copy is how one endpoint starts replying in a shape a published page's `fetch()` cannot read. The
+test asserts neither file re-declares them.
+
+### 2 · A signed-in stranger was being handed PAID apps — found and fixed in this pass
+
+`resolveSiteVisitor` decided entitlement from the visitor's subscription alone: `entitled = state !==
+'lapsed'`, so **never subscribed** counted as entitled. That is exactly right for a free app — there is no
+subscription to hold, and requiring one would lock everybody out of something nobody is charging for — and
+it is a hole for a paid one, because a published site's sign-in is an emailed code anybody can request.
+Sign in, never pay, get the product.
+
+The missing fact was never the visitor's. It was the **seller's**: free, priced, opened to a full trial,
+or withdrawn. The ROADMAP seam note argued the two shop windows "cannot be one function … a `site_user`
+cookie and a tenant JWT are not interchangeable subjects", and that is right about the SUBJECT and wrong
+about what they share. The has-paid fact stays per identity space and always will —
+`siteSubscriptionState` here, `holdsLicence` there. The seller's TERMS are a property of the listing and
+of nothing else.
+
+So **`entitledToListing(facts, hasPaid)`** is those terms, extracted from `launchListing` as a pure
+function over `{ visibility, priceCents, trial }`. `launchListing` calls it; `resolveSiteVisitor` calls
+it. Narrow on purpose — a caller that had to hold the whole 20-column row plus its JSONB body could not
+cache the inputs, and one that cannot cache them reads the catalogue on every request to a public
+website. `listingAccessFacts(row)` is the one projection, so a caching caller and `launchListing` cannot
+disagree about what the inputs are.
+
+Withdrawal moved INTO the rule rather than sitting beside it, which fixed a second latent case on the way:
+the old inline `open` check would have let strangers straight back into a **withdrawn free** listing.
+A lapsed subscriber is refused before the seller is consulted at all — the shop window is where the
+renewal is, whatever the seller has since decided.
+
+### 3 · The site→listing lookup, cached and invalidated exactly
+
+`siteListing.ts` resolves the `app` listing that sells a site through the identity join — the site's
+project ← the board that BECAME it (`link_kind = 'app'`) → the listing published from that board. No
+denormalised pointer on `project_sites`: a second copy of "what sells this app" is a second thing to keep
+true when a seller re-publishes.
+
+The cache key carries the marketplace's own version token (`LISTINGS_VERSION_KEY`, now exported), which
+every listing write already bumps. A publish, a re-publish, a price change or a withdrawal therefore
+orphans every cached site listing at once — **no call from the marketplace into the hosting side, no
+import cycle, and no list of invalidation callbacks for somebody to forget to add to.** The 600s TTL is
+only a ceiling on how long an orphaned entry occupies KV, not on how long a stale answer can be served.
+
+The caching split is the whole design and it is deliberate: what the SELLER decided changes on a publish
+and is cached; what the VISITOR paid changes on a cancellation and is never cached at any layer, because
+a cached "yes" there is a cancelled subscription that keeps working for a TTL. Net cost on the serving
+path is unchanged — an anonymous visitor still pays nothing, and a signed-in one pays one uncached
+subscription read plus a cache hit.
+
+### 4 · `frontend/scripts/**` has a steward
+
+Its ratchet baselines (`useClientFiles` in `check-frontend-architecture.mjs`, `offScaleFontSizes` in
+`check-design-scale.mjs`) are DATA inside those scripts, and the documented way past a ratchet is to move
+the number with a reason in the file header. The directory belonged to no track, so a lane that
+legitimately added a client component could not follow its brief and pass its own guard at the same time.
+It now sits in **T9's `owns`** beside `api/scripts/**`. (`ROADMAP.md` and `DONE.md` had already been made
+shared hubs for the same class of reason.)
+
+### A duplicate that was NOT merged
+
+A parallel W1A branch built R7/R12/R13 a second time — its own landing renderer, its own section
+vocabulary in `frontend/src/lib/`, its own editor under `components/site-editor/`, its own `growth.site.*`
+catalogue keys. It was **discarded rather than merged.** The implementation that shipped puts the section
+vocabulary and the block operations in `@builderforce/creation-canvas-contract`, where the publish
+renderer and the canvas WYSIWYG both read them — one definition of what a landing page is, which is the
+thing the duplicate could not have. Only the four items above were carried across, because only they were
+additive.
+
+**Verified:** 6,089 API tests. Two `npm run check` guards (`check:tenant-column`, `check:shape-lint`) fail
+on `reference_shares` / `0476_professional_references.sql`, which is another lane's in-flight work and
+touches no file in this change.
+
+---
+
 ## ✅ RESOLVED 2026-08-16 — The asset store holds video, so TikTok is reachable from the board that rendered the clip
 
 ### What was wrong
