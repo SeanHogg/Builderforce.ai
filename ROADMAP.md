@@ -133,11 +133,11 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 4 |
 | 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 37 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 158 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 157 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
-| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 40 |
+| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 41 |
 | 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 29 |
 Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
 
@@ -153,11 +153,11 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 7 | 25 |
 | 8 | 4 |
 | 9 | 37 |
-| 10 | 158 |
+| 10 | 157 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
-| 14 | 40 |
+| 14 | 41 |
 | 15 | 29 |
 ---
 
@@ -206,6 +206,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | `packages/creation-canvas-contract/src/index.ts` | object-kind and tool declarations | W1INT. Per-family modules beside it (`marketplaceListings.ts`, `parties.ts`, …) are lane-ownable and already split that way. |
 | `api/src/infrastructure/database/schema/growth.ts` | W1B (hosted-listing lifecycle), W1E (`site_collections.raises_tickets`) | T9-stewarded shared hub; each lane appends its own columns under its own migration band. |
 | `api/src/index.ts`, `frontend/src/lib/builderforceApi.ts` | route and typed-client registration | Existing shared hubs — append-only, serialize and rebase before merge. |
+| `ROADMAP.md`, `DONE.md`, `.github/isolation-tracks.json` (+ the `.generated.md` beside it) | every lane, by the rules on this page | **Added to `sharedHubs` 2026-08-16 (W1D).** Not a widened boundary — a defect corrected. Rule 4 above *requires* every lane to file its mount line into this file, the standing register rule requires it to log what it found, roadmap hygiene requires it to move what it closed to `DONE.md`, and the paragraph above the lane table tells a lane to edit the manifest when a boundary genuinely moved. `check-track-scope.mjs` rejected all four, while `README.md` — their exact peer — was already a hub. `check-track-manifest.mjs` still validates the manifest's contents (no two lanes claiming a file, no colliding bands), so nothing here goes unchecked. Append-only and rebase before merge, like every other hub. |
 
 ### Wave 0 · Seams — one agent, serial, before the wave scales past three lanes
 
@@ -291,6 +292,28 @@ appends here rather than reaching across the boundary; W1INT applies them all at
 | W1B | `api/src/cronSweeps.ts` | Register `runHostedListingSweep` (`application/marketplace/creationListings.hostedSweep.ts`) at the **daily** cadence. It is the only thing that writes `hosted_listing_lifecycle.unreachable_since`, which every state in R9's grace → read-only → released promise derives from. |
 | W1B | `api/src/presentation/routes/creationListingRoutes.ts` | Pass `c.env` as the third argument to `checksForStagedRelease(db, {…})` in `GET /releases/:sessionId/staged/:snapshotId`, so re-opening Stage re-probes a hosted address instead of reporting "not re-checked here". |
 | W1B | `frontend/src/components/creation-canvas/SellInMarketplace.tsx` | Mount `DeliveryChoice` (exported from `CanvasReleasesPanel.tsx`) and pass its value as the third argument to `resolveListingHarness(id, kind, delivery)`, so both publish surfaces answer "what will be checked" the same way. |
+
+#### W1INT mount queue — the lines the integration PR takes
+
+Each row is ONE line a lane could not write itself, because the file it goes in is a hub W1INT owns for
+the wave. Every component named here is **self-mounting**: it reads its own preconditions and renders
+`null` when they do not hold, so the host needs no guard, no `canX` prop and no import of the lane's
+types. Add the line, add the import, change nothing else.
+
+| Lane | Host file | Line to add | Renders nothing when |
+|---|---|---|---|
+| **W1D** | `frontend/src/components/creation-canvas/CreationCanvas.tsx` | `<CanvasAppPanel sessionId={sessionId} />` — beside the board's other header actions | the board has no server session (a local, signed-out canvas), or the reader is below `editor` on a board that is not yet an app |
+| **W1D** | the project page (`frontend/src/app/projects/…`) | `<ProjectAppPanel projectId={project.id} />` | the project has no `project_sites` row — i.e. it was never converted and never published |
+
+Imports: `import { CanvasAppPanel } from '@/components/apps/CanvasAppPanel';` and
+`import { ProjectAppPanel } from '@/components/apps/ProjectAppPanel';`. Both are ordinary client-tree
+components with no `'use client'` directive of their own — they inherit the host's boundary, which is
+what keeps the architecture ratchet flat.
+
+**A note on the project-page host.** `frontend/src/app/projects/[id]/page.tsx` is today a *redirect* —
+it opens the project on the canvas and renders nothing else — so the natural home for
+`ProjectAppPanel` is the `projects` tab body (`ProjectsContent`), on the selected project. W1INT owns
+that call; the component does not care which host mounts it.
 
 ### Wave 2 · Sell it to a business (starts when Wave 1's acceptance test passes)
 
@@ -932,23 +955,13 @@ sequenced into waves because nothing in them gates the sell motion.
 > sub-parts have four different owners across three directories, so as one entry it could only ever be
 > dispatched to one agent — which is the shape that left the whole embedded-apps API uncalled for a
 > full pass. Common to all four: shipped and working server-side are
-> `POST /api/creations/:id/convert-to-app`, `GET /api/creations/address-available`,
-> `GET /api/creations/:id` returning `app`, and `/__api/billing/{me,subscribe,complete,cancel}` on a
-> published site's own origin — **and none of it is called by any component.** Every part below must be
-> localized into ALL FIVE catalogs and work in both themes at 360px.
+> `POST /api/creation-sessions/:id/convert-to-app`, `GET /api/creation-sessions/address-available`,
+> `GET /api/creation-sessions/:id` returning `app`, and `/__api/billing/{me,subscribe,complete,cancel}`
+> on a published site's own origin. **R15a and R15b are CLOSED** (2026-08-16, W1D — see
+> [DONE.md](./DONE.md)): the creator surfaces now call the first three. R15c and R15d remain, and the
+> billing endpoints are still called by nothing. Every part below must be localized into ALL FIVE
+> catalogs and work in both themes at 360px.
 
-- **R15a — the canvas has no "Make this a project" action and no address field.** The one click the
-  whole "project IS the app" decision rests on does not exist on the board. Fix = a self-mounting panel
-  under `frontend/src/components/apps/` that reads `app` off the session response and decides its own
-  state, rather than taking a `canConvert` prop from the canvas; plus the address field validating
-  against `GET /api/creations/address-available`. The single mount line in `CreationCanvas.tsx` is filed
-  to the wave's integration step, not edited by this lane. Unblocks: the conversion being reachable at
-  all. **(W1D)**
-- **R15b — the project page has no app panel.** Once converted, nothing on the project shows address,
-  runtime, data or people. Because there is **no host choice and no database choice to make** (operator
-  decision 3), this panel replaces per-field settings with statements — it reports what the app runs on
-  rather than offering a picker. Fix = a component beside R15a's, mounted on the project page by the
-  integration step. Unblocks: a creator seeing that they now own a running thing. **(W1D)**
 - **R15c — a `site_user` on a published site cannot subscribe, and is never told a new version exists.**
   The billing endpoints answer on the site's own origin and nothing calls them; and since a buyer holds
   a version permanently and is **offered** an update rather than moved onto one, the "you are on vN,
@@ -962,6 +975,18 @@ sequenced into waves because nothing in them gates the sell motion.
   is — is not shown to the person deciding whether to list. Fix = the receipt reads `takeRate` and
   states the distance to the threshold. Unblocks: the 0%-under-threshold decision being a visible
   promise rather than an internal constant. **(W1C)**
+- **R15e — "is this board an app?" costs a whole board graph.** *(found closing R15a, 2026-08-16)*
+  `app` rides `GET /api/creation-sessions/:id`, which is the right place for the canvas — it already
+  makes that read — but it is the ONLY place, so the convert panel (and anything else that wants the
+  four-field answer) has to fetch every object, connection, member and viewport to get it.
+  `embeddedAppsApi.sessionAppState` caches it per board to keep that to one request, which bounds the
+  cost without removing it. Fix = a narrow `GET /api/creation-sessions/:id/app` over the
+  `appForSession` helper that already exists (`application/canvas/convertSessionToApp.ts:130`), and
+  point the gateway at it. **BLOCKER: `api/**` is outside lane W1D's `owns` set** — the wave brief is
+  explicit that the server side is shipped and not to be extended, and `check-track-scope.mjs` rejects
+  the edit. It is a one-route change for whoever owns `creationSessionRouteService.ts` next. Unblocks:
+  a board list, a project card or a share sheet asking the same question without paying for the graph.
+  **(W1INT or T2)**
 
 
 
@@ -1694,6 +1719,7 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
   one running its lanes without a hand-merged JSON. **(W0)**
 - **Date/number formatting bypasses next-intl at 180 call sites** *(architecture review 2026-07-26)* — `frontend/src` has **180** `toLocaleDateString`/`toLocaleString`/`toLocaleTimeString` calls: **157** pass **no locale argument** (so they render in the *browser/OS* language, not the locale the user picked — a zh user on an en-US machine sees English dates inside a Chinese UI) and **10** hardcode `'en-US'` (`adminShared.tsx`, `ArticleCard`, `BlogPostClient`, `RfpDetailClient`, `tools/[id]/page.tsx`). Only 1 `Intl.NumberFormat` and 16 `Intl.DateTimeFormat` instances exist, none locale-bound. Fix: a `useFormat()` hook (+ `getFormat()` server variant) that reads the active next-intl locale and exposes `date`/`dateTime`/`number`/`currency`/`relative`, then codemod the 180 sites. Unblocks: locale-correct dates/numbers, which no amount of catalog translation reaches. Related: the `taskStatusLabel` item below.
 - **RSC is effectively unused and i18n coverage is ~58%** *(architecture review 2026-07-26)* — **571 of 660** `.tsx` components carry `'use client'` (86%), so the App Router ships a SPA and the server-component data path is unavailable to almost every screen; **384 of 660** use `useTranslations`/`getTranslations`, leaving ~276 components with hardcoded English (consistent with the ~330 figure above, measured differently). No fix proposed as a single item — this is the size of the i18n backlog above plus a note that any "move this fetch to the server" plan is blocked until the client boundary is pushed down.
+- **`SiteInfo.totalBytes` is typed `number` and arrives as a `string`** *(found 2026-08-16 closing R15b)* — `api/src/presentation/routes/ideRoutes.ts:598` casts the `int8` column with `::text` **deliberately**, because Drizzle's bigint mapper would silently truncate it; `frontend/src/lib/api.ts:301` then declares the field `number`. Every consumer that does arithmetic on it is doing it on a string: `ProjectAppPanel` coerces with `Number(...)` at the edge and `SitePublishPanel` renders it straight, so nothing is visibly broken today — but the next `totalBytes + x` concatenates. Fix = type it `string` (matching the wire and the reason for the cast) and coerce at each read, or add a `totalBytesNumber` derived server-side. **BLOCKER: `frontend/src/lib/api.ts` is outside lane W1D's `owns` set** and `check-track-scope.mjs` rejects the edit; it belongs to whoever owns the IDE client next. Unblocks: a size figure that can be summed, compared or charted without a landmine. **(T2)**
 - **`taskStatusLabel` is an English-only label map outside next-intl** *(found 2026-07-25 while fixing the accountability banner)* — `frontend/src/lib/taskStatus.ts` `TASK_STATUS_LABELS` ("Backlog"/"In Review"/…) plus the `humanizeStatus` fallback are plain constants consumed by the board, the lane editor and now the Sign-off gap lines, so every lane/status name renders English in zh/es/fr/de. Fix: move the labels to a `taskStatus.*` catalog namespace and expose a `useTaskStatusLabel()` hook (plus a `getTranslations` variant for server callers), then migrate the call sites. Unblocks: a fully-localized board, which is the largest remaining English surface after the marketing copy.
 
 ---
