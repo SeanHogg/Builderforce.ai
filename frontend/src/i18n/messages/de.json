@@ -17144,7 +17144,7 @@
     "noticeGradebookEmpty": "Noch nichts zu berechnen — keine Lernenden oder Aufgabenspalten in diesem Notenbuch.",
     "noticeSubmissionMarked": "{name} bewertet: {percent}% ({mark} von {total})",
     "noticeSubmissionMarkedLate": "{name} bewertet: {percent}% ({mark} von {total}), {days, plural, one {# Tag} other {# Tage}} zu spät, {deducted} abgezogen",
-    "noticeSubmissionNoPlacements": "Diese Abgabe hat noch keine Rubrik-Einstufungen. Schreiben Sie eine Zeile pro Kriterium in `placements` — {criterion, levelIndex, comment} — und rufen Sie `mark` erneut auf.",
+    "noticeSubmissionNoPlacements": "Diese Abgabe hat noch keine Rubrik-Einstufungen. Schreiben Sie eine Zeile pro Kriterium in `placements` — '{'criterion, levelIndex, comment'}' — und rufen Sie `mark` erneut auf.",
     "noticeSubmissionPlacementsIncomplete": "Noch nicht jedes Kriterium ist eingestuft: {criteria}. Fügen Sie die fehlenden Zeilen zu `placements` hinzu und rufen Sie `mark` erneut auf.",
     "noticeSubmissionNoRubric": "Die Aufgabe oder die Rubrik dieser Abgabe konnte auf dem Board nicht gefunden werden.",
     "noticeSubmissionRubricBroken": "Die Rubrik, gegen die diese Aufgabe bewertet wird, ist noch nicht nutzbar: {reason}",
@@ -19107,12 +19107,6 @@
           "console": "Konsole"
         },
         "errorCount": "{count, plural, one {# Fehler} other {# Fehler}}",
-        "viewport": "Vorschaubreite",
-        "viewportName": {
-          "desktop": "Desktop",
-          "tablet": "Tablet",
-          "mobile": "Handy"
-        },
         "publish": "Veröffentlichen",
         "frameTitle": "{path}, läuft",
         "idleTitle": "Bereit zum Start",
@@ -19149,10 +19143,6 @@
       "site": {
         "label": "Website",
         "open": "Website öffnen",
-        "viewport": "Vorschaubreite",
-        "desktop": "Desktop",
-        "tablet": "Tablet",
-        "mobile": "Handy",
         "pageCount": "{count, plural, =0 {keine Seiten} one {# Seite} other {# Seiten}}",
         "addSection": "Hinzufügen",
         "addSectionPrompt": "Abschnitt hinzufügen…",
@@ -19177,24 +19167,63 @@
       "world": {
         "label": "3D-Raum",
         "open": "3D-Raum öffnen",
-        "mode": { "edit": "Bauen", "walk": "Laufen" },
+        "mode": {
+          "edit": "Bauen",
+          "walk": "Laufen"
+        },
         "palette": {
           "hint": "Ziehe ein Bauteil in den Raum.",
-          "group": { "building": "Bauteile", "zones": "Zonen", "props": "Objekte", "fx": "Effekte" },
-          "kind": { "block": "Block", "ramp": "Rampe", "sphere": "Kugel", "platform": "Plattform", "collectible": "Sammelobjekt", "goal": "Ziel", "hazard": "Gefahr", "light": "Licht" }
+          "group": {
+            "building": "Bauteile",
+            "zones": "Zonen",
+            "props": "Objekte",
+            "fx": "Effekte"
+          },
+          "kind": {
+            "block": "Block",
+            "ramp": "Rampe",
+            "sphere": "Kugel",
+            "platform": "Plattform",
+            "collectible": "Sammelobjekt",
+            "goal": "Ziel",
+            "hazard": "Gefahr",
+            "light": "Licht"
+          }
         },
         "panel": {
-          "transform": "Transformation", "appearance": "Erscheinungsbild", "physics": "Physik & Körper", "actions": "Aktionen",
-          "position": "Position", "rotation": "Rotation", "scale": "Skalierung", "color": "Farbe", "body": "Körpertyp",
-          "physicsKind": { "static": "Statisch", "dynamic": "Dynamisch", "kinematic": "Kinematisch", "sensor": "Sensor (durchquerbar)", "none": "Keiner" },
+          "transform": "Transformation",
+          "appearance": "Erscheinungsbild",
+          "physics": "Physik & Körper",
+          "actions": "Aktionen",
+          "position": "Position",
+          "rotation": "Rotation",
+          "scale": "Skalierung",
+          "color": "Farbe",
+          "body": "Körpertyp",
+          "physicsKind": {
+            "static": "Statisch",
+            "dynamic": "Dynamisch",
+            "kinematic": "Kinematisch",
+            "sensor": "Sensor (durchquerbar)",
+            "none": "Keiner"
+          },
           "deleteProp": "Objekt löschen",
-          "sky": "Himmel & Boden", "skyColor": "Himmel", "groundColor": "Boden", "groundSize": "Größe (m)",
-          "spawn": "Startpunkt", "lighting": "Beleuchtung", "ambient": "Umgebungslicht", "sun": "Sonne",
-          "stats": "Statistik", "propCount": "Objekte"
+          "sky": "Himmel & Boden",
+          "skyColor": "Himmel",
+          "groundColor": "Boden",
+          "groundSize": "Größe (m)",
+          "spawn": "Startpunkt",
+          "lighting": "Beleuchtung",
+          "ambient": "Umgebungslicht",
+          "sun": "Sonne",
+          "stats": "Statistik",
+          "propCount": "Objekte"
         },
         "respawn": "Neustart",
-        "cameraFirst": "Ich-Perspektive", "cameraThird": "Third-Person",
-        "switchToThird": "Zur Third-Person-Ansicht wechseln (V)", "switchToFirst": "Zur Ich-Perspektive wechseln (V)",
+        "cameraFirst": "Ich-Perspektive",
+        "cameraThird": "Third-Person",
+        "switchToThird": "Zur Third-Person-Ansicht wechseln (V)",
+        "switchToFirst": "Zur Ich-Perspektive wechseln (V)",
         "editHint": "Bauteile von links ziehen · Objekt anklicken, um es rechts zu bearbeiten",
         "viewOnlyHint": "„Laufen“ drücken, um diesen Raum zu erkunden",
         "walkHint": "Klicken, um den Zeiger zu sperren · WASD zum Bewegen · Leertaste zum Springen · V zum Ansicht wechseln · Esc zum Freigeben"
@@ -19504,6 +19533,12 @@
       "book": "Hauptbuch zur Erfassung von Finanztransaktionen und Buchungen.",
       "account": "Ein Finanzkonto zur Verfolgung von Salden und Transaktionen.",
       "sticky": "Freies Notizzettel für schnelle Gedanken auf der Arbeitsfläche."
+    },
+    "previewWidth": "Vorschaubreite",
+    "viewportName": {
+      "desktop": "Desktop",
+      "tablet": "Tablet",
+      "mobile": "Handy"
     }
   },
   "canvasCommands": {

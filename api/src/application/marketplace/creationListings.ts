@@ -756,7 +756,7 @@ export async function publishCreationListing(
     strippedFields,
     probe: deploymentProbe(),
     sandbox,
-    voiceClone: voiceCloneProbe(db),
+    voiceClone: voiceCloneProbe(db, input.tenantId),
     systemDryRun: harness === 'system' ? systemDryRunProbe(env as unknown as CloudExecutorEnv) : null,
   });
   if (!isPublishable(checks)) {

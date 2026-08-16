@@ -17144,7 +17144,7 @@
     "noticeGradebookEmpty": "Aún no hay nada que calcular — no hay estudiantes ni columnas de tareas en este libro de calificaciones.",
     "noticeSubmissionMarked": "{name} calificado: {percent}% ({mark} de {total})",
     "noticeSubmissionMarkedLate": "{name} calificado: {percent}% ({mark} de {total}), {days, plural, one {# día} other {# días}} de retraso, {deducted} descontados",
-    "noticeSubmissionNoPlacements": "Esta entrega aún no tiene ubicaciones de rúbrica. Escribe una fila por criterio en `placements` — {criterion, levelIndex, comment} — y vuelve a invocar `mark`.",
+    "noticeSubmissionNoPlacements": "Esta entrega aún no tiene ubicaciones de rúbrica. Escribe una fila por criterio en `placements` — '{'criterion, levelIndex, comment'}' — y vuelve a invocar `mark`.",
     "noticeSubmissionPlacementsIncomplete": "No todos los criterios están ubicados todavía: {criteria}. Añade las filas que faltan a `placements` y vuelve a invocar `mark`.",
     "noticeSubmissionNoRubric": "No se pudo encontrar la tarea de esta entrega ni su rúbrica en el tablero.",
     "noticeSubmissionRubricBroken": "La rúbrica con la que se califica esta tarea aún no es utilizable: {reason}",
@@ -19107,12 +19107,6 @@
           "console": "Consola"
         },
         "errorCount": "{count, plural, one {# error} other {# errores}}",
-        "viewport": "Ancho de vista previa",
-        "viewportName": {
-          "desktop": "Escritorio",
-          "tablet": "Tableta",
-          "mobile": "Móvil"
-        },
         "publish": "Publicar",
         "frameTitle": "{path}, en ejecución",
         "idleTitle": "Listo para ejecutar",
@@ -19149,10 +19143,6 @@
       "site": {
         "label": "Sitio",
         "open": "Abrir el sitio",
-        "viewport": "Ancho de vista previa",
-        "desktop": "Escritorio",
-        "tablet": "Tableta",
-        "mobile": "Móvil",
         "pageCount": "{count, plural, =0 {sin páginas} one {# página} other {# páginas}}",
         "addSection": "Añadir",
         "addSectionPrompt": "Añadir una sección…",
@@ -19177,24 +19167,63 @@
       "world": {
         "label": "Espacio 3D",
         "open": "Abrir el espacio 3D",
-        "mode": { "edit": "Construir", "walk": "Caminar" },
+        "mode": {
+          "edit": "Construir",
+          "walk": "Caminar"
+        },
         "palette": {
           "hint": "Arrastra una pieza al espacio.",
-          "group": { "building": "Construcción", "zones": "Zonas", "props": "Objetos", "fx": "Efectos" },
-          "kind": { "block": "Bloque", "ramp": "Rampa", "sphere": "Esfera", "platform": "Plataforma", "collectible": "Coleccionable", "goal": "Meta", "hazard": "Peligro", "light": "Luz" }
+          "group": {
+            "building": "Construcción",
+            "zones": "Zonas",
+            "props": "Objetos",
+            "fx": "Efectos"
+          },
+          "kind": {
+            "block": "Bloque",
+            "ramp": "Rampa",
+            "sphere": "Esfera",
+            "platform": "Plataforma",
+            "collectible": "Coleccionable",
+            "goal": "Meta",
+            "hazard": "Peligro",
+            "light": "Luz"
+          }
         },
         "panel": {
-          "transform": "Transformación", "appearance": "Apariencia", "physics": "Física y cuerpo", "actions": "Acciones",
-          "position": "Posición", "rotation": "Rotación", "scale": "Escala", "color": "Color", "body": "Cuerpo",
-          "physicsKind": { "static": "Estático", "dynamic": "Dinámico", "kinematic": "Cinemático", "sensor": "Sensor (atravesable)", "none": "Ninguno" },
+          "transform": "Transformación",
+          "appearance": "Apariencia",
+          "physics": "Física y cuerpo",
+          "actions": "Acciones",
+          "position": "Posición",
+          "rotation": "Rotación",
+          "scale": "Escala",
+          "color": "Color",
+          "body": "Cuerpo",
+          "physicsKind": {
+            "static": "Estático",
+            "dynamic": "Dinámico",
+            "kinematic": "Cinemático",
+            "sensor": "Sensor (atravesable)",
+            "none": "Ninguno"
+          },
           "deleteProp": "Eliminar objeto",
-          "sky": "Cielo y suelo", "skyColor": "Cielo", "groundColor": "Suelo", "groundSize": "Tamaño (m)",
-          "spawn": "Punto de aparición", "lighting": "Iluminación", "ambient": "Ambiental", "sun": "Sol",
-          "stats": "Estadísticas", "propCount": "Objetos"
+          "sky": "Cielo y suelo",
+          "skyColor": "Cielo",
+          "groundColor": "Suelo",
+          "groundSize": "Tamaño (m)",
+          "spawn": "Punto de aparición",
+          "lighting": "Iluminación",
+          "ambient": "Ambiental",
+          "sun": "Sol",
+          "stats": "Estadísticas",
+          "propCount": "Objetos"
         },
         "respawn": "Reaparecer",
-        "cameraFirst": "Primera persona", "cameraThird": "Tercera persona",
-        "switchToThird": "Cambiar a vista en tercera persona (V)", "switchToFirst": "Cambiar a vista en primera persona (V)",
+        "cameraFirst": "Primera persona",
+        "cameraThird": "Tercera persona",
+        "switchToThird": "Cambiar a vista en tercera persona (V)",
+        "switchToFirst": "Cambiar a vista en primera persona (V)",
         "editHint": "Arrastra piezas desde la izquierda · haz clic en un objeto para editarlo a la derecha",
         "viewOnlyHint": "Pulsa Caminar para explorar este espacio",
         "walkHint": "Haz clic para bloquear el puntero · WASD para moverte · Espacio para saltar · V para cambiar de vista · Esc para liberar"
@@ -19504,6 +19533,12 @@
       "book": "Libro mayor que registra transacciones financieras y asientos contables.",
       "account": "Cuenta financiera que registra saldos y transacciones.",
       "sticky": "Nota adhesiva libre para apuntar ideas rápidas en el lienzo."
+    },
+    "previewWidth": "Ancho de vista previa",
+    "viewportName": {
+      "desktop": "Escritorio",
+      "tablet": "Tableta",
+      "mobile": "Móvil"
     }
   },
   "canvasCommands": {

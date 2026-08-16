@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -43,8 +43,17 @@ import {
  * screen at once — the very confusion this consolidation exists to remove. When the
  * surface is small it is now simply the Object, where Brain's connections already are.
  *
- * The prompt is NOT in here — it stays in the centre of the page where every chat
- * product people already use puts it.
+ * The prompt is not OWNED here — it belongs to the canvas, which keeps it in the centre
+ * of the page where every chat product people already use puts it. But it has a docked
+ * placement (`lib/canvasPromptPlacement.ts`), and when the reader chooses that, this panel
+ * RENDERS it as the last row of its own column: header, transcript, prompt.
+ *
+ * It used to be docked by being drawn as a separate floating card underneath this panel,
+ * with the panel shortened by the card's measured height to make room. Two absolutely
+ * positioned boxes claiming one edge is not a column — it read as a prompt that had fallen
+ * out of the bottom of the chat, with its own header, its own border and its own copy of
+ * the activity line the panel was already showing. Passing the node in costs one prop and
+ * makes the docked placement what it says it is.
  *
  * The docked placement alone also carries the copyright/version/Terms/Privacy row
  * (`LegalStrip`) as its own footer, in normal flow below the transcript — the shell's
@@ -87,6 +96,15 @@ export interface BrainSurfaceBodyProps {
 }
 
 export interface BrainDockProps extends BrainSurfaceBodyProps {
+  /**
+   * The canvas prompt, when the reader has docked it into this panel. Absent while it
+   * floats over the board, is closed, or has nowhere else to be — the canvas decides,
+   * and this panel only gives it the last row of the column.
+   */
+  composer?: ReactNode;
+  /** Move the prompt back out onto the board. Passed only when the prompt is in here,
+   *  which is the only state in which this panel is the one thing that can release it. */
+  onUndockPrompt?: () => void;
   mode: BrainDockMode;
   side: BrainDockSide;
   size: BrainDockSize;
@@ -202,6 +220,13 @@ export interface BrainSurfaceActionsProps {
   size?: BrainDockSize;
   onSideChange?: (side: BrainDockSide) => void;
   onSizeChange?: (size: BrainDockSize) => void;
+  /**
+   * Put the prompt back on the board. Passed ONLY by the placement that currently holds
+   * it, so the control lives beside the thing it releases and exists in exactly one
+   * place: the way IN is the prompt's own header while it floats, the way OUT is here
+   * once it no longer has a header of its own to carry it.
+   */
+  onUndockPrompt?: () => void;
 }
 
 /**
@@ -212,7 +237,7 @@ export interface BrainSurfaceActionsProps {
  */
 export function BrainSurfaceActions({
   mode, showExecutionDetail, onModeChange, onExecutionDetailChange, onClose,
-  side, size, onSideChange, onSizeChange,
+  side, size, onSideChange, onSizeChange, onUndockPrompt,
 }: BrainSurfaceActionsProps) {
   const t = useTranslations('creationCanvas');
   const inline = mode === 'inline';
@@ -234,6 +259,15 @@ export function BrainSurfaceActions({
         title={showExecutionDetail ? t('hideExecutionSteps') : t('showExecutionSteps')}
         onClick={() => onExecutionDetailChange(!showExecutionDetail)}
       >⋮⋮</button>
+      {/* The prompt is in this panel's column, so the panel carries the way out of it.
+          Pressed, the prompt floats over the board again — the placement it came from. */}
+      {onUndockPrompt && <button
+        type="button"
+        aria-pressed
+        aria-label={t('floatPrompt')}
+        title={t('floatPrompt')}
+        onClick={onUndockPrompt}
+      ><Icon name="external-link" size={14} /></button>}
       {boardAvailable && <button
         type="button"
         aria-pressed={inline}
@@ -273,7 +307,7 @@ export function BrainSurfaceActions({
 
 /** The edge placement: a full-height panel the board reserves width for. */
 export function BrainDock({
-  mode, side, size, width, showExecutionDetail,
+  mode, side, size, width, showExecutionDetail, composer, onUndockPrompt,
   onModeChange, onSideChange, onSizeChange, onWidthChange, onExecutionDetailChange, onClose,
   messages, trace, running, runStartedAt = null, node, nodes, edges, collaborators = [], joinedCollaborator = null,
   onReplayMessage, onRateMessage, ratings, guestSignup = null,
@@ -331,6 +365,7 @@ export function BrainDock({
           onSizeChange={onSizeChange}
           onExecutionDetailChange={onExecutionDetailChange}
           onClose={onClose}
+          {...(composer && onUndockPrompt ? { onUndockPrompt } : {})}
         />
       </header>
       <div
@@ -365,6 +400,10 @@ export function BrainDock({
         ratings={ratings}
         guestSignup={guestSignup}
       />
+      {/* Last row of the column, under the transcript — where a chat puts its prompt.
+          Nothing is positioned: it is in normal flow, so the transcript above it flexes
+          to whatever is left and the panel can never paint over the box you type in. */}
+      {composer}
       <LegalStrip className={styles.brainDockLegal} />
     </aside>
   );

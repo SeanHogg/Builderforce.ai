@@ -126,7 +126,7 @@ export function CanvasNodePanel({
           advancedOpen={advancedOpen}
           onChange={(schedule) => onChange({ schedule } as Partial<CreationNodeData>)}
         />}
-        {panel === 'config' && <ConfigBody data={data} editable={editable} advancedOpen={advancedOpen} onChange={onChange} />}
+        {panel === 'config' && <ConfigBody data={data} editable={editable} advancedOpen={advancedOpen} onChange={onChange} onOpenFull={onOpenFull} />}
         {panel === 'persona' && <PersonaBody data={data} editable={editable} advancedOpen={advancedOpen} onChange={onChange} />}
       </div>
 
@@ -213,11 +213,12 @@ function ScheduleBody({ schedule, editable, advancedOpen, onChange }: {
   </>;
 }
 
-function ConfigBody({ data, editable, advancedOpen, onChange }: {
+function ConfigBody({ data, editable, advancedOpen, onChange, onOpenFull }: {
   data: CreationNodeData;
   editable: boolean;
   advancedOpen: boolean;
   onChange: (patch: Partial<CreationNodeData>) => void;
+  onOpenFull: () => void;
 }) {
   const t = useTranslations('creationCanvas.nodePanel');
   return <>
@@ -234,7 +235,12 @@ function ConfigBody({ data, editable, advancedOpen, onChange }: {
         <span>{t('subtitle')}</span>
         <input value={data.subtitle ?? ''} disabled={!editable} onChange={(event) => onChange({ subtitle: event.target.value })} />
       </label>
-      <p className={styles.anchoredHint}>{t('configAdvancedHint')}</p>
+      {/* Naming the inspector and then not going there is what a dead end reads like:
+          somebody who opens Advanced looking for their object's OWN settings — a
+          dashboard's date range, a dataset's import — is told where those live and left
+          to find the door themselves. The sentence IS the door. Same `onOpenFull` the
+          header icon takes, so there is one route to the inspector, not two. */}
+      <button type="button" className={styles.anchoredHintAction} onClick={onOpenFull}>{t('configAdvancedHint')}</button>
     </>}
   </>;
 }

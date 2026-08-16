@@ -17144,7 +17144,7 @@
     "noticeGradebookEmpty": "Rien à calculer pour l’instant — aucun apprenant ni colonne de travail sur ce carnet de notes.",
     "noticeSubmissionMarked": "{name} noté : {percent}% ({mark} sur {total})",
     "noticeSubmissionMarkedLate": "{name} noté : {percent}% ({mark} sur {total}), {days, plural, one {# jour} other {# jours}} de retard, {deducted} déduits",
-    "noticeSubmissionNoPlacements": "Ce devoir n’a pas encore de placements sur la grille. Écrivez une ligne par critère dans `placements` — {criterion, levelIndex, comment} — puis relancez `mark`.",
+    "noticeSubmissionNoPlacements": "Ce devoir n’a pas encore de placements sur la grille. Écrivez une ligne par critère dans `placements` — '{'criterion, levelIndex, comment'}' — puis relancez `mark`.",
     "noticeSubmissionPlacementsIncomplete": "Tous les critères ne sont pas encore placés : {criteria}. Ajoutez les lignes manquantes à `placements` puis relancez `mark`.",
     "noticeSubmissionNoRubric": "Impossible de trouver le travail ou la grille de ce devoir sur le tableau.",
     "noticeSubmissionRubricBroken": "La grille utilisée pour noter ce travail n’est pas encore utilisable : {reason}",
@@ -19107,12 +19107,6 @@
           "console": "Console"
         },
         "errorCount": "{count, plural, one {# erreur} other {# erreurs}}",
-        "viewport": "Largeur d'aperçu",
-        "viewportName": {
-          "desktop": "Bureau",
-          "tablet": "Tablette",
-          "mobile": "Mobile"
-        },
         "publish": "Publier",
         "frameTitle": "{path}, en cours d'exécution",
         "idleTitle": "Prêt à s'exécuter",
@@ -19149,10 +19143,6 @@
       "site": {
         "label": "Site",
         "open": "Ouvrir le site",
-        "viewport": "Largeur d'aperçu",
-        "desktop": "Bureau",
-        "tablet": "Tablette",
-        "mobile": "Mobile",
         "pageCount": "{count, plural, =0 {aucune page} one {# page} other {# pages}}",
         "addSection": "Ajouter",
         "addSectionPrompt": "Ajouter une section…",
@@ -19177,24 +19167,63 @@
       "world": {
         "label": "Espace 3D",
         "open": "Ouvrir l’espace 3D",
-        "mode": { "edit": "Construire", "walk": "Marcher" },
+        "mode": {
+          "edit": "Construire",
+          "walk": "Marcher"
+        },
         "palette": {
           "hint": "Glissez une pièce dans l’espace.",
-          "group": { "building": "Construction", "zones": "Zones", "props": "Objets", "fx": "Effets" },
-          "kind": { "block": "Bloc", "ramp": "Rampe", "sphere": "Sphère", "platform": "Plateforme", "collectible": "Objet à collecter", "goal": "Objectif", "hazard": "Danger", "light": "Lumière" }
+          "group": {
+            "building": "Construction",
+            "zones": "Zones",
+            "props": "Objets",
+            "fx": "Effets"
+          },
+          "kind": {
+            "block": "Bloc",
+            "ramp": "Rampe",
+            "sphere": "Sphère",
+            "platform": "Plateforme",
+            "collectible": "Objet à collecter",
+            "goal": "Objectif",
+            "hazard": "Danger",
+            "light": "Lumière"
+          }
         },
         "panel": {
-          "transform": "Transformation", "appearance": "Apparence", "physics": "Physique et corps", "actions": "Actions",
-          "position": "Position", "rotation": "Rotation", "scale": "Échelle", "color": "Couleur", "body": "Corps",
-          "physicsKind": { "static": "Statique", "dynamic": "Dynamique", "kinematic": "Cinématique", "sensor": "Capteur (traversable)", "none": "Aucun" },
+          "transform": "Transformation",
+          "appearance": "Apparence",
+          "physics": "Physique et corps",
+          "actions": "Actions",
+          "position": "Position",
+          "rotation": "Rotation",
+          "scale": "Échelle",
+          "color": "Couleur",
+          "body": "Corps",
+          "physicsKind": {
+            "static": "Statique",
+            "dynamic": "Dynamique",
+            "kinematic": "Cinématique",
+            "sensor": "Capteur (traversable)",
+            "none": "Aucun"
+          },
           "deleteProp": "Supprimer l’objet",
-          "sky": "Ciel et sol", "skyColor": "Ciel", "groundColor": "Sol", "groundSize": "Taille (m)",
-          "spawn": "Point d’apparition", "lighting": "Éclairage", "ambient": "Ambiante", "sun": "Soleil",
-          "stats": "Statistiques", "propCount": "Objets"
+          "sky": "Ciel et sol",
+          "skyColor": "Ciel",
+          "groundColor": "Sol",
+          "groundSize": "Taille (m)",
+          "spawn": "Point d’apparition",
+          "lighting": "Éclairage",
+          "ambient": "Ambiante",
+          "sun": "Soleil",
+          "stats": "Statistiques",
+          "propCount": "Objets"
         },
         "respawn": "Réapparaître",
-        "cameraFirst": "Première personne", "cameraThird": "Troisième personne",
-        "switchToThird": "Passer à la vue à la troisième personne (V)", "switchToFirst": "Passer à la vue à la première personne (V)",
+        "cameraFirst": "Première personne",
+        "cameraThird": "Troisième personne",
+        "switchToThird": "Passer à la vue à la troisième personne (V)",
+        "switchToFirst": "Passer à la vue à la première personne (V)",
         "editHint": "Glissez des pièces depuis la gauche · cliquez sur un objet pour l’éditer à droite",
         "viewOnlyHint": "Appuyez sur Marcher pour explorer cet espace",
         "walkHint": "Cliquez pour verrouiller le pointeur · WASD pour se déplacer · Espace pour sauter · V pour changer de vue · Échap pour libérer"
@@ -19504,6 +19533,12 @@
       "book": "Grand livre enregistrant les transactions financières et écritures comptables.",
       "account": "Compte financier suivant les soldes et les transactions.",
       "sticky": "Note autocollante libre pour noter rapidement une idée sur le canevas."
+    },
+    "previewWidth": "Largeur d'aperçu",
+    "viewportName": {
+      "desktop": "Bureau",
+      "tablet": "Tablette",
+      "mobile": "Mobile"
     }
   },
   "canvasCommands": {

@@ -1,3 +1,153 @@
+## ✅ RESOLVED 2026-08-16 — Canvas prompt & command bar: the docked prompt is IN the chat, the bar is one icon row
+
+Three defects reported from the Creation Canvas, all fixed in one pass (frontend 2026.8.47):
+
+- **The docked prompt sat BELOW the Brain panel, not in it.** `docked` was drawn as a second
+  absolutely positioned card at the panel's edge, with the panel shortened by the card's measured
+  height to make room — two boxes claiming one edge, each with its own border, its own header and
+  its own copy of the live activity line. `BrainDock` now takes the prompt as a `composer` node and
+  renders it as the last row of its own column (header → tabs → transcript → prompt → legal), in
+  normal flow: `position:static`, full width, no `--composer-space` compensation. Its caption row
+  stands down inside the panel (the panel's header names the conversation) and the way back out is
+  one control in that header; the composer's own activity chip stands down too, because
+  `BrainActivityBar` below it is the same reading of the same run. `docked` also degrades: with
+  Brain closed, inline, or replaced by the chat surface there is no column to be the last row of,
+  so the prompt floats until the panel returns, and pressing "dock" opens the panel it docks into.
+
+- **The command bar was two rows tall and worded.** The App surface contributes Run, three readings
+  and a width switcher into the ONE bar; `.appBarControls` was `flex-wrap:wrap`, so its six worded
+  buttons wrapped the bar onto a second row (~86px). The readings and the widths are now glyph
+  buttons on the same 15px grid as every other control in the bar (`PreviewReadingIcon`,
+  `CodeReadingIcon`, `ConsoleReadingIcon`, `ViewportDesktop/Tablet/MobileIcon`), the group cannot
+  wrap, and Run matches the bar's 28px control height. Measured: 86px → 50px, one row. Every word
+  survives as the button's accessible name and tooltip.
+
+- **The floating prompt was drawn UNDER that bar.** `--canvas-command-bar-space` was a literal
+  `66px` — a guess the App surface's contribution overran by ~40px. `useComposerSpace` was
+  generalised into `useBottomChromeSpace(host, property, gap)` and the bar's height is now measured
+  and published onto the shell, the same way the prompt's already was; the prompt clears it by
+  `COMMAND_BAR_CLEARANCE`. The same defect at phone width (both pinned to `bottom:8px`, so the
+  prompt sat under the bar below 900px) is fixed by the same measurement. The prompt also moved
+  above the floating chrome's z-index band, so its own popovers can never be painted through.
+
+Two duplicates removed in the same pass: the width switcher existed twice (App surface + Site
+surface, two copies of three buttons, two identical segmented troughs in the stylesheet, and two
+sets of catalogue keys) and is now ONE `CanvasViewportSwitcher` reading one `creationCanvas.
+viewportName.*` (five catalogues updated; the per-surface keys deleted). A stale registry
+assertion was fixed while it was red: `canvasSurfaces.test.tsx` still listed four object-scoped
+surfaces after `world` became the fifth.
+
+## ✅ RESOLVED 2026-08-16 — Stage Sandbox: real execution behind marketplace Stage checks
+
+Closed the gap tracked in ROADMAP.md's Consolidated Gap Register: *"Stage's checks are STATIC
+ANALYSIS of the snapshot, not a run in a sandbox workspace"* (identified 2026-08-15). The proposal
+called for installing the staged snapshot into a throwaway tenant, booting it with every outbound
+step stubbed, and measuring the result — parked because a disposable-tenant lifecycle and a
+headless runner with an outbound interceptor didn't exist. Research this pass found the container
+lifecycle already half-built (`QaRunnerContainerDO` + `api/qa-container`) and, on closer read, that
+literally booting **everything** in a container would duplicate two things the platform already
+has: voice-clone transfer eligibility and workflow step execution. The scope that shipped instead:
+
+- **`runtime.touch`** — `api/stage-sandbox` (a new disposable Cloudflare Container, mirroring
+  `qa-container`) boots the buyer-facing document in a real touch-enabled Chromium context with
+  every outbound request aborted, dispatches a real gesture, and reports whether a listener fired
+  and reacted — replacing the regex guess at whether the document merely *mentions* touch handling.
+- **`media.duration`** — the same container measures a real `loadedmetadata` duration on the
+  buyer-facing assets, catching a 404'd or corrupt asset the declared-field read missed.
+- **`media.voiceClone`** — a new `VoiceCloneTransferProbe` port (`stageChecks.probe.ts`) checks the
+  referenced clone id against the real `studio_voice_clones` table instead of a field-presence
+  guess; a stale/deleted id is now reported as such.
+- **`system.outbound`** — a Worker-side stubbed dry-run (`application/marketplace/systemDryRun.ts`)
+  runs a listing's recognizable steps through the SAME executor real cloud workflows use
+  (`executeCloudNode`), via one new injected seam (`OutboundPort`, `cloudExecutor.ts`) that
+  intercepts `gmail`/`connector`/`mcp`/`llm` before their real preconditions — no second executor,
+  no container needed (everything here is CPU-bound once outbound calls are stubbed).
+
+The publish gate now genuinely requires a clean sandbox run for the CURRENT build
+(`stage_sandbox_runs`, matched by a SHA-256 payload hash — not snapshot id — so a re-stage of an
+unchanged board reuses its clean run and a one-byte edit invalidates it) for `runtime`/`media`
+listings; `queued`/`running`/`missing` block, `error`/`capped` fail open. A new metered resource
+(`stage_sandbox_runs` meter, `stageSandboxRunsMonthly` plan limit) caps dispatches per tenant per
+month, following the existing `cloud_runs`/`outbound_fetches` ledger shape exactly.
+`STAGE_SANDBOX_LIMIT_CODE`'s standing disclosure is now reworded per-harness rather than one
+blanket "not yet built" sentence, since it no longer applies to `runtime`/`media`.
+
+Genuine architecture-driven scope cuts from the original proposal, not deferrals: voice-clone
+transfer delegates to a query rather than a second container execution path; the system dry-run
+runs in-Worker rather than porting the cloud executor into a container image; the new DB access
+went through `stage_sandbox_runs` (adjudicated in `check-shape-lint.mjs` against the unused kernel
+`runs` primitive — its access pattern is a content-hash cache lookup, which needs a first-class
+indexed column neither `runs` nor `executions` has) rather than forcing an unproven kernel table's
+first real write-path consumer inside an already-large change.
+
+---
+
+## ✅ RESOLVED 2026-08-16 — FO-B3: four of the five waiting signature/form consumers are real handlers
+
+Track 2 of the founder-operations build-out (ROADMAP.md's "collection & signature consumers"),
+over the `signature_requests`/`signature_parties` engine FO-B2 landed 2026-08-15 (0469). All four
+go through the SAME two calls — `createSignatureRequest` and `signatureProgress`
+(`frontend/src/lib/founderOpsApi.ts`) — from new handlers in `CreationCanvas.tsx`, dispatched the
+same way `investorUpdate.send` already was: a model proposes the act, the approval gate in
+`canvasApprovalGate.ts` decides whether it needs a human first, and only once it is allowed does
+`pendingBrainActions` run the handler that actually calls the engine.
+
+**`contract.sign`.** `signContract` resolves the signer through the FO-A2 join — the linked
+`account`'s own `contacts` row with an email — rather than a typed address. No linked account, or
+one with no contact email, sends nothing and says so (`noticeContractSignNoContact`): inventing an
+address is exactly the failure mode FO-A2's resolver exists to remove. `contract` gained
+`signatureState`/`signatureRequestId`/`signedAt` bookkeeping fields so the request is visible on
+the card, matching `offer`'s existing shape. Stays GATED (`canvasApprovalGate.GATED_ACTIONS`
+already had `contract: ['sign']`) — what changed is `contract` now appears in
+`CONNECTED_CANVAS_ACTIONS`, so an approved sign gets a real request instead of "no delivery
+adapter is connected".
+
+**`policy.acknowledge`.** `sendPolicyAcknowledgement` builds one signature request, intent
+`acknowledge`, from the `employee` objects on the board whose `personRef` is email-shaped —
+the same "never invent an identifier" rule `PERSON_REF_HINT` already states — scoped to
+`appliesTo` when it names specific departments, employment types or locations. `policy.roster` and
+`policy.acknowledgementRate` (declared `derived: true` in the 0469 pass and written by nothing)
+are now stored by the handler at send time, the same pattern `offer.approvals` already used. Open,
+not gated: sending a nudge to acknowledge is reversible and attests nothing.
+
+**`offer.send` / `offer.sign`.** `offer` gained an authored `candidateEmail` field — there was
+nowhere else to get one: `candidate` is authored freeform from a résumé and carries no
+`party_roles` identity or email of its own, and inventing one to avoid adding a field would be
+worse than asking for it. `sendOfferForSignature` composes the terms into one document and creates
+a `sign`-intent request; `refreshOfferSignature` (`offer.sign`) re-reads that request's
+`signatureProgress` and mirrors the signer's own decision onto `signatureState`/`signedAt` rather
+than the card asserting one. `offer.send` is GATED (new in `GATED_ACTIONS`) the same way an
+investor update is; `offer.sign` deliberately is not — it asserts nothing new, only what the
+signer already did.
+
+**`dataRoom.share` / `nda_required`.** `dataRoom` gained `ndaRequired`, `recipientName`,
+`recipientEmail`, and bookkeeping `ndaState`/`ndaSignatureRequestId`. `shareDataRoom` is called
+safely more than once: the first call sends the NDA (intent `sign`) and stops; a later call reads
+whether the recipient signed and either grants access (`status` reads "Shared with …") or says the
+NDA is still pending — never a second NDA to the same person. `ndaRequired: false` (or an already
+`signed` NDA) grants immediately. Stays GATED — `dataRoom: ['share']` already existed in
+`GATED_ACTIONS`; `dataRoom` is now also in `CONNECTED_CANVAS_ACTIONS`.
+
+**One fix found along the way.** `founderMutableFields` (`founderObjects.ts`) duplicated
+`specMutableFields`'s filter instead of calling it, so a `derived` founder field would have been
+advertised as writable through this path while the real registry (`FOUNDER_MUTABLE_FIELDS`, built
+from the same generic function) correctly refused it — no founder field had tested the difference
+before `counterpartyAccountField` (FO-A2). Now a thin alias.
+
+**`jobPosting` applications is the one of the five left, and it is genuinely blocked** — see
+ROADMAP.md's FO-B3 entry for the reason: no canvas `jobPosting` carries the numeric id a real
+`job_applications` count would join on, and there is no FO-A1-shaped sync tool that would create or
+resolve one. Building it by matching on title would reintroduce the exact string-matching defect
+FO-A1/FO-A2 exist to close, so it is left for a decision on whether `jobPosting` gets its own
+account-shaped sync foundation.
+
+All five catalogs (`en`/`zh`/`es`/`fr`/`de`) carry the new field labels and notice copy. Found and
+fixed in the same pass: `creationCanvas.noticeSubmissionNoPlacements` had unescaped literal
+`{criterion, levelIndex, comment}` in its ICU message across all five catalogs, so next-intl fell
+back to the raw key instead of formatting it — pre-existing, unrelated to this track, caught by
+`src/i18n/messages.test.ts` while verifying the new notices formatted. Fixed with ICU quote
+escaping in all five.
+
 ## ✅ RESOLVED 2026-08-16 — `world`: a true 3D authoring surface — place a prop, move a camera, walk the scene, with real colliders (frontend 2026.8.45)
 
 The gap this pass closed: **"No 3D *authoring* surface — `scene3d` reads the board, it does not

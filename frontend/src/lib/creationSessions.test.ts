@@ -75,6 +75,27 @@ describe('legacy tool canvases', () => {
     const session = readLocalCreationSession(id);
     expect(session?.nodes.map((node) => node.data.kind)).toEqual(['chat']);
   });
+
+  /**
+   * The seed that FAILED THE TURN it was supposed to help.
+   *
+   * A prompt containing "chart" or "report" used to place a `dataset` titled "Imported
+   * data" carrying no rows and a `dashboard` carrying no widgets. Brain read the board,
+   * believed the dataset, called `canvas_query_dataset` on it and got back "No dataset
+   * with imported rows is on this canvas" — the run then ended with "I couldn't prepare
+   * the requested canvas changes" and zero objects authored, leaving the two empty
+   * shells behind as though they were the output.
+   */
+  it('does not pre-seed a chart or report prompt with an empty dataset and dashboard', () => {
+    const id = createLocalCreationSession('Turn this chart into a one-page board update');
+    expect(readLocalCreationSession(id)?.nodes.map((node) => node.data.kind)).toEqual(['chat']);
+    expect(readLocalCreationSession(id)?.edges).toEqual([]);
+  });
+
+  it('does not pre-seed a workflow prompt with an empty workflow shell', () => {
+    const id = createLocalCreationSession('Automate the onboarding process');
+    expect(readLocalCreationSession(id)?.nodes.map((node) => node.data.kind)).toEqual(['chat']);
+  });
 });
 
 describe('local Creation Session index', () => {

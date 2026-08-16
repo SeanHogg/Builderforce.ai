@@ -1567,7 +1567,13 @@
    It shifts by exactly the width a docked Brain reserved, so it stays centred on
    whatever board is left — and it never moves when Brain floats, docks, or closes.
    The 300px reserve keeps it clear of the zoom rail and the minimap. */
-.composerDock { position:absolute; z-index:16; right:calc(300px + var(--brain-dock-right, 0px)); bottom:var(--canvas-command-bar-space, 66px); left:calc(300px + var(--brain-dock-left, 0px)); box-sizing:border-box; width:auto; max-width:700px; margin-inline:auto; display:flex; flex-direction:column; align-items:center; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); }
+/* z-index ABOVE the floating chrome (`.floatCard`, 20): the prompt is the board's primary
+   input, and its own popovers — the model menu, the starting-point picker, the attachment
+   list — open upward out of it. Below the chrome, any of those that reached a card's band
+   was painted through by it. It no longer OVERLAPS the command bar (that band is measured
+   now), but "we calculated that they cannot touch" is not a reason to leave the more
+   important of the two underneath. */
+.composerDock { position:absolute; z-index:21; right:calc(300px + var(--brain-dock-right, 0px)); bottom:var(--canvas-command-bar-space, 66px); left:calc(300px + var(--brain-dock-left, 0px)); box-sizing:border-box; width:auto; max-width:700px; margin-inline:auto; display:flex; flex-direction:column; align-items:center; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); }
 .promptComposerShell { position:relative; width:100%; }
 .promptResizeHandle { position:absolute; z-index:2; top:-7px; left:50%; width:42px; height:17px; display:grid; place-items:center; padding:0; transform:translateX(-50%); touch-action:none; user-select:none; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); background:var(--canvas-brain-surface); color:var(--canvas-muted); box-shadow:0 2px 6px var(--canvas-shadow); font:700 13px/1 var(--font-sans); cursor:ns-resize; }
 .promptResizeHandle:hover,.promptResizeHandle:focus-visible { border-color:var(--canvas-brain-accent); color:var(--canvas-brain-accent); outline:none; }
@@ -1846,14 +1852,19 @@
    360px instead of overflowing. */
 .appSurface { position:absolute; z-index:7; inset:0; box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-bottom:var(--composer-space); background:var(--canvas-board-background); color:var(--canvas-ink); }
 .appSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; min-width:0; }
-/* The surface's own controls, INSIDE the session bar. Wraps rather than fixing a width,
-   because it shares that bar's row with undo/redo, Share and Publish and must give way
-   first — the bar is the session's, and this is a guest in it. */
-.appBarControls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
+/* The surface's own controls, INSIDE the session bar — ONE row of it.
+   It used to wrap, which sounds accommodating and is not: the bar it lives in is
+   `flex-wrap:nowrap` and 28px tall per control, so a contribution that wraps makes the
+   BAR two rows tall, and the second row is what covered the prompt floating above it.
+   Nothing here wraps now — the group is three glyphs, three glyphs and a worded Run, and
+   the bar scrolls horizontally on a phone rather than growing upwards. */
+.appBarControls { display:flex; align-items:center; gap:8px; flex-wrap:nowrap; min-width:0; }
 
-/* Run is the loudest control on the surface, and the only one that is loud. */
+/* Run is the loudest control on the surface, and the only one that is loud. Its height is
+   the bar's own control height: a 32px pill among 28px glyphs sets the row's height on its
+   own, for no reason a reader could name. */
 .appRunButton {
-  display:inline-flex; align-items:center; gap:7px; flex:none; min-height:32px; padding:6px 14px;
+  display:inline-flex; align-items:center; gap:7px; flex:none; min-height:28px; padding:5px 12px;
   border:1px solid transparent; border-radius:var(--radius-full);
   background:var(--tone-success-mark); color:#fff; font:650 11px var(--font-sans); cursor:pointer;
 }
@@ -1865,16 +1876,27 @@
 @keyframes appRunPulse { 0%,100% { opacity:1; } 50% { opacity:.35; } }
 @media (prefers-reduced-motion: reduce) { .appRunButton[data-running='true'] .appRunDot { animation:none; } }
 
-/* Two segmented groups, same trough as the site surface's widths — a trough is what
-   says "these belong together" without a caption saying it. */
-.appReadings,.appViewports { display:flex; align-items:center; gap:2px; padding:2px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
-.appReadings button,.appViewports button {
-  display:inline-flex; align-items:center; gap:5px; min-height:24px; padding:3px 9px; border:0; border-radius:var(--radius-sm);
+/* Two segmented groups — the readings, and THE width switcher (`CanvasViewportSwitcher`,
+   shared with the site surface, which is why the second class is not named for the app).
+   A trough is what says "these belong together" without a caption saying it.
+
+   Both are glyph buttons on the same square as every other control in the bar. They were
+   worded, which is six words in a row of 15px marks and — with the readings, the widths,
+   Run, the view cluster, the roster and the team band all in one bar — enough to wrap it.
+   The word is still on each button as its accessible name and its tooltip. */
+.appReadings,.viewportSwitcher { display:flex; flex:none; align-items:center; gap:2px; padding:2px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
+.appReadings button,.viewportSwitcher button {
+  position:relative; display:inline-grid; place-items:center; min-width:26px; height:24px; padding:0 4px; border:0; border-radius:var(--radius-sm);
   background:transparent; color:var(--canvas-muted); font-family:inherit; font-size:11px; font-weight:650; cursor:pointer;
 }
+.appReadings button > svg,.viewportSwitcher button > svg { display:block; width:15px; height:15px; }
 .appReadings button:hover,.appReadings button:focus-visible,
-.appViewports button:hover,.appViewports button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
-.appReadings button[aria-pressed='true'],.appViewports button[aria-pressed='true'] { background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 1px 2px var(--canvas-shadow); }
+.viewportSwitcher button:hover,.viewportSwitcher button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.appReadings button[aria-pressed='true'],.viewportSwitcher button[aria-pressed='true'] { background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 1px 2px var(--canvas-shadow); }
+/* The error count rides the console glyph rather than sitting beside it: a badge in the
+   flow would make one button in a segmented group wider than its neighbours the moment an
+   app throws, which reads as the group shifting rather than as a count. */
+.appReadings button > .appErrorCount { position:absolute; top:-3px; right:-3px; }
 .appErrorCount { min-width:15px; padding:0 4px; border-radius:var(--radius-full); background:var(--tone-danger-bg); color:var(--tone-danger-ink); font-size:9px; font-weight:700; text-align:center; }
 
 /* Where it is running — STATUS, so it survives a collapsed bar. Capped rather than
@@ -1966,13 +1988,10 @@
 .siteFrame .websitePreview { border:0; border-radius:0; overflow:visible; }
 .siteMeta { display:flex; flex:none; align-items:center; gap:10px; }
 .siteMeta small { color:var(--canvas-muted); font-size:10px; white-space:nowrap; }
-.siteViewports { display:flex; align-items:center; gap:2px; padding:2px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
-.siteViewports button {
-  min-height:24px; padding:3px 9px; border:0; border-radius:var(--radius-sm);
-  background:transparent; color:var(--canvas-muted); font-family:inherit; font-size:11px; font-weight:650; cursor:pointer;
-}
-.siteViewports button:hover,.siteViewports button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
-.siteViewports button[aria-pressed='true'] { background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 1px 2px var(--canvas-shadow); }
+/* The widths this surface is read at are `.viewportSwitcher`, declared with the readings
+   it shares a shape with — this file used to carry a second, identical copy of that trough
+   under a site-specific name, which is the stylesheet half of the duplicate
+   `CanvasViewportSwitcher` removed. */
 
 /* ── Structural editing ──────────────────────────────────────────────────────────
    The "add a section" control. A native <select> so the kind list is one element on a
@@ -2114,9 +2133,16 @@
 /* How much room the floating command bar takes at the bottom of the canvas. The prompt
    dock, the minimap and anything else that used to sit at `bottom:16px` reads THIS rather
    than each carrying its own guess — the bar's height changes when it folds, and three
-   independent guesses is how a composer ends up printed through a toolbar. */
+   independent guesses is how a composer ends up printed through a toolbar.
+
+   This value is now MEASURED and written onto the shell as an inline style by
+   `useBottomChromeSpace` (see `CreationCanvas.tsx`), because folding is not the only thing
+   that changes the bar's height: a surface contributes its own controls into it — the App
+   surface's Run, its three readings and its width switcher — and this literal was ~40px
+   short of that, which drew the bar straight over the prompt. What stays here is the value
+   used before the first measurement lands (server render, and any browser without
+   `ResizeObserver`); the inline property wins the moment it does. */
 .canvasShell { --canvas-command-bar-space:66px; }
-.canvasShell:has(.commandBar[data-collapsed='true']) { --canvas-command-bar-space:58px; }
 
 /* Inside the floating chip card the trough IS the card — a second border and a second
    fill one pixel apart is the "bar inside a bar" the redesign removed everywhere else. */
@@ -2324,8 +2350,11 @@
      it while the canvas owns the viewport. */
   .canvasShell[data-fullscreen='true'] .flowWrap { height:calc(100% - 50px); }
   .inspectorResizeHandle,.inspectorHeaderActions button:first-child { display:none; }
-  /* The prompt is still the bottom-of-the-page fixture, just edge to edge. */
-  .composerDock { left:8px; right:8px; bottom:8px; width:auto; min-width:0; max-width:none; margin-inline:0; }
+  /* The prompt is still the bottom-of-the-page fixture, just edge to edge. It keeps the
+     MEASURED bar band as its offset rather than restating `bottom:8px` here — the bar is
+     also at `bottom:8px` on a phone, so the two were pinned to the same edge and the prompt
+     sat under the bar at every width below this breakpoint. */
+  .composerDock { left:8px; right:8px; width:auto; min-width:0; max-width:none; margin-inline:0; }
   .composer { --prompt-panel-action-gap:4px; }
   .scopeChip { min-width:48px; max-width:110px; flex:1 1 84px; padding:4px 5px; overflow:hidden; }
   .scopeChip select { width:100%; max-width:none; }
@@ -3921,6 +3950,22 @@
 .anchoredPanelFooter { display: flex; align-items: center; padding: 9px 11px; border-top: 1px solid var(--canvas-line); }
 .anchoredPanelEmpty { margin: 0; color: var(--canvas-ink-soft); font-size: 11.5px; }
 .anchoredHint { margin: 0; color: var(--canvas-ink-soft); font-size: 10.5px; line-height: 1.5; }
+/* The hint that names the inspector IS the way there — see `ConfigBody`. Styled as the
+   sentence it reads as rather than as a button, but underlined and pointer-cursored so
+   it does not look inert, and it carries the same focus ring every other control here
+   has. Both colours are tokens, so it reads in either theme. */
+.anchoredHintAction {
+  composes: anchoredHint;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.anchoredHintAction:hover { color: var(--canvas-ink); }
+.anchoredHintAction:focus-visible { outline: 2px solid var(--canvas-accent); outline-offset: 2px; border-radius: var(--radius-sm); }
 
 .anchoredField { display: flex; flex-direction: column; gap: 4px; }
 .anchoredField > span:first-child {
@@ -4136,24 +4181,33 @@
 }
 .promptChrome button:hover, .promptChrome button:focus-visible { background: var(--canvas-hover); color: var(--canvas-ink); outline: none; }
 
-/* DOCKED — the prompt joins the Brain panel's column instead of floating over the board.
-   It takes the dock's edge and its width, so the two read as one surface rather than a
-   card parked on top of a panel. */
+/* DOCKED — the prompt is a ROW INSIDE the Brain panel, not a card under it.
+   `BrainDock` renders the same node as its last child (see that file's header), so there
+   is nothing to position: it is in normal flow, full width, and the transcript above it
+   flexes to whatever is left. The panel's own padding and border are the prompt's, which
+   is what makes the column read as one chat rather than as a panel with something stuck
+   to its underside.
+
+   It used to be an absolutely positioned card at the dock's edge, with the dock shortened
+   by `--composer-space` to make room for it. That is two boxes claiming one edge, each
+   with its own border and its own header, and it needed a measurement to stop the panel
+   painting over the prompt entirely. Both went away with the positioning. */
 .composerDock[data-placement='docked'] {
-  right: auto;
-  left: auto;
-  bottom: 12px;
-  width: var(--brain-dock-size, 330px);
-  max-width: var(--brain-dock-size, 330px);
+  position: static;
+  z-index: auto;
+  flex: none;
+  width: 100%;
+  max-width: none;
   margin-inline: 0;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--canvas-brain-border);
+  align-items: stretch;
 }
-.canvasShell:has(.brainDock[data-side='right']) .composerDock[data-placement='docked'] { right: 8px; }
-.canvasShell:has(.brainDock[data-side='left']) .composerDock[data-placement='docked'] { left: 8px; }
-/* The dock (bottom:0, z-index 17) and the docked composer (bottom:12px, z-index 16) are
-   separately positioned elements that both claim the same edge. Without this, the dock's
-   full-height, opaque panel paints over the composer entirely — the prompt is there, but
-   behind the transcript, not just visually lower than it. `--composer-space` is already
-   the exact measured gap every other piece of bottom-anchored chrome reserves above the
-   composer (see `useComposerSpace.ts`), so it is also the exact amount the dock needs to
-   give back — the same fix the phone layout already applies to its bottom-sheet dock. */
-.canvasShell:has(.composerDock[data-placement='docked']) .brainDock { bottom: var(--composer-space, 0px); }
+/* The panel is already a raised surface. A second drop shadow inside it draws a card
+   edge where the column should just continue. */
+.composerDock[data-placement='docked'] .composer { box-shadow: none; }
+/* The starting-point picker tucks 8px INTO the floating prompt, where the utilities row
+   overlaps the card it belongs to. In the panel there is no card to tuck into — the nudge
+   just drops it onto the input's top border and the height handle that sits there. */
+.composerDock[data-placement='docked'] .promptStarter { transform: none; }
+.composerDock[data-placement='docked'] .composerUtilities { margin-bottom: 6px; }

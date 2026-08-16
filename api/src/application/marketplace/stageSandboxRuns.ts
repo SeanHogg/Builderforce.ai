@@ -11,7 +11,8 @@
  */
 
 import { and, desc, eq, lt } from 'drizzle-orm';
-import { stageSandboxRuns } from '../../infrastructure/database/schema';
+import { snapshots, stageSandboxRuns } from '../../infrastructure/database/schema';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { ListingHarness, StageCheck } from '@builderforce/creation-canvas-contract';
@@ -175,7 +176,7 @@ export async function ensureStageSandboxRun(
     // unchanged, and the publish gate reads this as `sandbox.unavailable` (warn).
     await db.update(stageSandboxRuns)
       .set({ status: 'error', errorMessage: 'Sandbox runner not provisioned', finishedAt: new Date(), updatedAt: new Date() })
-      .where(eq(stageSandboxRuns.id, runId));
+      .where(scopedToTenant(stageSandboxRuns, input.tenantId, eq(stageSandboxRuns.id, runId)));
   }
 }
 
@@ -198,6 +199,28 @@ export async function claimStageSandboxRun(
     ))
     .returning({ snapshotId: stageSandboxRuns.snapshotId, harness: stageSandboxRuns.harness });
   return row ? { snapshotId: row.snapshotId, harness: row.harness as ListingHarness } : null;
+}
+
+/**
+ * Claim a run AND hand back the exact payload objects a buyer would receive —
+ * the one assembly the container's claim response needs. Kept in the
+ * application layer (not the route) so the route never queries `snapshots`
+ * directly; a presentation handler takes an application port, never a table.
+ */
+export async function claimStageSandboxRunBundle(
+  db: Db,
+  input: { runId: string; tenantId: number },
+): Promise<{ harness: ListingHarness; objects: unknown } | null> {
+  const claimed = await claimStageSandboxRun(db, input);
+  if (!claimed) return null;
+
+  const [row] = await db
+    .select({ payload: snapshots.payload })
+    .from(snapshots)
+    .where(scopedToTenant(snapshots, input.tenantId, eq(snapshots.id, claimed.snapshotId)))
+    .limit(1);
+  const objects = (row?.payload as { objects?: unknown } | null)?.objects ?? [];
+  return { harness: claimed.harness, objects };
 }
 
 /** The container's result report — the only writer of `passed`/`failed`/`error`. */
@@ -232,15 +255,22 @@ export async function completeStageSandboxRun(
   return !!row;
 }
 
-/** Housekeeping only — never called from the request path. Exported for a
- *  future sweep; the lazy reap in {@link resolveStageSandboxState} is what
- *  actually protects a caller from reading a dead `running` row today. */
+/**
+ * Housekeeping only — never called from the request path. Exported for a
+ * future cron sweep; the lazy reap in {@link resolveStageSandboxState} is what
+ * actually protects a caller from reading a dead `running` row today.
+ *
+ * Genuinely cross-tenant: a sweep has no caller and therefore no tenant to
+ * filter by — it is the platform reaping every tenant's stale rows on its own
+ * schedule, which is what a sweep is. `acrossTenants('scheduled_sweep', ...)`
+ * declares that rather than silently dropping the tenant predicate.
+ */
 export async function reapStaleStageSandboxRuns(db: Db): Promise<number> {
   const cutoff = new Date(Date.now() - STALE_RUNNING_MS);
   const rows = await db
     .update(stageSandboxRuns)
     .set({ status: 'error', errorMessage: 'The sandbox did not report back in time.', finishedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(stageSandboxRuns.status, 'running'), lt(stageSandboxRuns.updatedAt, cutoff)))
+    .where(acrossTenants(stageSandboxRuns, 'scheduled_sweep', eq(stageSandboxRuns.status, 'running'), lt(stageSandboxRuns.updatedAt, cutoff)))
     .returning({ id: stageSandboxRuns.id });
   return rows.length;
 }

@@ -51,7 +51,11 @@ describe('canvas surface registry', () => {
    */
   it('keeps object-scoped surfaces out of the rail and out of the stored preference', () => {
     const objectScoped = CANVAS_SURFACES.filter((def) => def.scope === 'object');
-    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'site', 'timeline']);
+    // `world` belongs here for the same reason the other four do: it is the surface of ONE
+    // `world` object, with that object's own camera and props. The list was pinned before
+    // it existed, so the registry had grown a fifth object surface that this assertion
+    // still called an error.
+    expect(objectScoped.map((def) => def.id)).toEqual(['page', 'play', 'site', 'timeline', 'world']);
     // None persists: a page cannot be reopened without knowing which page.
     expect(objectScoped.every((def) => !def.persist)).toBe(true);
     // None draws the board or its objects — each is about exactly one.

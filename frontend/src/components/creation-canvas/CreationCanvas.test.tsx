@@ -920,10 +920,13 @@ describe('CreationCanvas', () => {
       .find((button) => button.hasAttribute('aria-pressed'))!;
 
     // Dock the prompt into the Brain panel's column, then close it outright — both are
-    // legitimate choices while the board is on screen.
+    // legitimate choices while the board is on screen. Docked, the prompt has no header
+    // of its own (the panel's is above it), so the way to put it away is the command
+    // bar's prompt toggle — the control that exists in every placement.
     fireEvent.click(screen.getByTestId('canvas-prompt-dock'));
     expect(screen.getByTestId('canvas-composer')).toHaveAttribute('data-placement', 'docked');
-    fireEvent.click(screen.getByTestId('canvas-prompt-close'));
+    expect(screen.getByRole('complementary', { name: 'Brain chat' })).toContainElement(screen.getByTestId('canvas-composer'));
+    fireEvent.click(screen.getByTestId('canvas-prompt-toggle'));
     expect(screen.queryByTestId('canvas-composer')).not.toBeInTheDocument();
 
     // Chat becomes the surface: there is no Brain dock left to join and no board behind

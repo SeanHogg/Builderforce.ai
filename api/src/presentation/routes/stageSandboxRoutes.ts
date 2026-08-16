@@ -11,13 +11,10 @@
  */
 
 import { Hono } from 'hono';
-import { and, eq } from 'drizzle-orm';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { snapshots } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { claimStageSandboxRun, completeStageSandboxRun } from '../../application/marketplace/stageSandboxRuns';
+import { claimStageSandboxRunBundle, completeStageSandboxRun } from '../../application/marketplace/stageSandboxRuns';
 import type { StageCheck } from '@builderforce/creation-canvas-contract';
 
 export function createStageSandboxRoutes(db: Db): Hono<HonoEnv> {
@@ -29,16 +26,9 @@ export function createStageSandboxRoutes(db: Db): Hono<HonoEnv> {
    *  copy `stageChecks.ts` reads rather than re-deriving one. */
   router.get('/:runId/claim', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const claimed = await claimStageSandboxRun(db, { runId: c.req.param('runId'), tenantId });
-    if (!claimed) return c.json({ harness: null }, 200); // already claimed, or gone — nothing to do
-
-    const [row] = await db
-      .select({ payload: snapshots.payload })
-      .from(snapshots)
-      .where(and(eq(snapshots.id, claimed.snapshotId), scopedToTenant(snapshots, tenantId)))
-      .limit(1);
-    const objects = (row?.payload as { objects?: unknown } | null)?.objects ?? [];
-    return c.json({ harness: claimed.harness, objects });
+    const bundle = await claimStageSandboxRunBundle(db, { runId: c.req.param('runId'), tenantId });
+    if (!bundle) return c.json({ harness: null }, 200); // already claimed, or gone — nothing to do
+    return c.json(bundle);
   });
 
   /** The container's result report. */

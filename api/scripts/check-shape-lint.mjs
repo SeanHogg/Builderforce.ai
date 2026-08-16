@@ -127,6 +127,19 @@ const ADJUDICATED = new Map([
       "object, and stores a patch or a snapshot key — none of which a stranger's install " +
       'can point at. Same argument as `agent_definition_versions` above, one layer out.',
   ],
+  [
+    'stage_sandbox_runs',
+    "a CONTENT-ADDRESSED cache entry, not a task execution. Its primary access pattern " +
+      "is \"find the newest row for (tenant, payload_hash)\" — a re-stage of an unchanged " +
+      "build must reuse its prior clean run, and a one-byte edit must invalidate it — which " +
+      "needs `payload_hash` as a first-class indexed column, not a value buried inside the " +
+      "kernel `runs` primitive's opaque `input` jsonb. `runs`/`executions` are looked up by " +
+      "id or by (tenant, kind, status); neither shape has a content-hash access path. The " +
+      "kernel `runs` table is also unadopted by any real feature today (migration 0418, " +
+      "referenced only by the generic read-only entity browser) — becoming its first write " +
+      "consumer inside an already-large change would be validating two unproven things at " +
+      "once instead of one.",
+  ],
 ]);
 
 const tables = parseDrizzleTables(srcDir);

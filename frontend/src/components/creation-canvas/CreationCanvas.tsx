@@ -192,7 +192,7 @@ import { useCoarsePointer } from '@/lib/useCoarsePointer';
 import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
 import { canvasStrokes, drawingPatch, DRAWING_TOOLS, eraseStrokes, strokesSvg, type CanvasDrawingTool, type CanvasStroke } from '@/lib/canvasDrawing';
 import { DEFAULT_DRAWING_PREFERENCES, readDrawingPreferences, writeDrawingPreferences, type DrawingPreferences } from './drawingPreferences';
-import { useComposerSpace } from './useComposerSpace';
+import { useBottomChromeSpace } from './useBottomChromeSpace';
 import {
   fileToDataUrl, importCanvasFile, type AttachmentBytesStrategy, type ImportTranslator,
 } from '@/lib/canvasFileImport';
@@ -357,7 +357,11 @@ const INSPECTOR_DEFAULT_WIDTH = 270;
 const INSPECTOR_MIN_WIDTH = 270;
 const INSPECTOR_WIDE_WIDTH = 520;
 const INSPECTOR_MAX_WIDTH = 720;
-const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'train', 'start', 'compare', 'build']);
+/** The air between the command bar and the prompt floating above it. The bar's HEIGHT is
+ *  measured (see `useBottomChromeSpace`); this is the only part of that band a number can
+ *  honestly state, because it is a spacing decision rather than a fact about an element. */
+const COMMAND_BAR_CLEARANCE = 10;
+const ACCOUNT_REQUIRED_OBJECT_ACTIONS =new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'train', 'start', 'compare', 'build']);
 
 /**
  * ONE shape for every "this needs a free account" tool answer.
@@ -1494,7 +1498,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // The prompt's real height, published to the board as `--composer-space` — the
   // band every bottom-anchored panel and the phone command rail sit above. It
   // was a hardcoded 112px, which the execution chip alone overran.
-  const composerDockRef = useComposerSpace(flowWrapRef);
+  const composerDockRef = useBottomChromeSpace(flowWrapRef, '--composer-space');
+  // The command bar's real height, published to the SHELL as `--canvas-command-bar-space`
+  // — the band the floating prompt sits above. Measured for the same reason and by the
+  // same hook: the bar grows by whatever the SURFACE contributes to it (the App surface's
+  // Run, its three readings, its width switcher), and the literal `66px` it used to be is
+  // how the bar came to be drawn straight over the prompt on exactly that surface.
+  const commandBarSpaceRef = useBottomChromeSpace(shellRef, '--canvas-command-bar-space', COMMAND_BAR_CLEARANCE);
   const paletteSearchRef = useRef<HTMLInputElement | null>(null);
   const proposalBuffer = useRef<ProposedCanvasChange[]>([]);
   /** Set by the turn runner when the string it returned is a RUNTIME NOTICE rather
@@ -2222,18 +2232,41 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
   }, [setNodes, tSocial]);
 
+  /**
+   * The board, read WITHOUT depending on it.
+   *
+   * `updateNodeData` is handed to every card through the `nodeTypes` memo, and `nodes`
+   * changes identity on every board event — a selection, a drag, a re-measure, each
+   * streamed Brain token writing the transcript back onto the chat Object. Listing it
+   * as a dependency therefore gave React Flow a new `nodeTypes` object continuously and
+   * REMOUNTED every Object on the board, destroying the local state a card holds: the
+   * dashboard's open editor, a document's caret, a data grid's edited cell.
+   *
+   * Reported as "Edit dashboard does nothing", and that is precisely what it did: the
+   * remount lands between the mousedown that SELECTS a card and the click on a control
+   * inside it, so the first press hit an element that no longer existed and never
+   * reached a handler. Locked by `CreationCanvas.realFlow.test.tsx`, which needs the
+   * real store — a mocked XYFlow cannot see a remount.
+   *
+   * Same ref treatment, for the same reason, as `exportFromNode` and
+   * `runWorkflowFromNode` below: stable identity, newest closure. `nodesRef` is the ONE
+   * such ref — the build tools and the object vocabulary read the board through it too.
+   */
+  const nodesRef = useRef<CreationFlowNode[]>([]);
+  nodesRef.current = nodes;
+
   const updateNodeData = useCallback((nodeId: string, patch: Partial<CreationNodeData>) => {
     if (!cardsEditable) return;
     setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...patch } } : node));
     setNotice(t('noticeSavingChanges'));
-    const target = nodes.find((node) => node.id === nodeId);
+    const target = nodesRef.current.find((node) => node.id === nodeId);
     const campaignId = Number(target?.data.campaignId);
     if (target?.data.kind === 'socialCampaign'
       && Number.isInteger(campaignId)
       && SERVER_OWNED_CAMPAIGN_FIELDS.some((field) => field in patch)) {
       void syncSocialCampaign(campaignId, nodeId, patch);
     }
-  }, [cardsEditable, nodes, setNodes, syncSocialCampaign]);
+  }, [cardsEditable, setNodes, syncSocialCampaign]);
 
   const updateSelected = useCallback((patch: Partial<CreationNodeData>) => {
     if (!selectedId) return;
@@ -3823,12 +3856,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * being a dependency of the memo that builds them — otherwise every object added
    * to the board would re-register all seven tools mid-turn.
    */
-  /** The board as the tool modules read it. Same reason as `boundBuildsRef`
-   *  directly below: a tool that closed over `nodes` would make every object
-   *  added to the board re-register the whole vocabulary mid-turn. */
-  const nodesRef = useRef<CreationFlowNode[]>([]);
-  nodesRef.current = nodes;
-
+  /* The board as the tool modules read it is `nodesRef`, declared beside
+   * `updateNodeData` above — ONE ref for the one reason all three callers need it,
+   * `boundBuildsRef` directly below included: reading CURRENT board state without
+   * `nodes` being a dependency, which would re-register the whole vocabulary mid-turn
+   * and remount every Object on the board. */
   const boundBuildsRef = useRef<BoundCanvasBuild[]>([]);
   boundBuildsRef.current = useMemo(() => {
     const staged = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
@@ -9801,9 +9833,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // `float`/`docked`/`closed` remain a per-browser preference for every OTHER surface; chat
   // just declines to read it, the same way `BrainSurfaceActions` declines the dock toggle
   // (see the `onModeChange` comment in `CanvasChatSurface.tsx`).
-  const effectivePromptPlacement: CanvasPromptPlacement = surfaceDef.brainIsSurface ? 'float' : promptPlacement;
+  //
+  // `docked` means the prompt is rendered INSIDE the Brain panel's column (see `BrainDock`),
+  // so it only holds while that panel is actually on screen. With Brain closed, inline in
+  // its Object, or replaced by a surface that IS the conversation, there is no column to be
+  // the last row of — so the preference is untouched and the prompt floats until the panel
+  // comes back, rather than being drawn into a panel that is not there.
+  const brainDockDrawn = brainSurfaceOpen && brainPlacement === 'docked' && !surfaceDef.brainIsSurface;
+  const effectivePromptPlacement: CanvasPromptPlacement = surfaceDef.brainIsSurface
+    ? 'float'
+    : promptPlacement === 'docked' && !brainDockDrawn ? 'float' : promptPlacement;
+  const promptInBrainPanel = effectivePromptPlacement === 'docked';
   const composer = !presentMode && effectivePromptPlacement !== 'closed' && <div
-    ref={composerDockRef}
+    // Measured ONLY while it floats over the board. In the Brain panel it is that panel's
+    // last row rather than the board's chrome, so the band the board reserves for it is
+    // zero — publishing the panel-relative height instead would push every low-anchored
+    // panel up by most of the window. `useBottomChromeSpace` publishes `0px` the moment
+    // this ref stops being handed the node.
+    ref={promptInBrainPanel ? undefined : composerDockRef}
     data-testid="canvas-composer"
     className={styles.composerDock}
     data-placement={effectivePromptPlacement}
@@ -9811,8 +9858,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   >
     {/* The prompt's own header, and the only place the dock decision is made. Closing is
         offered from here and from the command bar; DOCKING is deliberate enough to belong
-        only on the thing being docked. Neither is offered while chat is the surface. */}
-    <div className={styles.promptChrome}>
+        only on the thing being docked. Neither is offered while chat is the surface.
+        Inside the Brain panel the whole row stands down: that panel has a header of its
+        own naming this conversation, and the way back out is a control in it. */}
+    {!promptInBrainPanel && <div className={styles.promptChrome}>
       <span className={styles.promptChromeName}>{t('promptName')}</span>
       {!surfaceDef.brainIsSurface && <>
         <button
@@ -9821,7 +9870,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           aria-pressed={promptPlacement === 'docked'}
           aria-label={promptPlacement === 'docked' ? t('floatPrompt') : t('dockPrompt')}
           title={promptPlacement === 'docked' ? t('floatPrompt') : t('dockPrompt')}
-          onClick={() => setPromptPlacement(promptPlacement === 'docked' ? 'float' : 'docked')}
+          // Docking puts the prompt in the Brain panel, so it OPENS that panel: a control
+          // whose whole effect is invisible until you separately find the launcher reads
+          // as a control that did nothing.
+          onClick={() => {
+            const next = promptPlacement === 'docked' ? 'float' : 'docked';
+            setPromptPlacement(next);
+            if (next === 'docked' && !brainDockDrawn) updateBrainDock({ open: true, mode: 'docked' });
+          }}
         ><Icon name={promptPlacement === 'docked' ? 'external-link' : 'message'} size={14} /></button>
         <button
           type="button"
@@ -9831,17 +9887,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onClick={() => setPromptPlacement('closed')}
         ><Icon name="close" size={15} /></button>
       </>}
-    </div>
+    </div>}
     <div className={styles.composerUtilities}>
       {/* Keep the settled receipt mounted after the run. Token consumption used
           to disappear at the exact moment the answer arrived because this whole
-          component was conditional on `thinking`. */}
-      <BrainActivityIndicator
+          component was conditional on `thinking`.
+
+          Not in the Brain panel: that panel's own footer (`BrainActivityBar`) is the
+          same reading of the same run, from the same `useBrainActivity` state, and two
+          copies of "Executing… read object · 36s" eight pixels apart is one live turn
+          reported twice. */}
+      {!promptInBrainPanel && <BrainActivityIndicator
         running={thinking}
         trace={brainTrace}
         startedAt={brainRunStartedAt}
         variant="composer"
-      />
+      />}
       {promptStarter}
     </div>
     <div className={styles.promptComposerShell} style={{ '--canvas-prompt-height': `${promptHeight}px` } as CSSProperties}>
@@ -10110,6 +10171,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           the address it is running at land here rather than in a second toolbar of their
           own. See `CanvasCommandBar` for why one bar and why the bottom. */}
       <CanvasCommandBar
+        // Its measured height becomes the band the prompt floats above. See the ref's
+        // declaration: this used to be a literal that the App surface's own controls
+        // overran, which is how the bar came to be drawn on top of the prompt.
+        hostRef={commandBarSpaceRef}
         surface={surface}
         collapsed={barCollapsed}
         onToggleCollapse={() => setBarCollapsed(!barCollapsed)}
@@ -10641,7 +10706,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             surface that IS the conversation renders it full-bleed, so rendering the edge
             panel alongside either would put the same live conversation on screen twice —
             the duplicate this placement model exists to prevent. */}
-        {brainSurfaceOpen && brainPlacement === 'docked' && !surfaceDef.brainIsSurface && <BrainDock
+        {brainDockDrawn && <BrainDock
+          // The prompt, when the reader has docked it — rendered as the panel's last row
+          // rather than as a card parked under it. See `BrainDock`'s header.
+          {...(promptInBrainPanel ? { composer, onUndockPrompt: () => setPromptPlacement('float') } : {})}
           mode={brainPlacement}
           side={brainDock.side}
           size={brainDock.size}
@@ -10668,7 +10736,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           ratings={brainSurface.ratings}
           guestSignup={guestSignupPrompt}
         />}
-        {composer}
+        {/* Floating over the board. A docked prompt is not drawn here at all — it is a row
+            inside the panel above, and rendering it in both places would mount the same
+            live composer twice. */}
+        {!promptInBrainPanel && composer}
         {/* The way back to a closed Brain. An inline Brain that still has its Object on
             the board already offers one ("Open Brain chat"), so the pill would be a
             second control for the same thing — it appears only when there is no Object

@@ -139,26 +139,26 @@ export function createLocalCreationSession(prompt: string, mode: ChatMode = NEW_
     position: { x: 120, y: 140 },
     data: { kind: 'chat', title: 'Brain', subtitle: prompt.trim() },
   }];
+  // NOTHING is pre-seeded from the WORDING of the prompt — not a website, not a
+  // workflow, and not a dataset/dashboard pair.
+  //
+  // The website shell went first: it drew the same ecommerce fallback for every prompt
+  // and then sat beside the object Brain actually authored. The keyword-matched
+  // workflow and dataset/dashboard shells were the same mistake left standing, and the
+  // dataset one was worse than decorative. A prompt containing "chart" or "report"
+  // placed a `dataset` titled "Imported data" holding no rows, plus a `dashboard`
+  // holding no widgets. Brain then read the board, found a dataset announcing itself as
+  // imported data, called `canvas_query_dataset` on it, and got back "No dataset with
+  // imported rows is on this canvas" — so the seed did not merely fail to help, it
+  // FAILED THE TURN that would otherwise have authored the real objects, and left two
+  // empty shells that look like output sitting there afterwards.
+  //
+  // Every object on a board is authored: by Brain through the AI tool contract (whose
+  // `emptyShellProblem` gate rejects a dashboard with no widgets and a dataset with no
+  // rows), from the palette, or from a template. A guess made by a regex over the
+  // prompt is none of those, and it cannot carry data because at this moment there is
+  // none to carry.
   const edges: Edge[] = [];
-  const lower = prompt.toLowerCase();
-  const addIntent = (kind: CreationFlowNode['data']['kind'], title: string, x: number, y: number) => {
-    const id = crypto.randomUUID();
-    nodes.push({ id, type: 'creation', position: { x, y }, data: { kind, title, status: 'AI draft', subtitle: `Created from: ${prompt.trim()}` } });
-    edges.push({ id: crypto.randomUUID(), source: nodeId, target: id, type: 'smoothstep', label: 'creates' });
-    return id;
-  };
-  // Do not pre-seed Website/Prototype requests with an empty visual shell. The
-  // old shell rendered the same ecommerce fallback for every prompt, then sat
-  // beside the genuinely authored object Brain produced. Website creation now
-  // enters through the AI tool contract, which rejects anything without real
-  // WYSIWYG pages and sections.
-  if (/workflow|campaign|automation|process/.test(lower)) addIntent('workflow', `${title} workflow`, 570, 390);
-  if (/data|dataset|csv|spreadsheet|report|dashboard|chart/.test(lower)) {
-    const datasetId = addIntent('dataset', 'Imported data', 570, 120);
-    const dashboardId = crypto.randomUUID();
-    nodes.push({ id: dashboardId, type: 'creation', position: { x: 1050, y: 120 }, data: { kind: 'dashboard', title: `${title} dashboard`, status: 'AI draft' } });
-    edges.push({ id: crypto.randomUUID(), source: datasetId, target: dashboardId, type: 'smoothstep', label: 'visualizes' });
-  }
   const snapshot: LocalCreationSnapshot = {
     version: 1,
     title,

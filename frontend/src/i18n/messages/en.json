@@ -17144,7 +17144,7 @@
     "noticeGradebookEmpty": "Nothing to compute yet — no learners or no assignment columns on this gradebook.",
     "noticeSubmissionMarked": "{name} marked: {percent}% ({mark} of {total})",
     "noticeSubmissionMarkedLate": "{name} marked: {percent}% ({mark} of {total}), {days, plural, one {# day} other {# days}} late, {deducted} deducted",
-    "noticeSubmissionNoPlacements": "This submission has no rubric placements yet. Write one row per criterion to `placements` — {criterion, levelIndex, comment} — then invoke `mark` again.",
+    "noticeSubmissionNoPlacements": "This submission has no rubric placements yet. Write one row per criterion to `placements` — '{'criterion, levelIndex, comment'}' — then invoke `mark` again.",
     "noticeSubmissionPlacementsIncomplete": "Not every criterion is placed yet: {criteria}. Add the missing rows to `placements` and invoke `mark` again.",
     "noticeSubmissionNoRubric": "Could not find this submission's assignment or its rubric on the board.",
     "noticeSubmissionRubricBroken": "The rubric this assignment marks against is not usable yet: {reason}",
@@ -19107,12 +19107,6 @@
           "console": "Console"
         },
         "errorCount": "{count, plural, one {# error} other {# errors}}",
-        "viewport": "Preview width",
-        "viewportName": {
-          "desktop": "Desktop",
-          "tablet": "Tablet",
-          "mobile": "Phone"
-        },
         "publish": "Publish",
         "frameTitle": "{path}, running",
         "idleTitle": "Ready to run",
@@ -19149,10 +19143,6 @@
       "site": {
         "label": "Site",
         "open": "Open the site",
-        "viewport": "Preview width",
-        "desktop": "Desktop",
-        "tablet": "Tablet",
-        "mobile": "Phone",
         "pageCount": "{count, plural, =0 {no pages} one {# page} other {# pages}}",
         "addSection": "Add",
         "addSectionPrompt": "Add a section…",
@@ -19177,24 +19167,63 @@
       "world": {
         "label": "3D space",
         "open": "Open the 3D space",
-        "mode": { "edit": "Build", "walk": "Walk" },
+        "mode": {
+          "edit": "Build",
+          "walk": "Walk"
+        },
         "palette": {
           "hint": "Drag a piece into the space.",
-          "group": { "building": "Building", "zones": "Zones", "props": "Props", "fx": "FX" },
-          "kind": { "block": "Block", "ramp": "Ramp", "sphere": "Sphere", "platform": "Platform", "collectible": "Collectible", "goal": "Goal", "hazard": "Hazard", "light": "Light" }
+          "group": {
+            "building": "Building",
+            "zones": "Zones",
+            "props": "Props",
+            "fx": "FX"
+          },
+          "kind": {
+            "block": "Block",
+            "ramp": "Ramp",
+            "sphere": "Sphere",
+            "platform": "Platform",
+            "collectible": "Collectible",
+            "goal": "Goal",
+            "hazard": "Hazard",
+            "light": "Light"
+          }
         },
         "panel": {
-          "transform": "Transform", "appearance": "Appearance", "physics": "Physics & body", "actions": "Actions",
-          "position": "Position", "rotation": "Rotation", "scale": "Scale", "color": "Color", "body": "Body",
-          "physicsKind": { "static": "Static", "dynamic": "Dynamic", "kinematic": "Kinematic", "sensor": "Sensor (walk-through)", "none": "None" },
+          "transform": "Transform",
+          "appearance": "Appearance",
+          "physics": "Physics & body",
+          "actions": "Actions",
+          "position": "Position",
+          "rotation": "Rotation",
+          "scale": "Scale",
+          "color": "Color",
+          "body": "Body",
+          "physicsKind": {
+            "static": "Static",
+            "dynamic": "Dynamic",
+            "kinematic": "Kinematic",
+            "sensor": "Sensor (walk-through)",
+            "none": "None"
+          },
           "deleteProp": "Delete prop",
-          "sky": "Sky & ground", "skyColor": "Sky", "groundColor": "Ground", "groundSize": "Size (m)",
-          "spawn": "Spawn point", "lighting": "Lighting", "ambient": "Ambient", "sun": "Sun",
-          "stats": "Stats", "propCount": "Props"
+          "sky": "Sky & ground",
+          "skyColor": "Sky",
+          "groundColor": "Ground",
+          "groundSize": "Size (m)",
+          "spawn": "Spawn point",
+          "lighting": "Lighting",
+          "ambient": "Ambient",
+          "sun": "Sun",
+          "stats": "Stats",
+          "propCount": "Props"
         },
         "respawn": "Respawn",
-        "cameraFirst": "First-person", "cameraThird": "Third-person",
-        "switchToThird": "Switch to third-person view (V)", "switchToFirst": "Switch to first-person view (V)",
+        "cameraFirst": "First-person",
+        "cameraThird": "Third-person",
+        "switchToThird": "Switch to third-person view (V)",
+        "switchToFirst": "Switch to first-person view (V)",
         "editHint": "Drag pieces from the left · click a prop to edit it on the right",
         "viewOnlyHint": "Press Walk to explore this space",
         "walkHint": "Click to lock the pointer · WASD to move · Space to jump · V to switch view · Esc to release"
@@ -19504,6 +19533,12 @@
       "book": "General ledger recording financial transactions and journal entries.",
       "account": "A financial account tracking balances and transactions.",
       "sticky": "Freeform sticky note for quick thoughts on the canvas."
+    },
+    "previewWidth": "Preview width",
+    "viewportName": {
+      "desktop": "Desktop",
+      "tablet": "Tablet",
+      "mobile": "Phone"
     }
   },
   "canvasCommands": {

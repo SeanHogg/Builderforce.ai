@@ -36,6 +36,7 @@ import { MonitoringService } from '../monitoring/MonitoringService';
 import { httpCheck } from '../monitoring/httpCheck';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { studioVoiceClones } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { dryRunSystemSteps } from './systemDryRun';
 import type { Db } from '../../infrastructure/database/connection';
 import type { CloudExecutorEnv } from '../workflow/cloudExecutor';
@@ -121,15 +122,20 @@ export function deploymentProbe(): DeploymentProbe {
  * `'transfers'` yet. The day a purchase-time grant exists, this is where it is
  * checked — a real `canUseClone(db, clone, buyerTenantId)` call for whichever
  * tenant is asking, once there is one to ask about.
+ *
+ * Scoped to the SELLER's own tenant, which is both the security requirement
+ * (a query against a tenant-owned table must filter by tenant) and the right
+ * semantic answer: a clone id that does not resolve UNDER THIS TENANT is
+ * exactly as "not really theirs to sell" as one that does not exist at all.
  */
-export function voiceCloneProbe(db: Db): VoiceCloneTransferProbe {
+export function voiceCloneProbe(db: Db, tenantId: number): VoiceCloneTransferProbe {
   return async (cloneId: string): Promise<'transfers' | 'seller_only' | 'unknown'> => {
     const parsed = Number.parseInt(cloneId, 10);
     if (!Number.isFinite(parsed)) return 'unknown';
     const [clone] = await db
       .select({ id: studioVoiceClones.id })
       .from(studioVoiceClones)
-      .where(eq(studioVoiceClones.id, parsed))
+      .where(scopedToTenant(studioVoiceClones, tenantId, eq(studioVoiceClones.id, parsed)))
       .limit(1);
     return clone ? 'seller_only' : 'unknown';
   };

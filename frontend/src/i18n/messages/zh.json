@@ -17144,7 +17144,7 @@
     "noticeGradebookEmpty": "暂无可计算内容 — 此成绩册没有学生或作业列。",
     "noticeSubmissionMarked": "已评分 {name}：{percent}%（{mark}/{total}）",
     "noticeSubmissionMarkedLate": "已评分 {name}：{percent}%（{mark}/{total}），迟交 {days} 天，扣除 {deducted}",
-    "noticeSubmissionNoPlacements": "此提交尚无评分标准定级。请在 `placements` 中为每项标准写入一行 — {criterion, levelIndex, comment} — 然后再次调用 `mark`。",
+    "noticeSubmissionNoPlacements": "此提交尚无评分标准定级。请在 `placements` 中为每项标准写入一行 — '{'criterion, levelIndex, comment'}' — 然后再次调用 `mark`。",
     "noticeSubmissionPlacementsIncomplete": "尚未对所有标准定级：{criteria}。请在 `placements` 中补全缺失的行，然后再次调用 `mark`。",
     "noticeSubmissionNoRubric": "在画布上找不到此提交对应的作业或其评分标准。",
     "noticeSubmissionRubricBroken": "此作业所依据的评分标准尚不可用：{reason}",
@@ -19107,12 +19107,6 @@
           "console": "控制台"
         },
         "errorCount": "{count, plural, other {# 个错误}}",
-        "viewport": "预览宽度",
-        "viewportName": {
-          "desktop": "桌面",
-          "tablet": "平板",
-          "mobile": "手机"
-        },
         "publish": "发布",
         "frameTitle": "{path}，运行中",
         "idleTitle": "准备就绪",
@@ -19149,10 +19143,6 @@
       "site": {
         "label": "网站",
         "open": "打开网站",
-        "viewport": "预览宽度",
-        "desktop": "桌面",
-        "tablet": "平板",
-        "mobile": "手机",
         "pageCount": "{count, plural, =0 {无页面} other {# 个页面}}",
         "addSection": "添加",
         "addSectionPrompt": "添加板块…",
@@ -19177,24 +19167,63 @@
       "world": {
         "label": "3D 空间",
         "open": "打开 3D 空间",
-        "mode": { "edit": "搭建", "walk": "行走" },
+        "mode": {
+          "edit": "搭建",
+          "walk": "行走"
+        },
         "palette": {
           "hint": "将部件拖入空间。",
-          "group": { "building": "建筑", "zones": "区域", "props": "道具", "fx": "特效" },
-          "kind": { "block": "方块", "ramp": "坡道", "sphere": "球体", "platform": "平台", "collectible": "收集品", "goal": "终点", "hazard": "危险区", "light": "灯光" }
+          "group": {
+            "building": "建筑",
+            "zones": "区域",
+            "props": "道具",
+            "fx": "特效"
+          },
+          "kind": {
+            "block": "方块",
+            "ramp": "坡道",
+            "sphere": "球体",
+            "platform": "平台",
+            "collectible": "收集品",
+            "goal": "终点",
+            "hazard": "危险区",
+            "light": "灯光"
+          }
         },
         "panel": {
-          "transform": "变换", "appearance": "外观", "physics": "物理与刚体", "actions": "操作",
-          "position": "位置", "rotation": "旋转", "scale": "缩放", "color": "颜色", "body": "刚体类型",
-          "physicsKind": { "static": "静态", "dynamic": "动态", "kinematic": "运动学", "sensor": "感应（可穿过）", "none": "无" },
+          "transform": "变换",
+          "appearance": "外观",
+          "physics": "物理与刚体",
+          "actions": "操作",
+          "position": "位置",
+          "rotation": "旋转",
+          "scale": "缩放",
+          "color": "颜色",
+          "body": "刚体类型",
+          "physicsKind": {
+            "static": "静态",
+            "dynamic": "动态",
+            "kinematic": "运动学",
+            "sensor": "感应（可穿过）",
+            "none": "无"
+          },
           "deleteProp": "删除道具",
-          "sky": "天空与地面", "skyColor": "天空", "groundColor": "地面", "groundSize": "尺寸（米）",
-          "spawn": "出生点", "lighting": "光照", "ambient": "环境光", "sun": "阳光",
-          "stats": "统计", "propCount": "道具数量"
+          "sky": "天空与地面",
+          "skyColor": "天空",
+          "groundColor": "地面",
+          "groundSize": "尺寸（米）",
+          "spawn": "出生点",
+          "lighting": "光照",
+          "ambient": "环境光",
+          "sun": "阳光",
+          "stats": "统计",
+          "propCount": "道具数量"
         },
         "respawn": "重生",
-        "cameraFirst": "第一人称", "cameraThird": "第三人称",
-        "switchToThird": "切换到第三人称视角（V）", "switchToFirst": "切换到第一人称视角（V）",
+        "cameraFirst": "第一人称",
+        "cameraThird": "第三人称",
+        "switchToThird": "切换到第三人称视角（V）",
+        "switchToFirst": "切换到第一人称视角（V）",
         "editHint": "从左侧拖入部件 · 点击道具在右侧编辑",
         "viewOnlyHint": "按“行走”探索此空间",
         "walkHint": "点击锁定指针 · WASD 移动 · 空格跳跃 · V 切换视角 · Esc 释放"
@@ -19504,6 +19533,12 @@
       "book": "记录财务交易与账目分录的总账。",
       "account": "追踪余额与交易记录的财务账户。",
       "sticky": "用于在画布上随手记录想法的便签。"
+    },
+    "previewWidth": "预览宽度",
+    "viewportName": {
+      "desktop": "桌面",
+      "tablet": "平板",
+      "mobile": "手机"
     }
   },
   "canvasCommands": {

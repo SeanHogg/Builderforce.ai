@@ -1,0 +1,14 @@
+{
+  "name": "builderforce-stage-sandbox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Container runner for the Stage Sandbox (real execution behind marketplace Stage checks).",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.58.2"
+  }
+}

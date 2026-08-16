@@ -5,15 +5,16 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { CodeReadingIcon, ConsoleReadingIcon, PreviewReadingIcon } from '@/components/canvas/CanvasCommands';
 import {
   CANVAS_APP_FRAME_SANDBOX,
   CANVAS_APP_MESSAGE,
-  CANVAS_APP_VIEWPORTS,
   canvasApp,
   type CanvasAppFile,
   type CanvasAppLogEntry,
   type CanvasAppViewport,
 } from '@/lib/canvasApp';
+import { CanvasViewportSwitcher } from './CanvasViewportSwitcher';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
 import styles from './CreationCanvas.module.css';
 import type { CreationNodeData } from './types';
@@ -59,6 +60,16 @@ import type { CreationNodeData } from './types';
 
 const READINGS = ['preview', 'code', 'console'] as const;
 type AppReading = (typeof READINGS)[number];
+
+/** One glyph per reading. Icons rather than words for the reason the width switcher gives:
+ *  this group renders INSIDE the one command bar, where everything else is a 15px mark, and
+ *  six worded buttons in that row wrapped the bar onto a second line that then covered the
+ *  prompt floating above it. The word is still the button's accessible name. */
+const READING_ICON: Record<AppReading, () => React.ReactElement> = {
+  preview: PreviewReadingIcon,
+  code: CodeReadingIcon,
+  console: ConsoleReadingIcon,
+};
 
 /** How many lines the console keeps. A runaway `console.log` in a render loop must not
  *  grow this array without bound while the user watches the frame. */
@@ -150,37 +161,31 @@ export function CanvasAppSurface({ nodes, onExit, onOpenObject }: CanvasAppSurfa
       </button>
 
       <div className={styles.appReadings} role="group" aria-label={t('readings')}>
-        {READINGS.map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setReading(option)}
-            aria-pressed={reading === option}
-          >
-            {t(`reading.${option}` as 'reading.preview')}
-            {option === 'console' && errors > 0 && (
-              <span className={styles.appErrorCount} aria-label={t('errorCount', { count: errors })}>{errors}</span>
-            )}
-          </button>
-        ))}
+        {READINGS.map((option) => {
+          const Glyph = READING_ICON[option];
+          const name = t(`reading.${option}` as 'reading.preview');
+          return (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setReading(option)}
+              aria-pressed={reading === option}
+              aria-label={name}
+              title={name}
+            >
+              <Glyph />
+              {option === 'console' && errors > 0 && (
+                <span className={styles.appErrorCount} aria-label={t('errorCount', { count: errors })}>{errors}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* The width the READER is checking. Local and unpersisted for the same reason
-          the site surface keeps its own: looking at a desktop app on a phone frame for
-          a moment must not quietly re-author what the app is designed for. */}
-      <div className={styles.appViewports} role="group" aria-label={t('viewport')}>
-        {CANVAS_APP_VIEWPORTS.map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setViewport(option)}
-            aria-pressed={viewport === option}
-            title={t(`viewportName.${option}` as 'viewportName.desktop')}
-          >
-            {t(`viewportName.${option}` as 'viewportName.desktop')}
-          </button>
-        ))}
-      </div>
+      {/* The width the READER is checking — the ONE switcher, shared with the site
+          surface. Local and unpersisted: looking at a desktop app on a phone frame for a
+          moment must not quietly re-author what the app is designed for. */}
+      <CanvasViewportSwitcher value={viewport} onChange={setViewport} />
 
     </div>
     ),

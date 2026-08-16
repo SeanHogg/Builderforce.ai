@@ -491,7 +491,7 @@ async function stagedView(
     // re-opening Stage re-asks the address instead of redisplaying a stale verdict.
     probe: deploymentProbe(),
     sandbox,
-    voiceClone: voiceCloneProbe(db),
+    voiceClone: voiceCloneProbe(db, meta.tenantId),
     systemDryRun: harness === 'system' ? systemDryRunProbe(env as unknown as CloudExecutorEnv) : null,
   });
 

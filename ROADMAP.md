@@ -133,12 +133,12 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
 | 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 39 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 151 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 142 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
 | 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 42 |
-| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 29 |
+| 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 31 |
 Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
 
 | Group | Exact open bullets |
@@ -153,12 +153,12 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 7 | 25 |
 | 8 | 3 |
 | 9 | 39 |
-| 10 | 151 |
+| 10 | 142 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
 | 14 | 42 |
-| 15 | 29 |
+| 15 | 31 |
 ---
 
 ## 🚦 Parallel Execution Plan — waves, lanes, and what each agent may touch
@@ -952,8 +952,6 @@ sequenced into waves because nothing in them gates the sell motion.
 
 
 
-- **Stage's checks are STATIC ANALYSIS of the snapshot, not a run in a sandbox workspace.** *(identified 2026-08-15 while building the Build/Stage/Live release lifecycle)* `api/src/application/marketplace/stageChecks.ts` reads the staged snapshot payload — the copy a buyer actually receives, after `stripBindings` — and answers six harnesses' worth of questions about it (a CDN reference in a game document, an orphaned question id, an empty page, a mesh with no unit, a cloned voice that will not transfer). That catches the whole class of defect the seller cannot see on their own board, which is the point. What it does NOT do is what the proposal called for: install the snapshot into a throwaway tenant, boot it with every outbound step stubbed, and measure the result. So `runtime.touch` is a regex over the document rather than a driven play; `media.duration` reads a declared field rather than a render that finished; `system.outbound` reports that steps WOULD be stubbed rather than that they were. Consequence: a document that boots and then throws on frame 2 passes, and a workflow whose stubbed step would have failed is not caught. **Blocked on an infrastructure decision**: a disposable tenant needs a lifecycle (who creates it, who destroys it, what it costs per stage press) and a headless runner with an outbound interceptor — neither exists, and inventing either inside this pass would have shipped a sandbox nobody had agreed to pay for. Unblocks: the difference between "the payload looks right" and "it ran". **(W1B — parked for the wave; W1B ships the static harnesses plus R8's `deployment` harness and states this limit rather than inventing the sandbox.)**
-
 - **SAML 2.0 / Shibboleth SSO is not implemented, so no institution can buy the academic vocabulary.** *(identified 2026-08-13 while landing LTI 1.3)* Universities authenticate through an institutional IdP (Shibboleth/InCommon, Azure AD, Okta) and procurement does not start without it — LTI 1.3 gets the tool into the LMS, SSO is what gets it past the security review. The tool half is straightforward (SP metadata, an `AuthnRequest` over HTTP-Redirect, an ACS endpoint); the part that is not is **verifying the signed SAML Response**, which needs exclusive XML canonicalisation (C14N) plus reference-digest validation before the RSA check. **Blocker: this is a security-critical component I will not hand-roll in one pass — a C14N or reference-resolution mistake is an XML signature-wrapping (XSW) authentication bypass, and it cannot be validated without a real institutional IdP to test against.** Needed to clear it: a decision on a vetted xmldsig implementation that runs on Workers (or a decision to terminate SAML at an identity provider that already speaks it, e.g. WorkOS/Auth0, and keep only OIDC in-process), plus one live IdP metadata document to integrate against. Unblocks: institutional procurement for the whole teaching vocabulary.
 - **LTI platform registrations live in the `LTI_REGISTRATIONS` secret with no admin surface.** *(landed 2026-08-13)* `presentation/routes/ltiRoutes.ts` reads registrations from a JSON secret, deliberately: a registration holds an RSA **private** key, and the generic entity layer serves every table it knows through one reader whose redaction is column-name-pattern based — a signing key should not be riding on a regex. The consequence is that adding a university is a `wrangler secret put`, not a screen, and key rotation is manual. Fix = a `lti_registrations` table with the private key in the existing `credentials` envelope (`credentialCrypto.ts`) plus a registration screen under /settings/security, or an explicit decision that this stays operator-managed. Unblocks: self-serve onboarding of an institution.
 - **The LTI OIDC launch never bridges into a canvas session.** *(identified 2026-08-16 while wiring the academic object actions to real delivery adapters)* `POST /api/lti/launch` verifies the signed `id_token` correctly and now returns `issuer`, `services.membershipsUrl` and `services.lineItemUrl` in its JSON response, but nothing on the frontend consumes that response: there is no route the LMS's `target_link_uri` lands a user on inside the canvas app, no session it establishes, and no board it creates or opens. So a `cohort`'s `ltiIssuer`/`ltiMembershipsUrl` and an `assignment`'s `ltiLineItemUrl` (the bindings `cohort.import` and `submission.mark` now use to call `/api/lti/roster` and push through `/api/lti/score`, see DONE.md) can only be set by hand today — an admin pasting values out of their LMS's tool configuration screen, not an instructor clicking "Launch" in Canvas/Moodle. **Blocked on a product decision**: does a launch create a new board, resume an existing one keyed on `contextId`, and what happens when the launching user has no Builderforce account. Unblocks: an instructor reaching a bound cohort by clicking through from their LMS, rather than configuring one by hand.
@@ -1048,7 +1046,8 @@ file-disjoint and must be serialized and rebased before merge:
 **Track 1 — the counterparty, serialized:** FO-A2 → FO-A3. **CLOSED 2026-08-16** — see
   DONE.md. Everything else rebases onto it now.
 **Track 2 — collection & signature consumers:** FO-B3 → FO-B4, over the primitives 0469
-  landed. Almost entirely handlers, so it is the most genuinely isolated.
+  landed. **FO-B3 mostly CLOSED 2026-08-16** — see DONE.md; `jobPosting` applications is blocked
+  on a decision (see FO-B3's own entry). FO-B4 unaffected.
 **Track 3 — money:** FO-C2 → FO-C5, then FO-C4. Its canvas half rebases onto Track 1.
 **Track 4 — the disjoint singles:** FO-F2 (one prompt deletion), FO-E2 (over FO-B2).
 
@@ -1071,15 +1070,28 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
 > document and finished its real work somewhere else". **Both primitives landed 2026-08-15 (0469)** —
 > the collection half on `question_sets` + `responses` (which already WERE the store; what was missing
 > was publication) plus `form_recipients`, and the signature half as `signature_requests` +
-> `signature_parties` with a public signer and a reminder sweep. What is left is the consumers.
+> `signature_parties` with a public signer and a reminder sweep. **Four of the five waiting
+> consumers landed 2026-08-16** — see FO-B3 below and [DONE.md](./DONE.md).
 
-- **FO-B3 — Route the five waiting consumers through them.** *(unblocked 2026-08-15 — both
-  primitives now exist.)* `contract.sign`; `policy.acknowledge` with
-  its roster and its `acknowledgementRate` meter (declared `derived: true` and derived from nothing);
-  `offer.send` / `offer.sign`; `jobPosting` applications; and the `data_rooms.nda_required` column. Each
-  is a handler over FO-B1/FO-B2 rather than a new mechanism, and doing them in one pass is what stops
-  five surfaces inventing five answers to "has this person agreed yet". Unblocks: the offer→employee
-  handover `people.ts` names as the seam between the Recruiter and HR seats.
+- **FO-B3 — Four of the five waiting consumers now route through FO-B1/FO-B2.** *(landed
+  2026-08-16, Track 2.)* `contract.sign`, `policy.acknowledge` (its `roster` and
+  `acknowledgementRate` are now written by the round rather than declared and derived from
+  nothing), `offer.send`/`offer.sign`, and `dataRoom.share`/`nda_required` are real handlers in
+  `CreationCanvas.tsx` over `createSignatureRequest`/`signatureProgress` — each stays GATED in
+  `canvasApprovalGate` (`offer.sign` deliberately excluded: it only re-reads a request `send`
+  already created). `contract.sign` resolves its recipient through the FO-A2 join — a linked
+  `account`'s own contact — rather than a typed email; a contract with no linked account or no
+  contact email sends nothing rather than inventing one. See [DONE.md](./DONE.md).
+  **`jobPosting` applications is the one left, and it is blocked**: `applicantCount`/`distribution`
+  are documented as "read from the hiring domain", but no canvas `jobPosting` object carries the
+  numeric `job_postings.id` a real `job_applications` count would join on — there is no
+  `canvas_sync_job_posting` equivalent of FO-A1's `canvas_sync_account` that creates or resolves
+  that backend row in the first place. Building the handler without it would mean matching by
+  title, which is exactly the string-matching defect FO-A1/FO-A2 exist to remove. Needed to clear
+  it: a decision on whether a canvas `jobPosting` should sync to/from a real `job_postings` row
+  (its own foundation, FO-A1-shaped) or applications stay off-canvas and are read through a
+  different surface. Unblocks: the offer→employee handover `people.ts` names as the seam between
+  the Recruiter and HR seats — already true for the four that landed.
 - **FO-B4 — An e-signature VENDOR adapter (DocuSign / Dropbox Sign).** Only worth building after FO-B2:
   a vendor adapter with no internal engine has nothing to map onto, and would become the second answer
   to "is it signed". Slots into the connector platform as manifest DATA per migration 0410, the same
@@ -1506,6 +1518,8 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
   hub; our scope is project-level (`ProjectScopeContext`) and board-centric, so "everything about this launch"
   has no home. Fix = a Space entity over the PRD-20 kernel, not a new per-feature table.
 
+- **Two Creation Canvas tests are red from a half-landed surface/chrome refactor in the working tree.** *(found 2026-08-16 while fixing the dashboard card-remount defect)* `canvasSurfaces.test.tsx:54` expects the object-scoped surfaces to be exactly `['page','play','site','timeline']` and the registry now also returns `world`, so a new surface was added without its registry assertion; and `CreationCanvas.test.tsx` > "keeps the prompt open and centred when chat becomes the surface" cannot find `canvas-prompt-close`, which only renders when `!surfaceDef.brainIsSurface`. Both reproduce on the untouched baseline, so neither belongs to the remount fix. **Blocker: a concurrent session is actively editing these files** — `useComposerSpace.ts` was deleted and replaced by `useBottomChromeSpace.ts` mid-run, `CanvasCommandBar.tsx`/`CanvasCommands.tsx` are uncommitted, and three separate edits made from this session were reverted underneath it — so the assertions belong to whoever owns that change rather than to a second writer racing them. Fix = add `world` to the registry expectation with the reason it is object-scoped, and decide whether the prompt's close control should exist on a brain-is-surface board (the test says yes, the component says no). Unblocks: the creation-canvas suite going green, which currently hides any further regression in those two files.
+
 - **Two elements are labelled "Model" on the Creation Canvas, so the participant editor's model control is ambiguous.** *(found 2026-08-13 during the career-tool pass)* `CreationCanvas.test.tsx:632` fails with `getMultipleElementsFoundError` on `getByLabelText('Model')`: both `creationCanvas.node.model` and `chatInput.model` render the string, and after opening a participant card both are in the tree. That is the [[prompt-options-menu-single-model-control]] convention being violated in the DOM — a person using a screen reader hears two identical "Model" controls and cannot tell which one governs the run. **Blocker: a concurrent session is actively editing this surface** (the frontend package version moved 2026.8.13 → 2026.8.14 mid-run and the participant editor is part of that change), so the fix belongs to whoever owns that edit rather than to a second writer racing them. Fix = give the node-body field a distinct label (the object's own "Model" attribute is not the run's model control) or route both through the one shared control. Unblocks: the frontend suite going green, which currently hides any further regression in that file.
 
 ---
@@ -1680,6 +1694,8 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
 
 ## 15 · 🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt
 
+- **`check:canvas-tools` fails: `canvas_import_roster` and `canvas_import_references` are advertised but unclassified.** *(observed 2026-08-16 while running the full guard chain for an unrelated marketplace change)* `check-canvas-tool-contract` reports both tools as missing from `GUEST_SAFE_CANVAS_TOOLS`/`GUEST_GATED_CANVAS_TOOLS`/`ACCOUNT_REQUIRED_CANVAS_TOOLS` in `packages/creation-canvas-contract/src/canvasTools.ts`, even though `DONE.md` records both as shipped (roster/bibliography CSV import, `lib/academic/roster.ts#parseRosterCsv`). A tool a session lacks makes the model improvise a limitation and tell the user the product cannot do it. Pre-existing, unrelated to the change that surfaced it — needs someone with academic-vocabulary context to pick the right bucket (both read/write a tenant's cohort/bibliography, so `ACCOUNT_REQUIRED_CANVAS_TOOLS` is the likely answer) rather than a guess made in passing. Unblocks: the guard chain going green, and the model actually planning around these two tools.
+- **`check:silent-catches` fails: an empty promise `.catch()` in `payables.ts:242`.** *(observed 2026-08-16, same guard-chain run)* One violation in `application/finance/payables.ts` — an empty catch callback swallows whatever it catches with no `reportCaughtError`/log, which is exactly the silent-failure class this guard exists to catch. Pre-existing, unrelated to the change that surfaced it — needs someone with payables context to decide whether the failure is genuinely ignorable (and say so in a comment) or needs reporting. Unblocks: the guard chain going green.
 - **`siteSubscriptions.ts` does not compile, and it is the only thing red on `main`.** *(observed 2026-08-15 after the tenant-scope / table-adoption fixes went green)* Run 31911920213's `Deploy API` job fails `tsgo` and `tsc` on six errors in `application/marketplace/siteSubscriptions.ts` alone — five `TS2769 No overload matches this call` at its insert/update statements (260, 284, 300, 336, 347) and one `TS2322 Type 'number | null' is not assignable to type 'number'` at 276, which together read as a nullable-column mismatch against the `site_subscriptions` shape rather than six separate mistakes. Every other guard in the chain now passes, so this single file is what stands between `main` and a deploy. **Blocker: it is another session's file, committed at `f924867e4` and still modified in the working tree as this was logged** — the author is mid-fix on the same lines, and a second edit from here would collide rather than help. Unblocks: the API deploying at all.
 
 ### 🛡️ Cloudflare serves a managed challenge to every datacenter caller of the whole `builderforce.ai` zone *(found 2026-08-08)*

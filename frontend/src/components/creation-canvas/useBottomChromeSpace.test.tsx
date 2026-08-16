@@ -8,7 +8,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it, vi, beforeAll } from 'vitest';
 import { useRef } from 'react';
-import { useComposerSpace } from './useComposerSpace';
+import { useBottomChromeSpace } from './useBottomChromeSpace';
 
 /** jsdom has no ResizeObserver. A no-op stub would make the "it grows" test pass
  *  vacuously — the hook publishes once on mount and would never be asked again —
@@ -40,9 +40,9 @@ function stubRect(element: HTMLElement, rect: { top: number; bottom: number }) {
   } as DOMRect);
 }
 
-function Board({ withDock, dockTop }: { withDock: boolean; dockTop: number }) {
+function Board({ withDock, dockTop, gap = 0 }: { withDock: boolean; dockTop: number; gap?: number }) {
   const board = useRef<HTMLDivElement | null>(null);
-  const dockRef = useComposerSpace(board);
+  const dockRef = useBottomChromeSpace(board, '--composer-space', gap);
   return (
     <div
       ref={(node) => {
@@ -66,7 +66,7 @@ function Board({ withDock, dockTop }: { withDock: boolean; dockTop: number }) {
 
 const spaceOf = (element: HTMLElement) => element.style.getPropertyValue('--composer-space');
 
-describe('useComposerSpace', () => {
+describe('useBottomChromeSpace', () => {
   it('publishes the distance from the board bottom to the dock top', () => {
     const { getByTestId } = render(<Board withDock dockTop={650} />);
     expect(spaceOf(getByTestId('board'))).toBe('150px');

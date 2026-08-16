@@ -93,6 +93,17 @@ export interface CanvasCommandBarProps {
   team?: React.ReactNode;
   /** The ••• sheet's trigger and whatever else the host keeps beside the actions. */
   extras?: React.ReactNode;
+  /**
+   * How tall this bar actually is, published to the shell as `--canvas-command-bar-space`
+   * by whoever passes the ref — the band the prompt floats above.
+   *
+   * It is a MEASUREMENT and not a number this file could state, because the bar's height
+   * is not this file's to know: a surface contributes Run, its readings and a width
+   * switcher, the roster and the team band come and go, and the shell was carrying a
+   * literal `66px` guess that the App surface's contribution overran by enough to draw
+   * the bar straight over the prompt. See `useBottomChromeSpace`.
+   */
+  hostRef?: (node: HTMLDivElement | null) => void;
 }
 
 export function CanvasCommandBar({
@@ -109,6 +120,7 @@ export function CanvasCommandBar({
   onTogglePrompt,
   promptOpen = true,
   extras,
+  hostRef,
 }: CanvasCommandBarProps) {
   const t = useTranslations('creationCanvas');
   const tQuick = useTranslations('creationCanvas.quickAdd');
@@ -120,6 +132,7 @@ export function CanvasCommandBar({
 
   return (
     <div
+      ref={hostRef}
       className={`${styles.floatCard} ${styles.commandBar}`}
       data-collapsed={collapsed ? 'true' : 'false'}
       data-surface={surface}

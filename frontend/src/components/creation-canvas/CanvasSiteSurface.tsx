@@ -6,8 +6,10 @@
  */
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
+import type { CanvasAppViewport } from '@/lib/canvasApp';
 import styles from './CreationCanvas.module.css';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
+import { CanvasViewportSwitcher } from './CanvasViewportSwitcher';
 import { WebsiteBody } from './WebsiteCanvas';
 import {
   WEBSITE_ADDABLE_SECTION_KINDS,
@@ -57,8 +59,9 @@ import type { CreationNodeData } from './types';
  * back, because which page is open genuinely belongs to the object.
  */
 
-const VIEWPORTS = ['desktop', 'tablet', 'mobile'] as const;
-type SiteViewport = (typeof VIEWPORTS)[number];
+/* The widths themselves come from `lib/canvasApp`, which already declared them for the
+   surface that runs an app — one list, so a width added there cannot appear on one
+   preview and not the other. */
 
 export interface CanvasSiteSurfaceProps {
   data: CreationNodeData;
@@ -70,7 +73,7 @@ export interface CanvasSiteSurfaceProps {
 
 export function CanvasSiteSurface({ data, onExit, onEdit }: CanvasSiteSurfaceProps) {
   const t = useTranslations('creationCanvas');
-  const [viewport, setViewport] = useState<SiteViewport>(
+  const [viewport, setViewport] = useState<CanvasAppViewport>(
     data.viewport === 'mobile' || data.viewport === 'tablet' ? data.viewport : 'desktop',
   );
   // Derived, never stored: a count beside the pages that produce it is a number the rows
@@ -136,15 +139,9 @@ export function CanvasSiteSurface({ data, onExit, onEdit }: CanvasSiteSurfacePro
         </option>)}
       </select>
     </span>}
-    <span className={styles.siteViewports} role="group" aria-label={t('surface.site.viewport')}>
-      {VIEWPORTS.map((option) => <button
-        key={option}
-        type="button"
-        onClick={() => setViewport(option)}
-        aria-pressed={viewport === option}
-        title={t(`surface.site.${option}` as 'surface.site.desktop')}
-      >{t(`surface.site.${option}` as 'surface.site.desktop')}</button>)}
-    </span>
+    {/* THE width switcher, shared with the App surface — see `CanvasViewportSwitcher`
+        for why this is one component and not two copies of three buttons. */}
+    <CanvasViewportSwitcher value={viewport} onChange={setViewport} />
     <small>{t('surface.site.pageCount', { count: pages.length })}</small>
   </span>;
 
