@@ -1119,6 +1119,57 @@
       }
     }
   },
+  "references": {
+    "title": "Referencias",
+    "lede": "Las personas que responderán por ti, en un solo lugar: quiénes son, de qué te conocen y qué pueden confirmar. Nada es público hasta que generas un enlace.",
+    "loading": "Cargando referencias…",
+    "loadFailed": "No se pudieron cargar tus referencias.",
+    "actionFailed": "No se pudo guardar el cambio.",
+    "nameRequired": "El nombre es obligatorio.",
+    "empty": "Aún no hay referencias. Añade a la primera persona que respondería por ti.",
+    "addTitle": "Añadir una referencia",
+    "add": "Añadir referencia",
+    "remove": "Eliminar",
+    "addSubtitle": "Una referencia informada sobre las dos cosas que debe confirmar vale por tres a las que solo se avisó de que \"quizá llamen\".",
+    "listTitle": "{count, plural, one {# referencia} other {# referencias}}",
+    "canSpeakTo": "Puede hablar de",
+    "includeInShare": "Incluir en el enlace",
+    "selectToShare": "Elige al menos una referencia para compartir.",
+    "linkOnce": "Cópialo ahora: se muestra una sola vez y no se puede recuperar.",
+    "untitledShare": "Enlace sin título",
+    "shareTitle": "Compartir un enlace",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "revoke": "Revocar",
+    "shareSubtitle": "Un enlace muestra solo las referencias que elijas y deja de funcionar en cuanto lo revocas.",
+    "includeContact": "Incluir correo y teléfono",
+    "createShare": "{count, plural, =0 {Crear enlace} one {Crear enlace con # referencia} other {Crear enlace con # referencias}}",
+    "shareMeta": "{count, plural, one {# referencia} other {# referencias}} · {views, plural, one {# vista} other {# vistas}}",
+    "field": {
+      "name": "Nombre",
+      "title": "Su cargo",
+      "company": "Empresa",
+      "email": "Correo",
+      "phone": "Teléfono",
+      "relationship": "De qué te conoce",
+      "canSpeakTo": "¿Qué puede confirmar sobre tu trabajo?"
+    },
+    "status": {
+      "draft": "Borrador",
+      "requested": "Solicitada",
+      "confirmed": "Confirmada",
+      "declined": "Rechazada"
+    },
+    "shared": {
+      "metaTitle": "Referencias compartidas",
+      "title": "Referencias",
+      "empty": "Este enlace no incluye ninguna referencia.",
+      "ledeWithContact": "Compartidas contigo, con datos de contacto. Trátalos como confidenciales.",
+      "ledeNoContact": "Compartidas contigo. Los datos de contacto se omitieron deliberadamente; pídeselos a la persona candidata.",
+      "goneTitle": "Este enlace ya no está disponible",
+      "goneBody": "Fue revocado o ha caducado. Pide uno nuevo a quien te lo envió."
+    }
+  },
   "salary": {
     "backToIndex": "← Todas las guías salariales",
     "backToRole": "← Salarios de {role}",

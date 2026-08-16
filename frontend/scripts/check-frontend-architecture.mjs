@@ -75,6 +75,14 @@
  *   regression to spend silently, which is how a ratchet goes slack without
  *   anyone deciding it should.
  *
+ *   798 → 799 (`useClientFiles`, 2026-08-16) — `app/references/ReferencesClient.tsx`.
+ *   The reference list is add / edit / select / issue-a-link, none of which a
+ *   server render can do. Its ROUTE root is deliberately not client: `page.tsx`
+ *   is a Server Component that reads its heading through `getTranslations` and
+ *   mounts this below, so the feature costs one client file and zero client-rooted
+ *   pages. The share view (`references/shared/[token]`) is a Server Component
+ *   too — an employer reading it never interacts with anything.
+ *
  *   The THIRD, `components/resume/ResumeDocumentView.tsx`, is why this is +2 and
  *   not +3: it had the directive and needed none. Props in, paper out, no hook and
  *   no handler. Its interactive hosts pull it into their bundle by importing it,

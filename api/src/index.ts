@@ -86,6 +86,8 @@ import { createRuntimeRoutes }     from './presentation/routes/runtimeRoutes';
 import { createAuditRoutes }       from './presentation/routes/auditRoutes';
 import { createMarketplaceRoutes } from './presentation/routes/marketplaceRoutes';
 import { createToolRoutes } from './presentation/routes/toolRoutes';
+import { createSalaryRoutes } from './presentation/routes/salaryRoutes';
+import { createReferenceRoutes } from './presentation/routes/referenceRoutes';
 import { createRfpRoutes } from './presentation/routes/rfpRoutes';
 import { ToolService } from './application/tools/ToolService';
 import { AuditRunner } from './application/tools/AuditRunner';
@@ -583,6 +585,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Diagnostics & Tools — list/get/compute are public (free preview);
   // save/runs apply auth + manager role inside the router.
   app.route('/api/tools', createToolRoutes(toolService, auditRunner, db, runtimeService));
+  // The public salary guide — bounded catalog, fully cached, no tenant data.
+  app.route('/api/salary', createSalaryRoutes());
+  // Professional references — private per person; only /shared/:token is public.
+  app.route('/api/references', createReferenceRoutes(db));
   // RFP / RFQ Response — pre-sales proposal generation (PRD 15). Reuses the diagnostics
   // scan (freshness gate) + audit runner (re-scan) grounded in the same toolService.
   app.route('/api/rfp', createRfpRoutes(db, toolService, auditRunner));

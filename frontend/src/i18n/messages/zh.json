@@ -1119,6 +1119,57 @@
       }
     }
   },
+  "references": {
+    "title": "推荐人",
+    "lede": "愿意为你背书的人，集中在一处——他们是谁、如何认识你、能证明什么。在你生成链接之前，这些内容都不会公开。",
+    "loading": "正在加载推荐人…",
+    "loadFailed": "无法加载你的推荐人。",
+    "actionFailed": "无法保存该更改。",
+    "nameRequired": "请填写姓名。",
+    "empty": "尚未添加推荐人。先添加第一位愿意为你背书的人。",
+    "addTitle": "添加推荐人",
+    "add": "添加推荐人",
+    "remove": "删除",
+    "addSubtitle": "一位清楚该证明哪两件事的推荐人，胜过三位只被告知“可能会有人来电”的推荐人。",
+    "listTitle": "{count} 位推荐人",
+    "canSpeakTo": "可以证明",
+    "includeInShare": "包含在链接中",
+    "selectToShare": "请至少选择一位推荐人再分享。",
+    "linkOnce": "请立即复制——此链接只显示一次，无法找回。",
+    "untitledShare": "未命名链接",
+    "shareTitle": "分享链接",
+    "copy": "复制",
+    "copied": "已复制",
+    "revoke": "撤销",
+    "shareSubtitle": "链接只显示你选中的推荐人，一旦撤销即刻失效。",
+    "includeContact": "包含邮箱和电话",
+    "createShare": "{count, plural, =0 {创建链接} other {创建包含 # 位推荐人的链接}}",
+    "shareMeta": "{count} 位推荐人 · {views} 次查看",
+    "field": {
+      "name": "姓名",
+      "title": "职位",
+      "company": "公司",
+      "email": "邮箱",
+      "phone": "电话",
+      "relationship": "如何认识你",
+      "canSpeakTo": "他们能证明你工作中的哪些方面？"
+    },
+    "status": {
+      "draft": "草稿",
+      "requested": "已邀请",
+      "confirmed": "已确认",
+      "declined": "已婉拒"
+    },
+    "shared": {
+      "metaTitle": "共享的推荐人",
+      "title": "推荐人",
+      "empty": "此链接不包含任何推荐人。",
+      "ledeWithContact": "已与你共享，含联系方式，请注意保密。",
+      "ledeNoContact": "已与你共享。联系方式已被有意隐去，请向候选人索取。",
+      "goneTitle": "此链接已失效",
+      "goneBody": "它已被撤销或已过期。请向发送者索取新的链接。"
+    }
+  },
   "salary": {
     "backToIndex": "← 全部薪资指南",
     "backToRole": "← {role} 薪资",

@@ -49,9 +49,11 @@ platform_modules
 platform_personas
 platform_pricing_configuration
 privacy_requests
+professional_references
 prompt_library_stars
 prompt_library_versions
 qa_run_steps
+reference_shares
 release_note_beta_enrollments
 release_notes
 role_permission_overrides

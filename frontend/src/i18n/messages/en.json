@@ -1119,6 +1119,57 @@
       }
     }
   },
+  "references": {
+    "title": "References",
+    "lede": "The people who will vouch for you, in one place — who they are, how they know you, and what they can confirm. Nothing here is public until you issue a link.",
+    "loading": "Loading references…",
+    "loadFailed": "Could not load your references.",
+    "actionFailed": "That change could not be saved.",
+    "nameRequired": "A name is required.",
+    "empty": "No references yet. Add the first person who would vouch for you.",
+    "addTitle": "Add a reference",
+    "add": "Add reference",
+    "remove": "Remove",
+    "addSubtitle": "A reference briefed on the two things to confirm is worth three who were told \"they might call\".",
+    "listTitle": "{count, plural, one {# reference} other {# references}}",
+    "canSpeakTo": "Can speak to",
+    "includeInShare": "Include in link",
+    "selectToShare": "Choose at least one reference to share.",
+    "linkOnce": "Copy this now — it is shown once and cannot be recovered.",
+    "untitledShare": "Untitled link",
+    "shareTitle": "Share a link",
+    "copy": "Copy",
+    "copied": "Copied",
+    "revoke": "Revoke",
+    "shareSubtitle": "A link shows only the references you pick, and stops working the moment you revoke it.",
+    "includeContact": "Include email and phone",
+    "createShare": "{count, plural, =0 {Create link} one {Create link with # reference} other {Create link with # references}}",
+    "shareMeta": "{count, plural, one {# reference} other {# references}} · {views, plural, one {# view} other {# views}}",
+    "field": {
+      "name": "Name",
+      "title": "Their title",
+      "company": "Company",
+      "email": "Email",
+      "phone": "Phone",
+      "relationship": "How they know you",
+      "canSpeakTo": "What can they confirm about your work?"
+    },
+    "status": {
+      "draft": "Draft",
+      "requested": "Asked",
+      "confirmed": "Confirmed",
+      "declined": "Declined"
+    },
+    "shared": {
+      "metaTitle": "Shared references",
+      "title": "References",
+      "empty": "This link does not include any references.",
+      "ledeWithContact": "Shared with you, including contact details. Please treat them as confidential.",
+      "ledeNoContact": "Shared with you. Contact details were deliberately withheld — ask the candidate for them.",
+      "goneTitle": "This link is no longer available",
+      "goneBody": "It was revoked or has expired. Ask the person who sent it for a new one."
+    }
+  },
   "salary": {
     "backToIndex": "← All salary guides",
     "backToRole": "← {role} salaries",

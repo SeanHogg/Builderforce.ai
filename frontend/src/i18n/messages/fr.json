@@ -1119,6 +1119,57 @@
       }
     }
   },
+  "references": {
+    "title": "Références",
+    "lede": "Les personnes qui répondront de vous, au même endroit : qui elles sont, d’où elles vous connaissent et ce qu’elles peuvent confirmer. Rien n’est public tant que vous n’émettez pas de lien.",
+    "loading": "Chargement des références…",
+    "loadFailed": "Impossible de charger vos références.",
+    "actionFailed": "Cette modification n’a pas pu être enregistrée.",
+    "nameRequired": "Un nom est requis.",
+    "empty": "Aucune référence pour l’instant. Ajoutez la première personne qui répondrait de vous.",
+    "addTitle": "Ajouter une référence",
+    "add": "Ajouter la référence",
+    "remove": "Supprimer",
+    "addSubtitle": "Une référence briefée sur les deux points à confirmer en vaut trois à qui on a seulement dit « on vous appellera peut-être ».",
+    "listTitle": "{count, plural, one {# référence} other {# références}}",
+    "canSpeakTo": "Peut témoigner de",
+    "includeInShare": "Inclure dans le lien",
+    "selectToShare": "Choisissez au moins une référence à partager.",
+    "linkOnce": "Copiez-le maintenant : il n’est affiché qu’une fois et ne peut pas être récupéré.",
+    "untitledShare": "Lien sans titre",
+    "shareTitle": "Partager un lien",
+    "copy": "Copier",
+    "copied": "Copié",
+    "revoke": "Révoquer",
+    "shareSubtitle": "Un lien n’affiche que les références choisies et cesse de fonctionner dès que vous le révoquez.",
+    "includeContact": "Inclure l’e-mail et le téléphone",
+    "createShare": "{count, plural, =0 {Créer le lien} one {Créer un lien avec # référence} other {Créer un lien avec # références}}",
+    "shareMeta": "{count, plural, one {# référence} other {# références}} · {views, plural, one {# vue} other {# vues}}",
+    "field": {
+      "name": "Nom",
+      "title": "Son poste",
+      "company": "Entreprise",
+      "email": "E-mail",
+      "phone": "Téléphone",
+      "relationship": "D’où elle vous connaît",
+      "canSpeakTo": "Que peut-elle confirmer sur votre travail ?"
+    },
+    "status": {
+      "draft": "Brouillon",
+      "requested": "Sollicitée",
+      "confirmed": "Confirmée",
+      "declined": "Refusée"
+    },
+    "shared": {
+      "metaTitle": "Références partagées",
+      "title": "Références",
+      "empty": "Ce lien ne contient aucune référence.",
+      "ledeWithContact": "Partagées avec vous, coordonnées comprises. Merci de les traiter comme confidentielles.",
+      "ledeNoContact": "Partagées avec vous. Les coordonnées ont été volontairement omises — demandez-les au candidat.",
+      "goneTitle": "Ce lien n’est plus disponible",
+      "goneBody": "Il a été révoqué ou a expiré. Demandez-en un nouveau à la personne qui vous l’a envoyé."
+    }
+  },
   "salary": {
     "backToIndex": "← Tous les guides salariaux",
     "backToRole": "← Salaires {role}",

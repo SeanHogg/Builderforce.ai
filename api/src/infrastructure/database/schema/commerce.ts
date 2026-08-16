@@ -984,7 +984,8 @@ export const professionalReferences = pgTable('professional_references', {
 export const referenceShares = pgTable('reference_shares', {
   id:             uuid('id').primaryKey().defaultRandom(),
   userId:         varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  token:          varchar('token', { length: 64 }).notNull().unique(),
+  /** SHA-256 hex only — never the raw token. Same rule as kernel `share_links`. */
+  tokenHash:      varchar('token_hash', { length: 64 }).notNull().unique(),
   label:          varchar('label', { length: 160 }),
   referenceIds:   jsonb('reference_ids').$type<string[]>().notNull().default([]),
   /** Contact details are the sensitive half; a share can prove the reference exists
