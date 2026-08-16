@@ -37,6 +37,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { siteCollections, siteRecords, siteUsers, projectSites, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskService } from '../task/TaskService';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
@@ -132,7 +133,7 @@ export async function raiseTicketForSiteRecord(env: Env, db: Db, input: RaiseTic
  * reported and swallowed, matching the other best-effort tails in
  * `recordStatusTransition` (workforce-metrics bump, cache invalidation).
  */
-export async function notifySiteRecordTicketDone(env: Env, db: Db, taskId: number): Promise<void> {
+export async function notifySiteRecordTicketDone(env: Env, db: Db, tenantId: number, taskId: number): Promise<void> {
   try {
     const [task] = await db
       .select({ originSiteRecordId: tasks.originSiteRecordId, title: tasks.title })
@@ -144,14 +145,14 @@ export async function notifySiteRecordTicketDone(env: Env, db: Db, taskId: numbe
     const [record] = await db
       .select({ collectionId: siteRecords.collectionId, email: siteRecords.email, siteUserId: siteRecords.siteUserId })
       .from(siteRecords)
-      .where(eq(siteRecords.id, task.originSiteRecordId))
+      .where(scopedToTenant(siteRecords, tenantId, eq(siteRecords.id, task.originSiteRecordId)))
       .limit(1);
     if (!record) return;
 
     const [collection] = await db
       .select({ siteId: siteCollections.siteId, name: siteCollections.name })
       .from(siteCollections)
-      .where(eq(siteCollections.id, record.collectionId))
+      .where(scopedToTenant(siteCollections, tenantId, eq(siteCollections.id, record.collectionId)))
       .limit(1);
     if (!collection) return;
 
@@ -160,7 +161,7 @@ export async function notifySiteRecordTicketDone(env: Env, db: Db, taskId: numbe
       const [user] = await db
         .select({ email: siteUsers.email })
         .from(siteUsers)
-        .where(eq(siteUsers.id, record.siteUserId))
+        .where(scopedToTenant(siteUsers, tenantId, eq(siteUsers.id, record.siteUserId)))
         .limit(1);
       recipientEmail = user?.email ?? recipientEmail;
     }
@@ -172,7 +173,7 @@ export async function notifySiteRecordTicketDone(env: Env, db: Db, taskId: numbe
     const [site] = await db
       .select({ subdomain: projectSites.subdomain, customDomain: projectSites.customDomain })
       .from(projectSites)
-      .where(eq(projectSites.id, collection.siteId))
+      .where(scopedToTenant(projectSites, tenantId, eq(projectSites.id, collection.siteId)))
       .limit(1);
     const host = site ? (site.customDomain ?? `${site.subdomain}.${HOSTING_APEX}`) : null;
     const appName = host ?? collection.name;

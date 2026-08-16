@@ -47,7 +47,7 @@ describe('notifySiteRecordTicketDone', () => {
 
   it('does nothing when the ticket was not raised by a site submission', async () => {
     const db = fakeDb([[{ originSiteRecordId: null, title: 'Some ticket' }]]);
-    await notifySiteRecordTicketDone(env, db as unknown as Db, 1);
+    await notifySiteRecordTicketDone(env, db as unknown as Db, 7, 1);
     expect(mail.sendRawEmail).not.toHaveBeenCalled();
   });
 
@@ -56,7 +56,7 @@ describe('notifySiteRecordTicketDone', () => {
       [{ originSiteRecordId: 42, title: 'Fix the export button' }],
       [],
     ]);
-    await notifySiteRecordTicketDone(env, db as unknown as Db, 1);
+    await notifySiteRecordTicketDone(env, db as unknown as Db, 7, 1);
     expect(mail.sendRawEmail).not.toHaveBeenCalled();
   });
 
@@ -66,7 +66,7 @@ describe('notifySiteRecordTicketDone', () => {
       [{ collectionId: 3, email: null, siteUserId: null }],
       [{ siteId: 9, name: 'bug-reports' }],
     ]);
-    await notifySiteRecordTicketDone(env, db as unknown as Db, 1);
+    await notifySiteRecordTicketDone(env, db as unknown as Db, 7, 1);
     expect(mail.sendRawEmail).not.toHaveBeenCalled();
   });
 
@@ -77,7 +77,7 @@ describe('notifySiteRecordTicketDone', () => {
       [{ siteId: 9, name: 'bug-reports' }],
       [{ subdomain: 'acme', customDomain: null }],
     ]);
-    await notifySiteRecordTicketDone(env, db as unknown as Db, 1);
+    await notifySiteRecordTicketDone(env, db as unknown as Db, 7, 1);
     expect(mail.sendRawEmail).toHaveBeenCalledTimes(1);
     const [, message] = mail.sendRawEmail.mock.calls[0] as [Env, { to: string; subject: string; html: string }];
     expect(message).toMatchObject({ to: 'visitor@example.com' });
@@ -92,7 +92,7 @@ describe('notifySiteRecordTicketDone', () => {
       [{ email: 'owner-account@example.com' }],
       [{ subdomain: 'acme', customDomain: 'acme.app' }],
     ]);
-    await notifySiteRecordTicketDone(env, db as unknown as Db, 1);
+    await notifySiteRecordTicketDone(env, db as unknown as Db, 7, 1);
     expect(mail.sendRawEmail).toHaveBeenCalledTimes(1);
     const [, message] = mail.sendRawEmail.mock.calls[0] as [Env, { to: string; subject: string; html: string }];
     expect(message).toMatchObject({ to: 'owner-account@example.com' });
@@ -104,7 +104,7 @@ describe('notifySiteRecordTicketDone', () => {
     const db = {
       select: () => { throw new Error('db is down'); },
     } as unknown as Db;
-    await expect(notifySiteRecordTicketDone(env, db, 1)).resolves.toBeUndefined();
+    await expect(notifySiteRecordTicketDone(env, db, 7, 1)).resolves.toBeUndefined();
     expect(mail.sendRawEmail).not.toHaveBeenCalled();
   });
 });

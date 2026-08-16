@@ -19340,6 +19340,7 @@
       "game": "Ein Studio zum Erzeugen eines spielbaren Minispiels aus einem Prompt.",
       "cad": "Ein Studio zum Erzeugen von CAD-Modellen für Bauteile und mechanische Konstruktionen.",
       "model3d": "Ein Studio zum Erzeugen von 3D-Modellen, die Sie ansehen und exportieren können.",
+      "world": "Ein von Hand gebauter 3D-Raum — platzieren Sie Objekte, bewegen Sie die Kamera und laufen Sie mit echten Kollisionen hindurch.",
       "resume": "Ein Lebenslaufdokument für eine Kandidatin oder einen Kandidaten, bearbeit- und exportierbar.",
       "template": "Eine wiederverwendbare Kreativvorlage, die Sie duplizieren können, um neue Arbeit zu starten.",
       "document": "Ein Rich-Text-Dokument, das du mit KI schreiben, formatieren und bearbeiten kannst.",

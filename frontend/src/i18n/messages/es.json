@@ -19340,6 +19340,7 @@
       "game": "Un estudio para generar un minijuego jugable a partir de un prompt.",
       "cad": "Un estudio para generar modelos CAD de piezas y diseños mecánicos.",
       "model3d": "Un estudio para generar modelos 3D que puedes ver y exportar.",
+      "world": "Un espacio 3D que construyes a mano: coloca objetos, mueve la cámara y camina por él con colisiones reales.",
       "resume": "Un documento de currículum para un candidato, listo para editar y exportar.",
       "template": "Una plantilla creativa reutilizable que puedes duplicar para iniciar un nuevo trabajo.",
       "document": "Un documento de texto enriquecido que puedes escribir, dar formato y editar con IA.",

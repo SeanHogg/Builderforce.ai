@@ -208,8 +208,12 @@ describe('the counterparty resolver', () => {
   });
 
   it('is never authorable — the resolution is read-only', () => {
-    for (const sourceField of ['customer', 'vendor', 'counterparty']) {
-      const hostKind = { customer: 'invoice', vendor: 'bill', counterparty: 'contract' }[sourceField]!;
+    const HOSTS = [
+      { sourceField: 'customer', hostKind: 'invoice' },
+      { sourceField: 'vendor', hostKind: 'bill' },
+      { sourceField: 'counterparty', hostKind: 'contract' },
+    ] as const;
+    for (const { sourceField, hostKind } of HOSTS) {
       const field = founderObjectSpec(hostKind)!.fields.find((entry) => entry.name === `${sourceField}Account`);
       expect(field?.derived, `${hostKind}.${sourceField}Account must be derived`).toBe(true);
       expect(founderMutableFields(hostKind)).not.toContain(`${sourceField}Account`);

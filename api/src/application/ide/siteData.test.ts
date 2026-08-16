@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+const ticketBridge = vi.hoisted(() => ({ raiseTicketForSiteRecord: vi.fn(async () => 99) }));
+vi.mock('./siteTicketBridge', () => ticketBridge);
+
 import {
   DEFAULT_COLLECTION,
   MAX_FIELDS,
@@ -9,9 +13,11 @@ import {
   normalizeCollectionName,
   sanitizeSubmission,
   submitSiteRecord,
+  updateCollection,
 } from './siteData';
 import { fakeDb, whereColumns } from '../../../test/fakeDb';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 
 describe('normalizeCollectionName', () => {
   it('slugifies to a URL segment', () => {
@@ -175,6 +181,65 @@ describe('submitSiteRecord', () => {
     await expect(submitSiteRecord({ ...input, db: db as unknown as Db }))
       .resolves.toMatchObject({ ok: true, recordId: 42, audienceAdded: false });
   });
+
+  describe('raises a ticket (0920, R10)', () => {
+    it('does NOT raise a ticket when the collection has not opted in', async () => {
+      ticketBridge.raiseTicketForSiteRecord.mockClear();
+      const db = fakeDb([
+        [{ id: 3, acceptsPublicWrites: true, audienceId: null, dailyWriteCap: 0, tenantId: 7, projectId: 5, raisesTickets: false }],
+        [{ count: 0 }],
+        [{ id: 42 }],
+        [],
+      ]);
+      await submitSiteRecord({ ...input, db: db as unknown as Db, env: {} as Env });
+      expect(ticketBridge.raiseTicketForSiteRecord).not.toHaveBeenCalled();
+    });
+
+    it('does NOT raise a ticket when no env is available (e.g. a unit test)', async () => {
+      ticketBridge.raiseTicketForSiteRecord.mockClear();
+      const db = fakeDb([
+        [{ id: 3, acceptsPublicWrites: true, audienceId: null, dailyWriteCap: 0, tenantId: 7, projectId: 5, raisesTickets: true }],
+        [{ count: 0 }],
+        [{ id: 42 }],
+        [],
+      ]);
+      await submitSiteRecord({ ...input, db: db as unknown as Db });
+      expect(ticketBridge.raiseTicketForSiteRecord).not.toHaveBeenCalled();
+    });
+
+    it('raises a ticket linked to the new record when the collection has opted in', async () => {
+      ticketBridge.raiseTicketForSiteRecord.mockClear();
+      const db = fakeDb([
+        [{ id: 3, acceptsPublicWrites: true, audienceId: null, dailyWriteCap: 0, tenantId: 7, projectId: 5, raisesTickets: true }],
+        [{ count: 0 }],
+        [{ id: 42 }],
+        [],
+      ]);
+      const env = {} as Env;
+      await submitSiteRecord({ ...input, db: db as unknown as Db, env });
+      expect(ticketBridge.raiseTicketForSiteRecord).toHaveBeenCalledWith(env, db, {
+        tenantId: 7,
+        projectId: 5,
+        collectionName: 'signups',
+        recordId: 42,
+        payload: { name: 'Sam', email: 'sam@example.com' },
+        email: 'sam@example.com',
+      });
+    });
+
+    it('does not fail the submission when raising the ticket fails', async () => {
+      ticketBridge.raiseTicketForSiteRecord.mockClear();
+      ticketBridge.raiseTicketForSiteRecord.mockRejectedValueOnce(new Error('board unavailable'));
+      const db = fakeDb([
+        [{ id: 3, acceptsPublicWrites: true, audienceId: null, dailyWriteCap: 0, tenantId: 7, projectId: 5, raisesTickets: true }],
+        [{ count: 0 }],
+        [{ id: 42 }],
+        [],
+      ]);
+      await expect(submitSiteRecord({ ...input, db: db as unknown as Db, env: {} as Env }))
+        .resolves.toMatchObject({ ok: true, recordId: 42 });
+    });
+  });
 });
 
 describe('createCollection', () => {
@@ -188,6 +253,35 @@ describe('createCollection', () => {
     const db = fakeDb([[{ id: 3 }]]);
     await expect(createCollection(db as unknown as Db, 7, 1, 2, 'signups'))
       .resolves.toMatchObject({ ok: false, status: 409 });
+  });
+});
+
+describe('updateCollection', () => {
+  it('404s an unknown collection', async () => {
+    const db = fakeDb([[]]);
+    await expect(updateCollection(db as unknown as Db, 7, 3, { raisesTickets: true }))
+      .resolves.toMatchObject({ ok: false, status: 404 });
+  });
+
+  it('sets raisesTickets alongside the existing toggles', async () => {
+    const db = fakeDb([[{
+      id: 3, name: 'bug-reports', acceptsPublicWrites: true, audienceId: null,
+      recordCount: 0, dailyWriteCap: 0, raisesTickets: true, createdAt: new Date('2026-08-01'),
+    }]]);
+    const result = await updateCollection(db as unknown as Db, 7, 3, { raisesTickets: true });
+    expect(result).toMatchObject({ ok: true, collection: { raisesTickets: true } });
+    const update = db.calls.find((c) => c.kind === 'update')!;
+    expect(update.payload).toMatchObject({ raisesTickets: true });
+  });
+
+  it('leaves raisesTickets untouched when the patch omits it', async () => {
+    const db = fakeDb([[{
+      id: 3, name: 'bug-reports', acceptsPublicWrites: false, audienceId: null,
+      recordCount: 0, dailyWriteCap: 0, raisesTickets: false, createdAt: new Date('2026-08-01'),
+    }]]);
+    await updateCollection(db as unknown as Db, 7, 3, { acceptsPublicWrites: false });
+    const update = db.calls.find((c) => c.kind === 'update')!;
+    expect(update.payload).not.toHaveProperty('raisesTickets');
   });
 });
 

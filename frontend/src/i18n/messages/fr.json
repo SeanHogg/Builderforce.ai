@@ -19340,6 +19340,7 @@
       "game": "Un studio pour générer un mini-jeu jouable à partir d'une invite.",
       "cad": "Un studio pour générer des modèles CAO de pièces et conceptions mécaniques.",
       "model3d": "Un studio pour générer des modèles 3D que vous pouvez visualiser et exporter.",
+      "world": "Un espace 3D que vous construisez à la main : placez des objets, déplacez la caméra et parcourez-le avec de vraies collisions.",
       "resume": "Un document de CV pour un candidat, prêt à modifier et exporter.",
       "template": "Un modèle créatif réutilisable que vous pouvez dupliquer pour démarrer un nouveau travail.",
       "document": "Un document de texte enrichi à rédiger, mettre en forme et éditer avec l'IA.",

@@ -257,7 +257,7 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
     // pulls in laneEntryTrigger, which reaches runtimeRoutes. The function itself
     // never throws; this catch only covers a failed dynamic import.
     await import('../ide/siteTicketBridge')
-      .then((m) => m.notifySiteRecordTicketDone(env, db, taskId))
+      .then((m) => m.notifySiteRecordTicketDone(env, db, tenantId, taskId))
       .catch((error) => {
         reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "recordStatusTransition" });
       });

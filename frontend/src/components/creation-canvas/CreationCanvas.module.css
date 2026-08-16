@@ -2049,7 +2049,7 @@
 .worldBannerTop { top:0; background:linear-gradient(to bottom,var(--canvas-shadow),transparent); }
 .worldRespawnAction,.worldCameraAction {
   position:absolute; z-index:2; bottom:10px; min-height:30px; padding:6px 12px;
-  border:0; border-radius:var(--radius-full); background:var(--canvas-accent,var(--coral-bright));
+  border:0; border-radius:var(--radius-full); background:var(--canvas-accent);
   color:var(--text-on-accent); font:650 11px var(--font-sans); cursor:pointer;
 }
 .worldRespawnAction { left:10px; }
@@ -2065,8 +2065,8 @@
 .worldNumberInput { width:70px; padding:3px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; }
 .worldSelect { flex:1; padding:3px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; }
 .worldSelect option { background:var(--canvas-panel); color:var(--canvas-ink); }
-.worldDeleteAction { width:100%; padding:6px 10px; border:1px solid var(--canvas-danger,#ef4444); border-radius:var(--radius-sm); background:transparent; color:var(--canvas-danger,#ef4444); font:650 11px var(--font-sans); cursor:pointer; }
-.worldDeleteAction:hover,.worldDeleteAction:focus-visible { background:var(--canvas-danger,#ef4444); color:var(--text-on-accent); outline:none; }
+.worldDeleteAction { width:100%; padding:6px 10px; border:1px solid var(--danger-border); border-radius:var(--radius-sm); background:transparent; color:var(--danger-text); font:650 11px var(--font-sans); cursor:pointer; }
+.worldDeleteAction:hover,.worldDeleteAction:focus-visible { background:var(--danger-bg); outline:none; }
 .worldVec3Label { margin-bottom:3px; color:var(--canvas-muted); font-size:10px; }
 .worldVec3Row { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; }
 .worldVec3Axis { display:flex; align-items:center; gap:3px; }

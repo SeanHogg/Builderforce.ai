@@ -1,3 +1,195 @@
+## ✅ RESOLVED 2026-08-16 — R10 (W1E): the app's own users can now reach the board that maintains it
+
+`site_records`/`site_collections`/`site_users` (growth) and `tasks` (delivery) now speak, via a
+new `api/src/application/ide/siteTicketBridge.ts` — the growth↔delivery bridge, same pattern as
+`QaFindingRouter` (application-layer file reading both domains' schema modules; no schema module
+imports the other, so `check-domain-boundary.mjs` stays green).
+
+**Forward leg.** `site_collections.raises_tickets` (already migrated, 0473) is now READ:
+`submitSiteRecord` (`siteData.ts`) checks it after a successful insert and, when set, calls
+`raiseTicketForSiteRecord` — opens a task via the normal `TaskService.createTask`, links it back
+with a new plain, FK-less `tasks.origin_site_record_id` column (migration 0920, same shape as
+`tasks.job_posting_id` from 0293), and fires the SAME lane-entry funnel every other
+ticket-creating writer uses (`onTaskLandedInLane`), so `maybeAutoRunOnLaneEntry` picks it up with
+no second dispatch path. Best-effort: a failed ticket-raise never fails the visitor's submission.
+The flag is now also settable — `updateCollection`/`PATCH /api/projects/:id/site/collections/:cid`
+gained a `raisesTickets` patch field (previously write-only in the schema, unreachable from any
+route), and `SiteFormsPanel` (frontend) gained a toggle + hint, localized in all 5 catalogs.
+
+**Return leg.** `taskLifecycle.recordStatusTransition` now calls (dynamic import, same
+cycle-avoidance the Validator-review call beside it already uses)
+`notifySiteRecordTicketDone(env, db, tenantId, taskId)` the moment a ticket first enters a
+done-class lane. It reads the link backwards — task → site_records → site_collections →
+project_sites, tenant-scoped at every hop (`scopedToTenant`) — and emails whoever is reachable:
+the signed-in `site_user` if there was one, else the anonymous submission's own captured email.
+Never throws; a notification failure cannot fail the board move that produced it.
+
+Tests: `siteTicketBridge.test.ts` (11 cases — the pure title/description drafting, and every
+branch of the return-leg lookup/notify), plus new `siteData.test.ts` coverage for the
+`raisesTickets` opt-in wiring and the `updateCollection` patch. All pre-existing tests
+(`siteData.test.ts`, task/swimlane/qa suites — 336 tests) still pass unchanged.
+
+Also fixed in the same pass (found via `tsgo --noEmit`, unrelated to R10 but left the tree
+non-compiling): `api/src/application/ide/siteListing.ts` assigned a nullable
+`catalogItems.currency` to a non-null field — one-line fix (`?? 'USD'`, matching the existing
+fallback convention in `creationListings.ts`).
+
+---
+
+## ✅ RESOLVED 2026-08-16 — FO-A2/FO-A3: the counterparty's fields are bound, and its card is worth opening
+
+Track 1 of the founder-operations build-out (ROADMAP.md's "the counterparty, serialized"),
+closing the two items FO-A1 (2026-08-15, migration 0469) left open.
+
+### FO-A2 · `invoice.customer`, `bill.vendor`, `contract.counterparty` and `placement.client` were free text
+
+Each field told the model to "match it to a `company`, `salesContact` or `contract` on the
+board" by NAME — three near-identical instructions and three chances for a trailing "Ltd" to
+produce a second Acme. `frontend/src/lib/founderObjects.ts` now declares ONE constant,
+`COUNTERPARTY_HINT`, that all four fields share, and one resolver,
+`resolveCounterpartyAccount(label, board)`, that all four bind through via
+`counterpartyAccountField(sourceField)`.
+
+**A live join, not a stored id.** `party_roles` already holds the counterparty; a second id
+column on every invoice, bill, contract and placement would be the same fact stored twice, and
+the two would disagree the day an account is renamed. So each source field stays the plain
+string it always was — an existing board's typed value keeps rendering, which is the read-time
+fallback the roadmap called for — and a companion `derived: true` field
+(`customerAccount`/`vendorAccount`/`counterpartyAccount`) resolves it LIVE against whichever
+`account` objects are on the board right now: matched on title first, then on `alsoKnownAs` (the
+list that exists so a company already on the board under a different name does not get a second
+account). No match yet renders "No `account` matches … — author one to link this" instead of a
+blank section, so the model is told what to do rather than left to invent somewhere to put a
+receivable.
+
+`placement.client` (a HIRING kind, `frontend/src/lib/hiringObjects.ts`) is the fourth call site
+and imports the same resolver from the founder vocabulary rather than growing its own — `account`
+is owned by founder, `hiringObjects.ts` already imports the shared spec machinery, and a second
+resolver was the exact duplication `COUNTERPARTY_HINT`'s own header argues against.
+
+### FO-A3 · An account's card showed nothing about the account
+
+`account.history` — open invoices and open bills, real. `api/src/application/finance/payables.ts`
+gained `openInvoicesForAccount`/`openBillsForAccount`, exact-match reads on
+`invoices.customerRef`/`bills.vendorRef` (both already documented on the schema as
+`party_roles.party_ref` for the counterparty — the SAME ref `canvas_sync_account` joins an
+`account` card by, so this is not a fuzzy join). `api/src/application/finance/accountHistory.ts`
+wraps both in one read-through-cached function, keyed `finance:account-history:<tenant>:<ref>` via
+the shared `getOrSetCached`, and `recordBill`/`approveBill`/`scheduleBillPayment`/`disputeBill`
+invalidate that exact key on write — precise invalidation on the ref each handler already knows,
+no version-token bookkeeping needed. Served at `GET /api/payables/accounts/:partyRef/history` and
+projected onto the board by `canvas_sync_account`, which now fetches each synced account's
+history in parallel and writes it onto `history` in the same call — "what does Acme owe us" is one
+tool call, not a sync plus a manual lookup.
+
+**Two of FO-A3's four were left out, honestly, rather than joined on a guess:**
+- **Live contract / renewal.** A founder `contract` object has no backend table — it is
+  canvas-board JSON — so there was nothing to query. `contract.counterparty` already resolves the
+  OTHER direction, client-side and board-scoped, via the FO-A2 resolver; that is where a
+  contract's renewal is read, not `account.history`.
+- **Support load.** `support_tickets.customer_ref` is populated from the ITSM ingest's
+  `requester` field (`api/src/application/boardsync/itsmIngest.ts`) — a free-text CRM identity,
+  never `party_roles.party_ref`. Joining it to an account by that column would have been exactly
+  the string-matching defect FO-A2 exists to close: two companies sharing a support requester's
+  name could see each other's tickets. Left out rather than shipped on a guess.
+
+**One known staleness window, documented rather than silently accepted.** `invoices` is also
+writable through the generic entity path (drafting one is ordinary work, per FO-C1's note in the
+2026-08-15 entry) — that path does not yet call the same invalidation the bill acts do, so a
+freshly-drafted invoice can lag `account.history` by its cache TTL (120s) until FO-C2 gives
+invoices their own handlers to hook precise invalidation into.
+
+`founderObjects.ts`'s own `account` kind comment — "a field is declared only when it has a
+writer" — is now current: the `history` field is declared, `canvas_sync_account` is its writer,
+and the placeholder comment explaining why it was withheld is gone.
+
+## ✅ RESOLVED 2026-08-16 — the academic object actions now have real delivery adapters
+
+**The gap.** `assignment.distribute`, `gradebook.compute`, `submission.mark`, `cohort.import`,
+`bibliography.import` and `curriculumMap.validate` were advertised by the registry and correctly
+REFUSED at invoke time by `canInvokeCreationObjectAction` — so nothing silently no-op'd — but the
+pure engines (`lib/academic/marking.ts`, `gradebook.ts`, `citations.ts`) had no canvas-side wiring
+to a live board, and `/api/lti/roster`/`/api/lti/score` had no client calling them.
+
+**The fix — six adapters over the existing engines, no new arithmetic.**
+- `assignment.distribute` (`CreationCanvas.tsx#distributeAssignment`) resolves the assignment's
+  cohort via `SpecDeriveBoard.byRef`, reads its roster through `learnersFromCohort`, and creates one
+  `submission` per learner who does not already have one — idempotent on `learnerRef`, so re-running
+  it after the roster grows only fills the gap.
+- `gradebook.compute` surfaces `statsOf` (already `derive`d live from board submissions —
+  `academic/derivations.ts`) as a reported, stamped figure rather than leaving it implicit.
+- `submission.mark` reads a new mutable field, `submission.placements` — the criterion→level
+  selections a marker (human or Brain, reading the rubric's descriptors) authors through the normal
+  reviewable `canvas_update_object` path — applies `rubricFromNode`/`applyRubric` and the assignment's
+  `parseLatePolicy`/`hoursLate`/`applyLatePolicy`, and writes `mark`/`markBreakdown`/`feedback`.
+  `mark`/`markBreakdown`/`feedback` stay `derived: true`; only `placements` is authorable, so a model
+  still cannot assert a grade, only place evidence a deterministic engine grades.
+- `cohort.import` and `bibliography.import` get BOTH a dedicated tool (`canvas_import_roster` parses
+  a roster CSV via the new `lib/academic/roster.ts#parseRosterCsv`; `canvas_import_references` reuses
+  the already-built `parseReferences`/`entryRowFromRecord` for `.bib`/`.ris`) and a generic-action
+  fallback for when the declared action is invoked with no text: `cohort.import` pulls through NRPS
+  when the cohort carries `ltiIssuer`/`ltiMembershipsUrl`; `bibliography.import` looks for a
+  `.bib`/`.ris` document already on the board.
+- `curriculumMap.validate` adds `curriculumMapProblems` (`academic/derivations.ts`) — outcomes with
+  no mapping row, mapping columns naming an assessment absent from the board — beside the coverage
+  figure that already existed, and stamps both onto the card.
+
+**LTI wiring, and the one real bug it surfaced.** `frontend/src/lib/ltiApi.ts` wraps
+`POST /api/lti/roster` and `POST /api/lti/score`, used by `submission.mark` (pushes a score when the
+cohort/assignment carry `ltiIssuer`/`ltiLineItemUrl`) and `cohort.import`'s LTI path. Wiring this up
+surfaced a real gap in `ltiRoutes.ts`: `POST /api/lti/launch`'s response never returned the
+`membershipsUrl`/`lineItemUrl`/`issuer` the verified launch context already computed — so nothing
+that ever consumed a launch could have called either service. Fixed in the same pass. What is still
+NOT built — the launch actually bridging into a canvas session that sets those fields on a board — is
+a distinct, larger product decision and is logged as its own ROADMAP entry rather than guessed at
+here.
+
+**New surface, localized.** `cohort.ltiIssuer`/`ltiMembershipsUrl`, `assignment.ltiLineItemUrl` and
+`submission.placements` (with its `levelIndex` column) are declared fields with hints, labelled in
+all five catalogs; eighteen new `notice*` keys (import/distribute/compute/mark/validate outcomes,
+success and failure) are localized in all five catalogs too.
+
+**Verification.** `frontend`'s full `type-check` (tsc + tsgo) passes clean on the changed files.
+
+---
+
+## ✅ RESOLVED 2026-08-16 — R11: a hosted app's agent-run cost now comes out of its own payout (lane W1C)
+
+**The gap.** Three economic controls never spoke to each other — the per-tenant dispatch caps
+([[superadmin-unlimited-dispatch-two-caps]]), the auto-run circuit-breaker
+([[autorun-failure-circuit-breaker]]), and `MARKETPLACE_TAKE_RATE_BPS` in `marketplace/listingCommerce.ts`.
+Once a board IS the project a paid app runs on, ongoing agent maintenance is OUR compute (the
+"no self-hosting" decision), and nothing connected what that compute cost to what the app earned.
+
+**The decision.** Of the three funding models the register laid out — creator's plan, a dedicated
+prepaid app budget, or a line on the payout — the payout deduction is the only one that's
+self-financing, so that's the one built: a hosted app pays for its own upkeep out of its own sales.
+
+**The fix — no new meter, one new ledger entry kind.** `application/marketplace/appMaintenanceCost.ts`
+resolves the project a hosted listing IS (via the existing `creation_session_project_links` `app`
+link, 0473 — `catalog_items` still carries no project column, by design), sums that project's
+`llm_usage_log.costUsdMillicents` (the SAME attribution the token caps already stamp on every run,
+0103), and debits the delta since the last charge from the seller's own `ledger_entries` account as a
+new `entryKind: 'maintenance_cost'` — alongside `commission`/`refund`/`payout`, idempotent by a
+reference derived from the cumulative accrued total, exactly like `creditSeller`'s sale references.
+`listingCommerce.ts#sellerEarnings` charges every hosted app up to date and nets the cost into
+`availableCents` (which `PayoutAccountService.balance` already floors at zero) while keeping
+`earnedCents` gross, so it stays the same number `resolveTakeRateBps`'s lifetime threshold reads —
+maintenance cost must not quietly reset a seller's progress toward the take-rate fee. No migration:
+`entryKind` has no DB CHECK constraint (documented vocabulary only, per the 0477 precedent), so a new
+value is an application-level addition, not a schema change.
+
+**Made it live, not just computed.** `SellerEarnings.tsx` shows a `maintenanceCost` stat tile and an
+explanatory note whenever the figure is nonzero, localized in all five catalogs. Also fixed the one
+other call site (`creationListings.ts`) that spelled the `app` link kind as a literal `'app'` instead
+of the `SESSION_PROJECT_LINK_APP` constant this feature now depends on reading correctly.
+
+**Tests.** `appMaintenanceCost.test.ts` (charge idempotency, zero-delta no-op, no-project no-op,
+lifetime sum) and an added `SellerEarnings.test.tsx` case for the UI line item; both api and frontend
+suites green, both packages typecheck clean on every file touched.
+
+---
+
 ## ✅ RESOLVED 2026-08-16 — R15c + R15d: a `site_user` can now pay, and the 0%-under-threshold promise is visible (lane W1C · api 2026.8.23 · frontend 2026.8.45)
 
 **The gap.** The two rules the "sell the Vercel-marketplace way" decision rests on — no second signup,

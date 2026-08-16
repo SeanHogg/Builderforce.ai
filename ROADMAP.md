@@ -957,22 +957,19 @@ sequenced into waves because nothing in them gates the sell motion.
 > **R15a, R15b, R15c, R15d and R15e are all CLOSED** (R15a/b/e 2026-08-16 W1D; R15c/d 2026-08-16
 > W1C — see [DONE.md](./DONE.md)). The embedded-apps API now has a caller end to end: creation,
 > the creator's own overview, a paying `site_user`, the version they are offered, and the receipt
-> that shows what selling actually costs. **Still open in this group: R8 (deployment harness), R9 and
-> R11 (decisions — R11 in progress), R10 (`raises_tickets` → tickets).**
+> that shows what selling actually costs. **R10 (`raises_tickets` → tickets) is now also CLOSED**
+> (2026-08-16 — see [DONE.md](./DONE.md)). **Still open in this group: R8 (deployment harness), R9 and
+> R11 (decisions — R11 in progress).**
 
 
 
 
-
-- **The app's own users cannot reach the board that maintains it.** *(new 2026-08-15, implied by the "project = app" decision)* `site_records` (`schema/growth.ts:129`) and `site_users` (`:192`) are referenced by exactly TWO files in `api/src/application` — `ide/siteData.ts` and `ide/siteAuth.ts` — and by nothing else. So the growth domain and the delivery domain do not speak: a bug reported by one of an app's end users lands in a `site_records` row that no ticket, no manager and no agent will ever read, and a shipped fix has no path back to the person who reported it. "Leverage all the AI agents" only pays off if the agents can hear from the people using the app; today the workforce maintains the code and never meets the customers. Fix = a `site_collections.raises_tickets` flag (configuration on the collection, never a hardcoded collection name) whose records write a `tasks` row through the existing seeding path so `maybeAutoRunOnLaneEntry` picks it up; cross-domain by id, never by importing the table. Return leg = the same link read backwards, notifying the `site_user` when the ticket reaches Done. Unblocks: the maintenance loop the "project = app" decision promises. **(R10 · W1E)**
-
-- **Nothing relates what the agents cost to what the app earns.** *(new 2026-08-15, implied by the "project = app" decision)* Three independent economic controls now overlap and none knows about the others: the per-tenant dispatch caps (see [[superadmin-unlimited-dispatch-two-caps]]), the auto-run failure circuit-breaker (see [[autorun-failure-circuit-breaker]]), and `MARKETPLACE_TAKE_RATE_BPS` stamped per sale in `marketplace/listingCommerce.ts`. Once the project IS the app and agents maintain it, running a paid app spends the creator's run budget on work that produces revenue — so a creator whose app is doing well can be rate-limited by a cap that has never heard of their earnings, while the platform takes 15% of a sale whose maintenance is billed in a different subsystem. Sharpened by the "no self-hosting" decision: the compute is now OURS, not a cloud bill the creator absorbs. Fix = decide the model before hosted apps go on sale: maintenance spend comes out of the creator's plan, out of the app's own revenue, or as a line on the payout (only the third makes a hosted app self-financing) — and attribute it through the existing usage ledger rather than a second meter. Unblocks: pricing a hosted app without the platform absorbing unbounded maintenance cost. **(R11 · W1C)**
 
 - **Stage's checks are STATIC ANALYSIS of the snapshot, not a run in a sandbox workspace.** *(identified 2026-08-15 while building the Build/Stage/Live release lifecycle)* `api/src/application/marketplace/stageChecks.ts` reads the staged snapshot payload — the copy a buyer actually receives, after `stripBindings` — and answers six harnesses' worth of questions about it (a CDN reference in a game document, an orphaned question id, an empty page, a mesh with no unit, a cloned voice that will not transfer). That catches the whole class of defect the seller cannot see on their own board, which is the point. What it does NOT do is what the proposal called for: install the snapshot into a throwaway tenant, boot it with every outbound step stubbed, and measure the result. So `runtime.touch` is a regex over the document rather than a driven play; `media.duration` reads a declared field rather than a render that finished; `system.outbound` reports that steps WOULD be stubbed rather than that they were. Consequence: a document that boots and then throws on frame 2 passes, and a workflow whose stubbed step would have failed is not caught. **Blocked on an infrastructure decision**: a disposable tenant needs a lifecycle (who creates it, who destroys it, what it costs per stage press) and a headless runner with an outbound interceptor — neither exists, and inventing either inside this pass would have shipped a sandbox nobody had agreed to pay for. Unblocks: the difference between "the payload looks right" and "it ran". **(W1B — parked for the wave; W1B ships the static harnesses plus R8's `deployment` harness and states this limit rather than inventing the sandbox.)**
 
 - **SAML 2.0 / Shibboleth SSO is not implemented, so no institution can buy the academic vocabulary.** *(identified 2026-08-13 while landing LTI 1.3)* Universities authenticate through an institutional IdP (Shibboleth/InCommon, Azure AD, Okta) and procurement does not start without it — LTI 1.3 gets the tool into the LMS, SSO is what gets it past the security review. The tool half is straightforward (SP metadata, an `AuthnRequest` over HTTP-Redirect, an ACS endpoint); the part that is not is **verifying the signed SAML Response**, which needs exclusive XML canonicalisation (C14N) plus reference-digest validation before the RSA check. **Blocker: this is a security-critical component I will not hand-roll in one pass — a C14N or reference-resolution mistake is an XML signature-wrapping (XSW) authentication bypass, and it cannot be validated without a real institutional IdP to test against.** Needed to clear it: a decision on a vetted xmldsig implementation that runs on Workers (or a decision to terminate SAML at an identity provider that already speaks it, e.g. WorkOS/Auth0, and keep only OIDC in-process), plus one live IdP metadata document to integrate against. Unblocks: institutional procurement for the whole teaching vocabulary.
 - **LTI platform registrations live in the `LTI_REGISTRATIONS` secret with no admin surface.** *(landed 2026-08-13)* `presentation/routes/ltiRoutes.ts` reads registrations from a JSON secret, deliberately: a registration holds an RSA **private** key, and the generic entity layer serves every table it knows through one reader whose redaction is column-name-pattern based — a signing key should not be riding on a regex. The consequence is that adding a university is a `wrangler secret put`, not a screen, and key rotation is manual. Fix = a `lti_registrations` table with the private key in the existing `credentials` envelope (`credentialCrypto.ts`) plus a registration screen under /settings/security, or an explicit decision that this stays operator-managed. Unblocks: self-serve onboarding of an institution.
-- **The academic object actions are declared without delivery adapters.** *(landed 2026-08-13)* `assignment.distribute`, `gradebook.compute`, `submission.mark`, `cohort.import`, `bibliography.import`, `curriculumMap.validate` and their siblings are advertised by the registry and are correctly REFUSED at invoke time by `canInvokeCreationObjectAction`, which tells the model not to claim they ran — so nothing silently no-ops. But the loop is still manual until the adapters exist: the pure engines are all built and tested (`lib/academic/marking.ts`, `gradebook.ts`, `citations.ts`, `accessibility.ts`, `assessment.ts`) and what is missing is the canvas-side wiring that fans a distribute into one `submission` per roster row, recomputes a gradebook from the submissions on the board, and pulls/pushes through `/api/lti/roster` and `/api/lti/score`. Unblocks: the assessment cycle running end to end without a person moving data between cards.
+- **The LTI OIDC launch never bridges into a canvas session.** *(identified 2026-08-16 while wiring the academic object actions to real delivery adapters)* `POST /api/lti/launch` verifies the signed `id_token` correctly and now returns `issuer`, `services.membershipsUrl` and `services.lineItemUrl` in its JSON response, but nothing on the frontend consumes that response: there is no route the LMS's `target_link_uri` lands a user on inside the canvas app, no session it establishes, and no board it creates or opens. So a `cohort`'s `ltiIssuer`/`ltiMembershipsUrl` and an `assignment`'s `ltiLineItemUrl` (the bindings `cohort.import` and `submission.mark` now use to call `/api/lti/roster` and push through `/api/lti/score`, see DONE.md) can only be set by hand today — an admin pasting values out of their LMS's tool configuration screen, not an instructor clicking "Launch" in Canvas/Moodle. **Blocked on a product decision**: does a launch create a new board, resume an existing one keyed on `contextId`, and what happens when the launching user has no Builderforce account. Unblocks: an instructor reaching a bound cohort by clicking through from their LMS, rather than configuring one by hand.
 
 - **The TALENT publish CTA still opens the skill form.** *(identified 2026-08-14 while merging the storefront's two kind filters)* `publishActionFor` (`lib/marketplaceFamilies.ts`) now routes every Assets and Agents chip to where its thing is actually authored — canvas kinds to `/create/new`, personas to `/personas`, knowledge to `/knowledge/new`, models to a disabled button — but `talent:person` and `talent:gig` still fall through to `{ via: 'form' }` and get the skill publish form, so "Publish a listing" offers slug/version/repo fields that describe neither a freelancer nor a gig. The person half is plausibly `/freelancer/profile` (the `available_for_hire` opt-in), but **the gig half is a product decision, not a route lookup**: `gigMarketplaceRoutes` publishes a gig from an existing board TICKET, so there is no "post a gig" page to point at and the honest CTA may be a board picker rather than a destination. **Blocker: that decision.** Once made it is two rows in `PUBLISH_ROUTE`. Unblocks: a CTA that is honest for all four families.
 
@@ -1034,11 +1031,16 @@ implementations. Both foundations are wiring, not modelling.
 
 **The ten unblocked items are CLOSED** — migration 0469, 2026-08-15, see
 [DONE.md](./DONE.md): FO-A1, FO-B1, FO-B2, FO-C1, FO-C3, FO-C6, FO-E3, FO-F1, FO-G1 and
-FO-D5's matching half. Seventeen remain, and three of them are unblocked by that pass:
-**FO-A2** now has an object to bind to, **FO-C2** now has a header to issue from, and
+FO-D5's matching half. **FO-A2 and FO-A3 are CLOSED too** — 2026-08-16, Track 1, see
+[DONE.md](./DONE.md): the counterparty resolver, the four bound fields, and
+`account.history` (open invoices and open bills; a contract's renewal reads off the
+`contract` object itself, and support load was evaluated and left out — see the
+entry for why). Fifteen remain, and two of them are unblocked by that pass:
+**FO-C2** now has a header to issue from, and
 **FO-B3** now has both primitives to route through. FO-D1 and FO-E1 have the
 `equity_holder` and `investor` roles they needed (`parties.ts`). FO-F2 is unblocked and
 should be taken with care — it deletes the mirroring paragraph that FO-F1 replaced.
+FO-D and FO-G2/FO-G3 are unblocked now that Track 1 has landed.
 
 **The tighter constraint is still file collision, not logical dependency.** The remaining
 items edit the same coordination files, so dispatching them at once produces conflicts even
@@ -1047,7 +1049,7 @@ where none depends on another's behaviour:
 | File | Contended by |
 |---|---|
 | `packages/creation-canvas-contract/src/index.ts` (`FOUNDER_OBJECT_KINDS`) | FO-D1, FO-E1 |
-| `frontend/src/lib/founderObjects.ts` | FO-A2, FO-C2, FO-D1, FO-E1, FO-G2 |
+| `frontend/src/lib/founderObjects.ts` | FO-C2, FO-D1, FO-E1, FO-G2 |
 | `frontend/src/i18n/messages/{en,zh,es,fr,de}.json` | every item with a surface |
 | `frontend/src/components/creation-canvas/CreationCanvas.tsx` (tool registry) | every item with a tool |
 | `frontend/src/lib/canvasFounderOpsTools.ts` | the founder-ops tool family added by 0469 |
@@ -1056,8 +1058,8 @@ where none depends on another's behaviour:
 Per the isolation-track rule at the foot of this file, shared coordination files are not
 file-disjoint and must be serialized and rebased before merge:
 
-**Track 1 — the counterparty, serialized:** FO-A2 → FO-A3. Owns `founderObjects.ts` and
-  the kind list for the duration; everything else rebases onto it.
+**Track 1 — the counterparty, serialized:** FO-A2 → FO-A3. **CLOSED 2026-08-16** — see
+  DONE.md. Everything else rebases onto it now.
 **Track 2 — collection & signature consumers:** FO-B3 → FO-B4, over the primitives 0469
   landed. Almost entirely handlers, so it is the most genuinely isolated.
 **Track 3 — money:** FO-C2 → FO-C5, then FO-C4. Its canvas half rebases onto Track 1.
@@ -1068,18 +1070,12 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
 #### FO-A · The counterparty — one object every commercial reference points at
 
 > FO-A1 landed 2026-08-15 (0469): the `account` kind, `parties.ts` and `canvas_sync_account`.
-
-- **FO-A2 — Bind the counterparty FIELDS to it.** *(unblocked 2026-08-15 — the object now
-  exists.)* Once `account` exists, `invoice.customer`,
-  `bill.vendor`, `contract.counterparty` and `placement.client` stop being free text and carry an object
-  id with the string kept as the display label. Needs ONE shared resolver over four call sites rather
-  than each field inventing its own match, plus a read-time fallback that leaves existing string values
-  readable — a board saved yesterday must not lose its counterparty because the field grew a type.
-  Unblocks: "show me everything about Acme" as one query instead of four greps.
-- **FO-A3 — Project the account's own history onto the card.** With FO-A2 landed, an `account` can show
-  its open invoices, its live contract, its renewal date and its support load from the domains that
-  already hold them, through the consolidated entity layer. Read-through cached per (tenant, account)
-  and invalidated on write, per the caching standard. Unblocks: the card being worth opening.
+> **FO-A2 and FO-A3 landed 2026-08-16 (Track 1)**: `resolveCounterpartyAccount` /
+> `counterpartyAccountField` join `invoice.customer`, `bill.vendor`, `contract.counterparty`
+> and `placement.client` to an `account` by `partyRef`, live and read-time-fallback-safe for
+> a board saved before the join existed; and `account.history` projects the account's real
+> open invoices and open bills, read-through cached and invalidated on the bill acts. See
+> [DONE.md](./DONE.md) for what "live contract" and "support load" turned out to need instead.
 
 #### FO-B · Collection & signature — the two primitives the contract already declares
 
@@ -1229,10 +1225,11 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
   document.
 - **FO-G2 — A contract repository with live obligations.** `contract.obligations` is
   `{obligation, owner, due}` prose, and nothing binds a contract to the invoices it should generate or a
-  `bill` to the contract it should be checked against (the hint tells the model to "match it to a
-  contract on the board" — by name). Needs FO-A2; FO-C1 landed 2026-08-15. The renewal-warning half is
-  already done: `contract.renewsAt` is a declared deadline and the `due-within` comparator shipped
-  2026-08-15.
+  `bill` to the contract it should be checked against. *(Unblocked 2026-08-16 — FO-A2 gave
+  `contract.counterparty` a real `account` join via `counterpartyAccountField`, so a contract and its
+  invoices now resolve to the same account instead of matching by name.)* FO-C1 landed 2026-08-15. The
+  renewal-warning half is already done: `contract.renewsAt` is a declared deadline and the `due-within`
+  comparator shipped 2026-08-15.
 - **FO-G3 — A template library.** *(unblocked 2026-08-15 — the signature engine now exists.)* Formation
   documents, NDAs, MSAs, SOWs, offer letters, IP assignments. A template you cannot get signed is a
   `document`; with `signature_requests` live it is mostly content, and the founders' agreement
