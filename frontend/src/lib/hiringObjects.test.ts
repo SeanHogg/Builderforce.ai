@@ -3,7 +3,10 @@ import { CREATION_OBJECT_KINDS, HIRING_OBJECT_KINDS, isHiringObjectKind, renameL
 import { HIRING_LABELS, HIRING_OBJECT_SPECS, HIRING_STATUSES } from './hiringObjects';
 import { SHARED_OBJECT_SPECS } from './sharedCanvasObjects';
 import './specObjectSets';
-import { specFieldNames, specMutableFields, specObjectNamespace, specReadableFields, specRestrictedFields } from './specObjects';
+import {
+  makeSpecDeriveBoard, specFieldNames, specFieldValue, specMutableFields,
+  specObjectNamespace, specReadableFields, specRestrictedFields,
+} from './specObjects';
 
 describe('hiring vocabulary', () => {
   it('declares one spec per contract kind, and no more', () => {
@@ -131,5 +134,26 @@ describe('the shared funnel', () => {
   it('measures conversion per stage rather than cumulatively', () => {
     const stages = SHARED_OBJECT_SPECS.find((spec) => spec.kind === 'funnel')?.fields.find((field) => field.name === 'stages');
     expect(stages?.columns).toEqual(['stage', 'entered', 'exited', 'conversion', 'medianDays']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FO-A2 — `placement.client` is the fourth counterparty field, reusing the
+// founder vocabulary's shared resolver. See founderObjects.test.ts for the
+// resolver's own matching rules.
+// ---------------------------------------------------------------------------
+
+describe('placement.client, the fourth counterparty field', () => {
+  const CLIENT = { kind: 'account', title: 'Northwind Traders', relationship: 'customer', owner: 'Sam Ito' };
+
+  it('is authorable, and links to an account on the board', () => {
+    expect(specMutableFields('placement')).toContain('client');
+    const field = HIRING_OBJECT_SPECS.find((spec) => spec.kind === 'placement')!.fields.find((entry) => entry.name === 'clientAccount')!;
+    expect(field.derived).toBe(true);
+    expect(specMutableFields('placement')).not.toContain('clientAccount');
+    const placement = { kind: 'placement', title: 'Placement 1', client: 'Northwind Traders' };
+    const linked = String(specFieldValue(field, placement, makeSpecDeriveBoard([CLIENT, placement])));
+    expect(linked).toContain('Northwind Traders');
+    expect(linked).toContain('Sam Ito');
   });
 });

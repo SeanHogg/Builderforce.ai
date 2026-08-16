@@ -1,5 +1,6 @@
 /** Shared, transport-neutral Creation Canvas contract used by web and VSIX. */
 export * from './video';
+export * from './world';
 export * from './canvasTools';
 export * from './marketplaceListings';
 export * from './dependencyGraph';

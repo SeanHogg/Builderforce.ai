@@ -127,7 +127,16 @@ export function SellerEarnings() {
           <Stat label={t('paidOut')} value={formatListingPrice(earnings.paidCents)} />
           <Stat label={t('available')} value={formatListingPrice(earnings.availableCents)} />
           <Stat label={t('sales')} value={String(earnings.salesCount)} />
+          {earnings.maintenanceCostCents > 0 && (
+            <Stat label={t('maintenanceCost')} value={formatListingPrice(earnings.maintenanceCostCents)} />
+          )}
         </div>
+      )}
+
+      {earnings && earnings.maintenanceCostCents > 0 && (
+        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-size-small)' }}>
+          {t('maintenanceCostNote', { amount: formatListingPrice(earnings.maintenanceCostCents) })}
+        </p>
       )}
 
       {earnings && (

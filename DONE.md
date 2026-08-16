@@ -1,3 +1,188 @@
+## ✅ RESOLVED 2026-08-16 — R15c + R15d: a `site_user` can now pay, and the 0%-under-threshold promise is visible (lane W1C · api 2026.8.23 · frontend 2026.8.45)
+
+**The gap.** The two rules the "sell the Vercel-marketplace way" decision rests on — no second signup,
+0% under a lifetime threshold — were both true on the server and invisible everywhere a person would
+see them. `/__api/billing/{me,subscribe,complete,cancel}` answered on a published site's own origin
+and nothing called them, so a `site_user` who wanted to pay the creator had no button to press. And
+`sellerEarnings` had grown a `takeRate` object with the seller's actually-resolved rate, while the
+route serving it still sent the platform's flat configured rate under the same field name the earnings
+panel read — so a seller under the threshold was told they were being charged the default fee, the
+exact inverse of the promise.
+
+**R15d — the bug was worse than "invisible", it was backwards.** `creationListingRoutes.ts`'s
+`/earnings` handler sent `takeRateBps: platformTakeRateBps(c.env)` — the CONFIGURED rate, same for
+every seller — as a sibling of `earnings`, even though `earnings.takeRate.bps` (the SELLER's resolved
+rate, 0 while under threshold) was sitting right there in the same response, unread. The route now
+sends `configuredTakeRateBps` (renamed, so what it is cannot be mistaken again) alongside the full
+`earnings` object, and `SellerEarnings.tsx` reads `earnings.takeRate.underThreshold` to choose between
+two statements: **"you are keeping 100%, {rate}% starts after {threshold}, {remaining} to go"** or
+**"the platform keeps {rate}% of each sale"** — never a rate nobody actually resolved. Localized in
+all five catalogs (`takeRateZero`); five tests including the exact regression (a seller under
+threshold now reads 100%/0%, not the configured 15%).
+
+**R15c — why the fix could not live where the register named it.** The register pointed at
+`frontend/src/components/commerce/**` — a Next.js directory. It cannot be the runtime: `siteBilling.ts`
+resolves the buyer from a cookie scoped to the SITE's own origin (a custom domain or platform
+subdomain, never `builderforce.ai`), and the published app itself is arbitrary bytes a creator's
+WebContainer build emitted (`publishStaticSite` takes `dist/` verbatim) — there is no markup Builderforce
+controls to mount a component into, and nothing served from this repo's own origin can read that
+cookie or post to that one. The one document Builderforce DOES still render for every paid app is the
+shop window (`siteLandingPage.ts` / `renderWebsiteDocument`) — already framework-free for the identical
+reason. The fix follows that shape instead: `application/marketplace/siteCommerceWidget.ts` is a
+plain-JS, ES5-style, self-contained script (subscribe, sign-in-by-code, and the version-offer banner),
+served once at the reserved path `GET /__api/billing/widget.js` and cached hard, since it is the same
+public bytes for every paid app on the platform. It asks for its own price and name at load
+(`GET /__api/billing/listing`, added as the second deliberate public exception to the sign-in gate)
+rather than being templated per publish, so `siteLandingPage.ts` only ever needs one unconditional,
+constant `<script src>` — it never has to know whether the project it belongs to is even on the
+marketplace.
+
+**The version offer.** `site_subscriptions.snapshot_id` is pinned at subscribe time and a buyer is
+OFFERED an update, never moved without accepting — `subscriptionUpdateAvailable` (`siteSubscriptions.ts`)
+is the one comparison both readers share: `subscriberStanding`'s `versionOffer` (via the subscriber's
+own `catalogItemId`, pinned and unaffected by a republish) for the widget's `/billing/me` read, and
+`siteVisitor.ts`'s `resolveSiteVisitor` (via `siteListing`'s `currentSnapshotId`, added alongside `name`
+and `currency`) for the ONE additive fork condition in `tryServeHostedSite`: `!visitor.entitled ||
+visitor.updateAvailable` — a live subscriber holding an old version sees the shop window once more,
+purely to be offered the update, and `ENTER_APP_PARAM` (already respected by `landingPageApplies`) is
+how either visitor reaches the app. `acceptSiteSubscriptionUpdate` is the only place
+`site_subscriptions.snapshot_id` moves outside the initial subscribe. `POST /__api/billing/accept-update`
+is the new action.
+
+**Where this crossed the lane boundary, and why.** `siteVisitor.ts`, `siteServer.ts`, `siteLandingPage.ts`
+and `ide/siteListing.ts` are W1A's files under the wave's parallel-dispatch plan; this pass touched all
+four, each by a single additive field or a one-line condition, because the alternative — the register's
+own `frontend/src/components/commerce/` — could not physically run where a `site_user`'s cookie lives.
+The lane-isolation rule exists to keep concurrent AGENTS from colliding on one file; done as one
+continuous pass instead of parallel dispatch, the smaller risk was a documented, minimal cross-boundary
+touch rather than landing R15c against a target it could never have satisfied. Nothing else on the
+"declared cross-lane seams" list moved.
+
+**Shipped:** `api/src/application/marketplace/{siteCommerceWidget,siteSubscriptions,siteBilling}.ts`,
+`api/src/application/ide/{siteListing,siteVisitor,siteServer,siteLandingPage}.ts`,
+`packages/creation-canvas-contract/src/websiteDocument.ts`,
+`api/src/presentation/routes/creationListingRoutes.ts`,
+`frontend/src/lib/creationListings.ts`, `frontend/src/app/marketplace/SellerEarnings.tsx`. 24 new/updated
+backend tests (`siteCommerceWidget.test.ts` parses the hand-written widget script with `new Function`
+so a stray quote fails CI rather than shipping silently broken to every paid app), `siteLandingPage.test.ts`
+covers the new `commerceScriptSrc` option and its escaping, `SellerEarnings.test.tsx` covers both the
+charged and the under-threshold copy. `hostedRemedies.test.ts`'s standing assertion that `subscribeStanding`
+never leaks the internal listing id now also asserts `versionOffer` is the one new field, not a leak.
+i18n: `takeRateZero` in all five catalogs (R15d only — the commerce widget is server-rendered vanilla JS
+outside `frontend/`'s next-intl surface, the same non-localized-by-architecture territory as
+`deliverSiteSignInCode`'s sign-in email).
+
+---
+
+## ✅ RESOLVED 2026-08-16 — a realization now records a verdict, not just a build (frontend 2026.8.44 · api 2026.8.22)
+
+The gap this pass closed: **"A realization records what was BUILT and never what was LEARNED."**
+Every proof target states success criteria before it is built — 25 signups from 500 visitors, a
+90% pass rate over 20 trials — but `realizations.result` only ever held the build outcome (files,
+tickets, live URL). The two consoles that already know the answer — the smoke test's demand
+console, the POC harness — computed a pass/fail verdict client-side and threw it away on refresh,
+so the platform could say "you ran a smoke test" and never "it failed and you built it anyway."
+
+**Migration 0477** adds `verdict` (`met` / `missed` / `abandoned`, CHECK-constrained), `verdict_metric`
+(jsonb — the number that decided it) and `decided_at` to `realizations`, distinct from `updated_at`
+so a rebuild never masks when the call was made.
+
+**The number is read off the console, never retyped.** Both consoles now render a "Record verdict"
+button (`shared.ts`'s `verdictRecorderScript()`), shown only once the console reaches a decisive
+state — the count crosses the threshold, or every POC trial is judged. Clicking it posts through the
+SAME public, same-origin, key-free `/__api/collections/<name>` write endpoint the signup/request
+forms already use (`proof-verdict`, a new `requiredCollections` entry on both targets) — no new
+backend surface, no auth to wire into a page that has none. The operator still decides WHEN to call
+it (only they know whether the 14-day window has run its course); the button removes the other half
+of the job, reading the number and typing it somewhere else.
+
+**`application/realization/realizationVerdict.ts` is the one trusted reader.** A console's write is
+public and therefore untrusted on its own — this module reads the `proof-verdict` collection back
+server-side, scoped by both tenant and the realization's own `project_id`, and rolls the latest
+decisive call onto the row via `setRealizationVerdict`. Deliberately NOT a new declarative handler
+step: `handlerSpec.ts` keeps that vocabulary narrow on purpose (a handler runs sandboxed against a
+spec any collaborator can edit), so writing to a core platform table stays in the trusted application
+layer. The sync runs on `GET /api/realizations/:id` — idempotent, a no-op once `decided_at` already
+matches the console's record, and it never lets a console resurrect an idea a person has already
+parked with `PATCH /api/realizations/:id/verdict` (the one verdict — `abandoned` — that is a
+judgement call with no number to compute, so it is the one value a person sets directly).
+
+**Frontend:** `Realize` now shows a `VerdictCard` on any built proof — the pill, the metric against
+its target, when it was decided, and a "Mark abandoned" button (confirmed via `useConfirm`, never
+`window.confirm`) — plus a colored verdict chip in the history list once a realization has been
+opened and synced. Localized in all five catalogs (`en`/`zh`/`es`/`fr`/`de`).
+
+Guards: `api/src/application/realization/realizationVerdict.test.ts` — 7 new cases (no project, no
+collection, no submission yet, an unrecognised payload, the happy path with its own recorded date,
+idempotent no-op, and abandoned never resurrected by a stale console read), all green. The existing
+`realization.test.ts` "declares every collection its forms post to" check passes unmodified — it
+scans generated markup for `__api/collections/<name>` and now finds `proof-verdict` declared in both
+targets' `requiredCollections`. `npm run check:i18n-keys` and `check:migrations` / `check-schema-drift.mjs`
+both clean.
+Verified: `tsgo --noEmit` clean on both `api` and `frontend` for every file this pass touched (the
+churn seen elsewhere in each run — `creationObjectRegistry.ts`, `payableRoutes.ts`, `siteListing.ts`
+— is other in-flight sessions editing this shared working tree concurrently, confirmed by re-running
+after each and watching the failing file change; none of it touches realization code).
+
+---
+
+## ✅ RESOLVED 2026-08-16 — a scanned résumé can now complete the import flow, R2 for a tenant, base64 for a guest (frontend 2026.8.43 · api 2026.8.21)
+
+The gap this pass closed: **"A SCANNED document dropped on the canvas can never become a résumé,
+because the canvas keeps no bytes to escalate with."** Registered blocked-on-a-decision by the
+"convert this pdf into a resume" pass (see the entry below) — retaining source bytes on a canvas
+attachment costs either a ~33% inflation of every server-persisted document that carries one (a
+base64 data URL) or a tenant to scope an R2 upload to (which a local/guest canvas does not have).
+The operator's decision, given directly: **signed-in sessions with a tenant upload to R2 and keep
+only a key; sessions with no tenant (not signed in) keep the bytes inline as base64.** Implemented
+exactly that split, end to end.
+
+**`canvasFileImport.ts` now accepts an `AttachmentBytesStrategy`** — `(file) => Promise<{
+sourceFileKey } | { sourceDataUrl } | null>` — threaded through `importCanvasFile`/`deriveObjects`
+and invoked at the two places a file already lands as an unreadable `file` attachment but could
+still be escalated: a PDF with pages and no text layer (a scan), and any docx/xlsx/pptx/pdf/rtf
+container that throws while parsing. `attachmentObject` merges whatever the strategy returns onto
+the object's data — invisible to `FileBody`'s card renderer (it only reads `content`/`markdown`/
+`thumbnailUrl`/`outputUrl`), so nothing changes about how an attachment looks on the board.
+
+**`CreationCanvas.tsx` builds that strategy from `persistence`, not from a separate auth check** —
+`persistence === 'server'` uploads through the new `POST /api/creative/attachments/upload` (R2,
+keyed `${tenantId}/${userId}/attachments/…`); anything else reads the file to a base64 data URL
+client-side, the same `FileReader` read images already use. A guest's scan is never lost even
+though it can't be OCR'd yet — if the draft is later claimed after sign-in, the same object, bytes
+still attached, is escalatable then.
+
+**`canvas_import_resume` escalates instead of dead-ending.** Previously a `file`-kind attachment
+had no `canvasDocument`, so the tool's only move was to tell the model to say "this is a scan" and
+stop. It now falls back to a `scanCandidates` search (any `file` attachment carrying
+`sourceFileKey`/`sourceDataUrl`), and when the only source is one of those, escalates through
+`importResumeFromAttachment` → `POST /api/creative/resume/import` — extended to accept an existing
+R2 key or an inline `dataUrl` alongside the original fresh-`File` path the résumé editor's own
+picker already used, so the same route now has three ways to receive bytes and one deterministic
+"which key survives" rule (a key already in R2 is reused, not re-uploaded). Escalation is gated on
+`persistence === 'server'`: OCR is a billed model call, and there is no guest-tenant fallback
+anywhere in the auth layer to bill it to (`authMiddleware` 401s any caller with no `tid` in its
+token — confirmed by reading it directly, not assumed). A guest hitting this case gets a plain
+"sign in, then try again," not a silent failure.
+
+**One shared primitive, not two R2-upload code paths.** `storeTenantFile()` in `creativeRoutes.ts`
+is the one write both `/attachments/upload` and `/resume/import`'s fresh-file branch use — same
+key shape, same tenant/user scoping, same `customMetadata`. `/resume/import` also now rejects a
+`sourceFileKey` that does not start with the caller's own `${tenantId}/` prefix (403), since a key
+now arrives from the client rather than always being minted server-side in the same request.
+
+Guards: `frontend/src/lib/canvasFileImport.test.ts` — 4 new cases (strategy invoked and its result
+kept for a scanned PDF; nothing retained with no strategy; nothing retained when the strategy
+throws), all 22 tests in the file green. `api/src/presentation/routes/creativeRoutes.attachmentEscalation.test.ts`
+— 7 new cases covering the upload route, R2-key round-trip through `/resume/import`, the
+cross-tenant-key 403, the inline-`dataUrl` path, and the no-source 400, all green.
+Verified: `tsgo --noEmit` clean on both `api` and `frontend` for every file this pass touched
+(pre-existing, unrelated errors in `creationObjectRegistry.ts`'s in-flight `world` kind and a
+duplicate `makeSpecDeriveBoard` import in `CreationCanvas.tsx` predate this pass and were left
+alone — see the canvas-hub-contention entry in ROADMAP.md for why that file collides).
+
+---
+
 ## ✅ RESOLVED 2026-08-16 — the last two items of the canvas-redesign audit
 
 The two items the 2026-08-16 audit pass below left open are both closed now.

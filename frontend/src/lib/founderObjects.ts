@@ -628,11 +628,15 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
   // one row per (tenant, party, role), so this card is a PROJECTION of a kernel row
   // and `partyRef` is the join.
   //
-  // `history` is the FO-A3 half — the account's own open invoices, live contract and
-  // renewal, written by `canvas_sync_account` from the domains that already hold them.
-  // Declared `derived` rather than omitted: a model that cannot see the section exists
-  // will invent somewhere to put a receivable, and the honest instruction is "this
-  // exists, you may reason about it, you may not assert it".
+  // `history` is the FO-A3 half — the account's own open invoices and open bills,
+  // written by `canvas_sync_account` from `finance/accountHistory.ts`, which reads
+  // `invoices.customerRef` / `bills.vendorRef` against this account's `partyRef`.
+  // A contract's renewal is NOT projected here: `contract` has no backend table (it
+  // is canvas-board JSON), so its renewal is read off the `contract` object itself —
+  // `counterpartyAccountField` already resolves that direction. `derived` rather than
+  // omitted: a model that cannot see the section exists will invent somewhere to put
+  // a receivable, and the honest instruction is "this exists, you may reason about
+  // it, you may not assert it".
   {
     kind: 'account',
     icon: '⬡',
@@ -665,13 +669,14 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
         columns: ['name', 'role', 'email', 'notes'],
         hint: 'The people at this account: {name, role, email, notes}. `role` is what they DO in a deal — economic buyer, champion, blocker, user — not their job title, because the title is on their business card and the role is what a next step depends on.',
       },
-      // NOT DECLARED: `history` — this account's open invoices, live contract and
-      // renewal, projected from the domains that already hold them. It is the
-      // obvious next field and it is deliberately absent, because declaring one
-      // with no producer is the defect this vocabulary is meant to avoid: the
-      // academic set has nineteen `derived: true` cells that nothing ever writes,
-      // and the card shows the section only when a human types into it. A field
-      // arrives with its writer or it does not arrive.
+      {
+        name: 'history',
+        render: 'rows',
+        label: 'history',
+        columns: ['kind', 'reference', 'amount', 'currency', 'due', 'status'],
+        hint: 'READ-ONLY. This account\'s open invoices and open bills, resolved live from finance by `canvas_sync_account` — never author it directly. Absent or empty does not mean nothing is owed: call canvas_sync_account again to refresh before concluding an account is current. A `contract`\'s renewal is not here — read it off the `contract` object itself, which this account\'s cards already join to.',
+        derived: true,
+      },
       SUMMARY_FIELD,
       SOURCES_FIELD,
     ],

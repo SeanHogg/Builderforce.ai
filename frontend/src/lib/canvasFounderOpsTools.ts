@@ -36,7 +36,7 @@
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
 import { ACCOUNT_RELATIONSHIPS, partyRef } from '@builderforce/creation-canvas-contract';
 import { getEntityRows } from '@/lib/kernel/kernelApi';
-import { moveDeal, readPipeline, type ProjectedPipeline } from '@/lib/founderOpsApi';
+import { accountHistory, moveDeal, readPipeline, type AccountHistory, type ProjectedPipeline } from '@/lib/founderOpsApi';
 
 /** What the canvas hands these tools so they can author onto the board. */
 export interface CanvasFounderOpsContext {
@@ -109,6 +109,18 @@ export function accountFieldsFrom(row: PartyRoleRow): Record<string, unknown> {
   };
 }
 
+/**
+ * The `account.history` rows a sync writes — open invoices and open bills,
+ * merged and ordered by due date so the earliest obligation on either side
+ * reads first. A missing `due` sorts last rather than first: an amount with no
+ * due date is not the most urgent one, it is the least dated.
+ */
+export function historyRowsFrom(history: AccountHistory): Record<string, unknown>[] {
+  return [...history.openInvoices, ...history.openBills]
+    .map((doc) => ({ kind: doc.kind, reference: doc.reference, amount: doc.amount, currency: doc.currency, due: doc.due, status: doc.status }))
+    .sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999'));
+}
+
 /** The canvas `salesPipeline` fields a projection writes. */
 export function pipelineFieldsFrom(pipeline: ProjectedPipeline): Record<string, unknown> {
   return {
@@ -138,7 +150,7 @@ export function canvasFounderOpsActions(ctx: CanvasFounderOpsContext): BrainActi
     {
       name: 'canvas_sync_account',
       description:
-        'Put the workspace\'s real COUNTERPARTIES on the canvas as `account` objects — the customers, vendors, investors and partners it already holds. Call this whenever the user names a customer or supplier ("what do we owe Acme", "show me the Northwind account"), and BEFORE authoring an invoice, bill or contract, so the counterparty on it matches an account that exists rather than a typed string. Creates each account when absent and refreshes it when present. If the workspace has no counterparty of the requested kind, the result says so — author an `account` from what the user tells you rather than inventing one.',
+        'Put the workspace\'s real COUNTERPARTIES on the canvas as `account` objects — the customers, vendors, investors and partners it already holds. Call this whenever the user names a customer or supplier ("what do we owe Acme", "show me the Northwind account"), and BEFORE authoring an invoice, bill or contract, so the counterparty on it matches an account that exists rather than a typed string. Creates each account when absent and refreshes it when present, and projects its real OPEN invoices and open bills onto `history` in the same call — no separate refresh needed to answer "what does Acme owe us". If the workspace has no counterparty of the requested kind, the result says so — author an `account` from what the user tells you rather than inventing one.',
       parameters: {
         type: 'object', additionalProperties: false,
         properties: {
@@ -180,22 +192,33 @@ export function canvasFounderOpsActions(ctx: CanvasFounderOpsContext): BrainActi
 
         const limit = Math.max(1, Math.min(Math.round(args.limit ?? MAX_ACCOUNTS), MAX_ACCOUNTS));
         const existing = ctx.objects().filter((object) => object.kind === 'account');
+        const targets = rows.slice(0, limit).map((row) => accountFieldsFrom(row));
+
+        // Fetched in parallel and merged BEFORE any object is staged, so a slow or
+        // failed history read never blocks — or half-populates — the sync itself.
+        // FO-A3's projection: real open invoices and bills, never authored.
+        const histories = await Promise.all(targets.map((fields) => {
+          const ref = String(fields.partyRef ?? '');
+          return ref ? accountHistory(ref).catch(() => null) : Promise.resolve(null);
+        }));
+
         const synced: Array<{ objectId: string; title: string; partyRef: string; updated: boolean }> = [];
 
-        for (const row of rows.slice(0, limit)) {
-          const fields = accountFieldsFrom(row);
+        targets.forEach((fields, i) => {
           const ref = String(fields.partyRef ?? '');
+          const history = histories[i];
+          const withHistory = history ? { ...fields, history: historyRowsFrom(history) } : fields;
           // Matched on `partyRef` and NOT on title: the ref is the identity, and
           // matching on a display name is the exact defect this object removes.
           const match = existing.find((object) => text(object.data.partyRef, 64) === ref);
           if (match) {
-            ctx.updateObject(match.id, fields, `Refreshed ${fields.title}`);
+            ctx.updateObject(match.id, withHistory, `Refreshed ${fields.title}`);
             synced.push({ objectId: match.id, title: String(fields.title), partyRef: ref, updated: true });
           } else {
-            const { objectId } = ctx.addObject('account', fields, { ...(args.x != null ? { x: args.x } : {}), ...(args.y != null ? { y: args.y } : {}) });
+            const { objectId } = ctx.addObject('account', withHistory, { ...(args.x != null ? { x: args.x } : {}), ...(args.y != null ? { y: args.y } : {}) });
             synced.push({ objectId, title: String(fields.title), partyRef: ref, updated: false });
           }
-        }
+        });
 
         return {
           ok: true, proposed: true, accountsFound: true,

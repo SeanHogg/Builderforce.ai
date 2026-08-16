@@ -34,6 +34,8 @@ import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { bills, invoiceLineItems, invoices } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import type { Env } from '../../env';
+import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 
 export class PayableError extends Error {
   constructor(message: string, readonly status: number) {
@@ -44,6 +46,20 @@ export class PayableError extends Error {
 
 /** Bounded, because every read here is a list a surface renders. */
 const PAGE = 100;
+
+/** Bounded, because `account.history` renders a card section, not a ledger. */
+const HISTORY_PAGE = 20;
+
+/**
+ * Cache key for one account's projected history (FO-A3) — exported so
+ * `accountHistory.ts` reads through the SAME key this module invalidates.
+ *
+ * Keyed on `(tenant, ref)` rather than folded into a version token: every write
+ * that can change it names its own `customerRef`/`vendorRef` right here, so a
+ * precise per-key invalidation is exact and needs no extra bookkeeping.
+ */
+export const accountHistoryCacheKey = (tenantId: number, accountPartyRef: string): string =>
+  `finance:account-history:${tenantId}:${accountPartyRef}`;
 
 /** Statuses from which each act is legal. Declared as DATA so the three handlers
  *  below share one transition check rather than each writing its own — and so a
@@ -177,7 +193,7 @@ export interface RecordBillInput {
 
 /** Enter a vendor's bill. Always lands `received` — never approved, because an
  *  approval nobody gave is the defect this module is built around. */
-export async function recordBill(db: Db, tenantId: number, input: RecordBillInput): Promise<{ id: number }> {
+export async function recordBill(db: Db, env: Env, tenantId: number, input: RecordBillInput): Promise<{ id: number }> {
   const reference = input.reference.trim().slice(0, 64);
   const vendorName = input.vendorName.trim().slice(0, 200);
   if (!reference || !vendorName) throw new PayableError('A bill needs the vendor and their own reference for it.', 400);
@@ -214,7 +230,16 @@ export async function recordBill(db: Db, tenantId: number, input: RecordBillInpu
     throw new PayableError(`${vendorName} has already sent a bill with reference "${reference}". Check whether it is a duplicate before entering it again.`, 409);
   }
   if (input.lines?.length) await setDocumentLines(db, tenantId, 'bill', reference, input.lines, currency);
+  await invalidateAccountHistory(env, tenantId, input.vendorRef);
   return { id: row.id };
+}
+
+/** Best-effort — a stale `account.history` for one more read cycle is not worth
+ *  failing the write that just happened over. */
+async function invalidateAccountHistory(env: Env, tenantId: number, ref: string | null | undefined): Promise<void> {
+  const key = ref?.trim();
+  if (!key) return;
+  await invalidateCached(env, accountHistoryCacheKey(tenantId, key)).catch(() => {});
 }
 
 /**
@@ -228,6 +253,7 @@ export async function recordBill(db: Db, tenantId: number, input: RecordBillInpu
  */
 export async function approveBill(
   db: Db,
+  env: Env,
   tenantId: number,
   billId: number,
   approverRef: string,
@@ -248,12 +274,14 @@ export async function approveBill(
     .update(bills)
     .set({ status: 'approved', approvedBy: approverRef, approvedAt: now, disputedAt: null, disputeReason: null, updatedAt: now })
     .where(scopedToTenant(bills, tenantId, eq(bills.id, billId)));
+  await invalidateAccountHistory(env, tenantId, bill.vendorRef);
 }
 
 /** Put an APPROVED bill into a payment run. Refuses anything unapproved — see
  *  `LEGAL_FROM`, where that rule is stated once. */
 export async function scheduleBillPayment(
   db: Db,
+  env: Env,
   tenantId: number,
   billId: number,
   scheduledFor: string,
@@ -269,6 +297,7 @@ export async function scheduleBillPayment(
     .update(bills)
     .set({ status: 'scheduled', scheduledFor: when, updatedAt: now })
     .where(scopedToTenant(bills, tenantId, eq(bills.id, billId)));
+  await invalidateAccountHistory(env, tenantId, bill.vendorRef);
 }
 
 /**
@@ -280,6 +309,7 @@ export async function scheduleBillPayment(
  */
 export async function disputeBill(
   db: Db,
+  env: Env,
   tenantId: number,
   billId: number,
   reason: string,
@@ -303,11 +333,12 @@ export async function disputeBill(
       updatedAt: now,
     })
     .where(scopedToTenant(bills, tenantId, eq(bills.id, billId)));
+  await invalidateAccountHistory(env, tenantId, bill.vendorRef);
 }
 
 async function requireBill(db: Db, tenantId: number, billId: number) {
   const [bill] = await db
-    .select({ id: bills.id, status: bills.status, createdBy: bills.createdBy })
+    .select({ id: bills.id, status: bills.status, createdBy: bills.createdBy, vendorRef: bills.vendorRef })
     .from(bills)
     .where(scopedToTenant(bills, tenantId, eq(bills.id, billId)))
     .limit(1);
@@ -442,4 +473,50 @@ export async function listInvoices(db: Db, tenantId: number, status?: string) {
     .where(scopedToTenant(invoices, tenantId, status ? eq(invoices.status, status) : undefined))
     .orderBy(desc(invoices.updatedAt))
     .limit(PAGE);
+}
+
+// ---------------------------------------------------------------------------
+// One counterparty's history (FO-A3) — the reads `account.history` projects
+// ---------------------------------------------------------------------------
+//
+// `invoices.customerRef` and `bills.vendorRef` are documented on the schema as
+// `party_roles.party_ref` for the counterparty — the SAME ref `canvas_sync_account`
+// already joins an `account` card to. So these are exact-match reads on an
+// indexed column, not a fuzzy join: an account with no invoices or bills under
+// its ref returns an empty history rather than a guess.
+
+export interface AccountLedgerDoc {
+  kind: 'invoice' | 'bill';
+  reference: string;
+  amount: number;
+  currency: string;
+  due: string | null;
+  status: string;
+}
+
+const OPEN_INVOICE_STATUSES = ['issued', 'part-paid'];
+const OPEN_BILL_STATUSES = ['received', 'approved', 'scheduled', 'disputed'];
+
+/** An account's open receivables — what it still owes us. Bounded and ordered
+ *  by due date, because this renders a card section, not a ledger. */
+export async function openInvoicesForAccount(db: Db, tenantId: number, customerRef: string): Promise<AccountLedgerDoc[]> {
+  const rows = await db
+    .select({ reference: invoices.reference, amount: invoices.amount, currency: invoices.currency, dueAt: invoices.dueAt, status: invoices.status })
+    .from(invoices)
+    .where(scopedToTenant(invoices, tenantId, and(eq(invoices.customerRef, customerRef), inArray(invoices.status, OPEN_INVOICE_STATUSES))))
+    .orderBy(asc(invoices.dueAt))
+    .limit(HISTORY_PAGE);
+  return rows.map((row) => ({ kind: 'invoice' as const, reference: row.reference, amount: Number(row.amount), currency: row.currency, due: row.dueAt ? row.dueAt.toISOString() : null, status: row.status }));
+}
+
+/** An account's open payables — what we still owe it. Same shape as the
+ *  receivable read, mirrored the other direction. */
+export async function openBillsForAccount(db: Db, tenantId: number, vendorRef: string): Promise<AccountLedgerDoc[]> {
+  const rows = await db
+    .select({ reference: bills.reference, amount: bills.amount, currency: bills.currency, dueAt: bills.dueAt, status: bills.status })
+    .from(bills)
+    .where(scopedToTenant(bills, tenantId, and(eq(bills.vendorRef, vendorRef), inArray(bills.status, OPEN_BILL_STATUSES))))
+    .orderBy(asc(bills.dueAt))
+    .limit(HISTORY_PAGE);
+  return rows.map((row) => ({ kind: 'bill' as const, reference: row.reference, amount: Number(row.amount), currency: row.currency, due: row.dueAt ? row.dueAt.toISOString() : null, status: row.status }));
 }

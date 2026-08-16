@@ -16188,6 +16188,7 @@
       "game": "Game",
       "cad": "CAD",
       "model3d": "3D model",
+      "world": "3D space",
       "resume": "Resume",
       "template": "Template",
       "document": "Document",
@@ -17771,6 +17772,7 @@
         "conversion": "Conversion",
         "cost": "Cost",
         "costs": "Costs",
+        "currency": "currency",
         "current": "Current",
         "date": "Date",
         "description": "Description",
@@ -17787,6 +17789,7 @@
         "includes": "Includes",
         "instrument": "Instrument",
         "investor": "Investor",
+        "kind": "Type",
         "lat": "Lat",
         "lift": "Lift",
         "line": "Line",
@@ -19160,6 +19163,31 @@
         "open": "Open the timeline",
         "clipCount": "{count, plural, =0 {no clips} one {# clip} other {# clips}}"
       },
+      "world": {
+        "label": "3D space",
+        "open": "Open the 3D space",
+        "mode": { "edit": "Build", "walk": "Walk" },
+        "palette": {
+          "hint": "Drag a piece into the space.",
+          "group": { "building": "Building", "zones": "Zones", "props": "Props", "fx": "FX" },
+          "kind": { "block": "Block", "ramp": "Ramp", "sphere": "Sphere", "platform": "Platform", "collectible": "Collectible", "goal": "Goal", "hazard": "Hazard", "light": "Light" }
+        },
+        "panel": {
+          "transform": "Transform", "appearance": "Appearance", "physics": "Physics & body", "actions": "Actions",
+          "position": "Position", "rotation": "Rotation", "scale": "Scale", "color": "Color", "body": "Body",
+          "physicsKind": { "static": "Static", "dynamic": "Dynamic", "kinematic": "Kinematic", "sensor": "Sensor (walk-through)", "none": "None" },
+          "deleteProp": "Delete prop",
+          "sky": "Sky & ground", "skyColor": "Sky", "groundColor": "Ground", "groundSize": "Size (m)",
+          "spawn": "Spawn point", "lighting": "Lighting", "ambient": "Ambient", "sun": "Sun",
+          "stats": "Stats", "propCount": "Props"
+        },
+        "respawn": "Respawn",
+        "cameraFirst": "First-person", "cameraThird": "Third-person",
+        "switchToThird": "Switch to third-person view (V)", "switchToFirst": "Switch to first-person view (V)",
+        "editHint": "Drag pieces from the left · click a prop to edit it on the right",
+        "viewOnlyHint": "Press Walk to explore this space",
+        "walkHint": "Click to lock the pointer · WASD to move · Space to jump · V to switch view · Esc to release"
+      },
       "backToBoard": "Back to the board",
       "objectLabel": "{title}, at full size",
       "switcher": "Canvas view"
@@ -19312,6 +19340,7 @@
       "game": "A studio for generating a playable mini-game from a prompt.",
       "cad": "A studio for generating CAD models for parts and mechanical designs.",
       "model3d": "A studio for generating 3D models you can view and export.",
+      "world": "A 3D space you build by hand — place props, move the camera, and walk it with real collisions.",
       "resume": "A resume document for a candidate, ready to edit and export.",
       "template": "A reusable creative template you can duplicate to start new work.",
       "document": "A rich-text document you can write, format, and edit with AI.",
@@ -21271,6 +21300,8 @@
     "paidOut": "Paid out",
     "available": "Available",
     "sales": "Sales",
+    "maintenanceCost": "Maintenance cost",
+    "maintenanceCostNote": "Your hosted apps' ongoing agent runs have cost {amount}, deducted from what's available to pay out.",
     "takeRateNote": "The platform keeps {rate}% of each sale.",
     "takeRateZero": "You are keeping 100% of every sale today. The platform's {rate}% fee starts once you cross {threshold} in lifetime sales — {remaining} to go.",
     "payOutNow": "Pay out my balance",

@@ -46,6 +46,7 @@ import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { registerObject } from '../kernel/ObjectRegistry';
 import { PayoutAccountService } from '../payouts/PayoutAccountService';
 import { ListingError, invalidateListingCaches, recordInstall } from './creationListings';
+import { chargeAllHostedAppMaintenance, sellerMaintenanceCostCents } from './appMaintenanceCost';
 
 const USD_CENTS = 'usd_cents';
 
@@ -791,10 +792,18 @@ export async function refundListingOrder(
 // ---------------------------------------------------------------------------
 
 export interface SellerEarnings {
+  /** Gross — commission plus refund, never netted against maintenance cost, so
+   *  it stays the same number the take-rate threshold reads. */
   earnedCents: number;
   paidCents: number;
+  /** Gross earned, minus what has left, minus this seller's hosted apps' agent
+   *  maintenance cost — see `appMaintenanceCost.ts`. Never negative. */
   availableCents: number;
   salesCount: number;
+  /** What this seller's hosted apps have cost in agent runs, ever — already
+   *  netted into `availableCents`; broken out here so the earnings page can
+   *  show it as its own line rather than a silent gap between sales and payout. */
+  maintenanceCostCents: number;
   /** The rate this seller pays on their NEXT sale, and how far they are from
    *  the threshold. Returned with the balance because a creator reading their
    *  earnings is exactly the person asking "when does the fee start". */
@@ -820,11 +829,20 @@ export async function sellerEarnings(
   // this seller earned" is how the rate a buyer is charged and the figure the
   // seller is shown come to disagree.
   const { earnedCents, salesCount } = await lifetimeSellerCents(db, tenantId, userId);
-  const [balance, takeRate] = await Promise.all([
-    new PayoutAccountService(db, env).balance(tenantId, userId, earnedCents),
+  // Bring every hosted app this seller publishes up to date BEFORE reading what
+  // it has cost — otherwise a payout computed in the same instant a run lands
+  // could pay out cost that was never charged.
+  await chargeAllHostedAppMaintenance(db, tenantId, userId);
+  const [maintenanceCostCents, takeRate] = await Promise.all([
+    sellerMaintenanceCostCents(db, tenantId, userId),
     resolveTakeRateBps(db, env, { tenantId, ref: userId }),
   ]);
-  return { ...balance, salesCount, takeRate };
+  const balance = await new PayoutAccountService(db, env)
+    .balance(tenantId, userId, Math.max(0, earnedCents - maintenanceCostCents));
+  // `balance.earnedCents` is the NET figure `PayoutAccountService` computed
+  // available-from; overridden back to gross here so this field keeps meaning
+  // "what this seller has sold", matching what `resolveTakeRateBps` reads.
+  return { ...balance, earnedCents, maintenanceCostCents, salesCount, takeRate };
 }
 
 /**

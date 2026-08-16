@@ -179,7 +179,7 @@ describe('subscriberStanding', () => {
     hostedListingStatus.mockResolvedValue(lifecycle());
     const db = fakeDb([[{ catalogItemId: 'listing-1' }], [liveRow()]]);
     const standing = await subscriberStanding(db as unknown as Db, env(), subscriber);
-    expect(Object.keys(standing).sort()).toEqual(['hosted', 'subscription']);
+    expect(Object.keys(standing).sort()).toEqual(['hosted', 'subscription', 'versionOffer']);
   });
 });
 

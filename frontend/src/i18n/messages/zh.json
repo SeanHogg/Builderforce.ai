@@ -16188,6 +16188,7 @@
       "game": "游戏",
       "cad": "CAD",
       "model3d": "3D 模型",
+      "world": "3D 空间",
       "resume": "简历",
       "template": "模板",
       "document": "文档",
@@ -17771,6 +17772,7 @@
         "conversion": "转化率",
         "cost": "成本",
         "costs": "成本",
+        "currency": "币种",
         "current": "当前",
         "date": "日期",
         "description": "说明",
@@ -17787,6 +17789,7 @@
         "includes": "包含",
         "instrument": "工具类型",
         "investor": "投资人",
+        "kind": "类型",
         "lat": "纬度",
         "lift": "提升",
         "line": "科目",
@@ -19160,6 +19163,31 @@
         "open": "打开时间轴",
         "clipCount": "{count, plural, =0 {无片段} other {# 个片段}}"
       },
+      "world": {
+        "label": "3D 空间",
+        "open": "打开 3D 空间",
+        "mode": { "edit": "搭建", "walk": "行走" },
+        "palette": {
+          "hint": "将部件拖入空间。",
+          "group": { "building": "建筑", "zones": "区域", "props": "道具", "fx": "特效" },
+          "kind": { "block": "方块", "ramp": "坡道", "sphere": "球体", "platform": "平台", "collectible": "收集品", "goal": "终点", "hazard": "危险区", "light": "灯光" }
+        },
+        "panel": {
+          "transform": "变换", "appearance": "外观", "physics": "物理与刚体", "actions": "操作",
+          "position": "位置", "rotation": "旋转", "scale": "缩放", "color": "颜色", "body": "刚体类型",
+          "physicsKind": { "static": "静态", "dynamic": "动态", "kinematic": "运动学", "sensor": "感应（可穿过）", "none": "无" },
+          "deleteProp": "删除道具",
+          "sky": "天空与地面", "skyColor": "天空", "groundColor": "地面", "groundSize": "尺寸（米）",
+          "spawn": "出生点", "lighting": "光照", "ambient": "环境光", "sun": "阳光",
+          "stats": "统计", "propCount": "道具数量"
+        },
+        "respawn": "重生",
+        "cameraFirst": "第一人称", "cameraThird": "第三人称",
+        "switchToThird": "切换到第三人称视角（V）", "switchToFirst": "切换到第一人称视角（V）",
+        "editHint": "从左侧拖入部件 · 点击道具在右侧编辑",
+        "viewOnlyHint": "按“行走”探索此空间",
+        "walkHint": "点击锁定指针 · WASD 移动 · 空格跳跃 · V 切换视角 · Esc 释放"
+      },
       "backToBoard": "返回画板",
       "objectLabel": "{title}（全屏）",
       "switcher": "画布视图"
@@ -19312,6 +19340,7 @@
       "game": "根据提示生成可玩小游戏的工作室。",
       "cad": "用于生成零件和机械设计CAD模型的工作室。",
       "model3d": "用于生成3D模型的工作室，可查看并导出。",
+      "world": "手动搭建的3D空间——放置道具、移动摄像机，并以真实碰撞行走其中。",
       "resume": "候选人的简历文档，可直接编辑并导出。",
       "template": "可复用的创意模板，复制后即可开始新工作。",
       "document": "富文本文档，可与 AI 协作撰写、排版和编辑。",
@@ -21271,6 +21300,8 @@
     "paidOut": "已提现",
     "available": "可提现",
     "sales": "销量",
+    "maintenanceCost": "维护成本",
+    "maintenanceCostNote": "你的托管应用持续运行的智能体费用共计 {amount}，已从可提现余额中扣除。",
     "takeRateNote": "平台从每笔交易中收取 {rate}%。",
     "takeRateZero": "你现在保留每笔销售额的 100%。累计销售额达到 {threshold} 后将开始收取 {rate}% 的费用——还差 {remaining}。",
     "payOutNow": "提现余额",

@@ -106,6 +106,23 @@ describe('landing page rendering', () => {
     expect(renderLandingPage({ pages: [], theme, brand: 'Acme' })).toBeNull();
   });
 
+  it('adds the commerce widget only when a caller supplies its src', () => {
+    expect(renderLandingPage({ pages, theme, brand: 'Acme' })).not.toContain('data-bf-commerce');
+    expect(renderLandingPage({ pages, theme, brand: 'Acme' })).not.toContain('<script src=');
+
+    const withWidget = renderLandingPage({
+      pages, theme, brand: 'Acme', commerceScriptSrc: '/__api/billing/widget.js',
+    })!;
+    expect(withWidget).toContain('<script src="/__api/billing/widget.js" defer></script>');
+  });
+
+  it('escapes a commerce script src the same as every other authored field', () => {
+    const html = renderLandingPage({
+      pages, theme, brand: 'Acme', commerceScriptSrc: '"><script>alert(1)</script>',
+    })!;
+    expect(html).not.toContain('"><script>alert(1)</script>');
+  });
+
   it('renders a total switch over the declared vocabulary', () => {
     const all: WebsitePage[] = [{
       id: 'home', name: 'Home', path: '/', sections: [

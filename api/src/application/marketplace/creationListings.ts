@@ -62,6 +62,7 @@ import {
   creationSessionProjectLinks,
   creationSessions,
   objects,
+  SESSION_PROJECT_LINK_APP,
   snapshots,
   users,
 } from '../../infrastructure/database/schema';
@@ -557,7 +558,7 @@ export async function resolveListingTarget(
         .from(creationSessionProjectLinks)
         .where(and(
           eq(creationSessionProjectLinks.sessionId, input.sessionId),
-          eq(creationSessionProjectLinks.linkKind, 'app'),
+          eq(creationSessionProjectLinks.linkKind, SESSION_PROJECT_LINK_APP),
         ))
         .limit(1)
     : [];

@@ -195,6 +195,33 @@ export const ageing = (direction: 'invoice' | 'bill') =>
   apiRequest<{ ageing: AgeingReport }>(`/api/payables/ageing/${direction}`).then((r) => r.ageing);
 
 // ---------------------------------------------------------------------------
+// One account's history (FO-A3)
+// ---------------------------------------------------------------------------
+
+export interface AccountLedgerDoc {
+  kind: 'invoice' | 'bill';
+  reference: string;
+  amount: number;
+  currency: string;
+  due: string | null;
+  status: string;
+}
+
+export interface AccountHistory {
+  accountPartyRef: string;
+  openInvoices: AccountLedgerDoc[];
+  openInvoicesTotal: number;
+  openBills: AccountLedgerDoc[];
+  openBillsTotal: number;
+}
+
+/** One `account`'s real open invoices and bills — what `canvas_sync_account`
+ *  projects onto its `history` field. Always resolves, even to an empty
+ *  history: an account can be real and simply have no open documents yet. */
+export const accountHistory = (partyRef: string) =>
+  apiRequest<AccountHistory>(`/api/payables/accounts/${encodeURIComponent(partyRef)}/history`);
+
+// ---------------------------------------------------------------------------
 // The pipeline projection
 // ---------------------------------------------------------------------------
 

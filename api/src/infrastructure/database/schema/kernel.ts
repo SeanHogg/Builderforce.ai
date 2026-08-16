@@ -238,7 +238,9 @@ export const ledgerEntries = pgTable('ledger_entries', {
   /** Signed. A spend is negative; there is no separate debit table. */
   amount:        numeric('amount', { precision: 20, scale: 6 }).notNull(),
   balanceAfter:  numeric('balance_after', { precision: 20, scale: 6 }),
-  /** 'grant' | 'spend' | 'refund' | 'payout' | 'commission' | 'adjustment' | 'hold'. */
+  /** 'grant' | 'spend' | 'refund' | 'payout' | 'commission' | 'adjustment' | 'hold' |
+   *  'maintenance_cost' (a hosted app's agent-run cost, debited against its
+   *  seller — see `application/marketplace/appMaintenanceCost.ts`). */
   entryKind:     varchar('entry_kind', { length: 24 }).notNull(),
   /** Idempotency key / external reference. Unique per denomination so a retried
    *  webhook cannot double-credit. */

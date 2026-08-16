@@ -15,7 +15,7 @@
 
 import { Hono, type Context } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   PayableError,
@@ -27,6 +27,7 @@ import {
   scheduleBillPayment,
   scheduledPayments,
 } from '../../application/finance/payables';
+import { accountHistory } from '../../application/finance/accountHistory';
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -46,7 +47,7 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/bills', (c) => handle(async () => {
     const body = await c.req.json<Record<string, unknown>>();
-    const result = await recordBill(db, tenant(c), {
+    const result = await recordBill(db, c.env as Env, tenant(c), {
       reference: String(body.reference ?? ''),
       vendorName: String(body.vendorName ?? ''),
       vendorRef: typeof body.vendorRef === 'string' ? body.vendorRef : null,
@@ -67,19 +68,19 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
   }));
 
   router.post('/bills/:id/approve', (c) => handle(async () => {
-    await approveBill(db, tenant(c), Number(c.req.param('id')), actor(c));
+    await approveBill(db, c.env as Env, tenant(c), Number(c.req.param('id')), actor(c));
     return Response.json({ ok: true });
   }));
 
   router.post('/bills/:id/schedule-payment', (c) => handle(async () => {
     const body = await c.req.json<{ scheduledFor?: unknown }>();
-    await scheduleBillPayment(db, tenant(c), Number(c.req.param('id')), String(body.scheduledFor ?? ''));
+    await scheduleBillPayment(db, c.env as Env, tenant(c), Number(c.req.param('id')), String(body.scheduledFor ?? ''));
     return Response.json({ ok: true });
   }));
 
   router.post('/bills/:id/dispute', (c) => handle(async () => {
     const body = await c.req.json<{ reason?: unknown }>();
-    await disputeBill(db, tenant(c), Number(c.req.param('id')), String(body.reason ?? ''));
+    await disputeBill(db, c.env as Env, tenant(c), Number(c.req.param('id')), String(body.reason ?? ''));
     return Response.json({ ok: true });
   }));
 
@@ -100,6 +101,13 @@ export function createPayableRoutes(db: Db): Hono<HonoEnv> {
     }
     return Response.json({ ageing: await ageing(db, tenant(c), direction) });
   }));
+
+  /** One `account`'s real open invoices and open bills (FO-A3) — what
+   *  `canvas_sync_account` projects onto the card's `history` field. Empty
+   *  arrays for a ref with none yet, never a 404: an account can be real and
+   *  simply have no open documents. */
+  router.get('/accounts/:partyRef/history', (c) => handle(async () =>
+    Response.json(await accountHistory(db, c.env as Env, tenant(c), c.req.param('partyRef')))));
 
   return router;
 }

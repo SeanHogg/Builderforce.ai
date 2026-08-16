@@ -81,3 +81,15 @@ describe('the two rules that must not move', () => {
     expect(source).not.toMatch(/returnUrl:\s*String\(body/);
   });
 });
+
+describe('the two deliberate public exceptions', () => {
+  it('answers widget.js and listing BEFORE the sign-in gate — same facts a shop window already shows a stranger', async () => {
+    const source = await read('./siteBilling.ts');
+    const body = source.slice(source.indexOf('export async function handleSiteBilling'));
+    const signInRefusal = body.indexOf('Sign in first.');
+    expect(body.indexOf("action === 'widget.js'")).toBeLessThan(signInRefusal);
+    expect(body.indexOf("action === 'listing'")).toBeLessThan(signInRefusal);
+    // And accept-update — a money-adjacent write — is NOT one of the exceptions.
+    expect(body.indexOf("action === 'accept-update'")).toBeGreaterThan(signInRefusal);
+  });
+});

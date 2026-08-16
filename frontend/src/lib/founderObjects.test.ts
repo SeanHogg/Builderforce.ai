@@ -3,7 +3,9 @@ import { FOUNDER_OBJECT_KINDS, isFounderObjectKind, CREATION_OBJECT_KINDS } from
 import {
   FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS,
   allFounderFieldGuidance, founderFieldGuidance, founderMutableFields, founderObjectSpec,
+  resolveCounterpartyAccount,
 } from './founderObjects';
+import { makeSpecDeriveBoard, specFieldValue } from './specObjects';
 import {
   createDefaultCreationData, creationObjectAiContext, creationObjectContentFields,
   creationObjectDefinition, creationObjectMutableFields, emptyShellProblem,
@@ -177,5 +179,65 @@ describe('render specs', () => {
     for (const spec of FOUNDER_OBJECT_SPECS) {
       for (const field of spec.fields) expect(field.label).toBeTruthy();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FO-A2 — the counterparty resolver `invoice.customer`, `bill.vendor` and
+// `contract.counterparty` bind through. `placement.client` reuses the same
+// resolver from the hiring vocabulary — see hiringObjects.test.ts.
+// ---------------------------------------------------------------------------
+
+describe('the counterparty resolver', () => {
+  const ACME = { kind: 'account', title: 'Acme Holdings Ltd', relationship: 'customer', owner: 'Jane Lee', alsoKnownAs: ['Acme', 'Acme Holdings'] };
+
+  it('matches an account by title, case- and space-insensitively', () => {
+    const board = makeSpecDeriveBoard([ACME]);
+    expect(resolveCounterpartyAccount('  acme holdings ltd  ', board)).toBe(ACME);
+  });
+
+  it('falls back to an alias in alsoKnownAs', () => {
+    const board = makeSpecDeriveBoard([ACME]);
+    expect(resolveCounterpartyAccount('Acme', board)).toBe(ACME);
+  });
+
+  it('resolves nothing for an empty label or an unmatched name', () => {
+    const board = makeSpecDeriveBoard([ACME]);
+    expect(resolveCounterpartyAccount('', board)).toBeNull();
+    expect(resolveCounterpartyAccount('Some Other Company', board)).toBeNull();
+  });
+
+  it('is never authorable — the resolution is read-only', () => {
+    for (const sourceField of ['customer', 'vendor', 'counterparty']) {
+      const hostKind = { customer: 'invoice', vendor: 'bill', counterparty: 'contract' }[sourceField]!;
+      const field = founderObjectSpec(hostKind)!.fields.find((entry) => entry.name === `${sourceField}Account`);
+      expect(field?.derived, `${hostKind}.${sourceField}Account must be derived`).toBe(true);
+      expect(founderMutableFields(hostKind)).not.toContain(`${sourceField}Account`);
+    }
+  });
+
+  it('reports what it linked to, and nudges to author the account when nothing matches', () => {
+    const invoice = { kind: 'invoice', title: 'INV-1', customer: 'Acme Holdings Ltd' };
+    const field = founderObjectSpec('invoice')!.fields.find((entry) => entry.name === 'customerAccount')!;
+    expect(String(specFieldValue(field, invoice, makeSpecDeriveBoard([ACME, invoice])))).toContain('Acme Holdings Ltd');
+    expect(String(specFieldValue(field, invoice, makeSpecDeriveBoard([ACME, invoice])))).toContain('Jane Lee');
+    expect(String(specFieldValue(field, { ...invoice, customer: 'Nobody Ltd' }, makeSpecDeriveBoard([ACME])))).toContain('author one');
+    // No counterparty authored yet — no section to draw.
+    expect(specFieldValue(field, { kind: 'invoice', title: 'INV-2' }, makeSpecDeriveBoard([ACME]))).toBeUndefined();
+  });
+
+  it('survives into the AI context under the same name Brain sees on the card', () => {
+    const board = makeSpecDeriveBoard([ACME]);
+    const context = creationObjectAiContext({ kind: 'invoice', title: 'INV-1', customer: 'Acme Holdings Ltd' }, board);
+    expect(String(context.customerAccount)).toContain('Acme Holdings Ltd');
+  });
+
+  it('reads a board saved before this field existed without losing the counterparty', () => {
+    // The read-time fallback the roadmap calls for: a plain string with no account on
+    // the board yet still renders the honest "not linked" state rather than throwing
+    // or silently omitting the section.
+    const field = founderObjectSpec('bill')!.fields.find((entry) => entry.name === 'vendorAccount')!;
+    const legacyBill = { kind: 'bill', title: 'B-1', vendor: 'Some Supplier Inc' };
+    expect(String(specFieldValue(field, legacyBill, makeSpecDeriveBoard([legacyBill])))).toContain('No `account` matches');
   });
 });

@@ -2020,6 +2020,59 @@
 .timelineMeta strong { color:var(--canvas-ink); font:700 13px var(--font-mono,var(--font-sans)); font-variant-numeric:tabular-nums; }
 .timelineMeta small { color:var(--canvas-muted); font-size:10px; }
 
+/* A 3D space is three columns when there is something to author (a palette to drag
+   from, a viewport, a properties rail) and one when there is not (a read-only walk).
+   The viewport is `position:relative` because R3F's `<Canvas>` fills it at 100%/100%
+   and the banners/buttons over it are absolutely positioned inside that box, the same
+   overlay pattern the play surface's frame uses. */
+.worldStage { min-height:0; flex:1; display:flex; overflow:hidden; }
+.worldPalette { flex:none; width:168px; overflow-y:auto; border-right:1px solid var(--canvas-line); background:var(--canvas-panel); }
+.worldPaletteHint { margin:0; padding:10px 10px 6px; color:var(--canvas-muted); font-size:10px; }
+.worldPaletteGroup { padding:0 8px 10px; }
+.worldPaletteGroupTitle { margin:0 0 6px; padding:0 2px; color:var(--canvas-muted); font:650 9px var(--font-sans); letter-spacing:.08em; text-transform:uppercase; }
+.worldPaletteTiles { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.worldPaletteTile {
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  aspect-ratio:1; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); color:var(--canvas-ink); font-size:9px; font-weight:600;
+  cursor:grab; user-select:none;
+}
+.worldPaletteTile:active { cursor:grabbing; }
+.worldPaletteTile span:first-child { font-size:16px; line-height:1; }
+.worldViewport { position:relative; min-width:0; flex:1; background:var(--canvas-board-background); }
+.worldViewport canvas { display:block; width:100%; height:100%; }
+.worldBanner,.worldBannerTop {
+  position:absolute; left:0; right:0; z-index:1; display:flex; align-items:center; justify-content:center;
+  padding:8px 12px; color:var(--text-on-accent); font-size:11px; font-weight:600; text-align:center; pointer-events:none;
+}
+.worldBanner { bottom:0; background:linear-gradient(to top,var(--canvas-shadow),transparent); }
+.worldBannerTop { top:0; background:linear-gradient(to bottom,var(--canvas-shadow),transparent); }
+.worldRespawnAction,.worldCameraAction {
+  position:absolute; z-index:2; bottom:10px; min-height:30px; padding:6px 12px;
+  border:0; border-radius:var(--radius-full); background:var(--canvas-accent,var(--coral-bright));
+  color:var(--text-on-accent); font:650 11px var(--font-sans); cursor:pointer;
+}
+.worldRespawnAction { left:10px; }
+.worldCameraAction { right:10px; }
+.worldRespawnAction:hover,.worldCameraAction:hover,.worldRespawnAction:focus-visible,.worldCameraAction:focus-visible { filter:brightness(1.08); outline:none; }
+.worldProperties { flex:none; width:220px; overflow-y:auto; border-left:1px solid var(--canvas-line); background:var(--canvas-panel); padding:4px 0; }
+.worldPropertiesSection { padding:8px 10px; border-bottom:1px solid var(--canvas-line); }
+.worldPropertiesSection h4 { margin:0 0 6px; color:var(--canvas-muted); font:650 9px var(--font-sans); letter-spacing:.08em; text-transform:uppercase; }
+.worldFieldRow { display:flex; align-items:center; gap:6px; margin-bottom:6px; color:var(--canvas-ink); font-size:11px; }
+.worldFieldRow span:first-child { flex:none; width:64px; color:var(--canvas-muted); }
+.worldFieldRow code { color:var(--canvas-muted); font-size:10px; }
+.worldColorInput { width:34px; height:22px; padding:0; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); cursor:pointer; }
+.worldNumberInput { width:70px; padding:3px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; }
+.worldSelect { flex:1; padding:3px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; }
+.worldSelect option { background:var(--canvas-panel); color:var(--canvas-ink); }
+.worldDeleteAction { width:100%; padding:6px 10px; border:1px solid var(--canvas-danger,#ef4444); border-radius:var(--radius-sm); background:transparent; color:var(--canvas-danger,#ef4444); font:650 11px var(--font-sans); cursor:pointer; }
+.worldDeleteAction:hover,.worldDeleteAction:focus-visible { background:var(--canvas-danger,#ef4444); color:var(--text-on-accent); outline:none; }
+.worldVec3Label { margin-bottom:3px; color:var(--canvas-muted); font-size:10px; }
+.worldVec3Row { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; }
+.worldVec3Axis { display:flex; align-items:center; gap:3px; }
+.worldVec3Axis span { flex:none; width:9px; color:var(--canvas-muted); font-size:10px; }
+.worldVec3Axis input { width:100%; min-width:0; padding:3px 4px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel); color:var(--canvas-ink); font-size:10px; }
+
 /* The conversation AS the canvas — the zero-object surface.
    z-index 7 puts it exactly where the 3D scene sits: under the React Flow root, which
    the rule above raises to 9 with pointer events off so the command rail inside it
@@ -2308,6 +2361,13 @@
   .objectSurfaceHeader { gap:8px; padding:8px 10px; }
   .objectSurfaceTitle strong { font-size:12px; }
   .playStage,.timelineStage { padding:10px 8px 14px; }
+  /* Three side-by-side columns don't fit a phone. The viewport keeps the room; the
+     palette and the properties rail become short horizontal-scroll strips above and
+     below it instead of disappearing — a phone can still place and edit a prop. */
+  .worldStage { flex-direction:column; }
+  .worldPalette,.worldProperties { width:auto; max-height:112px; border-right:0; border-left:0; border-bottom:1px solid var(--canvas-line); overflow-y:hidden; overflow-x:auto; }
+  .worldPaletteGroup { display:inline-block; vertical-align:top; padding-right:4px; }
+  .worldPaletteTiles { grid-auto-flow:column; grid-template-columns:none; grid-auto-columns:56px; }
   .chatSurfaceHeader { padding:10px 12px 8px; }
   .chatSurfaceBody { padding:0 2px 0 54px; }
   .chatSurfaceFooter { padding:4px 12px 8px; }

@@ -20,9 +20,13 @@
  * resolves who is asking, refuses anonymous callers, and hands off.
  *
  * ── THE TWO RULES THAT MUST NOT MOVE ─────────────────────────────────────────
- *  1. Every route requires a SIGNED-IN end user, resolved from the site's own
- *     cookie. There is no anonymous subscribe: a payment with nobody attached is
- *     a charge nobody can be granted access for, and nobody can cancel.
+ *  1. Every route that MOVES OR PROTECTS money requires a SIGNED-IN end user,
+ *     resolved from the site's own cookie. There is no anonymous subscribe: a
+ *     payment with nobody attached is a charge nobody can be granted access for,
+ *     and nobody can cancel. `widget.js` and `listing` are the two deliberate
+ *     exceptions — the same public price and name a stranger already sees on the
+ *     shop window, answered before it asks them to sign in, because that is the
+ *     whole reason the widget exists.
  *  2. The seller's tenant comes off the RESOLVED SITE, never off the request.
  *     It decides whose ledger the money lands in, and taking it from a caller
  *     would let anyone direct a payment into their own books.
@@ -35,7 +39,10 @@ import { resolveSiteUser, siteSessionCookie } from '../ide/siteAuth';
 import { jsonResponse, readSubmission } from '../ide/siteServer.http';
 import { exportOwnedSiteRecords } from '../ide/siteData';
 import { ListingError } from './creationListings';
+import { siteListing } from '../ide/siteListing';
+import { commerceWidgetResponse } from './siteCommerceWidget';
 import {
+  acceptSiteSubscriptionUpdate,
   cancelSiteSubscription,
   completeSiteSubscription,
   startSiteSubscriptionCheckout,
@@ -65,6 +72,26 @@ export async function handleSiteBilling(
   action: string,
 ): Promise<Response> {
   const db = buildDatabase(env);
+
+  // ── The two PUBLIC answers ───────────────────────────────────────────────
+  // Neither carries anything a stranger to this app should not see — the widget
+  // script is the same bytes for every paid app, and the listing's name and price
+  // are already on the shop window. Answered BEFORE the sign-in gate, because the
+  // subscribe surface has to show a price to somebody it has not yet asked to sign
+  // in — that is the whole reason it exists.
+  if (action === 'widget.js' && request.method === 'GET') {
+    return commerceWidgetResponse();
+  }
+  if (action === 'listing' && request.method === 'GET') {
+    const listing = await siteListing(env, db, site);
+    return jsonResponse({
+      ok: true,
+      listing: listing ? {
+        slug: listing.slug, name: listing.name, priceCents: listing.priceCents, currency: listing.currency,
+      } : null,
+    }, 200);
+  }
+
   const identity = await resolveSiteUser(
     db, site.siteId, site.tenantId, siteSessionCookie(request.headers.get('cookie')),
   );
@@ -73,11 +100,22 @@ export async function handleSiteBilling(
   const who = { tenantId: site.tenantId, siteId: site.siteId, siteUserId: identity.userId };
 
   if (action === 'me' && request.method === 'GET') {
-    // The subscription AND the app's own lifecycle, from one call. Asking them
-    // separately is how a surface shows a live subscription to a dead app, which is
-    // precisely the state the hosted lifecycle exists to make visible.
+    // The subscription, the version offer, AND the app's own lifecycle, from one
+    // call. Asking them separately is how a surface shows a live subscription to a
+    // dead app, or a paid-up subscriber an update prompt for a version they
+    // already hold — exactly the drift the hosted lifecycle and the version offer
+    // both exist to make visible in one read.
     const standing = await subscriberStanding(db, env, who);
     return jsonResponse({ ok: true, ...standing }, 200);
+  }
+
+  if (action === 'accept-update' && request.method === 'POST') {
+    try {
+      const subscription = await acceptSiteSubscriptionUpdate(db, env, who);
+      return jsonResponse({ ok: true, subscription }, 200);
+    } catch (error) {
+      return failure(error, 'Could not apply the update.');
+    }
   }
 
   if (action === 'subscribe' && request.method === 'POST') {

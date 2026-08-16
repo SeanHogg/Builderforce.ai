@@ -1,5 +1,5 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
-import { CREATION_CONNECTION_KINDS, emptyCanvasVideoTimeline, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
+import { CREATION_CONNECTION_KINDS, emptyCanvasVideoTimeline, emptyCanvasWorldScene, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
 import { FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS, founderMutableFields } from '@/lib/founderObjects';
 // Importing the vocabulary registers it (see `specObjects.ts`), which is what makes the
 // academic kinds resolvable everywhere else without a second list of them here.
@@ -435,6 +435,9 @@ const BASE_MUTABLE_FIELDS = {
   game: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
   cad: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'cadState', 'units', 'mcpServer', 'mcpTool', 'mcpArguments'],
   model3d: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'modelState', 'units', 'mcpServer', 'mcpTool', 'mcpArguments'],
+  // Hand-authored (see the registry entry): no `mediaKind`/`capabilityId`/`mcpTool`
+  // siblings — `world` is the whole authored state, same as `website`/`document`.
+  world: ['content', 'world'],
   resume: ['content', 'markdown', 'resumeDocument', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'resumeId', 'fileName', 'mimeType', 'fileSize', 'mcpServer', 'mcpTool', 'mcpArguments'],
   template: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'templateCategory', 'outputFormat', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
   document: ['content', 'markdown', 'sources'],
@@ -555,8 +558,7 @@ function sanitizeMutationValue(value: unknown, depth = 0): unknown {
 }
 
 export function creationObjectMutableFields(kind: CreationObjectKind): readonly string[] {
-  if (!MUTABLE_FIELDS[kind]) console.error('DIAG_MISSING_KIND', kind);
-  return [...COMMON_MUTABLE_FIELDS, ...(MUTABLE_FIELDS[kind] ?? [])];
+  return [...COMMON_MUTABLE_FIELDS, ...MUTABLE_FIELDS[kind]];
 }
 
 /**

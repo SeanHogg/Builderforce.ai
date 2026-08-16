@@ -133,7 +133,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
 | 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 39 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 153 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 151 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
@@ -153,7 +153,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 7 | 25 |
 | 8 | 3 |
 | 9 | 39 |
-| 10 | 153 |
+| 10 | 151 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
@@ -905,22 +905,6 @@ sequenced into waves because nothing in them gates the sell motion.
 
 ### Canvas surfaces
 
-- **A SCANNED document dropped on the canvas can never become a résumé, because the canvas keeps no
-  bytes to escalate with.** *(registered 2026-08-16 by the "convert this pdf into a resume" pass,
-  which fixed every other link in that chain — see DONE.md)* A PDF with a real text layer now reads
-  in the browser and `canvas_import_resume` structures it. A **scan** has no text layer, so it lands
-  as an attachment and the tool correctly says so — but the multimodal route that WOULD read it
-  (`POST /api/creative/resume/import`, already wired to the résumé editor's own file picker) needs
-  the original bytes, and `attachmentObject` in `canvasFileImport.ts` stores only name, type and
-  size. The file is gone by the time any tool can ask for it. Fixing it would let a photographed or
-  scanned CV complete the same flow, and unblocks the same escalation for every other unreadable
-  drop. **Blocked on an explicit decision, not on capability:** retaining source bytes means putting
-  a base64 data URL on a canvas object, which inflates every server-persisted canvas document
-  carrying an attachment by ~33% of the file size — a persistence-cost trade-off across all
-  attachment kinds that is the operator's call, not this pass's. The alternative shape (upload to R2
-  on import and keep only a key) needs a tenant, so it would not work on the local/guest canvas where
-  the reported session actually ran.
-
 - **No 3D *authoring* surface — `scene3d` reads the board, it does not build a world.** *(registered
   2026-08-15 while mapping creations to surfaces)* `scene3d` arranges the canvas's own objects by
   depth (stage / layer / sequence); it has no world, camera, collider or prop placement. A 3D game
@@ -950,7 +934,7 @@ sequenced into waves because nothing in them gates the sell motion.
   Unblocks: the eight entries above dispatching concurrently instead of queueing, and Wave 1 scaling
   past five lanes without an integration step. **(W0)**
 
-### Embedded apps — "idea to sell" (R8–R11 + R15a–d outstanding; R1–R7, R12–R14 RESOLVED, see DONE.md)
+### Embedded apps — "idea to sell" (R8–R11 outstanding; R1–R7, R12–R15e RESOLVED, see DONE.md)
 
 > **Operator decisions taken 2026-08-15** (rev 4 of the Idea-to-Sell mockup), all still binding on the entries below:
 > 1. **The project IS the app.** No separate app entity; conversion is 1 click and the creator inherits the board, tickets, manager and agent workforce on the same `projects` row.
@@ -970,24 +954,11 @@ sequenced into waves because nothing in them gates the sell motion.
 > `POST /api/creation-sessions/:id/convert-to-app`, `GET /api/creation-sessions/address-available`,
 > `GET /api/creation-sessions/:id/app` (added closing R15e), and
 > `/__api/billing/{me,subscribe,complete,cancel}` on a published site's own origin.
-> **R15a, R15b and R15e are CLOSED** (2026-08-16, W1D — see
-> [DONE.md](./DONE.md)): the creator surfaces now call the first three. R15c and R15d remain, and the
-> billing endpoints are still called by nothing. Every part below must be localized into ALL FIVE
-> catalogs and work in both themes at 360px.
-
-- **R15c — a `site_user` on a published site cannot subscribe, and is never told a new version exists.**
-  The billing endpoints answer on the site's own origin and nothing calls them; and since a buyer holds
-  a version permanently and is **offered** an update rather than moved onto one, the "you are on vN,
-  vN+1 available" surface is what makes `site_subscriptions.snapshot_id` load-bearing instead of
-  bookkeeping. Fix = the subscribe + version-offer surfaces under `frontend/src/components/commerce/`,
-  over the `siteBilling` module W1C extracts. Unblocks: money actually changing hands on a hosted app.
-  **(W1C)**
-- **R15d — the earnings receipt does not read `takeRate`, so 0% is invisible.** `sellerEarnings` now
-  carries `takeRate` and no surface renders it, so the single most persuasive fact about selling
-  here — that the platform takes nothing until a lifetime threshold, and how far away that threshold
-  is — is not shown to the person deciding whether to list. Fix = the receipt reads `takeRate` and
-  states the distance to the threshold. Unblocks: the 0%-under-threshold decision being a visible
-  promise rather than an internal constant. **(W1C)**
+> **R15a, R15b, R15c, R15d and R15e are all CLOSED** (R15a/b/e 2026-08-16 W1D; R15c/d 2026-08-16
+> W1C — see [DONE.md](./DONE.md)). The embedded-apps API now has a caller end to end: creation,
+> the creator's own overview, a paying `site_user`, the version they are offered, and the receipt
+> that shows what selling actually costs. **Still open in this group: R8 (deployment harness), R9 and
+> R11 (decisions — R11 in progress), R10 (`raises_tickets` → tickets).**
 
 
 
@@ -1017,7 +988,6 @@ sequenced into waves because nothing in them gates the sell motion.
 
 > The realization layer shipped 2026-08-15 (migration 0463): eight proof forms — demo video, clickable prototype, smoke test, wizard-of-oz, proof of concept, pilot, phone line, live system — each planned from a spec, built through the existing challenge materialiser, published to a real URL and wired to its own site collections (see [DONE.md](./DONE.md)). These are the parts deliberately left out of that pass.
 
-- **A realization records what was BUILT and never what was LEARNED.** *(identified 2026-08-15 while landing the layer)* Every target states success criteria before it is built — 25 signups from 500 visitors, ten wizard-of-oz requests inside the SLA, a 90% pass rate over 20 trials — and `realizations.result` holds only the build outcome (files, tickets, live URL). So the platform can say "you ran a smoke test" and cannot say "it failed and you built it anyway", which is the single most valuable thing a register of proofs could tell a team. Fix: a verdict on the row (`met` / `missed` / `abandoned`) plus the number that decided it and the date, written from the proof's own console rather than typed — the demand console and the POC harness both already compute the verdict client-side and throw it away on refresh. Unblocks: "what have we already tried, and what did it tell us?", which is the question the table was created to answer.
 - **The wizard-of-oz queue and the pilot report are public and carry participant contact details.** *(same pass)* `/queue` and `/pilot-report` are `verify: 'none'` so a proof works with zero setup on the day it is built, and each target seeds a BLOCKING first ticket saying so in as many words — but the platform still ships the open version by default, and a seeded ticket is a request, not a control. The clean fix is a per-realization read secret the console holds and the handler verifies (`shared-secret` already exists and needs no new vocabulary), generated at build time so zero-setup survives; what stops it today is that the console is a static page on the public site with nowhere to keep a secret. Options are a signed short-lived link, or moving the console off the published site and behind the app's own auth. **Blocker: that is a product decision about where an operator console lives**, not a missing implementation. Unblocks: pointing a wizard-of-oz at strangers without a ticket standing between the queue and the internet.
 - **Realize and Challenges have no door.** *(same pass)* Both are routes with no nav row, deliberately — `navGroups.ts` records the rule ("a capability of a destination does not get a door beside it") and `publicMenus.test.tsx` enforces it — and the comment's promise that "the canvas still opens it" is not true of either: no `canvas_*` tool navigates to them. Both are now in the IDEA group's `match` so the shell stays lit, and `/challenges` links to `/realize`, but the only way to arrive at either is to know the URL. Fix: a `canvas_realize_idea` tool that plans the proofs for the board's current idea and opens the page, which is what the convention actually implies. **Blocker: `packages/creation-canvas-contract` and every `creation-canvas/*` component are another session's uncommitted, in-flight work**, and adding a tool means editing the guest-boundary contract and the canvas dispatcher in the middle of that edit stream. Unblocks: the loop being reachable from where an idea is actually typed.
 

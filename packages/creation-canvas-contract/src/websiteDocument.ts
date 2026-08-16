@@ -184,6 +184,13 @@ export interface WebsiteDocumentOptions {
   /** Label for `enterPath`. Ignored when `enterPath` is absent. */
   enterLabel?: string;
   activePageId?: unknown;
+  /**
+   * A `<script src>` for the commerce widget (subscribe + "an update is
+   * available"), loaded `defer`. Omitted by the canvas `app` surface, which has
+   * no site of its own for the widget's same-origin cookie to belong to — only a
+   * PUBLISHED document, with a real origin, can carry one.
+   */
+  commerceScriptSrc?: string;
 }
 
 /**
@@ -197,7 +204,7 @@ export function renderWebsiteDocument(
   options: WebsiteDocumentOptions,
 ): string | null {
   if (!pages.length) return null;
-  const { brand, enterPath, enterLabel } = options;
+  const { brand, enterPath, enterLabel, commerceScriptSrc } = options;
 
   const first = activeWebsitePage(pages, options.activePageId) ?? pages[0]!;
   const ordered = [first, ...pages.filter((page) => page.id !== first.id)];
@@ -225,5 +232,7 @@ ${description ? `<meta property="og:description" content="${escapeHtml(descripti
 ${STYLES}</style></head>
 <body><div class="wrap">${nav}${ordered.map((page, index) => renderPage(page, index, enterPath ?? null)).join('')}
 <footer>${escapeHtml(brand)}</footer></div>
-${ordered.length > 1 ? `<script>${SWITCH_SCRIPT}</script>` : ''}</body></html>`;
+${ordered.length > 1 ? `<script>${SWITCH_SCRIPT}</script>` : ''}${
+    commerceScriptSrc ? `<script src="${escapeHtml(commerceScriptSrc)}" defer></script>` : ''
+  }</body></html>`;
 }

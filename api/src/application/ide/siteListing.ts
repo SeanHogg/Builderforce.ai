@@ -116,7 +116,7 @@ export async function resolveSiteListing(
   return {
     slug: row.slug,
     name: row.name,
-    currency: row.currency,
+    currency: row.currency ?? 'USD',
     visibility: row.visibility,
     priceCents: row.priceCents,
     trial: (row.trial as ListingAccessFacts['trial']) ?? null,

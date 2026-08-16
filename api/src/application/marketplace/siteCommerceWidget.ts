@@ -28,16 +28,6 @@
  * coupling, and the SAME bytes serve every paid app on the platform.
  */
 
-const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-
-/** Only used to escape THIS module's own literal doc comments if ever needed —
- *  the widget itself escapes at runtime, in the browser, from live fetch data. */
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => ESCAPES[char] ?? char);
-}
-
-export { escapeHtml };
-
 /** Reserved path, analogous to `SITE_LANDING_KEY` — `handleSiteBilling` answers it
  *  publicly, ahead of the sign-in gate every other `/__api/billing/*` action sits
  *  behind. */
@@ -46,7 +36,7 @@ export const SITE_COMMERCE_WIDGET_PATH = '/__api/billing/widget.js';
 /**
  * The widget's JS source. A plain constant, not a template — nothing here varies
  * per site or per request, which is exactly why it can be served once and cached
- * hard (see `commerceWidgetHeaders`).
+ * hard (see `commerceWidgetResponse`).
  */
 export const COMMERCE_WIDGET_JS = `
 (function(){
@@ -119,15 +109,14 @@ function renderUpdate(listing){
     '<button type="button" class="ghost" data-continue>Continue with current version</button></div>'+
     '<p class="err" data-error hidden></p>'
   );
-  root.querySelector("[data-update]").addEventListener("click",function(btn){
-    return function(){
-      btn.disabled=true;
-      api("billing/accept-update",{method:"POST"}).then(function(r){
-        if(!r.ok){ btn.disabled=false; err((r.body&&r.body.error)||"Could not apply the update."); return; }
-        location.href=withApp(location.href);
-      });
-    };
-  }(root.querySelector("[data-update]")));
+  var updateBtn=root.querySelector("[data-update]");
+  updateBtn.addEventListener("click",function(){
+    updateBtn.disabled=true;
+    api("billing/accept-update",{method:"POST"}).then(function(r){
+      if(!r.ok){ updateBtn.disabled=false; err((r.body&&r.body.error)||"Could not apply the update."); return; }
+      location.href=withApp(location.href);
+    });
+  });
   root.querySelector("[data-continue]").addEventListener("click",function(){
     location.href=withApp(location.href);
   });
@@ -172,7 +161,7 @@ function renderCode(listing,email){
   paint(
     "<p><strong>Enter the code sent to "+esc(email)+"</strong></p>"+
     '<input inputmode="numeric" maxlength="6" placeholder="123456" data-code>'+
-    '<div><button type="button" class="primary" data-verify">Verify</button>'+
+    '<div><button type="button" class="primary" data-verify>Verify</button>'+
     '<button type="button" class="ghost" data-dismiss>Cancel</button></div>'+
     '<p class="err" data-error hidden></p>'
   );
@@ -226,23 +215,25 @@ function boot(){
     evaluate(listing);
   });
 
+  function isDismissed(){
+    try{ return sessionStorage.getItem("bf-commerce-dismissed")==="1"; }catch(e){ return false; }
+  }
+
   function evaluate(listing){
     api("billing/me").then(function(meRes){
       if(!meRes.ok){
-        var dismissed=false;
-        try{ dismissed=sessionStorage.getItem("bf-commerce-dismissed")==="1"; }catch(e){}
-        if(!dismissed) renderSubscribe(listing);
+        if(!isDismissed()) renderSubscribe(listing);
         return;
       }
       var standing=meRes.body||{};
       if(standing.versionOffer && standing.versionOffer.updateAvailable){
+        // Never dismissible for a session — "Continue with current version" IS the
+        // dismiss action, and it still lets them into the app.
         renderUpdate(listing);
         return;
       }
-      if(!standing.subscription){
-        var dismissed2=false;
-        try{ dismissed2=sessionStorage.getItem("bf-commerce-dismissed")==="1"; }catch(e){}
-        if(!dismissed2) renderSubscribe(listing);
+      if(!standing.subscription && !isDismissed()){
+        renderSubscribe(listing);
       }
       // A live, current subscriber has nothing this widget needs to say.
     });

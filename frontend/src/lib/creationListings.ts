@@ -103,10 +103,16 @@ export interface ResolvedTakeRate {
 }
 
 export interface SellerEarnings {
+  /** Gross — commission plus refund, never netted against maintenance cost. */
   earnedCents: number;
   paidCents: number;
+  /** Gross earned, minus paid out, minus hosted apps' agent maintenance cost. */
   availableCents: number;
   salesCount: number;
+  /** What this seller's hosted apps have cost in agent runs, ever — already
+   *  netted into `availableCents`; shown as its own line so a drop between
+   *  "earned" and "available" is never a mystery. */
+  maintenanceCostCents: number;
   /** The rate this seller pays on their NEXT sale, and how far they are from the
    *  threshold — 0 while `underThreshold` is true. */
   takeRate: ResolvedTakeRate;

@@ -284,6 +284,14 @@ const Canvas3DView = dynamic(
     .then((module) => module.Canvas3DView as ComponentType<Canvas3DViewProps<CreationFlowNode>>),
   { ssr: false },
 );
+// Real WebGL (three.js + react-three-fiber + Rapier's WASM physics) — the
+// heaviest dependency this canvas pulls in, and the first one. Dynamic +
+// `ssr: false` for the same reason Canvas3DView is: no server-side render,
+// and it must not sit in the main chunk for people who never open a `world`.
+const CanvasWorldView = dynamic(
+  () => import('./CanvasWorldView').then((module) => module.CanvasWorldView),
+  { ssr: false },
+);
 const VoiceConfigPanel = dynamic(
   () => import('@/components/builder/VoiceConfigPanel').then((module) => module.VoiceConfigPanel),
   { ssr: false },
@@ -385,6 +393,16 @@ const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly stri
   // cannot fire it: what changed is that a human who approves it now gets a send
   // instead of "no delivery adapter is connected".
   investorUpdate: ['send'],
+  // The assessment cycle. `distribute` fans an assignment into one `submission` per
+  // roster row; `compute` surfaces the gradebook's already-live derivation as a
+  // reported figure; `mark` applies the rubric to a submission's authored
+  // `placements` and, when the assignment is LTI-bound, pushes the score through
+  // AGS; `import` pulls a cohort's roster from a connected LMS through NRPS (a CSV
+  // paste goes through the dedicated `canvas_import_roster` tool instead, since this
+  // generic action carries no text); `validate` checks a curriculum map's mapping
+  // grid for outcomes and columns that do not resolve on the board.
+  assignment: ['distribute'], gradebook: ['compute'], submission: ['mark'],
+  cohort: ['import'], curriculumMap: ['validate'], bibliography: ['import'],
 };
 const WEBSITE_SECTION_SCHEMA = {
   type: 'object', required: ['id', 'kind'], additionalProperties: false,
@@ -4471,6 +4489,66 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           ? 'The résumé is on the board, but few sections were recognised. Say which ones came through and offer to fill the rest from what the person tells you — do NOT invent employers, dates or skills, and do not retype the document.'
           : 'The résumé is on the board, fully structured. Report what came through in one short line and offer the next step — restyling with canvas_render_resume_variants, or screening against a posting. Do NOT retype any of its content.',
       };
+    },
+  }, {
+    // Mirrors `canvas_import_resume`: a deterministic reader for a file a registrar
+    // or a spreadsheet actually produces, so the roster field's own hint
+    // ("canvas_import_roster reads a CSV") is real rather than aspirational.
+    name: 'canvas_import_roster',
+    description: 'Import a cohort roster from CSV text into a `cohort` object\'s `roster` field. Use this whenever someone pastes or uploads a class list, student list or roster export and asks to load it — never retype rows by hand. Accepts headers ref/id/student id, name, email, group/section and status (enrolled|withdrawn|auditing) in any order, or a headerless ref,name,email,group,status file. Parsed rows are ADDED to any roster already on the object; a learner already present (matched on ref) is left alone rather than duplicated.',
+    parameters: {
+      type: 'object', required: ['objectId', 'source'], additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'The `cohort` object to import into.' },
+        source: { type: 'string', description: 'The full CSV text.' },
+      },
+    },
+    mutates: () => true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; source?: string };
+      const target = nodes.find((node) => node.id === args.objectId && node.data.kind === 'cohort');
+      if (!target) return { error: 'objectId must name a `cohort` object on this canvas' };
+      const parsed = parseRosterCsv(String(args.source ?? ''));
+      if (!parsed.length) {
+        return { error: 'No roster rows were recognised in that text. Expected a header row naming ref/id, name, email, group and status in any order, or headerless ref,name,email,group,status rows.' };
+      }
+      const existing: RosterRow[] = Array.isArray(target.data.roster) ? target.data.roster as RosterRow[] : [];
+      const seen = new Set(existing.map((row) => specRefKey(row?.ref)));
+      const merged = [...existing, ...parsed.filter((row) => !seen.has(specRefKey(row.ref)))];
+      proposalBuffer.current.push({
+        id: crypto.randomUUID(), type: 'object.update', label: `Import ${parsed.length} learners into ${target.data.title}`,
+        objectId: target.id, patch: { roster: merged, enrolledCount: merged.length },
+      });
+      return { ok: true, proposed: true, objectId: target.id, imported: parsed.length, total: merged.length };
+    },
+  }, {
+    // Mirrors `canvas_import_resume` for the other document format the academic set
+    // documents but never wired: a `.bib`/`.ris` export, which every reference
+    // manager already produces and nobody should have to retype.
+    name: 'canvas_import_references',
+    description: 'Import references from BibTeX (.bib) or RIS (.ris) text into a `bibliography` object\'s `entries` field. Use this whenever someone pastes or uploads a Zotero, Mendeley, EndNote, Scopus or PubMed export and asks to load their references — never retype them by hand and never write a pre-formatted citation string. The format is detected automatically. Parsed entries are ADDED to any already on the object.',
+    parameters: {
+      type: 'object', required: ['objectId', 'source'], additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'The `bibliography` object to import into.' },
+        source: { type: 'string', description: 'The full .bib or .ris text.' },
+      },
+    },
+    mutates: () => true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; source?: string };
+      const target = nodes.find((node) => node.id === args.objectId && node.data.kind === 'bibliography');
+      if (!target) return { error: 'objectId must name a `bibliography` object on this canvas' };
+      const records = parseReferences(String(args.source ?? ''));
+      if (!records.length) return { error: 'No .bib or .ris entries were recognised in that text.' };
+      const existing = Array.isArray(target.data.entries) ? target.data.entries : [];
+      proposalBuffer.current.push({
+        id: crypto.randomUUID(), type: 'object.update', label: `Import ${records.length} references into ${target.data.title}`,
+        objectId: target.id, patch: { entries: [...existing, ...records.map(entryRowFromRecord)] },
+      });
+      return { ok: true, proposed: true, objectId: target.id, imported: records.length };
     },
   }, {
     // The measurement half of every other hiring object. One `funnel` kind, bound to a
@@ -8874,6 +8952,218 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
   }, [persistence, setNodes, t]);
 
+  /**
+   * `assignment.distribute` — fan the task into one `submission` per roster row.
+   *
+   * Idempotent by construction: a learner who already has a submission for this
+   * assignment (matched on `learnerRef`) is skipped, so distributing twice — a late
+   * enrolment, a re-run after the roster grew — only creates what is missing rather
+   * than duplicating every submission on the board.
+   */
+  const distributeAssignment = useCallback((assignmentId: string) => {
+    const all = nodesRef.current;
+    const assignment = all.find((node) => node.id === assignmentId && node.data.kind === 'assignment');
+    if (!assignment) return;
+    const board = makeSpecDeriveBoard(all.map((node) => node.data as unknown as Record<string, unknown>));
+    const cohort = board.byRef('cohort', assignment.data.cohortRef);
+    const roster = cohort ? learnersFromCohort(cohort) : [];
+    if (!roster.length) { setNotice(t('noticeSubmissionsNoCohort')); return; }
+
+    const assignmentKey = specRefKey(assignment.data.title);
+    const already = new Set(all
+      .filter((node) => node.data.kind === 'submission' && specRefKey(node.data.assignmentRef) === assignmentKey)
+      .map((node) => specRefKey(node.data.learnerRef)));
+    const toCreate = roster.filter((learner) => !already.has(specRefKey(learner.ref)));
+    if (!toCreate.length) { setNotice(t('noticeSubmissionsAlreadyDistributed')); return; }
+
+    const created = toCreate.map((learner, index) => {
+      const node = newNode('submission', {
+        x: assignment.position.x + 440 + (index % 3) * 300,
+        y: assignment.position.y + 220 + Math.floor(index / 3) * 190,
+      });
+      node.data = {
+        ...node.data,
+        title: `${learner.name} — ${String(assignment.data.title ?? '')}`,
+        learnerRef: learner.ref,
+        learnerName: learner.name,
+        assignmentRef: String(assignment.data.title ?? ''),
+      };
+      return node;
+    });
+    setNodes((current) => [...current, ...created]);
+    setEdges((current) => [...current, ...created.map((node) => ({
+      id: crypto.randomUUID(), source: assignment.id, target: node.id,
+      type: 'smoothstep', label: 'submission', data: { connectionKind: 'membership' },
+    }))]);
+    setNotice(t('noticeSubmissionsDistributed', { count: created.length }));
+  }, [setEdges, setNodes, t]);
+
+  /**
+   * `cohort.import`'s GENERIC path — invoked with no roster text, so it pulls
+   * through NRPS using whatever `ltiIssuer`/`ltiMembershipsUrl` the cohort already
+   * carries. A CSV paste goes through the dedicated `canvas_import_roster` tool
+   * instead, which has the text to parse; this is what runs when the action is
+   * invoked directly with nothing else to go on.
+   */
+  const importCohortRosterFromLti = useCallback(async (cohortId: string) => {
+    const target = nodesRef.current.find((node) => node.id === cohortId && node.data.kind === 'cohort');
+    if (!target) return;
+    const issuer = String(target.data.ltiIssuer ?? '').trim();
+    const membershipsUrl = String(target.data.ltiMembershipsUrl ?? '').trim();
+    if (!issuer || !membershipsUrl) { setNotice(t('noticeRosterNoLmsBound')); return; }
+    try {
+      const result = await pullLtiRoster(issuer, membershipsUrl);
+      setNodes((current) => current.map((node) => node.id === cohortId
+        ? { ...node, data: { ...node.data, roster: result.roster, enrolledCount: result.roster.length } }
+        : node));
+      setNotice(t('noticeRosterPulled', { count: result.roster.length }));
+    } catch (error) {
+      setNotice(t('noticeRosterPullFailed', { reason: error instanceof Error ? error.message : String(error) }));
+    }
+  }, [setNodes, t]);
+
+  /**
+   * `gradebook.compute` — the matrix, mean, median, pass rate and distribution are
+   * already `derive`d live from the submissions on the board (see
+   * `academic/derivations.ts`); this action's job is to make that explicit and
+   * reportable, stamping the figure onto the card the same way `sendUpdateToInvestors`
+   * stamps what it sent rather than leaving it to be read off a toast that closes.
+   */
+  const computeGradebook = useCallback((gradebookId: string) => {
+    const all = nodesRef.current;
+    const target = all.find((node) => node.id === gradebookId && node.data.kind === 'gradebook');
+    if (!target) return;
+    const board = makeSpecDeriveBoard(all.map((node) => node.data as unknown as Record<string, unknown>));
+    const stats = statsOf(target.data as unknown as Record<string, unknown>, board);
+    if (!stats) { setNotice(t('noticeGradebookEmpty')); return; }
+    setNodes((current) => current.map((node) => node.id === gradebookId
+      ? { ...node, data: { ...node.data, status: `Computed — ${stats.mean ?? 0}% mean, ${stats.markedCount}/${stats.learnerCount} marked`, computedAt: new Date().toISOString() } }
+      : node));
+    setNotice(t('noticeGradebookComputed', { mean: stats.mean ?? 0, marked: stats.markedCount, total: stats.learnerCount }));
+  }, [setNodes, t]);
+
+  /** Why {@link rubricProblems} refused to mark, in one short clause. */
+  const rubricBlockReason = (code: string): string => (code === 'noLevels'
+    ? 'it declares no achievement levels'
+    : code === 'noCriteria'
+      ? 'it declares no criteria'
+      : 'every criterion weight is zero');
+
+  /**
+   * `submission.mark` — apply the rubric to the placements already authored onto
+   * `submission.placements`, apply the assignment's late policy, and write the
+   * result. Never invents a judgement: the placements are the input, `applyRubric`
+   * and `applyLatePolicy` are the same engines the gradebook already trusts, and a
+   * submission with no placements yet is refused rather than marked zero.
+   */
+  const markSubmission = useCallback((submissionId: string) => {
+    const all = nodesRef.current;
+    const submission = all.find((node) => node.id === submissionId && node.data.kind === 'submission');
+    if (!submission) return;
+    const board = makeSpecDeriveBoard(all.map((node) => node.data as unknown as Record<string, unknown>));
+    const assignment = board.byRef('assignment', submission.data.assignmentRef);
+    const rubric = assignment ? board.byRef('rubric', assignment.rubricRef) : null;
+    if (!assignment || !rubric) { setNotice(t('noticeSubmissionNoRubric')); return; }
+
+    const parsedRubric = rubricFromNode(rubric);
+    const maxMarks = Number(assignment.maxMarks);
+    const problems = rubricProblems(parsedRubric, Number.isFinite(maxMarks) ? maxMarks : undefined);
+    const blocking = problems.find((problem) => problem.code === 'noLevels' || problem.code === 'noCriteria' || problem.code === 'weightsZero');
+    if (blocking) { setNotice(t('noticeSubmissionRubricBroken', { reason: rubricBlockReason(blocking.code) })); return; }
+
+    const placements = Array.isArray(submission.data.placements) ? submission.data.placements : [];
+    if (!placements.length) { setNotice(t('noticeSubmissionNoPlacements')); return; }
+    const selections: CriterionSelection[] = placements.flatMap((raw): CriterionSelection[] => {
+      if (!raw || typeof raw !== 'object') return [];
+      const row = raw as Record<string, unknown>;
+      const criterion = String(row.criterion ?? '').trim();
+      const levelIndex = Number(row.levelIndex);
+      if (!criterion || !Number.isInteger(levelIndex)) return [];
+      return [{ criterion, levelIndex, comment: typeof row.comment === 'string' ? row.comment : undefined }];
+    });
+    const result = applyRubric(parsedRubric, selections);
+    if (result.unmarked.length) { setNotice(t('noticeSubmissionPlacementsIncomplete', { criteria: result.unmarked.join(', ') })); return; }
+
+    const policy = parseLatePolicy(assignment.latePolicy);
+    const hours = hoursLate(submission.data.submittedAt, assignment.dueAt);
+    const late = applyLatePolicy(result.total, hours, policy);
+    const percent = parsedRubric.totalMarks > 0 ? Math.round((late.mark / parsedRubric.totalMarks) * 1000) / 10 : 0;
+
+    const commentNotes = result.breakdown.map((row) => row.comment).filter(Boolean).join(' ');
+    const lateNote = late.daysLate > 0
+      ? ` Submitted ${late.daysLate} day${late.daysLate === 1 ? '' : 's'} late; ${late.deducted} marks deducted under the late policy.`
+      : '';
+    const feedback = `${commentNotes}${lateNote}`.trim();
+    const markBreakdown = result.breakdown.map((row) => ({ criterion: row.criterion, level: row.level, marks: row.marks, comment: row.comment }));
+
+    setNodes((current) => current.map((node) => node.id === submissionId
+      ? { ...node, data: { ...node.data, mark: late.mark, markBreakdown, feedback, status: `Marked — ${percent}%` } }
+      : node));
+
+    const learnerName = String(submission.data.learnerName ?? submission.data.learnerRef ?? '');
+    const learnerRef = String(submission.data.learnerRef ?? '').trim();
+    const cohort = board.byRef('cohort', assignment.cohortRef);
+    const issuer = cohort ? String(cohort.ltiIssuer ?? '').trim() : '';
+    const lineItemUrl = String(assignment.ltiLineItemUrl ?? '').trim();
+
+    const baseNotice = late.daysLate > 0
+      ? t('noticeSubmissionMarkedLate', { name: learnerName, percent, mark: late.mark, total: parsedRubric.totalMarks, days: late.daysLate, deducted: late.deducted })
+      : t('noticeSubmissionMarked', { name: learnerName, percent, mark: late.mark, total: parsedRubric.totalMarks });
+
+    if (issuer && lineItemUrl && learnerRef) {
+      pushLtiScore({
+        issuer, lineItemUrl, userId: learnerRef, scoreGiven: late.mark, scoreMaximum: parsedRubric.totalMarks,
+        released: true, ...(feedback ? { comment: feedback } : {}),
+      })
+        .then(() => setNotice(`${baseNotice} ${t('noticeSubmissionScorePushed')}`))
+        .catch((error) => setNotice(`${baseNotice} ${t('noticeSubmissionScorePushFailed', { reason: error instanceof Error ? error.message : String(error) })}`));
+    } else {
+      setNotice(baseNotice);
+    }
+  }, [setNodes, t]);
+
+  /**
+   * `curriculumMap.validate` — structural problems the coverage figure alone cannot
+   * show: an outcome nobody mapped, a mapping column naming an assessment that is
+   * not actually on this board. See `curriculumMapProblems`.
+   */
+  const validateCurriculumMap = useCallback((curriculumMapId: string) => {
+    const all = nodesRef.current;
+    const target = all.find((node) => node.id === curriculumMapId && node.data.kind === 'curriculumMap');
+    if (!target) return;
+    const board = makeSpecDeriveBoard(all.map((node) => node.data as unknown as Record<string, unknown>));
+    const data = target.data as unknown as Record<string, unknown>;
+    const problems = curriculumMapProblems(data, board);
+    const rows = mappingRows(data);
+    const coverage = rows.length ? Math.round((rows.filter((row) => row.assured).length / rows.length) * 100) : 0;
+    setNodes((current) => current.map((node) => node.id === curriculumMapId
+      ? { ...node, data: { ...node.data, status: problems.length ? `Validated — ${problems.length} issue(s)` : 'Validated — fully mapped', validatedAt: new Date().toISOString() } }
+      : node));
+    setNotice(t('noticeCurriculumMapValidated', { coverage, issues: problems.length }));
+  }, [setNodes, t]);
+
+  /**
+   * `bibliography.import`'s GENERIC path — invoked with no reference text, so it
+   * looks for a `.bib`/`.ris` export already sitting on the board as a document (the
+   * same shape `canvas_import_resume` reads a résumé out of) and parses that. A
+   * pasted or uploaded reference list goes through the dedicated
+   * `canvas_import_references` tool instead, which has the text directly.
+   */
+  const importReferencesFromDocument = useCallback((bibliographyId: string) => {
+    const all = nodesRef.current;
+    const target = all.find((node) => node.id === bibliographyId && node.data.kind === 'bibliography');
+    if (!target) return;
+    const candidate = all
+      .map((node) => ({ node, records: parseReferences(canvasDocument(node.data)?.markdown ?? '') }))
+      .find((entry) => entry.records.length > 0);
+    if (!candidate) { setNotice(t('noticeReferencesImportEmpty')); return; }
+    const existing = Array.isArray(target.data.entries) ? target.data.entries : [];
+    setNodes((current) => current.map((node) => node.id === bibliographyId
+      ? { ...node, data: { ...node.data, entries: [...existing, ...candidate.records.map(entryRowFromRecord)] } }
+      : node));
+    setNotice(t('noticeReferencesImported', { count: candidate.records.length }));
+  }, [setNodes, t]);
+
   useEffect(() => {
     const pending = pendingBrainActions[0];
     if (!pending) return;
@@ -8910,6 +9200,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else if (target.data.kind === 'evermind' && pending.action === 'evaluate') evaluateEvermind(target.id);
     else if (target.data.kind === 'testPlan' && pending.action === 'gate') evaluateReleaseGate(target.id);
     else if (target.data.kind === 'investorUpdate' && pending.action === 'send') void sendUpdateToInvestors(target.id);
+    else if (target.data.kind === 'assignment' && pending.action === 'distribute') distributeAssignment(target.id);
+    else if (target.data.kind === 'cohort' && pending.action === 'import') void importCohortRosterFromLti(target.id);
+    else if (target.data.kind === 'gradebook' && pending.action === 'compute') computeGradebook(target.id);
+    else if (target.data.kind === 'submission' && pending.action === 'mark') markSubmission(target.id);
+    else if (target.data.kind === 'curriculumMap' && pending.action === 'validate') validateCurriculumMap(target.id);
+    else if (target.data.kind === 'bibliography' && pending.action === 'import') importReferencesFromDocument(target.id);
     else if (pending.action === 'export') void exportArtifact(target.id, defaultExportAction(target.data.kind)).then(setNotice);
     else if (target.data.kind === 'slides' && pending.action === 'present') setPresentMode(true);
     else if (target.data.kind === 'evermind' && pending.action === 'publish') {
@@ -8920,7 +9216,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('noticeNoDeliveryAdapter', { action: pending.action, kind: creationObjectDefinition(target.data.kind).label }));
     }
     finish();
-  }, [compareProjects, compileWorkflow, convertObjectToDiagram, deliverMockup, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, sendUpdateToInvestors, setEdges, setNodes, startStandup, visualizeDataset]);
+  }, [compareProjects, compileWorkflow, computeGradebook, convertObjectToDiagram, deliverMockup, distributeAssignment, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, importCohortRosterFromLti, importReferencesFromDocument, markSubmission, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, sendUpdateToInvestors, setEdges, setNodes, startStandup, validateCurriculumMap, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
@@ -10177,6 +10473,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
             /> : null,
             timeline: surfaceNode ? <CanvasTimelineSurface
+              data={surfaceNode.data}
+              onExit={() => setSurface('graph')}
+              {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}
+            /> : null,
+            world: surfaceNode ? <CanvasWorldView
               data={surfaceNode.data}
               onExit={() => setSurface('graph')}
               {...(cardsEditable ? { onEdit: (patch: Partial<CreationNodeData>) => updateNodeData(surfaceNode.id, patch) } : {})}

@@ -31,6 +31,7 @@ import {
 } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import { ENTER_APP_PARAM } from './siteVisitor';
+import { SITE_COMMERCE_WIDGET_PATH } from '../marketplace/siteCommerceWidget';
 import {
   creationSessionObjects,
   creationSessionProjectLinks,
@@ -76,6 +77,10 @@ export interface RenderLandingInput {
   /** Label for the button that leaves the shop window and enters the product. */
   enterLabel?: string;
   activePageId?: unknown;
+  /** A `<script src>` for the subscribe + version-offer widget. Omitted by a
+   *  caller previewing this same object off-site (e.g. the canvas), which has no
+   *  published origin for the widget's cookie to belong to. */
+  commerceScriptSrc?: string;
 }
 
 /**
@@ -89,6 +94,7 @@ export function renderLandingPage(input: RenderLandingInput): string | null {
     enterPath: input.enterPath ?? ENTER_APP_HREF,
     enterLabel: input.enterLabel ?? 'Open the app',
     activePageId: input.activePageId,
+    commerceScriptSrc: input.commerceScriptSrc,
   });
 }
 
@@ -134,6 +140,11 @@ export async function landingPageForProject(
     brand: options.brand,
     activePageId: data.activeWebsitePageId,
     ...(options.enterLabel ? { enterLabel: options.enterLabel } : {}),
+    // Unconditional and constant, not resolved from a listing here: the widget
+    // asks for its own price and name at load (`GET /__api/billing/listing`) and
+    // renders nothing when there is none to sell, so this document never has to
+    // know whether the project it belongs to is even on the marketplace.
+    commerceScriptSrc: SITE_COMMERCE_WIDGET_PATH,
   });
   return html ? { objectId: chosen.objectId, html } : null;
 }

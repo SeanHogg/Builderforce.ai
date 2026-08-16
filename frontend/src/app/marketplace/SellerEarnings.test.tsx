@@ -65,6 +65,7 @@ describe('SellerEarnings', () => {
     earningsMock.mockResolvedValue({
       earnings: {
         earnedCents: 2500, paidCents: 1000, availableCents: 1500, salesCount: 4,
+        maintenanceCostCents: 0,
         takeRate: { bps: 1000, lifetimeCents: 21_000_000, thresholdCents: 20_000_000, underThreshold: false },
       },
       configuredTakeRateBps: 1000,
@@ -88,6 +89,7 @@ describe('SellerEarnings', () => {
     earningsMock.mockResolvedValue({
       earnings: {
         earnedCents: 900, paidCents: 0, availableCents: 900, salesCount: 1,
+        maintenanceCostCents: 0,
         takeRate: { bps: 0, lifetimeCents: 900, thresholdCents: 20_000_000, underThreshold: true },
       },
       configuredTakeRateBps: 1500,
@@ -108,6 +110,7 @@ describe('SellerEarnings', () => {
     earningsMock.mockResolvedValue({
       earnings: {
         earnedCents: 0, paidCents: 0, availableCents: 0, salesCount: 0,
+        maintenanceCostCents: 0,
         takeRate: { bps: 0, lifetimeCents: 0, thresholdCents: 20_000_000, underThreshold: true },
       },
       configuredTakeRateBps: 1500,
@@ -117,5 +120,24 @@ describe('SellerEarnings', () => {
 
     await waitFor(() => expect(earningsMock).toHaveBeenCalled());
     await waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
+
+  it('shows what hosted apps have cost, deducted from what is available', async () => {
+    hasTenant = true;
+    mineMock.mockResolvedValue([listing()]);
+    earningsMock.mockResolvedValue({
+      earnings: {
+        earnedCents: 5000, paidCents: 0, availableCents: 3200, salesCount: 2,
+        maintenanceCostCents: 1800,
+        takeRate: { bps: 0, lifetimeCents: 5000, thresholdCents: 20_000_000, underThreshold: true },
+      },
+      configuredTakeRateBps: 1500,
+    });
+
+    render(<SellerEarnings />);
+
+    await waitFor(() => expect(earningsMock).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('$18.00')).toBeInTheDocument();
+    expect(screen.getByText(/\$18\.00, deducted from what's available/)).toBeInTheDocument();
   });
 });
