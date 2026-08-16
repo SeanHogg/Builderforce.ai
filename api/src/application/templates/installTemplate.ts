@@ -21,12 +21,13 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { catalogItems, projects } from '../../infrastructure/database/schema';
+import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { bindAnswers } from '../../domain/guidedSetup/guidedPlan';
 import type { GuidedAnswers } from '../../domain/guidedSetup/guidedStep';
 import type { TemplateOutput } from '../../domain/template/templateManifest';
 import { outputKindSpec, type MaterializeOutputContext, type OutputResult } from './outputKinds';
-import { invalidateTemplateCatalog, type ResolvedTemplate } from './templateRegistry';
+import { invalidateTemplateCatalog, TEMPLATE_CATALOG_KIND, type ResolvedTemplate } from './templateRegistry';
 import { resolveTemplateSetup } from './templateSetup';
 
 export interface InstallTemplateArgs {
@@ -100,15 +101,31 @@ function resolveRunTarget(answers: GuidedAnswers): Pick<
   return { runTargetRuntime: 'cloud', runTargetAgentHostId: null, runTargetCloudAgentRef: null };
 }
 
-/** Move the install counter on a stored template. Best-effort by design: a
- *  counter that failed to increment must never fail an install that worked. */
+/**
+ * Move the install counter on a stored template.
+ *
+ * DELIBERATELY CROSS-TENANT. The whole point of a marketplace template is that
+ * another workspace installs it, and the row being counted belongs to the
+ * PUBLISHER — scoping this write to the installing tenant would silently count
+ * nothing for exactly the templates whose counts matter. The access predicate is
+ * the id the registry already resolved plus the row's kind, and the only column
+ * it can touch is a counter.
+ *
+ * Best-effort by design: a counter that failed to increment must never fail an
+ * install that worked.
+ */
 async function recordInstall(db: Db, env: Env, tenantId: number, template: ResolvedTemplate): Promise<void> {
   if (!template.id) return; // built-ins have no row to count against
   try {
     await db
       .update(catalogItems)
       .set({ installCount: sql`${catalogItems.installCount} + 1`, updatedAt: new Date() })
-      .where(eq(catalogItems.id, template.id));
+      .where(acrossTenants(
+        catalogItems,
+        'public_catalogue',
+        eq(catalogItems.id, template.id),
+        eq(catalogItems.kind, TEMPLATE_CATALOG_KIND),
+      ));
     await invalidateTemplateCatalog(env, tenantId);
   } catch (error) {
     reportCaughtError(error, {

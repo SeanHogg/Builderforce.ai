@@ -35,6 +35,12 @@
  * The bar, the overflow menu, the clustering and the accessible names all follow.
  */
 
+import {
+  canvasSurfaceDefinition,
+  DEFAULT_CANVAS_SURFACE,
+  type CanvasSurfaceId,
+} from './canvasSurfaces';
+
 export type CanvasSessionActionId =
   | 'undo'
   | 'redo'
@@ -50,6 +56,23 @@ export type CanvasSessionActionId =
  * "these are the same kind of thing" without a caption saying it.
  */
 export type CanvasSessionActionCluster = 'history' | 'inspect' | 'session';
+
+/**
+ * What an action NEEDS from the surface it is drawn on.
+ *
+ * ── WHY A REQUIREMENT AND NOT A LIST OF SURFACES ─────────────────────────────────
+ * The bar used to be the same eight buttons on every surface, which put "align the
+ * selected objects" and "read the outcome numbers for this board" on a conversation that
+ * has no objects on it — a control whose only possible answer is nothing. The obvious fix
+ * is `surfaces: ['graph', 'scene3d']` on each entry, and it is the wrong one: every future
+ * surface would have to be added to every list that happens to apply to it, in a file
+ * about actions, and the lists would drift the moment somebody forgot one.
+ *
+ * So an action declares its REQUIREMENT and the surface registry answers it. `objects`
+ * reads `showsObjects`; `board` reads `showsBoard`. A new surface declares those two flags
+ * once, as it already must, and the whole bar composes itself correctly for it.
+ */
+export type CanvasSessionActionNeed = 'objects' | 'board';
 
 export interface CanvasSessionActionDef {
   id: CanvasSessionActionId;
@@ -82,6 +105,11 @@ export interface CanvasSessionActionDef {
   activeLabelKey?: string;
   /** Catalog key for the hover description, when it says more than the label. */
   titleKey?: string;
+  /**
+   * What the surface must provide for this action to mean anything. Absent = every
+   * surface, which is the honest answer for undo, share, publish and full screen.
+   */
+  needs?: CanvasSessionActionNeed;
 }
 
 /**
@@ -103,8 +131,11 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // read as unrelated: `↗` said "opens elsewhere" for a scorecard, and `⚠` drew a standing
   // warning triangle for a report that is usually clean — a permanent alarm on a healthy
   // board is an alarm nobody reads.
-  { id: 'outcomes', cluster: 'inspect', order: 2, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'viewOutcomeMetrics', titleKey: 'outcomeMetricsTitle' },
-  { id: 'diagnostics', cluster: 'inspect', order: 3, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'openDiagnostics' },
+  // Both read THIS BOARD'S OBJECTS — an outcome scorecard and a canvas diagnostic over a
+  // conversation with nothing on it are two buttons whose only answer is "nothing". They
+  // ask the surface for objects rather than naming the surfaces that have them.
+  { id: 'outcomes', cluster: 'inspect', order: 2, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'viewOutcomeMetrics', titleKey: 'outcomeMetricsTitle', needs: 'objects' },
+  { id: 'diagnostics', cluster: 'inspect', order: 3, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'openDiagnostics', needs: 'objects' },
   // Full screen keeps its phone slot for the reason it always had one: a small screen is
   // where trading app chrome for board is worth the most.
   { id: 'fullscreen', cluster: 'inspect', order: 4, chrome: 'icon', state: 'pressed', phone: 'bar', labelKey: 'fullScreen', activeLabelKey: 'exitFullScreen' },
@@ -134,9 +165,26 @@ export function canvasSessionAction(id: CanvasSessionActionId): CanvasSessionAct
   return def;
 }
 
-/** Declaration order, grouped into the troughs the bar draws. */
-export function canvasSessionClusters(): readonly { cluster: CanvasSessionActionCluster; actions: readonly CanvasSessionActionDef[] }[] {
-  const ordered = [...CANVAS_SESSION_ACTIONS].sort((a, b) => a.order - b.order);
+/**
+ * The actions that mean something on this surface.
+ *
+ * ONE filter, asked by the bar, the phone sheet and the tests alike — so "is this button
+ * on screen right now" has a single answer and a cluster of one can never be drawn as an
+ * empty trough. Passing no surface answers for the board, which is what a caller that has
+ * not got one (a test, a story) means.
+ */
+export function canvasSessionActionsFor(surface: CanvasSurfaceId = DEFAULT_CANVAS_SURFACE): readonly CanvasSessionActionDef[] {
+  const def = canvasSurfaceDefinition(surface);
+  return CANVAS_SESSION_ACTIONS.filter((action) => {
+    if (action.needs === 'objects') return def.showsObjects;
+    if (action.needs === 'board') return def.showsBoard;
+    return true;
+  }).sort((a, b) => a.order - b.order);
+}
+
+/** Declaration order, grouped into the troughs the bar draws on THIS surface. */
+export function canvasSessionClusters(surface?: CanvasSurfaceId): readonly { cluster: CanvasSessionActionCluster; actions: readonly CanvasSessionActionDef[] }[] {
+  const ordered = [...canvasSessionActionsFor(surface)];
   const clusters: { cluster: CanvasSessionActionCluster; actions: CanvasSessionActionDef[] }[] = [];
   for (const def of ordered) {
     const last = clusters[clusters.length - 1];
@@ -147,8 +195,8 @@ export function canvasSessionClusters(): readonly { cluster: CanvasSessionAction
 }
 
 /** The actions that keep their own button in the session bar on a phone. */
-export function phoneSessionBarActions(): readonly CanvasSessionActionDef[] {
-  return CANVAS_SESSION_ACTIONS.filter((def) => def.phone === 'bar').sort((a, b) => a.order - b.order);
+export function phoneSessionBarActions(surface?: CanvasSurfaceId): readonly CanvasSessionActionDef[] {
+  return canvasSessionActionsFor(surface).filter((def) => def.phone === 'bar');
 }
 
 /**
@@ -156,6 +204,6 @@ export function phoneSessionBarActions(): readonly CanvasSessionActionDef[] {
  * derived rather than listed, so the two can never disagree about an action and leave it
  * on neither.
  */
-export function phoneOverflowActions(): readonly CanvasSessionActionDef[] {
-  return CANVAS_SESSION_ACTIONS.filter((def) => def.phone === 'menu').sort((a, b) => a.order - b.order);
+export function phoneOverflowActions(surface?: CanvasSurfaceId): readonly CanvasSessionActionDef[] {
+  return canvasSessionActionsFor(surface).filter((def) => def.phone === 'menu');
 }

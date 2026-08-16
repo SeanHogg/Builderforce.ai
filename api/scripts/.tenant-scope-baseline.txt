@@ -146,7 +146,7 @@ presentation/routes/specRoutes.ts:1
 presentation/routes/studioVoiceCloneRoutes.ts:6
 presentation/routes/taskRoutes.ts:3
 presentation/routes/vscodeRoutes.ts:1
-presentation/routes/workflowDefinitionRoutes.ts:4
+presentation/routes/workflowDefinitionRoutes.ts:2
 presentation/routes/workflowRoutes.ts:5
 presentation/routes/workflowTriggerRoutes.ts:2
 presentation/routes/workforceRoutes.ts:7

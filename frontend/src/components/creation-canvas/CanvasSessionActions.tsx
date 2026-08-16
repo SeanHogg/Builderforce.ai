@@ -19,6 +19,8 @@ import {
   type CanvasSessionActionDef,
   type CanvasSessionActionId,
 } from '@/lib/canvasSessionActions';
+import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
+import { useContributedSurfaceActions } from './canvasSurfaceActions';
 import styles from './CreationCanvas.module.css';
 
 /**

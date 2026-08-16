@@ -908,11 +908,25 @@ sequenced into waves because nothing in them gates the sell motion.
   existing object palette as a visual icon picker at the node; and a per-step clock badge opening
   anchored schedule settings. This is what turns the canvas from "describe it and hope" into
   something a non-developer can assemble, and it reclaims roughly 180px of vertical room.
+  **Four further pieces settled in the second review pass:** (a) the command bar is ONE bar whose
+  contents follow the surface — each group declares which surfaces it belongs to, the way
+  `canvasSurfaces.ts` already declares `showsBoard`/`showsObjects`, so pressing **App** swaps the
+  board's arrange tool and category circles for Preview/Code/Console + width + preview URL + an
+  error pill, and `CanvasAppSurface`'s own toolbar is retired into it rather than being a second
+  bar; (b) **people are nodes** — a built-in seat (CTO, from the `role:<key>` catalog) and a custom
+  agent both sit on the board with connectors, a clock and a centre `+`, and share ONE panel shape
+  (model · autonomy · toolbox · personality traits · Advanced), differing only in what is read-only,
+  which is what keeps `psychometric-persona` a single trait engine with two doors in; (c) **messages
+  are on the item** — a severity-coloured badge opening an anchored list that names the consequence
+  and carries the link that FIXES it, with the bar's error pill reading the same source; (d) six
+  colour-coded category circles (Flow control · Tools · Text parser · AI steps · People · All apps)
+  driving ONE data-filled popover, never six hand-written panels.
   **Blocked on an explicit user decision:** the design is done and mocked up interactively
   (https://claude.ai/code/artifact/c935a6ce-18cc-4ea4-bccf-1859a50c20a1) — building it edits the app
-  shell, `CreationCanvas.tsx`, the object palette, the inspector and five i18n catalogs, and one
-  open question is called out in the mockup (whether a collapsed command bar keeps the team avatars
-  or hides them the way Make hides everything).
+  shell, `CreationCanvas.tsx`, `CanvasAppSurface.tsx`, `canvasSessionActions.ts`, the object palette,
+  the inspector, the agent/persona cards and five i18n catalogs, and one open question is called out
+  in the mockup (whether a collapsed command bar keeps the team avatars or hides them the way Make
+  hides everything).
 
 - **A SCANNED document dropped on the canvas can never become a résumé, because the canvas keeps no
   bytes to escalate with.** *(registered 2026-08-16 by the "convert this pdf into a resume" pass,

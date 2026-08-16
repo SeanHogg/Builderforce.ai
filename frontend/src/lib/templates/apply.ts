@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * What pressing a starting point DOES — the client half of the extension point.
  *

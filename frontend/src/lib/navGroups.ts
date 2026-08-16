@@ -313,7 +313,12 @@ export const NAV_GROUPS: NavGroup[] = [
   // The second front door. Canvas is "I have an idea"; the marketplace is "I
   // have a business" — and both end in a company you run. Public, so rung 0.
   // Agents are a FAMILY inside it, never a destination of their own (§11.5).
-  { id: 'marketplace', labelKey: 'group.marketplace', icon: '🛒', href: '/marketplace', match: ['/marketplace', '/talent'], seat: 'platform', stage: 'market', rung: RUNG.PUBLIC },
+  // `/templates` is in `match` rather than a row of its own. A template is a
+  // KIND of listing — it has a marketplace chip, it is published from the
+  // gallery, and it is offered from the starting-point picker under every
+  // prompt bar. A second door beside the marketplace would suggest a second
+  // catalogue, which is precisely what the consolidation removed.
+  { id: 'marketplace', labelKey: 'group.marketplace', icon: '🛒', href: '/marketplace', match: ['/marketplace', '/talent', '/templates'], seat: 'platform', stage: 'market', rung: RUNG.PUBLIC },
   // The SUPPLY side of that same door (PRD 24). `/marketplace` is where you buy
   // what the platform and its sellers made; `/developers` is where a vendor
   // becomes one of those sellers, and where an admin sees what this workspace has
