@@ -15974,7 +15974,12 @@
       "sampleSize": "n = {count}",
       "toPreview": "Show less of this object",
       "toMinimized": "Minimise to a mark",
-      "toExpanded": "Show the whole object"
+      "toExpanded": "Show the whole object",
+      "scheduleThis": "Schedule this step",
+      "scheduledEvery": "Runs every {minutes} minutes",
+      "messageCount": "{count} messages on this object",
+      "insertAfter": "Add a step after {title}",
+      "openSettings": "Settings for {title}"
     },
     "editor": {
       "toolbar": "Formatting",
@@ -16075,7 +16080,7 @@
     "saveCollaborate": "Save & collaborate",
     "addToCanvas": "Add to canvas",
     "searchEverything": "Search everything…",
-    "askBrain": "Ask Brain about this canvas",
+    "askBrain": "Ask Brain",
     "sendBrain": "Send to Brain",
     "resizePrompt": "Resize prompt area",
     "entireCanvas": "Entire canvas",
@@ -19194,7 +19199,56 @@
       "people": "People",
       "all": "All objects"
     },
-    "runCanvasLabel": "Run this canvas"
+    "runCanvasLabel": "Run this canvas",
+    "nodePanel": {
+      "config": "Settings",
+      "schedule": "Schedule",
+      "messages": "Messages",
+      "persona": "Persona",
+      "openFull": "Open the full inspector",
+      "close": "Close",
+      "advanced": "Advanced",
+      "noMessages": "Nothing to report on this object.",
+      "fixThis": "Fix this",
+      "runOnItsOwn": "Run on its own",
+      "scheduleOn": "On",
+      "scheduleOff": "Off",
+      "every": "Every",
+      "everyMinutes": "{minutes} minutes",
+      "scheduleFloorHint": "Fifteen minutes is the floor - every run is a poll, and a board of fifteen scheduled steps adds up fast.",
+      "onlyBetween": "Only between",
+      "fromHour": "From",
+      "toHour": "Until",
+      "weekdaysOnly": "Weekdays only",
+      "name": "Name",
+      "status": "Status",
+      "statusPlaceholder": "Draft, Active, Blocked...",
+      "subtitle": "Subtitle",
+      "configAdvancedHint": "Everything else about this object lives in the full inspector.",
+      "role": "Role",
+      "focus": "Current focus",
+      "model": "Model",
+      "modelPlaceholder": "Follow the board default",
+      "builtinSeat": "Built-in seat",
+      "customAgent": "Custom agent",
+      "builtinSeatHint": "This seat comes from the role catalog - its brief, its tools and its review rights come with it. What you set here is how it works on this board."
+    },
+    "nodeMessage": {
+      "emptyShell": "This object has a title and no content yet - it will look finished and be empty."
+    },
+    "picker": {
+      "search": "Search objects...",
+      "categories": "Categories",
+      "allGroups": "Everything",
+      "noMatches": "Nothing matches {query}.",
+      "insertLabel": "Choose what comes next",
+      "addLabel": "Add to the board"
+    },
+    "dockPrompt": "Dock the prompt into Brain",
+    "floatPrompt": "Float the prompt over the board",
+    "hidePrompt": "Hide the prompt",
+    "showPrompt": "Show the prompt",
+    "canvasPanelControls": "Canvas panels"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

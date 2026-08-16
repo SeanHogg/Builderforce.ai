@@ -15974,7 +15974,12 @@
       "sampleSize": "样本量 n = {count}",
       "toPreview": "减少显示此对象",
       "toMinimized": "最小化为图标",
-      "toExpanded": "显示完整对象"
+      "toExpanded": "显示完整对象",
+      "scheduleThis": "为此步骤设置计划",
+      "scheduledEvery": "每 {minutes} 分钟运行一次",
+      "messageCount": "此对象上有 {count} 条消息",
+      "insertAfter": "在“{title}”之后添加步骤",
+      "openSettings": "“{title}”的设置"
     },
     "editor": {
       "toolbar": "格式",
@@ -16075,7 +16080,7 @@
     "saveCollaborate": "保存并协作",
     "addToCanvas": "添加到画布",
     "searchEverything": "搜索全部内容…",
-    "askBrain": "向 Brain 询问此画布",
+    "askBrain": "询问 Brain",
     "sendBrain": "发送给 Brain",
     "resizePrompt": "调整提示词区域大小",
     "entireCanvas": "整个画布",
@@ -19194,7 +19199,56 @@
       "people": "人员",
       "all": "全部对象"
     },
-    "runCanvasLabel": "运行此画布"
+    "runCanvasLabel": "运行此画布",
+    "nodePanel": {
+      "config": "设置",
+      "schedule": "计划",
+      "messages": "消息",
+      "persona": "角色",
+      "openFull": "打开完整检查器",
+      "close": "关闭",
+      "advanced": "高级",
+      "noMessages": "此对象没有需要报告的内容。",
+      "fixThis": "修复",
+      "runOnItsOwn": "自动运行",
+      "scheduleOn": "开",
+      "scheduleOff": "关",
+      "every": "每隔",
+      "everyMinutes": "{minutes} 分钟",
+      "scheduleFloorHint": "最短为十五分钟——每次运行都是一次轮询，十五个已排期步骤的画板累积很快。",
+      "onlyBetween": "仅在此时段",
+      "fromHour": "从",
+      "toHour": "至",
+      "weekdaysOnly": "仅工作日",
+      "name": "名称",
+      "status": "状态",
+      "statusPlaceholder": "草稿、进行中、受阻……",
+      "subtitle": "副标题",
+      "configAdvancedHint": "此对象的其他所有设置都在完整检查器中。",
+      "role": "职责",
+      "focus": "当前重点",
+      "model": "模型",
+      "modelPlaceholder": "沿用画板默认值",
+      "builtinSeat": "内置席位",
+      "customAgent": "自定义智能体",
+      "builtinSeatHint": "此席位来自角色目录——其职责说明、工具和审阅权限随席位而来。你在此设置的是它在本画板上的工作方式。"
+    },
+    "nodeMessage": {
+      "emptyShell": "此对象只有标题、尚无内容——看起来已完成，实际是空的。"
+    },
+    "picker": {
+      "search": "搜索对象……",
+      "categories": "类别",
+      "allGroups": "全部",
+      "noMatches": "没有匹配 {query} 的结果。",
+      "insertLabel": "选择下一步",
+      "addLabel": "添加到画板"
+    },
+    "dockPrompt": "将输入框停靠到 Brain",
+    "floatPrompt": "让输入框浮动在画板上",
+    "hidePrompt": "隐藏输入框",
+    "showPrompt": "显示输入框",
+    "canvasPanelControls": "画布面板"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

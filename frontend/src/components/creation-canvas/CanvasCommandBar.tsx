@@ -3,7 +3,7 @@
 // would only add another file to the architecture ratchet's client-component tally — the
 // same reason `CanvasSessionActions` omits it.
 import { useTranslations } from 'next-intl';
-import { CollapseBarIcon, ExpandBarIcon, RunCanvasIcon } from '@/components/canvas/CanvasCommands';
+import { CollapseBarIcon, ExpandBarIcon, PromptIcon, RunCanvasIcon } from '@/components/canvas/CanvasCommands';
 import { canvasChromeShows } from '@/lib/canvasChrome';
 import { CANVAS_QUICK_ADD } from '@/lib/canvasQuickAdd';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
@@ -60,10 +60,23 @@ export interface CanvasCommandBarProps {
    * empty canvas is a promise with nothing behind it.
    */
   onRun?: () => void;
-  /** Opens the object palette focused on a group; no group means the palette whole. */
-  onQuickAdd: (group?: CreationObjectGroup) => void;
-  /** Whether the palette is open, so the circles can report it. */
+  /**
+   * Opens the object picker on a group; no group means every group. The circle's own
+   * screen rect goes with it so the picker can open ABOVE the button that summoned it —
+   * this bar is at the bottom of the window, so a popover placed below it is off-screen.
+   */
+  onQuickAdd: (group: CreationObjectGroup | undefined, anchor: DOMRect) => void;
+  /** Whether the picker is open, so the circles can report it. */
   quickAddOpen: boolean;
+  /**
+   * Move around the board — zoom, fit, arrange. Contributed by the host because React
+   * Flow owns the viewport; drawn HERE because a second floating rail down the left edge
+   * of the canvas was the last toolbar competing with this one.
+   */
+  view?: React.ReactNode;
+  /** Show or hide the prompt. Absent while presenting, when there is nothing to ask. */
+  onTogglePrompt?: () => void;
+  promptOpen?: boolean;
   /**
    * Who is in this session RIGHT NOW — the live collaborators. Status, so it survives
    * the collapse.
@@ -92,6 +105,9 @@ export function CanvasCommandBar({
   quickAddOpen,
   roster,
   team,
+  view,
+  onTogglePrompt,
+  promptOpen = true,
   extras,
 }: CanvasCommandBarProps) {
   const t = useTranslations('creationCanvas');
@@ -133,6 +149,24 @@ export function CanvasCommandBar({
           because which of those survive a collapse is one table and not three. */}
       <CanvasSessionActions variant="bar" surface={surface} collapsed={collapsed} handlers={handlers} />
 
+      {/* Moving around the board sits with acting on it. It used to be a second floating
+          rail pinned to the left edge — two toolbars over one canvas, each with its own
+          idea of which commands are "view" and which are "session". */}
+      {showsActions && view}
+
+      {/* The prompt is a THING YOU CAN PUT AWAY now, so the bar has to be able to bring
+          it back — a close with no way back is the trap that keeps people from ever
+          pressing it. */}
+      {onTogglePrompt && showsActions && <button
+        type="button"
+        className={styles.sessionActionButton}
+        data-testid="canvas-prompt-toggle"
+        aria-pressed={promptOpen}
+        aria-label={promptOpen ? t('hidePrompt') : t('showPrompt')}
+        title={promptOpen ? t('hidePrompt') : t('showPrompt')}
+        onClick={onTogglePrompt}
+      ><PromptIcon /></button>}
+
       {extras}
 
       {/* Never folded. A collapsed roster is a team nobody can see is working, and this
@@ -160,7 +194,7 @@ export function CanvasCommandBar({
               aria-pressed={quickAddOpen}
               aria-label={label}
               title={label}
-              onClick={() => onQuickAdd(entry.group)}
+              onClick={(event) => onQuickAdd(entry.group, event.currentTarget.getBoundingClientRect())}
             >{entry.group ? null : <span aria-hidden>+</span>}</button>;
           })}
         </div>

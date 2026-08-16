@@ -15974,7 +15974,12 @@
       "sampleSize": "n = {count}",
       "toPreview": "Mostrar menos de este objeto",
       "toMinimized": "Minimizar a una marca",
-      "toExpanded": "Mostrar el objeto completo"
+      "toExpanded": "Mostrar el objeto completo",
+      "scheduleThis": "Programar este paso",
+      "scheduledEvery": "Se ejecuta cada {minutes} minutos",
+      "messageCount": "{count} mensajes en este objeto",
+      "insertAfter": "Anadir un paso despues de {title}",
+      "openSettings": "Ajustes de {title}"
     },
     "editor": {
       "toolbar": "Formato",
@@ -16075,7 +16080,7 @@
     "saveCollaborate": "Guardar y colaborar",
     "addToCanvas": "Añadir al Lienzo",
     "searchEverything": "Buscar en todo…",
-    "askBrain": "Pregunta a Brain sobre este Lienzo",
+    "askBrain": "Pregunta a Brain",
     "sendBrain": "Enviar a Brain",
     "resizePrompt": "Cambiar el tamaño del área de indicaciones",
     "entireCanvas": "Todo el Lienzo",
@@ -19194,7 +19199,56 @@
       "people": "Personas",
       "all": "Todos los objetos"
     },
-    "runCanvasLabel": "Ejecutar este lienzo"
+    "runCanvasLabel": "Ejecutar este lienzo",
+    "nodePanel": {
+      "config": "Ajustes",
+      "schedule": "Programacion",
+      "messages": "Mensajes",
+      "persona": "Perfil",
+      "openFull": "Abrir el inspector completo",
+      "close": "Cerrar",
+      "advanced": "Avanzado",
+      "noMessages": "Nada que informar sobre este objeto.",
+      "fixThis": "Corregir",
+      "runOnItsOwn": "Ejecutar por su cuenta",
+      "scheduleOn": "Si",
+      "scheduleOff": "No",
+      "every": "Cada",
+      "everyMinutes": "{minutes} minutos",
+      "scheduleFloorHint": "Quince minutos es el minimo: cada ejecucion es un sondeo y un tablero con quince pasos programados suma rapido.",
+      "onlyBetween": "Solo entre",
+      "fromHour": "Desde",
+      "toHour": "Hasta",
+      "weekdaysOnly": "Solo dias laborables",
+      "name": "Nombre",
+      "status": "Estado",
+      "statusPlaceholder": "Borrador, Activo, Bloqueado...",
+      "subtitle": "Subtitulo",
+      "configAdvancedHint": "Todo lo demas sobre este objeto esta en el inspector completo.",
+      "role": "Rol",
+      "focus": "Foco actual",
+      "model": "Modelo",
+      "modelPlaceholder": "Seguir el valor por defecto del tablero",
+      "builtinSeat": "Puesto integrado",
+      "customAgent": "Agente propio",
+      "builtinSeatHint": "Este puesto viene del catalogo de roles: su encargo, sus herramientas y sus permisos de revision vienen con el. Aqui defines como trabaja en este tablero."
+    },
+    "nodeMessage": {
+      "emptyShell": "Este objeto tiene titulo pero aun no tiene contenido: parecera terminado y estara vacio."
+    },
+    "picker": {
+      "search": "Buscar objetos...",
+      "categories": "Categorias",
+      "allGroups": "Todo",
+      "noMatches": "Nada coincide con {query}.",
+      "insertLabel": "Elige lo que viene despues",
+      "addLabel": "Anadir al tablero"
+    },
+    "dockPrompt": "Acoplar el prompt en Brain",
+    "floatPrompt": "Flotar el prompt sobre el tablero",
+    "hidePrompt": "Ocultar el prompt",
+    "showPrompt": "Mostrar el prompt",
+    "canvasPanelControls": "Paneles del lienzo"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

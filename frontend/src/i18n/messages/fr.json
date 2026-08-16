@@ -15974,7 +15974,12 @@
       "sampleSize": "n = {count}",
       "toPreview": "Afficher moins de cet objet",
       "toMinimized": "Réduire à une pastille",
-      "toExpanded": "Afficher l'objet en entier"
+      "toExpanded": "Afficher l'objet en entier",
+      "scheduleThis": "Planifier cette etape",
+      "scheduledEvery": "Execute toutes les {minutes} minutes",
+      "messageCount": "{count} messages sur cet objet",
+      "insertAfter": "Ajouter une etape apres {title}",
+      "openSettings": "Reglages de {title}"
     },
     "editor": {
       "toolbar": "Mise en forme",
@@ -16075,7 +16080,7 @@
     "saveCollaborate": "Enregistrer et collaborer",
     "addToCanvas": "Ajouter au Canevas",
     "searchEverything": "Tout rechercher…",
-    "askBrain": "Interroger Brain sur ce Canevas",
+    "askBrain": "Demander a Brain",
     "sendBrain": "Envoyer à Brain",
     "resizePrompt": "Redimensionner la zone de saisie",
     "entireCanvas": "Canevas entier",
@@ -19194,7 +19199,56 @@
       "people": "Personnes",
       "all": "Tous les objets"
     },
-    "runCanvasLabel": "Exécuter ce canevas"
+    "runCanvasLabel": "Exécuter ce canevas",
+    "nodePanel": {
+      "config": "Reglages",
+      "schedule": "Planification",
+      "messages": "Messages",
+      "persona": "Profil",
+      "openFull": "Ouvrir l'inspecteur complet",
+      "close": "Fermer",
+      "advanced": "Avance",
+      "noMessages": "Rien a signaler sur cet objet.",
+      "fixThis": "Corriger",
+      "runOnItsOwn": "Executer tout seul",
+      "scheduleOn": "Active",
+      "scheduleOff": "Desactive",
+      "every": "Toutes les",
+      "everyMinutes": "{minutes} minutes",
+      "scheduleFloorHint": "Quinze minutes est le minimum : chaque execution est une interrogation, et un tableau de quinze etapes planifiees s'accumule vite.",
+      "onlyBetween": "Uniquement entre",
+      "fromHour": "De",
+      "toHour": "Jusqu'a",
+      "weekdaysOnly": "Jours ouvres uniquement",
+      "name": "Nom",
+      "status": "Statut",
+      "statusPlaceholder": "Brouillon, Actif, Bloque...",
+      "subtitle": "Sous-titre",
+      "configAdvancedHint": "Tout le reste concernant cet objet se trouve dans l'inspecteur complet.",
+      "role": "Role",
+      "focus": "Priorite actuelle",
+      "model": "Modele",
+      "modelPlaceholder": "Suivre la valeur par defaut du tableau",
+      "builtinSeat": "Siege integre",
+      "customAgent": "Agent personnalise",
+      "builtinSeatHint": "Ce siege vient du catalogue de roles : sa mission, ses outils et ses droits de relecture l'accompagnent. Ce que vous reglez ici, c'est sa facon de travailler sur ce tableau."
+    },
+    "nodeMessage": {
+      "emptyShell": "Cet objet a un titre mais pas encore de contenu : il paraitra termine et sera vide."
+    },
+    "picker": {
+      "search": "Rechercher des objets...",
+      "categories": "Categories",
+      "allGroups": "Tout",
+      "noMatches": "Rien ne correspond a {query}.",
+      "insertLabel": "Choisissez la suite",
+      "addLabel": "Ajouter au tableau"
+    },
+    "dockPrompt": "Ancrer le prompt dans Brain",
+    "floatPrompt": "Faire flotter le prompt sur le tableau",
+    "hidePrompt": "Masquer le prompt",
+    "showPrompt": "Afficher le prompt",
+    "canvasPanelControls": "Panneaux du canevas"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

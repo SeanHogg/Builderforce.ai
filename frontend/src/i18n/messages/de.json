@@ -15974,7 +15974,12 @@
       "sampleSize": "n = {count}",
       "toPreview": "Weniger von diesem Objekt zeigen",
       "toMinimized": "Auf ein Zeichen verkleinern",
-      "toExpanded": "Das ganze Objekt zeigen"
+      "toExpanded": "Das ganze Objekt zeigen",
+      "scheduleThis": "Diesen Schritt planen",
+      "scheduledEvery": "Laeuft alle {minutes} Minuten",
+      "messageCount": "{count} Meldungen an diesem Objekt",
+      "insertAfter": "Einen Schritt nach {title} hinzufuegen",
+      "openSettings": "Einstellungen fuer {title}"
     },
     "editor": {
       "toolbar": "Formatierung",
@@ -16075,7 +16080,7 @@
     "saveCollaborate": "Speichern und zusammenarbeiten",
     "addToCanvas": "Zum Canvas hinzufügen",
     "searchEverything": "Alles durchsuchen…",
-    "askBrain": "Brain zu diesem Canvas fragen",
+    "askBrain": "Brain fragen",
     "sendBrain": "An Brain senden",
     "resizePrompt": "Größe des Prompt-Bereichs ändern",
     "entireCanvas": "Gesamter Canvas",
@@ -19194,7 +19199,56 @@
       "people": "Personen",
       "all": "Alle Objekte"
     },
-    "runCanvasLabel": "Dieses Canvas ausführen"
+    "runCanvasLabel": "Dieses Canvas ausführen",
+    "nodePanel": {
+      "config": "Einstellungen",
+      "schedule": "Zeitplan",
+      "messages": "Meldungen",
+      "persona": "Profil",
+      "openFull": "Die vollstaendige Inspektion oeffnen",
+      "close": "Schliessen",
+      "advanced": "Erweitert",
+      "noMessages": "Zu diesem Objekt gibt es nichts zu melden.",
+      "fixThis": "Beheben",
+      "runOnItsOwn": "Von selbst ausfuehren",
+      "scheduleOn": "An",
+      "scheduleOff": "Aus",
+      "every": "Alle",
+      "everyMinutes": "{minutes} Minuten",
+      "scheduleFloorHint": "Fuenfzehn Minuten sind das Minimum - jeder Lauf ist eine Abfrage, und ein Board mit fuenfzehn geplanten Schritten summiert sich schnell.",
+      "onlyBetween": "Nur zwischen",
+      "fromHour": "Von",
+      "toHour": "Bis",
+      "weekdaysOnly": "Nur Werktage",
+      "name": "Name",
+      "status": "Status",
+      "statusPlaceholder": "Entwurf, Aktiv, Blockiert...",
+      "subtitle": "Untertitel",
+      "configAdvancedHint": "Alles Weitere zu diesem Objekt steht in der vollstaendigen Inspektion.",
+      "role": "Rolle",
+      "focus": "Aktueller Schwerpunkt",
+      "model": "Modell",
+      "modelPlaceholder": "Board-Standard folgen",
+      "builtinSeat": "Eingebauter Sitz",
+      "customAgent": "Eigener Agent",
+      "builtinSeatHint": "Dieser Sitz stammt aus dem Rollenkatalog - Auftrag, Werkzeuge und Pruefrechte kommen mit ihm. Hier stellst du ein, wie er auf diesem Board arbeitet."
+    },
+    "nodeMessage": {
+      "emptyShell": "Dieses Objekt hat einen Titel und noch keinen Inhalt - es sieht fertig aus und ist leer."
+    },
+    "picker": {
+      "search": "Objekte suchen...",
+      "categories": "Kategorien",
+      "allGroups": "Alles",
+      "noMatches": "Nichts passt zu {query}.",
+      "insertLabel": "Waehle, was als Naechstes kommt",
+      "addLabel": "Zum Board hinzufuegen"
+    },
+    "dockPrompt": "Den Prompt an Brain andocken",
+    "floatPrompt": "Den Prompt ueber dem Board schweben lassen",
+    "hidePrompt": "Den Prompt ausblenden",
+    "showPrompt": "Den Prompt einblenden",
+    "canvasPanelControls": "Canvas-Bereiche"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

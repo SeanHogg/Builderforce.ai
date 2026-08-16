@@ -275,6 +275,14 @@ export function RunCanvasIcon() {
   </svg>;
 }
 
+/** Ask Brain. A spark, matching the mark the prompt and the Brain object already carry —
+ *  the toggle and the thing it toggles have to be recognisably the same object. */
+export function PromptIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M8 1.9l1.5 4.2 4.2 1.5-4.2 1.5L8 13.3 6.5 9.1 2.3 7.6l4.2-1.5z" fill="currentColor" />
+  </svg>;
+}
+
 /** Fold the session bar down to what the canvas IS DOING. A chevron INTO the row it
  *  collapses, so the direction says where the controls go rather than merely that
  *  something happens. Its opposite is {@link ExpandBarIcon}. */

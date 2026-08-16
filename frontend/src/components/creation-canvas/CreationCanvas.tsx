@@ -25,6 +25,16 @@ import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canv
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { canvasChromeShows, readCanvasBarCollapsed, writeCanvasBarCollapsed } from '@/lib/canvasChrome';
 import { canvasApp } from '@/lib/canvasApp';
+import { canvasNodeMessages, type CanvasNodePanelId } from '@/lib/canvasNodeAffordances';
+import {
+  DEFAULT_CANVAS_PROMPT_PLACEMENT,
+  readCanvasPromptPlacement,
+  toggledCanvasPromptPlacement,
+  writeCanvasPromptPlacement,
+  type CanvasPromptPlacement,
+} from '@/lib/canvasPromptPlacement';
+import { CanvasNodePanel } from './CanvasNodePanel';
+import { CanvasObjectPicker } from './CanvasObjectPicker';
 import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
 import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
@@ -917,6 +927,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const [barCollapsed, setBarCollapsedState] = useState(false);
   useEffect(() => { setBarCollapsedState(readCanvasBarCollapsed()); }, []);
+  /**
+   * Where the prompt lives — floating, docked into Brain, or closed. Read in an effect
+   * for the same reason the folded bar is: reading storage during render is a hydration
+   * mismatch, and a prompt that arrives floating for one frame is the safe direction.
+   */
+  const [promptPlacement, setPromptPlacementState] = useState<CanvasPromptPlacement>(DEFAULT_CANVAS_PROMPT_PLACEMENT);
+  useEffect(() => { setPromptPlacementState(readCanvasPromptPlacement()); }, []);
+  const setPromptPlacement = useCallback((next: CanvasPromptPlacement) => {
+    setPromptPlacementState(next);
+    writeCanvasPromptPlacement(next);
+  }, []);
   const setBarCollapsed = useCallback((next: boolean) => {
     setBarCollapsedState(next);
     writeCanvasBarCollapsed(next);
@@ -983,6 +1004,34 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setCollapsedPaletteGroups(group
       ? new Set(CREATION_PALETTE_GROUPS.map((entry) => entry.group).filter((entry) => entry !== group))
       : new Set());
+  }, []);
+
+  /**
+   * THE ANCHORED PANEL AND THE PICKER — two overlays, one rule.
+   *
+   * Both are positioned from a SCREEN rect handed up by whichever control opened them,
+   * never from a board coordinate. The alternative is projecting a node's flow position
+   * through the viewport transform on every pan and zoom, which is a second copy of React
+   * Flow's own maths and drifts the moment either changes. A fixed overlay anchored to
+   * where the button actually is cannot drift, and both close on click-away anyway.
+   */
+  const [nodePanel, setNodePanel] = useState<{ nodeId: string; panel: CanvasNodePanelId; anchor: { x: number; y: number } } | null>(null);
+  const [objectPicker, setObjectPicker] = useState<{ anchor: { x: number; y: number }; group?: CreationObjectGroup; fromNodeId?: string } | null>(null);
+
+  /** Beside the badge, clamped so a card at the right edge does not open a panel off it. */
+  const anchorFrom = (rect: DOMRect, width: number) => ({
+    x: Math.min(Math.max(12, rect.right + 12), Math.max(12, window.innerWidth - width - 12)),
+    y: Math.min(Math.max(12, rect.top - 8), Math.max(12, window.innerHeight - 220)),
+  });
+
+  const openNodePanel = useCallback((nodeId: string, panel: CanvasNodePanelId, rect: DOMRect) => {
+    setObjectPicker(null);
+    setNodePanel({ nodeId, panel, anchor: anchorFrom(rect, 300) });
+  }, []);
+
+  const openInsertPicker = useCallback((nodeId: string, rect: DOMRect) => {
+    setNodePanel(null);
+    setObjectPicker({ anchor: anchorFrom(rect, 400), fromNodeId: nodeId });
   }, []);
   /**
    * PRESENTATION AND FOLLOW ARE SHELL STATE NOW.
@@ -2694,6 +2743,30 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(t('objectAdded', { title: node.data.title }));
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
   }, [canEdit, localizedTourDefaults, sessionId, setNodes, t, timeline]);
+
+  /**
+   * What choosing an object in the picker DOES.
+   *
+   * With a source node it is an INSERT: the object is created to the right of that node
+   * and wired to it in one action, which is the difference between "add a step" and "add
+   * an object" — and the reason the board could previously only be built by prompting.
+   * Without one it is the bar's plain add, which is `addAtCenter` unchanged.
+   */
+  const pickObject = useCallback((kind: CreationObjectKind, fromNodeId?: string) => {
+    setObjectPicker(null);
+    if (!fromNodeId) { addAtCenter(kind); return; }
+    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
+    const source = nodes.find((node) => node.id === fromNodeId);
+    if (!source) { addAtCenter(kind); return; }
+    // Beside it, not on top of it — far enough right that the two cards and the edge
+    // between them are all legible without an immediate re-layout.
+    const node = newNode(kind, { x: source.position.x + (canvasNodeDimensions(source).width || 300) + 90, y: source.position.y });
+    setNodes((current) => [...current, node]);
+    setEdges((current) => addEdge({ id: `${fromNodeId}-${node.id}`, source: fromNodeId, target: node.id, type: connectionKind }, current));
+    setSelectedId(node.id); setSelectedIds([node.id]);
+    setNotice(t('objectAdded', { title: node.data.title }));
+    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
+  }, [addAtCenter, canEdit, connectionKind, nodes, sessionId, setEdges, setNodes, t]);
 
   /**
    * ONE credential check in front of every social tool.
@@ -9040,11 +9113,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onResumeShare={createResumeShare} onResumeSharesList={listResumeShares} onResumeShareRevoke={revokeResumeShare} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onResumeShare={createResumeShare} onResumeSharesList={listResumeShares} onResumeShareRevoke={revokeResumeShare} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]);
     }} />,
-  }), [canRun, cardsEditable, createResumeShare, detachResumeFromNode, exportFromNode, listResumeShares, openBuiltinAgentSurfaceFromNode, revokeResumeShare, runWorkflowFromNode, tailorResumeFromNode, updateNodeData]);
+  }), [canRun, cardsEditable, createResumeShare, detachResumeFromNode, exportFromNode, listResumeShares, openBuiltinAgentSurfaceFromNode, openInsertPicker, openNodePanel, revokeResumeShare, runWorkflowFromNode, tailorResumeFromNode, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     // Objects are passed WHOLE: the report decides which fields explain whether
@@ -9303,7 +9376,34 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * They are additive: every aria-label stays, because a test id is for a test and an
    * accessible name is for a person.
    */
-  const composer = !presentMode && <div ref={composerDockRef} data-testid="canvas-composer" className={styles.composerDock} data-tour="creation-brain-dock">
+  const composer = !presentMode && promptPlacement !== 'closed' && <div
+    ref={composerDockRef}
+    data-testid="canvas-composer"
+    className={styles.composerDock}
+    data-placement={promptPlacement}
+    data-tour="creation-brain-dock"
+  >
+    {/* The prompt's own header, and the only place the dock decision is made. Closing is
+        offered from here and from the command bar; DOCKING is deliberate enough to belong
+        only on the thing being docked. */}
+    <div className={styles.promptChrome}>
+      <span className={styles.promptChromeName}>{t('askBrain')}</span>
+      <button
+        type="button"
+        data-testid="canvas-prompt-dock"
+        aria-pressed={promptPlacement === 'docked'}
+        aria-label={promptPlacement === 'docked' ? t('floatPrompt') : t('dockPrompt')}
+        title={promptPlacement === 'docked' ? t('floatPrompt') : t('dockPrompt')}
+        onClick={() => setPromptPlacement(promptPlacement === 'docked' ? 'float' : 'docked')}
+      ><Icon name={promptPlacement === 'docked' ? 'external-link' : 'message'} size={14} /></button>
+      <button
+        type="button"
+        data-testid="canvas-prompt-close"
+        aria-label={t('hidePrompt')}
+        title={t('hidePrompt')}
+        onClick={() => setPromptPlacement('closed')}
+      ><Icon name="close" size={15} /></button>
+    </div>
     <div className={styles.composerUtilities}>
       {/* Keep the settled receipt mounted after the run. Token consumption used
           to disappear at the exact moment the answer arrived because this whole
@@ -9547,6 +9647,36 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>}
       </div>
 
+      {/* The panel that opens BESIDE the card it configures — config, schedule, messages
+          or persona, from one shell. The inspector rail is still one press away from its
+          header; this is the common case, which is why it is short. */}
+      {nodePanel && (() => {
+        const target = nodes.find((node) => node.id === nodePanel.nodeId);
+        if (!target) return null;
+        return <CanvasNodePanel
+          panel={nodePanel.panel}
+          nodeId={nodePanel.nodeId}
+          data={target.data}
+          anchor={nodePanel.anchor}
+          messages={canvasNodeMessages(target.data, { emptyShell: emptyShellProblem(target.data.kind, target.data as Record<string, unknown>) !== null })}
+          editable={canEdit && !lockBlocked}
+          onChange={(patch) => updateNodeData(nodePanel.nodeId, patch)}
+          onClose={() => setNodePanel(null)}
+          onOpenFull={() => { setNodePanel(null); setSelectedId(nodePanel.nodeId); setSelectedIds([nodePanel.nodeId]); }}
+        />;
+      })()}
+
+      {/* ONE picker, two doors: a node's centre `+` (insert, connected) and the command
+          bar's category circles (add). Contents from `CREATION_PALETTE_GROUPS`, so it can
+          never fall behind the object registry. */}
+      {objectPicker && <CanvasObjectPicker
+        anchor={objectPicker.anchor}
+        {...(objectPicker.group ? { group: objectPicker.group } : {})}
+        {...(objectPicker.fromNodeId ? { fromNodeId: objectPicker.fromNodeId } : {})}
+        onPick={pickObject}
+        onClose={() => setObjectPicker(null)}
+      />}
+
       {/* THE bar. Everything you can do to what you are looking at, in one floating card
           — including whatever the SURFACE contributed, so an app's Run, its readings and
           the address it is running at land here rather than in a second toolbar of their
@@ -9563,8 +9693,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // contributing its own Run: two Run buttons that can disagree about whether
         // something is running is worse than none.
         onRun={surface === 'graph' && runnableApp ? () => setSurface('app') : undefined}
-        onQuickAdd={openPaletteGroup}
-        quickAddOpen={paletteOpen}
+        // The circles open the PICKER now — the same component a node's centre `+` opens,
+        // so "choose an object" is one interaction with one search and one contents,
+        // reached from two places. `openPaletteGroup` still backs the palette rail.
+        onQuickAdd={(group, rect) => {
+          setNodePanel(null);
+          setObjectPicker({ anchor: { x: Math.min(Math.max(12, rect.left - 170), Math.max(12, window.innerWidth - 412)), y: Math.max(12, rect.top - 330) }, ...(group ? { group } : {}) });
+        }}
+        quickAddOpen={objectPicker !== null && !objectPicker.fromNodeId}
         roster={
           /* WHO IS HERE is the single most important thing a folded bar can still say.
              A collapsed roster is a team nobody can see is working, and on a shared
@@ -9585,6 +9721,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 now only reports who is here; Share is the door. */}
           </div>
         }
+        // Moving around the board, folded out of the left-edge rail. The rail was the
+        // last toolbar competing with this bar, and it split "what can I do to this
+        // canvas" across two floating elements with nothing saying why.
+        view={<div className={styles.commandBarView} role="group" aria-label={t('canvasViewControls')}>
+          <button type="button" onClick={zoomInAction} aria-label={t('zoomIn')} title={t('zoomIn')}><ZoomInIcon /></button>
+          <button type="button" onClick={zoomOutAction} aria-label={t('zoomOut')} title={t('zoomOut')}><ZoomOutIcon /></button>
+          <button type="button" onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')} title={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>{threeDControls ? <ResetViewIcon /> : <FitViewIcon />}</button>
+          <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')} title={t('arrangeObjects')}><CleanLayoutIcon /></button>
+        </div>}
+        onTogglePrompt={presentMode ? undefined : () => setPromptPlacement(toggledCanvasPromptPlacement(promptPlacement))}
+        promptOpen={promptPlacement !== 'closed'}
         // The always-on seats, folded out of the shell's footer band and into the one
         // bar. Same component, same roster endpoint, same drag-to-board payload — the
         // band simply stands down on a stage route and draws itself here instead.
@@ -9803,11 +9950,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             of ⌗ / ⌘ / ◱ next to two real icons. */}
         <div className={styles.boardRail}>
         {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label={t('toggleObjectPalette')}>{paletteOpen ? <ClosePaletteIcon /> : <AddObjectIcon />}</button>}
-        <div className={styles.mobileCanvasActions} role="group" aria-label={t('canvasViewControls')}>
-          <button type="button" onClick={zoomInAction} aria-label={t('zoomIn')}><ZoomInIcon /></button>
-          <button type="button" onClick={zoomOutAction} aria-label={t('zoomOut')}><ZoomOutIcon /></button>
-          <button type="button" onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>{threeDControls ? <ResetViewIcon /> : <FitViewIcon />}</button>
-          <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')}><CleanLayoutIcon /></button>
+        {/* ZOOM, FIT AND ARRANGE ARE NOT HERE ANY MORE. They moved into the one command
+            bar, which is where "what can I do to this canvas" now lives — keeping a copy
+            on this rail would be the same decision with two controls, on two floating
+            toolbars, which is the exact failure the surface registry was written to
+            prevent. What stays is what the bar does not carry: the surface switcher's
+            phone form, the panels, and the 3D-only commands. */}
+        <div className={styles.mobileCanvasActions} role="group" aria-label={t('canvasPanelControls')}>
           <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="mobile" />
           {threeDControls && <button type="button" onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')}><DepthIcon /></button>}
           {threeDControls && <button type="button" onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')}><LayerGuidesIcon /></button>}

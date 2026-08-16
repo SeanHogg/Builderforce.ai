@@ -14,7 +14,14 @@ import {
 import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL } from './authoredColors';
 import { STICKY_COLORS } from '@/components/canvas/canvasModel';
 import styles from './CreationCanvas.module.css';
-import { creationObjectDefinition } from './creationObjectRegistry';
+import { creationObjectDefinition, emptyShellProblem } from './creationObjectRegistry';
+import {
+  canvasNodeMessages,
+  canvasNodeSchedule,
+  canvasNodeSettingsPanel,
+  canvasNodeWorstSeverity,
+  type CanvasNodePanelId,
+} from '@/lib/canvasNodeAffordances';
 import { canvasNodeDensity, canvasNodeDensityActionKey, nextCanvasNodeDensity, type CanvasNodeDensity } from '@/lib/canvasNodeDensity';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
 import { BrainSurfaceActions, BrainSurfaceBody } from './BrainDock';
@@ -2237,6 +2244,14 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
   onResumeShare?: (nodeId: string, kind: 'view' | 'embed') => Promise<void>;
   onResumeSharesList?: (nodeId: string) => Promise<CanvasResumeShare[]>;
   onResumeShareRevoke?: (nodeId: string, shareId: string) => Promise<void>;
+  /**
+   * Open one of the card's own panels BESIDE it. The anchor is a screen rect, not a
+   * board coordinate: the panel is a fixed overlay, so it never has to be re-projected
+   * through the viewport transform and it lands where the badge is regardless of zoom.
+   */
+  onOpenPanel?: (nodeId: string, panel: CanvasNodePanelId, anchor: DOMRect) => void;
+  /** The centre `+`: choose what comes after this object, connected to it. */
+  onInsertFrom?: (nodeId: string, anchor: DOMRect) => void;
 };
 
 /** Object kinds whose body IS a document. Registry kinds, so a new document-like
@@ -2320,6 +2335,16 @@ function useSpecDeriveBoard(kind: CreationObjectKind): SpecDeriveBoard {
  * the mark has to say which of the three you are in — full rows, one row plus a rule, or a
  * dot — or the only way to know is to press it and watch.
  */
+/** A clock, drawn at badge size. Not `Icon name="clock"` — this sits INSIDE a 26px
+ *  circle that already carries a fill, so it needs a heavier stroke than the icon set's
+ *  general-purpose glyph to survive at that size on a tinted plate. */
+function ClockBadgeIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M8 4.9V8l2.2 1.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
 function DensityIcon({ density }: { density: CanvasNodeDensity }) {
   if (density === 'minimized') return <svg viewBox="0 0 16 16" aria-hidden="true">
     <circle cx="8" cy="8" r="3.1" fill="currentColor" />
@@ -2335,7 +2360,7 @@ function DensityIcon({ density }: { density: CanvasNodeDensity }) {
   </svg>;
 }
 
-export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke }: CreationNodeProps) {
+export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke, onOpenPanel, onInsertFrom }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const specBoard = useSpecDeriveBoard(data.kind);
   const isWide = ['workflow', 'website', 'prototype', 'guidedTour', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
@@ -2379,6 +2404,60 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
    *
    * The rule lives in `lib/canvasNodeDensity.ts`; this only draws it.
    */
+  /**
+   * THE CARD'S OWN AFFORDANCES — schedule, messages, and what comes next.
+   *
+   * Built once and drawn on BOTH the card and the orb, because a minimised node is where
+   * they matter most: an orb with a red badge is the only thing on a folded board that
+   * says where the problem is. Everything about which badges exist and when is decided in
+   * `lib/canvasNodeAffordances.ts`; this only draws them.
+   */
+  const messages = canvasNodeMessages(data, { emptyShell: emptyShellProblem(data.kind, data as Record<string, unknown>) !== null });
+  const worstSeverity = canvasNodeWorstSeverity(messages);
+  const schedule = canvasNodeSchedule(data);
+  const openPanel = (panel: CanvasNodePanelId) => (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    onOpenPanel?.(id, panel, event.currentTarget.getBoundingClientRect());
+  };
+  const affordances = onOpenPanel ? <span className={styles.nodeAffordances}>
+    {/* The clock is on every step, lit when it is armed. Not conditional on there being
+        a schedule: "this can run on its own" is a fact about every step, and hiding the
+        control until a schedule exists is how a feature stays undiscovered. */}
+    <button
+      type="button"
+      className={`${styles.nodeBadge} nodrag`}
+      data-kind="schedule"
+      data-on={schedule.enabled ? 'true' : 'false'}
+      data-testid={`canvas-node-schedule-${id}`}
+      aria-label={schedule.enabled ? t('scheduledEvery', { minutes: schedule.everyMinutes }) : t('scheduleThis')}
+      title={schedule.enabled ? t('scheduledEvery', { minutes: schedule.everyMinutes }) : t('scheduleThis')}
+      onClick={openPanel('schedule')}
+    ><ClockBadgeIcon /></button>
+    {/* Severity-coloured and COUNTED. A badge that says "2" without saying how bad is a
+        badge you have to open to triage, which defeats putting it on the card. */}
+    {worstSeverity && <button
+      type="button"
+      className={`${styles.nodeBadge} nodrag`}
+      data-kind="messages"
+      data-severity={worstSeverity}
+      data-testid={`canvas-node-messages-${id}`}
+      aria-label={t('messageCount', { count: messages.length })}
+      title={t('messageCount', { count: messages.length })}
+      onClick={openPanel('messages')}
+    >{messages.length}</button>}
+  </span> : null;
+
+  // What comes AFTER this object. The board could only ever be built by prompting: there
+  // was no way to say "and then this" without describing it in words and hoping.
+  const insertButton = onInsertFrom ? <button
+    type="button"
+    className={`${styles.nodeInsert} nodrag`}
+    data-testid={`canvas-node-insert-${id}`}
+    aria-label={t('insertAfter', { title: data.title })}
+    title={t('insertAfter', { title: data.title })}
+    onClick={(event) => { event.stopPropagation(); onInsertFrom(id, event.currentTarget.getBoundingClientRect()); }}
+  ><Icon name="plus" size={15} /></button> : null;
+
   const density = canvasNodeDensity(data);
   const densityAction = t(canvasNodeDensityActionKey(density) as 'toPreview');
   const densityToggle = onEditData ? <button
@@ -2407,6 +2486,8 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         <Icon source={typeof data.toolIcon === 'string' ? data.toolIcon : creationObjectDefinition(data.kind).icon} size={30} />
       </span>
       {densityToggle}
+      {affordances}
+      {insertButton}
       <span className={styles.nodeOrbName}><b>{data.title}</b>{data.status && <small>{data.status}</small>}</span>
       <Handle type="source" position={Position.Right} className={styles.handle} />
     </article>
@@ -2421,7 +2502,16 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         <span className={styles.nodeIcon}><Icon source={typeof data.toolIcon === 'string' ? data.toolIcon : creationObjectDefinition(data.kind).icon} size={18} /></span>
         <strong>{data.title}</strong>
         {data.status && <span className={styles.status}>{data.status}</span>}
+        {affordances}
         {densityToggle}
+        {onOpenPanel && <button
+          type="button"
+          className={`${styles.densityToggle} nodrag`}
+          data-testid={`canvas-node-settings-${id}`}
+          aria-label={t('openSettings', { title: data.title })}
+          title={t('openSettings', { title: data.title })}
+          onClick={openPanel(canvasNodeSettingsPanel(data.kind))}
+        ><Icon name="settings" size={14} /></button>}
         {data.kind === 'workflow' && onRun && <button
           type="button"
           className={`${styles.workflowRunButton} nodrag nowheel`}
@@ -2431,6 +2521,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         >{`${t('run')}`}</button>}
         <button className={styles.moreButton} aria-label={t('moreOptions', { title: data.title })}>•••</button>
       </header>
+      {insertButton}
       <div className={styles.nodeBody}>
         {typeof data.pipelineStep === 'number' && <div className={styles.pipelineNodeGuide} data-start={data.pipelineStart === true ? 'true' : 'false'}><b>{data.pipelineStart === true ? t('startHere') : t('stepOfFive', { step: data.pipelineStep })}</b><span>{String(data.pipelineInstruction || t('pipelineFallback'))}</span></div>}
         {data.kind === 'workflow' && <WorkflowBody data={data} />}
