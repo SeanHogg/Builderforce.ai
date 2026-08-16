@@ -11,6 +11,7 @@ import {
   proofFormKey,
   proofsByCost,
 } from '@/lib/methodology';
+import type { Stage } from '@/lib/navGroups';
 import styles from './MethodologySection.module.css';
 
 /**
@@ -67,10 +68,19 @@ function Meter({ value, label }: { value: number; label: string }) {
 export default function MethodologySection({
   variant = 'full',
   headingLevel = 'h2',
+  activeStage,
 }: {
   variant?: MethodologyVariant;
   /** So a host page can slot this under its own <h1> without skipping a level. */
   headingLevel?: 'h2' | 'h3';
+  /**
+   * Mark WHERE IN THE ARC the host page sits. The four marketing pages have no
+   * answer (they are about the whole method), but a route teaser does — the
+   * destination it is standing in front of has a `stage` — and a visitor read
+   * the arc very differently once it points at the page they asked for. A stage
+   * outside `METHOD_STAGES` (market / expand / admin) simply marks nothing.
+   */
+  activeStage?: Stage;
 }) {
   const t = useTranslations('methodology');
   const tn = useTranslations('nav');
@@ -121,11 +131,13 @@ export default function MethodologySection({
                 key={stage}
                 className={styles.arcStage}
                 data-closes={stage === LOOP_CLOSES_IN}
+                data-active={stage === activeStage}
                 style={{ '--step-hue': `var(--stage-${stage})` } as React.CSSProperties}
               >
                 <span className={styles.arcDot} aria-hidden="true" />
                 <strong>{tn(`stage.${stage}`)}</strong>
                 <em>{t(`arcQuestion.${stage}`)}</em>
+                {stage === activeStage && <span className={styles.arcHere}>{t('youAreHere')}</span>}
               </li>
             ))}
           </ol>

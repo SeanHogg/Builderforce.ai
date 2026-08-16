@@ -8600,7 +8600,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('noticeNoDeliveryAdapter', { action: pending.action, kind: creationObjectDefinition(target.data.kind).label }));
     }
     finish();
-  }, [compareProjects, compileWorkflow, deliverMockup, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, sendUpdateToInvestors, setEdges, setNodes, startStandup, visualizeDataset]);
+  }, [compareProjects, compileWorkflow, convertObjectToDiagram, deliverMockup, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, sendUpdateToInvestors, setEdges, setNodes, startStandup, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);

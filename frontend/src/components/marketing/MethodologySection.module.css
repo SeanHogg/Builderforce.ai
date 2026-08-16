@@ -195,6 +195,29 @@
   outline-offset: -1px;
 }
 
+/* The stage the HOST page belongs to (route teasers pass one). Solid edge and a
+   fuller fill against the closing stage's dashed one, so the two marks read as
+   different statements rather than two flavours of emphasis — and both hold in
+   either theme because every value is mixed from the stage's own token. */
+.arcStage[data-active='true'] {
+  background: color-mix(in srgb, var(--step-hue, var(--coral-bright)) 18%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--step-hue, var(--coral-bright)) 60%, transparent);
+  outline-offset: -2px;
+}
+
+.arcHere {
+  justify-self: start;
+  margin-top: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--step-hue, var(--coral-bright)) 30%, var(--surface-raised));
+  color: var(--text-primary);
+  font-size: var(--font-size-field-label);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .arcDot {
   width: 8px;
   height: 8px;
