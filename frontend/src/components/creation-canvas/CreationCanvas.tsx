@@ -26,6 +26,7 @@ import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type Ca
 import { canvasChromeShows, readCanvasBarCollapsed, writeCanvasBarCollapsed } from '@/lib/canvasChrome';
 import { canvasApp } from '@/lib/canvasApp';
 import { canvasNodeMessages, type CanvasNodePanelId } from '@/lib/canvasNodeAffordances';
+import { memberAvatarClass, memberInitials } from './rosterAvatar';
 import {
   DEFAULT_CANVAS_PROMPT_PLACEMENT,
   readCanvasPromptPlacement,
@@ -1023,11 +1024,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodePanel(null);
     setObjectPicker({ anchor: anchorFrom(rect, 400), fromNodeId: nodeId });
   }, []);
-
-  /** For a freshly created object: no click to anchor from (`addAtCenter` places it at
-   *  the middle of the viewport with no DOM element yet), so the panel opens near
-   *  there instead — close enough to read as "beside what you just added". */
-  const centerAnchorRect = (): DOMRect => ({ right: window.innerWidth / 2, top: window.innerHeight / 2 } as DOMRect);
   /**
    * PRESENTATION AND FOLLOW ARE SHELL STATE NOW.
    *
@@ -2743,10 +2739,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (data) node.data = { ...node.data, ...data };
     setNodes((current) => [...current, node]);
     setSelectedId(node.id); setSelectedIds([node.id]);
-    if (node.data.kind !== 'chat') openNodePanel(node.id, 'config', centerAnchorRect());
+    // A deliberate "add a Project/Task/Website" from the palette is a request to
+    // configure it, not a glance at an existing card — the full inspector is the
+    // helpful answer here, where the anchored panel is for the OTHER case (looking
+    // at something already on the board).
+    if (node.data.kind !== 'chat') setInspectorNodeId(node.id);
     setNotice(t('objectAdded', { title: node.data.title }));
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
-  }, [canEdit, localizedTourDefaults, openNodePanel, sessionId, setNodes, t, timeline]);
+  }, [canEdit, localizedTourDefaults, sessionId, setNodes, t, timeline]);
 
   /**
    * What choosing an object in the picker DOES.
@@ -2768,10 +2768,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current, node]);
     setEdges((current) => addEdge({ id: `${fromNodeId}-${node.id}`, source: fromNodeId, target: node.id, type: connectionKind }, current));
     setSelectedId(node.id); setSelectedIds([node.id]);
-    if (node.data.kind !== 'chat') openNodePanel(node.id, 'config', centerAnchorRect());
+    if (node.data.kind !== 'chat') setInspectorNodeId(node.id);
     setNotice(t('objectAdded', { title: node.data.title }));
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
-  }, [addAtCenter, canEdit, connectionKind, nodes, openNodePanel, sessionId, setEdges, setNodes, t]);
+  }, [addAtCenter, canEdit, connectionKind, nodes, sessionId, setEdges, setNodes, t]);
 
   /**
    * ONE credential check in front of every social tool.
@@ -7847,7 +7847,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const lab: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1020, y: 230 }, data: { ...createDefaultCreationData('code'), title: 'LLM capstone lab', status: 'Practice workspace', language: 'python', code: '# Build your tokenizer, model, and training loop here\n' } };
         setNodes((current) => [...current, course, lab]);
         setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: course.id, target: lab.id, type: 'smoothstep', label: 'practice', animated: true, data: { connectionKind: 'reference' } }], brain?.id || '', [course.id], 'Created with Brain'));
-        setSelectedId(course.id); setThinking(false); clearComposer(); setNotice(t('noticeLlmCourseAdded')); return;
+        setSelectedId(course.id); setInspectorNodeId(course.id); setThinking(false); clearComposer(); setNotice(t('noticeLlmCourseAdded')); return;
       }
       if (request.includes('roadmap')) {
         const project = nodes.find((node) => node.data.kind === 'project');
@@ -7856,7 +7856,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const slides: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 315 }, data: { kind: 'slides', title: request.includes('executive') ? 'Executive team presentation' : 'Sales presentation', status: 'AI generated' } };
         setNodes((current) => [...current, roadmap, slides]);
         setEdges((current) => associateBrainWithArtifacts([...current, ...(project ? [{ id: crypto.randomUUID(), source: project.id, target: roadmap.id, type: 'smoothstep' as const }] : []), { id: crypto.randomUUID(), source: roadmap.id, target: slides.id, type: 'smoothstep', label: 'presents', animated: true }], brain?.id || '', [roadmap.id], 'Created with Brain'));
-        setSelectedId(roadmap.id); setThinking(false); clearComposer(); setNotice(t('noticeRoadmapAdded')); return;
+        setSelectedId(roadmap.id); setInspectorNodeId(roadmap.id); setThinking(false); clearComposer(); setNotice(t('noticeRoadmapAdded')); return;
       }
       if (request.includes('top 10') || request.includes('requested features')) {
         const brain = nodes.find((node) => node.data.kind === 'chat');
@@ -7864,7 +7864,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const mockups: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 300 }, data: { kind: 'mockupSet', title: 'Top 10 feature mockups', status: 'Ready for review', subtitle: 'Ten linked high-fidelity concepts generated from user feedback.', items: ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'], sources: [{ label: 'Customer feedback evidence', resource: '/api/feedback' }] } };
         setNodes((current) => [...current, summary, mockups]);
         setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: summary.id, target: mockups.id, type: 'smoothstep', animated: true }], brain?.id || '', [summary.id], 'Created with Brain'));
-        setSelectedId(mockups.id); setThinking(false); clearComposer(); setNotice(t('noticeFeatureSummaryAdded')); return;
+        setSelectedId(mockups.id); setInspectorNodeId(mockups.id); setThinking(false); clearComposer(); setNotice(t('noticeFeatureSummaryAdded')); return;
       }
       const evaluationId = crypto.randomUUID();
       setNodes((current) => [...current, { id: evaluationId, type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'evaluation', title: 'Canvas evaluation', status: 'AI evaluation' } }]);
@@ -7873,6 +7873,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const brain = nodes.find((node) => node.data.kind === 'chat');
       setEdges((current) => associateBrainWithArtifacts([...current, ...[workflow, website].filter((node): node is CreationFlowNode => !!node).map((node) => ({ id: crypto.randomUUID(), source: node.id, target: evaluationId, type: 'smoothstep', animated: true }))], brain?.id || '', [evaluationId], 'Created with Brain'));
       setSelectedId(evaluationId);
+      setInspectorNodeId(evaluationId);
       setThinking(false);
       clearComposer();
       setNotice(t('noticeEvaluationAdded'));
@@ -9118,13 +9119,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onResumeShare={createResumeShare} onResumeSharesList={listResumeShares} onResumeShareRevoke={revokeResumeShare} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onResumeShare={createResumeShare} onResumeSharesList={listResumeShares} onResumeShareRevoke={revokeResumeShare} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} onOpenSurface={(nodeId, surface) => setSurface(surface, nodeId)} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       // Asking for a specific tab (knowledge, test, evaluation, delivery) is asking for
       // the full rail directly — the anchored panel has no such tab to route through.
       setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]); setInspectorNodeId(nodeId);
     }} />,
-  }), [canRun, cardsEditable, createResumeShare, detachResumeFromNode, exportFromNode, listResumeShares, openBuiltinAgentSurfaceFromNode, openInsertPicker, openNodePanel, revokeResumeShare, runWorkflowFromNode, tailorResumeFromNode, updateNodeData]);
+  }), [canRun, cardsEditable, createResumeShare, detachResumeFromNode, exportFromNode, listResumeShares, openBuiltinAgentSurfaceFromNode, openInsertPicker, openNodePanel, revokeResumeShare, runWorkflowFromNode, setSurface, tailorResumeFromNode, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     // Objects are passed WHOLE: the report decides which fields explain whether
@@ -9246,6 +9247,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     metadata: message.metadata?.authoredBy ? JSON.stringify({ authoredBy: message.metadata.authoredBy }) : null,
     createdAt: message.createdAt,
   })), [timeline]);
+
+  /**
+   * WHO IS HERE — the one roster, read by the command bar's collapsed cluster AND
+   * the chat surface's header. A shared free session's roster is REAL members; a
+   * local one falls back to the room's live guests, then to just "you". Computed
+   * once so both surfaces can never show a different answer to the same question.
+   */
+  const rosterMembers = useMemo(
+    () => (persistence !== 'local'
+      ? members
+      : inRoom && room.participants.length
+        ? room.participants.map((person) => ({ userId: `guest:${person.name}:${person.joinedAt}`, displayName: person.name, role: person.isHost ? ('owner' as const) : ('editor' as const) }))
+        : [{ userId: 'local', displayName: t('you'), role: 'owner' as const }]),
+    [inRoom, members, persistence, room.participants, t],
+  );
 
   const brainSurfaceOpen = !presentMode && brainDock.open;
   const brainCollaborators = useMemo(
@@ -9383,33 +9399,42 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * They are additive: every aria-label stays, because a test id is for a test and an
    * accessible name is for a person.
    */
-  const composer = !presentMode && promptPlacement !== 'closed' && <div
+  // When Brain IS the surface (chat mode), there is no separate dock to join and no board
+  // behind it to hand the composer's space back to — it is the surface's only input, so it
+  // stays fixed, centred and always open, exactly like `CanvasChatSurface`'s docs describe.
+  // `float`/`docked`/`closed` remain a per-browser preference for every OTHER surface; chat
+  // just declines to read it, the same way `BrainSurfaceActions` declines the dock toggle
+  // (see the `onModeChange` comment in `CanvasChatSurface.tsx`).
+  const effectivePromptPlacement: CanvasPromptPlacement = surfaceDef.brainIsSurface ? 'float' : promptPlacement;
+  const composer = !presentMode && effectivePromptPlacement !== 'closed' && <div
     ref={composerDockRef}
     data-testid="canvas-composer"
     className={styles.composerDock}
-    data-placement={promptPlacement}
+    data-placement={effectivePromptPlacement}
     data-tour="creation-brain-dock"
   >
     {/* The prompt's own header, and the only place the dock decision is made. Closing is
         offered from here and from the command bar; DOCKING is deliberate enough to belong
-        only on the thing being docked. */}
+        only on the thing being docked. Neither is offered while chat is the surface. */}
     <div className={styles.promptChrome}>
       <span className={styles.promptChromeName}>{t('promptName')}</span>
-      <button
-        type="button"
-        data-testid="canvas-prompt-dock"
-        aria-pressed={promptPlacement === 'docked'}
-        aria-label={promptPlacement === 'docked' ? t('floatPrompt') : t('dockPrompt')}
-        title={promptPlacement === 'docked' ? t('floatPrompt') : t('dockPrompt')}
-        onClick={() => setPromptPlacement(promptPlacement === 'docked' ? 'float' : 'docked')}
-      ><Icon name={promptPlacement === 'docked' ? 'external-link' : 'message'} size={14} /></button>
-      <button
-        type="button"
-        data-testid="canvas-prompt-close"
-        aria-label={t('hidePrompt')}
-        title={t('hidePrompt')}
-        onClick={() => setPromptPlacement('closed')}
-      ><Icon name="close" size={15} /></button>
+      {!surfaceDef.brainIsSurface && <>
+        <button
+          type="button"
+          data-testid="canvas-prompt-dock"
+          aria-pressed={promptPlacement === 'docked'}
+          aria-label={promptPlacement === 'docked' ? t('floatPrompt') : t('dockPrompt')}
+          title={promptPlacement === 'docked' ? t('floatPrompt') : t('dockPrompt')}
+          onClick={() => setPromptPlacement(promptPlacement === 'docked' ? 'float' : 'docked')}
+        ><Icon name={promptPlacement === 'docked' ? 'external-link' : 'message'} size={14} /></button>
+        <button
+          type="button"
+          data-testid="canvas-prompt-close"
+          aria-label={t('hidePrompt')}
+          title={t('hidePrompt')}
+          onClick={() => setPromptPlacement('closed')}
+        ><Icon name="close" size={15} /></button>
+      </>}
     </div>
     <div className={styles.composerUtilities}>
       {/* Keep the settled receipt mounted after the run. Token consumption used
@@ -9714,15 +9739,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
              A collapsed roster is a team nobody can see is working, and on a shared
              board that is somebody editing next to people they cannot see. */
           <div className={styles.collaborators} aria-label={t('activeCollaborators')} data-tour="creation-collaborators">
-            {/* In a shared free session the roster is REAL — showing only "you"
-                while three other people move cards around is a lie the board
-                itself contradicts. */}
-            {(persistence !== 'local'
-              ? members
-              : inRoom && room.participants.length
-                ? room.participants.map((person) => ({ userId: `guest:${person.name}:${person.joinedAt}`, displayName: person.name, role: person.isHost ? ('owner' as const) : ('editor' as const) }))
-                : [{ userId: 'local', displayName: t('you'), role: 'owner' as const }]
-            ).slice(0, 4).map((member, index) => <button key={member.userId} type="button" data-typing={'typing' in member && member.typing ? 'true' : 'false'} aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${'typing' in member && member.typing ? ` · ${t('writingPrompt')}` : ''}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
+            {rosterMembers.slice(0, 4).map((member, index) => <button key={member.userId} type="button" data-typing={'typing' in member && member.typing ? 'true' : 'false'} aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${'typing' in member && member.typing ? ` · ${t('writingPrompt')}` : ''}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={memberAvatarClass(index, { pink: styles.avatarPink, orange: styles.avatarOrange, green: styles.avatarGreen })}>{memberInitials(member.displayName)}</button>)}
             {/* The roster's `+` used to open the invite sheet — the same sheet the
                 Share button opens, which is one decision with two controls and the
                 exact failure the surface registry was written to prevent. The roster
@@ -9738,8 +9755,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button type="button" onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')} title={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>{threeDControls ? <ResetViewIcon /> : <FitViewIcon />}</button>
           <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')} title={t('arrangeObjects')}><CleanLayoutIcon /></button>
         </div>}
-        onTogglePrompt={presentMode ? undefined : () => setPromptPlacement(toggledCanvasPromptPlacement(promptPlacement))}
-        promptOpen={promptPlacement !== 'closed'}
+        onTogglePrompt={presentMode || surfaceDef.brainIsSurface ? undefined : () => setPromptPlacement(toggledCanvasPromptPlacement(promptPlacement))}
+        promptOpen={effectivePromptPlacement !== 'closed'}
         // The always-on seats, folded out of the shell's footer band and into the one
         // bar. Same component, same roster endpoint, same drag-to-board payload — the
         // band simply stands down on a stage route and draws itself here instead.
@@ -10000,6 +10017,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               onExecutionDetailChange={(showExecutionDetail) => updateBrainDock({ showExecutionDetail })}
               onOpenBoard={() => setSurface('graph')}
               objectCount={nodes.length}
+              sessionTitle={title}
+              participants={rosterMembers}
+              {...(canEdit ? { onAddParticipant: () => setShareOpen(true) } : {})}
               messages={brainMessages}
               trace={brainTrace}
               running={thinking}

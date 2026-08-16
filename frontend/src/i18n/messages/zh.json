@@ -19035,7 +19035,9 @@
         "label": "对话",
         "enter": "只进行对话",
         "active": "当前为对话视图",
-        "openBoard": "{count, plural, =0 {打开画板} other {打开画板 · # 个对象}}"
+        "openBoard": "{count, plural, =0 {打开画板} other {打开画板 · # 个对象}}",
+        "participants": "此对话的参与者",
+        "addParticipant": "邀请他人"
       },
       "graph": {
         "label": "画板",

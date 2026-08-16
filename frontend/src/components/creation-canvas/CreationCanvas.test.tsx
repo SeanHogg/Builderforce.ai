@@ -657,7 +657,10 @@ describe('CreationCanvas', () => {
 
   it('renders agent model, instructions, tools, and autonomy changes live', () => {
     render(<CreationCanvas sessionId="agent-settings-test" persistence="local" />);
+    // Selecting a card opens the panel anchored to it now; these fields are
+    // the full inspector's, one press further in.
     fireEvent.click(screen.getAllByText('Campaign Strategist')[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Open the full inspector' }));
 
     // Scoped to the `select`, exactly as the "Research" note below is scoped to the
     // agent card: the data-science vocabulary registered a `model` OBJECT KIND, so
@@ -717,6 +720,7 @@ describe('CreationCanvas', () => {
   it('renders workflow target and approval changes live', () => {
     render(<CreationCanvas sessionId="workflow-settings-test" persistence="local" />);
     fireEvent.click(screen.getByText('Fall campaign workflow'));
+    fireEvent.click(screen.getByRole('button', { name: 'Open the full inspector' }));
 
     fireEvent.change(screen.getByLabelText('Execution target'), { target: { value: 'campaign-strategist' } });
     fireEvent.change(screen.getByLabelText('Approval mode'), { target: { value: 'autonomous' } });
@@ -728,6 +732,7 @@ describe('CreationCanvas', () => {
   it('renders dashboard range and refresh changes live', () => {
     render(<CreationCanvas sessionId="dashboard-settings-test" persistence="local" />);
     fireEvent.click(screen.getByText('Campaign forecast'));
+    fireEvent.click(screen.getByRole('button', { name: 'Open the full inspector' }));
 
     fireEvent.change(screen.getByLabelText('Date range'), { target: { value: 'qtd' } });
     expect(screen.getAllByText('Quarter to date').length).toBeGreaterThan(1);
@@ -762,6 +767,7 @@ describe('CreationCanvas', () => {
   it('renders staff and task inspector edits live on their widgets', () => {
     render(<CreationCanvas sessionId="people-work-settings-test" persistence="local" />);
     fireEvent.click(screen.getByText('Sarah'));
+    fireEvent.click(screen.getByRole('button', { name: 'Open the full inspector' }));
     fireEvent.change(screen.getByDisplayValue('Marketing'), { target: { value: 'Product lead' } });
     fireEvent.change(screen.getByLabelText('Current focus'), { target: { value: 'Validate the launch scope.' } });
     expect(screen.getByText('Product lead')).toBeInTheDocument();
@@ -892,6 +898,41 @@ describe('CreationCanvas', () => {
     expect(starter.closest('[data-tour="creation-prompt-starter"]')).not.toBeNull();
     expect(starter.closest('[data-align="end"]')).not.toBeNull();
     expect(starter.closest('[data-placement="top"]')).not.toBeNull();
+  });
+
+  it('keeps the prompt open and centred when chat becomes the surface, regardless of the float/dock/closed preference', () => {
+    render(<CreationCanvas sessionId="brain-chat-surface-prompt-test" persistence="local" />);
+
+    // The Brain dock's own "Chat" transcript tab shares its accessible name with the
+    // surface switcher's "Chat" tab, so pin to the switcher by the `aria-pressed` state
+    // only it carries (the transcript tab uses `aria-selected` instead).
+    const chatSurfaceTab = () => namedButtons('Chat')
+      .find((button) => button.hasAttribute('aria-pressed'))!;
+
+    // Dock the prompt into the Brain panel's column, then close it outright — both are
+    // legitimate choices while the board is on screen.
+    fireEvent.click(screen.getByTestId('canvas-prompt-dock'));
+    expect(screen.getByTestId('canvas-composer')).toHaveAttribute('data-placement', 'docked');
+    fireEvent.click(screen.getByTestId('canvas-prompt-close'));
+    expect(screen.queryByTestId('canvas-composer')).not.toBeInTheDocument();
+
+    // Chat becomes the surface: there is no Brain dock left to join and no board behind
+    // it to hand the composer back to, so it must reappear centred and stay open even
+    // though the stored preference is still `closed`.
+    fireEvent.click(chatSurfaceTab());
+    const composer = screen.getByTestId('canvas-composer');
+    expect(composer).toBeInTheDocument();
+    expect(composer).toHaveAttribute('data-placement', 'float');
+    expect(screen.getByLabelText('Ask Brain about this canvas')).toBeInTheDocument();
+    // Neither control makes sense once chat IS the surface: there is nothing to dock
+    // into and no board to hand the composer's space back to.
+    expect(screen.queryByTestId('canvas-prompt-dock')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('canvas-prompt-close')).not.toBeInTheDocument();
+
+    // Leaving chat restores the preference the person set before — `closed` is honoured
+    // again on the board, because that choice was never about the chat surface at all.
+    fireEvent.click(chatSurfaceTab());
+    expect(screen.queryByTestId('canvas-composer')).not.toBeInTheDocument();
   });
 
   it('lets the user resize the canvas prompt from its handle', () => {
@@ -1077,6 +1118,7 @@ describe('CreationCanvas', () => {
   it('edits and runs a canonical workflow in an isolated Canvas focus editor', () => {
     render(<CreationCanvas sessionId="workflow-focus-test" persistence="local" />);
     fireEvent.click(screen.getByText('Fall campaign workflow'));
+    fireEvent.click(screen.getByRole('button', { name: 'Open the full inspector' }));
     fireEvent.click(screen.getByRole('button', { name: 'Edit Workflow on Canvas' }));
 
     expect(screen.getByRole('dialog', { name: 'Workflow focus editor' })).toBeInTheDocument();
@@ -1188,6 +1230,7 @@ describe('CreationCanvas', () => {
   it('resizes website viewport presets and renders supporting copy as Markdown', () => {
     render(<CreationCanvas sessionId="website-responsive-test" persistence="local" />);
     fireEvent.click(screen.getAllByText('Campaign landing page')[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Open the full inspector' }));
     fireEvent.change(screen.getByLabelText('Supporting copy'), { target: { value: '**Secure banking** with transparent pricing.' } });
     expect(screen.getByText('Secure banking').tagName).toBe('STRONG');
     fireEvent.change(screen.getByLabelText('Viewport'), { target: { value: 'mobile' } });

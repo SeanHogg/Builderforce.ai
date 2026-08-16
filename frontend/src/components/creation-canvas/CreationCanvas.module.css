@@ -2031,6 +2031,15 @@
 .chatSurface { position:absolute; z-index:7; inset:0; box-sizing:border-box; display:flex; flex-direction:column; padding-bottom:var(--composer-space); background:var(--canvas-board-background); color:var(--canvas-ink); }
 .chatSurfaceHeader { display:flex; flex:none; align-items:center; gap:8px; width:min(100%,var(--chat-surface-width,760px)); margin:0 auto; padding:12px 16px 10px; }
 .chatSurfaceHeader strong { flex:1; min-width:0; overflow:hidden; color:var(--canvas-ink); font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
+/* Who is in this conversation — the SAME roster the command bar's cluster draws,
+   sized down to sit in a header row rather than a floating pill. */
+.chatSurfaceParticipants { display:flex; flex:none; align-items:center; }
+.chatSurfaceParticipants span, .chatSurfaceParticipants button {
+  width:20px; height:20px; border-radius:50%; display:grid; place-items:center; margin-left:-5px;
+  border:2px solid var(--canvas-panel); color:var(--text-on-accent); font-size:8px; font-weight:750;
+}
+.chatSurfaceParticipants button { padding:0; cursor:pointer; background:var(--canvas-muted); border-style:dashed; }
+.chatSurfaceParticipants button:hover, .chatSurfaceParticipants button:focus-visible { background:var(--canvas-accent); outline:none; }
 /* One measure for the reading column, so the transcript, the header and the footer are
    the same width and the eye has one left edge to return to. */
 .chatSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; width:min(100%,var(--chat-surface-width,760px)); margin:0 auto; padding:0 6px; }

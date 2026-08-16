@@ -34,21 +34,24 @@ import type { CreationNodeData } from './types';
 export interface CanvasObjectSurfaceButtonProps {
   data: CreationNodeData;
   onOpen: (surface: CanvasSurfaceId) => void;
+  /** No class of its own by default: the chrome comes from `.inspectorHeaderActions
+   *  button`, so this and the expand/close buttons beside it read as one row of slots.
+   *  The card header — its OTHER caller — has no such ancestor rule and passes its own
+   *  icon-slot class instead. */
+  className?: string;
 }
 
-export function CanvasObjectSurfaceButton({ data, onOpen }: CanvasObjectSurfaceButtonProps) {
+export function CanvasObjectSurfaceButton({ data, onOpen, className }: CanvasObjectSurfaceButtonProps) {
   const t = useTranslations('creationCanvas');
   const surface = creationObjectSurface(data.kind);
   if (!surface) return null;
 
   const label = t(`surface.${surface}.open` as 'surface.page.open');
-  // No class of its own: the chrome comes from `.inspectorHeaderActions button`, so this
-  // and the expand and close buttons beside it are one row of slots rather than three
-  // visitors' idea of one — which is what let a worded button escape its box before.
   return (
     <button
       type="button"
-      onClick={() => onOpen(surface)}
+      {...(className ? { className } : {})}
+      onClick={(event) => { event.stopPropagation(); onOpen(surface); }}
       aria-label={label}
       title={label}
       data-testid={`open-${surface}-surface`}

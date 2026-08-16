@@ -19035,7 +19035,9 @@
         "label": "Chat",
         "enter": "Einfach unterhalten",
         "active": "Du bist im Chat",
-        "openBoard": "{count, plural, =0 {Board öffnen} one {Board öffnen · # Objekt} other {Board öffnen · # Objekte}}"
+        "openBoard": "{count, plural, =0 {Board öffnen} one {Board öffnen · # Objekt} other {Board öffnen · # Objekte}}",
+        "participants": "Wer an diesem Gespräch beteiligt ist",
+        "addParticipant": "Jemanden einladen"
       },
       "graph": {
         "label": "Board",

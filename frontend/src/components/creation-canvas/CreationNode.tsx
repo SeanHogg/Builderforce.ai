@@ -34,6 +34,8 @@ import { maskCell, maskPlan, normalizeClassifications } from '@/lib/canvasDataGo
 import { outlinePaths, projectMap, sanitizeGeoBounds, sanitizeMapPoints } from '@/lib/canvasGeo';
 import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
 import { GAME_FRAME_SANDBOX, gameDocumentFrom } from '@/lib/gameTargets';
+import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
+import { CanvasObjectSurfaceButton } from './CanvasObjectSurfaceButton';
 import { controlLabels, readGameControls } from '@/lib/gamePoster';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, WEB_PAGE_KINDS } from '@/lib/canvasWebPage';
@@ -2252,6 +2254,10 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
   onOpenPanel?: (nodeId: string, panel: CanvasNodePanelId, anchor: DOMRect) => void;
   /** The centre `+`: choose what comes after this object, connected to it. */
   onInsertFrom?: (nodeId: string, anchor: DOMRect) => void;
+  /** "Open this at full size" — reachable from the card's own header, not only from
+   *  the inspector's. `CanvasObjectSurfaceButton` decides for itself whether this
+   *  kind even has a surface, so a note or a task simply draws nothing here. */
+  onOpenSurface?: (nodeId: string, surface: CanvasSurfaceId) => void;
 };
 
 /** Object kinds whose body IS a document. Registry kinds, so a new document-like
@@ -2360,7 +2366,7 @@ function DensityIcon({ density }: { density: CanvasNodeDensity }) {
   </svg>;
 }
 
-export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke, onOpenPanel, onInsertFrom }: CreationNodeProps) {
+export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke, onOpenPanel, onInsertFrom, onOpenSurface }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const specBoard = useSpecDeriveBoard(data.kind);
   const isWide = ['workflow', 'website', 'prototype', 'guidedTour', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
@@ -2519,6 +2525,11 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
           aria-label={t('runObject', { title: data.title })}
           onClick={(event) => { event.stopPropagation(); onRun(id); }}
         >{`${t('run')}`}</button>}
+        {onOpenSurface && <CanvasObjectSurfaceButton
+          data={data}
+          onOpen={(surface) => onOpenSurface(id, surface)}
+          className={`${styles.densityToggle} nodrag`}
+        />}
         <button className={styles.moreButton} aria-label={t('moreOptions', { title: data.title })}>•••</button>
       </header>
       {insertButton}
