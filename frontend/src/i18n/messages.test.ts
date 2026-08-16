@@ -29,6 +29,7 @@ import {
 } from '@/lib/publicDestinations';
 import { FAMILIES, FAMILY_IDS, kindLabelKey } from '@/lib/marketplaceFamilies';
 import { METHOD_STEPS, PROOF_FORMS, methodStepKey, proofFormKey } from '@/lib/methodology';
+import { destinationPitchKey, teaserDestinationIds } from '@/lib/routeMarketing';
 import { RESUME_TEMPLATES } from '@/lib/canvasResume';
 
 import { listWidgets } from '@/lib/widgets/registry';
@@ -226,6 +227,15 @@ describe('message catalogs', () => {
         .map((section) => `referencePanel.section.${section}`),
       'marketingNav.megaFoot',
       'marketingNav.megaFootLearn',
+      // The logged-out route teaser. Every nav row is a marketing page for a
+      // signed-out visitor (`<RouteMarketing>`), and its hero pitch comes from
+      // here — so a destination without one renders the generic gate under a
+      // real destination's name, in four languages, silently. The generic tier's
+      // own copy is asserted alongside it.
+      ...teaserDestinationIds().map((id) => `routeMarketing.${destinationPitchKey(id)}`),
+      'routeMarketing.generic.title',
+      'routeMarketing.generic.description',
+      'methodology.youAreHere',
       // `referencePanel.crumb` is deliberately absent: it takes a `{seat}`
       // argument, and this list formats with none. The every-message-formats
       // test below covers it, deriving arguments from the message itself.

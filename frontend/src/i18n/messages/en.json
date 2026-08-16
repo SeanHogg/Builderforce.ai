@@ -19014,6 +19014,97 @@
         "decisionBody": "Moved onboarding fix ahead of campaign work",
         "now": "Now"
       }
+    },
+    "insideHeading": "What's inside {surface}",
+    "generic": {
+      "title": "Idea to real, on one canvas",
+      "description": "You have reached a page inside Builderforce.ai. This is what happens on the other side of it: read the idea, choose the cheapest proof that could kill it, then build what survives — with your team and AI agents on one canvas, from the first idea through delivery."
+    },
+    "destination": {
+      "create": {
+        "description": "The infinite canvas where an idea becomes something working — conversation, workflows, websites, data, prototypes, models, and agents on one surface."
+      },
+      "projects": {
+        "description": "One delivery workspace for people and AI agents: plan, assign, and track work across board, table, calendar, and Gantt views."
+      },
+      "workforce": {
+        "description": "Your team of people and agents in one roster — roles, meetings, approvals, chats, and the mesh that dispatches work to them."
+      },
+      "insights": {
+        "description": "Delivery, AI, finance, and developer experience measured on one surface, so the number behind the next decision is not an opinion."
+      },
+      "growth": {
+        "description": "Campaigns, connected mailboxes, and the marketing surface for what you have built."
+      },
+      "inbox": {
+        "description": "Every message, approval, and mention from your team and your agents in one queue you can clear."
+      },
+      "finance": {
+        "description": "Spend, budgets, and the real cost of the work your people and agents are doing."
+      },
+      "revenue": {
+        "description": "Pipeline, deals, and the revenue side of the business, run beside the work that delivers it."
+      },
+      "people": {
+        "description": "The people in your company, their records, and the processes that keep them supported."
+      },
+      "hiring": {
+        "description": "Requisitions, candidates, and offers — with agents doing the coordination in between."
+      },
+      "investor": {
+        "description": "The story, the metrics, and the updates the people funding this expect."
+      },
+      "governance": {
+        "description": "Policy packs, access control, and the audit trail that proves who approved what."
+      },
+      "support": {
+        "description": "Customer conversations and the knowledge behind them, answered by people and agents together."
+      },
+      "embedded": {
+        "description": "Turn a canvas creation into a live customer-facing experience: one install rail, consented capabilities, and host surfaces."
+      },
+      "quality": {
+        "description": "Errors from your SDK, OpenTelemetry, Sentry, PostHog, or LogRocket — grouped, then turned into a fix an agent ships as a pull request."
+      },
+      "reliability": {
+        "description": "Monitors, incidents, on-call, and escalation in one detect-and-respond loop."
+      },
+      "knowledge": {
+        "description": "SOPs, processes, documents, skills, personas, and prompts — the versioned base your agents are grounded in."
+      },
+      "marketplace": {
+        "description": "Buy and sell agents, skills, personas, board templates, and talent."
+      },
+      "developers": {
+        "description": "Publish connectors, skills, and apps to the marketplace, and see what this workspace has installed."
+      },
+      "settings": {
+        "description": "Your workspace, members, security, integrations, billing, and API keys."
+      },
+      "admin": {
+        "description": "Platform operations: tenants, traces, and the operator tooling behind the product."
+      },
+      "sales-admin": {
+        "description": "The referral and sales-associate programme, aggregated across every associate."
+      },
+      "sales": {
+        "description": "Your referral links, your pipeline, and what you have earned selling Builderforce.ai."
+      },
+      "freelancer-dashboard": {
+        "description": "Your for-hire home: active engagements, invitations, and what needs your attention."
+      },
+      "freelancer-profile": {
+        "description": "The profile clients see — your skills, rate, availability, and past work."
+      },
+      "freelancer-gigs": {
+        "description": "Open gigs you can bid on, matched to the skills on your profile."
+      },
+      "freelancer-workspace": {
+        "description": "Where you do engagement work and hand it back to the client."
+      },
+      "freelancer-timecard": {
+        "description": "Log hours against an engagement and get paid for them."
+      }
     }
   },
   "burnrateMarketing": {
@@ -19893,7 +19984,8 @@
         "summary": "The whole system running at a real address, with an ops console and an on-call runbook."
       }
     },
-    "ctaRealize": "Make something real →"
+    "ctaRealize": "Make something real →",
+    "youAreHere": "You are here"
   },
   "sell": {
     "seo": {

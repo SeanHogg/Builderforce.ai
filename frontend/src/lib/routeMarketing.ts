@@ -422,3 +422,16 @@ export function destinationPitchKey(groupId: string): string {
 export function teaserDestinationIds(): string[] {
   return [...new Set(TEASER_NAV_GROUPS.map((group) => group.id))].sort();
 }
+
+/** The routes carrying a DETAILS overlay. Exported for the ratchet that asserts
+ *  each one has a base row — an overlay without a base used to render its
+ *  highlights under the GENERIC hero, which is how /brainstorm and /training
+ *  spent months titled "This is part of Builderforce.ai". */
+export function detailRoutes(): string[] {
+  return Object.keys(DETAILS);
+}
+
+/** Routes with hand-authored copy. Exported for the same ratchet. */
+export function marketedRoutes(): string[] {
+  return Object.keys(REGISTRY);
+}

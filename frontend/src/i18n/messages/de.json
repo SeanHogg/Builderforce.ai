@@ -19013,6 +19013,97 @@
         "decisionBody": "Onboarding-Fix vor Kampagnenarbeit verschoben",
         "now": "Jetzt"
       }
+    },
+    "insideHeading": "Was in {surface} steckt",
+    "generic": {
+      "title": "Von der Idee zum Realen, auf einer Leinwand",
+      "description": "Sie sind auf einer Seite innerhalb von Builderforce.ai gelandet. So läuft es auf der anderen Seite: die Idee lesen, den billigsten Beweis wählen, der sie kippen könnte, und dann bauen, was übrig bleibt — mit Ihrem Team und KI-Agenten auf einer Leinwand, von der ersten Idee bis zur Auslieferung."
+    },
+    "destination": {
+      "create": {
+        "description": "Die unendliche Leinwand, auf der aus einer Idee etwas Funktionierendes wird: Konversation, Workflows, Websites, Daten, Prototypen, Modelle und Agenten auf einer Fläche."
+      },
+      "projects": {
+        "description": "Ein Lieferbereich für Menschen und KI-Agenten: Arbeit planen, zuweisen und in Board-, Tabellen-, Kalender- und Gantt-Ansichten verfolgen."
+      },
+      "workforce": {
+        "description": "Ihr Team aus Menschen und Agenten in einer Aufstellung: Rollen, Meetings, Freigaben, Chats und das Mesh, das ihnen Arbeit zuteilt."
+      },
+      "insights": {
+        "description": "Lieferung, KI, Finanzen und Developer Experience auf einer Fläche gemessen, damit die Zahl hinter der nächsten Entscheidung keine Meinung ist."
+      },
+      "growth": {
+        "description": "Kampagnen, verbundene Postfächer und die Marketingfläche für das, was Sie gebaut haben."
+      },
+      "inbox": {
+        "description": "Jede Nachricht, Freigabe und Erwähnung von Team und Agenten in einer Warteschlange, die sich wirklich leeren lässt."
+      },
+      "finance": {
+        "description": "Ausgaben, Budgets und die tatsächlichen Kosten der Arbeit Ihrer Leute und Agenten."
+      },
+      "revenue": {
+        "description": "Pipeline, Deals und die Umsatzseite des Geschäfts — direkt neben der Arbeit, die sie liefert."
+      },
+      "people": {
+        "description": "Die Menschen im Unternehmen, ihre Daten und die Prozesse, die sie tragen."
+      },
+      "hiring": {
+        "description": "Stellen, Kandidaten und Angebote — die Koordination dazwischen übernehmen Agenten."
+      },
+      "investor": {
+        "description": "Die Story, die Kennzahlen und die Updates, die Ihre Geldgeber erwarten."
+      },
+      "governance": {
+        "description": "Policy-Packs, Zugriffssteuerung und der Prüfpfad, der belegt, wer was freigegeben hat."
+      },
+      "support": {
+        "description": "Kundengespräche und das Wissen dahinter, beantwortet von Menschen und Agenten gemeinsam."
+      },
+      "embedded": {
+        "description": "Machen Sie aus einer Canvas-Kreation ein echtes Kundenerlebnis: ein Installationspfad, einzeln zugestimmte Fähigkeiten und Host-Flächen."
+      },
+      "quality": {
+        "description": "Fehler aus Ihrem SDK, OpenTelemetry, Sentry, PostHog oder LogRocket: gruppiert und dann in einen Fix verwandelt, den ein Agent als Pull Request liefert."
+      },
+      "reliability": {
+        "description": "Monitore, Incidents, Rufbereitschaft und Eskalation in einer Schleife aus Erkennen und Reagieren."
+      },
+      "knowledge": {
+        "description": "SOPs, Prozesse, Dokumente, Skills, Personas und Prompts — die versionierte Basis, auf der Ihre Agenten stehen."
+      },
+      "marketplace": {
+        "description": "Kaufen und verkaufen Sie Agenten, Skills, Personas, Board-Vorlagen und Talent."
+      },
+      "developers": {
+        "description": "Veröffentlichen Sie Konnektoren, Skills und Apps im Marktplatz — und sehen Sie, was dieser Workspace installiert hat."
+      },
+      "settings": {
+        "description": "Ihr Workspace, Mitglieder, Sicherheit, Integrationen, Abrechnung und API-Schlüssel."
+      },
+      "admin": {
+        "description": "Plattformbetrieb: Tenants, Traces und das Operator-Werkzeug hinter dem Produkt."
+      },
+      "sales-admin": {
+        "description": "Das Empfehlungs- und Vertriebspartnerprogramm, über alle Partner hinweg aggregiert."
+      },
+      "sales": {
+        "description": "Ihre Empfehlungslinks, Ihre Pipeline und was Sie mit dem Verkauf von Builderforce.ai verdient haben."
+      },
+      "freelancer-dashboard": {
+        "description": "Ihre Freelance-Startseite: laufende Engagements, Einladungen und was Ihre Aufmerksamkeit braucht."
+      },
+      "freelancer-profile": {
+        "description": "Das Profil, das Kunden sehen: Ihre Fähigkeiten, Ihr Satz, Ihre Verfügbarkeit und bisherige Arbeiten."
+      },
+      "freelancer-gigs": {
+        "description": "Offene Aufträge, auf die Sie bieten können — passend zu den Fähigkeiten in Ihrem Profil."
+      },
+      "freelancer-workspace": {
+        "description": "Der Ort, an dem Sie die Auftragsarbeit erledigen und an den Kunden zurückgeben."
+      },
+      "freelancer-timecard": {
+        "description": "Stunden auf ein Engagement buchen und dafür bezahlt werden."
+      }
     }
   },
   "burnrateMarketing": {
@@ -19892,7 +19983,8 @@
         "summary": "Das ganze System unter einer echten Adresse, mit Betriebskonsole und Rufbereitschafts-Runbook."
       }
     },
-    "ctaRealize": "Machen Sie etwas real →"
+    "ctaRealize": "Machen Sie etwas real →",
+    "youAreHere": "Sie sind hier"
   },
   "sell": {
     "seo": {

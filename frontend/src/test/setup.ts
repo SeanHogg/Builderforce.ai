@@ -25,7 +25,13 @@ import { vi } from 'vitest';
  * none of them uses a jest-dom matcher (asserted below, so this cannot rot).
  */
 if (typeof document !== 'undefined') {
-  await import('@testing-library/jest-dom');
+  // The `/vitest` entry, not the bare package: it registers the matchers against
+  // vitest's own `expect`, and its types are a MODULE, which a dynamic import
+  // needs — the bare package's `types/index.d.ts` is a global augmentation, so
+  // `await import('@testing-library/jest-dom')` typechecks as TS2306 even though
+  // it runs fine. A side-effect `import` at the top of the file did not care;
+  // moving it behind this check is what surfaced the difference.
+  await import('@testing-library/jest-dom/vitest');
   const { configure } = await import('@testing-library/react');
   /**
    * `findBy*` / `waitFor` ceiling, raised from the 1s default.

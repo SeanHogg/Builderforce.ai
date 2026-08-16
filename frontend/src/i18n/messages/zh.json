@@ -19013,6 +19013,97 @@
         "decisionBody": "将新手引导修复提前至营销活动之前",
         "now": "刚刚"
       }
+    },
+    "insideHeading": "{surface} 包含什么",
+    "generic": {
+      "title": "从想法到现实，都在同一个画布上",
+      "description": "你访问的是 Builderforce.ai 内部的页面。它的另一侧是这样运作的：先读懂想法，再选择最便宜、且足以否定它的验证方式，然后把留存下来的部分做出来——你的团队与 AI 智能体在同一个画布上，从第一个想法一直做到交付。"
+    },
+    "destination": {
+      "create": {
+        "description": "让想法变成可运行成果的无限画布——对话、工作流、网站、数据、原型、模型与智能体都在同一个界面上。"
+      },
+      "projects": {
+        "description": "为人与 AI 智能体准备的统一交付工作区：在看板、表格、日历与甘特视图中规划、分派并跟踪工作。"
+      },
+      "workforce": {
+        "description": "把人与智能体放进同一份团队名册——角色、会议、审批、对话，以及负责派发工作的网格。"
+      },
+      "insights": {
+        "description": "在同一个界面上衡量交付、AI、财务与开发者体验，让下一个决定背后的数字不再只是主观判断。"
+      },
+      "growth": {
+        "description": "营销活动、已连接的邮箱，以及你所构建成果的市场推广界面。"
+      },
+      "inbox": {
+        "description": "来自团队与智能体的每一条消息、审批与提及，集中在一个可以真正清空的队列里。"
+      },
+      "finance": {
+        "description": "支出、预算，以及团队与智能体所做工作的真实成本。"
+      },
+      "revenue": {
+        "description": "销售管道、交易，以及业务的营收侧，与交付工作并肩运行。"
+      },
+      "people": {
+        "description": "公司里的人、他们的档案，以及为他们提供支持的流程。"
+      },
+      "hiring": {
+        "description": "招聘需求、候选人与录用通知——中间的协调交给智能体。"
+      },
+      "investor": {
+        "description": "出资人期待看到的故事、指标与最新进展。"
+      },
+      "governance": {
+        "description": "策略包、访问控制，以及能证明谁批准了什么的审计轨迹。"
+      },
+      "support": {
+        "description": "客户对话及其背后的知识，由人与智能体共同作答。"
+      },
+      "embedded": {
+        "description": "把画布上的创作变成面向客户的真实体验：统一的安装通道、独立授权的能力与承载界面。"
+      },
+      "quality": {
+        "description": "来自你的 SDK、OpenTelemetry、Sentry、PostHog 或 LogRocket 的错误——先归类聚合，再变成智能体以拉取请求交付的修复。"
+      },
+      "reliability": {
+        "description": "监控、事件、值班与升级，构成同一个发现并响应的闭环。"
+      },
+      "knowledge": {
+        "description": "SOP、流程、文档、技能、人格与提示词——为智能体提供依据的版本化知识库。"
+      },
+      "marketplace": {
+        "description": "买卖智能体、技能、人格、看板模板与人才。"
+      },
+      "developers": {
+        "description": "向市场发布连接器、技能与应用，并查看此工作区已安装的内容。"
+      },
+      "settings": {
+        "description": "你的工作区、成员、安全、集成、账单与 API 密钥。"
+      },
+      "admin": {
+        "description": "平台运维：租户、追踪记录，以及产品背后的运营工具。"
+      },
+      "sales-admin": {
+        "description": "推荐与销售伙伴计划，按全部伙伴汇总。"
+      },
+      "sales": {
+        "description": "你的推荐链接、你的销售管道，以及你销售 Builderforce.ai 的收益。"
+      },
+      "freelancer-dashboard": {
+        "description": "你的接单主页：进行中的合作、邀请，以及需要你处理的事项。"
+      },
+      "freelancer-profile": {
+        "description": "客户看到的档案——你的技能、费率、可接单时间与过往作品。"
+      },
+      "freelancer-gigs": {
+        "description": "可以投标的公开任务，按你档案中的技能匹配。"
+      },
+      "freelancer-workspace": {
+        "description": "你完成合作工作并交付给客户的工作区。"
+      },
+      "freelancer-timecard": {
+        "description": "按合作记录工时并据此获得报酬。"
+      }
     }
   },
   "burnrateMarketing": {
@@ -19892,7 +19983,8 @@
         "summary": "整套系统运行在真实地址上，配有运维控制台和值班手册。"
       }
     },
-    "ctaRealize": "让它成真 →"
+    "ctaRealize": "让它成真 →",
+    "youAreHere": "你在这里"
   },
   "sell": {
     "seo": {

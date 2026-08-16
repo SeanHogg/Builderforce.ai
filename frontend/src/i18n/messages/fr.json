@@ -19013,6 +19013,97 @@
         "decisionBody": "Correctif d’intégration placé avant la campagne",
         "now": "Maintenant"
       }
+    },
+    "insideHeading": "Ce que contient {surface}",
+    "generic": {
+      "title": "De l'idée au réel, sur un seul canevas",
+      "description": "Vous êtes arrivé sur une page interne de Builderforce.ai. Voici ce qui se passe de l'autre côté : lisez l'idée, choisissez la preuve la moins coûteuse capable de l'invalider, puis construisez ce qui survit — avec votre équipe et vos agents IA sur un même canevas, de la première idée jusqu'à la livraison."
+    },
+    "destination": {
+      "create": {
+        "description": "Le canevas infini où une idée devient quelque chose qui fonctionne : conversation, workflows, sites web, données, prototypes, modèles et agents sur une seule surface."
+      },
+      "projects": {
+        "description": "Un espace de livraison unique pour les humains et les agents IA : planifiez, attribuez et suivez le travail en vues tableau, table, calendrier et Gantt."
+      },
+      "workforce": {
+        "description": "Votre équipe d'humains et d'agents dans un seul effectif : rôles, réunions, approbations, discussions et le maillage qui leur distribue le travail."
+      },
+      "insights": {
+        "description": "Livraison, IA, finances et expérience développeur mesurées sur une seule surface, pour que le chiffre derrière la prochaine décision ne soit pas une opinion."
+      },
+      "growth": {
+        "description": "Campagnes, boîtes mail connectées et la surface marketing de ce que vous avez construit."
+      },
+      "inbox": {
+        "description": "Chaque message, approbation et mention de votre équipe et de vos agents dans une file que vous pouvez vraiment vider."
+      },
+      "finance": {
+        "description": "Dépenses, budgets et coût réel du travail réalisé par vos équipes et vos agents."
+      },
+      "revenue": {
+        "description": "Pipeline, affaires et le côté revenus de l'activité, mené aux côtés du travail qui les produit."
+      },
+      "people": {
+        "description": "Les personnes de votre entreprise, leurs dossiers et les processus qui les accompagnent."
+      },
+      "hiring": {
+        "description": "Postes ouverts, candidatures et offres, avec des agents pour la coordination intermédiaire."
+      },
+      "investor": {
+        "description": "Le récit, les indicateurs et les mises à jour qu'attendent ceux qui financent le projet."
+      },
+      "governance": {
+        "description": "Packs de politiques, contrôle des accès et la piste d'audit qui prouve qui a approuvé quoi."
+      },
+      "support": {
+        "description": "Les conversations clients et le savoir qui les sous-tend, traités ensemble par les humains et les agents."
+      },
+      "embedded": {
+        "description": "Transformez une création du canevas en expérience client réelle : un seul rail d'installation, des capacités consenties et des surfaces hôtes."
+      },
+      "quality": {
+        "description": "Les erreurs venues de votre SDK, d'OpenTelemetry, Sentry, PostHog ou LogRocket : regroupées, puis transformées en correctif qu'un agent livre en pull request."
+      },
+      "reliability": {
+        "description": "Supervision, incidents, astreinte et escalade dans une même boucle détecter-répondre."
+      },
+      "knowledge": {
+        "description": "Procédures, processus, documents, compétences, personas et prompts : la base versionnée sur laquelle vos agents s'appuient."
+      },
+      "marketplace": {
+        "description": "Achetez et vendez agents, compétences, personas, modèles de tableau et talents."
+      },
+      "developers": {
+        "description": "Publiez connecteurs, compétences et applications sur la marketplace, et voyez ce que cet espace a installé."
+      },
+      "settings": {
+        "description": "Votre espace de travail, ses membres, la sécurité, les intégrations, la facturation et les clés d'API."
+      },
+      "admin": {
+        "description": "Exploitation de la plateforme : tenants, traces et l'outillage opérateur derrière le produit."
+      },
+      "sales-admin": {
+        "description": "Le programme de parrainage et d'apporteurs d'affaires, agrégé sur l'ensemble des associés."
+      },
+      "sales": {
+        "description": "Vos liens de parrainage, votre pipeline et ce que vous avez gagné en vendant Builderforce.ai."
+      },
+      "freelancer-dashboard": {
+        "description": "Votre accueil freelance : missions en cours, invitations et ce qui demande votre attention."
+      },
+      "freelancer-profile": {
+        "description": "Le profil que voient les clients : vos compétences, votre tarif, vos disponibilités et vos réalisations."
+      },
+      "freelancer-gigs": {
+        "description": "Les missions ouvertes auxquelles vous pouvez répondre, appariées aux compétences de votre profil."
+      },
+      "freelancer-workspace": {
+        "description": "L'espace où vous réalisez la mission et la rendez au client."
+      },
+      "freelancer-timecard": {
+        "description": "Déclarez vos heures sur une mission et faites-vous payer."
+      }
     }
   },
   "burnrateMarketing": {
@@ -19892,7 +19983,8 @@
         "summary": "Le système complet en service à une vraie adresse, avec une console d’exploitation et un runbook d’astreinte."
       }
     },
-    "ctaRealize": "Rendez quelque chose réel →"
+    "ctaRealize": "Rendez quelque chose réel →",
+    "youAreHere": "Vous êtes ici"
   },
   "sell": {
     "seo": {

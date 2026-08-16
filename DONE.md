@@ -1,3 +1,34 @@
+## ✅ RESOLVED 2026-08-16 — A 401 nobody could have avoided stopped filing itself as a support ticket (frontend 2026.8.26)
+
+**The gap.** A support ticket arrived at 01:05 UTC reporting `401 Missing or malformed Authorization
+header` on `GET /api/drive/providers`, filed from `/create/local-…` — a signed-out visitor on the creation
+canvas. The connected-account gate that was supposed to prevent exactly this shipped in `d4945f9` at 00:57
+UTC, eight minutes earlier, inside the ~7-minute deploy window: the visitor's tab was still running the
+bundle from before the gate existed. Nothing was wrong with the gate. The problem is that a gate is the
+wrong LAYER to be the only defence — it is a rule every new call site has to remember, it cannot reach a
+tab that already loaded, and getting it wrong costs a support ticket.
+
+**The real defect was one layer down.** `checkUnauthorizedAndRedirect` has always distinguished the two
+kinds of 401 — with a token it clears the session and bounces to login, without one it does nothing,
+because there is no session to expire. The *reporting* path never learned that distinction, so the same
+response was simultaneously "nothing to do" and a toast plus a filed ticket. Every one of those tickets was
+unactionable by construction: the client knew it had no credential before it sent the request.
+
+**`isAnonymousUnauthorized(status, hadToken)`** is now checked beside the terms-gate signal in
+`apiClient.ts`: no credential sent, no ticket filed — for every caller, on every transport. Deliberately
+narrow. A 401 *with* a token is a real expired session and a 403 is a real permission failure; both still
+report, and the request still throws either way, so callers keep their own inline handling.
+
+**The third transport was a copy, so the fix had to de-duplicate it first.** `apiRequestStream` carried its
+own inline paste of the envelope parse + gate signal + `expectedErrors` check + dispatch — which is how it
+could have drifted from the other two. The decision is now `reportApiFailure()`, returning the parsed
+envelope; `reportAndThrow()` is that plus a throw, and the streaming transport calls the shared function
+instead of re-implementing it. One judgement of what counts as a fault, three transports reading it.
+
+**Files touched.** `lib/apiClient.ts`, `lib/apiClient.test.ts` (+3 tests: an anonymous 401 is not reported,
+the same on the streaming transport, and a 401 that DID carry a token still is). Verified: 7/7 in
+`apiClient.test.ts`, 42/42 in `canvasArtifactViews.test.tsx`, frontend typecheck clean.
+
 ## ✅ RESOLVED 2026-08-15 — Nine diagram notations read, six written, through one shared graph (frontend 2026.8.25)
 
 **The gap.** The canvas knew exactly one diagram notation end to end. `.drawio` was the only drawing file
@@ -114,6 +145,91 @@ picker, and "does not read a drive until the connected-account gate allows it"),
 **Verified.** `canvasArtifactViews` 42/42, `CreationCanvas` 83/83, i18n catalog guards 53/53, `tsgo`
 clean, `check:design-tokens`, `check:architecture` pass.
 
+## ✅ RESOLVED 2026-08-15 — Both blockers from the product-updates pass, and the 60-second cliff underneath one of them
+
+The two entries that pass left open are closed. Neither turned out to be what its own entry said.
+
+### 1 · The two red ratchets — the blocker expired, and the answer was to DELETE, not to baseline
+
+Logged as *"a concurrent session owns those six files and they are uncommitted."* That stopped being
+true: `cecb2647a` landed all six, so both guards were red on `main` itself and the decision was
+everyone's to make.
+
+**`check:architecture` (801 vs 800) — all three new `'use client'` directives were dead.**
+`CanvasDriveBrowser.tsx`, `DiagramConvertPanel.tsx` and `JobAlertsPanel.tsx` have exactly ONE importer
+each — `CanvasFilesPanel`, `CreationCanvas`, `MarketplaceGigsSection` — and every one already declares
+the boundary. All three components are genuinely interactive, which is the question the directive does
+**not** answer: a module imported by a client module is client code either way, so the directive changed
+nothing except this count. Removed in all three with the reason written at the top of each, so the next
+person does not put it back. That is the third time the answer here has been "the directive was the
+bug" (`ResumeDocumentView`, then five canvas components, now these), and it is why the guard's header
+tells you to look for the shape before raising the number.
+
+The count then came in at **798, BELOW the baseline of 800** — so the baseline was tightened to 798
+rather than left as two points of slack for the next regression to spend silently. A ratchet that is
+not re-tightened after a cleanup goes slack without anyone deciding it should.
+
+**`check:design-scale` (3 literal-hex files) — three files, three different answers.**
+
+- `lib/diagramExcalidraw.ts` — a real exemption, and the concurrent session had already written it by
+  the time this pass reached the file. Its `strokeColor` / `viewBackgroundColor` are written into a
+  JSON document that opens in **Excalidraw**; a `var()` there is a string that tool has never heard
+  of. The duplicate entry this pass had added beside it was **removed** — two entries for one file in
+  a list whose whole point is that it is the review.
+- `lib/diagramSvg.ts` — exempted, on the other side of the same seam. Its only hex is `fill !== '#fff'`,
+  a comparison against **SVG's own default fill** applied to an attribute read out of somebody else's
+  exported document. Nothing is painted, and no theme has an opinion about what the spec's default is.
+- `lib/diagramMermaid.ts` — **not a colour at all, and exempting the file would have been wrong.** The
+  hex was `'#124;'`, Mermaid's own escape for `|`, which it would otherwise read as the end of an edge
+  label. `124` is three hex digits and the escape is deliberately ampersand-less, so the guard's
+  `(?<![\w&])` lookbehind let it through and the ratchet failed on a string that paints nothing.
+  Exempting the file would have silenced every FUTURE real hex in it, so the **guard** was fixed
+  instead: a string whose entire content is `#` + digits + `;` is a character reference and is blanked
+  before the colour scan. Deliberately narrow, and verified against the cases that must still fail —
+  `'#fff'`, `'#123456'`, `` `color: #123456;` `` and `'#abc;'` all still report; `'#124;'` and
+  `'#8592;'` do not.
+
+### 2 · The worker that could not start — a hard 60-second cliff, and what was standing on it
+
+Logged as *"a POOL-STARTUP timeout under machine load"* with the blocker *"reproducing it needs the
+loaded machine, and raising the timeout blind would equally mask a genuine worker hang."* **The
+proposed fix does not exist**: `START_TIMEOUT` is a hard-coded `6e4` constant inside vitest's pool
+runner, with no config lever at all. So a worker had genuinely spent more than sixty seconds starting,
+which is not "the machine was busy" — it is a pathology.
+
+`setupFiles` runs per test FILE, and `src/test/setup.ts` opened with an eager
+`import '@testing-library/jest-dom'` and `import { configure } from '@testing-library/react'` — the
+latter dragging in react-dom. The `lib` project runs in `node` **precisely to avoid building a
+document**, and then paid for the DOM testing stack anyway, 157 times. Measured before the fix: **815s
+of cumulative setup and 404s of environment against 44s of actual tests.**
+
+Starting a worker means loading that file, so a jsdom-overriding file scheduled at the tail of a
+contended run had to build a document *and* pay it — and `lib/brain/platformActions.test.ts` went over
+the cliff. It reports as `Failed to start threads worker`, which reads exactly like a hang in the code
+under test. It is not a candidate for deletion, either: it spies on `window.dispatchEvent`, so its
+`@vitest-environment jsdom` docblock is correct and must stay.
+
+The DOM half of setup is now behind `typeof document !== 'undefined'`. The 23 `src/lib` files that
+declare a document still get the matchers; the 134 that do not, do not.
+
+**Measured after:** setup **815s → 87s**, environment **404s → 184s**, `lib` project wall-clock
+**138s → 53s**, 157 files / 1950 tests still passing. The full suite went from **1 failed file / 2
+failed tests / exit 1** to **261 files / 2,780 tests / exit 0**.
+
+Two things the fix needed on the way. `@testing-library/jest-dom/vitest` rather than the bare package:
+its types are a module, and a dynamic import of the bare entry is `TS2306` even though it runs — a
+side-effect `import` at the top of a file never cared, and moving it behind a check is what surfaced
+the difference. And `setupEnvironment.test.ts` (new) asserts the gate stays sound: **no
+node-environment lib test may use a jest-dom matcher** (134 files, currently zero, checked by reading
+them) and the setup file must not go back to an eager top-level import. A new lib test reaching for
+`toBeInTheDocument` now fails there, named, with the one-line fix — instead of failing as "not a
+function" wherever the scheduler happens to put it.
+
+Verified: frontend **8/8 guards**, `tsgo --noEmit` clean, **2,780 tests pass**; api **24/24 guards**,
+**5,942 tests**, `check:roadmap` green.
+
+---
+
 ## ✅ RESOLVED 2026-08-15 — The changelog caught up with four days of shipping, the digest stopped being unbounded, and the version chip finally says there is something new
 
 **The gap.** The last product-update batch (`0451`) published on 2026-08-10 and covered the work up to
@@ -198,10 +314,10 @@ Announcing four days of work into a panel with no badge is announcing it to nobo
   already declare the boundary, so the directive would have cost the architecture ratchet a point and
   bought them nothing. Localized in all five catalogs as an ICU plural.
 
-**Left open, with the blocker named:** `check:architecture` (801 vs 800) and `check:design-scale`
-(3 literal-hex files) are red from a **concurrent session's six uncommitted files** — the delta report
-names every one and not one is this pass's. Logged to the register rather than baselined away, per the
-same contention resolved this way earlier today.
+**The two things this left open were both closed the same day** — see the entry above: the ratchets
+(the concurrent session's files landed, and the answer was to delete three dead directives rather than
+raise a baseline) and the worker-start failure (a hard 60-second vitest constant with the DOM testing
+stack loaded 134 unnecessary times underneath it).
 
 Verified: api **24/24 guards** and **5,942 tests** pass; frontend `tsgo --noEmit` clean, 6/8 guards green
 (`api-transport`, `design-tokens`, `edge-runtime`, `declared-deps`, `destinations`, `methodology` — the

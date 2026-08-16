@@ -58,7 +58,7 @@ describe('test setup — the DOM half is gated on there being a DOM', () => {
     const setup = readFileSync(join(process.cwd(), 'src', 'test', 'setup.ts'), 'utf8');
     // A top-level `import '@testing-library/jest-dom'` would be eager again, and
     // the cost would come back with no test failing to say so.
-    expect(setup).not.toMatch(/^import ['"]@testing-library\/jest-dom['"]/m);
+    expect(setup).not.toMatch(/^import ['"]@testing-library\/jest-dom/m);
     expect(setup).toMatch(/typeof document !== 'undefined'/);
   });
 });

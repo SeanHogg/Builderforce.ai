@@ -190,32 +190,75 @@ function errorMessage(body: ApiErrorBody, res: Response): string {
   return body.message || body.error || res.statusText || `Request failed (${res.status})`;
 }
 
-/** The one place a non-ok response becomes a thrown Error + a global toast. */
-async function reportAndThrow(
+/**
+ * A 401 answering a request that carried NO credential is not a fault.
+ *
+ * It is the server restating what the client already knew: nobody is signed in.
+ * `checkUnauthorizedAndRedirect` has always drawn this line — it clears the
+ * session and bounces to login ONLY when a token was actually sent, because
+ * otherwise there is no session to expire — but the reporting path did not, so
+ * the same response was simultaneously "nothing to do" and a support ticket.
+ *
+ * A signed-out visitor on the creation canvas is the case that made this bite:
+ * every connected-account panel calls the API with the tenant token, so tapping
+ * along the rail filed a ticket per panel ("Missing or malformed Authorization
+ * header") without ever telling the person they simply needed an account. Those
+ * panels now ask `connectedAccountGate` first, but a gate is a rule each new
+ * call site has to remember, and it cannot help a tab still running the bundle
+ * from before the gate shipped. This is the floor underneath it: no credential
+ * sent, no ticket filed — for every caller, on every transport, forever.
+ *
+ * Deliberately narrow. A 401 WITH a token is a real expired session, and a 403
+ * is a real permission failure; both still report.
+ */
+function isAnonymousUnauthorized(status: number, hadToken: boolean): boolean {
+  return status === 401 && !hadToken;
+}
+
+/**
+ * The ONE place a non-ok response is judged: fault (toast + support ticket),
+ * gate (route the user), or known state (stay quiet).
+ *
+ * Returns the parsed envelope so the caller can throw with it — all three
+ * transports share this decision rather than keeping their own copy of it.
+ */
+async function reportApiFailure(
   res: Response,
   url: string,
   method: string,
-  expectedErrors?: number[],
-): Promise<never> {
+  expectedErrors: number[] | undefined,
+  hadToken: boolean,
+): Promise<ApiErrorBody> {
   const body = await readErrorBody(res);
-  const message = errorMessage(body, res);
   // A terms bump is a GATE, not a fault — it routes the user to the acceptance
   // screen rather than the support-ticket toast. Signalled before the
   // `expectedErrors` check so the gate heals whichever call happens to hit it
   // first, including one whose caller opted out of the error surface.
   const gated = signalTermsGate(res.status, body.code);
-  if (!gated && !expectedErrors?.includes(res.status)) {
+  if (!gated && !isAnonymousUnauthorized(res.status, hadToken) && !expectedErrors?.includes(res.status)) {
     dispatchApiError({
       method: method.toUpperCase(),
       url,
       status: res.status,
       code: body.code,
-      message,
+      message: errorMessage(body, res),
       details: body.details,
       requestId: res.headers.get('x-request-id') ?? undefined,
     });
   }
-  throw new ApiRequestError(message, res.status, body.code, body.details);
+  return body;
+}
+
+/** The one place a non-ok response becomes a thrown Error + a global toast. */
+async function reportAndThrow(
+  res: Response,
+  url: string,
+  method: string,
+  expectedErrors: number[] | undefined,
+  hadToken: boolean,
+): Promise<never> {
+  const body = await reportApiFailure(res, url, method, expectedErrors, hadToken);
+  throw new ApiRequestError(errorMessage(body, res), res.status, body.code, body.details);
 }
 
 /**
@@ -239,7 +282,7 @@ export async function apiRequest<T = unknown>(
   });
   checkUnauthorizedAndRedirect(res, hadToken);
   if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) await reportAndThrow(res, url, init.method ?? 'GET', expectedErrors);
+  if (!res.ok) await reportAndThrow(res, url, init.method ?? 'GET', expectedErrors, hadToken);
   if (raw) return undefined as T;
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -258,7 +301,7 @@ export async function apiRequestText(path: string, opts: RequestOptions = {}): P
   });
   checkUnauthorizedAndRedirect(res, hadToken);
   if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) await reportAndThrow(res, url, init.method ?? 'GET', expectedErrors);
+  if (!res.ok) await reportAndThrow(res, url, init.method ?? 'GET', expectedErrors, hadToken);
   return res.text();
 }
 
@@ -285,23 +328,11 @@ export async function apiRequestStream(path: string, opts: RequestOptions = {}):
   // so it throws here exactly as it does in the other two transports rather than
   // leaving each caller to remember the check.
   if (res.status === 402) throw await planLimitErrorFromResponse(res);
-  if (!res.ok) {
-    const body = await readErrorBody(res);
-    // Same gate handling as the JSON transports — this is the path the activity
-    // tracker's best-effort flush takes, and an un-recognised terms bump made it
-    // raise a "Stream request failed" toast every 15 seconds.
-    const gated = signalTermsGate(res.status, body.code);
-    if (!gated && !expectedErrors?.includes(res.status)) {
-      dispatchApiError({
-        method: (init.method ?? 'GET').toUpperCase(),
-        url,
-        status: res.status,
-        code: body.code,
-        message: errorMessage(body, res),
-        details: body.details,
-        requestId: res.headers.get('x-request-id') ?? undefined,
-      });
-    }
-  }
+  // Same judgement as the JSON transports, from the same function rather than a
+  // copy of it — this is the path the activity tracker's best-effort flush
+  // takes, and an un-recognised terms bump made it raise a "Stream request
+  // failed" toast every 15 seconds. It reports but does not throw: the caller
+  // inspects the status itself.
+  if (!res.ok) await reportApiFailure(res, url, init.method ?? 'GET', expectedErrors, hadToken);
   return res;
 }

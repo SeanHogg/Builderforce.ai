@@ -19013,6 +19013,97 @@
         "decisionBody": "La corrección de incorporación pasa antes que la campaña",
         "now": "Ahora"
       }
+    },
+    "insideHeading": "Qué incluye {surface}",
+    "generic": {
+      "title": "De la idea a lo real, en un solo lienzo",
+      "description": "Has llegado a una página dentro de Builderforce.ai. Esto es lo que ocurre al otro lado: lee la idea, elige la prueba más barata capaz de descartarla y construye lo que sobreviva, con tu equipo y tus agentes de IA en un mismo lienzo, desde la primera idea hasta la entrega."
+    },
+    "destination": {
+      "create": {
+        "description": "El lienzo infinito donde una idea se convierte en algo que funciona: conversación, flujos de trabajo, sitios web, datos, prototipos, modelos y agentes en una sola superficie."
+      },
+      "projects": {
+        "description": "Un único espacio de entrega para personas y agentes de IA: planifica, asigna y sigue el trabajo en vistas de tablero, tabla, calendario y Gantt."
+      },
+      "workforce": {
+        "description": "Tu equipo de personas y agentes en una sola plantilla: roles, reuniones, aprobaciones, chats y la malla que les reparte el trabajo."
+      },
+      "insights": {
+        "description": "Entrega, IA, finanzas y experiencia de desarrollo medidas en una sola superficie, para que la cifra detrás de la próxima decisión no sea una opinión."
+      },
+      "growth": {
+        "description": "Campañas, buzones conectados y la superficie de marketing de lo que has construido."
+      },
+      "inbox": {
+        "description": "Cada mensaje, aprobación y mención de tu equipo y tus agentes en una cola que sí puedes vaciar."
+      },
+      "finance": {
+        "description": "Gasto, presupuestos y el coste real del trabajo que hacen tus personas y tus agentes."
+      },
+      "revenue": {
+        "description": "Pipeline, oportunidades y el lado de los ingresos del negocio, junto al trabajo que los entrega."
+      },
+      "people": {
+        "description": "Las personas de tu empresa, sus registros y los procesos que las sostienen."
+      },
+      "hiring": {
+        "description": "Vacantes, candidaturas y ofertas, con agentes encargándose de la coordinación intermedia."
+      },
+      "investor": {
+        "description": "El relato, las métricas y las actualizaciones que esperan quienes financian esto."
+      },
+      "governance": {
+        "description": "Paquetes de políticas, control de acceso y el rastro de auditoría que prueba quién aprobó qué."
+      },
+      "support": {
+        "description": "Conversaciones con clientes y el conocimiento que hay detrás, respondidas por personas y agentes juntos."
+      },
+      "embedded": {
+        "description": "Convierte una creación del lienzo en una experiencia real para clientes: un solo carril de instalación, capacidades consentidas y superficies anfitrionas."
+      },
+      "quality": {
+        "description": "Errores de tu SDK, OpenTelemetry, Sentry, PostHog o LogRocket: agrupados y convertidos en una corrección que un agente entrega como pull request."
+      },
+      "reliability": {
+        "description": "Monitores, incidentes, guardias y escalado en un único ciclo de detectar y responder."
+      },
+      "knowledge": {
+        "description": "SOP, procesos, documentos, habilidades, personas y prompts: la base versionada en la que se apoyan tus agentes."
+      },
+      "marketplace": {
+        "description": "Compra y vende agentes, habilidades, personas, plantillas de tablero y talento."
+      },
+      "developers": {
+        "description": "Publica conectores, habilidades y aplicaciones en el marketplace, y consulta lo que este espacio tiene instalado."
+      },
+      "settings": {
+        "description": "Tu espacio de trabajo, miembros, seguridad, integraciones, facturación y claves de API."
+      },
+      "admin": {
+        "description": "Operación de la plataforma: tenants, trazas y las herramientas de operador detrás del producto."
+      },
+      "sales-admin": {
+        "description": "El programa de referidos y asociados de ventas, agregado entre todos los asociados."
+      },
+      "sales": {
+        "description": "Tus enlaces de referido, tu pipeline y lo que has ganado vendiendo Builderforce.ai."
+      },
+      "freelancer-dashboard": {
+        "description": "Tu inicio como profesional: encargos activos, invitaciones y lo que requiere tu atención."
+      },
+      "freelancer-profile": {
+        "description": "El perfil que ven los clientes: tus habilidades, tarifa, disponibilidad y trabajos previos."
+      },
+      "freelancer-gigs": {
+        "description": "Encargos abiertos a los que puedes postular, emparejados con las habilidades de tu perfil."
+      },
+      "freelancer-workspace": {
+        "description": "Donde haces el trabajo del encargo y lo devuelves al cliente."
+      },
+      "freelancer-timecard": {
+        "description": "Registra horas de un encargo y cobra por ellas."
+      }
     }
   },
   "burnrateMarketing": {
@@ -19892,7 +19983,8 @@
         "summary": "El sistema completo funcionando en una dirección real, con consola de operaciones y manual de guardia."
       }
     },
-    "ctaRealize": "Haz algo real →"
+    "ctaRealize": "Haz algo real →",
+    "youAreHere": "Estás aquí"
   },
   "sell": {
     "seo": {

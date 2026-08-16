@@ -15,7 +15,16 @@ vi.mock('@/i18n/config', () => ({
 }));
 
 import { apiRequest, apiRequestStream } from './apiClient';
+import { getStoredTenantToken } from './auth';
 import { onTermsGate } from './errors/termsGateEvent';
+
+/** What every auth middleware answers a request that sent no bearer token. */
+function missingAuthHeaderResponse(): Response {
+  return new Response(JSON.stringify({ error: 'Missing or malformed Authorization header' }), {
+    status: 401,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
 /** The gate body the three auth middlewares return once terms move on. */
 function termsGateResponse(): Response {
@@ -96,6 +105,52 @@ describe('gate signals', () => {
     expect(onGlobalError).not.toHaveBeenCalled();
     expect(onGate).toHaveBeenCalledTimes(1);
     unsubscribe();
+    window.removeEventListener(API_ERROR_EVENT, onGlobalError);
+  });
+
+  /** A signed-out visitor is not a defect report.
+   *
+   *  Every connected-account panel on the creation canvas calls the API with the
+   *  tenant token, so a guest tapping along the rail turned one 401 per panel
+   *  into one support ticket per panel. */
+  it('does not report a 401 on a request that carried no credential', async () => {
+    vi.mocked(getStoredTenantToken).mockReturnValue(null);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(missingAuthHeaderResponse());
+    const onGlobalError: EventListener = vi.fn();
+    window.addEventListener(API_ERROR_EVENT, onGlobalError);
+
+    // Still throws — the caller renders its own "sign in to see this" state.
+    await expect(apiRequest('/api/drive/providers')).rejects.toThrow('Missing or malformed Authorization header');
+
+    expect(onGlobalError).not.toHaveBeenCalled();
+    window.removeEventListener(API_ERROR_EVENT, onGlobalError);
+  });
+
+  it('does not report an anonymous 401 on the streaming transport either', async () => {
+    vi.mocked(getStoredTenantToken).mockReturnValue(null);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(missingAuthHeaderResponse());
+    const onGlobalError: EventListener = vi.fn();
+    window.addEventListener(API_ERROR_EVENT, onGlobalError);
+
+    const res = await apiRequestStream('/api/drive/connections/1/files/abc');
+    expect(res.status).toBe(401);
+
+    expect(onGlobalError).not.toHaveBeenCalled();
+    window.removeEventListener(API_ERROR_EVENT, onGlobalError);
+  });
+
+  /** Narrow on purpose: a 401 WITH a token is a real expired session. */
+  it('still reports a 401 when a token was actually sent', async () => {
+    vi.mocked(getStoredTenantToken).mockReturnValue('tenant-token');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      error: 'Token expired',
+    }), { status: 401, headers: { 'Content-Type': 'application/json' } }));
+    const onGlobalError: EventListener = vi.fn();
+    window.addEventListener(API_ERROR_EVENT, onGlobalError);
+
+    await expect(apiRequest('/api/drive/providers')).rejects.toThrow('Token expired');
+
+    expect(onGlobalError).toHaveBeenCalledTimes(1);
     window.removeEventListener(API_ERROR_EVENT, onGlobalError);
   });
 
