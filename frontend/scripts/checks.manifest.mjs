@@ -14,6 +14,7 @@ export default [
   ['check:design-scale', 'check-design-scale.mjs'],
   ['check:edge-runtime', 'check-edge-runtime.mjs'],
   ['check:i18n-keys', 'check-i18n-keys.mjs'],
+  ['check:route-exports', 'check-route-exports.mjs'],
   ['check:declared-deps', 'check-declared-deps.mjs'],
   ['check:methodology', 'check-methodology.mjs'],
 ];
