@@ -19,6 +19,7 @@ import { seatHueVar, type SeatOrPlatform } from '@/lib/seats';
 import { isNavItemActive } from '@/lib/nav';
 import { rendersAppShell } from '@/lib/shellRouting';
 import { useMobileNav } from '@/lib/useMobileNav';
+import { listLocalCreationSessions } from '@/lib/creationSessions';
 import { Icon } from '@/components/ui/Icon';
 import { HeaderCartButton } from './HeaderCartButton';
 
@@ -286,6 +287,26 @@ export default function MarketingHeader() {
   // control on a guest's own board was "throw this board away and start again".
   const inProduct = rendersAppShell(pathname, false);
 
+  /**
+   * Whether THIS browser already has real canvas work — checked once and held in
+   * state rather than on every render, since `listLocalCreationSessions` scans
+   * every `localStorage` key. Only meaningful `inProduct`; a marketing page keeps
+   * its unconditional "Open the canvas" invitation regardless of what some OTHER
+   * tab's guest board holds.
+   *
+   * ── WHY THE CTA CHANGES AT ALL ────────────────────────────────────────────────
+   * "Get Started" is an invitation; once there is a real, local-first board behind
+   * it, the honest offer is "keep this", not "start something" — the offer only
+   * exists once there is something to lose, and it replaces the bottom-left
+   * "Sign in to keep your work" strip this same review removed from the rail.
+   */
+  const [hasLocalWork, setHasLocalWork] = useState(false);
+  useEffect(() => {
+    if (!inProduct) { setHasLocalWork(false); return; }
+    setHasLocalWork(listLocalCreationSessions().length > 0);
+  }, [inProduct, pathname]);
+  const keepingWork = inProduct && hasLocalWork;
+
   return (
     <header className="mh">
       <div className="mh-inner">
@@ -332,7 +353,7 @@ export default function MarketingHeader() {
           <ThemeToggleButton />
           <Link href="/login" className="mh-signin">{tc('signIn')}</Link>
           {inProduct
-            ? <Link href="/register" className="mh-cta">{tc('getStarted')}</Link>
+            ? <Link href="/register" className={`mh-cta${keepingWork ? ' mh-cta-keep' : ''}`}>{tc(keepingWork ? 'keepYourWork' : 'getStarted')}</Link>
             : <Link href="/create/new" className="mh-cta">{t('openCanvas')}</Link>}
           <button type="button" className="mh-hamburger" onClick={open ? closeNav : openNav} aria-label={t('toggleMenu')} aria-expanded={open}>
             {open ? (
@@ -376,7 +397,7 @@ export default function MarketingHeader() {
         <div className="mh-drawer-cta">
           <Link href="/login" className="mh-signin" onClick={closeNav}>{tc('signIn')}</Link>
           {inProduct
-            ? <Link href="/register" className="mh-cta" onClick={closeNav}>{tc('getStarted')}</Link>
+            ? <Link href="/register" className={`mh-cta${keepingWork ? ' mh-cta-keep' : ''}`} onClick={closeNav}>{tc(keepingWork ? 'keepYourWork' : 'getStarted')}</Link>
             : <Link href="/create/new" className="mh-cta" onClick={closeNav}>{t('openCanvas')}</Link>}
         </div>
       </div>

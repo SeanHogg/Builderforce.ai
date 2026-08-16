@@ -261,8 +261,12 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
             what they are making. Their board is real and local-first, so this is
             an offer rather than a wall. The version + legal strip that used to
             sit under it now lives in the frame's bottom-right corner
-            (`LegalCorner`), so the footer renders only when it has this to say. */}
-        {!collapsed && !isAuthenticated && (
+            (`LegalCorner`), so the footer renders only when it has this to say.
+            NOT on a stage route: the canvas already makes the same offer, in the
+            same colour the "keep your work" state uses, from the top-right CTA
+            (`MarketingHeader`) — a second copy of it down here would be the same
+            offer made twice in two different visual languages on one screen. */}
+        {!collapsed && !isAuthenticated && !onStage && (
           <div className="nav-footer">
             <ButtonLink href={signInHref(pathname)} variant="primary" size="sm" block>
               {ts('signInToKeep')}

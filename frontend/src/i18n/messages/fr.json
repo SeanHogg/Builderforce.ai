@@ -1409,7 +1409,8 @@
       "pageN": "Page {n}"
     },
     "resultCount": "{n, plural, =0 {Aucun résultat} one {# résultat} other {# résultats}}",
-    "done": "Terminé"
+    "done": "Terminé",
+    "keepYourWork": "Garder mon travail"
   },
   "prdCreate": {
     "title": "Nouveau PRD",

@@ -4428,6 +4428,14 @@ select.input option {
   white-space: nowrap;
 }
 .mh-cta:hover { transform: translateY(-2px); box-shadow: 0 10px 26px var(--shadow-coral-strong); }
+/* The offer only exists once there is something to lose: a visitor who has left
+ * real local work on a guest canvas sees THIS instead of the generic invitation
+ * above, in a colour that reads as "save", not "start" — never the same coral. */
+.mh-cta-keep {
+  background: linear-gradient(135deg, var(--emerald-bright), color-mix(in srgb, var(--emerald-bright) 70%, black));
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--emerald-bright) 45%, transparent);
+}
+.mh-cta-keep:hover { box-shadow: 0 10px 26px color-mix(in srgb, var(--emerald-bright) 60%, transparent); }
 .mh-hamburger {
   display: none;
   background: none;

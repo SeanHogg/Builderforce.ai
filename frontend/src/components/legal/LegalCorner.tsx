@@ -1,14 +1,8 @@
 'use client';
 
-import { useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { useTranslations } from 'next-intl';
 import { isStageRoute } from '@/lib/workbenchPolicy';
-import { useLegalDocs } from './useLegalDocs';
-import LegalDocModal, { type LegalModalType } from './LegalDocModal';
-import LegalDocLink from './LegalDocLink';
-import ProductUpdatesTrigger from '../releaseNotes/ProductUpdatesTrigger';
-import { BRAND } from '@/lib/content';
+import { LegalStrip } from './LegalStrip';
 
 /**
  * Copyright + version + Terms/Privacy strip for the operator shell, in the
@@ -31,10 +25,7 @@ import { BRAND } from '@/lib/content';
  * legal reader modal with it and decides its own rendering.
  */
 export default function LegalCorner() {
-  const { appVersion, apiVersion, legal, termsVersion, privacyVersion } = useLegalDocs();
-  const t = useTranslations('legal');
   const pathname = usePathname() || '';
-  const [modalType, setModalType] = useState<LegalModalType | null>(null);
 
   /**
    * IT STANDS DOWN ON A STAGE ROUTE, and decides that itself.
@@ -45,39 +36,12 @@ export default function LegalCorner() {
    * bar, and a flow row under the board is simply the last strip of chrome eating height
    * the artefact should have.
    *
-   * Nothing here is lost: the version button opens the same app-wide Product Updates
-   * panel the marketing footer's does, and both documents are reachable from every other
-   * route and from the marketing footer. A canvas is the one place in the product where
-   * a permanent legal strip costs more than it carries.
+   * Nothing here is lost on a canvas either: `CanvasUsageCorner` renders the SAME row
+   * (via `LegalStrip`) as a floating overlay instead, alongside the usage meters that
+   * belong there now — this component's job on a stage route is simply to get out of
+   * the way of that one.
    */
   if (isStageRoute(pathname)) return null;
 
-  return (
-    <>
-      <div className="legal-corner" role="group" aria-label={t('navLabel')}>
-        <span>
-          <span className="legal-corner-brand">{BRAND.name} </span>© {BRAND.year}
-        </span>
-        <ProductUpdatesTrigger
-          appVersion={appVersion}
-          apiVersion={apiVersion}
-          className="legal-corner-link"
-        />
-        <LegalDocLink
-          type="terms"
-          docVersion={termsVersion}
-          className="legal-corner-link"
-          onOpen={setModalType}
-        />
-        <LegalDocLink
-          type="privacy"
-          docVersion={privacyVersion}
-          className="legal-corner-link"
-          onOpen={setModalType}
-        />
-      </div>
-
-      <LegalDocModal type={modalType} legal={legal} onClose={() => setModalType(null)} />
-    </>
-  );
+  return <LegalStrip className="legal-corner" />;
 }

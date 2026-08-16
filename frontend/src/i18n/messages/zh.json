@@ -1409,7 +1409,8 @@
       "pageN": "第 {n} 页"
     },
     "resultCount": "{n, plural, =0 {无结果} other {# 条结果}}",
-    "done": "完成"
+    "done": "完成",
+    "keepYourWork": "保留你的成果"
   },
   "prdCreate": {
     "title": "新建 PRD",

@@ -1409,7 +1409,8 @@
       "pageN": "Página {n}"
     },
     "resultCount": "{n, plural, =0 {Sin resultados} one {# resultado} other {# resultados}}",
-    "done": "Listo"
+    "done": "Listo",
+    "keepYourWork": "Conserva tu trabajo"
   },
   "prdCreate": {
     "title": "Nuevo PRD",
