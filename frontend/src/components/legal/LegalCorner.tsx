@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useLegalDocs } from './useLegalDocs';
 import LegalDocModal, { type LegalModalType } from './LegalDocModal';
-import { openProductUpdates } from '@/lib/productUpdates';
+import ProductUpdatesTrigger from '../releaseNotes/ProductUpdatesTrigger';
 
 /**
  * Version + Terms/Privacy strip for the operator shell, in the BOTTOM-RIGHT
@@ -24,20 +24,16 @@ import { openProductUpdates } from '@/lib/productUpdates';
 export default function LegalCorner() {
   const { appVersion, apiVersion, legal, termsVersion, privacyVersion } = useLegalDocs();
   const t = useTranslations('legal');
-  const tFooter = useTranslations('footer');
   const [modalType, setModalType] = useState<LegalModalType | null>(null);
 
   return (
     <>
       <div className="legal-corner" role="group" aria-label={t('navLabel')}>
-        <button
-          type="button"
+        <ProductUpdatesTrigger
+          appVersion={appVersion}
+          apiVersion={apiVersion}
           className="legal-corner-link"
-          onClick={openProductUpdates}
-          title={tFooter('whatsNewHint')}
-        >
-          UI {appVersion} · API {apiVersion ?? '…'}
-        </button>
+        />
         <button type="button" className="legal-corner-link" onClick={() => setModalType('terms')}>
           {t('termsTitle')}{termsVersion ? ` (v${termsVersion})` : ''}
         </button>

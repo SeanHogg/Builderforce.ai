@@ -1,3 +1,59 @@
+## ✅ RESOLVED 2026-08-15 — The changelog caught up with four days of shipping, and the digest stopped being unbounded
+
+**The gap.** The last product-update batch (`0451`) published on 2026-08-10 and covered the work up to
+that day. Everything between 2026-08-12 and 2026-08-15 — which is most of this file — had shipped with
+**no customer-facing announcement at all**: the app told users about the 3D view and the Builder object
+while embedded apps, the eight proof forms, self-hosted backends, the ads/measurement ports, date
+triggers, the Miro import, the native résumé engine, the career layer, evaluated spreadsheets, the
+operations and legal seats, LTI, QA specs, ERD-to-DDL and the developer portal were all live and unnamed.
+A feature nobody is told about is, for adoption purposes, a feature that did not ship.
+
+**Migration `0474_august_2026_product_updates_2.sql` — 23 published notes**, written from DONE.md rather
+than from commit subjects, benefit-framed and ordered so the strongest adoption drivers lead: turning a
+board into an app customers can subscribe to (with no platform fee under $200,000 lifetime sales),
+building software from the canvas prompt, rollback for every file and release, native mobile packaging,
+click-to-source visual editing, Build/Stage/Live, the eight proof forms, own-cloud deploys, the marketing
+trio, social publishing, date triggers, Miro import, the résumé engine, the career profile, evaluated
+money, the operations vocabulary, the founder back office, the academic gradebook, QA specs, ERD-to-DDL,
+the developer portal, the chat/page/play/timeline surfaces, and the stall watchdog. 15 `new`, 7
+`improvement`, 1 `fix`. Fixed ids, `stage: 'live'`, `emailed_at` NULL so the digest announces them once.
+
+Two claims were deliberately *not* made, because they are not true yet: no live-account verification of
+the ad networks or the generated cloud deploys, and nothing about accounting/ledger imports — that
+capability is still adapter-less and stays out of the changelog for the same reason it was pulled from
+`/integrations`.
+
+**And the defect publishing 23 notes at once exposed.** `runReleaseDigest` inlines every note's full body
+and had **no ceiling on how many notes one email carries** — the size of the product's single marketing
+email was decided by how long it had been since the last publish, not by anything anyone chose. This
+batch would have gone out as one 23-item mail. `MAX_NOTES_PER_DIGEST = 8` caps the weekly path only; the
+overflow is *not* dropped, because only the notes a run actually mailed are stamped `emailed_at`, so the
+remainder are the front of the next digest and a backlog drains oldest-first in the order it shipped. The
+per-note admin trigger stays uncapped — naming ids is an instruction, not a backlog.
+`releaseDigest.test.ts` (new, 4 tests) pins the cap, the un-stamped remainder, the uncapped named-id path
+and the quiet-week no-op.
+
+**And a second defect, found because a guard failed on a sentence.** `check:table-adoption` went red
+demanding a Drizzle declaration for a table called **`for`** — because one note's body says the data
+modeller "exports as executable CREATE TABLE for Postgres, MySQL, SQLite or BigQuery", and
+`scripts/lib/tableAdoption.mjs` scanned the migration text with comments stripped and **string literals
+left in**. A quoted VALUE is data, not DDL. That module had already learned this lesson one syntax over
+(`stripSqlComments` exists because 0418's header prose mentions `CREATE TABLE`), and
+`check-migrations.mjs` blanks literals for exactly this reason before resolving column references — this
+was the third instance of one rule and the first place it was missing. `stripSqlLiterals` closes it,
+consuming `''` escapes so a doubled quote cannot end a literal early, and deliberately leaving
+dollar-quoted `DO $$ … $$` blocks alone because the DDL inside one is real.
+
+Verified in both directions rather than assumed: within the guard's own prefix range the collector goes
+311 → 310 tables, the single removal is `for`, and **nothing legitimate is added or lost**. The fix
+lands in the shared collector, so `entityCatalog.test.ts` — which would have demanded an entity-catalog
+entry for the same non-existent relation — is covered by the same change.
+
+Verified: api **24/24 guards** and **5,936 tests** pass, `tsgo --noEmit` clean. api bumped
+2026.8.15 → 2026.8.16.
+
+---
+
 ## ✅ RESOLVED 2026-08-15 — `column u.name does not exist`, and the guard that will not let it happen again
 
 **The red deploy.** `db:migrate` aborted on `0467_developer_portal.sql`:

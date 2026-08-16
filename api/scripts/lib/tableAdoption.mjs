@@ -79,7 +79,7 @@ export function collectCreatedTables(migrationsDir) {
   for (const file of readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort()) {
     const prefix = Number.parseInt(file.slice(0, 4), 10);
     if (!Number.isFinite(prefix) || prefix < CONSOLIDATION_FROM_PREFIX) continue;
-    const text = stripSqlComments(readFileSync(resolve(migrationsDir, file), 'utf8'));
+    const text = stripSqlLiterals(stripSqlComments(readFileSync(resolve(migrationsDir, file), 'utf8')));
     for (const m of text.matchAll(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?"?([a-z0-9_]+)"?/gi)) {
       if (!created.has(m[1])) created.set(m[1], file);
     }
@@ -95,6 +95,27 @@ export function collectCreatedTables(migrationsDir) {
  *  246 statements for 244 tables. */
 function stripSqlComments(text) {
   return text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\n]*/g, ' ');
+}
+
+/**
+ * A quoted VALUE is data, not DDL — the same lesson `stripSqlComments` learned
+ * one syntax over, and the reason `check-migrations.mjs` blanks literals before
+ * resolving column references.
+ *
+ * Measured 2026-08-15: `0474_august_2026_product_updates_2.sql` seeds a release
+ * note whose body says the data modeller "exports as executable CREATE TABLE for
+ * Postgres, MySQL, SQLite or BigQuery". That parsed as a table named `for`, and
+ * the guard failed the build demanding a `pgTable` for it — instructing the
+ * reader to declare a relation Postgres will never have, which is exactly the
+ * failure the DROP-reading half of this module was written to stop.
+ *
+ * `''` is an escaped quote INSIDE a literal, so the alternation consumes it
+ * rather than ending the literal there and reading the remaining prose as SQL.
+ * Dollar-quoted blocks are deliberately untouched: `DO $$ … $$` is plpgsql, and
+ * the DDL inside one is real.
+ */
+function stripSqlLiterals(text) {
+  return text.replace(/'(?:[^']|'')*'/g, ' ');
 }
 
 /** table name -> exported Drizzle identifier, for the schema modules only. */

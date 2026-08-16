@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { drawioLabelLines, drawioLabelText, drawioShapePolygon, parseDrawioStyle, parseDrawioXml, resolveDrawioXml } from './drawioDiagram';
+import { diagramLabelLines, diagramShapePolygon } from './diagramGraph';
+import { drawioLabelText, parseDrawioStyle, parseDrawioXml, resolveDrawioXml, writeDrawio } from './drawioDiagram';
 
 const DIAGRAM = `<mxfile host="app.diagrams.net"><diagram id="a" name="Page-1"><mxGraphModel dx="800" dy="600" grid="1">
   <root>
@@ -78,14 +79,33 @@ describe('style and label helpers', () => {
   });
 
   it('wraps a long label to fit its shape', () => {
-    const lines = drawioLabelLines('Competitive landscape review across four segments', 120, 12);
+    const lines = diagramLabelLines('Competitive landscape review across four segments', 120, 12);
     expect(lines.length).toBeGreaterThan(1);
-    expect(lines.every((line) => line.length <= 18)).toBe(true);
+    expect(lines.every((line: string) => line.length <= 18)).toBe(true);
   });
 
   it('gives polygons for angular shapes and none for rectangles', () => {
     const vertex = { id: 'v', label: '', x: 0, y: 0, width: 100, height: 50, fontSize: 12, dashed: false } as const;
-    expect(drawioShapePolygon({ ...vertex, shape: 'rhombus' })).toBe('50,0 100,25 50,50 0,25');
-    expect(drawioShapePolygon({ ...vertex, shape: 'rounded' })).toBeNull();
+    expect(diagramShapePolygon({ ...vertex, shape: 'rhombus' })).toBe('50,0 100,25 50,50 0,25');
+    expect(diagramShapePolygon({ ...vertex, shape: 'rounded' })).toBeNull();
+  });
+});
+
+describe('writeDrawio', () => {
+  it('writes a scene draw.io reads back, keeping shapes, labels and endpoints', () => {
+    const graph = parseDrawioXml(DIAGRAM)!;
+    const written = writeDrawio(graph);
+    const reread = parseDrawioXml(written)!;
+    expect(reread.vertices.map((vertex) => vertex.label)).toEqual(['Research', 'Enough <data>?']);
+    expect(reread.vertices.map((vertex) => vertex.shape)).toEqual(['rounded', 'rhombus']);
+    expect(reread.edges[0]).toMatchObject({ label: 'yes', source: 'start', target: 'decide' });
+  });
+
+  it('escapes a label that would otherwise close the attribute it sits in', () => {
+    const written = writeDrawio({
+      vertices: [{ id: 'a', label: 'Ship "it" & <now>', x: 0, y: 0, width: 120, height: 60, shape: 'rect', fontSize: 12, dashed: false }],
+      edges: [], x: 0, y: 0, width: 140, height: 80,
+    });
+    expect(parseDrawioXml(written)?.vertices[0]?.label).toBe('Ship "it" & <now>');
   });
 });

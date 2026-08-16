@@ -1,0 +1,31 @@
+/*
+ * The version chip and its unread badge.
+ *
+ * Only the badge is styled here — the chip's typography, colour and hover come
+ * from the host strip's own link class, so the marketing footer and the operator
+ * shell's legal corner keep looking like themselves. All colour is token-driven
+ * (`--accent` / `--text-on-accent`, both declared in each theme), so the badge
+ * reads in light and dark without a second rule.
+ */
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.badge {
+  display: inline-grid;
+  place-items: center;
+  /* em, not px: the two hosts set different font sizes on their link class, and
+     the badge should be the same size RELATIVE to the version string in both. */
+  min-width: 1.5em;
+  height: 1.5em;
+  padding: 0 0.35em;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: var(--font-size-eyebrow);
+  font-weight: 700;
+  line-height: 1;
+}

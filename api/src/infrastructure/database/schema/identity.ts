@@ -94,6 +94,12 @@ export const users = pgTable('users', {
    *  full builder shell. Always true for 'freelancer' accounts. Discoverability is
    *  still gated on a PUBLISHED profile; this drives the opt-in UX + bid gate. (0282) */
   availableForHire:       boolean('available_for_hire').notNull().default(false),
+  /** When this user last OPENED the Product Updates panel — the "read" clock behind
+   *  the unread badge on the version chip. NULL = never opened, which the counter
+   *  reads as `created_at` rather than as the epoch: notes published before someone
+   *  signed up are not new TO THEM, so a fresh account starts unbadged with no
+   *  backfill. (0475) */
+  productUpdatesSeenAt:   timestamp('product_updates_seen_at'),
   sessionVersion:         integer('session_version').notNull().default(0),
   onboardingCompletedAt:  timestamp('onboarding_completed_at'),
   /** JSON `{ track, completed[], activeStep }` — which setup-wizard steps are done,

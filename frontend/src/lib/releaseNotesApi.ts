@@ -53,14 +53,40 @@ export async function fetchReleaseNotes(limit = 50): Promise<ReleaseNote[]> {
   return data.releaseNotes ?? [];
 }
 
-/** The betas open to the signed-in user, plus the one the server judges worth
- *  interrupting them about (or null). The banner never makes that call itself. */
-export async function fetchBetaPrograms(): Promise<{ betas: BetaProgram[]; bannerBetaId: string | null }> {
-  const data = await apiRequest<{ betas?: BetaProgram[]; bannerBetaId?: string | null }>(
+/**
+ * Everything the signed-in user needs told about product updates, in ONE call:
+ * the betas open to them, the one the server judges worth interrupting them
+ * about (or null), and how many published notes they have not seen. The banner
+ * never makes that judgement itself, and the unread badge never adds a second
+ * request for a single integer.
+ */
+export async function fetchBetaPrograms(): Promise<{
+  betas: BetaProgram[];
+  bannerBetaId: string | null;
+  unreadCount: number;
+}> {
+  const data = await apiRequest<{
+    betas?: BetaProgram[]; bannerBetaId?: string | null; unreadCount?: number;
+  }>(
     '/api/release-notes/betas',
     { auth: 'web', expectedErrors: [401, 403] },
   );
-  return { betas: data.betas ?? [], bannerBetaId: data.bannerBetaId ?? null };
+  return {
+    betas: data.betas ?? [],
+    bannerBetaId: data.bannerBetaId ?? null,
+    unreadCount: Number.isFinite(data.unreadCount) ? Number(data.unreadCount) : 0,
+  };
+}
+
+/** The panel was opened, so the changelog has been read. Fire-and-forget: a
+ *  failed badge-clear is never worth an error surface, and the next load simply
+ *  reports the same count again. */
+export async function markProductUpdatesSeen(): Promise<void> {
+  await apiRequest('/api/release-notes/seen', {
+    method: 'POST',
+    auth: 'web',
+    expectedErrors: [401, 403],
+  });
 }
 
 /** Join / leave / dismiss. `agreed` is required by the server on a join — the

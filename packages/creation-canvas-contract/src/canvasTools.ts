@@ -78,7 +78,7 @@ export const GUEST_SAFE_CANVAS_TOOLS = [
   'canvas_connect_objects',
   'canvas_update_connection',
   'canvas_delete_connection',
-  'canvas_convert_to_drawio',
+  'canvas_convert_diagram',
   // Lifts one post out of a social feed tile that is ALREADY on this board, in the
   // browser, over the posts that tile is holding — no request, no tenant. Its sibling
   // tools, which do reach `/api/social/*`, are in the gated set below.

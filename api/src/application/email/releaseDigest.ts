@@ -9,7 +9,9 @@
  *
  * Whatever the trigger, one run:
  *
- *   1. Resolve the note set. Empty → a no-op (a quiet week sends no mail).
+ *   1. Resolve the note set. Empty → a no-op (a quiet week sends no mail); the
+ *      weekly set is capped (see `MAX_NOTES_PER_DIGEST`) so a bulk publish is
+ *      announced over several digests rather than in one unreadable email.
  *   2. Mail each verified, non-suspended account through `sendLifecycleEmail`
  *      (product_updates category) — consent is checked per recipient and every
  *      mail carries a working unsubscribe link; opted-out users are counted as
@@ -39,6 +41,22 @@ import {
 
 const SEND_BATCH_SIZE = 10;
 
+/**
+ * Upper bound on the notes ONE weekly digest carries. The email inlines every
+ * note's full body, so a batch published in bulk — migration 0474 published 23
+ * at once — would go out as a single unreadable mail, heavy enough to hurt
+ * deliverability on the one message the product uses to announce itself.
+ *
+ * The overflow is NOT dropped: only the notes this run mailed are stamped
+ * `emailed_at`, so the remainder are simply the front of the next digest. The
+ * unsent query is oldest-published first, so a backlog is announced in the order
+ * it shipped rather than newest-first with the tail arriving weeks later.
+ *
+ * The per-note admin trigger (`opts.noteIds`) is deliberately NOT capped: naming
+ * ids is an explicit instruction, not a backlog being drained.
+ */
+const MAX_NOTES_PER_DIGEST = 8;
+
 export interface ReleaseDigestRunResult {
   /** Release notes included in this digest (0 → nothing was sent). */
   notes: number;
@@ -63,7 +81,7 @@ export async function runReleaseDigest(
 
   const notes = opts.noteIds
     ? await listPublishedReleaseNotesByIds(db, opts.noteIds)
-    : await listUnsentPublishedReleaseNotes(db);
+    : (await listUnsentPublishedReleaseNotes(db)).slice(0, MAX_NOTES_PER_DIGEST);
   if (notes.length === 0) {
     return { notes: 0, recipients: 0, sent: 0, suppressed: 0, failed: 0 };
   }

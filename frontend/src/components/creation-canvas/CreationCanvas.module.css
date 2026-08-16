@@ -1301,7 +1301,12 @@
 .statusGuidance b { color:var(--canvas-muted); font-size:10px; }.statusGuidance p { margin:4px 0 0; color:var(--canvas-muted); font-size:10px; line-height:1.5; }
 .taskPrdSummary { display:grid; gap:5px; margin-top:2px; padding:10px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fafcff; }
 .taskPrdSummary > div { display:flex; align-items:center; justify-content:space-between; }.taskPrdSummary span { color:var(--canvas-muted); font-size:9px; font-weight:800; letter-spacing:.06em; }.taskPrdSummary small { padding:2px 6px; border-radius:var(--radius-full); background:#e8f7ef; color:#16744a; font-size:8px; text-transform:capitalize; }
-.taskPrdSummary strong { color:var(--canvas-ink); font-size:11px; }.taskPrdSummary p { max-height:100px; margin:0; overflow:auto; color:var(--canvas-muted); font-size:10px; line-height:1.5; white-space:pre-wrap; }
+.taskPrdSummary strong { color:var(--canvas-ink); font-size:11px; }
+/* A native <option> is painted by the OS, not by the page: it does NOT inherit
+   the select's background, so a dark-theme dropdown renders dark text on a
+   white system menu. Every native picker on this canvas declares its own
+   opaque pair for that reason. */
+.notationSelect option { background:var(--canvas-panel); color:var(--canvas-ink); }.taskPrdSummary p { max-height:100px; margin:0; overflow:auto; color:var(--canvas-muted); font-size:10px; line-height:1.5; white-space:pre-wrap; }
 .brainDetails { display:grid; gap:16px; margin-bottom:14px; }
 .brainDetails > section { display:grid; gap:7px; }
 .brainSectionHeading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
@@ -1396,8 +1401,8 @@
   position:sticky; top:0; z-index:1; display:flex; align-items:center; gap:8px;
   padding:9px 10px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel);
 }
-.filesPanel header strong { color:var(--canvas-ink); font-size:11px; }
-.filesPanel header small { flex:1; color:var(--canvas-muted); font-size:10px; }
+.filesPanel header strong { flex:1; color:var(--canvas-ink); font-size:11px; }
+.filesPanel header small { color:var(--canvas-muted); font-size:10px; }
 .filesPanel header button {
   width:24px; height:24px; display:grid; place-items:center; padding:0;
   border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font-size:17px; line-height:1; cursor:pointer;
@@ -1424,28 +1429,29 @@
 .panelFilters button[aria-pressed='true'] { border-color:var(--canvas-accent-ink); background:var(--canvas-hover); color:var(--canvas-ink); }
 .filesEmpty { margin:0; padding:14px 12px; color:var(--canvas-ink-soft); font-size:11px; line-height:1.5; }
 
-/* ── Connected cloud storage ─────────────────────────────────────────────────
-   Shares the Files panel's frame deliberately:they are two views of the same
-   idea — files you can open on this board — and a second visual language for
-   the second one would read as a different feature. */
+/* Which source the Files panel is reading — this board, or a connected drive.
+   A segmented pair rather than two chips: these are mutually exclusive views of
+   the same panel, not filters that stack. */
+.panelSources { display:flex; gap:4px; padding:8px 10px 0; }
+.panelSources button {
+  flex:1; min-width:0; min-height:26px; display:flex; align-items:center; justify-content:center; gap:5px;
+  padding:3px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:transparent; color:var(--canvas-muted);
+  font:600 10px inherit; font-family:inherit; white-space:nowrap; cursor:pointer;
+}
+.panelSources button svg { width:13px; height:13px; flex:none; }
+.panelSources button:hover,.panelSources button:focus-visible { color:var(--canvas-ink); border-color:var(--canvas-accent-ink); outline:none; }
+.panelSources button[aria-pressed='true'] { border-color:var(--canvas-accent-ink); background:var(--canvas-hover); color:var(--canvas-ink); }
+
+/* ── Connected-source panels (Miro, social, paid media) ──────────────────────
+   Composes the Files panel's frame rather than restating it:they are all "a
+   thing this workspace is connected to, listed so you can pull it onto the
+   board", and a second visual language would read as a second feature. Only the
+   width and height differ, because these rows are wider than a file row. */
 .drivePanel {
-  position:absolute; z-index:16;
-  left:calc(62px + var(--brain-dock-left, 0px)); bottom:calc(var(--composer-space) + 8px);
-  box-sizing:border-box; width:312px; max-width:calc(100vw - 96px); max-height:56%; overflow:auto;
-  border:1px solid var(--canvas-line); border-radius:var(--radius-lg);
-  background:var(--canvas-panel); color:var(--canvas-muted);
-  box-shadow:0 12px 34px var(--canvas-shadow); font-size:12px;
+  composes: filesPanel;
+  width:312px; max-height:56%;
 }
-.drivePanel header {
-  position:sticky; top:0; z-index:1; display:flex; align-items:center; gap:8px;
-  padding:9px 10px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel);
-}
-.drivePanel header strong { flex:1; color:var(--canvas-ink); font-size:11px; }
-.drivePanel header button {
-  width:24px; height:24px; display:grid; place-items:center; padding:0;
-  border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); font-size:17px; line-height:1; cursor:pointer;
-}
-.drivePanel header button:hover,.drivePanel header button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
 
 .driveAccounts { display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px 0; }
 .driveAccounts button {

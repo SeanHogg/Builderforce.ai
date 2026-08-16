@@ -6,15 +6,17 @@ const mocks = vi.hoisted(() => ({
   getStoredWebToken: vi.fn<() => string | null>(),
   fetchBetaPrograms: vi.fn(),
   setBetaEnrollment: vi.fn(),
+  markProductUpdatesSeen: vi.fn(async () => {}),
 }));
 
 vi.mock('./auth', () => ({ getStoredWebToken: mocks.getStoredWebToken }));
 vi.mock('./releaseNotesApi', () => ({
   fetchBetaPrograms: mocks.fetchBetaPrograms,
   setBetaEnrollment: mocks.setBetaEnrollment,
+  markProductUpdatesSeen: mocks.markProductUpdatesSeen,
 }));
 
-import { useBetaPrograms } from './betaPrograms';
+import { markProductUpdatesRead, useBetaPrograms, useProductUpdatesUnread } from './betaPrograms';
 
 const BETA = {
   id: 'b1',
@@ -36,6 +38,7 @@ const BETA = {
 const loaded = (overrides: Partial<typeof BETA> = {}) => ({
   betas: [{ ...BETA, ...overrides }],
   bannerBetaId: 'b1',
+  unreadCount: 3,
 });
 
 // The store is module-level and deliberately survives a remount — it is keyed to
@@ -104,10 +107,48 @@ describe('useBetaPrograms', () => {
 
     // A different person signs in — their own betas are fetched, not reused.
     mocks.getStoredWebToken.mockReturnValue('token-b');
-    mocks.fetchBetaPrograms.mockResolvedValue({ betas: [{ ...BETA, id: 'b2', myStatus: 'joined' }], bannerBetaId: null });
+    mocks.fetchBetaPrograms.mockResolvedValue({ betas: [{ ...BETA, id: 'b2', myStatus: 'joined' }], bannerBetaId: null, unreadCount: 0 });
     const second = renderHook(() => useBetaPrograms());
     await waitFor(() => expect(second.result.current.betas[0]?.id).toBe('b2'));
     expect(second.result.current.banner).toBeNull();
     expect(mocks.fetchBetaPrograms).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('useProductUpdatesUnread', () => {
+  it('rides the beta read rather than making a second request', async () => {
+    const { result } = renderHook(() => useProductUpdatesUnread());
+    await waitFor(() => expect(result.current).toBe(3));
+    expect(mocks.fetchBetaPrograms).toHaveBeenCalledTimes(1);
+  });
+
+  it('costs a signed-out visitor no request and shows no badge', async () => {
+    mocks.getStoredWebToken.mockReturnValue(null);
+    const { result } = renderHook(() => useProductUpdatesUnread());
+    await waitFor(() => expect(result.current).toBe(0));
+    expect(mocks.fetchBetaPrograms).not.toHaveBeenCalled();
+  });
+
+  it('clears on read — locally at once, and tells the server once', async () => {
+    const { result } = renderHook(() => useProductUpdatesUnread());
+    await waitFor(() => expect(result.current).toBe(3));
+
+    reactAct(() => { markProductUpdatesRead(); });
+    // Cleared without waiting for the round trip: the badge goes on click.
+    expect(result.current).toBe(0);
+    expect(mocks.markProductUpdatesSeen).toHaveBeenCalledTimes(1);
+
+    // Opening the panel again is not a second write — there is nothing to read.
+    reactAct(() => { markProductUpdatesRead(); });
+    expect(mocks.markProductUpdatesSeen).toHaveBeenCalledTimes(1);
+  });
+
+  it('survives a failed clear without surfacing an error', async () => {
+    mocks.markProductUpdatesSeen.mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderHook(() => useProductUpdatesUnread());
+    await waitFor(() => expect(result.current).toBe(3));
+
+    reactAct(() => { markProductUpdatesRead(); });
+    expect(result.current).toBe(0);
   });
 });

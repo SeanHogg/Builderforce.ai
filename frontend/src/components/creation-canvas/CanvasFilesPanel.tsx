@@ -3,8 +3,10 @@
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
+import { CanvasDriveIcon, CanvasFilesIcon } from '@/components/canvas/CanvasCommands';
 import styles from './CreationCanvas.module.css';
 import { CanvasPanelFilters } from './CanvasPanelFilters';
+import { CanvasDriveBrowser } from './CanvasDriveBrowser';
 import { formatBytes, type CanvasFile, type CanvasFileCategory } from '@/lib/canvasDocuments';
 
 const CATEGORY_ICON: Readonly<Record<CanvasFileCategory, string>> = {
@@ -14,24 +16,44 @@ const CATEGORY_ICON: Readonly<Record<CanvasFileCategory, string>> = {
 
 const FILTERS: ReadonlyArray<CanvasFileCategory | 'all'> = ['all', 'document', 'presentation', 'diagram', 'spreadsheet', 'image', 'media', 'code', 'web', 'other'];
 
+/** Where the files on offer come from. Sources are DATA so adding a third one
+ *  (a repo, a bucket) is an entry here plus its body, not a fourth rail button. */
+const SOURCES = [
+  { value: 'board', labelKey: 'sourceBoard', Icon: CanvasFilesIcon },
+  { value: 'cloud', labelKey: 'sourceCloud', Icon: CanvasDriveIcon },
+] as const;
+type CanvasFileSource = typeof SOURCES[number]['value'];
+
 /**
- * Every file this session holds, in one place.
+ * Every file this session can put on the board, in one place.
  *
- * The board shows objects where they were placed; this shows what a person can
- * actually take away — the market analysis, the deck, the diagram, the sheet,
- * and each artifact exported or published from them. Opening a row focuses the
- * object it came from, so the library and the canvas are two views of one set of
- * files rather than two lists that drift apart.
+ * TWO SOURCES, ONE PANEL. The board shows objects where they were placed; the
+ * "This board" source shows what a person can actually take away — the market
+ * analysis, the deck, the diagram, the sheet, and each artifact exported or
+ * published from them — and opening a row focuses the object it came from, so
+ * the library and the canvas are two views of one set of files rather than two
+ * lists that drift apart. The "Cloud" source is the same question asked of a
+ * connected Google Drive or OneDrive, and picking a file there imports it
+ * through the identical engine a dragged-in file goes through.
+ *
+ * They were two rail buttons opening two panels docked at the same coordinates,
+ * which meant opening both stacked one invisibly over the other. A person does
+ * not think "board files" and "cloud files"; they think "the file I want".
  */
 export function CanvasFilesPanel({
-  files, onOpen, onDownload, onClose,
+  files, onOpen, onDownload, onClose, onImportFile, returnTo,
 }: {
   files: CanvasFile[];
   onOpen: (nodeId: string) => void;
   onDownload: (file: CanvasFile) => void;
   onClose: () => void;
+  /** Handed a real `File` from the cloud source, exactly as a drop would be. */
+  onImportFile: (file: File) => void | Promise<void>;
+  /** Where the cloud provider's OAuth round trip should return the browser to. */
+  returnTo: string;
 }) {
   const t = useTranslations('creationCanvas.files');
+  const [source, setSource] = useState<CanvasFileSource>('board');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<CanvasFileCategory | 'all'>('all');
   const available = useMemo(() => FILTERS.filter((category) => category === 'all' || files.some((file) => file.category === category)), [files]);
@@ -44,9 +66,20 @@ export function CanvasFilesPanel({
     <aside className={styles.filesPanel} aria-label={t('title')}>
       <header>
         <strong>{t('title')}</strong>
-        <small>{t('count', { count: files.length })}</small>
+        {source === 'board' && <small>{t('count', { count: files.length })}</small>}
         <button type="button" aria-label={t('close')} title={t('close')} onClick={onClose}>×</button>
       </header>
+      <div className={styles.panelSources} role="group" aria-label={t('sourceGroup')}>
+        {SOURCES.map(({ value, labelKey, Icon: SourceIcon }) => <button
+          key={value}
+          type="button"
+          aria-pressed={source === value}
+          onClick={() => setSource(value)}
+        ><SourceIcon />{t(labelKey)}</button>)}
+      </div>
+      {source === 'cloud'
+        ? <CanvasDriveBrowser onImport={onImportFile} onClose={onClose} returnTo={returnTo} />
+        : <>
       {files.length > 0 && <CanvasPanelFilters
         search={search}
         onSearchChange={setSearch}
@@ -83,6 +116,7 @@ export function CanvasFilesPanel({
               <button type="button" className={styles.fileDownload} aria-label={t('download', { name: file.name })} title={t('download', { name: file.name })} onClick={() => onDownload(file)}>↓</button>
             </li>)}
           </ul>}
+        </>}
     </aside>
   );
 }

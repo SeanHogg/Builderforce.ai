@@ -15,6 +15,13 @@
  * eagerly-expanded tree. `FileExplorer` was the obvious thing to reuse and is
  * the wrong shape here — it takes a flat list of every path up front and builds
  * the hierarchy client-side, which for a real Drive is an unbounded fan-out.
+ *
+ * ── A BROWSER, NOT A PANEL ───────────────────────────────────────────────────
+ * This draws no frame, header or close button: it is the "Cloud" source INSIDE
+ * `CanvasFilesPanel`. Cloud files and board files were two rail buttons opening
+ * two panels that docked at the identical coordinates — so they stacked on top
+ * of each other — for what a person reads as one question: which file do I want
+ * on this board. One panel, one source picker.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -41,15 +48,16 @@ function itemGlyph(item: DriveItem): string {
   return '□';
 }
 
-export interface CanvasDrivePanelProps {
+export interface CanvasDriveBrowserProps {
   /** Handed a real `File`, exactly as a drop would be. */
   onImport: (file: File) => void | Promise<void>;
+  /** Dismisses the host panel once a file has landed on the board. */
   onClose: () => void;
   /** Where the OAuth round trip should return the browser to. */
   returnTo: string;
 }
 
-export function CanvasDrivePanel({ onImport, onClose, returnTo }: CanvasDrivePanelProps) {
+export function CanvasDriveBrowser({ onImport, onClose, returnTo }: CanvasDriveBrowserProps) {
   const t = useTranslations('creationCanvas.drive');
   const [providers, setProviders] = useState<DriveProviderStatus[]>([]);
   const [connections, setConnections] = useState<DriveConnection[]>([]);
@@ -146,12 +154,7 @@ export function CanvasDrivePanel({ onImport, onClose, returnTo }: CanvasDrivePan
   const needsReconnect = connections.some((account) => account.id === activeId && account.status !== 'connected');
 
   return (
-    <aside className={styles.drivePanel} aria-label={t('title')}>
-      <header>
-        <strong>{t('title')}</strong>
-        <button type="button" aria-label={t('close')} title={t('close')} onClick={onClose}>×</button>
-      </header>
-
+    <>
       {connections.length > 0 && <div className={styles.driveAccounts} role="group" aria-label={t('accounts')}>
         {connections.map((connection) => <button
           key={connection.id}
@@ -214,6 +217,6 @@ export function CanvasDrivePanel({ onImport, onClose, returnTo }: CanvasDrivePan
         className={styles.driveMore}
         onClick={() => void openFolder(activeId, crumbs[crumbs.length - 1] ?? null, true)}
       >{t('loadMore')}</button>}
-    </aside>
+    </>
   );
 }

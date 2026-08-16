@@ -37,6 +37,12 @@ vi.mock('../../application/product/releaseNoteBetas', async (orig) => ({
 const digest = vi.hoisted(() => ({ runReleaseDigest: vi.fn() }));
 vi.mock('../../application/email/releaseDigest', () => digest);
 
+const seen = vi.hoisted(() => ({
+  countUnreadReleaseNotes: vi.fn(async () => 0),
+  markReleaseNotesSeen: vi.fn(async () => {}),
+}));
+vi.mock('../../application/product/releaseNoteSeen', () => seen);
+
 import { createReleaseNoteRoutes } from './releaseNoteRoutes';
 
 const db = {} as any;
@@ -156,11 +162,22 @@ describe('releaseNoteRoutes', () => {
     expect(betas.countBetaParticipants).toHaveBeenCalledWith(db, ['b1']);
   });
 
-  it('GET /betas returns the user\'s betas and which one earns the banner', async () => {
+  it('GET /betas returns the user\'s betas, which one earns the banner, and the unread count', async () => {
     betas.listBetaProgramsForUser.mockResolvedValue([BETA]);
+    seen.countUnreadReleaseNotes.mockResolvedValue(3);
     const res = await createReleaseNoteRoutes(db).request('/betas');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ betas: [BETA], bannerBetaId: 'b1' });
+    // Both halves of "what does this person need told?" on ONE signed-in read —
+    // the badge never costs a second request for a single integer.
+    expect(await res.json()).toEqual({ betas: [BETA], bannerBetaId: 'b1', unreadCount: 3 });
+  });
+
+  it('POST /seen marks the changelog read for the session\'s own user', async () => {
+    const res = await createReleaseNoteRoutes(db).request('/seen', { method: 'POST' });
+    expect(res.status).toBe(200);
+    // The user comes from the session and the clock is the server's: a
+    // client-supplied timestamp would let a caller un-read their own badge.
+    expect(seen.markReleaseNotesSeen).toHaveBeenCalledWith(db, 'u-1');
   });
 
   it('POST /:id/beta rejects an unknown action', async () => {

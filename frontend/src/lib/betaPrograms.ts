@@ -1,8 +1,13 @@
 'use client';
 
 /**
- * Beta enrolment on the client — ONE store, shared by every surface that shows a
- * beta.
+ * Product updates on the client — ONE store behind every surface that shows a
+ * beta, and behind the unread badge on the version chip.
+ *
+ * Both are answers to "what does this person need told about product updates?",
+ * both come from the same signed-in read, and both are session-scoped in exactly
+ * the same way — so a second store would be a second request, a second cache and
+ * a second chance to show the previous person in this tab someone else's state.
  *
  * The banner, the join panel and the "What's new" changelog all ask the same two
  * questions ("which betas can I join?", "where do I stand with this one?"), and
@@ -25,6 +30,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getStoredWebToken } from './auth';
 import {
   fetchBetaPrograms,
+  markProductUpdatesSeen,
   setBetaEnrollment,
   type BetaAction,
   type BetaProgram,
@@ -34,12 +40,14 @@ interface BetaState {
   betas: BetaProgram[];
   /** The server's choice of which beta is worth a banner — never the client's. */
   bannerBetaId: string | null;
+  /** Published notes this user has not seen — the badge on the version chip. */
+  unread: number;
   loaded: boolean;
   /** The session this state describes. null = nobody's, i.e. signed out. */
   owner: string | null;
 }
 
-const EMPTY: BetaState = { betas: [], bannerBetaId: null, loaded: false, owner: null };
+const EMPTY: BetaState = { betas: [], bannerBetaId: null, unread: 0, loaded: false, owner: null };
 
 let state: BetaState = EMPTY;
 let inFlight: Promise<void> | null = null;
@@ -56,7 +64,9 @@ function loadOnce(token: string): Promise<void> {
   if (state.loaded && state.owner === token) return Promise.resolve();
   if (!inFlight) {
     inFlight = fetchBetaPrograms()
-      .then(({ betas, bannerBetaId }) => publish({ betas, bannerBetaId, loaded: true, owner: token }))
+      .then(({ betas, bannerBetaId, unreadCount }) => publish({
+        betas, bannerBetaId, unread: unreadCount, loaded: true, owner: token,
+      }))
       .catch(() => { publish({ ...EMPTY, loaded: true, owner: token }); })
       .finally(() => { inFlight = null; });
   }
@@ -88,7 +98,33 @@ export interface UseBetaPrograms {
   act: (id: string, action: BetaAction, agreed?: boolean) => Promise<void>;
 }
 
-export function useBetaPrograms(): UseBetaPrograms {
+/**
+ * The unread badge, for the version chips that open the changelog.
+ *
+ * It is a READ of the same store the beta banner uses, so the request that
+ * populates it is the one the app already makes — mounting a badge on the footer
+ * costs nothing extra, and a signed-out visitor still costs no request at all.
+ */
+export function useProductUpdatesUnread(): number {
+  return useBetaState().unread;
+}
+
+/**
+ * Opening the panel IS reading the changelog, so the badge clears here rather
+ * than behind a second "mark as read" the user would have to find. Local first
+ * (the badge must go on click, not one round trip later) and the request is
+ * fire-and-forget: a failure means the same count comes back next session, which
+ * is the harmless direction.
+ */
+export function markProductUpdatesRead(): void {
+  if (state.unread === 0) return;
+  publish({ ...state, unread: 0 });
+  void markProductUpdatesSeen().catch(() => {});
+}
+
+/** Subscribe to the store and load it once per session. Shared by both hooks so
+ *  the sign-in/sign-out handling exists exactly once. */
+function useBetaState(): BetaState {
   const [local, setLocal] = useState<BetaState>(state);
   // Read per render rather than once: signing in or out re-renders everything
   // under the auth provider, and that re-render is the signal this store gets.
@@ -111,6 +147,12 @@ export function useBetaPrograms(): UseBetaPrograms {
     }
     return () => { subscribers.delete(setLocal); };
   }, [token]);
+
+  return local;
+}
+
+export function useBetaPrograms(): UseBetaPrograms {
+  const local = useBetaState();
 
   const act = useCallback(async (id: string, action: BetaAction, agreed = false) => {
     const previous = state;

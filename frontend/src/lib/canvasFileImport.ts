@@ -23,6 +23,10 @@ import {
 import {
   dxfPreviewSvg, meshFormatFromHint, meshPreviewSvg, parseMeshTriangles, svgDataUrl,
 } from './creativeGeometry';
+import {
+  conversionFromGraph, diagramNotation, notationForFileName,
+  type DiagramConversion, type DiagramNotation,
+} from './diagramNotations';
 import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
 
 /** Text attachments Brain can read directly once they are on the canvas. */
@@ -235,6 +239,88 @@ function slidesObject(file: File, slides: OfficeSlide[], t: ImportTranslator): I
   };
 }
 
+/**
+ * The diagram object a drawing file becomes, in whichever notation it can be
+ * KEPT in.
+ *
+ * A notation the canvas can also WRITE is stored verbatim: the person's own
+ * file comes back out of the board byte-for-byte, and nothing is lost to a
+ * conversion they did not ask for. A notation this can only READ — a Visio
+ * package, an ArchiMate model — is converted to draw.io on the way in, because
+ * an object whose source cannot be re-read is an object that cannot be drawn,
+ * edited or exported. `sourceFormat` records where it came from either way.
+ */
+function diagramObject(
+  file: File,
+  conversion: DiagramConversion,
+  origin: DiagramNotation,
+  t: ImportTranslator,
+): ImportedCanvasObject {
+  const notation = diagramNotation(conversion.format)!;
+  const converted = notation.id !== origin.id;
+  return {
+    kind: 'diagram',
+    data: {
+      title: file.name,
+      fileName: file.name,
+      mimeType: converted ? notation.mimeType : (file.type || notation.mimeType),
+      fileSize: file.size,
+      diagramFormat: notation.id,
+      diagram: conversion.source,
+      content: conversion.source,
+      sourceFormat: origin.name,
+      status: t('statusImported'),
+      subtitle: conversion.shapes
+        ? t('diagramShape', { notation: notation.name, shapes: conversion.shapes, connections: conversion.connections })
+        : notation.name,
+    },
+  };
+}
+
+/**
+ * Read a drawing file into the diagram it holds.
+ *
+ * Returns `null` for a file this cannot make a diagram of, so the caller falls
+ * through to its other readers rather than putting an empty box on the board —
+ * which matters most for `.xml`, an extension draw.io shares with everything
+ * else in the world.
+ */
+async function diagramObjects(file: File, t: ImportTranslator): Promise<ImportedCanvasObject[] | null> {
+  const notation = notationForFileName(file.name);
+  if (!notation) return null;
+  const drawio = diagramNotation('drawio')!;
+
+  // A binary container never reaches a text field, so it is read from bytes and
+  // kept as draw.io — the notation this can both draw and write back.
+  if (notation.readBytes) {
+    const graph = await notation.readBytes(await bytes(file));
+    const converted = graph ? conversionFromGraph(graph, drawio) : null;
+    return converted ? [diagramObject(file, converted, notation, t)] : null;
+  }
+
+  const source = await file.text();
+  if (!source.trim()) return null;
+  // The extension proposes a notation; the CONTENT has to agree with it.
+  if (notation.detect && !notation.detect(source)) return null;
+
+  if (notation.write) {
+    // Counted for the card, not required by it: a Mermaid sequence diagram has
+    // no graph to count and is still a perfectly good diagram to keep.
+    const graph = await notation.read?.(source).catch(() => null) ?? null;
+    return [diagramObject(file, {
+      source,
+      format: notation.id,
+      shapes: graph?.vertices.length ?? 0,
+      connections: graph?.edges.length ?? 0,
+      droppedConnections: 0,
+    }, notation, t)];
+  }
+
+  const graph = await notation.read?.(source).catch(() => null) ?? null;
+  const converted = graph ? conversionFromGraph(graph, drawio) : null;
+  return converted ? [diagramObject(file, converted, notation, t)] : null;
+}
+
 function attachmentObject(file: File, t: ImportTranslator, extra: Record<string, unknown> = {}): ImportedCanvasObject {
   return {
     kind: 'file',
@@ -260,7 +346,8 @@ function promptFor(kind: CreationObjectKind, file: File, t: ImportTranslator): s
           : kind === 'image' ? 'promptImage'
             : kind === 'model3d' ? 'promptModel'
               : kind === 'cad' ? 'promptDrawing'
-                : kind === 'code' ? 'promptCode' : 'promptFile';
+                : kind === 'diagram' ? 'promptDiagram'
+                  : kind === 'code' ? 'promptCode' : 'promptFile';
   return t(key, { name: file.name });
 }
 
@@ -279,6 +366,15 @@ function noticeFor(objects: ImportedCanvasObject[], file: File, t: ImportTransla
   if (kind === 'image') return t('noticeImage', { name: file.name });
   if (kind === 'model3d') return t('noticeModel', { name: file.name, facets: Number(data.facetCount ?? 0).toLocaleString() });
   if (kind === 'cad') return t('noticeDrawing', { name: file.name });
+  if (kind === 'diagram') {
+    const notation = diagramNotation(typeof data.diagramFormat === 'string' ? data.diagramFormat : null);
+    const origin = typeof data.sourceFormat === 'string' ? data.sourceFormat : '';
+    // A converted import SAYS it was converted. Landing a Visio drawing as a
+    // draw.io diagram with no word about it looks like the file was replaced.
+    return origin && origin !== notation?.name
+      ? t('noticeDiagramConverted', { name: file.name, source: origin, notation: notation?.name ?? '' })
+      : t('noticeDiagram', { name: file.name, notation: notation?.name ?? '' });
+  }
   return t('noticeFile', { name: file.name });
 }
 
@@ -312,18 +408,13 @@ async function deriveObjects(file: File, t: ImportTranslator): Promise<ImportedC
     })];
   }
 
-  if (extension === 'drawio') {
-    const source = await file.text();
-    if (/<(?:mxfile|mxGraphModel)\b/i.test(source)) {
-      return [{ kind: 'diagram', data: {
-        title: file.name,
-        fileName: file.name,
-        mimeType: file.type || 'application/vnd.jgraph.mxfile',
-        fileSize: file.size,
-        diagramFormat: 'drawio', diagram: source, diagramXml: source, content: source,
-        status: t('statusImported'),
-      } }];
-    }
+  // Every drawing notation, in one branch, BEFORE the image and text readers.
+  // `.svg` is deliberately not among them — a vector picture is a picture, and
+  // reading its shapes is a conversion a person asks for, not one that happens
+  // to their logo on the way in.
+  if (extension !== 'svg') {
+    const diagram = await diagramObjects(file, t).catch(() => null);
+    if (diagram?.length) return diagram;
   }
 
   if (file.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'].includes(extension)) {
@@ -469,7 +560,22 @@ async function deriveObjects(file: File, t: ImportTranslator): Promise<ImportedC
    * Checked BEFORE the tabular branch because `.json` matches both.
    */
   if (!oversized && /\.json$/i.test(file.name)) {
-    const resume = jsonResumeObject(file, await file.text(), t);
+    const source = await file.text();
+    /**
+     * AN EXCALIDRAW SCENE IS A DRAWING, NOT A DATASET — the same trap, from the
+     * same cause. Excalidraw exports as `.excalidraw` AND as `.excalidraw.json`
+     * or a bare `.json`, and every one of those matched the tabular importer
+     * below: a whiteboard sketch became a one-row Dataset whose cells were JSON
+     * fragments. Recognised by its `type: "excalidraw"` declaration rather than
+     * by its name, it arrives as the diagram it is.
+     */
+    const excalidraw = diagramNotation('excalidraw')!;
+    if (excalidraw.detect!(source)) {
+      const graph = await excalidraw.read!(source).catch(() => null);
+      const converted = graph ? conversionFromGraph(graph, excalidraw) : null;
+      if (converted) return [diagramObject(file, converted, excalidraw, t)];
+    }
+    const resume = jsonResumeObject(file, source, t);
     if (resume) return [resume];
   }
 

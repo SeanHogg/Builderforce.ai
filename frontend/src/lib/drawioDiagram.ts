@@ -1,60 +1,26 @@
 /**
- * Draw.io (mxGraph) reader for the Creation Canvas.
+ * Draw.io (mxGraph) reader and writer for the Creation Canvas.
  *
  * A `.drawio` file is an XML scene graph, not a picture — pointing an `<img>` at
- * one only ever renders a broken tile. This reads the scene into plain geometry
- * the canvas draws itself, so a diagram an agent produced is VISIBLE on the board
- * with no external editor, no CDN script, and no network round-trip.
+ * one only ever renders a broken tile. This reads the scene into the shared
+ * `DiagramGraph` the canvas draws itself, so a diagram an agent produced is
+ * VISIBLE on the board with no external editor, no CDN script, and no network
+ * round-trip.
  *
  * Only the parts a generated diagram actually uses are modelled: vertices with a
  * shape, a fill, a stroke and a label; edges with waypoints and an arrow head.
  * Anything unrecognised degrades to a labelled rectangle rather than vanishing.
+ *
+ * The WRITER is the other half: any notation the canvas can read becomes a
+ * portable `.drawio` file, because draw.io is the format a person is most
+ * likely to be asked for and the one every diagramming tool can open.
  */
 
-export type DrawioShape = 'rect' | 'rounded' | 'ellipse' | 'rhombus' | 'triangle' | 'hexagon' | 'cylinder' | 'note' | 'text';
+import {
+  DIAGRAM_DEFAULT_FONT_SIZE, MAX_DIAGRAM_CELLS, clipToBox, diagramGraph,
+  type DiagramEdge, type DiagramGraph, type DiagramShape, type DiagramPoint, type DiagramVertex,
+} from './diagramGraph';
 
-export interface DrawioPoint { x: number; y: number }
-
-export interface DrawioVertex {
-  id: string;
-  label: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  shape: DrawioShape;
-  fill?: string;
-  stroke?: string;
-  fontColor?: string;
-  fontSize: number;
-  dashed: boolean;
-  /** Embedded artwork carried by an image cell. Only data:image URLs are
-   * rendered; remote URLs never become an implicit network request. */
-  imageUrl?: string;
-}
-
-export interface DrawioEdge {
-  id: string;
-  label: string;
-  points: DrawioPoint[];
-  stroke?: string;
-  dashed: boolean;
-  arrow: boolean;
-}
-
-export interface DrawioGraph {
-  vertices: DrawioVertex[];
-  edges: DrawioEdge[];
-  /** Content bounds, already padded, ready to become a `viewBox`. */
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-const MAX_CELLS = 600;
-const DEFAULT_FONT_SIZE = 12;
-const CONTENT_PADDING = 16;
 const SAFE_COLOR = /^(?:#[0-9a-f]{3}|#[0-9a-f]{6}|none)$/i;
 
 function numeric(value: string | null | undefined, fallback = 0): number {
@@ -97,7 +63,7 @@ export function parseDrawioStyle(style: string): Record<string, string> {
   return entries;
 }
 
-function shapeFromStyle(style: Record<string, string>): DrawioShape {
+function shapeFromStyle(style: Record<string, string>): DiagramShape {
   const named = (style.shape ?? '').toLowerCase();
   if (style.ellipse === '1' || named === 'ellipse') return 'ellipse';
   if (style.rhombus === '1' || named === 'rhombus') return 'rhombus';
@@ -122,17 +88,6 @@ export function drawioLabelText(value: string): string {
     .slice(0, 400);
 }
 
-/** Where a straight run from `from` toward `to` leaves the box around `from`. */
-function clipToBox(from: DrawioPoint, to: DrawioPoint, box: { x: number; y: number; width: number; height: number }): DrawioPoint {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  if (!dx && !dy) return from;
-  const halfWidth = box.width / 2;
-  const halfHeight = box.height / 2;
-  const scale = Math.min(dx ? halfWidth / Math.abs(dx) : Number.POSITIVE_INFINITY, dy ? halfHeight / Math.abs(dy) : Number.POSITIVE_INFINITY);
-  return { x: from.x + dx * scale, y: from.y + dy * scale };
-}
-
 type RawCell = { element: Element; label: string };
 
 function collectCells(model: Element): RawCell[] {
@@ -143,7 +98,7 @@ function collectCells(model: Element): RawCell[] {
     const wrapped = wrapper && (wrapper.tagName === 'object' || wrapper.tagName === 'UserObject');
     const label = wrapped ? (wrapper.getAttribute('label') ?? '') : (element.getAttribute('value') ?? '');
     cells.push({ element, label: drawioLabelText(label) });
-    if (cells.length >= MAX_CELLS) break;
+    if (cells.length >= MAX_DIAGRAM_CELLS) break;
   }
   return cells;
 }
@@ -162,7 +117,7 @@ function geometryOf(element: Element): Element | null {
  * Read a draw.io scene into geometry. Returns `null` when the payload is not a
  * parseable mxGraph model, so callers can fall back to showing the source.
  */
-export function parseDrawioXml(xml: string): DrawioGraph | null {
+export function parseDrawioXml(xml: string): DiagramGraph | null {
   if (typeof DOMParser === 'undefined') return null;
   let document: Document;
   try {
@@ -176,7 +131,7 @@ export function parseDrawioXml(xml: string): DrawioGraph | null {
 
   const cells = collectCells(model);
   const parentById = new Map<string, string>();
-  const vertexById = new Map<string, DrawioVertex>();
+  const vertexById = new Map<string, DiagramVertex>();
   const edgeCells: RawCell[] = [];
   const edgeLabels = new Map<string, string>();
 
@@ -213,13 +168,13 @@ export function parseDrawioXml(xml: string): DrawioGraph | null {
       ...(safeColor(style.fillcolor) ? { fill: safeColor(style.fillcolor) } : {}),
       ...(safeColor(style.strokecolor) ? { stroke: safeColor(style.strokecolor) } : {}),
       ...(safeColor(style.fontcolor) ? { fontColor: safeColor(style.fontcolor) } : {}),
-      fontSize: Math.min(Math.max(numeric(style.fontsize, DEFAULT_FONT_SIZE), 6), 48),
+      fontSize: Math.min(Math.max(numeric(style.fontsize, DIAGRAM_DEFAULT_FONT_SIZE), 6), 48),
       dashed: style.dashed === '1',
       ...(safeImageUrl(style.image) ? { imageUrl: safeImageUrl(style.image) } : {}),
     });
   }
 
-  const edges: DrawioEdge[] = [];
+  const edges: DiagramEdge[] = [];
   for (const cell of edgeCells) {
     const id = cellId(cell);
     const style = parseDrawioStyle(cell.element.getAttribute('style') ?? '');
@@ -229,12 +184,14 @@ export function parseDrawioXml(xml: string): DrawioGraph | null {
         .flatMap((array) => Array.from(array.children).filter((point) => point.tagName === 'mxPoint'))
         .map((point) => ({ x: numeric(point.getAttribute('x')), y: numeric(point.getAttribute('y')) }))
       : [];
-    const fixedPoint = (as: string): DrawioPoint | null => {
+    const fixedPoint = (as: string): DiagramPoint | null => {
       const point = geometry ? Array.from(geometry.children).find((child) => child.tagName === 'mxPoint' && child.getAttribute('as') === as) : null;
       return point ? { x: numeric(point.getAttribute('x')), y: numeric(point.getAttribute('y')) } : null;
     };
-    const source = vertexById.get(cell.element.getAttribute('source') ?? '');
-    const target = vertexById.get(cell.element.getAttribute('target') ?? '');
+    const sourceId = cell.element.getAttribute('source') ?? '';
+    const targetId = cell.element.getAttribute('target') ?? '';
+    const source = vertexById.get(sourceId);
+    const target = vertexById.get(targetId);
     const sourceCenter = source ? { x: source.x + source.width / 2, y: source.y + source.height / 2 } : fixedPoint('sourcePoint');
     const targetCenter = target ? { x: target.x + target.width / 2, y: target.y + target.height / 2 } : fixedPoint('targetPoint');
     if (!sourceCenter || !targetCenter) continue;
@@ -247,52 +204,15 @@ export function parseDrawioXml(xml: string): DrawioGraph | null {
       ...(safeColor(style.strokecolor) ? { stroke: safeColor(style.strokecolor) } : {}),
       dashed: style.dashed === '1',
       arrow: style.endarrow !== 'none',
+      // Carried so a text notation can be written from this scene. Waypoints
+      // alone cannot say "A --> B", and dropping the endpoints here is what
+      // would silently lose every connector on the way out to Mermaid.
+      ...(source ? { source: sourceId } : {}),
+      ...(target ? { target: targetId } : {}),
     });
   }
 
-  const vertices = [...vertexById.values()];
-  if (!vertices.length && !edges.length) return null;
-  const xs = [...vertices.flatMap((vertex) => [vertex.x, vertex.x + vertex.width]), ...edges.flatMap((edge) => edge.points.map((point) => point.x))];
-  const ys = [...vertices.flatMap((vertex) => [vertex.y, vertex.y + vertex.height]), ...edges.flatMap((edge) => edge.points.map((point) => point.y))];
-  const minX = Math.min(...xs) - CONTENT_PADDING;
-  const minY = Math.min(...ys) - CONTENT_PADDING;
-  return {
-    vertices,
-    edges,
-    x: minX,
-    y: minY,
-    width: Math.max(Math.max(...xs) + CONTENT_PADDING - minX, 1),
-    height: Math.max(Math.max(...ys) + CONTENT_PADDING - minY, 1),
-  };
-}
-
-/** The polygon points for a shape drawn inside its box. Rect-like shapes return
- * `null` and are drawn as a `<rect>` instead. */
-export function drawioShapePolygon(vertex: DrawioVertex): string | null {
-  const { x, y, width, height, shape } = vertex;
-  if (shape === 'rhombus') return `${x + width / 2},${y} ${x + width},${y + height / 2} ${x + width / 2},${y + height} ${x},${y + height / 2}`;
-  if (shape === 'triangle') return `${x},${y} ${x + width},${y + height / 2} ${x},${y + height}`;
-  if (shape === 'hexagon') return `${x + width * 0.25},${y} ${x + width * 0.75},${y} ${x + width},${y + height / 2} ${x + width * 0.75},${y + height} ${x + width * 0.25},${y + height} ${x},${y + height / 2}`;
-  if (shape === 'note') return `${x},${y} ${x + width - 14},${y} ${x + width},${y + 14} ${x + width},${y + height} ${x},${y + height}`;
-  return null;
-}
-
-/** Greedy wrap for a shape label, so long text stays inside its box. */
-export function drawioLabelLines(label: string, width: number, fontSize: number, maxLines = 4): string[] {
-  const perLine = Math.max(4, Math.floor((width - 8) / (fontSize * 0.56)));
-  const lines: string[] = [];
-  for (const paragraph of label.split('\n')) {
-    let current = '';
-    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
-      const candidate = current ? `${current} ${word}` : word;
-      if (candidate.length <= perLine) { current = candidate; continue; }
-      if (current) lines.push(current);
-      current = word.length > perLine ? `${word.slice(0, perLine - 1)}…` : word;
-    }
-    if (current) lines.push(current);
-    if (lines.length >= maxLines) break;
-  }
-  return lines.slice(0, maxLines);
+  return diagramGraph([...vertexById.values()], edges);
 }
 
 const DIAGRAM_TAG = /<diagram\b[^>]*>([\s\S]*?)<\/diagram>/i;
@@ -326,4 +246,76 @@ export async function resolveDrawioXml(source: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** The reader, taking either wrapper. One entry point so every caller handles
+ * the compressed form without knowing it exists. */
+export async function readDrawio(source: string): Promise<DiagramGraph | null> {
+  const xml = await resolveDrawioXml(source);
+  return xml ? parseDrawioXml(xml) : null;
+}
+
+/* ------------------------------------------------------------- writer --- */
+
+function xmlAttribute(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+/** The mxGraph style tokens each shape is drawn with. Rect is the default
+ * shape, so it contributes nothing but its fill. */
+const STYLE_BY_SHAPE: Readonly<Record<DiagramShape, string>> = {
+  rect: '',
+  rounded: 'rounded=1;',
+  ellipse: 'ellipse;',
+  rhombus: 'rhombus;',
+  triangle: 'triangle;',
+  hexagon: 'shape=hexagon;',
+  cylinder: 'shape=cylinder3;boundedLbl=1;',
+  note: 'shape=note;',
+  text: 'text;html=1;strokeColor=none;fillColor=none;',
+};
+
+function vertexStyle(vertex: DiagramVertex): string {
+  const parts = [STYLE_BY_SHAPE[vertex.shape], 'whiteSpace=wrap;html=1;'];
+  if (vertex.imageUrl) return `shape=image;imageAspect=0;aspect=fixed;image=${vertex.imageUrl};`;
+  if (vertex.fill) parts.push(`fillColor=${vertex.fill};`);
+  if (vertex.stroke) parts.push(`strokeColor=${vertex.stroke};`);
+  if (vertex.fontColor) parts.push(`fontColor=${vertex.fontColor};`);
+  if (vertex.fontSize !== DIAGRAM_DEFAULT_FONT_SIZE) parts.push(`fontSize=${vertex.fontSize};`);
+  if (vertex.dashed) parts.push('dashed=1;');
+  return parts.join('');
+}
+
+function edgeStyle(edge: DiagramEdge): string {
+  const parts = ['edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;'];
+  if (!edge.arrow) parts.push('endArrow=none;');
+  if (edge.dashed) parts.push('dashed=1;');
+  if (edge.stroke) parts.push(`strokeColor=${edge.stroke};`);
+  return parts.join('');
+}
+
+/**
+ * A portable `.drawio` file for any graph the canvas holds.
+ *
+ * Written UNCOMPRESSED on purpose: draw.io reads plain mxGraph XML happily, and
+ * a plain file is one a person can read in a diff, an agent can edit as text,
+ * and this module can re-read without a decompression step that is not
+ * available in every runtime.
+ */
+export function writeDrawio(graph: DiagramGraph, name = 'Page-1'): string {
+  const cells = [
+    ...graph.vertices.map((vertex) =>
+      `<mxCell id="${xmlAttribute(vertex.id)}" value="${xmlAttribute(vertex.label.replaceAll('\n', '<br/>'))}" style="${xmlAttribute(vertexStyle(vertex))}" vertex="1" parent="1"><mxGeometry x="${Math.round(vertex.x)}" y="${Math.round(vertex.y)}" width="${Math.round(vertex.width)}" height="${Math.round(vertex.height)}" as="geometry" /></mxCell>`),
+    ...graph.edges.map((edge) => {
+      const endpoints = `${edge.source ? ` source="${xmlAttribute(edge.source)}"` : ''}${edge.target ? ` target="${xmlAttribute(edge.target)}"` : ''}`;
+      // An edge with no endpoints still has to land somewhere, so its first and
+      // last waypoints are written as fixed points rather than dropped.
+      const first = edge.points[0];
+      const last = edge.points[edge.points.length - 1];
+      const fixed = !edge.source && first ? `<mxPoint x="${Math.round(first.x)}" y="${Math.round(first.y)}" as="sourcePoint" />` : '';
+      const fixedEnd = !edge.target && last ? `<mxPoint x="${Math.round(last.x)}" y="${Math.round(last.y)}" as="targetPoint" />` : '';
+      return `<mxCell id="${xmlAttribute(edge.id)}" value="${xmlAttribute(edge.label)}" style="${xmlAttribute(edgeStyle(edge))}" edge="1" parent="1"${endpoints}><mxGeometry relative="1" as="geometry">${fixed}${fixedEnd}</mxGeometry></mxCell>`;
+    }),
+  ].join('');
+  return `<mxfile host="Builderforce" agent="Builderforce Creation Canvas"><diagram id="builderforce-diagram" name="${xmlAttribute(name)}"><mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0"><root><mxCell id="0" /><mxCell id="1" parent="0" />${cells}</root></mxGraphModel></diagram></mxfile>`;
 }

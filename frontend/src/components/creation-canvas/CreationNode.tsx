@@ -54,7 +54,8 @@ import { authoredMarkdown, canvasDiagram, canvasDocument, canvasSlides } from '@
 import type { CanvasExportAction } from '@/lib/canvasExports';
 import { DocumentEditor } from './DocumentEditor';
 import { CanvasExportActions } from './CanvasExportActions';
-import { drawioLabelLines, drawioShapePolygon, parseDrawioXml, resolveDrawioXml, type DrawioGraph } from '@/lib/drawioDiagram';
+import { diagramLabelLines, diagramShapePolygon, type DiagramGraph } from '@/lib/diagramGraph';
+import { diagramNotation, readDiagramSource } from '@/lib/diagramNotations';
 import { MermaidDiagram } from '@/components/MermaidDiagram';
 import { COURSE_EXPORT_STANDARDS, courseAssessmentQuestions, courseFromNode, courseProgress, courseScore } from '@/lib/courseLms';
 import { practiceAttempts, practiceMode, practiceQuestions, practiceProgress, recordPracticeAttempt } from '@/lib/canvasPractice';
@@ -1361,7 +1362,7 @@ function readableInk(fill: string | undefined): string {
   return luminance > 0.55 ? 'var(--canvas-ink-on-light)' : 'var(--canvas-ink-on-dark)';
 }
 
-function DrawioCanvas({ graph, title }: { graph: DrawioGraph; title: string }) {
+function DiagramCanvas({ graph, title }: { graph: DiagramGraph; title: string }) {
   const markerId = `arrow-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   return <svg
     className={styles.diagramCanvas}
@@ -1394,11 +1395,11 @@ function DrawioCanvas({ graph, title }: { graph: DrawioGraph; title: string }) {
       >{edge.label}</text>}
     </g>)}
     {graph.vertices.map((vertex) => {
-      const polygon = drawioShapePolygon(vertex);
+      const polygon = diagramShapePolygon(vertex);
       const fill = vertex.fill ?? 'var(--canvas-widget-surface)';
       const stroke = vertex.stroke ?? 'var(--canvas-widget-border)';
       const ink = vertex.fontColor ?? (vertex.fill ? readableInk(vertex.fill) : 'var(--canvas-ink)');
-      const lines = drawioLabelLines(vertex.label, vertex.width, vertex.fontSize);
+      const lines = diagramLabelLines(vertex.label, vertex.width, vertex.fontSize);
       const shapeProps = { fill: vertex.shape === 'text' ? 'none' : fill, stroke: vertex.shape === 'text' ? 'none' : stroke, strokeWidth: 1.4, ...(vertex.dashed ? { strokeDasharray: '6 4' } : {}) };
       return <g key={vertex.id}>
         {vertex.imageUrl
@@ -1424,39 +1425,45 @@ function DrawioCanvas({ graph, title }: { graph: DrawioGraph; title: string }) {
 }
 
 /**
- * A diagram object rendered as a diagram. Draw.io scenes are drawn from their
- * own geometry — no editor embed, no network — and Mermaid goes through the
- * shared renderer, so both notations land on the board as pictures.
+ * A diagram object rendered as a diagram.
+ *
+ * Every notation but one is drawn from the shared graph — the SAME renderer for
+ * a draw.io scene, a Visio import, a BPMN process, a DOT graph and a PlantUML
+ * component diagram, because by the time it reaches here they are all the same
+ * geometry. Mermaid keeps its own renderer: its output is better than anything
+ * derived from a parse of it, and reimplementing it is not the job.
+ *
+ * No editor embed and no network in either path.
  */
 function DiagramBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');
   const diagram = canvasDiagram(data);
   const source = diagram?.source ?? '';
   const format = diagram?.format;
-  const [graph, setGraph] = useState<DrawioGraph | null>(null);
+  const notation = diagramNotation(format);
+  const [graph, setGraph] = useState<DiagramGraph | null>(null);
   const [unreadable, setUnreadable] = useState(false);
   useEffect(() => {
-    if (format !== 'drawio') { setGraph(null); setUnreadable(false); return; }
+    if (!format || notation?.renderer !== 'graph') { setGraph(null); setUnreadable(false); return; }
     let cancelled = false;
-    void resolveDrawioXml(source).then((xml) => {
+    void readDiagramSource(format, source).then((parsed) => {
       if (cancelled) return;
-      const parsed = xml ? parseDrawioXml(xml) : null;
       setGraph(parsed);
       setUnreadable(!parsed);
     });
     return () => { cancelled = true; };
-  }, [format, source]);
-  if (!diagram) return <AuthoredContent data={data} fallback={t('diagramFallback')} />;
+  }, [format, notation?.renderer, source]);
+  if (!diagram || !notation) return <AuthoredContent data={data} fallback={t('diagramFallback')} />;
   return <div className={styles.diagramBody}>
     <div className={styles.documentMeta}>
-      <span>{diagram.format === 'drawio' ? t('diagramDrawio') : t('diagramMermaid')}</span>
+      <span>{notation.name}</span>
       {graph && <span>{t('diagramShapes', { count: graph.vertices.length, connections: graph.edges.length })}</span>}
     </div>
     <div className={`${styles.diagramSurface} nowheel nodrag`} role="region" aria-label={data.title} tabIndex={0}>
-      {diagram.format === 'mermaid'
+      {notation.renderer === 'mermaid'
         ? <MermaidDiagram code={diagram.source} />
         : graph
-          ? <DrawioCanvas graph={graph} title={data.title} />
+          ? <DiagramCanvas graph={graph} title={data.title} />
           : <p className={styles.filePreviewEmpty}>{unreadable ? t('diagramUnreadable') : t('diagramLoading')}</p>}
     </div>
   </div>;

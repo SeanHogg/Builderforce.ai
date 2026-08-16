@@ -9,6 +9,7 @@
  * what produced "the document isn't visualized" in the first place.
  */
 import { creationDeliverables } from './creationDeliverables';
+import { detectDiagramSource, diagramNotation, type CanvasDiagramSource } from './diagramNotations';
 import { tabularFromObject } from './canvasTabularData';
 import { PAGE_BREAK_MARKER } from './officeFormats';
 import { pitchObjectMarkdown } from './pitchCompetition';
@@ -205,39 +206,26 @@ export function canvasSlides(data: CreationNodeData): CanvasSlide[] {
   return chunks.flatMap(slideFromChunk).slice(0, MAX_SLIDES);
 }
 
-export type CanvasDiagramFormat = 'drawio' | 'mermaid';
-export interface CanvasDiagramSource {
-  format: CanvasDiagramFormat;
-  source: string;
-}
-
-const DRAWIO_MARKER = /<(?:mxfile|mxGraphModel)\b/;
-const MERMAID_MARKER = /^\s*(?:graph|flowchart|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|journey|gantt|pie|mindmap|timeline|quadrantChart|gitGraph)\b/;
-const FENCED_MERMAID = /```mermaid\s*\n([\s\S]*?)```/i;
-const FENCED_ANY = /```(?:xml|drawio)?\s*\n([\s\S]*?)```/i;
 const DIAGRAM_FIELDS = ['diagram', 'diagramXml', 'diagramSource', 'markdown', 'content', 'code'] as const;
 
-function detectDiagram(raw: string): CanvasDiagramSource | null {
-  const value = raw.trim();
-  if (!value) return null;
-  const mermaidBlock = FENCED_MERMAID.exec(value)?.[1]?.trim();
-  if (mermaidBlock) return { format: 'mermaid', source: mermaidBlock };
-  const fenced = FENCED_ANY.exec(value)?.[1]?.trim();
-  const candidate = fenced && DRAWIO_MARKER.test(fenced) ? fenced : value;
-  if (DRAWIO_MARKER.test(candidate)) return { format: 'drawio', source: candidate };
-  if (MERMAID_MARKER.test(value)) return { format: 'mermaid', source: value };
-  return null;
-}
-
-/** The diagram an object carries, whichever notation it was authored in. */
+/**
+ * The diagram an object carries, whichever notation it was authored in.
+ *
+ * Recognition itself lives in the notation registry, so a format is declared
+ * ONCE and this stays a question about the OBJECT: which of its fields holds
+ * the source, and what its `diagramFormat` says when the payload is ambiguous.
+ */
 export function canvasDiagram(data: CreationNodeData): CanvasDiagramSource | null {
-  const declared = typeof data.diagramFormat === 'string' ? data.diagramFormat.trim().toLowerCase() : '';
+  const declared = diagramNotation(typeof data.diagramFormat === 'string' ? data.diagramFormat : null);
   for (const field of DIAGRAM_FIELDS) {
     const value = data[field];
     if (typeof value !== 'string' || !value.trim()) continue;
-    const detected = detectDiagram(value);
+    const detected = detectDiagramSource(value);
     if (detected) return detected;
-    if (declared === 'drawio' || declared === 'mermaid') return { format: declared, source: value.trim() };
+    // Nothing recognisable in the payload, but the object SAYS what it is —
+    // which is how a Mermaid sequence diagram (no graph markers of its own) and
+    // a half-written diagram still open in the right notation.
+    if (declared) return { format: declared.id, source: value.trim() };
   }
   return null;
 }
@@ -281,7 +269,12 @@ const MIME_BY_EXTENSION: Readonly<Record<string, string>> = Object.fromEntries(
 const CATEGORY_BY_EXTENSION: Readonly<Record<string, CanvasFileCategory>> = {
   md: 'document', txt: 'document', pdf: 'document', docx: 'document', rtf: 'document',
   pptx: 'presentation', key: 'presentation',
-  drawio: 'diagram', mmd: 'diagram', vsdx: 'diagram',
+  // Every notation the canvas reads, so a dropped `.puml` or `.bpmn` files
+  // under Diagrams rather than "other". `.svg` stays an image and `.xml` stays
+  // code: both are draw.io-adjacent but neither IS a diagram by extension.
+  drawio: 'diagram', mmd: 'diagram', mermaid: 'diagram', puml: 'diagram', plantuml: 'diagram',
+  dot: 'diagram', gv: 'diagram', bpmn: 'diagram', excalidraw: 'diagram', archimate: 'diagram',
+  vsdx: 'diagram', vsd: 'diagram', vdx: 'diagram',
   csv: 'spreadsheet', tsv: 'spreadsheet', xlsx: 'spreadsheet', xls: 'spreadsheet',
   png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', svg: 'image',
   mp4: 'media', webm: 'media', mp3: 'media', wav: 'media', m4a: 'media',
@@ -347,12 +340,15 @@ function objectFile(nodeId: string, data: CreationNodeData): CanvasFile | null {
 
   if (data.kind === 'diagram') {
     const diagram = canvasDiagram(data);
-    if (!diagram) return null;
-    const extension = diagram.format === 'drawio' ? 'drawio' : 'mmd';
+    const notation = diagram ? diagramNotation(diagram.format) : null;
+    if (!diagram || !notation) return null;
+    // Name, extension and MIME all come from the ONE notation row. Deriving
+    // them here is how a Mermaid diagram used to be downloadable as `.drawio`.
+    const extension = notation.extensions[0]!;
     return {
       ...base, name: `${stem}.${extension}`, extension, category: 'diagram',
-      mimeType: diagram.format === 'drawio' ? 'application/vnd.jgraph.mxfile' : 'text/vnd.mermaid',
-      sizeBytes: byteLength(diagram.source), detail: diagram.format === 'drawio' ? 'Draw.io' : 'Mermaid',
+      mimeType: notation.mimeType,
+      sizeBytes: byteLength(diagram.source), detail: notation.name,
     };
   }
 

@@ -19,7 +19,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasDriveIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
@@ -34,7 +34,6 @@ import { CanvasSurfaceProvider } from './canvasSurfaceContext';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
-import { CanvasDrivePanel } from './CanvasDrivePanel';
 import { CanvasMiroPanel } from './CanvasMiroPanel';
 import type { MiroBoardSummary, MiroImportResult } from '@/lib/miroImport';
 import { CanvasSocialPanel } from './CanvasSocialPanel';
@@ -50,6 +49,7 @@ import { useToast } from '@/components/ToastProvider';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import { AUTHORED_DRAWING_STROKE, AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL, AUTHORED_WEBSITE_ACCENT } from './authoredColors';
+import { DiagramConvertPanel } from './DiagramConvertPanel';
 import styles from './CreationCanvas.module.css';
 import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, llmApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, localCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
@@ -179,7 +179,9 @@ import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJour
 import { readStoredJournal, writeStoredJournal } from '@/lib/canvasJournalStore';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { Icon } from '@/components/ui/Icon';
-import { appendImageToDrawioCanvas, createDrawioImageCanvas, type DrawioImageAsset } from '@/lib/drawioImageCanvas';
+import { appendImageToDrawioCanvas, createDrawioImageCanvas } from '@/lib/drawioImageCanvas';
+import { convertGraphSource, diagramConvertSource, diagramConvertTargets } from '@/lib/canvasDiagramConvert';
+import { DIAGRAM_TARGETS, diagramNotation } from '@/lib/diagramNotations';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
 import { VoiceOutput } from '@/components/builder/VoiceOutput';
 import { useVoiceStudio } from '@/lib/voiceStudio';
@@ -331,8 +333,8 @@ const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly stri
   workflow: ['build', 'run'], dataset: ['visualize', 'plot', 'profile'], project: ['expand', 'compare'],
   mockup: ['deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
   evermind: ['train', 'evaluate', 'publish'],
-  image: ['generate', 'preview', 'export', 'convert-to-drawio'], drawing: ['convert-to-drawio'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
-  comic: ['generate', 'preview', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'export'], model3d: ['generate', 'preview', 'export'],
+  image: ['generate', 'preview', 'export', 'convert-to-diagram'], drawing: ['convert-to-diagram'], diagram: ['convert-to-diagram'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
+  comic: ['generate', 'preview', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'export', 'convert-to-diagram'], model3d: ['generate', 'preview', 'export'],
   resume: ['generate', 'preview', 'export'], template: ['browse', 'apply'],
   // The QA objects. `gate` recomputes the plan's verdict from the runs, defects and
   // audits on the board; `export` writes the .spec.ts (a plan writes its whole suite
@@ -454,6 +456,8 @@ export function duplicateAddUpdateTarget(
 type CanvasTimelineMessage = Pick<CreationTimelineMessage, 'clientMessageId' | 'messageRole' | 'body' | 'createdAt'> & { id?: number; metadata?: CreationTimelineMessage['metadata'] };
 type BrowserSpeechRecognition = { lang: string; interimResults: boolean; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void };
 type AccountGate = { title: string; description: string; action: string };
+/** The panels that share the canvas's left dock. One is open, or none is. */
+type CanvasDockPanel = 'files' | 'miro' | 'social' | 'ads' | 'outline';
 
 export function shouldAcquireCanvasObjectLock(
   persistence: 'local' | 'server',
@@ -694,27 +698,6 @@ function dragCarriesFiles(event: React.DragEvent): boolean {
   return Array.from(event.dataTransfer?.types ?? []).includes('Files');
 }
 
-function drawioAssetFromNode(node: CreationFlowNode): DrawioImageAsset | null {
-  const data = node.data;
-  const direct = [data.outputUrl, data.thumbnailUrl].find((value) => typeof value === 'string' && value.startsWith('data:image/'));
-  if (typeof direct === 'string') {
-    return {
-      name: typeof data.fileName === 'string' ? data.fileName : data.title,
-      dataUrl: direct,
-      ...(typeof data.imageWidth === 'number' ? { width: data.imageWidth } : {}),
-      ...(typeof data.imageHeight === 'number' ? { height: data.imageHeight } : {}),
-    };
-  }
-  if (data.kind !== 'drawing') return null;
-  // Every stroke, not just the first path: a sketch converted to draw.io used to
-  // arrive with one line on it because the exporter only knew about `points`.
-  const strokes = canvasStrokes(data);
-  const width = typeof data.drawingWidth === 'number' ? data.drawingWidth : 640;
-  const height = typeof data.drawingHeight === 'number' ? data.drawingHeight : 420;
-  const svg = strokesSvg(strokes, width, height);
-  return svg ? { name: `${data.title}.svg`, dataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, width, height } : null;
-}
-
 const SEED = {
   workflow: '00000000-0000-4000-8000-000000000001', website: '00000000-0000-4000-8000-000000000002',
   dashboard: '00000000-0000-4000-8000-000000000003', chat: '00000000-0000-4000-8000-000000000004',
@@ -831,7 +814,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   /** Chrome shared with every other spatial canvas lives in its own namespace. */
   const tCommands = useTranslations('canvasCommands');
   const tFiles = useTranslations('creationCanvas.files');
-  const tDrive = useTranslations('creationCanvas.drive');
   const tMiro = useTranslations('creationCanvas.miro');
   const tSocial = useTranslations('creationCanvas.social');
   const tAds = useTranslations('canvas.ads');
@@ -1250,12 +1232,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
-  const [outlineOpen, setOutlineOpen] = useState(false);
-  const [filesOpen, setFilesOpen] = useState(false);
-  const [driveOpen, setDriveOpen] = useState(false);
-  const [miroOpen, setMiroOpen] = useState(false);
-  const [socialOpen, setSocialOpen] = useState(false);
-  const [adsOpen, setAdsOpen] = useState(false);
+  /**
+   * The left dock holds ONE panel at a time.
+   *
+   * These were six independent booleans, and every panel they gate docks at the
+   * same coordinates — so opening a second one stacked it invisibly on the first
+   * rather than replacing it. A single value cannot express that state, which is
+   * the point: exclusivity is the data model, not a rule each toggle remembers.
+   */
+  const [dockPanel, setDockPanel] = useState<CanvasDockPanel | null>(null);
+  const toggleDockPanel = useCallback((panel: CanvasDockPanel) => setDockPanel((current) => (current === panel ? null : panel)), []);
+  const closeDockPanel = useCallback(() => setDockPanel(null), []);
   const [fullscreen, setFullscreen] = useState(false);
   /** True while the BROWSER is what put us full screen, false for the CSS fallback. */
   const nativeFullscreenRef = useRef(false);
@@ -3456,43 +3443,94 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedId(node.id); setSelectedIds([node.id]);
   }, [addFilesToCanvas, canEdit, localizedTourDefaults, setNodes, t]);
 
-  /** Convert an uploaded image/freehand drawing into a real, portable draw.io
-   * file, or append it as a new editable cell to an existing one. The diagram
-   * remains a normal canvas object, so the existing session graph persistence,
-   * history, Files panel, collaboration, and account ownership all apply. */
-  const convertObjectToDrawio = useCallback((sourceId: string, requestedDiagramId?: string): { ok: boolean; diagramId?: string; error?: string } => {
+  /**
+   * Convert an object into a diagram, in any notation that can be written.
+   *
+   * THREE things arrive here and they are not the same:
+   *
+   *  • An object whose shapes are REAL — a diagram in another notation, a
+   *    vector image, a CAD drawing. Its geometry is read, and written to the
+   *    destination. This is the path that turns a Lucidchart SVG export into
+   *    editable shapes rather than a picture of a diagram, and a draw.io file
+   *    into the Mermaid that will live in a repository.
+   *  • An object that is a PICTURE — a photograph, a freehand sketch. There are
+   *    no shapes to find, so it is embedded, and draw.io is the only notation
+   *    that can hold it. Appending to an existing draw.io file is how several
+   *    photos become one board.
+   *  • Anything else, which is refused with a reason rather than a blank file.
+   *
+   * The result is a normal canvas object, so session persistence, history, the
+   * Files panel, collaboration and ownership all apply unchanged.
+   */
+  const convertObjectToDiagram = useCallback(async (
+    sourceId: string,
+    requestedFormat?: string,
+    requestedDiagramId?: string,
+  ): Promise<{ ok: boolean; diagramId?: string; error?: string }> => {
     if (!canEdit) return { ok: false, error: t('roleCannotEdit') };
     const source = nodes.find((node) => node.id === sourceId);
-    if (!source) return { ok: false, error: t('drawioSourceMissing') };
-    const asset = drawioAssetFromNode(source);
-    if (!asset) return { ok: false, error: t('drawioPreviewRequired') };
-    const drawioDiagrams = nodes.filter((node) => node.data.kind === 'diagram' && canvasDiagram(node.data)?.format === 'drawio');
-    const target = requestedDiagramId && requestedDiagramId !== '__new__'
-      ? drawioDiagrams.find((node) => node.id === requestedDiagramId)
-      : requestedDiagramId === '__new__' ? undefined : drawioDiagrams.length === 1 ? drawioDiagrams[0] : undefined;
-    if (target) {
-      const current = canvasDiagram(target.data)?.source ?? '';
-      const updated = appendImageToDrawioCanvas(current, asset);
-      if (!updated) return { ok: false, error: t('drawioAppendFailed') };
-      setNodes((items) => items.map((node) => node.id === target.id ? { ...node, data: {
-        ...node.data, diagram: updated, diagramXml: updated, content: updated,
-        status: t('drawioUpdatedStatus'),
-        sourceImageIds: [...new Set([...(Array.isArray(node.data.sourceImageIds) ? node.data.sourceImageIds.map(String) : []), source.id])],
-      } } : node));
-      setEdges((items) => items.some((edge) => edge.source === source.id && edge.target === target.id) ? items : [...items, { id: crypto.randomUUID(), source: source.id, target: target.id, type: 'smoothstep', label: t('drawioAddedToEdge'), data: { connectionKind: 'reference' } }]);
-      setSelectedId(target.id); setSelectedIds([target.id]); setNotice(t('drawioImageAdded', { name: source.data.title, diagram: target.data.title }));
-      return { ok: true, diagramId: target.id };
+    if (!source) return { ok: false, error: t('diagramSourceMissing') };
+    const resolved = await diagramConvertSource(source.data);
+    if (!resolved) return { ok: false, error: t('diagramSourceUnreadable') };
+
+    const allowed = diagramConvertTargets(resolved);
+    const notation = requestedFormat
+      ? allowed.find((entry) => entry.id === requestedFormat.trim().toLowerCase())
+      : allowed[0];
+    if (!notation) {
+      return { ok: false, error: t('diagramTargetUnavailable', { formats: allowed.map((entry) => entry.name).join(', ') }) };
     }
+
+    // Appending only ever means "add this picture to that draw.io file". A
+    // graph conversion REPLACES a notation; merging two scene graphs is a
+    // different operation and pretending otherwise would silently lose one.
+    if (resolved.kind === 'asset' && notation.id === 'drawio') {
+      const drawioDiagrams = nodes.filter((node) => node.data.kind === 'diagram' && canvasDiagram(node.data)?.format === 'drawio');
+      const target = requestedDiagramId && requestedDiagramId !== '__new__'
+        ? drawioDiagrams.find((node) => node.id === requestedDiagramId)
+        : requestedDiagramId === '__new__' ? undefined : drawioDiagrams.length === 1 ? drawioDiagrams[0] : undefined;
+      if (target) {
+        const current = canvasDiagram(target.data)?.source ?? '';
+        const updated = appendImageToDrawioCanvas(current, resolved.asset);
+        if (!updated) return { ok: false, error: t('drawioAppendFailed') };
+        setNodes((items) => items.map((node) => node.id === target.id ? { ...node, data: {
+          ...node.data, diagram: updated, diagramXml: updated, content: updated,
+          status: t('drawioUpdatedStatus'),
+          sourceImageIds: [...new Set([...(Array.isArray(node.data.sourceImageIds) ? node.data.sourceImageIds.map(String) : []), source.id])],
+        } } : node));
+        setEdges((items) => items.some((edge) => edge.source === source.id && edge.target === target.id) ? items : [...items, { id: crypto.randomUUID(), source: source.id, target: target.id, type: 'smoothstep', label: t('drawioAddedToEdge'), data: { connectionKind: 'reference' } }]);
+        setSelectedId(target.id); setSelectedIds([target.id]); setNotice(t('drawioImageAdded', { name: source.data.title, diagram: target.data.title }));
+        return { ok: true, diagramId: target.id };
+      }
+    }
+
+    const conversion = resolved.kind === 'asset'
+      ? { source: createDrawioImageCanvas(resolved.asset), format: notation.id, shapes: 1, connections: 0, droppedConnections: 0 }
+      : convertGraphSource(resolved, notation.id);
+    if (!conversion) return { ok: false, error: t('diagramConversionFailed', { notation: notation.name }) };
+
     const diagram = newNode('diagram', { x: source.position.x + 430, y: source.position.y });
-    const xml = createDrawioImageCanvas(asset);
     diagram.data = {
-      ...diagram.data, title: t('drawioTitle', { name: source.data.title }), status: t('drawioCreatedStatus'),
-      fileName: `${safeDownloadName(source.data.title)}.drawio`, mimeType: 'application/vnd.jgraph.mxfile',
-      diagramFormat: 'drawio', diagram: xml, diagramXml: xml, content: xml, sourceImageIds: [source.id],
+      ...diagram.data,
+      title: t('diagramConvertedTitle', { name: source.data.title, notation: notation.name }),
+      status: t('diagramCreatedStatus'),
+      fileName: `${safeDownloadName(source.data.title)}.${notation.extensions[0]}`,
+      mimeType: notation.mimeType,
+      diagramFormat: notation.id,
+      diagram: conversion.source,
+      content: conversion.source,
+      sourceImageIds: [source.id],
+      subtitle: t('diagramShape', { notation: notation.name, shapes: conversion.shapes, connections: conversion.connections }),
     };
     setNodes((items) => [...items, diagram]);
     setEdges((items) => [...items, { id: crypto.randomUUID(), source: source.id, target: diagram.id, type: 'smoothstep', label: t('drawioConvertedEdge'), data: { connectionKind: 'reference' } }]);
-    setSelectedId(diagram.id); setSelectedIds([diagram.id]); setNotice(t('drawioCreated', { name: diagram.data.title }));
+    setSelectedId(diagram.id); setSelectedIds([diagram.id]);
+    // A destination that cannot carry every connection SAYS SO, at the moment
+    // of conversion — the alternative is a person finding a missing arrow later
+    // and having no way to know it was the format that dropped it.
+    setNotice(conversion.droppedConnections
+      ? t('diagramCreatedPartial', { name: diagram.data.title, dropped: conversion.droppedConnections })
+      : t('diagramCreated', { name: diagram.data.title, notation: notation.name }));
     return { ok: true, diagramId: diagram.id };
   }, [canEdit, nodes, setEdges, setNodes, t]);
 
@@ -6019,7 +6057,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // Opening the panel IS the action — the tool has done its work by the time the
       // model reads this, which is why it reports `opened` rather than proposing a
       // change the user would have to approve before anything appeared.
-      setSocialOpen(true);
+      setDockPanel('social');
       const listed = networks.networks.filter((option) => !isSocialNetworkName(wanted) || option.network === wanted);
       return {
         ok: true,
@@ -6211,7 +6249,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // the social panel on this canvas" left the user hunting a rail icon for a
         // panel Brain could not reach — so this opens it, and names the tool that
         // would have opened it, rather than describing a destination.
-        setSocialOpen(true);
+        setDockPanel('social');
         return {
           error: accounts.accounts.length === 0
             ? 'No social account is connected to this workspace yet, so there is nothing to publish to. The social panel is now open on this canvas — connect X, LinkedIn, Facebook, Instagram or TikTok there, or call canvas_connect_social_account to list what each one needs. Say that in one sentence, and author the campaign copy on the board now so it is ready the moment an account is connected.'
@@ -6658,17 +6696,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return { ok: true, proposed: true, objectId: args.objectId };
     },
   }, {
-    name: 'canvas_convert_to_drawio',
-    description: 'Convert an uploaded Image or freehand Drawing into a portable draw.io canvas file. To add another image to the same draw.io file, pass that existing Diagram object as diagramObjectId.',
+    name: 'canvas_convert_diagram',
+    // The enum is built from the notation registry, so the model is told exactly
+    // the destinations that exist. A hand-written list here is how a prompt ends
+    // up naming a format the canvas cannot write.
+    description: `Convert a Diagram, vector Image, CAD drawing, uploaded Image or freehand Drawing into a diagram in another notation. Destinations: ${DIAGRAM_TARGETS.map((notation) => `${notation.id} (${notation.name})`).join(', ')}. A picture with no shapes in it can only become drawio, where it is embedded; to add another picture to the same draw.io file, pass that existing Diagram as diagramObjectId.`,
     parameters: { type: 'object', required: ['sourceObjectId'], additionalProperties: false, properties: {
-      sourceObjectId: { type: 'string', description: 'Image or Drawing object to embed.' },
-      diagramObjectId: { type: 'string', description: 'Existing draw.io Diagram to append to. Omit to create a new file; when exactly one draw.io Diagram exists it is reused.' },
+      sourceObjectId: { type: 'string', description: 'Diagram, Image, CAD or Drawing object to convert.' },
+      format: { type: 'string', enum: DIAGRAM_TARGETS.map((notation) => notation.id), description: 'Destination notation. Omit for the first one this source supports.' },
+      diagramObjectId: { type: 'string', description: 'Existing draw.io Diagram to append a picture to. Omit to create a new file; when exactly one draw.io Diagram exists it is reused.' },
     } },
     mutates: true,
-    run: (raw: unknown) => {
-      const args = raw as { sourceObjectId?: string; diagramObjectId?: string };
+    run: async (raw: unknown) => {
+      const args = raw as { sourceObjectId?: string; format?: string; diagramObjectId?: string };
       if (!args.sourceObjectId) return { error: 'sourceObjectId is required' };
-      const result = convertObjectToDrawio(args.sourceObjectId, args.diagramObjectId);
+      const result = await convertObjectToDiagram(args.sourceObjectId, args.format, args.diagramObjectId);
       return result.ok ? { ok: true, diagramObjectId: result.diagramId, savedWithSession: persistence === 'server' } : { error: result.error };
     },
   }, {
@@ -7233,7 +7275,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       };
     },
   }, ...canvasBuildActionList, ...canvasFounderOpsActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [canEdit, canvasBuildActionList, canvasFounderOpsActionList, convertObjectToDrawio, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
+  [canEdit, canvasBuildActionList, canvasFounderOpsActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -8294,8 +8336,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }
       if (action === 'diagram') {
         if (!diagram) throw new Error(t('noDiagramSource'));
-        fileName = `${base}.${diagram.format === 'drawio' ? 'drawio' : 'mmd'}`;
-        downloadText(diagram.source, fileName, diagram.format === 'drawio' ? 'application/vnd.jgraph.mxfile' : 'text/vnd.mermaid');
+        // Extension and MIME come from the notation row, never from a guess:
+        // a Mermaid diagram downloaded as `.drawio` is a file nothing opens.
+        const notation = diagramNotation(diagram.format);
+        if (!notation) throw new Error(t('noDiagramSource'));
+        fileName = `${base}.${notation.extensions[0]}`;
+        downloadText(diagram.source, fileName, notation.mimeType);
       }
       if (action === 'svg') {
         // The drawing that is ON the board, not a second rendering of its source.
@@ -9201,6 +9247,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="◌" size="1em" /></span>{t('conversation')}</button>
             <button aria-pressed={drawingMode} onClick={() => { setDrawing((current) => current ? null : readDrawingPreferences()); setMoreOpen(false); }}><span aria-hidden>⌁</span>{drawingMode ? t('stopDrawing') : t('draw')}</button>
             <button onClick={() => { setPresentMode((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="▶" size="1em" /></span>{presentMode ? t('exitPresentation') : t('present')}</button>
+            {/* Errands against a connected account, kept off the rail. Each one
+                opens the SAME dock panel its rail button used to, drawn with the
+                same glyph, so this is a move rather than a second entry point. */}
+            <span className={styles.moreMenuHeading}>{t('connectedSources')}</span>
+            <button aria-pressed={dockPanel === 'miro'} onClick={() => { toggleDockPanel('miro'); setMoreOpen(false); }}><span aria-hidden><CanvasMiroIcon /></span>{tMiro('title')}</button>
+            <button aria-pressed={dockPanel === 'social'} onClick={() => { toggleDockPanel('social'); setMoreOpen(false); }}><span aria-hidden><CanvasSocialIcon /></span>{tSocial('title')}</button>
+            <button aria-pressed={dockPanel === 'ads'} onClick={() => { toggleDockPanel('ads'); setMoreOpen(false); }}><span aria-hidden><CanvasAdsIcon /></span>{tAds('title')}</button>
             <span className={styles.moreMenuHeading}>{t('sessionTools')}</span>
             <button onClick={() => { openHistory(); setMoreOpen(false); }}><span aria-hidden>↶</span>{t('history')}</button>
             <button onClick={() => { exportSession(); setMoreOpen(false); }}><span aria-hidden>↓</span>{t('exportCanvas')}</button>
@@ -9421,37 +9474,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 activeTitle={t('canvasGestureSelectActive')}
                 inactiveTitle={t('canvasGesturePanActive')}
               ><MarqueeSelectIcon /></CanvasRailToggle>}
+              {/* The rail is for what you do to THIS board, every session, with no
+                  account anywhere else: navigate it, read it, and reach its files.
+                  Cloud storage is a source inside Files rather than a button beside
+                  it, and Miro / social / paid media moved to the ••• menu — they are
+                  occasional errands against a connected account, and a rail that
+                  lists every integration stops reading as a toolbar. */}
               <CanvasRailToggle
-                pressed={filesOpen}
-                onClick={() => setFilesOpen((value) => !value)}
+                pressed={dockPanel === 'files'}
+                onClick={() => toggleDockPanel('files')}
                 label={tFiles('title')}
               ><CanvasFilesIcon /></CanvasRailToggle>
-              {/* Connected cloud storage and connected social accounts. Both panels
-                  existed only on the phone rail, so on a desktop board there was no
-                  way to open either — the Drive panel shipped unreachable. */}
               <CanvasRailToggle
-                pressed={driveOpen}
-                onClick={() => setDriveOpen((value) => !value)}
-                label={tDrive('title')}
-              ><CanvasDriveIcon /></CanvasRailToggle>
-              <CanvasRailToggle
-                pressed={miroOpen}
-                onClick={() => setMiroOpen((value) => !value)}
-                label={tMiro('title')}
-              ><CanvasMiroIcon /></CanvasRailToggle>
-              <CanvasRailToggle
-                pressed={socialOpen}
-                onClick={() => setSocialOpen((value) => !value)}
-                label={tSocial('title')}
-              ><CanvasSocialIcon /></CanvasRailToggle>
-              <CanvasRailToggle
-                pressed={adsOpen}
-                onClick={() => setAdsOpen((value) => !value)}
-                label={tAds('title')}
-              ><CanvasAdsIcon /></CanvasRailToggle>
-              <CanvasRailToggle
-                pressed={outlineOpen}
-                onClick={() => setOutlineOpen((value) => !value)}
+                pressed={dockPanel === 'outline'}
+                onClick={() => toggleDockPanel('outline')}
                 label={t('canvasOutline')}
               ><AccessibleOutlineIcon /></CanvasRailToggle>
             </>}
@@ -9471,12 +9507,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           {threeDControls && <button type="button" onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')}><DepthIcon /></button>}
           {threeDControls && <button type="button" onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')}><LayerGuidesIcon /></button>}
           {threeDControls?.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
-          <button type="button" onClick={() => setFilesOpen((value) => !value)} aria-pressed={filesOpen} aria-label={tFiles('title')}><CanvasFilesIcon /></button>
-          <button type="button" onClick={() => setDriveOpen((value) => !value)} aria-pressed={driveOpen} aria-label={tDrive('title')}><CanvasDriveIcon /></button>
-          <button type="button" onClick={() => setMiroOpen((value) => !value)} aria-pressed={miroOpen} aria-label={tMiro('title')}><CanvasMiroIcon /></button>
-          <button type="button" onClick={() => setSocialOpen((value) => !value)} aria-pressed={socialOpen} aria-label={tSocial('title')}><CanvasSocialIcon /></button>
-          <button type="button" onClick={() => setAdsOpen((value) => !value)} aria-pressed={adsOpen} aria-label={tAds('title')}><CanvasAdsIcon /></button>
-          <button type="button" onClick={() => setOutlineOpen((value) => !value)} aria-pressed={outlineOpen} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
+          <button type="button" onClick={() => toggleDockPanel('files')} aria-pressed={dockPanel === 'files'} aria-label={tFiles('title')}><CanvasFilesIcon /></button>
+          <button type="button" onClick={() => toggleDockPanel('outline')} aria-pressed={dockPanel === 'outline'} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
         </div>
 
         {/* The runtime that takes the centre. The board itself is not in the map — it is
@@ -9550,11 +9582,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         />
 
         <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />
-        {filesOpen && <CanvasFilesPanel
+        {dockPanel === 'files' && <CanvasFilesPanel
           files={sessionFiles}
           onOpen={(nodeId) => { setInspectorFocus(null); setSelectedId(nodeId); setSelectedIds([nodeId]); void flowRef.current?.fitView({ nodes: [{ id: nodeId }], padding: .35, maxZoom: 1.1, duration: 320 }); }}
           onDownload={downloadCanvasFile}
-          onClose={() => setFilesOpen(false)}
+          onClose={closeDockPanel}
+          onImportFile={(file) => addFilesToCanvas([file], undefined, 'drive_import')}
+          returnTo={`/create/${sessionId}`}
         />}
         {gameShipFocus && gamePanelTarget && <CanvasGamePanel
           open
@@ -9577,14 +9611,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           objectId={releaseFocus || null}
           onNotice={setNotice}
         />}
-        {driveOpen && <CanvasDrivePanel
-          onImport={(file) => addFilesToCanvas([file], undefined, 'drive_import')}
-          onClose={() => setDriveOpen(false)}
-          returnTo={`/create/${sessionId}`}
-        />}
-        {miroOpen && <CanvasMiroPanel
+        {dockPanel === 'miro' && <CanvasMiroPanel
           onImport={importMiroBoard}
-          onClose={() => setMiroOpen(false)}
+          onClose={closeDockPanel}
           // `/settings/integrations`, not `/settings/connectors` — the latter does not
           // exist, and a "Connect Miro" button that 404s is worse than no button.
           // `ConnectorsGallery` lives on this page under the connectors category, which
@@ -9593,18 +9622,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           // so `?category=connectors` would be a promise the destination does not keep.
           connectHref="/settings/integrations"
         />}
-        {socialOpen && <CanvasSocialPanel
+        {dockPanel === 'social' && <CanvasSocialPanel
           onAddFeed={addSocialFeedToBoard}
           onAddCampaign={addSocialCampaignToBoard}
           boardMedia={boardMedia}
-          onClose={() => setSocialOpen(false)}
+          onClose={closeDockPanel}
         />}
-        {adsOpen && <CanvasAdsPanel onClose={() => setAdsOpen(false)} />}
-        {outlineOpen && <CanvasOutlinePanel
+        {dockPanel === 'ads' && <CanvasAdsPanel onClose={closeDockPanel} />}
+        {dockPanel === 'outline' && <CanvasOutlinePanel
           nodes={nodes}
           edges={edges}
           onFocus={(nodeId) => { setSelectedId(nodeId); setSelectedIds([nodeId]); }}
-          onClose={() => setOutlineOpen(false)}
+          onClose={closeDockPanel}
         />}
 
         {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label={t('toggleObjectPalette')}>{paletteOpen ? '‹' : '+'}</button>}
@@ -9627,7 +9656,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onPublishListing={() => openPublishPanel(selectedNode.id)} onOpenReleases={() => openReleasesPanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(selectedNode.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDrawio={(diagramId) => { const result = convertObjectToDrawio(selectedNode.id, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'drawioAddedStatus' : 'drawioCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} onOpenSurface={(next) => setSurface(next, selectedNode.id)} />}
+        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onPublishListing={() => openPublishPanel(selectedNode.id)} onOpenReleases={() => openReleasesPanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(selectedNode.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDiagram={async (format, diagramId) => { const result = await convertObjectToDiagram(selectedNode.id, format, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'diagramAddedStatus' : 'diagramCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} onOpenSurface={(next) => setSurface(next, selectedNode.id)} />}
 
         {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
           <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>
@@ -9803,7 +9832,7 @@ function GuidedTourInspector({ node, nodes, onChange }: { node: CreationFlowNode
   </section>;
 }
 
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onPublishListing, onOpenReleases, onEditWorkflow, onBuildWorkflow, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDrawio, onExportArtifact, onAskBrain, onOpenSurface }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onPublishListing: () => void; onOpenReleases: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDrawio: (diagramId?: string) => string; onExportArtifact: (action: CanvasExportAction) => Promise<string>; onOpenSurface: (surface: CanvasSurfaceId) => void;
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onPublishListing, onOpenReleases, onEditWorkflow, onBuildWorkflow, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDiagram, onExportArtifact, onAskBrain, onOpenSurface }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onPublishListing: () => void; onOpenReleases: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDiagram: (format: string, diagramId?: string) => Promise<string>; onExportArtifact: (action: CanvasExportAction) => Promise<string>; onOpenSurface: (surface: CanvasSurfaceId) => void;
   /** The ONE route from the inspector back to Brain. Learning controls compose
    *  their own request text (see LearningControls.tsx) rather than each adding a
    *  callback to a panel that already takes forty. */
@@ -9868,7 +9897,6 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
   const deliverables = creationDeliverables(node.data);
   const taskId = kind === 'task' && /^task:\d+$/.test(node.data.resourceId || '') ? Number(node.data.resourceId!.slice(5)) : null;
   const taskAgents = nodes.filter((candidate) => candidate.data.kind === 'agent');
-  const drawioTargets = nodes.filter((candidate) => candidate.id !== node.id && candidate.data.kind === 'diagram' && canvasDiagram(candidate.data)?.format === 'drawio');
   const agentTools = Array.isArray(node.data.tools) ? node.data.tools.map(String) : ['Audience Analyzer', 'Copy Optimizer'];
   const isExistingAgent = kind === 'agent' && typeof node.data.resourceId === 'string' && node.data.resourceId.startsWith('agent:');
   const isBuiltinAgent = kind === 'agent' && typeof node.data.agentDomain === 'string' && typeof node.data.agentSeat === 'string';
@@ -10073,13 +10101,9 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       {kind === 'evermind' && <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} onTrain={onTrainEvermind} />}
       {isPitchObjectKind(kind) && <PitchInspector node={node} editable={editable} onChange={onChange} />}
       {kind === 'standup' && <><p className={styles.inspectorHint}>{t('standupHint')}</p><button className={styles.fullButton} onClick={onStartStandup}>{t('gatherStandup')}</button></>}
-      {(kind === 'image' || kind === 'drawing') && <section className={styles.taskPrdSummary} aria-label={t('drawioSectionTitle')}>
-        <div><span>{t('drawioSectionTitle')}</span><small>.drawio</small></div>
-        <p>{t('drawioSectionHint')}</p>
-        <button type="button" className={styles.fullButton} onClick={() => setActionStatus(onConvertDrawio('__new__'))}>{t('drawioCreateAction')}</button>
-        {drawioTargets.map((diagram) => <button type="button" key={diagram.id} className={styles.secondaryFullButton} onClick={() => setActionStatus(onConvertDrawio(diagram.id))}>{t('drawioAddAction', { name: diagram.data.title })}</button>)}
-        {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
-      </section>}
+      {/* The panel decides for itself whether this object has anything to
+          convert, and to which notations — so no kind list is maintained here. */}
+      <DiagramConvertPanel node={node} nodes={nodes} onConvert={onConvertDiagram} />
       {CREATIVE_GENERATOR_KINDS.has(kind) && <>
         <label>{t('creativeBrief')}<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : typeof node.data.content === 'string' ? node.data.content : ''} onChange={(event) => onChange({ prompt: event.target.value, content: event.target.value })} placeholder={t('creativeBriefPlaceholder', { label: creationObjectDefinition(kind).label.toLowerCase() })} /></label>
         <label>{t('templateId')}<input value={typeof node.data.templateId === 'string' ? node.data.templateId : ''} onChange={(event) => onChange({ templateId: event.target.value })} placeholder={kind === 'template' ? t('browseWithBrain') : t('optionalTemplate')} /></label>
@@ -10118,9 +10142,12 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         onChange={(event) => onChange({ markdown: event.target.value, content: event.target.value })}
       /></label>}
       {kind === 'diagram' && <>
-        <label>{t('diagramFormat')}<select value={typeof node.data.diagramFormat === 'string' ? node.data.diagramFormat : 'drawio'} onChange={(event) => onChange({ diagramFormat: event.target.value })}>
-          <option value="drawio">{t('diagramFormatDrawio')}</option>
-          <option value="mermaid">{t('diagramFormatMermaid')}</option>
+        {/* Options come from the notation registry, so a notation that gains a
+            writer is selectable here without a second list. Names are the
+            formats' own — brands, not translated copy — and each <option> keeps
+            its own opaque colours so it stays legible in both themes. */}
+        <label>{t('diagramFormat')}<select className={styles.notationSelect} value={typeof node.data.diagramFormat === 'string' ? node.data.diagramFormat : 'drawio'} onChange={(event) => onChange({ diagramFormat: event.target.value })}>
+          {DIAGRAM_TARGETS.map((notation) => <option key={notation.id} value={notation.id}>{notation.name}</option>)}
         </select></label>
         <label>{t('diagramSource')}<textarea
           rows={12}

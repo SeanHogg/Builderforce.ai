@@ -7,8 +7,12 @@
  *                        data). Served through the read-through cache.
  *   GET  /betas        — signed-in: the betas this user may join, each with where
  *                        THEY stand, plus the one worth banner-interrupting them
- *                        about. The banner choice is made HERE, once, so the
- *                        banner and the panel cannot disagree about it.
+ *                        about, plus how many published notes they have not seen.
+ *                        The banner choice is made HERE, once, so the banner and
+ *                        the panel cannot disagree about it. The unread count
+ *                        rides this read rather than adding a second signed-in
+ *                        request for one integer.
+ *   POST /seen         — signed-in: mark the changelog read (the panel opened).
  *   POST /:id/beta     — signed-in: join / leave / dismiss. Joining requires an
  *                        explicit `agreed: true` and records the consent.
  *   GET  /admin        — superadmin: everything, drafts + sent-state + how many
@@ -43,6 +47,10 @@ import {
   deleteReleaseNote,
   type ReleaseNoteStage,
 } from '../../application/product/releaseNotes';
+import {
+  countUnreadReleaseNotes,
+  markReleaseNotesSeen,
+} from '../../application/product/releaseNoteSeen';
 import {
   bannerBeta,
   countBetaParticipants,
@@ -103,10 +111,25 @@ export function createReleaseNoteRoutes(db: Db) {
   // -------------------------------------------------------------------------
   router.get('/betas', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    const betas = await listBetaProgramsForUser(c.env as Env, db, userId);
+    // Both halves of "what does this person need told about product updates?",
+    // in one round trip and one pair of reads.
+    const [betas, unreadCount] = await Promise.all([
+      listBetaProgramsForUser(c.env as Env, db, userId),
+      countUnreadReleaseNotes(c.env as Env, db, userId),
+    ]);
     // The banner candidate is decided here rather than in the client, so every
     // surface that asks "should we interrupt them?" gets the same answer.
-    return c.json({ betas, bannerBetaId: bannerBeta(betas)?.id ?? null });
+    return c.json({ betas, bannerBetaId: bannerBeta(betas)?.id ?? null, unreadCount });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /seen — the changelog was opened, so it has been read. No body: the
+  // clock is "now" and the user is the session, and accepting a client-supplied
+  // timestamp would let a caller silently un-read or over-read their own badge.
+  // -------------------------------------------------------------------------
+  router.post('/seen', webAuthMiddleware, async (c) => {
+    await markReleaseNotesSeen(db, c.get('userId') as UserId);
+    return c.json({ ok: true });
   });
 
   // -------------------------------------------------------------------------

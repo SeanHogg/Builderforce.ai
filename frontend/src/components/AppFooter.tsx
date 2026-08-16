@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useLegalDocs } from './legal/useLegalDocs';
 import LegalDocModal, { type LegalModalType } from './legal/LegalDocModal';
-import { openProductUpdates } from '@/lib/productUpdates';
+import ProductUpdatesTrigger from './releaseNotes/ProductUpdatesTrigger';
 import { BRAND, STATS } from '@/lib/content';
 import { destTitleKey, footerColumns } from '@/lib/publicDestinations';
 import { seatHueVar } from '@/lib/seats';
@@ -40,14 +40,11 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
       {variant === 'legal' && (
         <span className="global-footer-copyright">{BRAND.name} © {BRAND.year}</span>
       )}
-      <button
-        type="button"
-        onClick={openProductUpdates}
+      <ProductUpdatesTrigger
+        appVersion={appVersion}
+        apiVersion={apiVersion}
         className="global-footer-link"
-        title={t('whatsNewHint')}
-      >
-        UI {appVersion} · API {apiVersion ?? '…'}
-      </button>
+      />
       <div className="global-footer-links">
         <button type="button" onClick={() => window.dispatchEvent(new Event('builderforce:cookie-preferences'))} className="global-footer-link">{t('cookies')}</button>
         <Link href="/legal/subprocessors" className="global-footer-link">{t('subprocessors')}</Link>

@@ -22,6 +22,7 @@ import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';
 import type { CreationNodeData } from './types';
 import { exportActionsFor, type CanvasExportAction } from '@/lib/canvasExports';
+import { diagramNotation } from '@/lib/diagramNotations';
 import { canvasDiagram, canvasSlides } from '@/lib/canvasDocuments';
 import { canPrintCanvasObject } from '@/lib/printDocument';
 import { hasCanvasDrawing } from '@/lib/renderedSvg';
@@ -99,14 +100,14 @@ export interface CanvasExportActionsProps {
 
 export function CanvasExportActions({ data, onExport, className }: CanvasExportActionsProps) {
   const t = useTranslations('creationCanvas.export');
-  const node = useTranslations('creationCanvas.node');
   const actions = useMemo(() => canvasExportActionsFor(data), [data]);
   if (!actions.length) return null;
 
   /** A diagram's own notation is its native format, so the button names the
-   * notation rather than saying "Diagram" for two different file types. */
+   * notation rather than saying "Diagram" for nine different file types. The
+   * name comes from the notation registry — a format is spelled ONCE. */
   const label = (action: CanvasExportAction) => action === 'diagram'
-    ? node(canvasDiagram(data)?.format === 'mermaid' ? 'diagramMermaid' : 'diagramDrawio')
+    ? diagramNotation(canvasDiagram(data)?.format)?.name ?? t(action)
     : t(action);
 
   return <div className={`${styles.cardActions} ${className ?? ''} nodrag nowheel`} role="group" aria-label={t('group')}>

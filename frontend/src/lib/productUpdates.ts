@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { markProductUpdatesRead } from './betaPrograms';
 
 let open = false;
 const subscribers = new Set<(next: boolean) => void>();
@@ -24,9 +25,17 @@ function publish(next: boolean): void {
   subscribers.forEach((fn) => fn(next));
 }
 
-/** Open the changelog from anywhere — a version chip, a menu item, a deep link. */
+/**
+ * Open the changelog from anywhere — a version chip, a menu item, a deep link.
+ *
+ * Clearing the unread badge lives HERE rather than in any trigger, because every
+ * way of opening the panel is a way of reading it: a badge that only cleared
+ * when a footer button was pressed would still be lit after someone arrived
+ * through the digest email's `?whatsnew=1` link and read the lot.
+ */
 export function openProductUpdates(): void {
   publish(true);
+  markProductUpdatesRead();
 }
 
 export function closeProductUpdates(): void {

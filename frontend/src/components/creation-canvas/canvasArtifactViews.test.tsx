@@ -189,7 +189,7 @@ describe('files library', () => {
 
   it('lists every file the session holds and opens the object behind one', () => {
     const onOpen = vi.fn();
-    render(<CanvasFilesPanel files={files} onOpen={onOpen} onDownload={vi.fn()} onClose={vi.fn()} />);
+    render(<CanvasFilesPanel files={files} onOpen={onOpen} onDownload={vi.fn()} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" />);
     expect(screen.getByText('market-analysis.md')).toBeTruthy();
     expect(screen.getByText('pricing.csv')).toBeTruthy();
     fireEvent.click(screen.getByText('market-analysis.md'));
@@ -197,7 +197,7 @@ describe('files library', () => {
   });
 
   it('filters by type and by name', () => {
-    render(<CanvasFilesPanel files={files} onOpen={vi.fn()} onDownload={vi.fn()} onClose={vi.fn()} />);
+    render(<CanvasFilesPanel files={files} onOpen={vi.fn()} onDownload={vi.fn()} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" />);
     fireEvent.click(screen.getByRole('button', { name: 'Spreadsheet' }));
     expect(screen.queryByText('market-analysis.md')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'All' }));
@@ -207,13 +207,13 @@ describe('files library', () => {
 
   it('downloads the file a row stands for', () => {
     const onDownload = vi.fn();
-    render(<CanvasFilesPanel files={files} onOpen={vi.fn()} onDownload={onDownload} onClose={vi.fn()} />);
+    render(<CanvasFilesPanel files={files} onOpen={vi.fn()} onDownload={onDownload} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" />);
     fireEvent.click(screen.getByRole('button', { name: 'Download pricing.csv' }));
     expect(onDownload).toHaveBeenCalledWith(expect.objectContaining({ name: 'pricing.csv' }));
   });
 
   it('tells a new session what will land here', () => {
-    render(<CanvasFilesPanel files={[]} onOpen={vi.fn()} onDownload={vi.fn()} onClose={vi.fn()} />);
+    render(<CanvasFilesPanel files={[]} onOpen={vi.fn()} onDownload={vi.fn()} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" />);
     expect(screen.getByText(/no files yet/i)).toBeTruthy();
   });
 });
