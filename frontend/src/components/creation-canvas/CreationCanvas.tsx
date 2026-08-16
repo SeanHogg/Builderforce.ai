@@ -1298,6 +1298,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setAccountGate({ action, title, description });
     trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: canvasSurface(), action } });
   }, [sessionId]);
+  /**
+   * ONE door in front of everything that reads a CONNECTED ACCOUNT.
+   *
+   * Cloud storage, Miro, social and paid media all call the API with the tenant
+   * token. A signed-out visitor has none, so opening any of them used to fire a
+   * request that came back 401 "Missing or malformed Authorization header" — and
+   * because the canvas reports API failures as support tickets, a guest tapping
+   * along the rail filed five of them in ninety seconds. The condition is the
+   * same for every one of these surfaces, so the check, the copy and the
+   * sign-up prompt are one function rather than a rule each panel remembers.
+   *
+   * Returns true when the caller may proceed.
+   */
+  const connectedAccountGate = useCallback((source: string) => {
+    if (getStoredTenantToken()) return true;
+    requireAccount('connected_account', t('connectedGateTitle', { source }), t('connectedGateBody', { source }));
+    return false;
+  }, [requireAccount, t]);
   useEffect(() => {
     if (!palettePreferencesReady) return;
     try {
@@ -2633,10 +2651,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * the answer the user gets — see CANVAS_SOCIAL_ACCOUNT_GATE.
    */
   const socialAccountGate = useCallback((tool: string): { requiresAccount: true; tool: string; error: string } | null => {
-    if (getStoredTenantToken()) return null;
-    requireAccount('social', tSocial('gateTitle'), tSocial('gateBody'));
+    // Same door as the menu entry — a model asking for the social panel and a
+    // person clicking it must not describe the missing account two ways.
+    if (connectedAccountGate(tSocial('title'))) return null;
     return accountGateResult(tool, CANVAS_SOCIAL_ACCOUNT_GATE);
-  }, [requireAccount, tSocial]);
+  }, [connectedAccountGate, tSocial]);
 
   /**
    * Read the connected social accounts and BUILD the feed tile — without adding it.
@@ -9251,9 +9270,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 opens the SAME dock panel its rail button used to, drawn with the
                 same glyph, so this is a move rather than a second entry point. */}
             <span className={styles.moreMenuHeading}>{t('connectedSources')}</span>
-            <button aria-pressed={dockPanel === 'miro'} onClick={() => { toggleDockPanel('miro'); setMoreOpen(false); }}><span aria-hidden><CanvasMiroIcon /></span>{tMiro('title')}</button>
-            <button aria-pressed={dockPanel === 'social'} onClick={() => { toggleDockPanel('social'); setMoreOpen(false); }}><span aria-hidden><CanvasSocialIcon /></span>{tSocial('title')}</button>
-            <button aria-pressed={dockPanel === 'ads'} onClick={() => { toggleDockPanel('ads'); setMoreOpen(false); }}><span aria-hidden><CanvasAdsIcon /></span>{tAds('title')}</button>
+            <button aria-pressed={dockPanel === 'miro'} onClick={() => { if (connectedAccountGate(tMiro('title'))) toggleDockPanel('miro'); setMoreOpen(false); }}><span aria-hidden><CanvasMiroIcon /></span>{tMiro('title')}</button>
+            <button aria-pressed={dockPanel === 'social'} onClick={() => { if (connectedAccountGate(tSocial('title'))) toggleDockPanel('social'); setMoreOpen(false); }}><span aria-hidden><CanvasSocialIcon /></span>{tSocial('title')}</button>
+            <button aria-pressed={dockPanel === 'ads'} onClick={() => { if (connectedAccountGate(tAds('title'))) toggleDockPanel('ads'); setMoreOpen(false); }}><span aria-hidden><CanvasAdsIcon /></span>{tAds('title')}</button>
             <span className={styles.moreMenuHeading}>{t('sessionTools')}</span>
             <button onClick={() => { openHistory(); setMoreOpen(false); }}><span aria-hidden>↶</span>{t('history')}</button>
             <button onClick={() => { exportSession(); setMoreOpen(false); }}><span aria-hidden>↓</span>{t('exportCanvas')}</button>
@@ -9589,6 +9608,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onClose={closeDockPanel}
           onImportFile={(file) => addFilesToCanvas([file], undefined, 'drive_import')}
           returnTo={`/create/${sessionId}`}
+          onRequireAccount={connectedAccountGate}
         />}
         {gameShipFocus && gamePanelTarget && <CanvasGamePanel
           open

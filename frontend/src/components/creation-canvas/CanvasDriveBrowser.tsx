@@ -1,7 +1,10 @@
-'use client';
-
 /**
  * Your Google Drive and OneDrive, browsable on the canvas.
+ *
+ * No `'use client'`: its only importer, `CanvasFilesPanel`, already declares the
+ * boundary, so the directive would cost the architecture ratchet a point and buy
+ * that bundle nothing. This still runs as client code — that is what its hooks
+ * need — because a module imported by a client module IS client code.
  *
  * The point is to remove a round trip a person should never have had to make:
  * downloading a document out of Drive onto their desktop so they can drag it

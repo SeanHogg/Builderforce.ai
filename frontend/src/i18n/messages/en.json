@@ -16460,8 +16460,6 @@
       "campaignPublished": "Published to {published} of {targets} accounts.",
       "campaignScheduled": "Scheduled for {count} accounts.",
       "campaignUpdateFailed": "That campaign could not be updated.",
-      "gateTitle": "Create a free account to connect your social accounts",
-      "gateBody": "Connecting X, LinkedIn, Facebook, Instagram and TikTok — and publishing to all of them from one campaign — needs a free Builderforce account. Your board stays exactly as it is.",
       "boardMedia": "Attach from this board",
       "boardMediaHelp": "Picked pictures are published to a public URL automatically — that is what Instagram and TikTok need to fetch them."
     },
@@ -18012,7 +18010,9 @@
     "diagramShape": "{notation} · {shapes} shapes · {connections} connections",
     "diagramCreatedStatus": "Diagram created",
     "diagramAddedStatus": "Added to diagram",
-    "connectedSources": "Connected sources"
+    "connectedSources": "Connected sources",
+    "connectedGateTitle": "Sign in to use {source}",
+    "connectedGateBody": "{source} reads an account connected to your workspace, so it needs you signed in. Create a free account or sign in — this board stays exactly as it is."
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

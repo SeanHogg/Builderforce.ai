@@ -148,6 +148,7 @@ describe('BPMN 2.0', () => {
     <bpmn:endEvent id="e1" name="Shipped" />
     <bpmn:sequenceFlow id="f1" sourceRef="s1" targetRef="t1" />
     <bpmn:sequenceFlow id="f2" sourceRef="t1" targetRef="g1" name="checked" />
+    <bpmn:sequenceFlow id="f3" sourceRef="g1" targetRef="e1" name="yes" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="d1"><bpmndi:BPMNPlane id="p1" bpmnElement="Process_1">
     <bpmndi:BPMNShape id="s1_di" bpmnElement="s1"><dc:Bounds x="150" y="100" width="36" height="36" /></bpmndi:BPMNShape>
@@ -156,6 +157,7 @@ describe('BPMN 2.0', () => {
     <bpmndi:BPMNShape id="e1_di" bpmnElement="e1"><dc:Bounds x="520" y="100" width="36" height="36" /></bpmndi:BPMNShape>
     <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="186" y="118" /><di:waypoint x="240" y="118" /></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="340" y="118" /><di:waypoint x="400" y="118" /></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="450" y="118" /><di:waypoint x="520" y="118" /></bpmndi:BPMNEdge>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
@@ -163,7 +165,7 @@ describe('BPMN 2.0', () => {
     const graph = readBpmn(WITH_DI)!;
     expect(shapes(graph)).toMatchObject({ 'Order received': 'ellipse', 'Check stock': 'rounded', 'In stock?': 'rhombus' });
     expect(graph.vertices.find((vertex) => vertex.label === 'Check stock')).toMatchObject({ x: 240, y: 78, width: 100 });
-    expect(graph.edges).toHaveLength(2);
+    expect(graph.edges).toHaveLength(3);
   });
 
   it('lays out a process that has no drawing attached to it', () => {
@@ -172,7 +174,7 @@ describe('BPMN 2.0', () => {
     const headless = WITH_DI.replace(/<bpmndi:BPMNDiagram[\s\S]*?<\/bpmndi:BPMNDiagram>/, '');
     const graph = readBpmn(headless)!;
     expect(label(graph)).toEqual(['Check stock', 'In stock?', 'Order received', 'Shipped']);
-    expect(graph.edges).toHaveLength(2);
+    expect(graph.edges).toHaveLength(3);
     expect(new Set(graph.vertices.map((vertex) => vertex.y)).size).toBeGreaterThan(1);
   });
 
@@ -181,7 +183,7 @@ describe('BPMN 2.0', () => {
     expect(written).toMatch(/<bpmn:startEvent [^>]*name="Order received"/);
     expect(written).toMatch(/<bpmn:endEvent [^>]*name="Shipped"/);
     expect(written).toMatch(/<bpmn:exclusiveGateway [^>]*name="In stock\?"/);
-    expect(readBpmn(written)!.edges).toHaveLength(2);
+    expect(readBpmn(written)!.edges).toHaveLength(3);
   });
 
   it('writes an annotation as an association, never a sequence flow', () => {

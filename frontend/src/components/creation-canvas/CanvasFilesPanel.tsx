@@ -41,7 +41,7 @@ type CanvasFileSource = typeof SOURCES[number]['value'];
  * not think "board files" and "cloud files"; they think "the file I want".
  */
 export function CanvasFilesPanel({
-  files, onOpen, onDownload, onClose, onImportFile, returnTo,
+  files, onOpen, onDownload, onClose, onImportFile, returnTo, onRequireAccount,
 }: {
   files: CanvasFile[];
   onOpen: (nodeId: string) => void;
@@ -51,6 +51,9 @@ export function CanvasFilesPanel({
   onImportFile: (file: File) => void | Promise<void>;
   /** Where the cloud provider's OAuth round trip should return the browser to. */
   returnTo: string;
+  /** The canvas's ONE connected-account door. False keeps the cloud source shut
+   *  rather than letting a signed-out visitor fire a request that returns 401. */
+  onRequireAccount: (source: string) => boolean;
 }) {
   const t = useTranslations('creationCanvas.files');
   const [source, setSource] = useState<CanvasFileSource>('board');
@@ -74,7 +77,7 @@ export function CanvasFilesPanel({
           key={value}
           type="button"
           aria-pressed={source === value}
-          onClick={() => setSource(value)}
+          onClick={() => { if (value !== 'cloud' || onRequireAccount(t('sourceCloud'))) setSource(value); }}
         ><SourceIcon />{t(labelKey)}</button>)}
       </div>
       {source === 'cloud'

@@ -11,6 +11,9 @@
  * filesystem access is required at request time — everything is bundled.
  */
 
+import diagramFormats from '@/content/blog/every-diagram-format-the-canvas-reads.md';
+import whichDiagram from '@/content/blog/which-diagram-should-you-draw.md';
+import escapeDiagramTool from '@/content/blog/escape-your-diagramming-tool.md';
 import gettingStarted from '@/content/blog/getting-started-with-ai-agents.md';
 import webgpuLora from '@/content/blog/webgpu-lora-explained.md';
 import multiAgent from '@/content/blog/multi-agent-orchestration.md';
@@ -207,6 +210,9 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('eight-ways-to-make-an-idea-real', eightWaysToMakeItReal),
   buildPost('read-prove-build-the-inner-loop', readProveBuild),
   buildPost('idea-make-run-measure-menu-as-methodology', menuAsMethodology),
+  buildPost('every-diagram-format-the-canvas-reads', diagramFormats),
+  buildPost('which-diagram-should-you-draw', whichDiagram),
+  buildPost('escape-your-diagramming-tool', escapeDiagramTool),
   buildPost('whats-new-always-on-canvas-workspace', whatsNewAlwaysOnCanvas),
   buildPost('creation-canvas-functionality-guide', creationCanvasFunctionalityGuide),
   buildPost('learn-how-to-build-an-llm-interactive-course', llmInteractiveCourse),

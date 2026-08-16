@@ -16459,8 +16459,6 @@
       "campaignPublished": "Publicado en {published} de {targets} cuentas.",
       "campaignScheduled": "Programado para {count} cuentas.",
       "campaignUpdateFailed": "No se pudo actualizar esa campaña.",
-      "gateTitle": "Crea una cuenta gratuita para conectar tus cuentas sociales",
-      "gateBody": "Conectar X, LinkedIn, Facebook, Instagram y TikTok —y publicar en todas ellas desde una sola campaña— requiere una cuenta gratuita de Builderforce. Tu lienzo permanece intacto.",
       "boardMedia": "Adjuntar desde este lienzo",
       "boardMediaHelp": "Las imágenes seleccionadas se publican automáticamente en una URL pública: eso es lo que Instagram y TikTok necesitan para descargarlas."
     },
@@ -18011,7 +18009,9 @@
     "diagramShape": "{notation} · {shapes} formas · {connections} conexiones",
     "diagramCreatedStatus": "Diagrama creado",
     "diagramAddedStatus": "Añadido al diagrama",
-    "connectedSources": "Fuentes conectadas"
+    "connectedSources": "Fuentes conectadas",
+    "connectedGateTitle": "Inicia sesión para usar {source}",
+    "connectedGateBody": "{source} lee una cuenta conectada a tu espacio de trabajo, así que necesita que inicies sesión. Crea una cuenta gratuita o inicia sesión: este lienzo se queda tal cual."
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

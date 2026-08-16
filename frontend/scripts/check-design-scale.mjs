@@ -184,6 +184,16 @@ const COLOUR_EXEMPT = [
   /^lib\/renderedSvg\.ts$/,
   /^lib\/gamePoster\.ts$/,
   /^lib\/creativeGeometry\.ts$/,
+  // An `.excalidraw` scene is opened by Excalidraw, not by us: its element
+  // defaults (`strokeColor`, `viewBackgroundColor`) are values THAT app reads,
+  // and a `var(--x)` written into one resolves to nothing there.
+  /^lib\/diagramExcalidraw\.ts$/,
+  // The SVG READER, on the other side of the same seam: its only hex is
+  // `fill !== '#fff'`, a comparison against SVG's OWN default fill, applied to an
+  // attribute read out of somebody else's exported document to decide whether a
+  // fill is worth carrying onto the vertex. Nothing is painted here, and no theme
+  // has an opinion about what the SVG spec's default is.
+  /^lib\/diagramSvg\.ts$/,
   /^lib\/qrCode\.ts$/,
   /^components\/builder\/QrCode\.tsx$/,
   // A résumé is PAPER. This composes the standalone `<!doctype html>` document that
@@ -255,6 +265,25 @@ const LINE_COMMENT = /^\s*\/\/.*$/gm;
 
 /** A 3-, 4-, 6- or 8-digit hex colour, not part of a longer identifier. */
 const LITERAL_HEX = /(?<![\w&])#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g;
+
+/**
+ * A NUMERIC CHARACTER REFERENCE, which is not a colour and never was.
+ *
+ * Measured 2026-08-15: `lib/diagramMermaid.ts` writes `'#124;'` — Mermaid's own
+ * escape for `|`, which it would otherwise read as the end of an edge label —
+ * and the ampersand-less form is deliberate, so the `(?<![\w&])` lookbehind
+ * above does not exclude it. `124` is three hex digits, so the file was reported
+ * as carrying a literal colour and the ratchet failed on a string that paints
+ * nothing.
+ *
+ * The distinguishing rule is the whole literal, not the digits: a string whose
+ * ENTIRE content is `#` + digits + `;` is a character reference. A real colour
+ * literal is `'#123456'` with no semicolon, and a CSS snippet in a template
+ * string (`color: #123456;`) has the property name in front of it, so neither
+ * shape is matched here. Deliberately narrow — this guard must never silence a
+ * colour, and exempting the whole file would have hidden every future one in it.
+ */
+const CHARACTER_REFERENCE = /(['"`])#\d+;\1/g;
 
 /**
  * `border-radius: X` in CSS and `borderRadius: X` in an inline-style object.
@@ -382,8 +411,10 @@ for (const file of files) {
   const rel = relative(srcDir, file).split('\\').join('/');
   const raw = readFileSync(file, 'utf8');
   const text = raw.replace(BLOCK_COMMENT, '').replace(LINE_COMMENT, '');
+  // Blank character references before looking for colours — see CHARACTER_REFERENCE.
+  const colourText = text.replace(CHARACTER_REFERENCE, ' ');
 
-  if (!COLOUR_EXEMPT.some((pattern) => pattern.test(rel)) && LITERAL_HEX.test(text)) {
+  if (!COLOUR_EXEMPT.some((pattern) => pattern.test(rel)) && LITERAL_HEX.test(colourText)) {
     hexFiles.push(rel);
   }
   LITERAL_HEX.lastIndex = 0;

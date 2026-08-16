@@ -16459,8 +16459,6 @@
       "campaignPublished": "Publié sur {published} comptes sur {targets}.",
       "campaignScheduled": "Programmé pour {count} comptes.",
       "campaignUpdateFailed": "Cette campagne n’a pas pu être mise à jour.",
-      "gateTitle": "Créez un compte gratuit pour connecter vos comptes sociaux",
-      "gateBody": "Connecter X, LinkedIn, Facebook, Instagram et TikTok — et publier sur tous depuis une seule campagne — nécessite un compte Builderforce gratuit. Votre canevas reste inchangé.",
       "boardMedia": "Joindre depuis ce canevas",
       "boardMediaHelp": "Les images choisies sont automatiquement publiées sur une URL publique — c'est ce dont Instagram et TikTok ont besoin pour les récupérer."
     },
@@ -18011,7 +18009,9 @@
     "diagramShape": "{notation} · {shapes} formes · {connections} connexions",
     "diagramCreatedStatus": "Diagramme créé",
     "diagramAddedStatus": "Ajouté au diagramme",
-    "connectedSources": "Sources connectées"
+    "connectedSources": "Sources connectées",
+    "connectedGateTitle": "Connectez-vous pour utiliser {source}",
+    "connectedGateBody": "{source} lit un compte connecté à votre espace de travail : vous devez donc être connecté. Créez un compte gratuit ou connectez-vous — ce canevas reste exactement tel quel."
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

@@ -1,4 +1,9 @@
-'use client';
+/**
+ * No `'use client'`: its only importer, `MarketplaceGigsSection`, already
+ * declares the boundary. Everything the panel does is a click, and all of that
+ * still works — a module imported by a client module is client code — but the
+ * directive itself was buying nothing and costing the architecture ratchet.
+ */
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';

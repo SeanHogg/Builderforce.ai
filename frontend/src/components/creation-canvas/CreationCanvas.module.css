@@ -1392,7 +1392,8 @@
 .filesPanel {
   position:absolute; z-index:16;
   left:calc(62px + var(--brain-dock-left, 0px)); bottom:calc(var(--composer-space) + 8px);
-  box-sizing:border-box; width:296px; max-width:calc(100vw - 96px); max-height:52%; overflow:auto;
+  /* Wide enough for a drive row — the cloud source lives in this frame too. */
+  box-sizing:border-box; width:312px; max-width:calc(100vw - 96px); max-height:56%; overflow:auto;
   border:1px solid var(--canvas-line); border-radius:var(--radius-lg);
   background:var(--canvas-panel); color:var(--canvas-muted);
   box-shadow:0 12px 34px var(--canvas-shadow); font-size:12px;
@@ -1444,14 +1445,12 @@
 .panelSources button[aria-pressed='true'] { border-color:var(--canvas-accent-ink); background:var(--canvas-hover); color:var(--canvas-ink); }
 
 /* ── Connected-source panels (Miro, social, paid media) ──────────────────────
-   Composes the Files panel's frame rather than restating it:they are all "a
+   Composes the Files panel's frame rather than restating it: they are all "a
    thing this workspace is connected to, listed so you can pull it onto the
-   board", and a second visual language would read as a second feature. Only the
-   width and height differ, because these rows are wider than a file row. */
-.drivePanel {
-  composes: filesPanel;
-  width:312px; max-height:56%;
-}
+   board", and a second visual language would read as a second feature. The two
+   frames were duplicated declaration-for-declaration, which is how one of them
+   ended up without the phone-width override the other has. */
+.drivePanel { composes: filesPanel; }
 
 .driveAccounts { display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px 0; }
 .driveAccounts button {

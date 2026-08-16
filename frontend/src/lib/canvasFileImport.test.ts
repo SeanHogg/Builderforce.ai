@@ -69,6 +69,67 @@ describe('importCanvasFile', () => {
     expect(imported.objects[0]).toMatchObject({ kind: 'diagram', data: { fileName: 'system.drawio', diagramFormat: 'drawio', diagram: xml } });
   });
 
+  it('opens every text notation the canvas can also write, verbatim', async () => {
+    // A notation with a writer is stored EXACTLY as the person gave it. The
+    // file they get back out is the file they put in — no round-trip loss to a
+    // conversion nobody asked for.
+    const cases: Array<[string, string, string]> = [
+      ['flow.mmd', 'flowchart TD\n  a[Draft] --> b[Ship]', 'mermaid'],
+      ['arch.puml', '@startuml\nrectangle "Web" as w\ndatabase "DB" as d\nw --> d\n@enduml', 'plantuml'],
+      ['deps.gv', 'digraph g { a [label="API"]; b [label="DB"]; a -> b; }', 'dot'],
+    ];
+    for (const [name, body, format] of cases) {
+      const imported = await importCanvasFile(file(name, body), t);
+      expect(imported.objects[0], name).toMatchObject({ kind: 'diagram', data: { diagramFormat: format, diagram: body } });
+      expect(imported.notice, name).toContain('noticeDiagram');
+      expect(imported.suggestedPrompt, name).toContain('promptDiagram');
+    }
+  });
+
+  it('converts a notation it can read but not write, and says where it came from', async () => {
+    // An ArchiMate model cannot be stored as itself — writing one means
+    // choosing an element type per box. It lands as draw.io, and the notice
+    // SAYS so rather than looking as though the file was replaced.
+    const model = `<archimate:model xmlns:archimate="http://www.archimatetool.com/archimate" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="E" id="m">
+      <folder name="Business" type="business"><element xsi:type="archimate:BusinessActor" name="Customer" id="e1"/></folder>
+      <folder name="Views" type="diagrams"><element xsi:type="archimate:ArchimateDiagramModel" name="V" id="v1">
+        <children xsi:type="archimate:DiagramObject" id="o1" archimateElement="e1"><bounds x="10" y="10" width="120" height="55"/></children>
+      </element></folder></archimate:model>`;
+    const imported = await importCanvasFile(file('estate.archimate', model), t);
+    expect(imported.objects[0]).toMatchObject({ kind: 'diagram', data: { diagramFormat: 'drawio', sourceFormat: 'ArchiMate' } });
+    expect(String(imported.objects[0]?.data.diagram)).toContain('Customer');
+    expect(imported.notice).toContain('noticeDiagramConverted');
+  });
+
+  it('does not turn an .xml file that is not a diagram into an empty one', async () => {
+    // `.xml` is draw.io's second extension and everything else's first. The
+    // extension proposes the notation; the CONTENT has to agree.
+    const imported = await importCanvasFile(file('pom.xml', '<project><name>api</name></project>', 'text/xml'), t);
+    expect(imported.objects[0]?.kind).not.toBe('diagram');
+  });
+
+  it('reads an Excalidraw scene saved as .json as a drawing, not a one-row Dataset', async () => {
+    // The same trap the JSON-résumé path documents: a `.json` name sent the
+    // scene to the tabular importer, which made a Dataset of one row whose
+    // cells were JSON fragments.
+    const scene = JSON.stringify({
+      type: 'excalidraw',
+      elements: [
+        { id: 'r', type: 'rectangle', x: 0, y: 0, width: 120, height: 60 },
+        { id: 'r-t', type: 'text', containerId: 'r', text: 'Ingest', x: 8, y: 20 },
+      ],
+    });
+    const imported = await importCanvasFile(file('workshop.excalidraw.json', scene, 'application/json'), t);
+    expect(imported.objects[0]?.kind).toBe('diagram');
+    expect(imported.objects[0]?.data.diagramFormat).toBe('excalidraw');
+    expect(String(imported.objects[0]?.data.diagram)).toContain('Ingest');
+  });
+
+  it('leaves an .svg an image, because a vector picture is a picture', async () => {
+    const imported = await importCanvasFile(file('logo.svg', '<svg xmlns="http://www.w3.org/2000/svg"><rect width="80" height="40"/></svg>', 'image/svg+xml'), t);
+    expect(imported.objects[0]?.kind).toBe('image');
+  });
+
   it('reads a CSV as a queryable Dataset, not an opaque attachment', async () => {
     const imported = await importCanvasFile(file('pipeline.csv', 'Region,Deals\nEMEA,12\nAPAC,7\n', 'text/csv'), t);
     const [object] = imported.objects;

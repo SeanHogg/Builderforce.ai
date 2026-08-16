@@ -16459,8 +16459,6 @@
       "campaignPublished": "已发布到 {targets} 个账号中的 {published} 个。",
       "campaignScheduled": "已为 {count} 个账号排期。",
       "campaignUpdateFailed": "无法更新该活动。",
-      "gateTitle": "创建免费账户以连接您的社交账户",
-      "gateBody": "连接 X、LinkedIn、Facebook、Instagram 和 TikTok，并通过一个营销活动向所有平台发布，需要一个免费的 Builderforce 账户。您的画布将保持原样。",
       "boardMedia": "从本画布附加",
       "boardMediaHelp": "所选图片会自动发布到公开链接 — Instagram 和 TikTok 需要通过它来获取图片。"
     },
@@ -18011,7 +18009,9 @@
     "diagramShape": "{notation} · {shapes} 个图形 · {connections} 条连接",
     "diagramCreatedStatus": "图表已创建",
     "diagramAddedStatus": "已添加到图表",
-    "connectedSources": "已连接的来源"
+    "connectedSources": "已连接的来源",
+    "connectedGateTitle": "登录后即可使用{source}",
+    "connectedGateBody": "{source}读取的是与你的工作区相连的账户，因此需要先登录。免费注册或登录即可——本画布会原样保留。"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

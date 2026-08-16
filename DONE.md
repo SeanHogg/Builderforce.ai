@@ -1,4 +1,58 @@
-## ✅ RESOLVED 2026-08-15 — The changelog caught up with four days of shipping, and the digest stopped being unbounded
+## ✅ RESOLVED 2026-08-15 — The canvas rail stopped being an integration list, cloud files moved inside Files, and a signed-out visitor stopped filing 401s as support tickets (frontend 2026.8.24)
+
+**The gap.** The canvas's left rail had grown a button per integration — Files, Cloud files, Miro boards,
+Social accounts, Paid media — so a strip meant for "what I do to this board" read as a directory of every
+service the workspace might one day connect to. Two of those buttons, **Files** and **Cloud files**, asked
+the same question ("which file do I want on this board?") and opened two panels whose CSS docked them at
+byte-identical coordinates, so opening both stacked one invisibly on top of the other. And every one of
+these panels calls the API with the tenant token: a signed-out visitor tapping along the rail fired five
+requests that came back `401 Missing or malformed Authorization header` — `/api/ads/networks`,
+`/api/social/networks`, `/api/social/accounts`, `/api/connectors/connections/list?connectorKey=miro`,
+`/api/drive/providers` — and because the canvas reports API failures as support tickets, that visitor
+filed **five tickets in ninety seconds** without ever being told they simply needed an account.
+
+**Files is now one panel with a source picker.** `CanvasDrivePanel` became `CanvasDriveBrowser` — the same
+Drive/OneDrive walk, minus the frame, header and close button it used to draw for itself — and renders as
+the **Cloud** source inside `CanvasFilesPanel`, beside **This board**. Sources are declared as data
+(`SOURCES` in `CanvasFilesPanel.tsx`), so a third one is an entry plus its body, not a fourth rail button.
+Picking a cloud file still hands a real `File` to `addFilesToCanvas`, the identical engine a drag-and-drop
+goes through.
+
+**The rail now holds only board work:** surface switcher, pan/marquee, Files, Outline. Miro, Social
+accounts and Paid media moved to the ••• menu under a new **Connected sources** heading, drawn with the
+same glyphs they had on the rail — a move, not a second entry point. The ••• button carries
+`mobileAction`, so they stay reachable on a phone, where the parallel rail dropped from eleven controls
+to seven.
+
+**One dock panel at a time.** Six independent `useState(false)` flags became one
+`dockPanel: 'files' | 'miro' | 'social' | 'ads' | 'outline' | null` plus `toggleDockPanel` /
+`closeDockPanel`. Exclusivity is now the data model rather than a rule each toggle had to remember, which
+is what makes the stacking bug unrepresentable. The two Brain tools that open the social panel
+(`canvas_connect_social_account` and the publish path) set the same value.
+
+**One connected-account door.** `connectedAccountGate(source)` is the single check in front of everything
+that reads a connected account: it returns `true` when a tenant token exists, and otherwise raises the
+canvas's own account gate with `creationCanvas.connectedGateTitle` / `connectedGateBody` instead of
+letting the panel fire a request that 401s. Wired to the three ••• entries and to the Files panel's Cloud
+tab; `socialAccountGate` now calls it too, so a model asking for the social panel and a person clicking it
+no longer describe the missing account two different ways (`creationCanvas.social.gateTitle` / `gateBody`
+deleted from all five catalogs as a result).
+
+**CSS de-duplicated.** `.drivePanel` was a declaration-for-declaration copy of `.filesPanel` — which is
+how it ended up without the `max-width:760px` phone override the other one had. It is now
+`composes: filesPanel`, and the shared frame carries the wider drive-row width (312px) for both.
+
+**Files touched.** `CanvasDriveBrowser.tsx` (renamed from `CanvasDrivePanel.tsx`), `CanvasFilesPanel.tsx`,
+`CreationCanvas.tsx`, `CreationCanvas.module.css`, `canvasArtifactViews.test.tsx` (+2 tests: the source
+picker, and "does not read a drive until the connected-account gate allows it"), and
+`i18n/messages/{en,zh,es,fr,de}.json` (+`files.sourceGroup|sourceBoard|sourceCloud`,
++`connectedSources`, +`connectedGateTitle|connectedGateBody`; −`drive.title|close`,
+−`social.gateTitle|gateBody`).
+
+**Verified.** `canvasArtifactViews` 42/42, `CreationCanvas` 83/83, i18n catalog guards 53/53, `tsgo`
+clean, `check:design-tokens`, `check:architecture` pass.
+
+## ✅ RESOLVED 2026-08-15 — The changelog caught up with four days of shipping, the digest stopped being unbounded, and the version chip finally says there is something new
 
 **The gap.** The last product-update batch (`0451`) published on 2026-08-10 and covered the work up to
 that day. Everything between 2026-08-12 and 2026-08-15 — which is most of this file — had shipped with
@@ -49,8 +103,51 @@ Verified in both directions rather than assumed: within the guard's own prefix r
 lands in the shared collector, so `entityCatalog.test.ts` — which would have demanded an entity-catalog
 entry for the same non-existent relation — is covered by the same change.
 
-Verified: api **24/24 guards** and **5,936 tests** pass, `tsgo --noEmit` clean. api bumped
-2026.8.15 → 2026.8.16.
+**And the adjacent register entry, closed in the same pass, because publishing 23 notes made it the
+whole point.** *"Product Updates has no unread-since-last-open indicator"* had been open since
+2026-08-09: the changelog was reachable from every route and **nothing told anyone there was anything
+behind it**, so the affordance only ever paid off for someone who thought to click a version number.
+Announcing four days of work into a panel with no badge is announcing it to nobody.
+
+- **`users.product_updates_seen_at`** (migration 0475) — a COLUMN, 1:1 with the row and functionally
+  dependent on `users.id`, the argument `available_for_hire` and `account_type_selected_at` already
+  make. NULL is **not** backfilled: `countUnreadReleaseNotes` reads a never-opened panel as the
+  account's own `created_at`, so a brand-new signup is not greeted with a badge counting the entire
+  history of the product. A badge that is wrong on day one is a badge people learn to ignore.
+- **The count rides the read that already exists.** `GET /api/release-notes/betas` is the signed-in
+  product-updates call, so `unreadCount` travels with it rather than adding a second request for one
+  integer, and the count itself is taken over the **cached** published list — the read-through cache
+  that exists precisely because that list changes only when an operator publishes.
+- **`POST /seen` takes no body.** The user is the session and the clock is the server's; accepting a
+  client-supplied timestamp would let a caller silently un-read or over-read their own badge.
+- **One store, not a second one.** `betaPrograms.ts` already owned a session-scoped, single-flight,
+  owner-tracked store over that exact read — a second store would have been a second request, a second
+  cache and a second chance to show the next person in this tab someone else's state. It gained
+  `unread`, `useProductUpdatesUnread()` and `markProductUpdatesRead()`; `useBetaPrograms` and the badge
+  now share one `useBetaState()`, so the sign-in/sign-out handling exists exactly once.
+- **Clearing lives in `openProductUpdates()`, not in a trigger.** Every way of opening the panel is a
+  way of reading it — a badge that only cleared on a footer press would still be lit for someone who
+  arrived through the digest email's `?whatsnew=1` link and read the lot.
+- **`ProductUpdatesTrigger` is ONE component for both version chips.** The footer strip and the
+  operator shell's legal corner were two hand-written buttons rendering the same string with the same
+  handler and the same tooltip — which is two places to add a badge to one of. The chip decides its own
+  badge visibility (zero unread renders nothing), caps the display at `9+` for LAYOUT while the
+  accessible name still states the true count, and carries **no `'use client'`**: both its importers
+  already declare the boundary, so the directive would have cost the architecture ratchet a point and
+  bought them nothing. Localized in all five catalogs as an ICU plural.
+
+**Left open, with the blocker named:** `check:architecture` (801 vs 800) and `check:design-scale`
+(3 literal-hex files) are red from a **concurrent session's six uncommitted files** — the delta report
+names every one and not one is this pass's. Logged to the register rather than baselined away, per the
+same contention resolved this way earlier today.
+
+Verified: api **24/24 guards** and **5,942 tests** pass; frontend `tsgo --noEmit` clean, 6/8 guards green
+(`api-transport`, `design-tokens`, `edge-runtime`, `declared-deps`, `destinations`, `methodology` — the
+two red ones are the concurrent session's, above) and **2,704 tests pass**. The single red file,
+`lib/brain/platformActions.test.ts`, is not an assertion at all — vitest could not start a pool worker
+for it (`Timeout waiting for worker to respond`) on a machine simultaneously running another session's
+builds; it passes in isolation and imports nothing from this change. Logged rather than waved past.
+New tests: 4 digest, 5 unread-counter, 2 route, 4 store, 6 chip. api bumped 2026.8.15 → 2026.8.16.
 
 ---
 

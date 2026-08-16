@@ -1,4 +1,9 @@
-'use client';
+/**
+ * No `'use client'`: its only importer, `CreationCanvas`, already declares the
+ * boundary. The directive would cost the architecture ratchet a point and buy
+ * that bundle nothing; a module imported by a client module is client code, so
+ * the hooks below are unaffected.
+ */
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';

@@ -1806,6 +1806,9 @@ export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromE
 export const RELATED_ARTICLES: Record<string, string[]> = {
   'creation-canvas': [
     'creation-canvas-beyond-chat',
+    'every-diagram-format-the-canvas-reads',
+    'which-diagram-should-you-draw',
+    'escape-your-diagramming-tool',
     'compare-projects-and-build-an-executive-roadmap',
     'customer-feedback-to-ten-mockups',
     'build-and-train-evermind-on-the-creation-canvas',

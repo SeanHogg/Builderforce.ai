@@ -60,6 +60,21 @@
  *   panel owns its own reads so the gigs surface never fetches alerts it may not
  *   show. Nothing about it renders before the first interaction.
  *
+ *   800 → 798 (`useClientFiles`, 2026-08-15) — a TIGHTENING, and the third time
+ *   the answer was to delete the directive rather than raise the number. The
+ *   diagram/drive/job-alerts batch landed `CanvasDriveBrowser.tsx`,
+ *   `DiagramConvertPanel.tsx` and `JobAlertsPanel.tsx`, each carrying
+ *   `'use client'` and each imported by EXACTLY ONE module — `CanvasFilesPanel`,
+ *   `CreationCanvas` and `MarketplaceGigsSection` — every one of which already
+ *   declares the boundary. All three are genuinely interactive, which is the
+ *   question the directive does NOT answer: a module imported by a client module
+ *   is client code either way, so the directive changed nothing except this
+ *   count. Removed in all three, with the reason written at the top of each so
+ *   the next person does not put it back. Note the count came in BELOW the
+ *   baseline; leaving 800 there would have been two points of slack for the next
+ *   regression to spend silently, which is how a ratchet goes slack without
+ *   anyone deciding it should.
+ *
  *   The THIRD, `components/resume/ResumeDocumentView.tsx`, is why this is +2 and
  *   not +3: it had the directive and needed none. Props in, paper out, no hook and
  *   no handler. Its interactive hosts pull it into their bundle by importing it,

@@ -156,7 +156,9 @@ function collect(root: Element): Collected {
         label: '',
         ...box,
         shape,
-        ...(fill && fill !== '#fff' ? { fill } : {}),
+        // The author's own fill, carried across as they set it. Second-guessing
+        // it — dropping white, say — would silently redraw their diagram.
+        ...(fill ? { fill } : {}),
         ...(stroke ? { stroke } : {}),
         fontSize: DIAGRAM_DEFAULT_FONT_SIZE,
         dashed,

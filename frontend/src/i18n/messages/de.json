@@ -16459,8 +16459,6 @@
       "campaignPublished": "Auf {published} von {targets} Konten veröffentlicht.",
       "campaignScheduled": "Für {count} Konten geplant.",
       "campaignUpdateFailed": "Diese Kampagne konnte nicht aktualisiert werden.",
-      "gateTitle": "Erstellen Sie ein kostenloses Konto, um Ihre Social-Media-Konten zu verbinden",
-      "gateBody": "Um X, LinkedIn, Facebook, Instagram und TikTok zu verbinden — und aus einer Kampagne heraus auf allen zu veröffentlichen — wird ein kostenloses Builderforce-Konto benötigt. Ihre Leinwand bleibt unverändert.",
       "boardMedia": "Aus dieser Leinwand anhängen",
       "boardMediaHelp": "Ausgewählte Bilder werden automatisch unter einer öffentlichen URL veröffentlicht — genau das brauchen Instagram und TikTok, um sie abzurufen."
     },
@@ -18011,7 +18009,9 @@
     "diagramShape": "{notation} · {shapes} Formen · {connections} Verbindungen",
     "diagramCreatedStatus": "Diagramm erstellt",
     "diagramAddedStatus": "Zum Diagramm hinzugefügt",
-    "connectedSources": "Verbundene Quellen"
+    "connectedSources": "Verbundene Quellen",
+    "connectedGateTitle": "Melde dich an, um {source} zu nutzen",
+    "connectedGateBody": "{source} liest ein mit deinem Workspace verbundenes Konto und setzt daher eine Anmeldung voraus. Erstelle ein kostenloses Konto oder melde dich an — diese Leinwand bleibt genau so, wie sie ist."
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

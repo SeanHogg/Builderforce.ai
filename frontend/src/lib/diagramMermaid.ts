@@ -60,12 +60,22 @@ const CONNECTOR = /(<?)(-{2,}|-\.-*|={2,})(?:\s*([^->|]*?)\s*)?(-\.->|-{2,}>|={2
 
 const IDENTIFIER = /^[A-Za-z0-9_][A-Za-z0-9_.:-]*$/;
 
+/** Mermaid escapes a character it would otherwise parse as syntax with its own
+ * `#…;` entity — named or by code point. Both forms are decoded, because the
+ * writer below emits them and a reader that only knew two of them turned its
+ * own output back into literal `#124;`. */
+const MERMAID_ENTITIES: Readonly<Record<string, string>> = {
+  quot: '"', amp: '&', lt: '<', gt: '>', semi: ';', colon: ':', hash: '#', nbsp: ' ',
+};
+
 function unquote(value: string): string {
   const trimmed = value.trim();
   const inner = /^"([\s\S]*)"$/.exec(trimmed)?.[1] ?? /^'([\s\S]*)'$/.exec(trimmed)?.[1] ?? trimmed;
   return inner
     .replaceAll('<br/>', '\n').replaceAll('<br>', '\n').replaceAll('<br />', '\n')
-    .replaceAll('#quot;', '"').replaceAll('#35;', '#')
+    .replace(/#(\d{1,5}|[a-z]{2,5});/gi, (match, entity: string) => (
+      /^\d+$/.test(entity) ? String.fromCodePoint(Number(entity)) : MERMAID_ENTITIES[entity.toLowerCase()] ?? match
+    ))
     .trim();
 }
 
@@ -189,10 +199,19 @@ function mermaidIds(graph: DiagramGraph): Map<string, string> {
   return ids;
 }
 
+/** Mermaid's numeric escape for a character it would otherwise parse as syntax.
+ * Derived from the code point rather than spelled out, so the writer and the
+ * reader above cannot disagree about which character an entity stands for. */
+const mermaidEntity = (character: string): string => `#${character.codePointAt(0)};`;
+
 /** Mermaid reads `"` as the end of a quoted label and `|` as the end of an edge
  * label, so both have to leave as entities rather than as themselves. */
 function mermaidLabel(label: string): string {
-  return label.replaceAll('"', '#quot;').replaceAll('|', '#124;').replaceAll('\n', '<br/>').trim();
+  return label
+    .replaceAll('"', mermaidEntity('"'))
+    .replaceAll('|', mermaidEntity('|'))
+    .replaceAll('\n', '<br/>')
+    .trim();
 }
 
 export function writeMermaid(graph: DiagramGraph): string {

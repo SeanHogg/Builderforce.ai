@@ -261,6 +261,26 @@ function xmlAttribute(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
+/**
+ * A label, escaped TWICE — and it has to be.
+ *
+ * A draw.io `value` is HTML living inside an XML attribute, so it passes
+ * through two decoders on the way back in: the XML parser, then the HTML the
+ * label is written in. A label containing `<now>` escaped only once arrives at
+ * the reader as literal `<now>`, where the tag stripper deletes it as markup —
+ * the text silently disappears from the shape. Escaping for HTML first and
+ * letting `xmlAttribute` escape that is what draw.io itself writes, which is
+ * why its own files carry `&amp;lt;`.
+ *
+ * Newlines become `<br/>` AFTER the escape, so the one tag we do intend
+ * survives it.
+ */
+function drawioLabel(label: string): string {
+  return label
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('\n', '<br/>');
+}
+
 /** The mxGraph style tokens each shape is drawn with. Rect is the default
  * shape, so it contributes nothing but its fill. */
 const STYLE_BY_SHAPE: Readonly<Record<DiagramShape, string>> = {
@@ -305,7 +325,7 @@ function edgeStyle(edge: DiagramEdge): string {
 export function writeDrawio(graph: DiagramGraph, name = 'Page-1'): string {
   const cells = [
     ...graph.vertices.map((vertex) =>
-      `<mxCell id="${xmlAttribute(vertex.id)}" value="${xmlAttribute(vertex.label.replaceAll('\n', '<br/>'))}" style="${xmlAttribute(vertexStyle(vertex))}" vertex="1" parent="1"><mxGeometry x="${Math.round(vertex.x)}" y="${Math.round(vertex.y)}" width="${Math.round(vertex.width)}" height="${Math.round(vertex.height)}" as="geometry" /></mxCell>`),
+      `<mxCell id="${xmlAttribute(vertex.id)}" value="${xmlAttribute(drawioLabel(vertex.label))}" style="${xmlAttribute(vertexStyle(vertex))}" vertex="1" parent="1"><mxGeometry x="${Math.round(vertex.x)}" y="${Math.round(vertex.y)}" width="${Math.round(vertex.width)}" height="${Math.round(vertex.height)}" as="geometry" /></mxCell>`),
     ...graph.edges.map((edge) => {
       const endpoints = `${edge.source ? ` source="${xmlAttribute(edge.source)}"` : ''}${edge.target ? ` target="${xmlAttribute(edge.target)}"` : ''}`;
       // An edge with no endpoints still has to land somewhere, so its first and
@@ -314,7 +334,7 @@ export function writeDrawio(graph: DiagramGraph, name = 'Page-1'): string {
       const last = edge.points[edge.points.length - 1];
       const fixed = !edge.source && first ? `<mxPoint x="${Math.round(first.x)}" y="${Math.round(first.y)}" as="sourcePoint" />` : '';
       const fixedEnd = !edge.target && last ? `<mxPoint x="${Math.round(last.x)}" y="${Math.round(last.y)}" as="targetPoint" />` : '';
-      return `<mxCell id="${xmlAttribute(edge.id)}" value="${xmlAttribute(edge.label)}" style="${xmlAttribute(edgeStyle(edge))}" edge="1" parent="1"${endpoints}><mxGeometry relative="1" as="geometry">${fixed}${fixedEnd}</mxGeometry></mxCell>`;
+      return `<mxCell id="${xmlAttribute(edge.id)}" value="${xmlAttribute(drawioLabel(edge.label))}" style="${xmlAttribute(edgeStyle(edge))}" edge="1" parent="1"${endpoints}><mxGeometry relative="1" as="geometry">${fixed}${fixedEnd}</mxGeometry></mxCell>`;
     }),
   ].join('');
   return `<mxfile host="Builderforce" agent="Builderforce Creation Canvas"><diagram id="builderforce-diagram" name="${xmlAttribute(name)}"><mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0"><root><mxCell id="0" /><mxCell id="1" parent="0" />${cells}</root></mxGraphModel></diagram></mxfile>`;

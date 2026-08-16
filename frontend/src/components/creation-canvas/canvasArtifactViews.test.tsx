@@ -10,6 +10,13 @@ const youtube = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/youtubeApi', () => ({ youtubeApi: youtube }));
 
+/** The Files panel's cloud source browses a real drive; these assert WHEN it is
+ *  allowed to reach for one, not what a drive contains. */
+const drive = vi.hoisted(() => ({
+  providers: vi.fn(), connectUrl: vi.fn(), disconnect: vi.fn(), list: vi.fn(), fetchFile: vi.fn(),
+}));
+vi.mock('@/lib/driveApi', () => ({ driveApi: drive }));
+
 /**
  * The regression these cover: a researched document, a generated deck, and a
  * Draw.io diagram all rendered as one line of grey placeholder text, and there
@@ -189,7 +196,7 @@ describe('files library', () => {
 
   it('lists every file the session holds and opens the object behind one', () => {
     const onOpen = vi.fn();
-    render(<CanvasFilesPanel files={files} onOpen={onOpen} onDownload={vi.fn()} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" />);
+    render(<CanvasFilesPanel files={files} onOpen={onOpen} onDownload={vi.fn()} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" onRequireAccount={() => true} />);
     expect(screen.getByText('market-analysis.md')).toBeTruthy();
     expect(screen.getByText('pricing.csv')).toBeTruthy();
     fireEvent.click(screen.getByText('market-analysis.md'));
@@ -197,7 +204,7 @@ describe('files library', () => {
   });
 
   it('filters by type and by name', () => {
-    render(<CanvasFilesPanel files={files} onOpen={vi.fn()} onDownload={vi.fn()} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" />);
+    render(<CanvasFilesPanel files={files} onOpen={vi.fn()} onDownload={vi.fn()} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" onRequireAccount={() => true} />);
     fireEvent.click(screen.getByRole('button', { name: 'Spreadsheet' }));
     expect(screen.queryByText('market-analysis.md')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'All' }));
@@ -207,14 +214,38 @@ describe('files library', () => {
 
   it('downloads the file a row stands for', () => {
     const onDownload = vi.fn();
-    render(<CanvasFilesPanel files={files} onOpen={vi.fn()} onDownload={onDownload} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" />);
+    render(<CanvasFilesPanel files={files} onOpen={vi.fn()} onDownload={onDownload} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" onRequireAccount={() => true} />);
     fireEvent.click(screen.getByRole('button', { name: 'Download pricing.csv' }));
     expect(onDownload).toHaveBeenCalledWith(expect.objectContaining({ name: 'pricing.csv' }));
   });
 
   it('tells a new session what will land here', () => {
-    render(<CanvasFilesPanel files={[]} onOpen={vi.fn()} onDownload={vi.fn()} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" />);
+    render(<CanvasFilesPanel files={[]} onOpen={vi.fn()} onDownload={vi.fn()} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" onRequireAccount={() => true} />);
     expect(screen.getByText(/no files yet/i)).toBeTruthy();
+  });
+
+  /** Board files and cloud files were two rail buttons opening two panels docked
+   *  at the same coordinates. One panel, one source picker. */
+  it('offers the board and the cloud as two sources of one panel', async () => {
+    drive.providers.mockResolvedValue({ providers: [], connections: [] });
+    render(<CanvasFilesPanel files={files} onOpen={vi.fn()} onDownload={vi.fn()} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" onRequireAccount={() => true} />);
+    expect(screen.getByRole('button', { name: 'This board' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Cloud' }));
+    expect(await screen.findByText(/no cloud storage is available/i)).toBeTruthy();
+    // The board's own files are not listed while the cloud is being read.
+    expect(screen.queryByText('pricing.csv')).toBeNull();
+  });
+
+  /** The 401 a signed-out visitor filed as five support tickets: the cloud source
+   *  must not call the API at all until the account gate has been answered. */
+  it('does not read a drive until the connected-account gate allows it', () => {
+    drive.providers.mockClear();
+    const onRequireAccount = vi.fn(() => false);
+    render(<CanvasFilesPanel files={files} onOpen={vi.fn()} onDownload={vi.fn()} onClose={vi.fn()} onImportFile={vi.fn()} returnTo="/create/test" onRequireAccount={onRequireAccount} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Cloud' }));
+    expect(onRequireAccount).toHaveBeenCalledWith('Cloud');
+    expect(drive.providers).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'This board' }).getAttribute('aria-pressed')).toBe('true');
   });
 });
 
