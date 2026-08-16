@@ -106,8 +106,15 @@ const BASELINE = {
    * `12`/`13` meant small, `14` meant body and `26` meant section. Two headings
    * that had nothing else to say took the `.ui-text-*` class instead of the token,
    * which is what the guard's own message asks for.
+   *
+   * 3,793 → 3,789: the login and register split-panels lost two literals each when
+   * their hand-rolled FAQ disclosures — inline `fontSize: '0.85rem'` on the summary
+   * and `'0.82rem'` on the answer — were replaced by the one `<MarketingFaq>`,
+   * which names its roles in `globals.css`. Four of the six FAQ treatments in the
+   * tree were carrying their own type ramp; that is the shape this ratchet exists
+   * to find.
    */
-  offScaleFontSizes: 3793,
+  offScaleFontSizes: 3789,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

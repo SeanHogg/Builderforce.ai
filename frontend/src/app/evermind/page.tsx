@@ -5,6 +5,7 @@ import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import BrainBackdrop from '@/components/BrainBackdrop';
 import ModelApiSamples from '@/components/ModelApiSamples';
+import MarketingFaq from '@/components/marketing/MarketingFaq';
 import { evermindSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import { EVERMIND } from '@/lib/content';
@@ -130,11 +131,7 @@ export default async function EvermindPage() {
         .ev-table td.ev-yes { color: var(--text-primary); }
         .ev-table tr:last-child td { border-bottom: none; }
 
-        .ev-faq details { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 4px 18px; margin-bottom: 10px; background: var(--surface-card); }
-        .ev-faq summary { cursor: pointer; padding: 14px 0; font-weight: 600; color: var(--text-primary); font-size: var(--font-size-card-title); list-style: none; }
-        .ev-faq summary::-webkit-details-marker { display: none; }
-        .ev-faq details[open] summary { border-bottom: 1px solid var(--border-subtle); }
-        .ev-faq p { color: var(--text-secondary); line-height: 1.7; font-size: var(--font-size-body); padding: 14px 0 16px; margin: 0; }
+        /* The FAQ disclosure is MarketingFaq / .mk-q now. */
 
         .ev-figure { width: 100%; height: auto; display: block; border-radius: var(--radius-xl); border: 1px solid var(--border-subtle); margin: 18px 0 6px; background: var(--bg-deep); }
         .ev-figcap { font-size: var(--font-size-small); color: var(--text-muted); margin: 0 0 4px; text-align: center; }
@@ -298,14 +295,9 @@ export default async function EvermindPage() {
           </section>
 
           {/* ── FAQ (GEO) ── */}
-          <section className="ev-section ev-faq">
+          <section className="ev-section">
             <h2 className="ev-h2"><span className="ev-accent">⟩</span> {t('evermind.faqHeading')}</h2>
-            {faq.map((item) => (
-              <details key={item.question}>
-                <summary>{item.question}</summary>
-                <p>{item.answer}</p>
-              </details>
-            ))}
+            <MarketingFaq items={faq} />
           </section>
 
           {/* ── The adoption case: workforce + owned stack ── */}

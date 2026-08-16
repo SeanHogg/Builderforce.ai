@@ -506,6 +506,7 @@ export function compareSchema() {
           description: criterion.desc,
         })),
       },
+      faqSchema(COMPARE_FAQ),
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
         { name: 'Compare', url: `${BRAND.url}/compare` },

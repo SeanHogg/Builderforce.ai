@@ -65,6 +65,8 @@ import {
   completeSiteSubscription,
   startSiteSubscriptionCheckout,
 } from '../marketplace/siteSubscriptions';
+import { SITE_LANDING_KEY } from './siteLandingPage';
+import { forkedDocumentHeaders, landingPageApplies, resolveSiteVisitor } from './siteVisitor';
 
 /** Path prefix reserved for the site's datastore. A published site cannot use
  *  it for assets — enforced by checking it before R2 is consulted. */
@@ -590,7 +592,8 @@ export async function tryServeHostedSite(
   const site = await resolveSiteForHost(env, request.headers.get('host') ?? undefined);
   if (!site) return null;
 
-  const path = new URL(request.url).pathname;
+  const url = new URL(request.url);
+  const path = url.pathname;
   // One counting call for every exit, so a new branch cannot forget it.
   const count = async (bytes: number, pageView?: boolean): Promise<void> => {
     const pending = countRequest(env, site, request, path, bytes, pageView);
@@ -614,8 +617,42 @@ export async function tryServeHostedSite(
     }
   }
 
+  // ── The shop window ─────────────────────────────────────────────────────────
+  // One additive fork, on the ENTRY DOCUMENT only. A site with no landing page never
+  // reaches the database here — `landingPageApplies` reads a field already on the
+  // cached record — so nothing about serving an app changes for anyone who has not
+  // authored one.
+  if (landingPageApplies(site, url)) {
+    const visitor = await resolveSiteVisitor(buildDatabase(env), site, request);
+    if (!visitor.entitled) {
+      const landing = await serveLandingDocument(env, site);
+      if (landing) {
+        await count(landing.bytes, true);
+        return landing.response;
+      }
+      // The pointer said there is a shop window and R2 did not have it. Serving the
+      // app is the right failure: the visitor gets the product rather than an error
+      // page, and the next publish rewrites the document.
+    }
+  }
+
   const { response, bytes } = await serveAsset(env, site, path.replace(/^\/+/, ''));
   await count(bytes);
   return response;
+}
+
+/** Read the rendered landing document out of the release's own prefix. Null when it
+ *  is not there, which the caller treats as "serve the app". */
+async function serveLandingDocument(
+  env: Env & { UPLOADS?: R2Bucket },
+  site: SiteRecord,
+): Promise<{ response: Response; bytes: number } | null> {
+  if (!env.UPLOADS) return null;
+  const object = await env.UPLOADS.get(site.r2Prefix + SITE_LANDING_KEY);
+  if (!object) return null;
+  return {
+    response: new Response(object.body, { headers: forkedDocumentHeaders() }),
+    bytes: object.size ?? 0,
+  };
 }
 

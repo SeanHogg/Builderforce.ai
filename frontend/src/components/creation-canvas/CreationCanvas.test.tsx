@@ -129,8 +129,29 @@ describe('CreationCanvas', () => {
    * chunk exists. `findBy*` is the query that waits, and it is also the honest
    * one: this is what a real user's first entry into 3D does.
    */
+  /**
+   * The buttons carrying a given accessible name — for the assertions that COUNT
+   * controls rather than ask whether a user could find one.
+   *
+   * The 3D test below pins eighteen such facts ("the rail and the phone stack each
+   * offer Zoom in", "the depth toggle is gone once you leave"). Written as
+   * `screen.getAllByRole('button', { name })` it spent **46s of the 60s ceiling** on
+   * an idle machine and failed the moment anything else ran beside it. Measured, the
+   * cost is not the name matching — dropping the name filter only took it to 41s —
+   * it is that every role scan re-runs Testing Library's accessibility-visibility
+   * check over a document holding the whole canvas palette. One `querySelectorAll`
+   * plus a plain name filter is **9s**, and every count these tests pin is unchanged.
+   *
+   * The trade, stated rather than hidden: this matches literal `<button>` elements,
+   * so it would not notice one of them being hidden from the accessibility tree.
+   * That is the right tool for "how many of these exist" and the WRONG one for "can
+   * a user reach this" — the other 82 tests in this file keep `getByRole` for that.
+   */
+  const namedButtons = (name: string) => [...document.querySelectorAll('button')]
+    .filter((button) => (button.getAttribute('aria-label') ?? button.textContent ?? '').trim() === name);
+
   const enterThreeD = async () => {
-    fireEvent.click(screen.getAllByRole('button', { name: '3D space' })[0]!);
+    fireEvent.click(namedButtons('3D space')[0]!);
     return screen.findByTestId('canvas-3d-view');
   };
 
@@ -140,7 +161,7 @@ describe('CreationCanvas', () => {
     // The rail and the phone-sized action stack both offer the surface. It is named
     // for the surface, not for the act of toggling, because it is one entry in the
     // surface switcher rather than a mode of its own — see `canvasSurfaces.ts`.
-    const [toggle] = screen.getAllByRole('button', { name: '3D space' });
+    const [toggle] = namedButtons('3D space');
     expect(screen.queryByTestId('canvas-3d-view')).not.toBeInTheDocument();
 
     const scene = await enterThreeD();
@@ -148,8 +169,8 @@ describe('CreationCanvas', () => {
     expect(scene).toBeInTheDocument();
     // The mini map is a map of the flat board, so it — and its button — stand
     // down in 3D.
-    expect(screen.queryByRole('button', { name: 'Close mini map' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Toggle mini map' })).not.toBeInTheDocument();
+    expect(namedButtons('Close mini map')).toHaveLength(0);
+    expect(namedButtons('Toggle mini map')).toHaveLength(0);
     // The rail owns every 3D command, so the scene carries no toolbar at all —
     // no exit, no depth control, no zoom. A second header stacked over the board
     // is what this replaced.
@@ -160,15 +181,15 @@ describe('CreationCanvas', () => {
 
     // The scene's own commands ride the chrome the board already had — the rail
     // and the phone-sized stack both drive the scene, so each is offered twice.
-    expect(screen.getAllByRole('button', { name: 'Zoom in' })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: 'Zoom out' })).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: 'Reset view' })).toHaveLength(2);
+    expect(namedButtons('Zoom in')).toHaveLength(2);
+    expect(namedButtons('Zoom out')).toHaveLength(2);
+    expect(namedButtons('Reset view')).toHaveLength(2);
     // Both read one controller: flipping the axis on the rail flips it everywhere.
-    const depth = screen.getAllByRole('button', { name: 'Stack layers by object group' });
+    const depth = namedButtons('Stack layers by object group');
     expect(depth).toHaveLength(2);
     expect(depth.map((button) => button.getAttribute('aria-pressed'))).toEqual(['false', 'false']);
     fireEvent.click(depth[0]!);
-    expect(screen.getAllByRole('button', { name: 'Stack layers by object group' })
+    expect(namedButtons('Stack layers by object group')
       .map((button) => button.getAttribute('aria-pressed'))).toEqual(['true', 'true']);
 
     fireEvent.click(toggle!);
@@ -176,8 +197,8 @@ describe('CreationCanvas', () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(toggle).toHaveAttribute('title', 'View this canvas in 3D');
     // Leaving hands the rail back: the 3D commands go, the flat ones return.
-    expect(screen.queryAllByRole('button', { name: 'Stack layers by object group' })).toHaveLength(0);
-    expect(screen.getByRole('button', { name: 'Toggle mini map' })).toBeInTheDocument();
+    expect(namedButtons('Stack layers by object group')).toHaveLength(0);
+    expect(namedButtons('Toggle mini map')).toHaveLength(1);
   });
 
   it('selects the same object in 3D that the flat board would', async () => {
@@ -287,7 +308,7 @@ describe('CreationCanvas', () => {
 
     render(<CreationCanvas sessionId={sessionId} persistence="local" />);
 
-    await waitFor(() => expect(screen.getAllByText('Sales presentation roadmap').length).toBeGreaterThan(0), { timeout: 2_000 });
+    await waitFor(() => expect(screen.getAllByText('Sales presentation roadmap').length).toBeGreaterThan(0));
   });
 
   it('groups canvas history controls without changing their accessible actions', () => {
@@ -1095,7 +1116,7 @@ describe('CreationCanvas', () => {
 
     fireEvent.change(screen.getByLabelText('Ask Brain about this canvas'), { target: { value: 'Evaluate the selected canvas objects' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send to Brain' }));
-    await waitFor(() => expect(screen.getByDisplayValue('Canvas evaluation')).toBeInTheDocument(), { timeout: 2_000 });
+    await waitFor(() => expect(screen.getByDisplayValue('Canvas evaluation')).toBeInTheDocument());
     expect(screen.getByText('Evaluation added to canvas')).toBeInTheDocument();
   });
 
@@ -1113,7 +1134,7 @@ describe('CreationCanvas', () => {
     render(<CreationCanvas sessionId="feature-test" persistence="local" />);
     fireEvent.change(screen.getByLabelText('Ask Brain about this canvas'), { target: { value: 'Create a visual summary of the top 10 requested features and mockups' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send to Brain' }));
-    await waitFor(() => expect(screen.getByDisplayValue('Top 10 feature mockups')).toBeInTheDocument(), { timeout: 2_000 });
+    await waitFor(() => expect(screen.getByDisplayValue('Top 10 feature mockups')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Add to project and assign' }));
     expect(screen.getByRole('dialog', { name: 'Create an account to deliver this mockup' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Create a free account' })).toBeInTheDocument();

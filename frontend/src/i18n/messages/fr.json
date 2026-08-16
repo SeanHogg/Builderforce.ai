@@ -1131,11 +1131,25 @@
     "featuredDesc": "L’évaluation complète de style CMMI sur six pratiques, avec une version pilotée par les données calculée à partir de vos données de livraison réelles.",
     "open": "Ouvrir",
     "loading": "Chargement…",
+    "runFailed": "Impossible d’exécuter cet outil.",
+    "priority": {
+      "high": "Critique",
+      "medium": "Important",
+      "low": "Mineur"
+    },
+    "analyzer": {
+      "run": "Analyser",
+      "running": "Lecture…",
+      "optional": "facultatif",
+      "needsRequired": "Collez le texte requis pour lancer l’analyse.",
+      "privacy": "Votre texte est analysé sur le serveur et n’est jamais conservé. Rien n’est envoyé à un modèle."
+    },
     "category": {
       "delivery": "Livraison",
       "finops": "Coûts et FinOps",
       "governance": "Gouvernance",
-      "quality": "Qualité"
+      "quality": "Qualité",
+      "career": "Carrière et CV"
     },
     "kind": {
       "calculator": "Calculateur",
@@ -5864,7 +5878,10 @@
         "summary": "Continue.dev est une extension d'IDE ouverte pour l'assistance mono-agent. Builderforce.ai est indépendant de l'IDE et orchestre plusieurs agents spécialistes à travers des workflows complets de planification, de correction de bugs, de refactorisation et de revue, avec approbations, audit et mémoire persistante.",
         "verdict": "Choisissez Builderforce.ai plutôt que Continue.dev lorsque vous voulez une livraison multi-agents indépendante de l'IDE et de la gouvernance, plutôt qu'un assistant intégré à l'éditeur."
       }
-    }
+    },
+    "matrixHeading": "Capacité par capacité",
+    "matrixNote": "Chaque ligne correspond à une capacité et chaque colonne à un outil. Les cellules décrivent la prise en charge telle que nous la comprenons aujourd’hui. Les produits et les forfaits des fournisseurs évoluent souvent : vérifiez tout élément déterminant pour votre décision dans la documentation à jour du fournisseur et lors d’un essai pratique.",
+    "matrixScrollHint": "Faites défiler le tableau horizontalement pour voir tous les outils."
   },
   "promptUseCases": {
     "tabLabel": "Choisir un point de départ",
@@ -9038,7 +9055,10 @@
     "creating": "Création du compte…",
     "submit": "Créer un compte →",
     "haveAccount": "Vous avez déjà un compte ?",
-    "signInLink": "Se connecter"
+    "signInLink": "Se connecter",
+    "discountCodeLabel": "Code de réduction",
+    "discountCodeSaved": "Enregistré pour le paiement après l’inscription.",
+    "ageAttestation": "Je confirme avoir au moins 18 ans. BuilderForce ne s’adresse pas aux enfants."
   },
   "welcomeRole": {
     "eyebrow": "Bienvenue",
@@ -18068,7 +18088,21 @@
         "desktop": "Bureau",
         "tablet": "Tablette",
         "mobile": "Mobile",
-        "pageCount": "{count, plural, =0 {aucune page} one {# page} other {# pages}}"
+        "pageCount": "{count, plural, =0 {aucune page} one {# page} other {# pages}}",
+        "addSection": "Ajouter",
+        "addSectionPrompt": "Ajouter une section…",
+        "moveUp": "Monter",
+        "moveDown": "Descendre",
+        "duplicate": "Dupliquer",
+        "delete": "Supprimer",
+        "sectionTools": "Modifier la section {kind}",
+        "section": {
+          "features": "Fonctionnalités",
+          "content": "Texte",
+          "stats": "Chiffres",
+          "testimonial": "Citation",
+          "cta": "À l’action"
+        }
       },
       "timeline": {
         "label": "Montage",

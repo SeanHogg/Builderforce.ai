@@ -12,6 +12,7 @@ import {
 } from '@/lib/publicDestinations';
 import { isSeat, seatHueVar } from '@/lib/seats';
 import type { BurnrateDomainCopy } from '@/components/marketing/BurnrateDomainPage';
+import MarketingFaq from '@/components/marketing/MarketingFaq';
 import MethodologySection from '@/components/marketing/MethodologySection';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import { Icon } from '@/components/ui/Icon';
@@ -246,24 +247,17 @@ export default async function FeaturesPage() {
       <section className="mk-band mk-band--tint">
         <div className="mk-in">
           <header className="mk-center"><h2>{t('faqTitle')}</h2></header>
-          {/* `<details>` rather than the left panel's controlled disclosure: this
-              page is a server component and the summary/marker semantics come
-              free and keyboard-correct. The nav's own header cannot use it —
-              it is controlled, persisted, and has to stay closed when the rail
-              collapses to icons — so the two are deliberately not one component. */}
-          <div className="mk-faq">
-            {(t.raw('faq') as Array<{ q: string; a: string }>).map((item) => (
-              <details key={item.q} className="mk-q">
-                <summary>
-                  {item.q}
-                  <svg className="mk-q__chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </summary>
-                <p>{item.a}</p>
-              </details>
-            ))}
-          </div>
+          {/* THE marketing FAQ list. This band used to re-inline the `.mk-q`
+              markup by hand against a `{q, a}` shape while `ReferencePage`
+              exported its own copy against `{question, answer}` — one list, two
+              declarations. The catalog keeps this page's shorthand keys, so the
+              shape is mapped here rather than duplicating the component. */}
+          <MarketingFaq
+            items={(t.raw('faq') as Array<{ q: string; a: string }>).map((item) => ({
+              question: item.q,
+              answer: item.a,
+            }))}
+          />
         </div>
       </section>
 

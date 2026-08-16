@@ -174,7 +174,22 @@ export class ToolService {
   compute(id: string, input: Record<string, number>): ToolResult | null {
     const tool = getTool(id);
     if (!tool) return null;
+    if (tool.kind === 'analyzer') return null;
     return tool.kind === 'calculator' ? tool.compute(input) : tool.score(input);
+  }
+
+  /**
+   * Pure analysis — runs an analyzer over the supplied DOCUMENTS.
+   *
+   * Separate from {@link compute} because the input map is string-valued: an
+   * analyzer reads prose the person wrote, where every other kind scores numbers
+   * they picked from choices we wrote. Equally pure, so equally safe to expose
+   * publicly for the free preview.
+   */
+  analyze(id: string, input: Record<string, string>): ToolResult | null {
+    const tool = getTool(id);
+    if (!tool || tool.kind !== 'analyzer') return null;
+    return tool.analyze(input);
   }
 
   /** Whether a tool has a telemetry-derived "from your data" mode. */

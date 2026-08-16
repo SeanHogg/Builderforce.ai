@@ -11,6 +11,7 @@ import { MeetCarousel } from '@/components/home/MeetCarousel';
 import { TensionBeat } from '@/components/home/TensionBeat';
 import { CreationCtaSection } from '@/components/marketing/CreationCtaSection';
 import { LatestBlogSection } from '@/components/marketing/LatestBlogSection';
+import MarketingFaq from '@/components/marketing/MarketingFaq';
 import { NewsletterSignupSection } from '@/components/marketing/NewsletterSignupSection';
 import {
   CardTitle,
@@ -102,14 +103,7 @@ export default function LandingPage() {
             they actually surface. */}
         <HomeSection>
           <HomeSectionHeader eyebrow={t('home.beat.questions')} title={t('home.faqHeading')} />
-          <div className={styles.faq}>
-            {(t.raw('home.homepageFaq') as FaqItem[]).map((faq, index) => (
-              <details className={styles.faqItem} key={faq.question} open={index === 0}>
-                <summary>{faq.question}</summary>
-                <p>{faq.answer}</p>
-              </details>
-            ))}
-          </div>
+          <MarketingFaq items={t.raw('home.homepageFaq') as FaqItem[]} openFirst />
         </HomeSection>
 
         {/* 7 · THE ASK */}

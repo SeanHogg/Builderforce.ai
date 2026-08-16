@@ -1671,6 +1671,46 @@
 .siteViewports button:hover,.siteViewports button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
 .siteViewports button[aria-pressed='true'] { background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 1px 2px var(--canvas-shadow); }
 
+/* ── Structural editing ──────────────────────────────────────────────────────────
+   The "add a section" control. A native <select> so the kind list is one element on a
+   phone and a keyboard can reach every option; its own opaque background and colour are
+   NOT optional — a native <option> is painted by the OS and inherits nothing, so a
+   transparent one renders as dark-on-dark for half the readers. */
+.siteAdd { display:flex; align-items:center; gap:6px; }
+.siteAdd label { color:var(--canvas-muted); font-size:10px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
+.siteAdd select {
+  min-height:26px; max-width:150px; padding:3px 8px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md);
+  background:var(--canvas-panel); color:var(--canvas-ink);
+  font-family:inherit; font-size:11px; font-weight:600; cursor:pointer;
+}
+.siteAdd select:focus-visible { outline:2px solid var(--canvas-accent,var(--coral-bright)); outline-offset:1px; }
+.siteAdd option { background:var(--canvas-panel); color:var(--canvas-ink); }
+
+/* Each section gets a rail rather than an overlay: a floating toolbar on hover hides
+   the content it is about, and on a touch screen there is no hover to reveal it. */
+.siteSectionSlot { position:relative; }
+.siteSectionSlot + .siteSectionSlot { border-top:1px dashed var(--canvas-line); }
+.siteSectionTools {
+  display:flex; flex-wrap:wrap; align-items:center; gap:3px;
+  padding:5px 8px; border-bottom:1px solid var(--canvas-line);
+  background:var(--canvas-panel-muted);
+}
+.siteSectionKind {
+  margin-right:auto; color:var(--canvas-muted);
+  font:650 9px/1.6 var(--font-mono,var(--font-sans)); letter-spacing:.12em; text-transform:uppercase;
+}
+.siteSectionTools button {
+  display:grid; place-items:center; min-width:26px; min-height:26px; padding:0 5px;
+  border:1px solid transparent; border-radius:var(--radius-sm);
+  background:transparent; color:var(--canvas-muted); font-family:inherit; font-size:12px; line-height:1; cursor:pointer;
+}
+.siteSectionTools button:hover:not(:disabled),
+.siteSectionTools button:focus-visible:not(:disabled) { border-color:var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-ink); outline:none; }
+/* Disabled, never hidden: a control that vanishes teaches nothing about WHY the hero
+   cannot be deleted, and a rail whose buttons move as you use it is unusable. */
+.siteSectionTools button:disabled { opacity:.35; cursor:not-allowed; }
+
 /* Time needs width, which is the whole reason this surface exists. */
 .timelineStage { min-height:0; flex:1; display:flex; flex-direction:column; width:min(100%,1440px); margin:0 auto; padding:14px 16px 20px; }
 .timelineMeta { display:flex; flex:none; align-items:baseline; gap:6px; }

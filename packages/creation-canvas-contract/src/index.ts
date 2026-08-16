@@ -23,6 +23,11 @@ export * from './resumeDocument';
 // kind, the API's `party_roles` writer and the kernel's own role column must mean the
 // same thing on purpose; see `parties.ts`.
 export * from './parties';
+// The authored-website vocabulary, parser and block-level section operations. Shared
+// because the `site` surface renders it as React and the site publisher renders the
+// SAME object to static HTML in a Worker — two renderers, and a section vocabulary
+// stated twice is one that drifts until the publisher drops what the editor allows.
+export * from './website';
 // `export *` re-exports a binding; it does not bring it INTO scope here, and the
 // kind list below spreads it — without this import the whole contract module
 // throws `PEOPLE_OBJECT_KINDS is not defined` at import time, which takes every

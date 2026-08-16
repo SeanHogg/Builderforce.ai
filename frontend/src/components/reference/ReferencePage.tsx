@@ -217,20 +217,7 @@ export function ReferenceCta({ title, body, actions = [], children }: {
   );
 }
 
-export function ReferenceFaq({ items }: { items: Array<{ question: string; answer: string }> }) {
-  return (
-    <div className="mk-faq">
-      {items.map((item) => (
-        <details key={item.question} className="mk-q">
-          <summary>
-            {item.question}
-            <svg className="mk-q__chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </summary>
-          <p>{item.answer}</p>
-        </details>
-      ))}
-    </div>
-  );
-}
+/* The FAQ list used to live here as `ReferenceFaq`, and `/features` carried a
+   second hand-inlined copy of the same markup. Both now render THE one
+   `<MarketingFaq>` (components/marketing/MarketingFaq.tsx) — a reference page's
+   FAQ is not a different kind of FAQ from a marketing page's. */

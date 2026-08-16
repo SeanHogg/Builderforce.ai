@@ -2,9 +2,10 @@ import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
+import MarketingFaq from '@/components/marketing/MarketingFaq';
 import { Soc2AuditVisual } from '@/components/marketing/Soc2AuditVisual';
 import {
-  ReferenceCard, ReferenceCta, ReferenceFaq, ReferenceGrid, ReferenceHero, ReferencePage, ReferenceSection,
+  ReferenceCard, ReferenceCta, ReferenceGrid, ReferenceHero, ReferencePage, ReferenceSection,
 } from '@/components/reference/ReferencePage';
 import { soc2Schema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
@@ -128,7 +129,7 @@ export default async function Soc2Page() {
         </ReferenceSection>
 
         <ReferenceSection id="faq" title={t('soc2.faqTitle')}>
-          <ReferenceFaq items={faq} />
+          <MarketingFaq items={faq} />
         </ReferenceSection>
 
         <ReferenceCta

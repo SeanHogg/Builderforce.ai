@@ -12,7 +12,10 @@ import { getStoredTenantToken } from '@/lib/auth';
 import type { ToolSummary, ToolCategory, TenantDiagnosticsRollup } from '@/lib/tools';
 import { Icon } from '@/components/ui/Icon';
 
-const CATEGORY_ORDER: ToolCategory[] = ['delivery', 'finops', 'governance', 'quality'];
+// `career` sits last: the four before it diagnose a WORKSPACE and are what a
+// signed-in operator came for, while the career analyzers are personal and
+// arrive mostly from an article rather than from this page.
+const CATEGORY_ORDER: ToolCategory[] = ['delivery', 'finops', 'governance', 'quality', 'career'];
 
 /**
  * The diagnostics hub — a reference page (PRD 21 §11.4.5), and now built like

@@ -25,6 +25,32 @@ const card: CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 16,
 };
 
+/**
+ * How much a recommendation matters, as a chip.
+ *
+ * The career analyzers rank their findings and the ranking is the point — a
+ * "critical" fix and a "minor" one rendered identically turn a ranked plan back
+ * into a flat to-do list. Semantic colour, deliberately not the accent: this is a
+ * judgement about the finding, not branding.
+ */
+function PriorityChip({ priority }: { priority: 'high' | 'medium' | 'low' }) {
+  const t = useTranslations('tools');
+  const tone = priority === 'high'
+    ? { fg: 'var(--error)', bg: 'var(--error-soft, var(--bg-elevated))' }
+    : priority === 'medium'
+      ? { fg: 'var(--warning)', bg: 'var(--warning-soft, var(--bg-elevated))' }
+      : { fg: 'var(--text-muted)', bg: 'var(--bg-elevated)' };
+  return (
+    <span style={{
+      fontSize: 'var(--font-size-small)', fontWeight: 700, letterSpacing: '0.06em',
+      textTransform: 'uppercase', color: tone.fg, background: tone.bg,
+      border: `1px solid ${tone.fg}`, borderRadius: 'var(--radius-sm)', padding: '1px 6px',
+    }}>
+      {t(`priority.${priority}`)}
+    </span>
+  );
+}
+
 /** Compact 1..5 band ladder — where a score lands, coloured, active segment lit. */
 function LevelLadder({ tier }: { tier: number }) {
   return (
@@ -154,7 +180,10 @@ export function ToolResultView({ result }: { result: ToolResult }) {
                   fontSize: 'var(--font-size-small)', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>{i + 1}</span>
                 <div>
-                  <strong style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-strong)' }}>{r.title}</strong>
+                  <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-strong)' }}>{r.title}</strong>
+                    {r.priority && <PriorityChip priority={r.priority} />}
+                  </span>
                   <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginTop: 2 }}>{r.detail}</div>
                 </div>
               </li>

@@ -13,6 +13,7 @@ import RelatedArticles from './blog/RelatedArticles';
 import { signInHref } from '@/lib/auth';
 import { ProjectManagerVisual } from './marketing/ProjectManagerVisual';
 import MethodologySection from './marketing/MethodologySection';
+import MarketingFaq from './marketing/MarketingFaq';
 
 /**
  * Marketing page rendered (inside MarketingShell) when a logged-out visitor or
@@ -211,17 +212,7 @@ function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: strin
       {faq && faq.length > 0 && (
         <section className="rm-faq">
           <div className="ui-eyebrow rm-inside-head">{t('faqHeading')}</div>
-          <div className="rm-faq-list">
-            {faq.map((q) => (
-              <details
-                key={q.question}
-                className={surfaceClassName({ tone: 'raised', padding: 'none' }, 'rm-faq-item')}
-              >
-                <summary className="ui-text-card-title rm-faq-q">{q.question}</summary>
-                <p className="ui-text-body rm-faq-a">{q.answer}</p>
-              </details>
-            ))}
-          </div>
+          <MarketingFaq items={faq} />
         </section>
       )}
 
@@ -311,18 +302,11 @@ function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: strin
         .rm-card { display: flex; flex-direction: column; gap: var(--space-2); text-decoration: none; }
         .rm-card-icon { font-size: var(--font-size-section); }
 
+        /* .rm-faq is the section's own width; the disclosure inside it is
+           MarketingFaq / .mk-q. The fifth parallel vocabulary this block was
+           already documented as having shed — the FAQ item, on the component
+           that renders for 86 public routes. */
         .rm-faq { width: 100%; }
-        .rm-faq-list { display: flex; flex-direction: column; gap: var(--space-3); }
-        .rm-faq-item { padding-left: var(--space-5); padding-right: var(--space-5); }
-        .rm-faq-q {
-          cursor: pointer; list-style: none; padding: var(--space-4) 0;
-          color: var(--text-primary); display: flex;
-          justify-content: space-between; align-items: center; gap: var(--space-3);
-        }
-        .rm-faq-q::-webkit-details-marker { display: none; }
-        .rm-faq-q::after { content: '+'; color: var(--coral-bright); font-size: var(--font-size-section); line-height: 1; flex-shrink: 0; }
-        .rm-faq-item[open] .rm-faq-q::after { content: '–'; }
-        .rm-faq-a { margin: 0 0 var(--space-4); color: var(--text-secondary); }
         .rm-close { margin-top: var(--space-10); padding: clamp(28px, 5vw, 56px); border-radius: var(--radius-xl); display: flex; justify-content: space-between; align-items: center; gap: var(--space-8); background: linear-gradient(125deg, color-mix(in srgb, var(--accent) 16%, var(--surface-raised)), color-mix(in srgb, var(--coral-bright) 10%, var(--surface-raised))); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-subtle)); }
         .rm-close h2 { margin: var(--space-2) 0; font-size: var(--font-size-page-title); color: var(--text-primary); }
         .rm-close p { margin: 0; color: var(--text-secondary); max-width: 680px; }

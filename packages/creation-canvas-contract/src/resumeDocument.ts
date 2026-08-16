@@ -28,14 +28,14 @@ import type {
   CanvasResumeSkill,
   CanvasResumeWork,
 } from './resume';
-import { matchDateRange, parseResume, type ParsedResume, type ResumeSectionKind } from './resumeModel';
+import { RESUME_BULLET_GLYPH, matchDateRange, parseResume, type ParsedResume, type ResumeSectionKind } from './resumeModel';
 
-/** Bullet glyphs, matching the set `parseResume` strips. */
-const BULLET_GLYPH = /^\s*[-–—•·▪◦*‣⁃]\s+/;
+/** The one bullet set, owned by `resumeModel` — see {@link RESUME_BULLET_GLYPH}. */
+const BULLET_GLYPH = RESUME_BULLET_GLYPH;
 /** Running heads and page numbers, which otherwise become phantom entry titles. */
 const PAGE_FURNITURE = /^(page\s+\d+(\s+of\s+\d+)?|\d+\s*\/\s*\d+|-\s*\d+\s*-)$/i;
 /** Separators résumés use to pack two facts onto one line: "Acme | Senior Engineer". */
-const INLINE_SEPARATOR = /\s+[|▪•·—–]\s+|\s{3,}/;
+const INLINE_SEPARATOR = /\s+[|▪•·—–]\s*|\s*[|▪•·—–]\s+|\s{3,}/;
 
 const isBullet = (line: string): boolean => BULLET_GLYPH.test(line);
 const stripBullet = (line: string): string => line.replace(BULLET_GLYPH, '').trim();

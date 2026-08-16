@@ -4,7 +4,7 @@
  * directive would mark a second entry point that does not exist, and
  * `check-frontend-architecture` counts directives rather than components.
  */
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import ReactMarkdown from 'react-markdown';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
@@ -50,9 +50,19 @@ export interface WebsiteBodyProps {
    * preview cannot have a viewport control, so it must not have a viewport of its own.
    */
   viewport?: 'desktop' | 'tablet' | 'mobile';
+  /**
+   * Chrome drawn beside each section — move, duplicate, delete.
+   *
+   * A render prop rather than a `canEditStructure` flag, because the alternative is
+   * this module growing buttons, their labels, their five catalogs and the operation
+   * dispatch for a job only ONE of its two consumers has: the card is a preview, and
+   * structural editing in ~455px is the cramped-editor problem the `site` surface was
+   * created to end. Omitted, the markup is byte-identical to what the board draws.
+   */
+  sectionControls?: (section: WebsiteSection) => ReactNode;
 }
 
-export function WebsiteBody({ data, onEdit, viewport }: WebsiteBodyProps) {
+export function WebsiteBody({ data, onEdit, viewport, sectionControls }: WebsiteBodyProps) {
   const t = useTranslations('creationCanvas.node');
   const pages = websitePagesFrom(data);
   const theme = websiteThemeFrom(data);
@@ -78,7 +88,12 @@ export function WebsiteBody({ data, onEdit, viewport }: WebsiteBodyProps) {
   return (
     <div className={styles.websitePreview} data-viewport={drawnAt} data-theme={theme.style} style={{ '--site-bg': theme.background, '--site-fg': theme.foreground } as CSSProperties}>
       <nav className={`${styles.siteNav} nodrag nowheel`}><strong>{data.title}</strong><span>{pages.map((page) => <button key={page.id} type="button" data-active={page.id === activePage.id} onClick={(event) => { event.stopPropagation(); setLocalPageId(page.id); onEdit?.({ activeWebsitePageId: page.id }); }}>{page.name}</button>)}</span>{activePage.sections.find((section) => section.kind === 'hero')?.cta && <button style={{ background: accent }}>{activePage.sections.find((section) => section.kind === 'hero')?.cta}</button>}</nav>
-      {activePage.sections.map((section) => <WebsiteSectionBody key={section.id} section={section} accent={accent} />)}
+      {activePage.sections.map((section) => (sectionControls
+        ? <div key={section.id} className={styles.siteSectionSlot}>
+            {sectionControls(section)}
+            <WebsiteSectionBody section={section} accent={accent} />
+          </div>
+        : <WebsiteSectionBody key={section.id} section={section} accent={accent} />))}
     </div>
   );
 }

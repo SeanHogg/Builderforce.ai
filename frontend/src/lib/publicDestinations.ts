@@ -304,9 +304,12 @@ export interface FooterColumn {
 }
 
 export const FOOTER_COLUMNS: FooterColumn[] = [
-  { titleKey: 'colProduct', ids: ['canvas', 'marketplace', 'features', 'pricing', 'about'] },
+  // `compare` sits under Product, not Learn: "how does this compare to what I
+  // already use" is a question asked while choosing the product, alongside
+  // Pricing — not an article you go and read afterwards.
+  { titleKey: 'colProduct', ids: ['canvas', 'marketplace', 'features', 'pricing', 'compare', 'about'] },
   { titleKey: 'colPlatform', ids: ['evermind', 'ref.integrations', 'embedded', 'models', 'prompts'] },
-  { titleKey: 'colLearn', ids: ['blog', 'tutorials', 'compare', 'diagnostics', 'soc2', 'media'] },
+  { titleKey: 'colLearn', ids: ['blog', 'tutorials', 'diagnostics', 'soc2', 'media'] },
   { titleKey: 'colGetStarted', ids: ['demo', 'sell', 'signIn'] },
 ];
 

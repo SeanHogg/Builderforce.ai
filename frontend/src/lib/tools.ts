@@ -5,8 +5,8 @@
  * (free preview); saving a run goes through the authenticated `toolsApi`.
  */
 
-export type ToolCategory = 'delivery' | 'finops' | 'governance' | 'quality';
-export type ToolKind = 'calculator' | 'questionnaire' | 'quiz';
+export type ToolCategory = 'delivery' | 'finops' | 'governance' | 'quality' | 'career';
+export type ToolKind = 'calculator' | 'questionnaire' | 'quiz' | 'analyzer';
 
 export interface ToolSummary {
   id: string;
@@ -46,10 +46,23 @@ export interface QuizOption { level: number; text: string }
 export interface QuizQuestion { id: string; dimension: string; text: string; options: QuizOption[] }
 export interface QuizLevel { level: number; name: string; summary: string; advance: string }
 
+/** One field an analyzer reads. `document` is a long paste (a résumé, a posting);
+ *  `line` is a single value; `select` is a fixed choice. */
+export interface AnalyzerField {
+  id: string;
+  label: string;
+  type: 'document' | 'line' | 'select';
+  placeholder?: string;
+  help?: string;
+  required?: boolean;
+  options?: Array<{ value: string; label: string }>;
+}
+
 export type ToolDefinition =
   | (ToolSummary & { kind: 'calculator'; about: string; inputs: CalculatorInput[] })
   | (ToolSummary & { kind: 'questionnaire'; about: string; scale: ScaleAnchor[]; sections: QuestionnaireSection[] })
-  | (ToolSummary & { kind: 'quiz'; about: string; levels: QuizLevel[]; questions: QuizQuestion[] });
+  | (ToolSummary & { kind: 'quiz'; about: string; levels: QuizLevel[]; questions: QuizQuestion[] })
+  | (ToolSummary & { kind: 'analyzer'; about: string; fields: AnalyzerField[] });
 
 /** Remediation lifecycle a diagnostic's filed ticket(s) are in (mirrors the
  *  backend `RemediationState`). `none` = no remediation ticket → fall back to gaps. */
@@ -66,7 +79,13 @@ export interface RemediationSummary {
 }
 
 export interface ToolMetric { label: string; value: string; hint?: string; tier?: number }
-export interface ToolRecommendation { title: string; detail: string }
+export interface ToolRecommendation {
+  title: string;
+  detail: string;
+  /** How much this one matters. Carried by the career analyzers, which rank their
+   *  findings; absent on the questionnaire/quiz plans, already ordered by level. */
+  priority?: 'high' | 'medium' | 'low';
+}
 export interface ToolResult {
   headline: string;
   summary?: string;
@@ -185,7 +204,20 @@ export function defaultInput(def: ToolDefinition): Record<string, number> {
 export function questionIds(def: ToolDefinition): string[] {
   if (def.kind === 'calculator') return def.inputs.map((i) => i.id);
   if (def.kind === 'quiz') return def.questions.map((q) => q.id);
+  // An analyzer's fields are documents, not scored answers — it has no answer key
+  // to hand a caller, so the canvas diagnostic tool correctly posts nothing.
+  if (def.kind === 'analyzer') return [];
   return def.sections.flatMap((s) => s.questions.map((q) => q.id));
+}
+
+/** Which analyzer fields must carry text before it can run. */
+export function requiredFieldIds(def: ToolDefinition): string[] {
+  return def.kind === 'analyzer' ? def.fields.filter((f) => f.required).map((f) => f.id) : [];
+}
+
+/** Whether every required document has been supplied. */
+export function documentsComplete(def: ToolDefinition, values: Record<string, string>): boolean {
+  return requiredFieldIds(def).every((id) => (values[id] ?? '').trim().length > 0);
 }
 
 /** Whether every answer is provided for an answer-based tool. Calculators are
