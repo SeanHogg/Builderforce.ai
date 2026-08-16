@@ -132,8 +132,8 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 6 | [Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 31 |
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
-| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 38 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 153 |
+| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 39 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 157 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
@@ -152,8 +152,8 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 6 | 31 |
 | 7 | 25 |
 | 8 | 3 |
-| 9 | 38 |
-| 10 | 153 |
+| 9 | 39 |
+| 10 | 157 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
@@ -903,6 +903,45 @@ sequenced into waves because nothing in them gates the sell motion.
 ## 10 · 🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas
 
 ### Canvas surfaces
+
+- **A `website` section whose body is HTML renders as escaped TEXT, so the quote form the
+  user asked for is a wall of `&lt;form&gt;` markup.** *(registered 2026-08-16 from a live
+  GreenEdge Yard Care session, diagnostics captured 16:33:48Z, session
+  `local-442d63b8-e993-4150-bc30-0cde0031f355`)* `canvas_add_object` wrote a `content` section whose
+  `body` is a complete `<form>` plus a `<script>` (see the payload on the `quote` page of object
+  `bd52d651`), and `WebsiteBody`/`CanvasSiteSurface` print it verbatim. The user asked for "a
+  proof-of-concept marketing website with a Request a Quote form" and got source code on a page.
+  Fixing it = a `content` section carrying markup must render in a SANDBOXED frame under the same
+  rule `CANVAS_APP_FRAME_SANDBOX` and `GAME_FRAME_SANDBOX` already state — `allow-scripts` WITHOUT
+  `allow-same-origin`, via `srcDoc`, never `dangerouslySetInnerHTML` into the app DOM, because this
+  is model-authored markup from a free-text brief. Unblocks every generated site that contains a
+  form, which is most of them.
+
+- **A `website` + `code` pair that is really ONE app opens as two unrelated cards.** *(registered
+  2026-08-16, same session)* The same board holds `bd52d651` (website, with a form posting to a
+  backend) and `c51f7d5e` (code, the Twilio handler), joined by a `data` connection labelled "Quote
+  form submission" — i.e. an application. The website opens in the `site` surface and the code opens
+  nowhere; only `lib/canvasApp.ts` composes them, and it only reads `code` objects, so the site's
+  own HTML is invisible to the App surface. Fixing it = `canvasAppFiles` should project a `website`
+  object's pages into the app's file list, so a board like this runs as one thing under **App**
+  rather than as a static preview beside an orphan file.
+
+- **Nodes are all-or-nothing: no minimise, no expand, and errors/connectors read as the least
+  prominent thing on the card.** *(registered 2026-08-16, from the operator's review of the same
+  session)* Every card draws its full body at all times, so five objects fill the board and the
+  connections between them — the thing that says this is a SYSTEM — are hairlines behind them.
+  Fixing it = a per-node collapsed/preview/expanded state (the card keeps its identity strip and
+  gives up its body), plus promoting connectors and error badges above body content in the visual
+  order. Related to the shell entry below and to `canvasChrome.ts`'s status/control rule, which is
+  the same idea applied one level down: what a card REPORTS should survive its own collapse.
+
+- **A `website` card has no way into its surface — "open at full size" exists only in the
+  inspector.** *(registered 2026-08-16, same review)* `CanvasObjectSurfaceButton` renders in
+  `.inspectorHeaderActions` and nowhere else, so reaching the site runtime means selecting the card,
+  reading the inspector, and finding an icon in its header. It should also sit on the card header
+  itself beside `•••`. The component is already icon-chromed and registry-driven (fixed this pass);
+  what is missing is an `onOpenSurface` callback threaded to `CreationNode`, which is why this is
+  logged rather than done in the same edit.
 
 - **Four full-width bands of chrome before a single object is drawn, and a graph you cannot build by
   hand.** *(registered 2026-08-16 by the "resemble Make's UI/UX" review pass)* A `/create` session

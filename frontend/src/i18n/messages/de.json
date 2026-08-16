@@ -19178,7 +19178,19 @@
     },
     "moreMenuSessionActions": "Diese Leinwand",
     "templateCategoryAutomation": "Automatisierungen",
-    "templateCategoryPrompt": "Prompts"
+    "templateCategoryPrompt": "Prompts",
+    "commandBar": "Canvas-Befehle",
+    "runCanvas": "Ausführen",
+    "runCanvasTitle": "Die von diesem Board gebaute App öffnen und ausführen",
+    "quickAddGroup": "Zum Board hinzufügen",
+    "quickAdd": {
+      "build": "Bauen",
+      "data": "Daten",
+      "work": "Arbeit",
+      "agents": "Agenten",
+      "people": "Personen",
+      "all": "Alle Objekte"
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

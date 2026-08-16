@@ -119,13 +119,19 @@
   height: calc(100vh - var(--shell-topbar-height, 58px));
   min-height: 620px;
   overflow: hidden;
+  /* The containing block for every floating control. The shell used to be a column of
+     two children — a chrome band and the board — and the board subtracted the band's
+     height from its own. Now the board IS the shell and the chrome floats over it, so
+     this has to establish positioning or each floating card would resolve against the
+     viewport and slide out from under the app's own top bar. */
+  position: relative;
   color: var(--canvas-ink);
   background: var(--canvas-board-background);
   font-family:var(--font-sans);
 }
 
 .canvasShell:fullscreen { height:100vh; min-height:0; }
-.canvasShell:fullscreen .flowWrap { height:calc(100% - 54px); }
+.canvasShell:fullscreen .flowWrap { height:100%; }
 
 /* Full screen where there is no Fullscreen API to ask — iOS Safari exposes none
    for elements, and a phone is exactly where trading the app chrome for board
@@ -141,28 +147,110 @@
   height:100dvh;
   min-height:0;
 }
-.canvasShell[data-fullscreen='true'] .flowWrap { height:calc(100% - 54px); }
+.canvasShell[data-fullscreen='true'] .flowWrap { height:100%; }
 
-.sessionBar {
-  height:54px;
+/* ══════════════════════════════════════════════════════════════════════════════════
+   THE FLOATING CHROME
+   ══════════════════════════════════════════════════════════════════════════════════
+   There is no chrome band. The canvas takes the whole shell and every control floats
+   over it in one of four regions, declared in `lib/canvasChrome.ts`:
+
+     .sessionPill    top left      what this canvas IS
+     .surfaceChips   top centre    how it is being READ
+     .topRightCard   top right     how work LEAVES it
+     .commandBar     bottom centre what you DO to it
+
+   Every one of them is the same card — one surface, one border, one shadow — so the
+   four read as one system floating at one height rather than four visitors. The shared
+   look is `.floatCard`; only placement differs below it.
+
+   They are all `position:absolute` against `.canvasShell`, which is why the shell is a
+   containing block and the board no longer subtracts a band from its own height. */
+.floatCard {
+  position:absolute;
+  z-index:20;
   display:flex;
   align-items:center;
-  justify-content:space-between;
-  gap:16px;
-  padding:0 14px;
-  border-bottom:1px solid var(--canvas-line);
-  background:color-mix(in srgb, var(--canvas-panel) 94%, #eef5ff);
-  position:relative;
-  z-index:20;
+  box-sizing:border-box;
+  max-width:calc(100% - 28px);
+  border:1px solid var(--canvas-line);
+  border-radius:var(--radius-lg);
+  background:color-mix(in srgb, var(--canvas-panel) 92%, transparent);
+  backdrop-filter:blur(10px);
+  box-shadow:0 1px 2px var(--canvas-shadow), 0 14px 34px -14px var(--canvas-shadow);
 }
 
-/* Folded, the bar reports and does not act: the title, the connection, who is here and
-   what the runtime is doing. It gets SHORTER rather than merely emptier — a 54px band
-   holding four small status marks reads as a bar that has lost its buttons, which is the
-   impression a collapse is supposed to remove. WHAT is on screen is decided in
-   `canvasChrome.ts`, never here; this only sizes what survives. */
-.sessionBar[data-collapsed='true'] { height:40px; gap:10px; }
-.sessionBar[data-collapsed='true'] .titleBlock input { width:min(200px, 30vw); font-size:12px; }
+.sessionPill { top:14px; left:14px; gap:7px; padding:6px 10px 6px 8px; min-width:0; }
+/* The title and the state read as one phrase, so they stack rather than sitting side by
+   side — at 13px the connection light beside a 250px input pushed the pill past a third
+   of the window and started colliding with the surface chips. */
+.pillStatus { display:flex; align-items:center; gap:7px; min-width:0; }
+.pillStatus:empty { display:none; }
+.sessionPill input {
+  min-width:0; width:min(240px, 26vw); border:1px solid transparent; border-radius:var(--radius-md);
+  padding:4px 7px; background:transparent; color:var(--canvas-ink);
+  font-family:inherit; font-size:13px; font-weight:650;
+}
+.sessionPill input:hover, .sessionPill input:focus { border-color:var(--canvas-line); background:var(--canvas-panel); outline:none; }
+
+/* On the canvas, framing nothing. This is the piece the redesign is most often judged
+   by: the old switcher sat inside a band that drew a hard line across the window under
+   it, so the board began below the chrome instead of behind it. */
+.surfaceChips { top:14px; left:50%; transform:translateX(-50%); padding:4px; gap:4px; }
+
+.topRightCard { top:14px; right:14px; gap:6px; padding:6px; }
+
+/* ── THE ONE COMMAND BAR ──────────────────────────────────────────────────────────
+   Bottom centre, over the board rather than under it. It holds Run, whatever the
+   surface contributed, the glyph clusters, the team and the add-object circles — and
+   `data-surface` is published so a surface-specific rule has somewhere to hang without
+   this file needing to know which surfaces exist. */
+.commandBar {
+  bottom:14px; left:50%; transform:translateX(-50%);
+  gap:7px; padding:6px 7px; flex-wrap:nowrap;
+}
+.commandBarDivider { flex:none; width:1px; height:22px; background:var(--canvas-line); }
+.commandBarCollapse {
+  flex:none; display:grid; place-items:center; width:28px; height:28px; padding:0;
+  border:0; border-radius:var(--radius-sm); background:transparent; color:var(--canvas-muted); cursor:pointer;
+}
+.commandBarCollapse:hover, .commandBarCollapse:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.commandBarCollapse > svg { display:block; width:15px; height:15px; }
+
+/* Folded, the bar reports and does not act: who is here, and what the runtime is doing.
+   It gets SHORTER and NARROWER rather than merely emptier — a full-width bar holding
+   three small status marks reads as a bar that has lost its buttons, which is the exact
+   impression a collapse is supposed to remove. WHAT survives is decided in
+   `canvasChrome.ts`, never here; this only sizes what does. */
+.commandBar[data-collapsed='true'] { gap:5px; padding:4px 5px; }
+
+/* Run is the only control on this bar that STARTS something, so it is the only one with
+   a fill. Positive rather than brand: the accent is already spent on "which surface am I
+   on", and two blues at the same weight in one window is a decision nobody can read. */
+.runButton {
+  flex:none; display:inline-flex; align-items:center; gap:6px; padding:6px 12px;
+  border:1px solid var(--tone-success-mark); border-radius:var(--radius-md);
+  background:var(--tone-success-mark); color:var(--text-on-accent);
+  font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap;
+}
+.runButton:hover, .runButton:focus-visible { filter:brightness(1.07); outline:none; }
+.runButton > svg { display:block; width:13px; height:13px; }
+
+/* The add-object circles. Colour is the identity — a glyph at this size beside five
+   other glyphs at this size is a texture, not a menu — so each carries its group's board
+   palette token and the hues are never repeated as literals here. */
+.quickAdd { display:flex; align-items:center; gap:5px; flex:none; }
+.quickAdd button {
+  position:relative; display:grid; place-items:center; width:26px; height:26px; padding:0;
+  border:0; border-radius:50%; color:var(--text-on-accent);
+  font-family:inherit; font-size:14px; font-weight:700; line-height:1; cursor:pointer;
+  transition:transform .14s ease;
+}
+.quickAdd button:hover, .quickAdd button:focus-visible { transform:translateY(-1px); outline:none; }
+/* A ring OUTSIDE the circle, so the fill that identifies the group is never covered by
+   the mark that says the palette is open. */
+.quickAdd button:focus-visible { box-shadow:0 0 0 2px var(--canvas-panel), 0 0 0 4px var(--canvas-accent); }
+@media (prefers-reduced-motion: reduce) { .quickAdd button { transition:none; } }
 
 .titleBlock, .sessionActions, .collaborators { display:flex; align-items:center; }
 .titleBlock { gap:9px; min-width:0; }
@@ -352,7 +440,7 @@
    Anything else that sits low (the canvas outline, the Brain launcher) clears it
    from this ONE number instead of each guessing its own offset. */
 .flowWrap {
-  height:calc(100% - 54px); position:relative; background:var(--canvas-board-background); --composer-space:112px;
+  height:100%; position:relative; background:var(--canvas-board-background); --composer-space:112px;
   /* The dock's footprint, restated under the name the shared canvas chrome reads
      (see CanvasCommands.module.css). One source, so the command rail and the mini
      map move out from under a docked Brain exactly like every panel above. */
@@ -1957,6 +2045,9 @@
    `flex:none` matters — the title input beside it is `flex:1` on narrow desktops and
    would otherwise squeeze the labels out one character at a time. */
 .surfaceTabs { display:flex; flex:none; align-items:center; gap:2px; padding:3px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
+/* Inside the floating chip card the trough IS the card — a second border and a second
+   fill one pixel apart is the "bar inside a bar" the redesign removed everywhere else. */
+.surfaceChips .surfaceTabs { padding:0; border:0; background:transparent; }
 .surfaceTab {
   display:inline-flex; align-items:center; gap:6px; min-height:28px; padding:5px 10px;
   border:0; border-radius:var(--radius-sm); background:transparent;

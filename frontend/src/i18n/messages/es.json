@@ -19178,7 +19178,19 @@
     },
     "moreMenuSessionActions": "Este lienzo",
     "templateCategoryAutomation": "Automatizaciones",
-    "templateCategoryPrompt": "Indicaciones"
+    "templateCategoryPrompt": "Indicaciones",
+    "commandBar": "Comandos del lienzo",
+    "runCanvas": "Ejecutar",
+    "runCanvasTitle": "Abre la aplicación que construye este tablero y ejecútala",
+    "quickAddGroup": "Añadir al tablero",
+    "quickAdd": {
+      "build": "Construir",
+      "data": "Datos",
+      "work": "Trabajo",
+      "agents": "Agentes",
+      "people": "Personas",
+      "all": "Todos los objetos"
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

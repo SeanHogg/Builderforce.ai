@@ -19,7 +19,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, AddObjectIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, ClosePaletteIcon, CollapseBarIcon, DepthIcon, DropToLayersIcon, ExpandBarIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MoreActionsIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, AddObjectIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, ClosePaletteIcon, DepthIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MoreActionsIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
@@ -27,6 +27,8 @@ import { canvasChromeShows, readCanvasBarCollapsed, writeCanvasBarCollapsed } fr
 import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
 import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
+import { CanvasSessionPill } from './CanvasSessionPill';
+import { CanvasCommandBar } from './CanvasCommandBar';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
 import { CanvasChatSurface } from './CanvasChatSurface';
 import { CanvasAppSurface } from './CanvasAppSurface';
@@ -951,6 +953,25 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setPaletteOpen(savedOpen === '1' || (savedOpen == null && window.innerWidth > 760));
     } catch { setPaletteOpen(window.innerWidth > 760); }
     setPalettePreferencesReady(true);
+  }, []);
+  /**
+   * What the command bar's coloured circles do.
+   *
+   * They point INTO the palette rather than carrying a second catalogue beside it: the
+   * object registry is the only place that knows which kinds exist, and a hand-written
+   * bar menu would have gone stale the first time a kind was added to one and not the
+   * other. So a circle opens the palette and focuses its group — every other group folds
+   * away, which is a state the palette already has, persists and draws.
+   *
+   * The circle with no group opens the palette WHOLE, with nothing folded. That is what
+   * stops a six-item shortlist becoming the only way into a sixteen-group catalogue.
+   */
+  const openPaletteGroup = useCallback((group?: CreationObjectGroup) => {
+    setPaletteOpen(true);
+    setPaletteSearch('');
+    setCollapsedPaletteGroups(group
+      ? new Set(CREATION_PALETTE_GROUPS.map((entry) => entry.group).filter((entry) => entry !== group))
+      : new Set());
   }, []);
   /**
    * PRESENTATION AND FOLLOW ARE SHELL STATE NOW.
@@ -9384,63 +9405,40 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       className={`${styles.canvasShell} app-full-height`}
       data-fullscreen={fullscreen ? 'true' : 'false'}
     >
-      {/* `data-collapsed` is published so the stylesheet can tighten the row without a
-          second copy of the rule; WHAT is on screen is decided by `canvasChromeShows`
-          per slot, never by CSS. */}
-      <div className={styles.sessionBar} data-collapsed={barCollapsed ? 'true' : 'false'}>
-        <div className={styles.titleBlock}><span className={styles.spark}><Icon source="✦" size="1em" /></span><input data-testid="canvas-session-title" aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
-        {/* Which surface this canvas is read through — the first thing in the header
-            after the title it applies to, because it answers "what am I looking at"
-            rather than "what do I do to it". The phone's copy of this decision lives in
-            the board's control column; the stylesheet keeps exactly one on screen. */}
-        {canvasChromeShows('surfaces', barCollapsed) && <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="header" />}
-        <div className={styles.sessionActions}>
-          {canvasChromeShows('actions', barCollapsed) && <TwilioCanvasSetup active={canvasUsesTwilio} />}
-          {/* Not gated: WHO IS HERE is the single most important thing a folded bar can
-              still say. A collapsed roster is a team nobody can see is working, and on a
-              shared board that is somebody editing next to people they cannot see. */}
-          <div className={styles.collaborators} aria-label={t('activeCollaborators')} data-tour="creation-collaborators">
-            {/* In a shared free session the roster is REAL — showing only "you"
-                while three other people move cards around is a lie the board
-                itself contradicts. */}
-            {(persistence !== 'local'
-              ? members
-              : inRoom && room.participants.length
-                ? room.participants.map((person) => ({ userId: `guest:${person.name}:${person.joinedAt}`, displayName: person.name, role: person.isHost ? ('owner' as const) : ('editor' as const) }))
-                : [{ userId: 'local', displayName: t('you'), role: 'owner' as const }]
-            ).slice(0, 4).map((member, index) => <button key={member.userId} type="button" data-typing={'typing' in member && member.typing ? 'true' : 'false'} aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${'typing' in member && member.typing ? ` · ${t('writingPrompt')}` : ''}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
-            {/* The roster's `+` used to open the invite sheet — the same sheet the
-                Share button opens, which is one decision with two controls and the
-                exact failure the surface registry was written to prevent. The roster
-                now only reports who is here; Share is the door. */}
-          </div>
-          {/* Editor-only capture actions. Renders nothing on the web — it asks the
-              host port whether an editor is present rather than being told. */}
-          {canvasChromeShows('actions', barCollapsed) && <CanvasHostActions
-            selectedNode={selectedNode ?? null}
-            disabled={!canEdit || lockBlocked}
-            onCapture={addHostCapture}
-            onError={setNotice}
-          />}
-          {/* Everything this session bar DOES to the canvas, from one registry: which
-              actions exist, which of them are a set, and where each one lives on a
-              phone. The same list renders inside the ••• sheet below, so a small
-              screen loses placement rather than losing the action. */}
-          <CanvasSessionActions variant="bar" surface={surface} collapsed={barCollapsed} handlers={sessionActionHandlers} />
-          {canvasChromeShows('actions', barCollapsed) && <button className={`${styles.secondaryButton} ${styles.iconAction} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}><MoreActionsIcon /></button>}
+      {/* ── THE FLOATING CHROME ────────────────────────────────────────────────────
+          There is no chrome band any more. The board takes the whole shell and each
+          piece of chrome floats over it in the region `lib/canvasChrome.ts` gives it:
+          what this canvas IS (top left), how it is READ (top centre), how work LEAVES
+          it (top right), and what you DO to it (the one bar, bottom centre).
+
+          The band this replaced was 54px of full-width surface holding a title, a
+          switcher, seven buttons, a roster and a save button — mostly empty space
+          between things with nothing to do with each other, drawn ABOVE a hard line
+          that made the board start below the chrome rather than run behind it. */}
+      <CanvasSessionPill
+        title={title}
+        onTitleChange={setTitle}
+        onTitleCommit={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }}
+        notice={notice}
+        // A board that lives only on this device has no connection to report, and
+        //  is that absence rather than a fifth connection state — so it is
+        // narrowed away here rather than given a label the pill would have to invent.
+        realtimeState={realtimeState === 'local' ? undefined : realtimeState}
+      />
+      {/* Which surface this canvas is read through, ON the canvas rather than in a bar
+          across it. The phone's copy of this decision lives in the board's control
+          column; the stylesheet keeps exactly one on screen. */}
+      {canvasChromeShows('surfaces', barCollapsed) && <div className={`${styles.floatCard} ${styles.surfaceChips}`}>
+        <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="header" />
+      </div>}
+      <div className={`${styles.floatCard} ${styles.topRightCard}`} data-testid="canvas-handoff">
+          {/* The two doors OUT of this canvas — bring a person in, or put the result
+              where strangers can reach it. They are the only worded actions in the
+              registry and they are here for the same reason they are worded: a glyph
+              acts on the board, a word opens somewhere else. */}
+          <CanvasSessionActions variant="handoff" surface={surface} collapsed={barCollapsed} handlers={sessionActionHandlers} />
+          {canvasChromeShows('actions', barCollapsed) && <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}><MoreActionsIcon /></button>}
           {canvasChromeShows('save', barCollapsed) && persistence === 'local' && <button className={`${styles.secondaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', t('gateSaveTitle'), t('gateSaveBody'))}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>{t('save')}</span></button>}
-          {/* The toggle itself is never hidden — a collapse with no way back is a
-              one-way door, and it is the last thing in the row so the controls it
-              removes vanish leftwards rather than jumping under the cursor. */}
-          <button
-            type="button"
-            className={`${styles.secondaryButton} ${styles.iconAction}`}
-            data-testid="canvas-bar-collapse"
-            aria-pressed={barCollapsed}
-            aria-label={barCollapsed ? t('expandBar') : t('collapseBar')}
-            title={barCollapsed ? t('expandBar') : t('collapseBar')}
-            onClick={() => setBarCollapsed(!barCollapsed)}
-          >{barCollapsed ? <ExpandBarIcon /> : <CollapseBarIcon />}</button>
           {moreOpen && <div className={styles.moreMenu} data-testid="canvas-more-menu" aria-label={t('moreActions')}>
             {/* First, because these are the session-bar actions a phone gave up its
                 room for — including the only way to invite anybody, which used to be
@@ -9525,8 +9523,56 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             {!!serverTemplates.length && <><h4>{t('savedAccount')}</h4>{serverTemplates.map((template) => <button key={template.id} onClick={() => applyServerTemplate(template)}><b>{template.name}</b><small>{template.visibility === 'tenant' ? t('sharedWithTenant') : t('private')} · {template.category}</small><span>{template.description}</span></button>)}</>}
             {!!framePresets.length && <><h4>{t('reusableFrames')}</h4>{framePresets.map((preset) => <button key={preset.id} onClick={() => addFramePreset(preset)}><b>{preset.name}</b><small><span>{t('privateCustomFrame')}</span> · {t('thisDevice')}</small></button>)}</>}
           </div>}
-        </div>
       </div>
+
+      {/* THE bar. Everything you can do to what you are looking at, in one floating card
+          — including whatever the SURFACE contributed, so an app's Run, its readings and
+          the address it is running at land here rather than in a second toolbar of their
+          own. See `CanvasCommandBar` for why one bar and why the bottom. */}
+      <CanvasCommandBar
+        surface={surface}
+        collapsed={barCollapsed}
+        onToggleCollapse={() => setBarCollapsed(!barCollapsed)}
+        handlers={sessionActionHandlers}
+        // The board's Run takes this canvas to the surface that runs it. Offered only
+        // when there is something to run and only when the surface is not already
+        // contributing its own — two Run buttons that can disagree about whether
+        // something is running is worse than none.
+        onRun={surface === 'graph' && nodes.length ? () => setSurface('app') : undefined}
+        onQuickAdd={openPaletteGroup}
+        quickAddOpen={paletteOpen}
+        roster={
+          /* WHO IS HERE is the single most important thing a folded bar can still say.
+             A collapsed roster is a team nobody can see is working, and on a shared
+             board that is somebody editing next to people they cannot see. */
+          <div className={styles.collaborators} aria-label={t('activeCollaborators')} data-tour="creation-collaborators">
+            {/* In a shared free session the roster is REAL — showing only "you"
+                while three other people move cards around is a lie the board
+                itself contradicts. */}
+            {(persistence !== 'local'
+              ? members
+              : inRoom && room.participants.length
+                ? room.participants.map((person) => ({ userId: `guest:${person.name}:${person.joinedAt}`, displayName: person.name, role: person.isHost ? ('owner' as const) : ('editor' as const) }))
+                : [{ userId: 'local', displayName: t('you'), role: 'owner' as const }]
+            ).slice(0, 4).map((member, index) => <button key={member.userId} type="button" data-typing={'typing' in member && member.typing ? 'true' : 'false'} aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${'typing' in member && member.typing ? ` · ${t('writingPrompt')}` : ''}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
+            {/* The roster's `+` used to open the invite sheet — the same sheet the
+                Share button opens, which is one decision with two controls and the
+                exact failure the surface registry was written to prevent. The roster
+                now only reports who is here; Share is the door. */}
+          </div>
+        }
+        extras={canvasChromeShows('actions', barCollapsed) ? <>
+          <TwilioCanvasSetup active={canvasUsesTwilio} />
+          {/* Editor-only capture actions. Renders nothing on the web — it asks the
+              host port whether an editor is present rather than being told. */}
+          <CanvasHostActions
+            selectedNode={selectedNode ?? null}
+            disabled={!canEdit || lockBlocked}
+            onCapture={addHostCapture}
+            onError={setNotice}
+          />
+        </> : undefined}
+      />
 
       {/* THE GATE ASKS FOR WHAT IS ACTUALLY MISSING. Every caller writes signup-framed
           copy because `persistence === 'local'` was read as "no account" — so a

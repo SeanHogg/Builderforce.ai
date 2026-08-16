@@ -14,6 +14,7 @@ import {
   UndoIcon,
 } from '@/components/canvas/CanvasCommands';
 import {
+  canvasSessionActionsFor,
   canvasSessionClusters,
   phoneOverflowActions,
   type CanvasSessionActionDef,
@@ -72,7 +73,17 @@ export interface CanvasSessionActionHandler {
 
 export interface CanvasSessionActionsProps {
   handlers: Record<CanvasSessionActionId, CanvasSessionActionHandler>;
-  variant: 'bar' | 'menu';
+  /**
+   * `bar` — the floating command bar: the surface's own status and controls, then the
+   *         glyph clusters that act on the board.
+   * `handoff` — the top-right card: the worded actions only, which is Share and Publish.
+   *         They are split out because they are placed apart (`canvasChrome.ts`), and
+   *         they are placed apart because a word opens somewhere else while a glyph acts
+   *         here. The split is read from `def.chrome`, so a worded action added to the
+   *         registry lands in the right corner without either call site being edited.
+   * `menu` — the ••• sheet, which carries whatever a phone's bar could not.
+   */
+  variant: 'bar' | 'menu' | 'handoff';
   /**
    * The surface being read. The registry decides which actions mean anything on it —
    * an outcome scorecard over a conversation with no objects is a button whose only
@@ -138,6 +149,29 @@ export function CanvasSessionActions({ handlers, variant, surface, collapsed = f
     </>;
   }
 
+  if (variant === 'handoff') {
+    // No trough and no cluster: these two are not a segmented set, they are the two doors
+    // out of this canvas, and they are the whole contents of the corner they sit in.
+    if (!canvasChromeShows('handoff', collapsed)) return null;
+    return <>
+      {canvasSessionActionsFor(surface).filter((def) => def.chrome === 'labelled').map((def) => {
+        const { handler, active, label, title, ...aria } = describe(def);
+        const Glyph = (active && ACTIVE_ACTION_ICON[def.id]) || ACTION_ICON[def.id];
+        return <button
+          key={def.id}
+          type="button"
+          className={styles.sessionActionLabelled}
+          {...(def.id === 'share' ? { 'data-tour': 'creation-share' } : {})}
+          data-phone={def.phone}
+          disabled={handler?.disabled}
+          title={title}
+          onClick={() => handler?.run()}
+          {...aria}
+        ><Glyph /><span>{label}</span><i aria-hidden><DisclosureIcon /></i></button>;
+      })}
+    </>;
+  }
+
   return <>
     {/* What the runtime IS DOING, before what you can do to it — and it survives a
         collapse, because a folded bar that stops saying an app is running is the exact
@@ -147,35 +181,22 @@ export function CanvasSessionActions({ handlers, variant, surface, collapsed = f
         is what the reader is reaching for, and burying it behind undo/redo would make the
         shared bar worse than the second toolbar it replaces. */}
     {showsControls && controls}
-    {showsActions && canvasSessionClusters(surface).map(({ cluster, actions }) => {
+    {showsActions && canvasSessionClusters(surface).map(({ cluster, actions: all }) => {
+      // The worded pair is drawn by the `handoff` variant in the other corner. Filtering
+      // by chrome rather than by id is what keeps that true for an action added later.
+      const actions = all.filter((def) => def.chrome === 'icon');
+      if (!actions.length) return null;
       const buttons = actions.map((def) => {
         const { handler, active, label, title, ...aria } = describe(def);
         const Glyph = (active && ACTIVE_ACTION_ICON[def.id]) || ACTION_ICON[def.id];
-
-        // The worded actions. They open somewhere else rather than acting on the board,
-        // and "Share" and "Publish" are promises a glyph cannot make — the same reason
-        // the surface tabs carry their names on a desktop.
-        if (def.chrome === 'labelled') return <button
-          key={def.id}
-          type="button"
-          className={styles.sessionActionLabelled}
-          // The product tour anchors on Share specifically. Keyed off the id rather than
-          // the chrome, or the second worded action would silently steal the anchor.
-          {...(def.id === 'share' ? { 'data-tour': 'creation-share' } : {})}
-          // Published so the phone breakpoint stands down exactly the actions the
-          // registry moved into the ••• sheet — one declaration, read by the
-          // stylesheet as well as by the sheet, rather than a second list in CSS.
-          data-phone={def.phone}
-          disabled={handler?.disabled}
-          title={title}
-          onClick={() => handler?.run()}
-          {...aria}
-        ><Glyph /><span>{label}</span><i aria-hidden><DisclosureIcon /></i></button>;
 
         return <button
           key={def.id}
           type="button"
           className={styles.sessionActionButton}
+          // Published so the phone breakpoint stands down exactly the actions the
+          // registry moved into the ••• sheet — one declaration, read by the
+          // stylesheet as well as by the sheet, rather than a second list in CSS.
           data-phone={def.phone}
           disabled={handler?.disabled}
           aria-label={label}

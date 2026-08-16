@@ -266,6 +266,15 @@ export function PublishCanvasIcon() {
   </svg>;
 }
 
+/** Take this board to the surface that runs it. A solid triangle, not an outline: it is
+ *  the one control on the command bar that STARTS something, and the difference between
+ *  "play" and "step forward" at 16px is whether the shape is filled. */
+export function RunCanvasIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M4.6 3.1a.7.7 0 0 1 1.06-.6l6.9 4.28a.7.7 0 0 1 0 1.19l-6.9 4.28a.7.7 0 0 1-1.06-.6Z" fill="currentColor" />
+  </svg>;
+}
+
 /** Fold the session bar down to what the canvas IS DOING. A chevron INTO the row it
  *  collapses, so the direction says where the controls go rather than merely that
  *  something happens. Its opposite is {@link ExpandBarIcon}. */

@@ -19178,7 +19178,19 @@
     },
     "moreMenuSessionActions": "This canvas",
     "templateCategoryAutomation": "Automations",
-    "templateCategoryPrompt": "Prompts"
+    "templateCategoryPrompt": "Prompts",
+    "commandBar": "Canvas commands",
+    "runCanvas": "Run",
+    "runCanvasTitle": "Open the app this board builds and run it",
+    "quickAddGroup": "Add to the board",
+    "quickAdd": {
+      "build": "Build",
+      "data": "Data",
+      "work": "Work",
+      "agents": "Agents",
+      "people": "People",
+      "all": "All objects"
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

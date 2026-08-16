@@ -41,8 +41,17 @@ export type CanvasChromeSlot =
   | 'roster'
   /** Chat / Board / 3D space / App. */
   | 'surfaces'
-  /** Undo, redo, outcomes, diagnostics, full screen, Share, Publish. */
+  /** Undo, redo, outcomes, diagnostics, full screen — the glyphs that act on the board. */
   | 'actions'
+  /**
+   * Share and Publish — the two ways work LEAVES this canvas.
+   *
+   * A separate slot from `actions` because they are a separate PLACE, and the reason is
+   * the same one that makes them the only worded actions in the registry: a glyph acts on
+   * the board and a word opens somewhere else. Grouping "undo" with "publish to a public
+   * URL" put a keystroke you take back beside a decision you cannot, at the same weight.
+   */
+  | 'handoff'
   /** A runtime's own controls — an app surface's Run/Stop and its readings. */
   | 'surfaceControls'
   /** A runtime's own report — where it is running, and whether it is. */
@@ -51,6 +60,31 @@ export type CanvasChromeSlot =
   | 'save';
 
 export type CanvasChromeKind = 'status' | 'control';
+
+/**
+ * WHERE a slot is drawn, now that the canvas has no chrome band at all.
+ *
+ * ── WHY PLACEMENT IS DATA ────────────────────────────────────────────────────────
+ * The canvas used to spend four horizontal bands on chrome — marketing header, session
+ * bar, team bar, board rail — before a single object was drawn, and the board got
+ * whatever was left. The shell now gives the WHOLE window to the canvas and floats each
+ * piece of chrome over it, which is the arrangement every scenario editor worth copying
+ * converged on for the same reason: the artefact is the thing, and the controls are
+ * guests on it.
+ *
+ * The trap in that move is that "float it" is a per-element decision, so it decays into
+ * four components each holding its own `position:absolute` and its own idea of which
+ * corner is free. Placement is therefore declared HERE, beside the collapse rule, for the
+ * same reason the collapse rule is here: one table answers both "is this on screen" and
+ * "where", and a slot added later cannot be given a home by accident.
+ *
+ *   `pill`     — top left. What this canvas IS: its name, its state, who is on it.
+ *   `chips`    — top centre. How it is being READ. Non-blocking, on the canvas.
+ *   `topRight` — top right. How work LEAVES it: Share, Publish, and the overflow.
+ *   `bar`      — bottom centre. What you DO to it, including whatever the surface
+ *                itself contributes.
+ */
+export type CanvasChromePlace = 'pill' | 'chips' | 'topRight' | 'bar';
 
 /**
  * Which each slot is. The whole rule is this table plus the predicate under it.
@@ -66,12 +100,43 @@ const SLOT_KIND: Readonly<Record<CanvasChromeSlot, CanvasChromeKind>> = {
   surfaceStatus: 'status',
   surfaces: 'control',
   actions: 'control',
+  handoff: 'control',
   surfaceControls: 'control',
   save: 'control',
 };
 
+/**
+ * Where each slot floats.
+ *
+ * `roster` is in the BAR and not in the pill, which is the one placement worth arguing
+ * about. Who is here is status, so it survives a collapse — and the collapsed bar is the
+ * thing left on screen, so that is where the avatars have to be for the rule to mean
+ * anything. Putting them in the pill would have kept them visible while making the
+ * collapse rule a statement about an element that never folds.
+ */
+const SLOT_PLACE: Readonly<Record<CanvasChromeSlot, CanvasChromePlace>> = {
+  title: 'pill',
+  saveState: 'pill',
+  roster: 'bar',
+  surfaces: 'chips',
+  actions: 'bar',
+  handoff: 'topRight',
+  surfaceControls: 'bar',
+  surfaceStatus: 'bar',
+  save: 'topRight',
+};
+
 export function canvasChromeKind(slot: CanvasChromeSlot): CanvasChromeKind {
   return SLOT_KIND[slot];
+}
+
+export function canvasChromePlace(slot: CanvasChromeSlot): CanvasChromePlace {
+  return SLOT_PLACE[slot];
+}
+
+/** Every slot that floats in one region, in declaration order. */
+export function canvasChromeSlotsIn(place: CanvasChromePlace): readonly CanvasChromeSlot[] {
+  return (Object.keys(SLOT_PLACE) as CanvasChromeSlot[]).filter((slot) => SLOT_PLACE[slot] === place);
 }
 
 /**
