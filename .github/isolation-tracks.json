@@ -6,6 +6,10 @@
     "api/src/index.ts",
     "frontend/src/lib/builderforceApi.ts",
     "README.md",
+    "ROADMAP.md",
+    "DONE.md",
+    ".github/isolation-tracks.json",
+    ".github/isolation-tracks.generated.md",
     "api/package.json",
     "frontend/package.json",
     "frontend/src/i18n/messages/*.json"

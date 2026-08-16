@@ -22,5 +22,5 @@ Canonical rendering of `.github/isolation-tracks.json`. Edit the JSON, then run
 | **W1D · Wave 1 · Creator surfaces** | `frontend/src/components/apps/**` · `frontend/src/lib/embeddedApps.*` | — |
 | **W1E · Wave 1 · App-user loop** | `api/src/application/ide/siteData.*` | 0920–0929 |
 
-**Shared coordination files** (every track may edit; serialize changes and rebase before merge): `api/src/infrastructure/database/schema.ts`, `api/src/index.ts`, `frontend/src/lib/builderforceApi.ts`, `README.md`, `api/package.json`, `frontend/package.json`, `frontend/src/i18n/messages/*.json`.
+**Shared coordination files** (every track may edit; serialize changes and rebase before merge): `api/src/infrastructure/database/schema.ts`, `api/src/index.ts`, `frontend/src/lib/builderforceApi.ts`, `README.md`, `ROADMAP.md`, `DONE.md`, `.github/isolation-tracks.json`, `.github/isolation-tracks.generated.md`, `api/package.json`, `frontend/package.json`, `frontend/src/i18n/messages/*.json`.
 
