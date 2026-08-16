@@ -387,6 +387,13 @@ type CanvasCommandsProps = {
    */
   onToggleThreeD?: () => void;
   threeDActive?: boolean;
+  /**
+   * Stand the flat-board rail down entirely — zoom, fit, arrange and the mini
+   * map toggle move to the host's own command bar instead. Leaves the 3D rail
+   * untouched, since that view has no second bar competing with it. The mini
+   * map thumbnail itself still draws here; only the button that opens it moves.
+   */
+  hideOnFlatBoard?: boolean;
 };
 
 /**
@@ -416,12 +423,14 @@ export function CanvasCommands({
   extraControls,
   onToggleThreeD,
   threeDActive = false,
+  hideOnFlatBoard = false,
 }: CanvasCommandsProps) {
   const t = useTranslations('canvasCommands');
   // Published by the scene while it is on screen; null in the flat view.
   const threeD = useCanvas3DControls();
+  const showRail = threeDActive || !hideOnFlatBoard;
   return <>
-    <Controls
+    {showRail && <Controls
       position="bottom-left"
       className={styles.boardChrome}
       showZoom={!threeDActive}
@@ -482,7 +491,7 @@ export function CanvasCommands({
         <MinimapIcon />
       </CanvasRailToggle>}
       {extraControls}
-    </Controls>
+    </Controls>}
     {minimapOpen && !threeDActive && <>
       <MiniMap
         position="bottom-right"

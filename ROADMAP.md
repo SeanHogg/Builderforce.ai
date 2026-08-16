@@ -128,12 +128,12 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 2 | [On-Prem Runtime, Engine & Tooling](#2--on-prem-runtime-engine--tooling) | 6 |
 | 3 | [LLM Gateway, Routing & Cost](#3--llm-gateway-routing--cost) | 32 |
 | 4 | [Evermind / SSM](#4--evermind--ssm) | 14 (all blocked) |
-| 5 | [Brain & Chat](#5--brain--chat) | 18 |
+| 5 | [Brain & Chat](#5--brain--chat) | 19 |
 | 6 | [Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 31 |
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
 | 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 39 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 157 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 153 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
@@ -148,12 +148,12 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 2 | 6 |
 | 3 | 32 |
 | 4 | 14 |
-| 5 | 18 |
+| 5 | 19 |
 | 6 | 31 |
 | 7 | 25 |
 | 8 | 3 |
 | 9 | 39 |
-| 10 | 157 |
+| 10 | 153 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
@@ -905,50 +905,10 @@ sequenced into waves because nothing in them gates the sell motion.
 
 ### Canvas surfaces
 
-- **A `website` section whose body is HTML renders as escaped TEXT, so the quote form the
-  user asked for is a wall of `&lt;form&gt;` markup.** *(registered 2026-08-16 from a live
-  GreenEdge Yard Care session, diagnostics captured 16:33:48Z, session
-  `local-442d63b8-e993-4150-bc30-0cde0031f355`)* `canvas_add_object` wrote a `content` section whose
-  `body` is a complete `<form>` plus a `<script>` (see the payload on the `quote` page of object
-  `bd52d651`), and `WebsiteBody`/`CanvasSiteSurface` print it verbatim. The user asked for "a
-  proof-of-concept marketing website with a Request a Quote form" and got source code on a page.
-  Fixing it = a `content` section carrying markup must render in a SANDBOXED frame under the same
-  rule `CANVAS_APP_FRAME_SANDBOX` and `GAME_FRAME_SANDBOX` already state — `allow-scripts` WITHOUT
-  `allow-same-origin`, via `srcDoc`, never `dangerouslySetInnerHTML` into the app DOM, because this
-  is model-authored markup from a free-text brief. Unblocks every generated site that contains a
-  form, which is most of them.
-
-- **A `website` + `code` pair that is really ONE app opens as two unrelated cards.** *(registered
-  2026-08-16, same session)* The same board holds `bd52d651` (website, with a form posting to a
-  backend) and `c51f7d5e` (code, the Twilio handler), joined by a `data` connection labelled "Quote
-  form submission" — i.e. an application. The website opens in the `site` surface and the code opens
-  nowhere; only `lib/canvasApp.ts` composes them, and it only reads `code` objects, so the site's
-  own HTML is invisible to the App surface. Fixing it = `canvasAppFiles` should project a `website`
-  object's pages into the app's file list, so a board like this runs as one thing under **App**
-  rather than as a static preview beside an orphan file.
-
-- **Nodes are all-or-nothing: no minimise, no expand, and errors/connectors read as the least
-  prominent thing on the card.** *(registered 2026-08-16, from the operator's review of the same
-  session)* Every card draws its full body at all times, so five objects fill the board and the
-  connections between them — the thing that says this is a SYSTEM — are hairlines behind them.
-  Fixing it = a per-node collapsed/preview/expanded state (the card keeps its identity strip and
-  gives up its body), plus promoting connectors and error badges above body content in the visual
-  order. Related to the shell entry below and to `canvasChrome.ts`'s status/control rule, which is
-  the same idea applied one level down: what a card REPORTS should survive its own collapse.
-
-- **A `website` card has no way into its surface — "open at full size" exists only in the
-  inspector.** *(registered 2026-08-16, same review)* `CanvasObjectSurfaceButton` renders in
-  `.inspectorHeaderActions` and nowhere else, so reaching the site runtime means selecting the card,
-  reading the inspector, and finding an icon in its header. It should also sit on the card header
-  itself beside `•••`. The component is already icon-chromed and registry-driven (fixed this pass);
-  what is missing is an `onOpenSurface` callback threaded to `CreationNode`, which is why this is
-  logged rather than done in the same edit.
-
-- **The canvas chrome is consolidated; the BOARD ITSELF is still the old rectangular-card graph.**
-  *(re-scoped 2026-08-16 after the floating-chrome pass shipped — see DONE.md)* The four bands are
-  down to one floating layer and the surface-aware command bar is live, so the SHELL now matches the
-  mockup (https://claude.ai/code/artifact/c935a6ce-18cc-4ea4-bccf-1859a50c20a1). What has NOT been
-  built is everything below the chrome, and an audit against that mockup leaves these open:
+- **The canvas chrome is consolidated; the board itself matches the mockup's INTERACTION
+  model except for one deliberately-scoped-down piece.** *(re-scoped 2026-08-16 — the
+  2026-08-16 audit's remaining items were closed this pass; see DONE.md)* The mockup is
+  https://claude.ai/code/artifact/c935a6ce-18cc-4ea4-bccf-1859a50c20a1. What is left open:
   - **The marketing header still frames the board.** DELIBERATE, not an oversight — `AppShell`
     documents it ("the header follows the VISITOR") and the `operator-shell-header-follows-visitor`
     decision is that a guest reaching a canvas from the marketing site must keep every way back
@@ -956,42 +916,14 @@ sequenced into waves because nothing in them gates the sell motion.
     product decision, not a layout one. **Blocked on an explicit user decision**: if the canvas
     should take the whole window for guests too, the session pill needs the mockup's back arrow to
     replace the nav it removes.
-  - **SELECTING a card still opens the far-right rail, not a panel beside it.** The anchored panel
-    is BUILT (`CanvasNodePanel`) and opens from a card's badges and its settings button, but
-    `Inspector` is unchanged — `.inspector` is `position:absolute; top:14px; right:14px; bottom:14px`,
-    a full-height rail pinned to the window edge. So the single commonest way anybody opens
-    configuration still lands in the place the anchoring was meant to replace. Fixing it = routing
-    selection through `CanvasNodePanel` and demoting the rail to the "open full" escape hatch it is
-    already labelled as.
-  - **The canvas bottom-right corner is now EMPTY.** `LegalCorner` was stood down on stage routes
-    this session, and the operator's ask is the opposite: usage/consumption widgets for the
-    different features SHOULD live there, together with the copyright and version line. The
-    consumption data already exists (`AiUsageCard`, `insights/AiConsumptionHeader`,
-    `insights/widgets/aiImpactWidgets`) — what is missing is a canvas-corner surface that reads it.
-    Must be a read-through cached read, not a per-render recompute.
-  - **`Sign in to keep your work` still occupies the bottom-left rail** (`Sidebar.tsx:265`). It is
-    to be removed; the offer moves into the top-right CTA below.
-  - **The marketing header's CTA never changes once work exists.** `MarketingHeader.tsx:335`/`:379`
-    render a fixed `Get Started →` to `/register`. Once a visitor has started interacting with a
-    canvas it should read "Keep your work" in a DIFFERENT colour from the standard blue — the offer
-    is only meaningful after there is something to lose, and it is the replacement for the
-    bottom-left strip.
-  - **The chat surface names neither the session nor who is in it.** `CanvasChatSurface`'s header is
-    `✦ Brain`; the session title lives only in the floating pill and the participants only in the
-    command bar. In chat the session name belongs at the far left of the conversation, and the
-    participants belong IN the conversation — they are part of it, and adding one to the chat should
-    add them to the board.
-  - **Config is still a full-height right rail**, not a panel ANCHORED beside the card it configures
-    with a bottom-left "Advanced settings" toggle hiding the long tail of fields.
-  - **People are not nodes.** A built-in seat (CTO, from the `role:<key>` catalog) and a custom
-    agent should both sit on the board sharing ONE panel shape (model · autonomy · toolbox ·
-    personality traits · Advanced), differing only in what is read-only — which is what keeps
-    `psychometric-persona` a single trait engine with two doors in.
-  - **The prompt has no float / dock-into-Brain / closed states**; it is a fixed composer.
-  - **The six category circles open the palette focused on a group, not a data-filled popover.**
-    That is the honest half-step — they point INTO `CREATION_PALETTE_GROUPS` rather than carrying a
-    second catalogue — but the mockup's popover with per-module descriptions is not built.
-  - **The left zoom/fit/arrange rail is still a second toolbar** beside the command bar.
+  - **The six category circles open a real, searchable, data-filled popover
+    (`CanvasObjectPicker`) — but its rows carry a name and an icon, not the mockup's
+    per-module DESCRIPTION line.** Adding one honestly means one authored sentence per
+    kind in `CREATION_PALETTE_GROUPS` (~180 kinds today) translated into all five
+    catalogs — content-authoring at a scale that does not fit inside this pass alongside
+    the rest of the audit, and risks either AI-generic filler or a partially-translated
+    catalog if rushed. Scoped out on purpose rather than done badly. Unblocks: the picker
+    reading as the mockup's real popover rather than its honest half-step.
 
 - **A SCANNED document dropped on the canvas can never become a résumé, because the canvas keeps no
   bytes to escalate with.** *(registered 2026-08-16 by the "convert this pdf into a resume" pass,

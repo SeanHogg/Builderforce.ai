@@ -117,6 +117,15 @@
  *   except this count. The deep link `/templates?open=<key>` is the other half of
  *   the saving: a `/templates/<key>` route was the obvious shape and would have
  *   cost a second client file rendering a second copy of the same wizard.
+ *
+ *   802 → 803 (`useClientFiles`, 2026-08-16) — `components/legal/
+ *   CanvasUsageCorner.tsx`, the canvas's own bottom-right usage-meter corner
+ *   (the counterpart `LegalCorner` stands down for on a stage route). It reads
+ *   `usePathname()`, a client-only hook, the same reason its sibling
+ *   `LegalCorner.tsx` already carries the directive — mounted alongside it in
+ *   `AppShell.tsx`, which is itself already a client boundary, but a component
+ *   that reads a client-only hook declares its own rather than depending on
+ *   whichever parent happens to render it today.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';

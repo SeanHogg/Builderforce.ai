@@ -96,7 +96,9 @@ describe('CanvasOutlinePanel', () => {
     const { onFocus } = renderPanel();
     fireEvent.change(screen.getByRole('textbox', { name: 'Search this board' }), { target: { value: 'runbook' } });
     fireEvent.click(screen.getByRole('button', { name: /Runbook/ }));
-    expect(onFocus).toHaveBeenCalledWith('4');
+    // Anchored from the button's own rect now — the card this focuses may be
+    // off-screen, so the config panel opens beside the control that asked.
+    expect(onFocus).toHaveBeenCalledWith('4', expect.anything());
   });
 
   it('announces the result count politely so a screen reader hears it change', () => {

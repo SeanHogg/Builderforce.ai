@@ -1,3 +1,94 @@
+## ✅ RESOLVED 2026-08-16 — the remainder of the canvas-redesign audit, closed
+
+The 2026-08-16 mockup audit (https://claude.ai/code/artifact/c935a6ce-18cc-4ea4-bccf-1859a50c20a1)
+left nine items open after the floating-chrome pass. All nine are closed this pass,
+except the one item that was always DELIBERATE (the marketing header on a guest canvas
+route, still blocked on an explicit product decision) and one honestly scoped down
+(per-kind popover descriptions — see ROADMAP.md for why).
+
+**A `content` section carrying real markup rendered as escaped source code, not a page.**
+The GreenEdge Yard Care session's "Request a Quote" form printed as a wall of
+`&lt;form&gt;` text — `WebsiteSectionBody` (client) and `renderSection` (the static
+publisher) both ran every section through `ReactMarkdown` / an escaped `<p>`, with no
+branch for a `content` section whose body is actual HTML. Fixed by extracting the whole
+static HTML renderer out of `siteLandingPage.ts` into
+`@builderforce/creation-canvas-contract`'s new `websiteDocument.ts` (`renderWebsiteDocument`,
+`escapeHtml`) — ONE renderer now, not two drifting ones — and adding `isMarkupSectionBody` +
+`WEBSITE_CONTENT_FRAME_SANDBOX` (`allow-scripts allow-forms`, never `allow-same-origin`) to
+`website.ts`. A markup `content` section renders in a sandboxed `<iframe srcDoc>` — entity-
+escaped into the `srcdoc` ATTRIBUTE, which the browser decodes back to real markup only
+inside the isolated frame — everywhere: the card, the `site` surface, the published site,
+and now the `app` surface too. The 2,000-char body cap that would have truncated a real
+`<form>` mid-tag is now 20,000 chars for `content` bodies specifically.
+
+**A `website` + `code` pair that is really one app opened as two unrelated cards.**
+`canvasAppFiles` read only `code` objects; a `website` object's pages were invisible to the
+`app` surface, so a form-plus-backend board never composed. `canvasAppFiles` now projects a
+`website`/`prototype` object's pages through the same shared `renderWebsiteDocument` (no
+"open the app" door — that framing is the publisher's, not a board preview's) into a
+`role: 'page'` file, so the site becomes the app's entry and the code backend the app
+already recognised as `role: 'server'` sits beside it as one application.
+
+**Selecting a card opened the far-right rail; it now opens the panel anchored beside it.**
+`CanvasNodePanel` was built and reachable from a card's badges, but a plain click on a card
+still bypassed it and opened `Inspector` directly — the single commonest way anyone opens
+configuration still landed exactly where the anchoring was meant to replace. Selection and
+"the full rail is open" are now two different pieces of state (`selectedId` vs a new
+`inspectorNodeId`): clicking a card opens the anchored panel; the panel's own "open the
+full inspector" button, an action naming one of the rail's specialized tabs
+(knowledge/test/evaluation/delivery), and a deliberate "add a Project/Task/Website…" from
+the palette all open the rail directly, matching what a person reaching for a NAMED kind
+actually wants. A card newly created by dropping a file, a dragged palette kind, or one of
+Brain's own canned turns gets the same treatment. And because dozens of the rail's OWN
+actions (deliver a mockup, visualize a dataset, compare projects, build a website with
+code, expand an Evermind pipeline…) create a new object and select it, `inspectorNodeId`
+now FOLLOWS `selectedId` whenever the rail is already open — one `useEffect`, not a
+manually-remembered `setInspectorNodeId` at every one of those call sites, which is exactly
+the kind of thing one of them would eventually have forgotten.
+
+**The canvas bottom-right corner was empty; `CanvasUsageCorner` now floats the usage
+meters there** — a compact cluster of `ConsumptionMeterCard`s (`usageOnly`) for every
+metered feature actually in use, reading the same cached `useConsumption()` snapshot every
+other usage surface reads (no new fetch, no per-render recompute), positioned as a fixed
+overlay the way every other piece of canvas chrome is. The copyright/version/Terms/Privacy
+row stays where `LegalCorner` already puts it everywhere else and does NOT get a second
+copy on a stage route — a creation surface has no room for it and no need of it, which is
+also why `LegalCorner` itself keeps standing down there.
+
+**`Sign in to keep your work` stood down on a stage route** — `Sidebar`'s footer strip now
+reads `!onStage` — because the offer moved into the top-right CTA: `MarketingHeader`'s
+`Get Started →` becomes `Keep your work`, in an emerald gradient never the coral "start"
+button, once `listLocalCreationSessions()` shows this browser holds real local canvas work
+(checked once per route, not on every render).
+
+**The chat surface named neither the session nor who was in it.** `CanvasChatSurface`'s
+header now leads with the session's own title (far left, ahead of even the Brain mark) and
+draws the SAME roster (`rosterMembers`, extracted once and shared with the command bar's
+collapsed cluster so the two can never disagree) the command bar shows, with an invite
+button that opens the same Share sheet — a participant added from chat is a participant
+added to the session, and therefore already on the board.
+
+**A `website` card's "open at full size" existed only in the inspector header.**
+`CanvasObjectSurfaceButton` now also draws on the card's own header, beside `•••` —
+it already decided its own visibility from the surface registry, so a note or a task
+still draws nothing there.
+
+**Verified already resolved, not re-done:** node density (`minimized`/`preview`/`expanded`
+with badges and connectors promoted onto the orb) shipped in the prior pass and is exactly
+what this item asked for; the prompt's float/dock/closed states, the shared
+`CanvasObjectPicker`, people-as-nodes sharing one persona panel, and the left rail folding
+into the command bar were all already live — the gap register simply had not been purged
+of the closed sub-bullets. ROADMAP.md's canvas-surfaces section is rewritten to reflect
+only what is genuinely still open.
+
+Tests: `websiteMarkupSection.test.tsx` (new), `siteLandingPage.test.ts` (+2),
+`websiteWysiwyg.test.ts` (+1), `canvasAppSurface.test.tsx` (+2), `canvasNodeOpenSurface.test.tsx`
+(new), `MarketingHeader.test.tsx` (new), `CanvasOutlinePanel.test.tsx` (updated),
+`CreationCanvas.build.test.tsx`, and the full `CreationCanvas.test.tsx` suite (84 tests) —
+all green. `tsgo --noEmit` clean on both `frontend` and `api`. `check:roadmap` OK.
+
+---
+
 ## ✅ RESOLVED 2026-08-16 — the `app` surface was dropping every Brain-authored code card
 
 Reported live: a "build me the whole thing" turn (GreenEdge Yard Care — a business plan, a

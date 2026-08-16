@@ -4022,6 +4022,12 @@
 }
 .commandBarView button:hover, .commandBarView button:focus-visible { background: var(--canvas-hover); color: var(--canvas-ink); outline: none; }
 .commandBarView button > svg { display: block; width: 15px; height: 15px; }
+/* A mode that is on, or a panel this button owns that is open, is LIT — same signal
+   as `.sessionActionButton`, so the merged rail commands read as the same language
+   of controls as the rest of the bar rather than a second, unlit toolbar. */
+.commandBarView button[aria-pressed='true'] {
+  background: var(--canvas-panel); color: var(--canvas-accent); box-shadow: 0 1px 2px var(--canvas-shadow);
+}
 
 /* ── THE PROMPT'S THREE PLACEMENTS ────────────────────────────────────────────────
    `closed` is not styled: the composer is not rendered at all, which is the point — a
@@ -4063,3 +4069,11 @@
 }
 .canvasShell:has(.brainDock[data-side='right']) .composerDock[data-placement='docked'] { right: 8px; }
 .canvasShell:has(.brainDock[data-side='left']) .composerDock[data-placement='docked'] { left: 8px; }
+/* The dock (bottom:0, z-index 17) and the docked composer (bottom:12px, z-index 16) are
+   separately positioned elements that both claim the same edge. Without this, the dock's
+   full-height, opaque panel paints over the composer entirely — the prompt is there, but
+   behind the transcript, not just visually lower than it. `--composer-space` is already
+   the exact measured gap every other piece of bottom-anchored chrome reserves above the
+   composer (see `useComposerSpace.ts`), so it is also the exact amount the dock needs to
+   give back — the same fix the phone layout already applies to its bottom-sheet dock. */
+.canvasShell:has(.composerDock[data-placement='docked']) .brainDock { bottom: var(--composer-space, 0px); }

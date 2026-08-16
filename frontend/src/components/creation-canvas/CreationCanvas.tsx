@@ -19,7 +19,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, AddObjectIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, ClosePaletteIcon, DepthIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MoreActionsIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, AddObjectIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, ClosePaletteIcon, DepthIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MinimapIcon, MoreActionsIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
@@ -900,6 +900,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * tabs (knowledge, test, evaluation, delivery) the anchored panel does not have.
    */
   const [inspectorNodeId, setInspectorNodeId] = useState<string | null>(null);
+  /**
+   * While the full rail is open, it FOLLOWS selection rather than being left behind.
+   *
+   * Dozens of the inspector's own actions — deliver a mockup, visualize a dataset,
+   * compare projects, build a website with code, expand an Evermind pipeline — create
+   * a NEW object and select it, exactly the "just made something, look at it" moment
+   * the rail exists for. Requiring every one of those call sites to remember an extra
+   * `setInspectorNodeId` is the kind of thing one of them eventually forgets; this is
+   * the single place that keeps the rule instead. It does nothing while the rail is
+   * CLOSED (`current === null`): a plain click on a different card must still open
+   * only the anchored panel, never drag the full rail open behind it.
+   */
+  useEffect(() => {
+    setInspectorNodeId((current) => (current !== null && current !== selectedId ? selectedId : current));
+  }, [selectedId]);
   const [scopeMode, setScopeMode] = useState<'auto' | 'canvas' | 'selection' | 'connected' | 'frame'>('auto');
   const [connectionKind, setConnectionKind] = useState<CreationConnectionKind>('reference');
   const [title, setTitle] = useState('Untitled session');
@@ -2482,6 +2497,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current, dashboard]);
     setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: dashboard.id, type: 'smoothstep', label: t('edgeVisualizes'), animated: true, data: { connectionKind: 'data' } }]);
     setSelectedId(dashboard.id);
+    setInspectorNodeId(dashboard.id);
     setNotice(t('datasetVisualizationAdded'));
   }, [selectedNode, setEdges, setNodes, t]);
 
@@ -2524,6 +2540,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current, map]);
     setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: map.id, type: 'smoothstep', label: t('edgePlots'), animated: true, data: { connectionKind: 'data' } }]);
     setSelectedId(map.id);
+    setInspectorNodeId(map.id);
     setNotice(t('datasetMapAdded'));
   }, [selectedNode, setEdges, setNodes, t]);
 
@@ -3297,6 +3314,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }), comparison]);
       setEdges((current) => [...current, ...projectNodes.map((project) => ({ id: crypto.randomUUID(), source: project.id, target: comparison.id, label: 'compared in', type: 'smoothstep', animated: true }))]);
       setSelectedId(comparison.id);
+      setInspectorNodeId(comparison.id);
       setNotice(t('noticeComparisonAdded'));
       trackActivity('creation_projects_compared', { sessionId, metadata: { clientSurface: canvasSurface(), projectCount: projectNodes.length } });
     }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeCompareProjectsFailed')));
@@ -3336,6 +3354,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         : [...current.map((node) => node.id === project.id ? { ...node, data: { ...node.data, ...qualityData } } : node), qualityNode]);
       if (!existing) setEdges((current) => [...current, { id: crypto.randomUUID(), source: project.id, target: qualityNode.id, label: 'quality evidence', type: 'smoothstep', animated: true }]);
       setSelectedId(qualityNode.id);
+      setInspectorNodeId(qualityNode.id);
       setNotice(diagnostics.length ? `${diagnostics.length} quality diagnostics added to the canvas` : t('noticeQualityCardAdded'));
       void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'validated', projectId: Number(projectId), artifactId: project.id, durationMs: performance.now() - validationStartedAt, metricKey: 'validation_pass', metricValue: Number(quality.result.score ?? 0) >= 70 ? 1 : 0, unit: 'boolean', metadata: { score: quality.result.score, diagnosticCount: diagnostics.length } }).catch(() => undefined);
     }).catch((error) => {
@@ -3365,6 +3384,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNodes((current) => [...current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status } } : node), task]);
       setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: taskId, type: 'smoothstep', animated: true }]);
       setSelectedId(taskId);
+      setInspectorNodeId(taskId);
       return taskId;
     };
     if (persistence === 'server' && Number.isInteger(projectId) && projectId > 0) {
@@ -3459,7 +3479,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const existing = nodes.filter((node) => node.data.modelPipelineFor === selectedNode.id);
     if (existing.length) {
       const start = existing.find((node) => node.data.pipelineStep === 1) ?? existing[0]!;
-      setSelectedId(start.id); setSelectedIds([start.id]);
+      setSelectedId(start.id); setSelectedIds([start.id]); setInspectorNodeId(start.id);
       window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...existing].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
       setNotice(t('noticeDatasetStepOne'));
       return;
@@ -3486,7 +3506,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     ];
     setNodes((current) => [...current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, pipelineExpanded: true } } : node), ...created]);
     setEdges((current) => [...current, ...sequence.map((edge) => ({ ...edge, id: crypto.randomUUID(), type: 'smoothstep', animated: true, markerEnd: { type: MarkerType.ArrowClosed } }))]);
-    setSelectedId(dataset!.id); setSelectedIds([dataset!.id]);
+    setSelectedId(dataset!.id); setSelectedIds([dataset!.id]); setInspectorNodeId(dataset!.id);
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...created].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
     setNotice(t('noticeDatasetStepOne'));
   }, [nodes, selectedNode, setEdges, setNodes]);
@@ -3590,7 +3610,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const page = newNode('browser', point);
         page.data = { ...page.data, title: webPageHost(dropped), url: dropped, status: '' };
         setNodes((current) => [...current, page]);
-        setSelectedId(page.id); setSelectedIds([page.id]);
+        setSelectedId(page.id); setSelectedIds([page.id]); setInspectorNodeId(page.id);
         return;
       }
     }
@@ -3598,7 +3618,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const node = newNode(kind, point);
     if (kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
     setNodes((current) => [...current, node]);
-    setSelectedId(node.id); setSelectedIds([node.id]);
+    setSelectedId(node.id); setSelectedIds([node.id]); setInspectorNodeId(node.id);
   }, [addFilesToCanvas, canEdit, localizedTourDefaults, setNodes, t]);
 
   /**
@@ -9754,6 +9774,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button type="button" onClick={zoomOutAction} aria-label={t('zoomOut')} title={t('zoomOut')}><ZoomOutIcon /></button>
           <button type="button" onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')} title={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>{threeDControls ? <ResetViewIcon /> : <FitViewIcon />}</button>
           <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')} title={t('arrangeObjects')}><CleanLayoutIcon /></button>
+          {/* The rest of the left-edge rail, folded in here. Gated on the same flag the
+              rail's own `hideOnFlatBoard` reads (`showsBoard`) — the flat board is the
+              only view whose rail this bar stood down, so these only appear where the
+              rail actually went missing. Chat and the 3D scene keep their own rail. */}
+          {surfaceDef.showsBoard && <>
+            <button type="button" onClick={() => setMinimapOpen((open) => !open)} aria-pressed={minimapOpen} aria-label={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')} title={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')}><MinimapIcon /></button>
+            <button type="button" onClick={() => setCanvasGesture((current) => (current === 'select' ? 'pan' : 'select'))} aria-pressed={canvasGesture === 'select'} aria-label={t('canvasGestureToggle')} title={canvasGesture === 'select' ? t('canvasGestureSelectActive') : t('canvasGesturePanActive')}><MarqueeSelectIcon /></button>
+            <button type="button" onClick={() => toggleDockPanel('files')} aria-pressed={dockPanel === 'files'} aria-label={tFiles('title')} title={tFiles('title')}><CanvasFilesIcon /></button>
+            <button type="button" onClick={() => toggleDockPanel('outline')} aria-pressed={dockPanel === 'outline'} aria-label={t('canvasOutline')} title={t('canvasOutline')}><AccessibleOutlineIcon /></button>
+          </>}
         </div>}
         onTogglePrompt={presentMode || surfaceDef.brainIsSurface ? undefined : () => setPromptPlacement(toggledCanvasPromptPlacement(promptPlacement))}
         promptOpen={effectivePromptPlacement !== 'closed'}
@@ -9923,6 +9953,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             threeDActive={!surfaceDef.showsBoard}
             // `onToggleThreeD` is deliberately NOT passed: it would draw a second control
             // for the decision the surface switcher below already owns.
+            // The flat-board rail stood down entirely: zoom, fit, arrange, the mini map
+            // toggle, pan/marquee, files and the outline all moved into the one command
+            // bar below (`view`/`extras`), which was the last toolbar competing with it.
+            hideOnFlatBoard
             extraControls={<>
               {/* The surface switcher used to sit here, which put "change what this
                   canvas is" among zoom / fit / arrange at the same size and weight. It

@@ -154,8 +154,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <TeamBar />
       {/* Version + Terms/Privacy, in the frame's bottom-right corner. In flow as
           the last row, so it never covers the board or the roster above it.
-          Stands down on a stage route, where `CanvasUsageCorner` carries the
-          same row (plus the usage meters) as a floating overlay instead. */}
+          Stands down on a stage route — a creation surface has no room for it
+          and no need of it — where `CanvasUsageCorner` floats only the usage
+          meters instead. */}
       <LegalCorner />
       <CanvasUsageCorner />
       <MobileBottomNav />
