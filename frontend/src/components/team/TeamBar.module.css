@@ -91,7 +91,7 @@
   flex-shrink: 0;
 }
 
-.initials {
+.initials, .compactMore {
   display: grid;
   place-items: center;
   width: 20px;
@@ -141,4 +141,81 @@
   }
 
   .group { width: 100%; }
+}
+
+/* ── THE COMPACT STRIP ────────────────────────────────────────────────────────────
+   The same roster, the same chips and the same drag payload, drawn for the canvas
+   command bar: overlapping initials, because a bar has room for identity and not for
+   job titles. The band's `.chip` keeps its own chrome untouched — this is a second
+   drawing of one component, not a second component. */
+.compact {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+
+.compactChip {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-left: -7px;
+  padding: 0;
+  border: 2px solid var(--surface-raised, var(--bg-base));
+  border-radius: var(--radius-full);
+  background: transparent;
+  cursor: grab;
+  transition: transform 0.14s ease;
+}
+.compactChip:first-child { margin-left: 0; }
+/* Raised rather than enlarged: a circle that grows inside an overlapping row pushes
+   its neighbours, and a roster that reflows under the cursor is hard to aim at. */
+.compactChip:hover:not(:disabled),
+.compactChip:focus-visible { transform: translateY(-2px); z-index: 1; outline: none; }
+.compactChip:focus-visible { box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--coral-bright); }
+.compactChip:active:not(:disabled) { cursor: grabbing; }
+/* Disable, never hide — the band's rule, kept here. A seat with nothing provisioned
+   behind it is dimmed and inert, and its title still explains why. */
+.compactChip:disabled { opacity: 0.45; cursor: default; }
+.compactChip .initials,
+.compactChip .avatar { width: 22px; height: 22px; }
+
+/* Sized and weighted like a chip, tinted like the surface it counts INTO — it is a
+   member of the row, not a control beside it. The mono-initials treatment above is
+   shared rather than restated. */
+.compactMore {
+  width: 26px;
+  height: 26px;
+  margin-left: -7px;
+  padding: 0;
+  border: 2px solid var(--surface-raised, var(--bg-base));
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.compactMore:hover { background: var(--surface-coral-soft); color: var(--coral-bright); }
+.compactMore:focus-visible { outline: 2px solid var(--coral-bright); outline-offset: 2px; }
+
+/* Upward, because this strip lives at the bottom of the window. Full chips, so a seat
+   that did not fit is read exactly as it is in the band. */
+.compactOverflow {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 30;
+  display: grid;
+  gap: 2px;
+  min-width: 190px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised, var(--bg-base));
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.22);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .compactChip { transition: none; }
 }

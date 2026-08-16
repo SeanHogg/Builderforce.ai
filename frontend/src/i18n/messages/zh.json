@@ -15971,7 +15971,10 @@
       "auditRule_viewportMeta": "未声明响应式视口",
       "formulaErrors": "{count} 个公式错误 — 首个位于 {first}",
       "confidenceInterval": "95% 置信区间 {interval}",
-      "sampleSize": "样本量 n = {count}"
+      "sampleSize": "样本量 n = {count}",
+      "toPreview": "减少显示此对象",
+      "toMinimized": "最小化为图标",
+      "toExpanded": "显示完整对象"
     },
     "editor": {
       "toolbar": "格式",
@@ -19992,7 +19995,8 @@
     "roleTeammate": "队友",
     "chipJoin": "把 {name}（{role}）加入此画布 —— 拖入或按 Enter",
     "chipLocked": "{name} 尚未在此工作区中配置",
-    "inviteSignedOut": "登录后邀请"
+    "inviteSignedOut": "登录后邀请",
+    "moreSeats": "另外 {count} 个席位"
   },
   "sessions": {
     "newCanvas": "+ 新建画布",

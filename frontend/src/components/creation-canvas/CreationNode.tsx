@@ -15,6 +15,7 @@ import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL } from './authoredColors';
 import { STICKY_COLORS } from '@/components/canvas/canvasModel';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
+import { canvasNodeDensity, canvasNodeDensityActionKey, nextCanvasNodeDensity, type CanvasNodeDensity } from '@/lib/canvasNodeDensity';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
 import { BrainSurfaceActions, BrainSurfaceBody } from './BrainDock';
 import { useBrainSurface } from './brainSurfaceContext';
@@ -2312,6 +2313,28 @@ function useSpecDeriveBoard(kind: CreationObjectKind): SpecDeriveBoard {
   );
 }
 
+/**
+ * The density toggle's glyph, which reports the CURRENT reading rather than the next one.
+ *
+ * A single chevron would have been cheaper and wrong: this is a three-position control, so
+ * the mark has to say which of the three you are in — full rows, one row plus a rule, or a
+ * dot — or the only way to know is to press it and watch.
+ */
+function DensityIcon({ density }: { density: CanvasNodeDensity }) {
+  if (density === 'minimized') return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r="3.1" fill="currentColor" />
+  </svg>;
+  if (density === 'preview') return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="2.6" y="3.4" width="10.8" height="3" rx="1" fill="currentColor" />
+    <path d="M2.6 9.6h10.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>;
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="2.6" y="3" width="10.8" height="2.6" rx="1" fill="currentColor" />
+    <rect x="2.6" y="6.8" width="10.8" height="2.6" rx="1" fill="currentColor" opacity=".55" />
+    <rect x="2.6" y="10.6" width="10.8" height="2.6" rx="1" fill="currentColor" opacity=".3" />
+  </svg>;
+}
+
 export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const specBoard = useSpecDeriveBoard(data.kind);
@@ -2346,8 +2369,51 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   // addressed by `data-node-id` when a test needs a specific one, and both are what
   // `QaHeatZone.selector` finally has to key an element-level hot zone on — see the
   // seam note in CreationCanvas.
+  /**
+   * HOW MUCH OF THIS OBJECT TO DRAW.
+   *
+   * A board of fifteen cards each rendering four hundred words is a wall of documents
+   * with the shape of the work invisible underneath it. `minimized` is the reading that
+   * turns it back into a graph: the object's mark, its name, its badges and its
+   * connectors, and no body at all.
+   *
+   * The rule lives in `lib/canvasNodeDensity.ts`; this only draws it.
+   */
+  const density = canvasNodeDensity(data);
+  const densityAction = t(canvasNodeDensityActionKey(density) as 'toPreview');
+  const densityToggle = onEditData ? <button
+    type="button"
+    className={`${styles.densityToggle} nodrag`}
+    data-testid={`canvas-node-density-${id}`}
+    aria-label={densityAction}
+    title={densityAction}
+    onClick={(event) => { event.stopPropagation(); onEditData(id, { density: nextCanvasNodeDensity(density) }); }}
+  ><DensityIcon density={density} /></button> : null;
+
+  // The mark, the name, the badges, the connectors. Drawn as its own element rather than
+  // as a CSS treatment of the card, because a circle is not a small rectangle: the header
+  // row, the resizer, the body and the status chip all have to be ABSENT, not hidden, or
+  // React Flow keeps measuring a node the size of the card it is standing in for.
+  if (density === 'minimized') return (
+    <article
+      data-testid={`canvas-node-${data.kind}`}
+      data-node-id={id}
+      data-node-kind={data.kind}
+      data-density="minimized"
+      className={`${styles.nodeOrb} ${selected ? styles.selected : ''}`}
+    >
+      <Handle type="target" position={Position.Left} className={styles.handle} />
+      <span className={styles.nodeOrbMark} style={data.accent ? { background: String(data.accent) } : undefined}>
+        <Icon source={typeof data.toolIcon === 'string' ? data.toolIcon : creationObjectDefinition(data.kind).icon} size={30} />
+      </span>
+      {densityToggle}
+      <span className={styles.nodeOrbName}><b>{data.title}</b>{data.status && <small>{data.status}</small>}</span>
+      <Handle type="source" position={Position.Right} className={styles.handle} />
+    </article>
+  );
+
   return (
-    <article style={cardStyle} data-testid={`canvas-node-${data.kind}`} data-node-id={id} data-node-kind={data.kind} data-viewport={data.viewport} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
+    <article style={cardStyle} data-testid={`canvas-node-${data.kind}`} data-node-id={id} data-node-kind={data.kind} data-viewport={data.viewport} data-density={density} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <NodeResizer isVisible={selected} minWidth={240} minHeight={130} lineClassName={styles.resizeLine} handleClassName={styles.resizeHandle} />
       <Handle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>
@@ -2355,6 +2421,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         <span className={styles.nodeIcon}><Icon source={typeof data.toolIcon === 'string' ? data.toolIcon : creationObjectDefinition(data.kind).icon} size={18} /></span>
         <strong>{data.title}</strong>
         {data.status && <span className={styles.status}>{data.status}</span>}
+        {densityToggle}
         {data.kind === 'workflow' && onRun && <button
           type="button"
           className={`${styles.workflowRunButton} nodrag nowheel`}

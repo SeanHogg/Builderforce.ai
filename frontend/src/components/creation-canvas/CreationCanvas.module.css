@@ -3595,3 +3595,107 @@
   margin:0; font:500 11px var(--font-mono); line-height:1.6;
   color:var(--canvas-muted); word-break:break-word;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════════
+   NODE DENSITY — how much of an object its card draws
+   ══════════════════════════════════════════════════════════════════════════════════
+   Three readings, decided by `lib/canvasNodeDensity.ts` and published as `data-density`.
+   A board of fifteen cards each rendering four hundred words is a wall of documents with
+   the shape of the work invisible underneath it; `minimized` is what turns it back into
+   a graph you can read at a glance. */
+
+.densityToggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--canvas-muted);
+  cursor: pointer;
+}
+.densityToggle:hover, .densityToggle:focus-visible { background: var(--canvas-hover); color: var(--canvas-ink); outline: none; }
+.densityToggle > svg { display: block; width: 14px; height: 14px; }
+
+/* PREVIEW — the header plus a few lines, so the object is recognisable without claiming
+   a screen. The body is clamped rather than truncated at a character count: a document,
+   a chart and a data grid have nothing in common to count, and every one of them reads
+   correctly when it is simply given less room and told to fade out. */
+.node[data-density='preview'] .nodeBody {
+  max-height: 108px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+}
+/* Nothing inside a clamped body may be interactive: a half-visible button under a fade
+   is a target nobody can see they are pressing. */
+.node[data-density='preview'] .nodeBody { pointer-events: none; }
+
+/* MINIMIZED — the orb. A circle carrying the object's mark, its name underneath, and its
+   two connectors. Its own element rather than a CSS treatment of the card, because the
+   header row, the resizer and the body have to be ABSENT: React Flow measures what is
+   rendered, and a hidden card still reserves a card's worth of graph. */
+.nodeOrb {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  width: 120px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.nodeOrbMark {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: 2px solid var(--canvas-widget-border);
+  background: var(--canvas-widget-icon-bg);
+  color: var(--canvas-widget-icon);
+  box-shadow: 0 10px 26px var(--canvas-shadow);
+}
+.nodeOrb .densityToggle {
+  position: absolute;
+  top: 58px;
+  right: 12px;
+  border: 2px solid var(--canvas-panel);
+  background: var(--canvas-panel);
+  box-shadow: 0 2px 8px var(--canvas-shadow);
+}
+.nodeOrbName { display: grid; gap: 1px; text-align: center; max-width: 120px; }
+.nodeOrbName b { font-size: 12px; font-weight: 650; color: var(--canvas-ink); overflow-wrap: anywhere; }
+.nodeOrbName small { font-size: 10px; color: var(--canvas-ink-soft); }
+.nodeOrb.selected { box-shadow: none; }
+.nodeOrb.selected .nodeOrbMark { border-color: var(--canvas-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--canvas-accent) 22%, transparent), 0 10px 26px var(--canvas-shadow); }
+
+/* ── CONNECTORS, MADE PROMINENT ───────────────────────────────────────────────────
+   8px dots the colour of muted text were the least visible thing on a card that also
+   drew a title, a status chip and a body — so "drag from here to connect" was an
+   affordance you had to already know about. They are capsules now: a real target at the
+   card's edge, and they LIGHT UP on approach so the gesture announces itself.
+
+   `!important` throughout because React Flow writes its handle geometry inline — the
+   same reason the existing rule above carries it. */
+.handle {
+  width: 11px !important;
+  height: 26px !important;
+  border-radius: var(--radius-full) !important;
+  border: 2px solid var(--canvas-panel) !important;
+  background: var(--canvas-edge) !important;
+  transition: background .14s ease, width .14s ease, height .14s ease;
+}
+.node:hover .handle,
+.nodeOrb:hover .handle { background: var(--canvas-accent) !important; width: 13px !important; }
+.handle:hover, .handle:focus-visible {
+  width: 15px !important;
+  height: 32px !important;
+  background: var(--canvas-accent) !important;
+  outline: none;
+}
+@media (prefers-reduced-motion: reduce) { .handle { transition: none; } }

@@ -64,8 +64,20 @@ export interface CanvasCommandBarProps {
   onQuickAdd: (group?: CreationObjectGroup) => void;
   /** Whether the palette is open, so the circles can report it. */
   quickAddOpen: boolean;
-  /** Who is in this session. Status, so it survives the collapse. */
+  /**
+   * Who is in this session RIGHT NOW — the live collaborators. Status, so it survives
+   * the collapse.
+   */
   roster: React.ReactNode;
+  /**
+   * Who is ALWAYS on — the hired seats and the invited team. A different fact from
+   * `roster`, drawn beside it rather than merged into it: one answers "who is editing
+   * this with me", the other "who works here". Both are status.
+   *
+   * This is the footer band the canvas used to carry as a fifth strip of chrome; the
+   * component decides for itself that the band stands down on a stage route.
+   */
+  team?: React.ReactNode;
   /** The ••• sheet's trigger and whatever else the host keeps beside the actions. */
   extras?: React.ReactNode;
 }
@@ -79,6 +91,7 @@ export function CanvasCommandBar({
   onQuickAdd,
   quickAddOpen,
   roster,
+  team,
   extras,
 }: CanvasCommandBarProps) {
   const t = useTranslations('creationCanvas');
@@ -128,6 +141,7 @@ export function CanvasCommandBar({
       {canvasChromeShows('roster', collapsed) && <>
         <span className={styles.commandBarDivider} aria-hidden />
         {roster}
+        {team}
       </>}
 
       {showsQuickAdd && <>

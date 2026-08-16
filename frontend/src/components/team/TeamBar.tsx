@@ -59,7 +59,7 @@ const payloadOf = (member: TeamRosterMember): TeammatePayload => ({
   domain: member.domain,
 });
 
-function TeammateChip({ member, locallyAvailable = false }: { member: TeamRosterMember; locallyAvailable?: boolean }) {
+function TeammateChip({ member, locallyAvailable = false, compact = false }: { member: TeamRosterMember; locallyAvailable?: boolean; compact?: boolean }) {
   const t = useTranslations('team');
   const [dragging, setDragging] = useState(false);
   const locked = member.locked && !locallyAvailable;
@@ -76,7 +76,7 @@ function TeammateChip({ member, locallyAvailable = false }: { member: TeamRoster
   return (
     <button
       type="button"
-      className={styles.chip}
+      className={compact ? styles.compactChip : styles.chip}
       data-kind={member.kind}
       data-dragging={dragging ? 'true' : 'false'}
       // The drag and the keypress are the same action; `onClick` covers `Enter`
@@ -96,17 +96,42 @@ function TeammateChip({ member, locallyAvailable = false }: { member: TeamRoster
       {member.avatarUrl
         ? <img className={styles.avatar} src={member.avatarUrl} alt="" />
         : <span className={styles.initials} aria-hidden="true">{initials(member.seat ?? member.name)}</span>}
-      <span>{member.name}</span>
-      <span className={styles.dot} data-availability={member.availability} aria-hidden="true" />
+      {/* The name and the availability dot are what a BAND has room for. The compact
+          strip keeps the accessible name — which already carries both — and drops only
+          the drawn text, so nothing is lost to a screen reader. */}
+      {!compact && <>
+        <span>{member.name}</span>
+        <span className={styles.dot} data-availability={member.availability} aria-hidden="true" />
+      </>}
     </button>
   );
 }
 
-export function TeamBar() {
+/** How many seats the compact strip draws before it starts counting. Five 26px circles
+ *  overlapping at -7px is ~103px, which is what the command bar can spare beside Run, the
+ *  glyph clusters and the add-object circles without starting to scroll on a laptop. */
+const COMPACT_TEAM_LIMIT = 5;
+
+export interface TeamBarProps {
+  /**
+   * `band` — the shell's footer row, with names, availability dots and the invite link.
+   * `bar`  — the canvas command bar's avatar strip: the same roster, the same chips, the
+   *          same drag payload, drawn as overlapping initials because a bar has room for
+   *          identity and not for job titles.
+   *
+   * ONE component for both, because the alternative is a second roster that reads a
+   * second endpoint and drifts on who counts as always-on. `useTeamRoster` stays the
+   * single source and `TeammateChip` stays the single chip.
+   */
+  variant?: 'band' | 'bar';
+}
+
+export function TeamBar({ variant = 'band' }: TeamBarProps) {
   const t = useTranslations('team');
   const { hasTenant } = useAuth();
   const { members, loading } = useTeamRoster();
   const pathname = usePathname() || '';
+  const [overflowOpen, setOverflowOpen] = useState(false);
 
   // Nothing to show and nothing to explain yet — the bar appears with its data
   // rather than reserving an empty strip of chrome.
@@ -114,6 +139,49 @@ export function TeamBar() {
 
   const alwaysOn = members.filter((m) => m.alwaysOn);
   const team = members.filter((m) => !m.alwaysOn);
+
+  /**
+   * THE BAND STANDS DOWN ON A STAGE ROUTE.
+   *
+   * It decides that itself, the way it already decides everything else about its own
+   * visibility. A canvas gives the whole window to the board and floats its chrome over
+   * it; a full-width roster strip pinned under that board is the last of the four bands
+   * the redesign set out to remove, and it was the one still standing.
+   *
+   * The roster is not lost — the canvas renders this same component as `bar` inside its
+   * command bar, where "who is always on" is a status slot that survives a collapse.
+   */
+  if (variant === 'band' && isStageRoute(pathname)) return null;
+
+  if (variant === 'bar') {
+    // Always-on first: on a board, the seats that are already working are the ones you
+    // reach for. Invited humans follow, and the overflow carries whoever did not fit.
+    const ordered = [...alwaysOn, ...team];
+    if (ordered.length === 0) return null;
+    const shown = ordered.slice(0, COMPACT_TEAM_LIMIT);
+    const rest = ordered.slice(COMPACT_TEAM_LIMIT);
+    return (
+      <div className={styles.compact} role="group" aria-label={t('alwaysOn')}>
+        {shown.map((member) => <TeammateChip key={member.id} member={member} locallyAvailable compact />)}
+        {rest.length > 0 && <>
+          {/* Not a link and not a truncation: it opens the rest as the SAME chips, so a
+              seat that did not fit is one press away rather than unreachable. */}
+          <button
+            type="button"
+            className={styles.compactMore}
+            aria-expanded={overflowOpen}
+            aria-label={t('moreSeats', { count: rest.length })}
+            title={t('moreSeats', { count: rest.length })}
+            onClick={() => setOverflowOpen((open) => !open)}
+          >{`+${rest.length}`}</button>
+          {overflowOpen && <div className={styles.compactOverflow} role="group" aria-label={t('moreSeats', { count: rest.length })}>
+            {rest.map((member) => <TeammateChip key={member.id} member={member} locallyAvailable />)}
+          </div>}
+        </>}
+      </div>
+    );
+  }
+
   // Creation Canvas owns sharing in its session bar, including account-free
   // guest links. Repeating an account-backed workforce invite in this footer is
   // both a duplicate action and, for local canvases, a contradiction.

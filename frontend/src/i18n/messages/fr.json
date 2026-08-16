@@ -15971,7 +15971,10 @@
       "auditRule_viewportMeta": "Aucun viewport adaptatif déclaré",
       "formulaErrors": "{count, plural, one {# erreur de formule} other {# erreurs de formule}} — la première en {first}",
       "confidenceInterval": "IC 95 % {interval}",
-      "sampleSize": "n = {count}"
+      "sampleSize": "n = {count}",
+      "toPreview": "Afficher moins de cet objet",
+      "toMinimized": "Réduire à une pastille",
+      "toExpanded": "Afficher l'objet en entier"
     },
     "editor": {
       "toolbar": "Mise en forme",
@@ -19992,7 +19995,8 @@
     "roleTeammate": "coéquipier",
     "chipJoin": "Ajouter {name} ({role}) à ce tableau : faites-le glisser ou appuyez sur Entrée",
     "chipLocked": "{name} n’est pas encore configuré dans cet espace de travail",
-    "inviteSignedOut": "Connectez-vous pour inviter"
+    "inviteSignedOut": "Connectez-vous pour inviter",
+    "moreSeats": "{count} sièges de plus"
   },
   "sessions": {
     "newCanvas": "+ Nouveau tableau",

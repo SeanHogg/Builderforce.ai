@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { isStageRoute } from '@/lib/workbenchPolicy';
 import { useLegalDocs } from './useLegalDocs';
 import LegalDocModal, { type LegalModalType } from './LegalDocModal';
 import LegalDocLink from './LegalDocLink';
@@ -31,7 +33,24 @@ import { BRAND } from '@/lib/content';
 export default function LegalCorner() {
   const { appVersion, apiVersion, legal, termsVersion, privacyVersion } = useLegalDocs();
   const t = useTranslations('legal');
+  const pathname = usePathname() || '';
   const [modalType, setModalType] = useState<LegalModalType | null>(null);
+
+  /**
+   * IT STANDS DOWN ON A STAGE ROUTE, and decides that itself.
+   *
+   * The doc above says the shell "already ends in a footer band (`TeamBar`)" and that
+   * this is the last row after it. On a canvas neither is true any more: the board takes
+   * the whole window and floats its chrome over itself, `TeamBar` folds into the command
+   * bar, and a flow row under the board is simply the last strip of chrome eating height
+   * the artefact should have.
+   *
+   * Nothing here is lost: the version button opens the same app-wide Product Updates
+   * panel the marketing footer's does, and both documents are reachable from every other
+   * route and from the marketing footer. A canvas is the one place in the product where
+   * a permanent legal strip costs more than it carries.
+   */
+  if (isStageRoute(pathname)) return null;
 
   return (
     <>

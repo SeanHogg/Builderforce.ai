@@ -15971,7 +15971,10 @@
       "auditRule_viewportMeta": "Kein responsives Viewport deklariert",
       "formulaErrors": "{count, plural, one {# Formelfehler} other {# Formelfehler}} — erster bei {first}",
       "confidenceInterval": "95%-KI {interval}",
-      "sampleSize": "n = {count}"
+      "sampleSize": "n = {count}",
+      "toPreview": "Weniger von diesem Objekt zeigen",
+      "toMinimized": "Auf ein Zeichen verkleinern",
+      "toExpanded": "Das ganze Objekt zeigen"
     },
     "editor": {
       "toolbar": "Formatierung",
@@ -19992,7 +19995,8 @@
     "roleTeammate": "Teammitglied",
     "chipJoin": "{name} ({role}) zu diesem Board hinzufügen – ziehen oder Enter drücken",
     "chipLocked": "{name} ist in diesem Workspace noch nicht eingerichtet",
-    "inviteSignedOut": "Zum Einladen anmelden"
+    "inviteSignedOut": "Zum Einladen anmelden",
+    "moreSeats": "{count} weitere Sitze"
   },
   "sessions": {
     "newCanvas": "+ Neues Canvas",

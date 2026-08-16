@@ -15971,7 +15971,10 @@
       "auditRule_viewportMeta": "Sin viewport adaptable declarado",
       "formulaErrors": "{count, plural, one {# error de fórmula} other {# errores de fórmula}} — el primero en {first}",
       "confidenceInterval": "IC 95% {interval}",
-      "sampleSize": "n = {count}"
+      "sampleSize": "n = {count}",
+      "toPreview": "Mostrar menos de este objeto",
+      "toMinimized": "Minimizar a una marca",
+      "toExpanded": "Mostrar el objeto completo"
     },
     "editor": {
       "toolbar": "Formato",
@@ -19992,7 +19995,8 @@
     "roleTeammate": "compañero",
     "chipJoin": "Añade a {name} ({role}) a este lienzo: arrástralo o pulsa Intro",
     "chipLocked": "{name} aún no está configurado en este espacio de trabajo",
-    "inviteSignedOut": "Inicia sesión para invitar"
+    "inviteSignedOut": "Inicia sesión para invitar",
+    "moreSeats": "{count} puestos más"
   },
   "sessions": {
     "newCanvas": "+ Nuevo lienzo",

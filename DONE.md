@@ -1,3 +1,108 @@
+## ✅ RESOLVED 2026-08-16 — the fifth band folded into the bar, and a board of documents became a graph again
+
+Three items from the canvas-redesign audit, closed.
+
+**`TeamBar` was the band still standing.** The chrome pass floated everything else and
+left a full-width ALWAYS-ON roster strip pinned under the board — the last of the bands
+the redesign set out to remove. It now decides for itself that it stands down on a stage
+route and draws itself as `variant="bar"` inside the command bar: overlapping 26px
+initials, the same `useTeamRoster` endpoint, the same `TeammateChip`, the same
+drag-to-board payload and keyboard parity, with a `+N` opening the rest as full chips
+rather than truncating them. ONE component with two drawings, because the alternative is a
+second roster reading a second endpoint and drifting on who counts as always-on. Seats and
+live collaborators sit side by side there: "who works here" and "who is editing this with
+me" are different facts, and both are status, so both survive a collapse.
+
+**`LegalCorner` went with it**, on the same rule and for the same reason its own doc gave
+for existing: it was the last row *after* `TeamBar`, and on a canvas neither the band nor
+the "last row" is true any more. The version button opens the same app-wide Product Updates
+panel the marketing footer's does, and both documents stay reachable everywhere else.
+
+**Node density — `minimized` · `preview` · `expanded`.** Every card drew its full body,
+always: right for the two or three objects somebody is working on, wrong for the twenty
+behind them, and a board of fifteen documents hides the shape of the work underneath the
+words. `lib/canvasNodeDensity.ts` owns the rule; the card draws it.
+
+  - `minimized` renders an ORB — the object's mark, its name, its connectors — as its OWN
+    element rather than as a CSS treatment of the card, because React Flow measures what is
+    rendered and a hidden card still reserves a card's worth of graph.
+  - `preview` clamps the body behind a mask and takes its pointer events, because a
+    half-visible button under a fade is a target nobody can see they are pressing.
+  - The toggle SHRINKS first (expanded → preview → minimized → expanded): you reach for it
+    when a card is in the way, and a toggle whose first press makes it bigger is pressed
+    once and abandoned. Its glyph reports the CURRENT reading — three rows, one row, a dot
+    — because a single chevron on a three-position control tells you nothing.
+  - Density lives on the node's own data beside its position and size, and is DERIVED
+    (`expanded`) when absent, so objects authored by Brain, imported from a template or
+    created before this existed read correctly with no migration. It is shared for the same
+    reason position is shared: two people on one board must see one graph.
+
+**Connectors are targets now.** 8px dots the colour of muted text were the least visible
+thing on a card that also drew a title, a status chip and a body — so "drag from here" was
+an affordance you had to already know about. They are 11×26 capsules that light up and grow
+on card-hover and again on their own hover, so the gesture announces itself.
+
+450 tests green across canvas, team and legal; 10/10 guards; five catalogs.
+
+## ✅ RESOLVED 2026-08-16 — the canvas gave up four bands of chrome; everything floats over one board
+
+A `/create` session drew the board UNDER a stack of full-width bands and gave it whatever
+was left. The 54px session bar was the worst of them: a title, a surface switcher, seven
+buttons, a roster and a save button spread across a whole window, mostly empty space
+between things with nothing to do with each other — and it drew a hard line, so the board
+began below the chrome instead of running behind it.
+
+**The band is gone.** `.canvasShell` is now the containing block for four floating cards
+and the board fills it edge to edge. Which card a control lands in is DATA:
+`lib/canvasChrome.ts` already owned the status/control table that decides what survives a
+collapse, and it now owns a second table beside it — `pill` (what this canvas IS),
+`chips` (how it is READ), `topRight` (how work LEAVES it), `bar` (what you DO to it). A
+slot cannot be added to one table and forgotten in the other without the test failing,
+which is the quietest possible way to lose a control.
+
+**One bar, contents from the surface.** `CanvasCommandBar` draws Run, whatever the runtime
+contributed through `canvasSurfaceActions`, the glyph clusters, the roster and the
+add-object circles. Nothing in it is a switch on the surface: the App surface publishes its
+own Run, Preview/Code/Console, viewport switcher and address into the contribution seam and
+the bar draws what it finds, so a surface added later gets a bar for free and cannot get a
+second one.
+
+**The board finally has a Run.** It is gated on `canvasApp(nodes).entry !== null` — the
+same projection the App surface itself asks — so the bar can never promise a run that lands
+on an empty frame. A board of notes has plenty of objects and nothing to run. Its
+accessible name is "Run this canvas" rather than "Run", because a board can carry a
+workflow widget offering "Run Fall campaign" and a bare "Run" beside it is ambiguous to
+anyone reading the page by its names.
+
+**Share and Publish moved apart from the glyphs**, into their own `handoff` slot in the
+top-right card. They are the only worded actions in the registry, and they are worded for
+the same reason they are placed apart: a glyph acts here, a word opens somewhere else.
+`CanvasSessionActions` splits on `def.chrome`, so a worded action added later lands in the
+right corner with neither call site edited.
+
+**Six coloured circles point INTO the palette**, never beside it. `lib/canvasQuickAdd.ts`
+names real `CreationObjectGroup` values and real board palette tokens; pressing one opens
+the palette focused on that group (every other group folds — a state the palette already
+persists and draws) and the last one opens it whole, so a six-item shortlist can never
+become the only way into a sixteen-group catalogue.
+
+**The dock reservation moved to the shell.** `--brain-dock-left/right` used to be published
+on the board, which was correct while the chrome was inside it. The cards are siblings of
+the board now, so a reservation only the board could see would have left the session pill
+and the command bar as the two things that DO sit under a docked Brain.
+
+Retired with it: `.sessionBar`, `.titleBlock` and their phone and dark-theme rules; the
+duplicated `CollapseBarIcon`/`ExpandBarIcon` imports. `.composerDock` and the three menus
+that hang off the top-right card read one `--canvas-command-bar-space` token instead of
+three independent guesses at where the bottom of the canvas is.
+
+**What this did NOT do** is the board itself — orb/minimise node states, connector handles,
+the centre `+`, clock badges, message badges, anchored config panels, people-as-nodes, the
+prompt's float/dock states, and folding `TeamBar` and `LegalCorner` out of the app shell.
+Those are audited item by item in ROADMAP.md under the canvas chrome entry.
+
+395 canvas tests green, 10/10 guards, five catalogs.
+
 ## ✅ RESOLVED 2026-08-16 — the most-connected Twilio connector was the one that told you to paste the wrong secret
 
 Twilio recommends an API key (`SK…` + secret) over the account-wide Auth Token, and five

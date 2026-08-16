@@ -30,6 +30,7 @@ import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
 import { CanvasSessionPill } from './CanvasSessionPill';
 import { CanvasCommandBar } from './CanvasCommandBar';
+import { TeamBar } from '@/components/team/TeamBar';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
 import { CanvasChatSurface } from './CanvasChatSurface';
 import { CanvasAppSurface } from './CanvasAppSurface';
@@ -9584,6 +9585,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 now only reports who is here; Share is the door. */}
           </div>
         }
+        // The always-on seats, folded out of the shell's footer band and into the one
+        // bar. Same component, same roster endpoint, same drag-to-board payload — the
+        // band simply stands down on a stage route and draws itself here instead.
+        team={<TeamBar variant="bar" />}
         extras={canvasChromeShows('actions', barCollapsed) ? <>
           <TwilioCanvasSetup active={canvasUsesTwilio} />
           {/* Editor-only capture actions. Renders nothing on the web — it asks the

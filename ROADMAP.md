@@ -943,39 +943,33 @@ sequenced into waves because nothing in them gates the sell motion.
   what is missing is an `onOpenSurface` callback threaded to `CreationNode`, which is why this is
   logged rather than done in the same edit.
 
-- **Four full-width bands of chrome before a single object is drawn, and a graph you cannot build by
-  hand.** *(registered 2026-08-16 by the "resemble Make's UI/UX" review pass)* A `/create` session
-  spends the marketing header, the session bar, the fixed prompt composer and the ALWAYS-ON team bar
-  on chrome that never changes during a session — two of them permanent full-width bands, one of
-  them a logged-out marketing nav. Separately, the board can only be built by prompting: a node has
-  no visible connector handle to drag, no centre `+` to insert the next step, no clock to schedule
-  it, and its inspector is a full-height right rail forty controls deep with nothing tying it to the
-  card it configures. Fixing it = nine moves, most of them relocations: one floating session pill;
-  the team folded into a single floating command bar (Run · schedule · tools · avatars · +); surface
-  chips floating ON the canvas rather than in a band above it; the prompt gaining float / dock-into-
-  Brain / closed states; config panels ANCHORED beside their node with a bottom-left "Advanced
-  settings" toggle; real 26×44px drag handles on both sides of every node; a centre `+` opening the
-  existing object palette as a visual icon picker at the node; and a per-step clock badge opening
-  anchored schedule settings. This is what turns the canvas from "describe it and hope" into
-  something a non-developer can assemble, and it reclaims roughly 180px of vertical room.
-  **Three further pieces settled in the second review pass** (the fourth — the surface-aware
-  single command bar — is BUILT, see DONE.md 2026-08-16): (b) **people are nodes** — a built-in seat (CTO, from the `role:<key>` catalog) and a custom
-  agent both sit on the board with connectors, a clock and a centre `+`, and share ONE panel shape
-  (model · autonomy · toolbox · personality traits · Advanced), differing only in what is read-only,
-  which is what keeps `psychometric-persona` a single trait engine with two doors in; (c) **messages
-  are on the item** — a severity-coloured badge opening an anchored list that names the consequence
-  and carries the link that FIXES it, with the bar's error pill reading the same source; (d) six
-  colour-coded category circles (Flow control · Tools · Text parser · AI steps · People · All apps)
-  driving ONE data-filled popover, never six hand-written panels.
-  **Blocked on an explicit user decision:** the design is done and mocked up interactively
-  (https://claude.ai/code/artifact/c935a6ce-18cc-4ea4-bccf-1859a50c20a1) — building it edits the app
-  shell, `CreationCanvas.tsx`, `CanvasAppSurface.tsx`, `canvasSessionActions.ts`, the object palette,
-  the inspector, the agent/persona cards and five i18n catalogs. The collapse behaviour itself is
-  BUILT (see DONE.md 2026-08-16, "collapse hides controls, never status") — `lib/canvasChrome.ts`
-  owns the status/control table and the session bar obeys it, so the remaining work here is folding
-  `TeamBar`'s chips into that bar as a `roster`-kind slot, keeping their drag-to-board behaviour and
-  availability dot. Note that `TeamBar` renders in `AppShell` on EVERY route, so this is a move that
-  has to leave the non-canvas routes with a roster somewhere, not a deletion.
+- **The canvas chrome is consolidated; the BOARD ITSELF is still the old rectangular-card graph.**
+  *(re-scoped 2026-08-16 after the floating-chrome pass shipped — see DONE.md)* The four bands are
+  down to one floating layer and the surface-aware command bar is live, so the SHELL now matches the
+  mockup (https://claude.ai/code/artifact/c935a6ce-18cc-4ea4-bccf-1859a50c20a1). What has NOT been
+  built is everything below the chrome, and an audit against that mockup leaves these open:
+  - **The marketing header still frames the board.** DELIBERATE, not an oversight — `AppShell`
+    documents it ("the header follows the VISITOR") and the `operator-shell-header-follows-visitor`
+    decision is that a guest reaching a canvas from the marketing site must keep every way back
+    into the product at the exact moment they are deciding whether to sign up. Reversing it is a
+    product decision, not a layout one. **Blocked on an explicit user decision**: if the canvas
+    should take the whole window for guests too, the session pill needs the mockup's back arrow to
+    replace the nav it removes.
+  - **A node has no build affordances**: no centre `+` opening the object palette as an icon picker
+    at the node, no clock badge opening anchored schedule settings, no severity-coloured
+    message/error badge opening an anchored list that names the consequence and carries the link
+    that FIXES it. (The drag handles ARE now real targets — see DONE.md.)
+  - **Config is still a full-height right rail**, not a panel ANCHORED beside the card it configures
+    with a bottom-left "Advanced settings" toggle hiding the long tail of fields.
+  - **People are not nodes.** A built-in seat (CTO, from the `role:<key>` catalog) and a custom
+    agent should both sit on the board sharing ONE panel shape (model · autonomy · toolbox ·
+    personality traits · Advanced), differing only in what is read-only — which is what keeps
+    `psychometric-persona` a single trait engine with two doors in.
+  - **The prompt has no float / dock-into-Brain / closed states**; it is a fixed composer.
+  - **The six category circles open the palette focused on a group, not a data-filled popover.**
+    That is the honest half-step — they point INTO `CREATION_PALETTE_GROUPS` rather than carrying a
+    second catalogue — but the mockup's popover with per-module descriptions is not built.
+  - **The left zoom/fit/arrange rail is still a second toolbar** beside the command bar.
 
 - **A SCANNED document dropped on the canvas can never become a résumé, because the canvas keeps no
   bytes to escalate with.** *(registered 2026-08-16 by the "convert this pdf into a resume" pass,
