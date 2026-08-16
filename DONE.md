@@ -1,3 +1,59 @@
+## ✅ RESOLVED 2026-08-16 — the five things Wave 1 had written down and could not reach (W1B, second pass)
+
+Five register entries were logged as **blocked on file ownership** while lane W1B was fenced; the operator
+lifted the fence and all five are now closed, with the sixth (the Stage SANDBOX) deliberately still parked.
+
+**1 · The platform's one HTTP check needed a monitor row.** "Ask a URL, accept only a 2xx, require a
+marker in the body" lived inside `MonitoringService.evaluateMonitor`'s `http_check` branch and was
+reachable only by passing a persisted `monitors` row — so Stage assembled one in memory and cast it.
+Extracted to `api/src/application/monitoring/httpCheck.ts`; `evaluateMonitor` keeps its row and now
+delegates, `stageChecks.probe.ts` passes a config, and the cast is gone. `unknown` (not asked) stays
+distinct from `breach` (asked, and it is down) because they call for opposite responses. Covered by
+`httpCheck.test.ts` — 9 tests, including the 200-without-the-marker case that is the whole reason the
+assertion is not a status code.
+
+**2 · The hosted-listing sweep was written and not scheduled.** `runHostedListingSweep` is now a
+`CRON_SWEEPS` entry at the **daily** cadence. It is the only thing that writes
+`hosted_listing_lifecycle.unreachable_since`, which every state in the grace → read-only → released
+promise derives from; unscheduled, an app that went dark a month after it sold stayed `operating`
+forever and the buyer's clock never started. Covered by `creationListings.hostedSweep.test.ts` — 9
+tests over the skipping, the ordering, the write-then-read sequence and the suspension trigger.
+
+**3 · Re-opening Stage could not re-check a hosted address.** Closed by removing the need rather than
+threading the argument: `checksForStagedRelease` wanted an `Env` only because `evaluateMonitor` did.
+With item 1 landed, `deploymentProbe()` takes nothing, the route passes nothing, and every path that
+displays a hosted candidate probes it.
+
+**4 · The publish form showed a harness resolved without a delivery.** `SellInMarketplace.tsx` now
+resolves the delivery the SERVER would choose (`resolveDelivery(id, null)`), passes it to
+`resolveListingHarness`, and names it — `commerce.stage.deliveryDefaultHint`, in all five catalogs —
+only when the kind opens two doors. Deliberately NOT a second copy of the choice control: the seller
+chooses in the release panel, against a staged candidate, and a third place holding one answer is the
+place that goes stale.
+
+**5 · `subscriberMayTake` was derived and nothing acted on it.** All three flags are now honoured:
+
+- `billable === false` → the sweep calls `suspendSubscriptionsForListing`, which moves every still-`active`
+  row to `suspended` **and cancels the recurring charge at the processor**. Access is left alone — they
+  keep what they hold; cancelling them would punish a customer for a seller's silence.
+- `subscriberMayExport` → `GET …/billing/export` returns `exportOwnedSiteRecords`, ONE join across every
+  collection, owner-scoped, and the only read on the platform that deliberately ignores `readPolicy` —
+  documented as the abandonment-only exception, because a promise any collection's default setting can
+  void is not a promise.
+- `subscriberMayTake` → `takeAbandonedBuild` serves the subscriber's PINNED snapshot (falling back to the
+  listing's), gated on the lifecycle alone: not a price check, a status check or a role check, which are
+  three ways to give a working product away.
+
+**Found and fixed on the way — a real money bug.** `cancelSiteSubscription` marked the row cancelled,
+which revoked access, and never called `PaymentProvider.cancelSubscription`. A consumer pressing Cancel
+stopped receiving the thing and **kept being charged every month**. Both stop-the-money paths now share
+one `stopRecurringCharge` helper that never throws and always reports.
+
+Also in this pass: `suspendSubscriptionsForListing` is tenant-scoped via `scopedToTenant` rather than
+trusting a globally-unique id; `subscriberStanding` and the remedy share one read of the subscriber's row
+instead of two. 24/24 api guards, 9/9 frontend guards, api typecheck and frontend typecheck clean; api
+suite 533 files / 6,118 tests green.
+
 ## ✅ RESOLVED 2026-08-16 — Stage now asks the ADDRESS, shows the seller their product, and a hosted app has a written afterlife (W1B · api 2026.8.16, migration 0900)
 
 **R8 — an app whose address 404s was sellable.** `resolveListingHarness` picked one of six runners over

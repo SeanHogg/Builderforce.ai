@@ -131,9 +131,9 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 5 | [Brain & Chat](#5--brain--chat) | 18 |
 | 6 | [Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 31 |
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
-| 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 4 |
+| 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
 | 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 37 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 157 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 153 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
@@ -151,9 +151,9 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 5 | 18 |
 | 6 | 31 |
 | 7 | 25 |
-| 8 | 4 |
+| 8 | 3 |
 | 9 | 37 |
-| 10 | 157 |
+| 10 | 153 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
@@ -261,14 +261,11 @@ R7 and R15c in one lane and re-create the collision the plan exists to remove.
 - `application/marketplace/siteBilling.*` — the published site's `/__api/billing/{me,subscribe,complete,cancel}`
   handlers, extracted so **W1C owns the money** while **W1A owns the serving fork that mounts them**.
   Extracting this module is W1C's first commit and W1A rebases onto it.
-- `MonitoringService` — read-only for W1B's `deployment` harness (R8). **Corrected 2026-08-16 while
-  building it:** `watchDeployedBackend` CONFIGURES the assertion (an `http_check` with
-  `bodyMatch: BACKEND_HEALTH_MARKER`) and does not perform it; the fetch-and-assert lives in
-  `evaluateMonitor`'s `http_check` branch. W1B calls both — `evaluateMonitor` for the point-in-time
-  question Stage asks, `watchDeployedBackend` at publish so a hosted listing that goes on sale joins the
-  standing five-minute sweep. Neither is edited. The one thing that would be worth editing —
-  extracting `httpCheck(config)` so the probe stops assembling an unsaved row — is registered in
-  [group 8](#8--reliability--incidents--monitoring) and blocked on the file belonging to no track.
+- `MonitoringService` — **the extraction landed 2026-08-16.** `watchDeployedBackend` CONFIGURES the
+  assertion (an `http_check` with `bodyMatch: BACKEND_HEALTH_MARKER`) and does not perform it; the
+  fetch-and-assert now lives in `application/monitoring/httpCheck.ts`, which `evaluateMonitor` and
+  W1B's Stage probe both CALL. Stage asks the point-in-time question with a config, publish joins the
+  standing five-minute sweep with a row, and nothing casts an unsaved monitor any more.
 
 **Merge order.** W1D and W1E have no dependants and merge whenever they are ready. W1C's `siteBilling`
 extraction lands first so W1A can rebase — and rebases onto a **shipped** W1A, whose R13/R7/R12 landed
@@ -289,9 +286,6 @@ appends here rather than reaching across the boundary; W1INT applies them all at
 
 | From | File | The line |
 |---|---|---|
-| W1B | `api/src/cronSweeps.ts` | Register `runHostedListingSweep` (`application/marketplace/creationListings.hostedSweep.ts`) at the **daily** cadence. It is the only thing that writes `hosted_listing_lifecycle.unreachable_since`, which every state in R9's grace → read-only → released promise derives from. |
-| W1B | `api/src/presentation/routes/creationListingRoutes.ts` | Pass `c.env` as the third argument to `checksForStagedRelease(db, {…})` in `GET /releases/:sessionId/staged/:snapshotId`, so re-opening Stage re-probes a hosted address instead of reporting "not re-checked here". |
-| W1B | `frontend/src/components/creation-canvas/SellInMarketplace.tsx` | Mount `DeliveryChoice` (exported from `CanvasReleasesPanel.tsx`) and pass its value as the third argument to `resolveListingHarness(id, kind, delivery)`, so both publish surfaces answer "what will be checked" the same way. |
 
 #### W1INT mount queue — the lines the integration PR takes
 
@@ -789,7 +783,6 @@ sequenced into waves because nothing in them gates the sell motion.
 
 ### Active Monitoring — residual polish
 
-- **The platform's one HTTP check is not callable without a monitor row.** *(found 2026-08-16 building R8's `deployment` harness)* "Ask a URL, accept only a 2xx, and require a marker in the body" exists exactly once, correctly, inside `MonitoringService.evaluateMonitor`'s `http_check` branch — and it is reachable only by passing a persisted `monitors` row. Stage needs the same rule as a POINT-IN-TIME question asked before anything is for sale, and answering it by writing a row would page an on-call engineer every time a seller pressed Stage on a half-finished app. So `marketplace/stageChecks.probe.ts` assembles an in-memory row and casts it, which is a type lie that stays true only while that branch reads nothing but `monitorType` and `config`. Fix = extract `httpCheck(config): Promise<'ok' | 'breach' | 'unknown'>` beside `evaluateMonitor` and have both call it — the method keeps its row, the probe passes a config, and nobody casts. **Blocked on file ownership for the duration of Wave 1**: `api/src/application/monitoring/MonitoringService.ts` belongs to no isolation track, so no `track/<id>` branch may edit it and the scope guard rejects the change. Clear it by assigning the file to a track (T8 owns reliability) or by landing the extraction in the integration step. Unblocks: deleting the only cast in the marketplace probe path. **(W1B → T8)**
 
 ---
 
@@ -1053,13 +1046,9 @@ EXISTS and the canvas simply cannot see it. And `packages/creation-canvas-contra
 already declares the entire form and signature contract, argued distinction by distinction, with zero
 implementations. Both foundations are wiring, not modelling.
 
-- **The hosted-listing sweep is written and not scheduled.** *(found 2026-08-16 shipping R9)* `runHostedListingSweep` (`marketplace/creationListings.hostedSweep.ts`) probes every published hosted listing and writes `hosted_listing_lifecycle.unreachable_since`, which is the ONE observation all four lifecycle states derive from. Until it runs on a schedule, that column is written only when a seller stages or publishes — so an app that goes dark a month after it is sold stays `operating` for as long as nobody touches it, and the grace clock the buyer was promised never starts. Fix = one entry in `CRON_SWEEPS` at the daily cadence; the runner, the bound (200 per tick, oldest first) and the invalidation are already there. **Blocked on file ownership**: `api/src/cronSweeps.ts` is the composition root and belongs to no track. **Queued for W1INT.** Unblocks: R9's promise being kept rather than merely written down. **(W1B → W1INT)**
 
-- **Re-opening Stage cannot re-check a hosted address.** *(same pass)* `checksForStagedRelease` takes an optional `Env` and the route in `presentation/routes/creationListingRoutes.ts` does not pass `c.env`, so redisplaying an existing candidate runs every harness except the live probe and reports `deployment.address` as "not re-checked here" (a `warn`, never a gate — the two paths that DECIDE anything, staging and publishing, both always probe). Fix = one argument: `checksForStagedRelease(db, {...}, c.env)`. **Blocked on file ownership**: that route file is W1C's for the wave. **Queued for W1INT.** Unblocks: a seller reopening Stage seeing today's answer rather than the one recorded when they staged. **(W1B → W1INT)**
 
-- **The publish form has no delivery control and shows a harness resolved without one.** *(same pass)* `ListingDelivery` is now stored, chosen and load-bearing — it selects the harness — and the Releases panel offers the choice for the one kind that opens two doors. `frontend/src/components/creation-canvas/SellInMarketplace.tsx`, the OTHER publish surface, still calls `resolveListingHarness(id, kind)` with two arguments, so a seller about to sell an app as a subscription is told the captured document will be checked when the live address will be. Fix = the same `DeliveryChoice` control and the third argument; the component and the derivation both already exist. **Blocked on file ownership**: that file is W1INT's (T2 carve-out). **Queued for W1INT.** Unblocks: one answer to "what will be checked" across both publish surfaces. **(W1B → W1INT)**
 
-- **`subscriberMayTake` is derived and nothing acts on it.** *(same pass)* `resolveHostedLifecycle` returns `subscriberMayExport` and `subscriberMayTake`, and the launch payload carries the whole status to any hosted listing's page — so the promise is stated to the buyer in five languages and is currently kept by nobody: there is no button that exports a subscriber's `site_records`, and none that installs the released build onto a board of their own. The install path itself already exists (`installListingIntoCanvas`) and is gated on a licence, which a `site_user` does not hold — a released app has to grant one, and that is a commerce decision. Fix = the subscribe surface honours all three flags: stop charging on `billable === false`, offer the export on `subscriberMayExport`, and grant a licence + install on `subscriberMayTake`. **Blocked on file ownership**: `marketplace/siteSubscriptions.*` and `ide/siteData.*` are W1C's and W1E's for the wave. Unblocks: the difference between a written remedy and one a subscriber can press. **(W1B → W1C · W1E)**
 
 ---
 
