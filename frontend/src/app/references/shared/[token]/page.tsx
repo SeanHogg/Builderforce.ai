@@ -15,11 +15,13 @@ export const runtime = 'edge';
  * That is defensible because the link is issued, scoped and revocable — and it
  * stops being defensible the moment a crawler puts it in an index. The header is
  * set here rather than left to a global default so it cannot be lost to one.
+ *
+ * It has to live in `generateMetadata` and NOWHERE ELSE: the title is localized,
+ * so this route needs the async form, and Next refuses a module that exports
+ * both — "`metadata` and `generateMetadata` cannot be exported at the same
+ * time" is a BUILD failure, not a warning, which is how a static `metadata`
+ * duplicating these robots flags took the whole deploy down.
  */
-export const metadata: Metadata = {
-  robots: { index: false, follow: false, nocache: true },
-};
-
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('references');
   return { title: t('shared.metaTitle'), robots: { index: false, follow: false, nocache: true } };
