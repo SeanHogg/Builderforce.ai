@@ -16080,7 +16080,7 @@
     "saveCollaborate": "Save & collaborate",
     "addToCanvas": "Add to canvas",
     "searchEverything": "Search everything…",
-    "askBrain": "Ask Brain",
+    "askBrain": "Ask Brain about this canvas",
     "sendBrain": "Send to Brain",
     "resizePrompt": "Resize prompt area",
     "entireCanvas": "Entire canvas",
@@ -19248,7 +19248,8 @@
     "floatPrompt": "Float the prompt over the board",
     "hidePrompt": "Hide the prompt",
     "showPrompt": "Show the prompt",
-    "canvasPanelControls": "Canvas panels"
+    "canvasPanelControls": "Canvas panels",
+    "promptName": "Ask Brain"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

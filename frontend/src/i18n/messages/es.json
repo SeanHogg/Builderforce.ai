@@ -16080,7 +16080,7 @@
     "saveCollaborate": "Guardar y colaborar",
     "addToCanvas": "Añadir al Lienzo",
     "searchEverything": "Buscar en todo…",
-    "askBrain": "Pregunta a Brain",
+    "askBrain": "Pregunta a Brain sobre este lienzo",
     "sendBrain": "Enviar a Brain",
     "resizePrompt": "Cambiar el tamaño del área de indicaciones",
     "entireCanvas": "Todo el Lienzo",
@@ -19248,7 +19248,8 @@
     "floatPrompt": "Flotar el prompt sobre el tablero",
     "hidePrompt": "Ocultar el prompt",
     "showPrompt": "Mostrar el prompt",
-    "canvasPanelControls": "Paneles del lienzo"
+    "canvasPanelControls": "Paneles del lienzo",
+    "promptName": "Pregunta a Brain"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

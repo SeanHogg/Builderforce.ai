@@ -16080,7 +16080,7 @@
     "saveCollaborate": "保存并协作",
     "addToCanvas": "添加到画布",
     "searchEverything": "搜索全部内容…",
-    "askBrain": "询问 Brain",
+    "askBrain": "就此画布询问 Brain",
     "sendBrain": "发送给 Brain",
     "resizePrompt": "调整提示词区域大小",
     "entireCanvas": "整个画布",
@@ -19248,7 +19248,8 @@
     "floatPrompt": "让输入框浮动在画板上",
     "hidePrompt": "隐藏输入框",
     "showPrompt": "显示输入框",
-    "canvasPanelControls": "画布面板"
+    "canvasPanelControls": "画布面板",
+    "promptName": "询问 Brain"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

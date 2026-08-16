@@ -9387,7 +9387,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         offered from here and from the command bar; DOCKING is deliberate enough to belong
         only on the thing being docked. */}
     <div className={styles.promptChrome}>
-      <span className={styles.promptChromeName}>{t('askBrain')}</span>
+      <span className={styles.promptChromeName}>{t('promptName')}</span>
       <button
         type="button"
         data-testid="canvas-prompt-dock"

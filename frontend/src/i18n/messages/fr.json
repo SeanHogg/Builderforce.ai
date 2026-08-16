@@ -16080,7 +16080,7 @@
     "saveCollaborate": "Enregistrer et collaborer",
     "addToCanvas": "Ajouter au Canevas",
     "searchEverything": "Tout rechercher…",
-    "askBrain": "Demander a Brain",
+    "askBrain": "Interroger Brain sur ce canevas",
     "sendBrain": "Envoyer à Brain",
     "resizePrompt": "Redimensionner la zone de saisie",
     "entireCanvas": "Canevas entier",
@@ -19248,7 +19248,8 @@
     "floatPrompt": "Faire flotter le prompt sur le tableau",
     "hidePrompt": "Masquer le prompt",
     "showPrompt": "Afficher le prompt",
-    "canvasPanelControls": "Panneaux du canevas"
+    "canvasPanelControls": "Panneaux du canevas",
+    "promptName": "Demander a Brain"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

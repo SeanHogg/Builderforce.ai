@@ -16080,7 +16080,7 @@
     "saveCollaborate": "Speichern und zusammenarbeiten",
     "addToCanvas": "Zum Canvas hinzufügen",
     "searchEverything": "Alles durchsuchen…",
-    "askBrain": "Brain fragen",
+    "askBrain": "Brain zu diesem Canvas fragen",
     "sendBrain": "An Brain senden",
     "resizePrompt": "Größe des Prompt-Bereichs ändern",
     "entireCanvas": "Gesamter Canvas",
@@ -19248,7 +19248,8 @@
     "floatPrompt": "Den Prompt ueber dem Board schweben lassen",
     "hidePrompt": "Den Prompt ausblenden",
     "showPrompt": "Den Prompt einblenden",
-    "canvasPanelControls": "Canvas-Bereiche"
+    "canvasPanelControls": "Canvas-Bereiche",
+    "promptName": "Brain fragen"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
