@@ -73,6 +73,11 @@ export const GATED_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   capTable: ['review'],
   fundingRound: ['track'],
   contract: ['sign'],
+  // An offer letter leaving the building is the same shape of act as an investor
+  // update or a data-room share — see the GATED_ACTIONS header. `offer.sign` is
+  // deliberately absent: it only re-reads a request `send` already created and
+  // asserts nothing new, so gating it would ask a human to approve a status refresh.
+  offer: ['send'],
 };
 
 /** True when this act on this kind may not simply be performed. */

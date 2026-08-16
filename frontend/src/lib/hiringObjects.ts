@@ -269,6 +269,7 @@ export const HIRING_OBJECT_SPECS: readonly SpecObjectSpec[] = [
     defaultStatus: 'draft',
     actions: ['draft', 'approve', 'send', 'sign'],
     fields: [
+      { name: 'candidateEmail', render: 'stat', label: 'candidateEmail', hint: "The candidate's real email — required for `send` to do anything. Never invent one; take it from the candidate's own record or ask." },
       { name: 'baseSalary', render: 'stat', label: 'baseSalary', hint: MONEY_HINT },
       { name: 'bonus', render: 'stat', label: 'bonus', hint: 'Variable compensation, with the basis it is earned on.' },
       { name: 'equity', render: 'stat', label: 'equity', hint: 'Grant size and vesting, in the words the offer letter will use.' },
@@ -285,6 +286,7 @@ export const HIRING_OBJECT_SPECS: readonly SpecObjectSpec[] = [
       { name: 'terms', render: 'list', label: 'terms', hint: 'Everything else that was agreed: [{title, detail}] — notice period, relocation, remote allowance, probation, contingencies.' },
       { name: 'signatureState', render: 'stat', label: 'signatureState', hint: 'unsigned | sent | signed | declined | expired. Written by the sign flow; a signature is a recorded event with an audit trail, never an asserted field.', bookkeeping: true },
       { name: 'signedAt', render: 'stat', label: 'signedAt', hint: 'ISO instant the candidate signed.', bookkeeping: true },
+      { name: 'signatureRequestId', render: 'stat', label: 'signatureRequestId', hint: 'The signature_requests row `send` created. `sign` re-reads its progress from this rather than the candidate asserting completion.', bookkeeping: true },
       SUMMARY_FIELD,
     ],
   },

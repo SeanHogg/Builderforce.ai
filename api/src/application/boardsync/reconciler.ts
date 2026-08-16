@@ -25,6 +25,7 @@
  */
 
 import { fnv1a32 } from '../../domain/shared/strings';
+import { stableStringify } from '../../domain/shared/stableStringify';
 
 /** Sync state stored on an external_ticket_links row. */
 export type SyncState = 'synced' | 'dirty_local' | 'dirty_remote' | 'conflict';
@@ -228,15 +229,6 @@ export function hashFields(fields: Record<string, unknown>): string {
   const keys = Object.keys(fields).sort();
   const canonical = keys.map((k) => `${k}=${stableStringify(fields[k])}`).join('');
   return fnv1a32Hex(canonical);
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || value === undefined) return 'null';
-  if (typeof value !== 'object') return String(value);
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  return `{${keys.map((k) => `${k}:${stableStringify(obj[k])}`).join(',')}}`;
 }
 
 /** FNV-1a 32-bit hash → 8-char hex. Deterministic, no crypto/IO. */

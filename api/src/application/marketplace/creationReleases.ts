@@ -59,7 +59,10 @@ import {
   type PublishInput,
 } from './creationListings';
 import { runStageChecks, type StageObject } from './stageChecks';
-import { deploymentProbe } from './stageChecks.probe';
+import { deploymentProbe, systemDryRunProbe, voiceCloneProbe } from './stageChecks.probe';
+import { isSandboxApplicable, stageSandboxPayloadHash } from '../../domain/marketplace/stageSandboxPayload';
+import { ensureStageSandboxRun, resolveStageSandboxState } from './stageSandboxRuns';
+import type { CloudExecutorEnv } from '../workflow/cloudExecutor';
 import {
   SNAPSHOT_REASON_PUBLICATION,
   SNAPSHOT_REASON_STAGE,
@@ -357,7 +360,28 @@ export async function stageRelease(db: Db, env: Env, input: PublishInput): Promi
   });
   const staged = rail.releases.find((release) => release.snapshotId === snapshot.id);
 
-  return stagedView(payload, {
+  const harness = resolveListingHarness(target.spec.id, target.objectKind, target.delivery);
+  if (isSandboxApplicable(harness)) {
+    // Dispatched here, on Stage — not merely resolved on read — so a seller who
+    // never re-opens Stage still gets a run for what they staged. Awaited
+    // directly rather than backgrounded: the container ACKs in well under a
+    // second (the same shape `dispatchQaRunner` uses on its own request path),
+    // and the run itself continues after this returns.
+    await ensureStageSandboxRun(db, env, {
+      tenantId: input.tenantId,
+      userId: input.userId,
+      projectId: target.projectId,
+      snapshotId: snapshot.id,
+      listingId: target.listingId,
+      harness,
+      payloadHash: await stageSandboxPayloadHash({
+        harness, delivery: target.delivery, objects: payload.objects, strippedFields: payload.strippedFields ?? [],
+      }),
+    });
+  }
+
+  return stagedView(db, env, payload, {
+    tenantId: input.tenantId,
     snapshotId: snapshot.id,
     version: staged?.version ?? '1.0.0',
     listingKind: target.spec.id,
@@ -379,6 +403,7 @@ export async function stageRelease(db: Db, env: Env, input: PublishInput): Promi
  */
 export async function checksForStagedRelease(
   db: Db,
+  env: Env,
   query: ReleaseQuery & { snapshotId: string },
 ): Promise<StagedRelease> {
   const listing = await listingForSource(db, query.tenantId, query.sessionId, query.objectId);
@@ -400,7 +425,8 @@ export async function checksForStagedRelease(
   const rail = await listReleases(db, query);
   const release = rail.releases.find((entry) => entry.snapshotId === query.snapshotId);
 
-  return stagedView(payload, {
+  return stagedView(db, env, payload, {
+    tenantId: query.tenantId,
     snapshotId: query.snapshotId,
     version: release?.version ?? listing.version,
     listingKind: listing.kind,
@@ -422,8 +448,11 @@ export async function checksForStagedRelease(
  * that a staged release carries a rendered preview as well as findings.
  */
 async function stagedView(
+  db: Db,
+  env: Env,
   payload: ListingSnapshotPayload,
   meta: {
+    tenantId: number;
     snapshotId: string;
     version: string;
     listingKind: string;
@@ -434,10 +463,25 @@ async function stagedView(
     delivery: ListingDelivery;
   },
 ): Promise<StagedRelease> {
+  const harness = resolveListingHarness(meta.listingKind, meta.objectKind, meta.delivery);
+  const objects = (payload.objects ?? []) as readonly StageObject[];
+  const sandboxApplicable = isSandboxApplicable(harness);
+  const sandbox = sandboxApplicable
+    ? await resolveStageSandboxState(db, {
+        tenantId: meta.tenantId,
+        snapshotId: meta.snapshotId,
+        harness,
+        payloadHash: await stageSandboxPayloadHash({
+          harness, delivery: meta.delivery, objects, strippedFields: payload.strippedFields ?? [],
+        }),
+        sandboxApplicable,
+      })
+    : null;
+
   const checks = await runStageChecks({
     listingKind: meta.listingKind,
     objectKind: meta.objectKind,
-    objects: (payload.objects ?? []) as readonly StageObject[],
+    objects,
     priceCents: meta.priceCents,
     trial: meta.trial,
     delivery: meta.delivery,
@@ -446,6 +490,9 @@ async function stagedView(
     // rather than a method on a service that wanted an `Env` — which is why
     // re-opening Stage re-asks the address instead of redisplaying a stale verdict.
     probe: deploymentProbe(),
+    sandbox,
+    voiceClone: voiceCloneProbe(db),
+    systemDryRun: harness === 'system' ? systemDryRunProbe(env as unknown as CloudExecutorEnv) : null,
   });
 
   return {

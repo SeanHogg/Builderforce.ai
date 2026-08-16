@@ -46,7 +46,6 @@
  */
 
 import {
-  STAGE_SANDBOX_LIMIT_CODE,
   resolveListingHarness,
   type ListingDelivery,
   type ListingHarness,
@@ -54,6 +53,7 @@ import {
   type StageCheckGroup,
   type StageCheckSeverity,
 } from '@builderforce/creation-canvas-contract';
+import { sandboxChecks, type StageSandboxState } from './stageSandboxChecks';
 
 // ---------------------------------------------------------------------------
 // The shape a runner reads
@@ -93,6 +93,26 @@ export interface DeploymentProbeResult {
 
 export type DeploymentProbe = (origin: string) => Promise<DeploymentProbeResult>;
 
+/**
+ * Does a cloned voice actually transfer to a buyer?
+ *
+ * Delegates to the platform's ONE access predicate (`canUseClone`) rather than
+ * re-deriving transfer eligibility here — a second implementation of "who may
+ * use this clone" is exactly the duplication a port exists to prevent. Returns
+ * `'unknown'` when the referenced clone id does not resolve to a real row at
+ * all (a stale/deleted reference), which is a different fact from a real clone
+ * that simply has no transfer mechanism (`'seller_only'`).
+ */
+export type VoiceCloneTransferProbe = (cloneId: string) => Promise<'transfers' | 'seller_only' | 'unknown'>;
+
+/**
+ * Dry-run a `system` listing's declared steps with every outbound call stubbed,
+ * returning the real `system.outbound` finding. Absent, `systemChecks` falls
+ * back to its static declaration — the same honest "not checked here" the
+ * deployment runner uses when its own probe is missing.
+ */
+export type SystemDryRunProbe = (objects: readonly StageObject[]) => Promise<StageCheck[]>;
+
 /** Everything a runner is allowed to look at. */
 export interface StageInput {
   listingKind: string;
@@ -113,6 +133,18 @@ export interface StageInput {
   /** Supplied by the server for a `hosted` listing. Absent, the deployment runner
    *  says so rather than passing something it never asked. */
   probe?: DeploymentProbe | null;
+  /**
+   * The Stage Sandbox's state for THIS exact payload, when the harness is one a
+   * container can drive (`runtime`/`media`). Null for every other harness — see
+   * `isSandboxApplicable`. Absent/undefined reads the same as null: a caller
+   * that has not resolved one yet gets the standing "not applicable" wording
+   * rather than a crash.
+   */
+  sandbox?: StageSandboxState | null;
+  /** See {@link VoiceCloneTransferProbe}. */
+  voiceClone?: VoiceCloneTransferProbe | null;
+  /** See {@link SystemDryRunProbe}. */
+  systemDryRun?: SystemDryRunProbe | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -277,19 +309,33 @@ function sellChecks(input: StageInput): StageCheck[] {
 // The six runners
 // ---------------------------------------------------------------------------
 
-/** 1 · TIMED MEDIA — play it through and measure it. */
-function mediaChecks(input: StageInput): StageCheck[] {
+/**
+ * 1 · TIMED MEDIA — play it through and measure it.
+ *
+ * `media.duration` prefers the Stage Sandbox's real measurement (a headless
+ * browser awaiting `loadedmetadata` on the buyer-facing asset) over the
+ * declared field when a sandbox verdict is present — the declared field is
+ * what the seller TYPED, and a 404 or corrupt asset still carries one.
+ */
+async function mediaChecks(input: StageInput): Promise<StageCheck[]> {
   const found: StageCheck[] = [];
   const media = input.objects.map(fields);
 
-  const durations = media.map((data) => num(data.durationSeconds) ?? num(data.duration)).filter((d): d is number => d != null);
-  const totalSeconds = durations.reduce((sum, d) => sum + d, 0);
-  found.push(totalSeconds > 0
-    ? check('media.duration', 'runs', 'pass', `Runs ${Math.round(totalSeconds)}s`)
-    : check(
-        'media.duration', 'runs', 'block', 'Nothing to play',
-        'No timeline, no duration and no rendered output on the snapshot — a buyer would open silence.',
-      ));
+  const sandboxDuration = input.sandbox?.status === 'passed' || input.sandbox?.status === 'failed'
+    ? input.sandbox.findings.find((c) => c.code === 'media.duration')
+    : null;
+  if (sandboxDuration) {
+    found.push(sandboxDuration);
+  } else {
+    const durations = media.map((data) => num(data.durationSeconds) ?? num(data.duration)).filter((d): d is number => d != null);
+    const totalSeconds = durations.reduce((sum, d) => sum + d, 0);
+    found.push(totalSeconds > 0
+      ? check('media.duration', 'runs', 'pass', `Runs ${Math.round(totalSeconds)}s`)
+      : check(
+          'media.duration', 'runs', 'block', 'Nothing to play',
+          'No timeline, no duration and no rendered output on the snapshot — a buyer would open silence.',
+        ));
+  }
 
   const withCaptions = media.filter((data) => rows(data.captions).length > 0 || text(data.transcript)).length;
   const visual = media.filter((data) => text(data.videoUrl) || rows(data.scenes).length > 0).length;
@@ -302,17 +348,34 @@ function mediaChecks(input: StageInput): StageCheck[] {
         ));
   }
 
-  // A cloned voice is the case that only a sandbox finds: it plays perfectly for the
-  // seller and does not transfer, so what a buyer hears is the fallback.
-  const clonedVoice = media.some((data) => text(data.voiceCloneId) || text(data.clonedVoiceId));
-  if (clonedVoice) {
-    found.push(check(
-      'media.voiceClone', 'travels', 'block', 'The voiceover uses your cloned voice',
-      'The licence does not transfer, so a buyer hears the generic fallback rather than what you previewed. Re-record with a catalogue voice, or say so on the listing.',
-    ));
-  }
+  const clone = await voiceCloneCheck(input);
+  if (clone) found.push(clone);
 
   return found;
+}
+
+/**
+ * A cloned voice, checked against the platform's ONE transfer predicate rather
+ * than assumed. Separated from `mediaChecks` because the answer needs a port
+ * (a database read), and every other reading in this harness stays a pure
+ * field lookup.
+ */
+async function voiceCloneCheck(input: StageInput): Promise<StageCheck | null> {
+  const media = input.objects.map(fields);
+  const cloneId = media.map((data) => text(data.voiceCloneId) || text(data.clonedVoiceId)).find(Boolean);
+  if (!cloneId) return null;
+
+  const transfer = input.voiceClone ? await input.voiceClone(cloneId) : 'seller_only';
+  if (transfer === 'transfers') {
+    return check('media.voiceClone', 'travels', 'pass', 'The cloned voice transfers to a buyer');
+  }
+  return check(
+    'media.voiceClone', 'travels', 'block',
+    transfer === 'unknown' ? 'The voiceover references a cloned voice that no longer exists' : 'The voiceover uses your cloned voice',
+    transfer === 'unknown'
+      ? 'This clone id does not resolve to a real voice on your account — re-record or attach one that does.'
+      : 'The licence does not transfer, so a buyer hears the generic fallback rather than what you previewed. Re-record with a catalogue voice, or say so on the listing.',
+  );
 }
 
 /** 2 · INTERACTIVE RUNTIME — boot it in a sandbox and drive it. */
@@ -356,13 +419,24 @@ function runtimeChecks(input: StageInput): StageCheck[] {
     // Touch is not an accessibility nicety here: over half of everything published
     // from this marketplace is opened on a phone, where a keyboard-only game is
     // simply unplayable.
-    const touch = /touchstart|pointerdown|ontouchmove|touch-action/i.test(document);
-    found.push(touch
-      ? check('runtime.touch', 'runs', 'pass', 'Responds to touch')
-      : check(
-          'runtime.touch', 'runs', 'warn', 'No touch input found',
-          'Keyboard-only. Unplayable on a phone, which is where most buyers will open it.',
-        ));
+    //
+    // Prefers the Stage Sandbox's driven finding (a real touch gesture, dispatched
+    // and observed) over the regex when one is present — the regex is a guess at
+    // whether the document MENTIONS touch handling, not at whether it responds.
+    const sandboxTouch = input.sandbox?.status === 'passed' || input.sandbox?.status === 'failed'
+      ? input.sandbox.findings.find((c) => c.code === 'runtime.touch')
+      : null;
+    if (sandboxTouch) {
+      found.push(sandboxTouch);
+    } else {
+      const touch = /touchstart|pointerdown|ontouchmove|touch-action/i.test(document);
+      found.push(touch
+        ? check('runtime.touch', 'runs', 'pass', 'Responds to touch')
+        : check(
+            'runtime.touch', 'runs', 'warn', 'No touch input found',
+            'Keyboard-only. Unplayable on a phone, which is where most buyers will open it.',
+          ));
+    }
   }
 
   if (url) found.push(check('runtime.url', 'runs', 'pass', 'Live URL reachable', url));
@@ -555,7 +629,7 @@ function instrumentChecks(input: StageInput): StageCheck[] {
 }
 
 /** 6 · SYSTEM — dry-run it with every outbound step stubbed. */
-function systemChecks(input: StageInput): StageCheck[] {
+async function systemChecks(input: StageInput): Promise<StageCheck[]> {
   const found: StageCheck[] = [];
   const systems = input.objects.map(fields);
 
@@ -570,14 +644,23 @@ function systemChecks(input: StageInput): StageCheck[] {
         'No steps, no widgets, no tools and no instructions — the buyer installs an empty shell.',
       ));
 
-  // An outbound step with no stub is the difference between testing an automation
-  // and sending six real emails from the seller's account during a dry run.
-  const outbound = steps.filter((step) => /send|post|publish|email|sms|webhook|notify/i.test(text(step.action) || text(step.kind)));
-  if (outbound.length) {
-    found.push(check(
-      'system.outbound', 'runs', 'pass', `${outbound.length} outbound step${outbound.length === 1 ? '' : 's'} stubbed in the sandbox`,
-      'Captured and dropped rather than fired. Buyers connect their own accounts on first run.',
-    ));
+  // The Stage Sandbox's own dry-run — a real execution of every recognizable
+  // step with outbound calls stubbed — WHEN one is available. Falls back to the
+  // static declaration, which only guesses whether a step LOOKS outbound-shaped,
+  // when the probe found nothing recognizable to run or was never supplied.
+  const dryRun = input.systemDryRun ? await input.systemDryRun(input.objects) : [];
+  if (dryRun.length) {
+    found.push(...dryRun);
+  } else {
+    // An outbound step with no stub is the difference between testing an automation
+    // and sending six real emails from the seller's account during a dry run.
+    const outbound = steps.filter((step) => /send|post|publish|email|sms|webhook|notify/i.test(text(step.action) || text(step.kind)));
+    if (outbound.length) {
+      found.push(check(
+        'system.outbound', 'runs', 'pass', `${outbound.length} outbound step${outbound.length === 1 ? '' : 's'} declared`,
+        'Not driven by a sandbox run for this build — captured-and-dropped is the intended behaviour once one runs.',
+      ));
+    }
   }
 
   // A dashboard bound to nothing renders as zeros, which reads as a broken product
@@ -682,23 +765,6 @@ async function deploymentChecks(input: StageInput): Promise<StageCheck[]> {
 }
 
 /**
- * WHAT STAGE COULD NOT ASK, ON EVERY LISTING.
- *
- * Emitted by every harness, so it cannot be missed off one. It is a `warn`, which
- * means `declaredLimits` carries it onto the listing and a buyer reads the same
- * sentence the seller did — the inherited rule, applied to the platform's own
- * limitation rather than only to the seller's.
- */
-function sandboxLimitCheck(harness: ListingHarness): StageCheck {
-  return check(
-    STAGE_SANDBOX_LIMIT_CODE, 'runs', 'warn', 'Checked without being run in a sandbox',
-    harness === 'deployment'
-      ? 'The live address was asked whether it is serving. Nothing here installed the product into a clean workspace and drove it, so behaviour that only appears in use is not covered.'
-      : 'Every finding above is read from the exact copy a buyer receives. Nothing here booted it in a throwaway workspace and drove it, so behaviour that only appears at run time is not covered.',
-  );
-}
-
-/**
  * The runner registry.
  *
  * Deliberately typed to allow a Promise: `deployment` is the one runner that has to
@@ -735,6 +801,6 @@ export async function runStageChecks(input: StageInput): Promise<StageCheck[]> {
     ...await RUNNERS[harness](input),
     ...travelChecks(input),
     ...sellChecks(input),
-    sandboxLimitCheck(harness),
+    ...sandboxChecks(harness, input.sandbox ?? null),
   ].sort((a, b) => rank[a.severity] - rank[b.severity]);
 }

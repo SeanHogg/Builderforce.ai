@@ -903,19 +903,6 @@ sequenced into waves because nothing in them gates the sell motion.
 
 ## 10 · 🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas
 
-### Canvas surfaces
-
-- **No 3D *authoring* surface — `scene3d` reads the board, it does not build a world.** *(registered
-  2026-08-15 while mapping creations to surfaces)* `scene3d` arranges the canvas's own objects by
-  depth (stage / layer / sequence); it has no world, camera, collider or prop placement. A 3D game
-  therefore authors as a `game` object and opens in `play` (a running frame), with `roblox` as one of
-  five ship targets in `gameTargets.ts` — that path works. What does not exist is a surface where a
-  person places a prop, moves a camera and walks a scene, i.e. the authoring half of a 3D build.
-  Fixing it unblocks in-canvas 3D scene editing rather than "describe it and re-generate the whole
-  build"; it needs a `world` surface entry plus a real scene state shape, and is a genuinely new
-  runtime rather than a promotion of an existing editor (unlike `page` / `play` / `site` / `timeline`,
-  which all had editors already). Not blocked — just unbuilt and out of the scope that was asked for.
-
 ### Canvas hub contention — the seam that makes the canvas work parallelisable
 
 - **W0-1 — a canvas panel or object kind cannot be added without editing `CreationCanvas.tsx`, so the

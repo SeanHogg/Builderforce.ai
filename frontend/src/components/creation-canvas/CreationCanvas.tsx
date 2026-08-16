@@ -403,6 +403,14 @@ const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly stri
   // grid for outcomes and columns that do not resolve on the board.
   assignment: ['distribute'], gradebook: ['compute'], submission: ['mark'],
   cohort: ['import'], curriculumMap: ['validate'], bibliography: ['import'],
+  // FO-B3: the five consumers routed through the form/signature primitives (0469).
+  // `contract.sign` and `dataRoom.share` stay GATED in `canvasApprovalGate` — what
+  // changed is that a human who approves either now gets a real signature request
+  // instead of "no delivery adapter is connected". `offer.send` is gated the same
+  // way; `offer.sign` is not, because it only re-reads the request it created and
+  // asserts nothing new. `policy.acknowledge` is open: sending a roster its own
+  // reviewer a nudge to sign is reversible and not attested.
+  contract: ['sign'], policy: ['acknowledge'], offer: ['send', 'sign'], dataRoom: ['share'],
 };
 const WEBSITE_SECTION_SCHEMA = {
   type: 'object', required: ['id', 'kind'], additionalProperties: false,

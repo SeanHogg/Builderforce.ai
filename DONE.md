@@ -1,3 +1,65 @@
+## ✅ RESOLVED 2026-08-16 — `world`: a true 3D authoring surface — place a prop, move a camera, walk the scene, with real colliders (frontend 2026.8.45)
+
+The gap this pass closed: **"No 3D *authoring* surface — `scene3d` reads the board, it does not
+build a world."** `scene3d` remains exactly what it was — a temporary CSS-3D reading of the flat
+board's own nodes, `persist: false`, no independent state. What did not exist was a PLACE: an
+object with its own camera, its own props and real physics, opened the way `game`/`website`
+already open into `play`/`site`.
+
+**Ported, not hand-rolled.** An operator pointer identified a proven, shipped 3D world-builder
+(Three.js + react-three-fiber + Rapier physics) already live in a sibling repo. Rather than design
+a camera/collision system from scratch, that runtime's authoring engine was ported into this
+canvas and adapted to its own conventions — first WebGL dependency in the monorepo
+(`three@0.185`, `@react-three/fiber@^8`, `@react-three/drei@^9`, `@react-three/rapier@^1.5`, all
+pinned to the last React-18-compatible majors; R3F v9/drei v10/rapier v2 all require React 19).
+Dropped in the port: the source's `GameState`/`engine` wrapper (this canvas already discriminates
+on the object's own `kind`), challenges/scoring, multiplayer peers, the bespoke AI-agent authoring
+panel (Brain already edits any object's mutable fields through this canvas's own generic
+`MUTABLE_FIELDS` mechanism — no second path needed), textures/tags, and the click-to-shoot weapon
+mechanic. What stayed: real Rapier collision (no hand-rolled AABB math needed — the physics engine
+already solves it correctly), first/third-person walking, drag-and-drop prop placement, and a
+right-rail properties inspector.
+
+**The two-axis registry, extended by one entry each.** `world` is a new `CreationObjectKind`
+(`packages/creation-canvas-contract`) and a new `CanvasSurfaceId` (`lib/canvasSurfaces.ts`,
+`scope: 'object'`, `persist: false` — same as `page`/`play`/`site`/`timeline`, since the surface
+*selection* doesn't survive reload even though the authored scene obviously does). The join lives
+where every other kind→surface mapping does, `creationObjectSurfaces.ts`: `world: 'world'`. No new
+DB table or migration — `creationSessionObjects.content` is jsonb per kind, exactly as `game`
+already holds its whole authored build as one blob; the new `CanvasWorldScene` shape (camera-free —
+camera state is ephemeral UI, not persisted; spawn point, ground, lighting and a `props[]` array
+are) is just a new field on it.
+
+**Files.** New: `packages/creation-canvas-contract/src/world.ts` (scene types + pure, TOTAL
+mutation helpers — `addProp`/`updateProp`/`deleteProp`/`moveProp`/`updateSpawn`/`updateGround`/
+`updateLighting`/`updateSkyColor`/`PROP_KIND_DEFAULTS`, plus a defensive `canvasWorldSceneFrom`
+reader for the same reason `canvasVideoTimelineFrom` exists — jsonb round-trips and Brain patches
+are untrusted at the type level); `components/creation-canvas/world3d/{Scene3D,PlayerController,
+PropMesh,DropPlacer,PlayerAvatar,PropPalette,WorldPropertiesPanel}.tsx`; `CanvasWorldView.tsx` (the
+host, dynamically imported with `ssr:false` like `Canvas3DView` — WebGL has no server render and
+must not sit in the main chunk). Touched: `canvasSurfaces.ts`, `creationObjectSurfaces.ts`,
+`creationObjectRegistry.ts` (new kind row + `MUTABLE_FIELDS['world']`), `CreationCanvas.tsx`
+(dynamic import + surfaces-map entry, wired to the existing `updateNodeData` — no new save API),
+`CreationCanvas.module.css` (new `.world*` rules, dark/light via the existing `--canvas-*`/
+`--danger-*` tokens, a narrow-viewport rule collapsing the 3-column layout to stacked strips), and
+all five `i18n/messages/*.json` catalogs (`surface.world.*`, `object.world`,
+`objectDescription.world` — real translations, not English copies).
+
+**Scope boundary, intentional.** This closes *authoring*: place/move/scale props, walk with
+collision, persist. It does not add a `world`→ship-target pipeline the way `game`→`play` has one —
+the gap asked for the authoring half only ("a surface where a person places a prop, moves a camera
+and walks a scene"); shipping a 3D scene out is a separate, unscoped question.
+
+**Verification:** `canvasWorldEdit.test.ts` (9 cases — add/update/delete/move, independent
+scene-level patches, and the defensive reader dropping a malformed prop instead of throwing) all
+pass; full `tsc --noEmit` across the frontend is clean; `check:i18n-keys`, `check:declared-deps`
+and `check:design-tokens` all pass; the pre-existing `creationObjectRegistry.test.ts` +
+`CreationCanvas.test.tsx` suite (106 tests) still passes unchanged, confirming the new kind/surface
+didn't regress the registry or the surfaces map. The pre-existing `check:architecture` 'use client'
+ratchet failure is unrelated drift from concurrent work in other files, not this pass's.
+
+---
+
 ## ✅ RESOLVED 2026-08-16 — R10 (W1E): the app's own users can now reach the board that maintains it
 
 `site_records`/`site_collections`/`site_users` (growth) and `tasks` (delivery) now speak, via a

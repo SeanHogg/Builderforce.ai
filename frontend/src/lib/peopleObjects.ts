@@ -245,6 +245,7 @@ export const PEOPLE_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         hint: 'Who must acknowledge and who has: {person, requiredBy, status, acknowledgedAt}. Written by the signature subsystem, never by hand — an acknowledgement typed by the person chasing it is exactly the record that proves nothing.',
         derived: true,
       },
+      { name: 'signatureRequestId', render: 'stat', label: 'signatureRequestId', hint: 'The signature_requests row this acknowledgement round created.', bookkeeping: true },
       SUMMARY_FIELD,
       CONFIDENTIALITY_FIELD,
       EVIDENCE_FIELD,

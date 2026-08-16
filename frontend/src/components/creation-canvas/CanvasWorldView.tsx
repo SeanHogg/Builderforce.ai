@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Canvas } from '@react-three/fiber';
-import { addProp, canvasWorldSceneFrom, type CanvasWorldPropKind, type CanvasWorldScene } from '@builderforce/creation-canvas-contract';
+import { addProp, canvasWorldSceneFrom, deleteProp, type CanvasWorldPropKind, type CanvasWorldScene } from '@builderforce/creation-canvas-contract';
 import styles from './CreationCanvas.module.css';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
 import Scene3D from './world3d/Scene3D';
@@ -76,7 +76,7 @@ export function CanvasWorldView({ data, onExit, onEdit }: CanvasWorldViewProps) 
       if (event.code !== 'Delete' && event.code !== 'Backspace') return;
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
-      changeScene({ ...scene, props: scene.props.filter((prop) => prop.id !== selectedPropId) });
+      changeScene(deleteProp(scene, selectedPropId));
       setSelectedPropId(null);
     };
     window.addEventListener('keydown', onKey);

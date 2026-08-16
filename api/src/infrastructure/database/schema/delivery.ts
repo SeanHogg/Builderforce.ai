@@ -62,11 +62,13 @@ import { onCallMembers, segments, tenants, users } from './identity';
 import {
   AlertMetric,
   agentTypeEnum,
+  catalogItems,
   deploymentStatusEnum,
   objects,
   projectStatusEnum,
   reportScheduleEnum,
   reportTypeEnum,
+  snapshots,
   sourceControlProviderEnum,
   specStatusEnum,
   taskPriorityEnum,
@@ -2317,6 +2319,40 @@ export const qaCredentials = pgTable('qa_credentials', {
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 });
+
+
+// ---------------------------------------------------------------------------
+// Stage Sandbox (migration 0478) — real execution behind marketplace Stage
+// checks. One row per dispatched (or cap-refused) sandbox run: a disposable
+// Cloudflare Container boots the staged snapshot, drives it, and reports
+// findings back. `payloadHash` — not `snapshotId` — is what the publish gate
+// matches on (see application/marketplace/stageSandboxRuns.ts and
+// domain/marketplace/stageSandboxPayload.ts).
+// ---------------------------------------------------------------------------
+
+export const stageSandboxRuns = pgTable('stage_sandbox_runs', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  snapshotId:   uuid('snapshot_id').notNull().references(() => snapshots.id, { onDelete: 'cascade' }),
+  listingId:    uuid('listing_id').references(() => catalogItems.id, { onDelete: 'set null' }),
+  payloadHash:  varchar('payload_hash', { length: 64 }).notNull(),
+  // 'runtime' | 'media' — the only two harnesses a container can drive.
+  harness:      varchar('harness', { length: 16 }).notNull(),
+  // 'queued' | 'running' | 'passed' | 'failed' | 'error' | 'capped'
+  status:       varchar('status', { length: 16 }).notNull().default('queued'),
+  findings:     jsonb('findings'),   // StageCheck[] the container established
+  summary:      text('summary'),
+  errorMessage: text('error_message'),
+  durationMs:   integer('duration_ms'),
+  createdBy:    varchar('created_by', { length: 36 }),
+  startedAt:    timestamp('started_at'),
+  finishedAt:   timestamp('finished_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_stage_sandbox_runs_lookup').on(t.tenantId, t.payloadHash, t.createdAt),
+  index('idx_stage_sandbox_runs_meter').on(t.tenantId, t.createdAt),
+]);
 
 
 // ---------------------------------------------------------------------------

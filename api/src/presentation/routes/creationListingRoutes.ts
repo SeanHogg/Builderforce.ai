@@ -162,7 +162,7 @@ export function createCreationListingRoutes(db: Db): Hono<HonoEnv> {
    */
   router.get('/releases/:sessionId/staged/:snapshotId', async (c) => {
     try {
-      const staged = await checksForStagedRelease(db, {
+      const staged = await checksForStagedRelease(db, c.env, {
         tenantId: c.get('tenantId') as number,
         userId: c.get('userId') as string,
         sessionId: c.req.param('sessionId'),

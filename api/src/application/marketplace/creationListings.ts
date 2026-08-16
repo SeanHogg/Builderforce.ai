@@ -43,6 +43,7 @@ import {
   listingKindsForObjectKind,
   resolveDelivery,
   resolveListingAccess,
+  resolveListingHarness,
   resolveTrialPolicy,
   sessionListingKinds,
   SNAPSHOT_REASON_PUBLICATION,
@@ -76,7 +77,10 @@ import {
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { registerObject } from '../kernel/ObjectRegistry';
 import { liveUrl, runStageChecks, runnableDocument, type StageObject } from './stageChecks';
-import { deploymentProbe, watchHostedListing } from './stageChecks.probe';
+import { deploymentProbe, systemDryRunProbe, voiceCloneProbe, watchHostedListing } from './stageChecks.probe';
+import { isSandboxApplicable, stageSandboxPayloadHash } from '../../domain/marketplace/stageSandboxPayload';
+import { resolveStageSandboxState } from './stageSandboxRuns';
+import type { CloudExecutorEnv } from '../workflow/cloudExecutor';
 import {
   hostedListingStatus,
   isHostedListing,
@@ -719,15 +723,41 @@ export async function publishCreationListing(
     ? await stagedPayload(db, input.tenantId, target.registryObjectId, input.fromSnapshotId)
     : await buildSnapshotPayload(db, input.sessionId, input.objectId, name);
 
+  const objects = (payload.objects ?? []) as readonly StageObject[];
+  const strippedFields = payload.strippedFields ?? [];
+  const harness = resolveListingHarness(spec.id, objectKind, target.delivery);
+
+  // THE GATE: a runtime/media listing that has never been driven in a sandbox
+  // for this EXACT build cannot go on sale. Matched on the payload hash, not on
+  // `fromSnapshotId` — a seller who published straight from the live board
+  // (never staged) has no matching run either way, which is what makes this a
+  // real gate rather than one only a staged path goes through.
+  const sandboxApplicable = isSandboxApplicable(harness);
+  const sandbox = sandboxApplicable
+    ? await resolveStageSandboxState(db, {
+        tenantId: input.tenantId,
+        // Only meaningful for the "edited since" wording lookup — a publish
+        // straight from the live board (no `fromSnapshotId`) has no staged
+        // snapshot to compare against, so there is nothing honest to pass here.
+        snapshotId: input.fromSnapshotId ?? '',
+        harness,
+        payloadHash: await stageSandboxPayloadHash({ harness, delivery: target.delivery, objects, strippedFields }),
+        sandboxApplicable,
+      })
+    : null;
+
   const checks = await runStageChecks({
     listingKind: spec.id,
     objectKind,
-    objects: (payload.objects ?? []) as readonly StageObject[],
+    objects,
     priceCents: target.priceCents,
     trial: target.trial,
     delivery: target.delivery,
-    strippedFields: payload.strippedFields ?? [],
+    strippedFields,
     probe: deploymentProbe(),
+    sandbox,
+    voiceClone: voiceCloneProbe(db),
+    systemDryRun: harness === 'system' ? systemDryRunProbe(env as unknown as CloudExecutorEnv) : null,
   });
   if (!isPublishable(checks)) {
     // 409 rather than 400: the request is well-formed and the seller is entitled to

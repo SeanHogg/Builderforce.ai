@@ -16,17 +16,18 @@ import { buildTransactionalDatabase, type Db } from '../../infrastructure/databa
 import type { Env } from '../../env';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveAllFeatureEntitlements, type FeatureEntitlementSet } from '../tenant/featureEntitlements';
-import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly, resolveOutboundFetchesMonthly, resolveCloudRunsMonthly } from '../../domain/tenant/PlanLimits';
+import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly, resolveOutboundFetchesMonthly, resolveCloudRunsMonthly, resolveStageSandboxRunsMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { dailyTenantTextTokens, utcDayStart } from '../llm/tokenUsage';
 import { dailyTenantIngestionBytes, tenantIngestionBytesByProvider } from '../ingestion/ingestionLedger';
 import { dailyTenantErrorEvents } from '../quality/errorEventsLedger';
 import { dailyTenantOutboundFetches } from '../web/outboundFetchLedger';
 import { dailyTenantCloudRuns } from '../runtime/cloudRunLedger';
+import { dailyTenantStageSandboxRuns } from '../marketplace/stageSandboxLedger';
 import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 
-export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs';
-export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs';
+export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs' | 'stage_sandbox_runs';
+export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs' | 'sandbox_runs';
 
 export interface MeterSnapshot {
   key: MeterKey;

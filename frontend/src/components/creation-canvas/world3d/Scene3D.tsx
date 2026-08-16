@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import { OrbitControls } from '@react-three/drei';
 import { CuboidCollider, Physics, RigidBody } from '@react-three/rapier';
 import type { ThreeEvent } from '@react-three/fiber';
@@ -27,13 +26,11 @@ interface Scene3DProps {
 }
 
 export default function Scene3D({ scene, mode, selectedPropId, onSelectProp, respawnNonce = 0, cameraView = 'first', walkerColor }: Scene3DProps) {
-  const sunDirRef = useRef(scene.lighting.sun.direction);
   const sunPosition: [number, number, number] = [
     -scene.lighting.sun.direction[0] * 30,
     -scene.lighting.sun.direction[1] * 30,
     -scene.lighting.sun.direction[2] * 30,
   ];
-  sunDirRef.current = scene.lighting.sun.direction;
 
   const handleGroundClick = (_event: ThreeEvent<MouseEvent>) => {
     if (mode !== 'edit') return;

@@ -61,7 +61,7 @@ export interface CloudExecutorEnv extends ProxyEnv {
 const DEFAULT_TASK_BUDGET = 50;
 
 type TaskRow = typeof workflowTasks.$inferSelect;
-interface NodeInput {
+export interface NodeInput {
   kind: string;
   config: Record<string, unknown>;
   payload?: unknown;
@@ -90,14 +90,42 @@ interface NodeResult {
   drop?: boolean;
 }
 
+/**
+ * A stand-in for the node kinds that leave this workspace (or spend real
+ * tokens). Every method is OPTIONAL — a port that only stubs `gmail` leaves
+ * `connector`/`mcp`/`llm` to run for real, which is never how this is actually
+ * used today (the sandbox dry-run stubs all four) but keeps the seam honest
+ * about being per-kind rather than all-or-nothing.
+ *
+ * Consulted BEFORE the real path's own preconditions (a stubbed `gmail` node
+ * needs no `usageCtx`, no connected account, nothing) — that is what makes a
+ * dry-run runnable with no tenant context at all.
+ */
+export interface OutboundPort {
+  gmail?(config: Record<string, unknown>, inputText: string): Promise<string>;
+  connector?(config: Record<string, unknown>, inputText: string): Promise<string>;
+  mcp?(config: Record<string, unknown>, inputText: string): Promise<string>;
+  llm?(config: Record<string, unknown>, inputText: string): Promise<string>;
+}
+
 /** Run one cloud-native node; returns its output (and a drop flag) or throws on failure.
- *  `usageCtx` (when known) lets the `llm` node record its spend in the ledger [1310]. */
-async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputText: string, usageCtx?: { db: Db; tenantId: number }): Promise<NodeResult> {
+ *  `usageCtx` (when known) lets the `llm` node record its spend in the ledger [1310].
+ *  `outbound` (when supplied) intercepts the four node kinds that leave this workspace —
+ *  see {@link OutboundPort}. Omitted, every live caller today, this is a no-op: the
+ *  real adapters run exactly as they always have. */
+export async function executeCloudNode(
+  env: CloudExecutorEnv,
+  node: NodeInput,
+  inputText: string,
+  usageCtx?: { db: Db; tenantId: number },
+  outbound?: OutboundPort,
+): Promise<NodeResult> {
   switch (node.kind) {
     case 'trigger':
       return { output: node.payload !== undefined ? JSON.stringify(node.payload) : inputText };
 
     case 'llm': {
+      if (outbound?.llm) return { output: await outbound.llm(node.config, inputText) };
       const cfg = node.config;
       const system = typeof cfg.system === 'string' ? cfg.system : '';
       const prompt = typeof cfg.prompt === 'string' ? cfg.prompt : '';
@@ -169,6 +197,7 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
       return { output: inputText };
 
     case 'gmail': {
+      if (outbound?.gmail) return { output: await outbound.gmail(node.config, inputText) };
       // Send an email through the tenant's connected Gmail integration. Fields
       // support {{input}} so an upstream node's output can drive the recipient,
       // subject or body. Needs the tenant context to load the (encrypted) creds.
@@ -184,6 +213,7 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
     }
 
     case 'connector': {
+      if (outbound?.connector) return { output: await outbound.connector(node.config, inputText) };
       // EVERY connector action — Twilio SMS/voice/WhatsApp, SendGrid, Slack,
       // Stripe, a tenant's own connector — reaches a workflow through this one
       // node. It takes the connector and action as CONFIG, so publishing a new
@@ -199,6 +229,7 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
     }
 
     case 'mcp': {
+      if (outbound?.mcp) return { output: await outbound.mcp(node.config, inputText) };
       // Every Data + Marketing palette integration lands here. The node resolves
       // the tenant's stored credential for its provider and issues the SAME HTTP
       // call the connect form's "Test connection" makes, so a green test and a

@@ -74,6 +74,18 @@ export interface PlanLimits {
    * (application/runtime/cloudRunLedger.ts).
    */
   cloudRunsMonthly: number;
+  /**
+   * Monthly Stage Sandbox allowance (COUNT of dispatched disposable-container
+   * runs), surfaced by the consumption meter as "Sandbox runs"; -1 = unlimited.
+   * A run is dispatched at most once per Stage press per unique build (the
+   * payload hash dedupes re-stages of an unchanged board), and only for
+   * `runtime`/`media` listings — the two harnesses a container can drive.
+   * Below `cloudRunsMonthly` on purpose: a container-second is dearer than an
+   * LLM turn, and a Stage press is a check, not a product. Filled by counting
+   * dispatched rows in `stage_sandbox_runs`
+   * (application/marketplace/stageSandboxLedger.ts).
+   */
+  stageSandboxRunsMonthly: number;
   /** Image-generation credits per calendar day (1 credit = 1 returned image);
    *  -1 = unlimited. Independent of the text token budget. */
   imageCreditsDailyLimit: number;
@@ -130,6 +142,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     errorEventsMonthly: 10_000, // 10K error events/mo
     outboundFetchesMonthly: 500, // 500 Brain URL fetches/mo
     cloudRunsMonthly: 25, // 25 cloud-agent runs/mo — enough to try it, then upgrade
+    stageSandboxRunsMonthly: 15, // 15 sandbox runs/mo
     imageCreditsDailyLimit: 10,
     maxTokensPerRequest: 4_096,
     approvalWorkflows: false,
@@ -159,6 +172,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     errorEventsMonthly: 1_000_000, // 1M error events/mo
     outboundFetchesMonthly: 50_000, // 50K Brain URL fetches/mo
     cloudRunsMonthly: 2_000, // 2K cloud-agent runs/mo
+    stageSandboxRunsMonthly: 500, // 500 sandbox runs/mo
     imageCreditsDailyLimit: 1_000,
     maxTokensPerRequest: 16_384,
     approvalWorkflows: true,
@@ -188,6 +202,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
     errorEventsMonthly: -1, // unlimited
     outboundFetchesMonthly: -1, // unlimited
     cloudRunsMonthly: -1, // unlimited
+    stageSandboxRunsMonthly: -1, // unlimited
     imageCreditsDailyLimit: 5_000,
     maxTokensPerRequest: 64_000,
     approvalWorkflows: true,
@@ -431,6 +446,21 @@ export function resolveCloudRunsMonthly(input: {
 }): number {
   if (input.tokenDailyLimitOverride === -1 || input.isSuperadmin) return -1;
   return getLimits(input.effectivePlan).cloudRunsMonthly;
+}
+
+/**
+ * Resolve a tenant's effective monthly Stage Sandbox run allowance (count); -1
+ * = unlimited. Mirrors {@link resolveCloudRunsMonthly} so the "Sandbox runs"
+ * meter display and the dispatch gate agree. A superadmin-unlimited tenant is
+ * unlimited; a positive *token* override does not lift this (different axis).
+ */
+export function resolveStageSandboxRunsMonthly(input: {
+  effectivePlan: TenantPlan;
+  tokenDailyLimitOverride: number | null;
+  isSuperadmin?: boolean;
+}): number {
+  if (input.tokenDailyLimitOverride === -1 || input.isSuperadmin) return -1;
+  return getLimits(input.effectivePlan).stageSandboxRunsMonthly;
 }
 
 /**

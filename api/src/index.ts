@@ -235,6 +235,7 @@ import { createSecurityReviewRoutes } from './presentation/routes/securityReview
 import { createKnowledgeRoutes } from './presentation/routes/knowledgeRoutes';
 import { createKnowledgeMarketRoutes } from './presentation/routes/knowledgeMarketRoutes';
 import { createCreationListingRoutes, createPublicListingRoutes } from './presentation/routes/creationListingRoutes';
+import { createStageSandboxRoutes } from './presentation/routes/stageSandboxRoutes';
 import { createWebSearchRoutes } from './presentation/routes/webSearchRoutes';
 
 import { API_VERSION } from './version';
@@ -943,6 +944,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // sign-up is a catalogue of screenshots.
   app.route('/api/creation-listings', createCreationListingRoutes(db));
   app.route('/api/listings',          createPublicListingRoutes(db)); // PUBLIC browse + launch
+  app.route('/api/creation-listings/sandbox', createStageSandboxRoutes(db)); // Stage Sandbox container callbacks (machine token)
 
   // The domain router is intentionally LAST among `/api` mounts. It owns dynamic
   // `/api/:domain/*` paths and installs blanket auth for them; mounting it earlier

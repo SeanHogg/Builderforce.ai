@@ -30,12 +30,16 @@
  * would page an on-call engineer for a half-finished app.
  */
 
+import { eq } from 'drizzle-orm';
 import { BACKEND_HEALTH_MARKER, BACKEND_HEALTH_PATH } from '../backend/adapters/handlerEngineSource';
 import { MonitoringService } from '../monitoring/MonitoringService';
 import { httpCheck } from '../monitoring/httpCheck';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { studioVoiceClones } from '../../infrastructure/database/schema';
+import { dryRunSystemSteps } from './systemDryRun';
 import type { Db } from '../../infrastructure/database/connection';
-import type { DeploymentProbe, DeploymentProbeResult } from './stageChecks';
+import type { CloudExecutorEnv } from '../workflow/cloudExecutor';
+import type { DeploymentProbe, DeploymentProbeResult, SystemDryRunProbe, VoiceCloneTransferProbe } from './stageChecks';
 
 /** `https://x.example/` → `https://x.example`, so joining a path cannot double a slash. */
 function origin(url: string): string {
@@ -97,6 +101,49 @@ export function deploymentProbe(): DeploymentProbe {
         : 'unknown',
     };
   };
+}
+
+/**
+ * THE VOICE-CLONE TRANSFER PROBE.
+ *
+ * ── WHY THIS CANNOT CALL `canUseClone` THE WAY IT SOUNDS LIKE IT SHOULD ──────
+ * `canUseClone(db, clone, tenantId)` answers "may THIS tenant use it" —
+ * ownership, or an existing licence row for that SPECIFIC tenant. At Stage time
+ * there is no buyer tenant to ask about yet, and calling it with the SELLER's
+ * own tenantId would only ever prove the seller may use their own clone, which
+ * is not the question. So this reads existence directly: does the referenced
+ * clone id resolve to a real row at all. That is a genuine upgrade over the old
+ * field-presence check (a stale or deleted id is now reported as such, rather
+ * than treated the same as a real one) even though the transfer answer itself
+ * stays `'seller_only'` for every real clone — which is the true state of the
+ * platform today: no marketplace purchase grants the buyer a
+ * `studio_voice_clone_licenses` row, so nothing here would honestly say
+ * `'transfers'` yet. The day a purchase-time grant exists, this is where it is
+ * checked — a real `canUseClone(db, clone, buyerTenantId)` call for whichever
+ * tenant is asking, once there is one to ask about.
+ */
+export function voiceCloneProbe(db: Db): VoiceCloneTransferProbe {
+  return async (cloneId: string): Promise<'transfers' | 'seller_only' | 'unknown'> => {
+    const parsed = Number.parseInt(cloneId, 10);
+    if (!Number.isFinite(parsed)) return 'unknown';
+    const [clone] = await db
+      .select({ id: studioVoiceClones.id })
+      .from(studioVoiceClones)
+      .where(eq(studioVoiceClones.id, parsed))
+      .limit(1);
+    return clone ? 'seller_only' : 'unknown';
+  };
+}
+
+/**
+ * THE `system` HARNESS'S DRY-RUN PROBE — delegates to `dryRunSystemSteps`
+ * (application/workflow), the one place that knows how to run a step through
+ * the real cloud executor. Kept here, beside `deploymentProbe`, because this
+ * file is the seam `stageChecks.ts` reaches through for every check that needs
+ * I/O the pure module itself must not perform.
+ */
+export function systemDryRunProbe(env: CloudExecutorEnv): SystemDryRunProbe {
+  return (objects) => dryRunSystemSteps(env, objects);
 }
 
 /**
