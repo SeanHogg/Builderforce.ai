@@ -10,6 +10,7 @@ import { downloadBlob, filenameFromResponse } from './download';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { apiRequest, apiRequestStream, apiRequestText, type RequestOptions } from './apiClient';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
+import type { SessionApp } from './embeddedApps';
 
 /**
  * `request` / `webRequest` are the two credential flavours this module's ~250
@@ -8089,12 +8090,12 @@ export interface CreationSessionDetail {
   /**
    * The app this board BECAME, or null — the `app` link role, not a `reference`.
    *
-   * Structural rather than an import of `lib/embeddedApps`'s `SessionApp`: the
-   * gateway there imports this module for the transport, and a type import back
-   * would close a cycle for a four-field shape. The two are asserted against
-   * each other in `embeddedApps.test.ts`.
+   * The type comes from `lib/embeddedApps`, which owns the vocabulary and the
+   * narrow `GET /:id/app` route that answers the same question without the
+   * graph. Type-only, and that module imports nothing from this one, so there is
+   * no cycle.
    */
-  app?: { projectId: number; projectKey: string; name: string; subdomain: string | null } | null;
+  app?: SessionApp | null;
   members: Array<{ userId: string; role: CreationSessionSummary['role']; displayName: string | null; lastSeenAt?: string; viewport?: Record<string, unknown>; cursor?: { x?: number; y?: number } | null; selection?: string[]; typing?: boolean; watchState?: 'all' | 'mentions' | 'muted'; followingUserId?: string | null }>;
   personalViewport?: { x?: number; y?: number; zoom?: number } | null;
 }

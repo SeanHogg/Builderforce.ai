@@ -7,7 +7,7 @@
  *
  *   POST /api/creation-sessions/:id/convert-to-app     make this board an app
  *   GET  /api/creation-sessions/address-available      is this address free?
- *   GET  /api/creation-sessions/:id                    now answers with `app`
+ *   GET  /api/creation-sessions/:id/app                is this board an app?
  *
  * A component never embeds a query, so every one of those reads lives here as a
  * typed client and the two surfaces under `components/apps/` call functions
@@ -38,7 +38,6 @@
 
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import { apiRequest } from './apiClient';
-import { creationSessionsApi } from './builderforceApi';
 import { fetchSite, type SiteInfo } from './api';
 import {
   siteDataApi,
@@ -53,7 +52,15 @@ import {
 // Vocabulary — mirrors `application/canvas/convertSessionToApp.ts`
 // ---------------------------------------------------------------------------
 
-/** The app a board became, as `GET /api/creation-sessions/:id` reports it. */
+/**
+ * The app a board became.
+ *
+ * ONE declaration for the whole client: `GET /:id/app` answers with it and
+ * `GET /:id` carries it too, and `builderforceApi`'s `CreationSessionDetail`
+ * imports this type rather than restating four fields that would then be free to
+ * disagree. Type-only, and this module imports nothing from that one, so there
+ * is no cycle.
+ */
 export interface SessionApp {
   projectId: number;
   projectKey: string;
@@ -151,20 +158,16 @@ export const embeddedAppsApi = {
   /**
    * The app this board became (or null), plus who is asking.
    *
-   * Reads through `creationSessionsApi.get` rather than restating the URL, so
-   * there is ONE declaration of `GET /api/creation-sessions/:id` in the client.
-   * That endpoint answers with the whole graph, which is more than this needs —
-   * see the Gap Register entry for the narrow `/app` read that would replace it;
-   * until then the cache above is what keeps it to one request per board.
+   * Hits the NARROW route. `app` also rides `GET /api/creation-sessions/:id`,
+   * and that is right for the canvas — it makes that read anyway — but a surface
+   * that wants only these three fields must not pay for every object,
+   * connection, member and viewport on the board to get them. Cached on both
+   * sides of the wire: this key here, `session-app:<id>` on the server.
    */
   sessionAppState: (sessionId: string): Promise<SessionAppState> =>
     getOrSetClientCached(
       SESSION_APP_KEY(sessionId),
-      () => creationSessionsApi.get(sessionId).then((detail) => ({
-        app: detail.app ?? null,
-        role: detail.role,
-        title: detail.session.title,
-      })),
+      () => apiRequest<SessionAppState>(`${SESSIONS}/${encodeURIComponent(sessionId)}/app`),
       { ttlMs: SESSION_APP_TTL_MS },
     ),
 

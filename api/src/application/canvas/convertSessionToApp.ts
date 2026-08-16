@@ -53,6 +53,7 @@ import {
   projects,
 } from '../../infrastructure/database/schema';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { buildProjectKey } from '../project/projectKey';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
@@ -115,6 +116,24 @@ export type ConvertResult =
   | { ok: true; app: ConvertedApp }
   | { ok: false; status: 400 | 404 | 409; error: string; availability?: SubdomainAvailability };
 
+/** The shape every reader of "what did this board become" gets back. */
+export interface SessionAppLink {
+  projectId: number;
+  projectKey: string;
+  name: string;
+  subdomain: string | null;
+}
+
+/**
+ * The cache key for one board's app link.
+ *
+ * Keyed by session alone rather than by tenant+session: the query is already
+ * tenant-gated on the PROJECT, and a session id is a uuid, so one board has one
+ * answer. `convertSessionToApp` is the ONLY writer of that answer, which is why
+ * invalidation has exactly one call site.
+ */
+const sessionAppCacheKey = (sessionId: string) => `session-app:${sessionId}`;
+
 /**
  * The app a board became, or null.
  *
@@ -126,12 +145,18 @@ export type ConvertResult =
  * ONE round-trip: the link, its project and that project's site. A board is
  * opened constantly, so the three-table join is deliberate rather than three
  * awaited selects.
+ *
+ * Uncached at this level ON PURPOSE — `cachedAppForSession` below is the cached
+ * entry point. The session READ (`GET /:id`) already pays for a graph and folds
+ * this into its `Promise.all`, so caching here would put a KV round-trip on a
+ * path that is not waiting for it; the narrow `/:id/app` route is the one that
+ * benefits, and it asks for the cached form explicitly.
  */
 export async function appForSession(
   db: Db,
   tenantId: number,
   sessionId: string,
-): Promise<{ projectId: number; projectKey: string; name: string; subdomain: string | null } | null> {
+): Promise<SessionAppLink | null> {
   const [row] = await db
     .select({
       projectId: projects.id,
@@ -152,6 +177,28 @@ export async function appForSession(
     ))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * The same answer, read through the platform cache.
+ *
+ * The narrow `GET /:id/app` route exists so a surface can ask "is this board an
+ * app?" without paying for the whole graph, and a board is opened, closed and
+ * reopened constantly — so the read that made that cheap must not then make a
+ * database round-trip per mount. Invalidated by `convertSessionToApp`, the only
+ * thing that can change the answer, rather than left to expire.
+ */
+export async function cachedAppForSession(
+  db: Db,
+  env: Env,
+  tenantId: number,
+  sessionId: string,
+): Promise<SessionAppLink | null> {
+  return getOrSetCached(
+    env,
+    sessionAppCacheKey(sessionId),
+    () => appForSession(db, tenantId, sessionId),
+  );
 }
 
 /** Allocate a free project key, walking a numeric suffix on collision. */
@@ -320,6 +367,11 @@ export async function convertSessionToApp(
       operation: `reserveAddress:${subdomain}`,
     });
   }
+
+  // AFTER the address is reserved, not after the link: `subdomain` is part of the
+  // answer, so invalidating between the two would let a concurrent read refill
+  // the cache with an app that has no address and keep it there.
+  await invalidateCached(env, sessionAppCacheKey(session.id));
 
   return {
     ok: true,

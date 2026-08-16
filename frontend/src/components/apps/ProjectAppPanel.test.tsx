@@ -22,8 +22,7 @@ const SITE = {
   status: 'active',
   versionToken: 'v7',
   assetCount: 12,
-  // int8 crosses the wire as a STRING; the panel must not render "NaN".
-  totalBytes: '1048576' as unknown as number,
+  totalBytes: 1_048_576,
   publishedAt: '2026-08-01T00:00:00.000Z',
   url: 'https://sunday-rsvp.builderforce.app',
   pathUrl: '/api/sites/sunday-rsvp/',
@@ -86,7 +85,6 @@ describe('ProjectAppPanel — statements, not settings', () => {
 
     expect(await screen.findByRole('link', { name: 'sunday-rsvp.builderforce.app' }))
       .toHaveAttribute('href', 'https://sunday-rsvp.builderforce.app');
-    // The build being served, with the byte count coerced from its string form.
     expect(screen.getByText(/runtimeServing v7 1\.0 MB/)).toBeInTheDocument();
     expect(screen.getByText('15')).toBeInTheDocument();   // records, both collections
     expect(screen.getByText('12')).toBeInTheDocument();   // visitors
@@ -99,7 +97,7 @@ describe('ProjectAppPanel — statements, not settings', () => {
    * creator to share a link that 404s.
    */
   it('separates a reserved address from a live one', async () => {
-    api.overview.mockResolvedValue(overview({ site: { ...SITE, assetCount: 0, totalBytes: '0' } }));
+    api.overview.mockResolvedValue(overview({ site: { ...SITE, assetCount: 0, totalBytes: 0 } }));
     render(<ProjectAppPanel projectId={42} />);
     expect(await screen.findByText(/badgeReserved/)).toBeInTheDocument();
     expect(screen.queryByText(/badgeLive/)).not.toBeInTheDocument();

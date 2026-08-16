@@ -40,6 +40,7 @@ import {
 } from '../../infrastructure/database/schema';
 import {
   appForSession,
+  cachedAppForSession,
   convertSessionToApp,
   copyableLinkFilter,
 } from '../canvas/convertSessionToApp';
@@ -855,6 +856,30 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!label.trim()) return c.json({ error: 'A label is required.' }, 400);
     const availability = await checkSubdomainAvailability(db, label, null);
     return c.json(availability);
+  });
+
+  /**
+   * IS THIS BOARD AN APP? — the narrow answer, without the graph.
+   *
+   * `app` also rides `GET /:id`, which is right for the canvas because it makes
+   * that read anyway. It used to be the ONLY place, so anything else that wanted
+   * the four-field answer — the convert panel, a board list, a share sheet — had
+   * to fetch every object, connection, member and viewport to get it. This is
+   * the same three-table join, read through the platform cache, and nothing else.
+   *
+   * Viewer+ deliberately: "what did this board become" is not privileged beyond
+   * being able to see the board at all, and the convert surface has to answer it
+   * for a reader who may not convert.
+   *
+   * `role` and `title` ride along because the one surface that asks this needs
+   * all three to decide its own state, and three requests to render one button
+   * is the shape this route exists to remove.
+   */
+  router.get('/:id/app', async (c) => {
+    const access = await requireSession(c);
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const app = await cachedAppForSession(db, c.env, access.session.tenantId, access.session.id);
+    return c.json({ app, role: access.role, title: access.session.title });
   });
 
   /**

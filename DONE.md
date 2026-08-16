@@ -1,4 +1,69 @@
-## ✅ RESOLVED 2026-08-16 — R15a + R15b: the embedded-apps API had no caller; the two creator surfaces now call it (lane W1D)
+## ✅ RESOLVED 2026-08-16 — The asset store holds video, so TikTok is reachable from the board that rendered the clip
+
+### What was wrong
+
+Canvas images published through the marketing asset store; video did not, because that
+store was images by construction — five image MIME types and a flat 2 MB ceiling. TikTok
+publishes **video only**, so "post this clip to TikTok" had nowhere to put the clip and the
+target was reported blocked with a reason nobody could clear from the canvas.
+
+The 2 MB limit was never a storage decision. It was a RENDERING one: an image is mostly read
+in an inbox, and a mail client hides anything larger behind "download". None of that argument
+applies to a video, which is never inlined in an email and is fetched by TikTok's own
+downloader.
+
+### The shape
+
+`ALLOWED_ASSET_TYPES` + `MAX_ASSET_BYTES` were one decision made twice — "we accept this kind
+of media, and this much of it" — read in four places. They are now a single `ASSET_MEDIA`
+table keyed by media class, with three functions over it:
+
+- `assetMediaClass(mime)` — the only place a content type is judged;
+- `maxAssetBytes(mime)` — an unknown type gets the SMALLEST ceiling, so the upload route
+  checking size before the store has judged the type still refuses early;
+- `assetTooLargeMessage(mime)` — so the route's early 413 and the store's late one are the
+  same sentence rather than two wordings of one limit.
+
+`marketing_assets.kind` gains `video`. **No migration was needed** and none was written: the
+column is `VARCHAR(16)` with no CHECK constraint, so widening the value set is a code change
+and adding DDL would have been ceremony. An unstated kind now follows the bytes — an MP4
+nobody classified is filed as a video rather than defaulted to `image`.
+
+`logo` is refused for anything but an image, because a logo is a ROLE an image plays: every
+consumer of `{{logo}}` is an `<img>`.
+
+### Why 32 MB and not TikTok's own limit
+
+`readMediaSource` buffers the whole object in an `ArrayBuffer` inside a 128 MB Worker isolate.
+A higher limit would not be a larger upload, it would be an out-of-memory error part way
+through one. Raising it means streaming into R2, which needs the size known before the body
+is read — a different design, and honestly stated in the code rather than implied by a
+number. The `content-length` pre-check matters far more here than it ever did for images: an
+unchecked 500 MB body is a dead isolate.
+
+Covered by six new cases in `templateLibrary.test.ts`, including the one that matters — the
+same 3 MB payload is refused as a picture and accepted as a clip.
+
+---
+
+## ✅ RESOLVED 2026-08-16 — The last red frontend ratchet: three bar-end radii in the salary tables
+
+`check:design-scale` was red at `offScaleRadii: 4` against a baseline of 1, all three new ones
+in `components/salary/SalaryTables.tsx`: a 7px spread track, the band inside it, and a 2px
+median tick, carrying `borderRadius: 4`, `4` and `1`.
+
+Migrated rather than exempted, because every one of them is a **bar end**, not a corner —
+`var(--radius-full)` is what a bar end is on this scale. The literals were each an eyeballed
+approximation of a pill at one particular height, which stops being right the moment the
+height changes.
+
+The other three ratchets named in that entry cleared on their own as the in-flight work they
+were blocked behind landed: `check:architecture` is green at 797 client files, `check:design-scale`'s
+font-size tally is at its (lowered) baseline, and API `check:tenant-scope` reports 0 new.
+
+---
+
+## ✅ RESOLVED 2026-08-16 — R15a + R15b + R15e: the embedded-apps API had no caller; the two creator surfaces now call it (lane W1D)
 
 **The gap.** Conversion shipped complete and unreachable. `POST /api/creation-sessions/:id/convert-to-app`,
 `GET /api/creation-sessions/address-available` and the `app` field on `GET /api/creation-sessions/:id` were
@@ -46,10 +111,33 @@ and neither is touched here.
 only, 360px-safe (`auto-fit` count tiles, fluid fields, no fixed widths), 33 tests across the gateway and both
 panels, and all nine frontend guards green.
 
-**Left open, with the blocker named:** `R15e` (the `app` answer costs a whole board graph — needs a narrow
-`GET /api/creation-sessions/:id/app`, and `api/**` is outside lane W1D's `owns` set) and the
-`SiteInfo.totalBytes` string/number drift (`frontend/src/lib/api.ts`, likewise outside this lane). Both are in
-the register with their blocker stated.
+**The two things the lane boundary had deferred are now closed too** (same day, on `main`, where no track
+guard applies):
+
+**R15e — "is this board an app?" no longer costs a whole board graph.** `app` rode `GET /:id` and nowhere
+else, so the convert panel had to fetch every object, connection, member and viewport on the board to read
+four fields. `GET /api/creation-sessions/:id/app` is the same three-table join and nothing else, viewer+
+because "what did this board become" is not privileged beyond seeing the board at all — and the convert
+surface has to answer it for a reader who may *not* convert. `role` and `title` ride along because the one
+surface asking needs all three, and three requests to render one button is the shape the route removes.
+Read through `getOrSetCached` under `session-app:<id>` and invalidated by `convertSessionToApp`, the only
+writer of that answer — after the address is reserved rather than after the link is written, since the
+subdomain is part of the answer and invalidating between the two would let a concurrent read refill the
+cache with an app that has no address. `appForSession` stays uncached: the session read folds it into a
+`Promise.all` it is already paying for, so a KV round-trip there buys nothing.
+
+**`SiteInfo.totalBytes` is a number again.** `project_sites.total_bytes` is an int8 read with a `::text`
+cast — that cast is what stops Drizzle's bigint mapper truncating it — and the route then passed the STRING
+straight out against a client type declaring `number`. Nothing looked broken because `formatBytes('1048576')`
+happens to coerce; the next `totalBytes + x` would have concatenated. The route now coerces once at the
+boundary, exactly as `siteReleases.listReleases` already did, so no consumer has to know the column is a
+bigint — and `ProjectAppPanel`'s defensive `Number(...)` is gone with the reason for it.
+`ideRoutes.site.test.ts` asserts the wire type, including that the value can be added to.
+
+**And one DRY fix that fell out of the narrow route:** `SessionApp` is now declared once, in
+`lib/embeddedApps.ts`, and `CreationSessionDetail` imports the type instead of restating four fields. The
+cycle that made a structural copy look necessary is gone — the gateway no longer imports `builderforceApi`
+at all.
 
 ---
 

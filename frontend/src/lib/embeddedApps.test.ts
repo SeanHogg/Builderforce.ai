@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const transport = vi.hoisted(() => ({ apiRequest: vi.fn() }));
-const sessions = vi.hoisted(() => ({ get: vi.fn() }));
 const site = vi.hoisted(() => ({ fetchSite: vi.fn() }));
 const growth = vi.hoisted(() => ({
   domain: vi.fn(),
@@ -13,8 +12,6 @@ vi.mock('./apiClient', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./apiClient')>()),
   apiRequest: transport.apiRequest,
 }));
-
-vi.mock('./builderforceApi', () => ({ creationSessionsApi: sessions }));
 
 vi.mock('./api', () => ({ fetchSite: site.fetchSite }));
 
@@ -69,7 +66,7 @@ const collection = (patch: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(() => {
-  for (const spy of [transport.apiRequest, sessions.get, site.fetchSite, growth.domain, growth.collections, growth.traffic]) {
+  for (const spy of [transport.apiRequest, site.fetchSite, growth.domain, growth.collections, growth.traffic]) {
     spy.mockReset();
   }
   // Every test starts from a cold cache; otherwise the first test's answers are
@@ -92,30 +89,36 @@ describe('canConvertSession', () => {
 });
 
 describe('sessionAppState', () => {
-  it('reads the app, the role and the title off one session read', async () => {
-    sessions.get.mockResolvedValue({
+  /**
+   * The NARROW route, not the session read. `app` rides `GET /:id` too, but that
+   * answers with every object, connection, member and viewport on the board —
+   * the right shape for the canvas and the wrong price for a button.
+   */
+  it('asks the narrow route rather than fetching the whole board graph', async () => {
+    transport.apiRequest.mockResolvedValue({
       app: { projectId: 42, projectKey: 'SUN', name: 'Sunday RSVP', subdomain: 'sunday-rsvp' },
       role: 'owner',
-      session: { title: 'Sunday RSVP' },
+      title: 'Sunday RSVP',
     });
     await expect(embeddedAppsApi.sessionAppState('board-1')).resolves.toEqual({
       app: { projectId: 42, projectKey: 'SUN', name: 'Sunday RSVP', subdomain: 'sunday-rsvp' },
       role: 'owner',
       title: 'Sunday RSVP',
     });
+    expect(transport.apiRequest.mock.calls[0]?.[0]).toBe('/api/creation-sessions/board-1/app');
   });
 
   it('reports a board that is still only a board as app: null', async () => {
-    sessions.get.mockResolvedValue({ role: 'editor', session: { title: 'Untitled' } });
+    transport.apiRequest.mockResolvedValue({ app: null, role: 'editor', title: 'Untitled' });
     await expect(embeddedAppsApi.sessionAppState('board-1')).resolves.toMatchObject({ app: null });
   });
 
   /** A board is opened and closed constantly; the answer changes only on convert. */
   it('serves a second reader from the cache instead of a second request', async () => {
-    sessions.get.mockResolvedValue({ app: null, role: 'editor', session: { title: 'X' } });
+    transport.apiRequest.mockResolvedValue({ app: null, role: 'editor', title: 'X' });
     await embeddedAppsApi.sessionAppState('board-1');
     await embeddedAppsApi.sessionAppState('board-1');
-    expect(sessions.get).toHaveBeenCalledTimes(1);
+    expect(transport.apiRequest).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -148,23 +151,25 @@ describe('addressAvailable', () => {
 
 describe('convertToApp', () => {
   it('drops the cached session answer so the next read sees the app', async () => {
-    sessions.get.mockResolvedValue({ app: null, role: 'owner', session: { title: 'Sunday RSVP' } });
+    transport.apiRequest.mockResolvedValueOnce({ app: null, role: 'owner', title: 'Sunday RSVP' });
     await embeddedAppsApi.sessionAppState('board-1');
 
-    transport.apiRequest.mockResolvedValue({
+    transport.apiRequest.mockResolvedValueOnce({
       app: { projectId: 42, projectKey: 'SUN', name: 'Sunday RSVP', sessionId: 'board-1', subdomain: 'sunday-rsvp', host: 'sunday-rsvp.builderforce.app', created: true },
     });
     await embeddedAppsApi.convertToApp('board-1', 'sunday-rsvp');
 
-    sessions.get.mockResolvedValue({
+    transport.apiRequest.mockResolvedValueOnce({
       app: { projectId: 42, projectKey: 'SUN', name: 'Sunday RSVP', subdomain: 'sunday-rsvp' },
       role: 'owner',
-      session: { title: 'Sunday RSVP' },
+      title: 'Sunday RSVP',
     });
     await expect(embeddedAppsApi.sessionAppState('board-1')).resolves.toMatchObject({
       app: { subdomain: 'sunday-rsvp' },
     });
-    expect(sessions.get).toHaveBeenCalledTimes(2);
+    // Three calls: the first read, the conversion, and the re-read the dropped
+    // cache key forced. A surviving cache entry would have made it two.
+    expect(transport.apiRequest).toHaveBeenCalledTimes(3);
   });
 
   /** 400 unusable · 404 not editable · 409 taken are all answers the panel renders. */
