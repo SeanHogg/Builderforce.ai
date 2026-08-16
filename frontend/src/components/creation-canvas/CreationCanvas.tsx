@@ -99,7 +99,7 @@ import { canvasNoticesFrom } from '@/lib/canvasNotices';
 import { canvasTranscriptForModel } from '@/lib/canvasTranscript';
 import { approvalGuidance, evaluateGate, readProvenance, type ApprovalMode } from '@/lib/canvasApprovalGate';
 import { sheetFormulaGuidance } from '@/lib/canvasSheet';
-import { makeSpecDeriveBoard, specRefKey } from '@/lib/specObjects';
+import { deadlineBearingKinds, makeSpecDeriveBoard, specRefKey } from '@/lib/specObjects';
 import { learnersFromCohort } from '@/lib/academic/gradebook';
 import { statsOf, curriculumMapProblems, mappingRows } from '@/lib/academic/derivations';
 import { applyRubric, applyLatePolicy, hoursLate, parseLatePolicy, rubricFromNode, rubricProblems, type CriterionSelection } from '@/lib/academic/marking';
@@ -188,7 +188,6 @@ import { dataSourceApi, resolveDataSource, type DataSourceSummary } from '@/lib/
 import { detectGeoColumns, mapObjectFields, mapPointsFromRows } from '@/lib/canvasGeo';
 import { analyzeCompetitorGeography, competitorSitesFrom } from '@/lib/competitorGeo';
 import { evaluateCanvasTriggers, isDateComparator, triggerUnboundHint } from '@/lib/canvasTriggers';
-import { deadlineBearingKinds, makeSpecDeriveBoard } from '@/lib/specObjects';
 import { useCoarsePointer } from '@/lib/useCoarsePointer';
 import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
 import { canvasStrokes, drawingPatch, DRAWING_TOOLS, eraseStrokes, strokesSvg, type CanvasDrawingTool, type CanvasStroke } from '@/lib/canvasDrawing';
