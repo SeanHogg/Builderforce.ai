@@ -16501,6 +16501,8 @@
     "canvasViewControls": "Controles de vista del lienzo",
     "undoCanvasChange": "Deshacer cambio del lienzo",
     "redoCanvasChange": "Rehacer cambio del lienzo",
+    "publishCanvas": "Publicar",
+    "publishCanvasTitle": "Publica este lienzo: compruébalo y ponlo en línea",
     "inviteCollaborators": "Invitar colaboradores",
     "clickToFollow": "haz clic para seguir la vista",
     "connectionKind": "Tipo de conexión",
@@ -19030,6 +19032,50 @@
         "enter": "Ver este lienzo en 3D",
         "active": "Salir de 3D"
       },
+      "app": {
+        "label": "App",
+        "enter": "Ejecuta lo que construye este lienzo",
+        "active": "Estás en la app",
+        "regionLabel": "Este lienzo, ejecutándose como una sola app",
+        "run": "Ejecutar",
+        "stop": "Detener",
+        "stopped": "Sin ejecutar",
+        "readings": "Cómo leer la app",
+        "reading": {
+          "preview": "Vista previa",
+          "code": "Código",
+          "console": "Consola"
+        },
+        "errorCount": "{count, plural, one {# error} other {# errores}}",
+        "viewport": "Ancho de vista previa",
+        "viewportName": {
+          "desktop": "Escritorio",
+          "tablet": "Tableta",
+          "mobile": "Móvil"
+        },
+        "publish": "Publicar",
+        "frameTitle": "{path}, en ejecución",
+        "idleTitle": "Listo para ejecutar",
+        "idleBody": "Pulsa Ejecutar para iniciar la app en un entorno aislado al que solo tú accedes.",
+        "noEntryTitle": "No hay página que abrir",
+        "noEntryBody": "Este lienzo tiene código pero ninguna página HTML por la que empezar. Pídele una a Brain o abre un archivo abajo.",
+        "emptyTitle": "Todavía no hay nada que ejecutar",
+        "emptyBody": "Pídele a Brain que construya algo y los archivos que escriba se ejecutarán aquí.",
+        "files": "Archivos de esta app",
+        "role": {
+          "server": "Servidor"
+        },
+        "openCard": "Abrir la tarjeta",
+        "serverNote": "{files} necesita un host para ejecutarse. La vista previa solo ejecuta el front-end, así que las llamadas a tu backend fallarán aquí: publica para darle un servidor.",
+        "consoleQuiet": "En ejecución. Todavía no hay registros.",
+        "consoleStopped": "Ejecuta la app para ver qué registra.",
+        "level": {
+          "log": "registro",
+          "warn": "aviso",
+          "error": "error",
+          "request": "llamada"
+        }
+      },
       "page": {
         "label": "Página",
         "open": "Abrir como página"
@@ -19123,7 +19169,7 @@
     "sessionActionCluster": {
       "history": "Historial del lienzo",
       "inspect": "Herramientas del lienzo",
-      "session": "Compartir este lienzo"
+      "session": "Compartir y publicar"
     },
     "moreMenuSessionActions": "Este lienzo"
   },

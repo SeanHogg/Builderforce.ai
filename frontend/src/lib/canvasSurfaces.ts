@@ -34,7 +34,7 @@
  * preference all read the flags.
  */
 
-export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'page' | 'play' | 'site' | 'timeline';
+export type CanvasSurfaceId = 'chat' | 'graph' | 'scene3d' | 'app' | 'page' | 'play' | 'site' | 'timeline';
 
 /**
  * What a surface is ABOUT.
@@ -93,18 +93,30 @@ export const CANVAS_SURFACES: readonly CanvasSurfaceDef[] = [
   { id: 'chat', scope: 'board', order: 0, showsBoard: false, showsObjects: false, brainIsSurface: true, persist: true },
   { id: 'graph', scope: 'board', order: 1, showsBoard: true, showsObjects: true, brainIsSurface: false, persist: true },
   { id: 'scene3d', scope: 'board', order: 2, showsBoard: false, showsObjects: true, brainIsSurface: false, persist: false },
+  // The first surface that reads MANY objects as ONE artifact.
+  //
+  // Everything below this line is `scope: 'object'` — a medium whose own axis will not
+  // fit in a card, entered from the card that IS it. An application is not shaped like
+  // that: `backend/server.js`, `frontend/index.html` and the page they produce are three
+  // cards and one thing, so there is no card to enter it from and the surface has to be
+  // about the SESSION. That is also why it belongs in the rail, where pressing it with
+  // nothing selected has an answer.
+  //
+  // It persists because it is a place somebody chose to work in — a builder iterating on
+  // a running app is not taking a temporary reading of the board, the way 3D is.
+  { id: 'app', scope: 'board', order: 3, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: true },
   // The three medium runtimes. Each is a PROMOTION: the editor already existed, squeezed
   // into a node body where the medium's own axis had nowhere to go — a paged document in a
   // card, a playable build behind a bespoke `gameFocus` boolean, and a multi-track edit
   // with no room for a second track. None of them persists, because a surface bound to one
   // object cannot be restored without it.
-  { id: 'page', scope: 'object', order: 3, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
-  { id: 'play', scope: 'object', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'page', scope: 'object', order: 4, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'play', scope: 'object', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
   // A site is pages AND a width. It is not the `page` surface with more room: that one
   // draws ONE sheet at a reading measure, and a website is a set of pages you move
   // between at a width you choose. Two axes the sheet does not have, so two surfaces.
-  { id: 'site', scope: 'object', order: 5, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
-  { id: 'timeline', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'site', scope: 'object', order: 6, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
+  { id: 'timeline', scope: 'object', order: 7, showsBoard: false, showsObjects: false, brainIsSurface: false, persist: false },
 ];
 
 /**

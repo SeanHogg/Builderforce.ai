@@ -22,6 +22,7 @@
  */
 
 import type { BackendStrategyKey } from '../backend/hostingStrategy';
+import type { RequiredConnector, RequiredSecret } from '../../domain/guidedSetup/guidedStep';
 
 /**
  * The capability vocabulary. A closed set on purpose: matching two free-text
@@ -58,21 +59,18 @@ export function isCapability(v: unknown): v is Capability {
   return typeof v === 'string' && (CAPABILITIES as readonly string[]).includes(v);
 }
 
-/** A connector the built system needs a live connection for. */
-export interface RequiredConnector {
-  key: string;
-  label: string;
-  /** Why this system cannot work without it — shown next to the Connect button. */
-  why: string;
-}
-
-/** A secret the running backend reads. */
-export interface RequiredSecret {
-  name: string;
-  label: string;
-  /** Where the customer finds the value. */
-  where: string;
-}
+/**
+ * A connector the built system needs a live connection for, and a secret the
+ * running backend reads.
+ *
+ * Declared in `domain/guidedSetup` rather than here because a template's guided
+ * setup states exactly the same two facts about exactly the same catalog, and
+ * two structurally identical declarations of "which integration this needs and
+ * why" is how the Connect button ends up rendering one shape on the challenge
+ * page and a different one in the template wizard. Re-exported so every existing
+ * caller keeps importing it from where it already looks.
+ */
+export type { RequiredConnector, RequiredSecret };
 
 export interface BlueprintTask {
   title: string;

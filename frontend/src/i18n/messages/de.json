@@ -16501,6 +16501,8 @@
     "canvasViewControls": "Ansichtssteuerung der Leinwand",
     "undoCanvasChange": "Leinwandänderung rückgängig",
     "redoCanvasChange": "Leinwandänderung wiederholen",
+    "publishCanvas": "Veröffentlichen",
+    "publishCanvasTitle": "Diese Leinwand veröffentlichen – prüfen und live stellen",
     "inviteCollaborators": "Mitarbeiter einladen",
     "clickToFollow": "klicken, um der Ansicht zu folgen",
     "connectionKind": "Verbindungstyp",
@@ -19030,6 +19032,50 @@
         "enter": "Diese Leinwand in 3D ansehen",
         "active": "3D verlassen"
       },
+      "app": {
+        "label": "App",
+        "enter": "Ausführen, was diese Leinwand baut",
+        "active": "Du bist in der App",
+        "regionLabel": "Diese Leinwand, als eine App ausgeführt",
+        "run": "Starten",
+        "stop": "Stoppen",
+        "stopped": "Läuft nicht",
+        "readings": "Wie die App gelesen wird",
+        "reading": {
+          "preview": "Vorschau",
+          "code": "Code",
+          "console": "Konsole"
+        },
+        "errorCount": "{count, plural, one {# Fehler} other {# Fehler}}",
+        "viewport": "Vorschaubreite",
+        "viewportName": {
+          "desktop": "Desktop",
+          "tablet": "Tablet",
+          "mobile": "Handy"
+        },
+        "publish": "Veröffentlichen",
+        "frameTitle": "{path}, läuft",
+        "idleTitle": "Bereit zum Start",
+        "idleBody": "Drücke Starten, um die App in einer Sandbox zu starten, die nur du erreichst.",
+        "noEntryTitle": "Keine Seite zum Öffnen",
+        "noEntryBody": "Diese Leinwand hat Code, aber keine HTML-Seite als Einstieg. Bitte Brain um eine oder öffne unten eine Datei.",
+        "emptyTitle": "Noch nichts zum Ausführen",
+        "emptyBody": "Bitte Brain, etwas zu bauen — die geschriebenen Dateien laufen dann hier.",
+        "files": "Dateien dieser App",
+        "role": {
+          "server": "Server"
+        },
+        "openCard": "Karte öffnen",
+        "serverNote": "{files} braucht einen Host. Die Vorschau führt nur das Frontend aus, Aufrufe an dein Backend schlagen hier also fehl — veröffentliche, um ihm einen Server zu geben.",
+        "consoleQuiet": "Läuft. Noch nichts protokolliert.",
+        "consoleStopped": "Starte die App, um zu sehen, was sie protokolliert.",
+        "level": {
+          "log": "Log",
+          "warn": "Warnung",
+          "error": "Fehler",
+          "request": "Aufruf"
+        }
+      },
       "page": {
         "label": "Seite",
         "open": "Als Seite öffnen"
@@ -19123,7 +19169,7 @@
     "sessionActionCluster": {
       "history": "Leinwandverlauf",
       "inspect": "Leinwand-Werkzeuge",
-      "session": "Diese Leinwand teilen"
+      "session": "Teilen und veröffentlichen"
     },
     "moreMenuSessionActions": "Diese Leinwand"
   },

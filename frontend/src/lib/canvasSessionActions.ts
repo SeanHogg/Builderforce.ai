@@ -41,7 +41,8 @@ export type CanvasSessionActionId =
   | 'outcomes'
   | 'diagnostics'
   | 'fullscreen'
-  | 'share';
+  | 'share'
+  | 'publish';
 
 /**
  * The set an action belongs to. A cluster is drawn as ONE segmented control in a shared
@@ -111,6 +112,16 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // panel: the collaborator roster's `+` used to open the same sheet, which is one
   // decision with two controls — the thing the surface registry exists to prevent.
   { id: 'share', cluster: 'session', order: 5, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
+  // Publish sits beside Share because they are the two ways work leaves this canvas —
+  // one brings a person IN, one puts the result where strangers can reach it.
+  //
+  // It is here from the first second of a session, before there is anything worth
+  // publishing, and that is the point: it was previously reachable ONLY through
+  // `SellInMarketplace` in a selected card's inspector, which made "get this to a URL"
+  // three clicks deep, framed as commerce, and invisible until you had clicked the right
+  // card. It opens the SAME release lifecycle that button does — one gate, two doors —
+  // scoped to the whole board, which is the scope an application actually has.
+  { id: 'publish', cluster: 'session', order: 6, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
 ];
 
 const BY_ID = new Map<CanvasSessionActionId, CanvasSessionActionDef>(

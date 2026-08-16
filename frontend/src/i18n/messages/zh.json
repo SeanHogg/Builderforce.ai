@@ -16501,6 +16501,8 @@
     "canvasViewControls": "画布视图控件",
     "undoCanvasChange": "撤销画布更改",
     "redoCanvasChange": "重做画布更改",
+    "publishCanvas": "发布",
+    "publishCanvasTitle": "发布此画布——先检查，再上线",
     "inviteCollaborators": "邀请协作者",
     "clickToFollow": "点击以跟随视图",
     "connectionKind": "连接类型",
@@ -19030,6 +19032,50 @@
         "enter": "以 3D 方式查看此画布",
         "active": "退出 3D"
       },
+      "app": {
+        "label": "应用",
+        "enter": "运行此画布所构建的内容",
+        "active": "你正在应用中",
+        "regionLabel": "此画布，作为一个应用运行",
+        "run": "运行",
+        "stop": "停止",
+        "stopped": "未运行",
+        "readings": "查看应用的方式",
+        "reading": {
+          "preview": "预览",
+          "code": "代码",
+          "console": "控制台"
+        },
+        "errorCount": "{count, plural, other {# 个错误}}",
+        "viewport": "预览宽度",
+        "viewportName": {
+          "desktop": "桌面",
+          "tablet": "平板",
+          "mobile": "手机"
+        },
+        "publish": "发布",
+        "frameTitle": "{path}，运行中",
+        "idleTitle": "准备就绪",
+        "idleBody": "点击“运行”，在只有你能访问的沙箱中启动应用。",
+        "noEntryTitle": "没有可打开的页面",
+        "noEntryBody": "此画布有代码，但没有作为入口的 HTML 页面。可以让 Brain 生成一个，或在下方打开某个文件。",
+        "emptyTitle": "暂时没有可运行的内容",
+        "emptyBody": "让 Brain 构建一些东西，它写出的文件就会在这里运行。",
+        "files": "此应用的文件",
+        "role": {
+          "server": "服务端"
+        },
+        "openCard": "打开卡片",
+        "serverNote": "{files} 需要一个主机才能运行。预览只运行前端，因此对后端的调用在这里会失败——发布后即可获得服务器。",
+        "consoleQuiet": "运行中。暂无日志。",
+        "consoleStopped": "运行应用即可查看它输出的日志。",
+        "level": {
+          "log": "日志",
+          "warn": "警告",
+          "error": "错误",
+          "request": "调用"
+        }
+      },
       "page": {
         "label": "页面",
         "open": "以页面方式打开"
@@ -19123,7 +19169,7 @@
     "sessionActionCluster": {
       "history": "画布历史",
       "inspect": "画布工具",
-      "session": "共享此画布"
+      "session": "共享与发布"
     },
     "moreMenuSessionActions": "此画布"
   },

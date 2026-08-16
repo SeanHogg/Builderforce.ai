@@ -28,6 +28,7 @@ import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
 import { CanvasChatSurface } from './CanvasChatSurface';
+import { CanvasAppSurface } from './CanvasAppSurface';
 import { CanvasPageSurface } from './CanvasPageSurface';
 import { CanvasPlaySurface } from './CanvasPlaySurface';
 import { CanvasSiteSurface } from './CanvasSiteSurface';
@@ -8524,6 +8525,23 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * authors it — no separate registration step to forget. */
   const sessionFiles = useMemo(() => canvasFiles(nodes), [nodes]);
 
+  /**
+   * Put the reader in front of one object, from wherever they are.
+   *
+   * Selecting a node, clearing the inspector and flying the viewport to it were three
+   * calls spelled out inline by the Files library; the app surface's "open the card"
+   * needs the identical four, plus the one the library did not need — HANDING THE BOARD
+   * BACK. A surface that has taken the centre is the one place where selecting a node
+   * changes nothing you can see, so "reveal" has to include leaving.
+   */
+  const revealObject = useCallback((nodeId: string) => {
+    setSurface('graph');
+    setInspectorFocus(null);
+    setSelectedId(nodeId);
+    setSelectedIds([nodeId]);
+    void flowRef.current?.fitView({ nodes: [{ id: nodeId }], padding: .35, maxZoom: 1.1, duration: 320 });
+  }, [setSurface]);
+
   /** A file the library offers: a delivered artifact opens, an authored object
    * exports through the path above. */
   const downloadCanvasFile = useCallback((file: CanvasFile) => {
@@ -9313,6 +9331,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // sign-up gate, which answered a question nobody asked: they wanted to show
       // someone the board, not to create an account.
       share: act(() => setShareOpen((value) => !value), shareOpen),
+      // The whole board, not a card: an application is the session, and this is the
+      // door that was previously reachable only from a selected object's inspector
+      // under "Sell in the marketplace". Same lifecycle, same gate — `openReleasesPanel`
+      // already refuses a board with nothing on a server and says why.
+      publish: act(() => openReleasesPanel(), releaseFocus !== null),
     };
   })();
 
@@ -9696,7 +9719,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               ratings={brainSurface.ratings}
               guestSignup={guestSignupPrompt}
             />,
-            // The three medium runtimes. Each takes the object the surface is ABOUT, so
+            // The session read as ONE application. Board-scoped, so unlike the four
+            // below it takes the nodes rather than a single object: `backend/server.js`,
+            // `frontend/index.html` and the page they render are three cards and one
+            // artifact, and there is no card to enter it from.
+            app: <CanvasAppSurface
+              nodes={nodes}
+              onExit={() => setSurface('graph')}
+              onPublish={() => openReleasesPanel()}
+              onOpenObject={revealObject}
+            />,
+            // The four medium runtimes. Each takes the object the surface is ABOUT, so
             // each is rendered only when one resolves — `surfaceNode` going null is what
             // the effect above turns back into the board.
             page: surfaceNode ? <CanvasPageSurface
@@ -9734,7 +9767,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />
         {dockPanel === 'files' && <CanvasFilesPanel
           files={sessionFiles}
-          onOpen={(nodeId) => { setInspectorFocus(null); setSelectedId(nodeId); setSelectedIds([nodeId]); void flowRef.current?.fitView({ nodes: [{ id: nodeId }], padding: .35, maxZoom: 1.1, duration: 320 }); }}
+          onOpen={revealObject}
           onDownload={downloadCanvasFile}
           onClose={closeDockPanel}
           onImportFile={(file) => addFilesToCanvas([file], undefined, 'drive_import')}

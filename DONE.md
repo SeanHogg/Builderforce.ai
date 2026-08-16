@@ -32,15 +32,51 @@ canvas set (`CanvasCommands.tsx`) — the two that mattered being `↗`, the uni
 else* arrow standing in for a scorecard, and `⚠`, a standing warning triangle for a report that is
 usually clean.
 
-**Also mobile.** The phone had TWO floating toolbars down its left edge — the "add to canvas"
-toggle alone at the top-left, the view commands stacked at the bottom-left, with nothing saying why
-the add button was not part of the set. They are siblings in one `.boardRail` container now
-(`display:contents` on a desktop, so that layout is untouched; the rail itself below 560px), `+`
-leads it as a create action should, and the two menus that used to anchor at `right:76px` /
+**Also mobile: two toolbars down the left edge, and the typo behind them.** The visible half was
+structural — the "add to canvas" toggle floated alone at the top-left while the view commands
+stacked at the bottom-left, with nothing saying why the add button was not part of the set. They
+are siblings in one `.boardRail` container now (`display:contents` on a desktop, so that layout is
+untouched; the rail itself on a phone), and `+` leads it as a create action should. Its glyph
+became a plus INSIDE a card, because on the rail it now sits directly above zoom-in, which is a
+bare plus — two identical strokes stacked on one toolbar is one command drawn twice.
+
+The other half was a selector. Thirteen rules read `.flowWrap:global(.react-flow__…)`, which
+compiles to a COMPOUND selector — one element carrying both classes — and React Flow puts every one
+of those classes on a DESCENDANT of `.flowWrap`, never on `.flowWrap` itself. **None of the thirteen
+had ever matched anything.** The rule that gives the typo away had both forms in one declaration:
+`.flowWrap:global(.react-flow__controls), .flowWrap :global(.react-flow__minimap)`. So the phone's
+`display:none` for React Flow's own vertical zoom rail never fired, and the desktop control column
+kept drawing at the left edge underneath the phone's board rail — which is the SECOND bar, and the
+one no amount of restructuring the first would have removed. Verified by DOM probe at 360px: a
+26×208 `.react-flow__controls` panel at (15, 341) sitting under the 40×215 rail at (10, 166); after
+the fix, the rail is the only absolutely-positioned box on that edge. Fixing the family also turned
+on the edge/label colours, the control-button and mini-map chrome (both dark-theme overrides
+included) and the phone rule that keeps the interactive viewport clear of the prompt. The rail's
+height cap now rounds down to a whole number of 38px commands, so it no longer ends in half a glyph.
+
+The two menus that used to anchor at `right:76px` /
 `right:150px` — measurements of buttons that happened to follow them, so both drifted on every
 signed-in session, where the save button is absent — anchor to `right:0` of the action row instead.
 The ••• sheet stops being a two-column grid of 28px rows and becomes one column of 40px targets
 that scrolls, because it is now the phone's only route to five actions.
+
+**The registry earned its keep the same afternoon.** A parallel pass added a seventh action —
+`publish`, beside `share` — and the two integrity tests here failed immediately, because it had
+been declared without catalog copy for its label. That is the contract working: an action cannot
+reach the bar, or the phone's ••• sheet, without a real name in all five catalogs. Two pieces of
+follow-through fell out of it and are done: `sessionActionCluster.session` was named
+"Share this canvas" when Share was alone in it and now reads "Share and publish" in all five, and
+the phone rules that stand actions down keyed on `.sessionActionButton[data-phone='…']` — fine while
+a cluster held only icon buttons, wrong the moment Share and Publish made it two WORDED ones. They
+key on `data-phone` alone now, which is the declaration rather than the styling. A worded action
+inside a trough also gives up its own shell and draws as a segment, the trade the surface tabs
+already make, so the pair does not stand 6px taller than the icon troughs beside it.
+
+A fourteenth dead selector turned up in the same sweep and went with them:
+`.composer:global(.bf-model-picker) [role='dialog']`, nudging the model picker back onto a narrow
+screen. `bf-model-picker` is not a class any component in this repo has ever set — that rule was its
+only mention in the tree — so it was removed rather than repaired; there is nothing to key on, and
+left in place it would have silently kept a dialog off-screen the day the picker needed the nudge.
 
 Dead copy dropped from all five catalogs (`canvasHistory`, `inviteCollaborator`); `sessionActionCluster.*`
 and `moreMenuSessionActions` added to all five with real translations. 10/10 guards, `tsgo` clean,

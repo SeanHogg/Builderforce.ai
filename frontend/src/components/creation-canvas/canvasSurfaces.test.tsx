@@ -56,7 +56,26 @@ describe('canvas surface registry', () => {
     expect(objectScoped.every((def) => !def.persist)).toBe(true);
     // None draws the board or its objects — each is about exactly one.
     expect(objectScoped.every((def) => !def.showsBoard && !def.showsObjects)).toBe(true);
-    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'scene3d']);
+    expect(boardCanvasSurfaces().map((def) => def.id)).toEqual(['chat', 'graph', 'scene3d', 'app']);
+  });
+
+  /**
+   * `app` is the first surface that is about the SESSION rather than one card, and the
+   * only board surface that draws neither the board nor its objects. Asserted here
+   * because those two facts together are exactly what would tempt a later reader to
+   * "tidy" it into the object-scoped group beside `play` — where it would need a card to
+   * be entered from, which an application spread across three of them does not have.
+   */
+  it('scopes the app surface to the board and persists it as a place', () => {
+    const app = canvasSurfaceDefinition('app');
+    expect(app.scope).toBe('board');
+    expect(app.showsBoard).toBe(false);
+    expect(app.showsObjects).toBe(false);
+    expect(app.brainIsSurface).toBe(false);
+    // A builder iterating on a running app chose to be there; unlike 3D it is not a
+    // reading of the board they were already on, so coming back lands them in it.
+    expect(app.persist).toBe(true);
+    expect(sanitizeCanvasSurface('app')).toBe('app');
   });
 
   /** The join between the two axes: a kind declares the surface that authors it. */
@@ -223,7 +242,7 @@ describe('the chat surface on the canvas', () => {
     // and the count is pinned to the board surfaces the registry declares, so adding a
     // board surface without a button (or a button without a surface) also fails.
     const offered = within(switcher()).getAllByRole('button').map((button) => button.textContent);
-    expect(offered).toEqual(['Chat', 'Board', '3D space']);
+    expect(offered).toEqual(['Chat', 'Board', '3D space', 'App']);
     expect(offered).toHaveLength(boardCanvasSurfaces().length);
   });
 

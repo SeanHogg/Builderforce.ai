@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import {
+  AppSurfaceIcon,
   ChatSurfaceIcon,
   GraphSurfaceIcon,
   ThreeDIcon,
@@ -47,7 +48,24 @@ const SURFACE_ICON: Record<string, () => React.JSX.Element> = {
   chat: ChatSurfaceIcon,
   graph: GraphSurfaceIcon,
   scene3d: ThreeDIcon,
+  app: AppSurfaceIcon,
 };
+
+/**
+ * The glyph, or nothing.
+ *
+ * This lookup used to be read straight into `<Glyph />`, which meant a board surface
+ * added to the registry WITHOUT a matching entry above did not degrade — it threw, and
+ * took the whole session bar with it. The registry's own "adding a surface" instructions
+ * list three steps and this was a silent fourth, so the failure was reachable by
+ * following the documentation. A surface with no glyph now draws its label alone on the
+ * desktop and its first letter on a phone, which is legible, pressable and obviously
+ * unfinished — the three things a crash is not.
+ */
+function surfaceGlyph(id: string, label: string): React.JSX.Element {
+  const Glyph = SURFACE_ICON[id];
+  return Glyph ? <Glyph /> : <span aria-hidden>{label.slice(0, 1)}</span>;
+}
 
 export interface CanvasSurfaceSwitcherProps {
   surface: CanvasSurfaceId;
@@ -63,7 +81,6 @@ export function CanvasSurfaceSwitcher({ surface, onChange, variant }: CanvasSurf
   const ordered = boardCanvasSurfaces();
 
   const tabs = ordered.map((def) => {
-    const Glyph = SURFACE_ICON[def.id];
     const pressed = surface === def.id;
     // A pressed surface hands the board back. Without it the lit command is inert, and
     // the only way out of 3D would be to know that "board" is where you came from.
@@ -84,7 +101,7 @@ export function CanvasSurfaceSwitcher({ surface, onChange, variant }: CanvasSurf
         aria-pressed={pressed}
         aria-label={label}
         title={title}
-      ><Glyph /></button>;
+      >{surfaceGlyph(def.id, label)}</button>;
     }
 
     // The label is drawn, not just announced: `aria-label` still carries it so the
@@ -97,7 +114,7 @@ export function CanvasSurfaceSwitcher({ surface, onChange, variant }: CanvasSurf
       aria-pressed={pressed}
       aria-label={label}
       title={title}
-    ><Glyph /><span>{label}</span></button>;
+    >{surfaceGlyph(def.id, label)}<span>{label}</span></button>;
   });
 
   if (variant === 'mobile') return <>{tabs}</>;

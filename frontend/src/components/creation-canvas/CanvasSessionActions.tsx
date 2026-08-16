@@ -8,6 +8,7 @@ import {
   FullscreenIcon,
   ExitFullscreenIcon,
   OutcomeMetricsIcon,
+  PublishCanvasIcon,
   RedoIcon,
   ShareCanvasIcon,
   UndoIcon,
@@ -49,6 +50,7 @@ const ACTION_ICON: Record<CanvasSessionActionId, () => React.JSX.Element> = {
   diagnostics: DiagnosticsIcon,
   fullscreen: FullscreenIcon,
   share: ShareCanvasIcon,
+  publish: PublishCanvasIcon,
 };
 
 /** The glyph for an action that is currently ON, when leaving it needs a different one. */
@@ -120,14 +122,16 @@ export function CanvasSessionActions({ handlers, variant }: CanvasSessionActions
         const { handler, active, label, title, ...aria } = describe(def);
         const Glyph = (active && ACTIVE_ACTION_ICON[def.id]) || ACTION_ICON[def.id];
 
-        // The one worded action. It opens a panel rather than acting on the board, and
-        // "Share" is a promise a glyph cannot make — the same reason the surface tabs
-        // carry their names on a desktop.
+        // The worded actions. They open somewhere else rather than acting on the board,
+        // and "Share" and "Publish" are promises a glyph cannot make — the same reason
+        // the surface tabs carry their names on a desktop.
         if (def.chrome === 'labelled') return <button
           key={def.id}
           type="button"
           className={styles.sessionActionLabelled}
-          data-tour="creation-share"
+          // The product tour anchors on Share specifically. Keyed off the id rather than
+          // the chrome, or the second worded action would silently steal the anchor.
+          {...(def.id === 'share' ? { 'data-tour': 'creation-share' } : {})}
           // Published so the phone breakpoint stands down exactly the actions the
           // registry moved into the ••• sheet — one declaration, read by the
           // stylesheet as well as by the sheet, rather than a second list in CSS.

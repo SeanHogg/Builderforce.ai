@@ -16502,6 +16502,8 @@
     "undoCanvasChange": "Undo canvas change",
     "redoCanvasChange": "Redo canvas change",
     "inviteCollaborators": "Invite collaborators",
+    "publishCanvas": "Publish",
+    "publishCanvasTitle": "Publish this canvas — check it, then put it live",
     "clickToFollow": "click to follow viewport",
     "connectionKind": "Connection kind",
     "viewOutcomeMetrics": "View outcome metrics",
@@ -19030,6 +19032,50 @@
         "enter": "View this canvas in 3D",
         "active": "Exit 3D"
       },
+      "app": {
+        "label": "App",
+        "enter": "Run what this canvas builds",
+        "active": "You are in the app",
+        "regionLabel": "This canvas, running as one app",
+        "run": "Run",
+        "stop": "Stop",
+        "stopped": "Not running",
+        "readings": "How to read the app",
+        "reading": {
+          "preview": "Preview",
+          "code": "Code",
+          "console": "Console"
+        },
+        "errorCount": "{count, plural, one {# error} other {# errors}}",
+        "viewport": "Preview width",
+        "viewportName": {
+          "desktop": "Desktop",
+          "tablet": "Tablet",
+          "mobile": "Phone"
+        },
+        "publish": "Publish",
+        "frameTitle": "{path}, running",
+        "idleTitle": "Ready to run",
+        "idleBody": "Press Run to start the app in a sandbox only you can reach.",
+        "noEntryTitle": "No page to open",
+        "noEntryBody": "This canvas has code but no HTML page to start from. Ask Brain for one, or open a file below.",
+        "emptyTitle": "Nothing to run yet",
+        "emptyBody": "Ask Brain to build something and the files it writes will run here.",
+        "files": "Files in this app",
+        "role": {
+          "server": "Server"
+        },
+        "openCard": "Open the card",
+        "serverNote": "{files} needs a host to run. The preview runs the front end only, so calls to your backend will fail here — publish to give it a server.",
+        "consoleQuiet": "Running. Nothing logged yet.",
+        "consoleStopped": "Run the app to see what it logs.",
+        "level": {
+          "log": "log",
+          "warn": "warn",
+          "error": "error",
+          "request": "call"
+        }
+      },
       "page": {
         "label": "Page",
         "open": "Open as a page"
@@ -19123,7 +19169,7 @@
     "sessionActionCluster": {
       "history": "Canvas history",
       "inspect": "Canvas tools",
-      "session": "Share this canvas"
+      "session": "Share and publish"
     },
     "moreMenuSessionActions": "This canvas"
   },

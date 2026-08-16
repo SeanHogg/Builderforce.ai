@@ -59,6 +59,17 @@ export function GraphSurfaceIcon() {
   </svg>;
 }
 
+/** The app surface: a window with a play mark in it. Deliberately NOT a bare triangle —
+ *  a play glyph beside "Board" and "3D space" reads as "start something", and this tab
+ *  answers the same question they do: what am I looking at. The frame is the answer. */
+export function AppSurfaceIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.25" />
+    <path d="M1.6 5.6h12.8" stroke="currentColor" strokeWidth="1.1" />
+    <path d="M6.6 7.9v3.2l2.9-1.6z" fill="currentColor" />
+  </svg>;
+}
+
 export function DepthIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M8 1.6 14.4 5 8 8.4 1.6 5z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
@@ -244,6 +255,17 @@ export function ShareCanvasIcon() {
   </svg>;
 }
 
+/** Send it out: a box with something leaving the top of it. Distinct from
+ *  {@link ShareCanvasIcon}, which brings a person IN to this board — this one puts the
+ *  work somewhere strangers can reach, and the two are opposite directions on purpose. */
+export function PublishCanvasIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M2.4 9.9v2.7a1.4 1.4 0 0 0 1.4 1.4h8.4a1.4 1.4 0 0 0 1.4-1.4V9.9" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    <path d="M8 10.6V2.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    <path d="M5.1 5.1 8 2.2l2.9 2.9" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
 /** The menu-opens marker on a worded button. Replaces the `▾` character, which the
  *  session bar drew at a different size and colour to everything beside it. */
 export function DisclosureIcon() {
@@ -252,11 +274,16 @@ export function DisclosureIcon() {
   </svg>;
 }
 
-/** Open the object palette. The board's create action, and now the first command on
- *  the phone's single board rail rather than a `+` character floating on its own. */
+/** Open the object palette. The board's create action, and now the first command on the
+ *  phone's single board rail rather than a `+` character floating on its own.
+ *
+ *  The plus is INSIDE a card, and that is the whole point: on the rail this button sits
+ *  directly above zoom-in, which is a bare plus. Two identical strokes stacked on one
+ *  toolbar is a toolbar with one command drawn twice, so this one says what it adds. */
 export function AddObjectIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
-    <path d="M8 3.2v9.6M3.2 8h9.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <rect x="1.8" y="2.6" width="12.4" height="10.8" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.25" />
+    <path d="M8 5.6v5.2M5.4 8.2h5.2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
   </svg>;
 }
 

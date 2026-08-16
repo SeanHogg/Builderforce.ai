@@ -30,16 +30,19 @@ import {
   instantiateWorkflowRun,
   runTargetFromDefinition,
   type RunTarget,
-  type WorkflowRuntime,
 } from '../../application/workflow/instantiateRun';
+import {
+  coerceExecutionScope,
+  coerceRunTarget,
+  createWorkflowDefinition,
+  scopeFromProject,
+  workflowDefinitionListCacheKey as listCacheKey,
+} from '../../application/workflow/definitionStore';
 import { syncDefinitionTriggers } from '../../application/workflow/triggerSync';
 import { compileCanvasWorkflowSteps, connectorActionIndex } from '../../domain/canvasWorkflowSpec';
 import { connectorActionCatalog } from '../../application/connectors/connectorActionCatalog';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-
-/** Cache key for a tenant's workflow-definition list. */
-const listCacheKey = (tenantId: number): string => `wfdef:list:${tenantId}`;
 
 /** Normalize an incoming graph payload to a well-formed WorkflowDefinition. */
 function coerceDefinition(input: unknown): WorkflowDefinition {
@@ -61,35 +64,6 @@ interface RunTargetInput {
   projectId?: number | null;
   /** 'project' = runs under the bound project; 'global' = tenant-wide. */
   executionScope?: string;
-}
-
-/**
- * Resolve the execution scope from the project binding. A project binding is the
- * source of truth: bound ⇒ 'project', unbound ⇒ 'global'. Falls back to the
- * explicit/previous scope only when the binding is left untouched.
- */
-function scopeFromProject(projectId: number | null | undefined, fallback: string | undefined): 'project' | 'global' {
-  if (projectId !== undefined) return projectId != null ? 'project' : 'global';
-  return coerceExecutionScope(fallback);
-}
-
-/** Normalize execution scope to the two allowed values. */
-function coerceExecutionScope(v: string | undefined): 'project' | 'global' {
-  return v === 'global' ? 'global' : 'project';
-}
-
-/** Normalize a persisted/incoming run target into the columns + RunTarget shape. */
-function coerceRunTarget(input: RunTargetInput): {
-  runTargetRuntime: WorkflowRuntime;
-  runTargetAgentHostId: number | null;
-  runTargetCloudAgentRef: string | null;
-} {
-  const runtime: WorkflowRuntime = input.runTargetRuntime === 'cloud' ? 'cloud' : 'host';
-  return {
-    runTargetRuntime: runtime,
-    runTargetAgentHostId: runtime === 'host' ? input.runTargetAgentHostId ?? null : null,
-    runTargetCloudAgentRef: runtime === 'cloud' ? input.runTargetCloudAgentRef ?? null : null,
-  };
 }
 
 export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
@@ -242,37 +216,16 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     const body = await c.req.json<{ name?: string; description?: string; definition?: unknown } & RunTargetInput>();
     if (!body.name || !body.name.trim()) return c.json({ error: 'name is required' }, 400);
 
-    const id = crypto.randomUUID();
-    const now = new Date();
-    const def = coerceDefinition(body.definition);
-    const target = coerceRunTarget(body);
-    await db.insert(workflowDefinitions).values({
-      id,
+    const row = await createWorkflowDefinition(db, c.env as Env, {
       tenantId,
       segmentId,
-      name: body.name.trim(),
+      name: body.name,
       description: body.description ?? null,
       projectId: body.projectId ?? null,
-      definition: JSON.stringify(def),
-      ...target,
-      executionScope: scopeFromProject(body.projectId, body.executionScope),
-      createdAt: now,
-      updatedAt: now,
+      definition: coerceDefinition(body.definition),
+      target: coerceRunTarget(body),
+      executionScope: body.executionScope ?? null,
     });
-    await syncDefinitionTriggers(db, {
-      definitionId: id, tenantId, segmentId, definition: def, target: runTargetFromDefinition(target),
-    });
-
-    await invalidateCached(c.env as Env, listCacheKey(tenantId));
-    // Scoped by tenant as well as id. The id is a freshly generated uuid, so the
-    // read cannot cross a boundary in practice — but `check-tenant-scope.mjs`
-    // counts statements, not reachability, and a read-back that is only safe
-    // because of how its id happened to be produced is the one that stops being
-    // safe the moment somebody reuses the helper.
-    const [row] = await db
-      .select()
-      .from(workflowDefinitions)
-      .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
     return c.json(row, 201);
   });
 
@@ -292,32 +245,14 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     const invalid = validateDefinition(def);
     if (invalid) return c.json({ error: invalid }, 400);
 
-    const id = crypto.randomUUID();
-    const now = new Date();
-    const segmentId = c.get('segmentId') ?? null;
-    await db.insert(workflowDefinitions).values({
-      id,
+    const row = await createWorkflowDefinition(db, c.env as Env, {
       tenantId,
-      segmentId,
+      segmentId: c.get('segmentId') ?? null,
       name: body.name?.trim() || 'Imported workflow',
       description: null,
-      definition: JSON.stringify(def),
-      createdAt: now,
-      updatedAt: now,
+      definition: def,
+      target: coerceRunTarget({}),
     });
-    await syncDefinitionTriggers(db, {
-      definitionId: id, tenantId, segmentId, definition: def, target: { runtime: 'host', agentHostId: null },
-    });
-    await invalidateCached(c.env as Env, listCacheKey(tenantId));
-    // Scoped by tenant as well as id. The id is a freshly generated uuid, so the
-    // read cannot cross a boundary in practice — but `check-tenant-scope.mjs`
-    // counts statements, not reachability, and a read-back that is only safe
-    // because of how its id happened to be produced is the one that stops being
-    // safe the moment somebody reuses the helper.
-    const [row] = await db
-      .select()
-      .from(workflowDefinitions)
-      .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
     return c.json(row, 201);
   });
 
@@ -361,30 +296,19 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     const invalid = validateDefinition(compiled.definition);
     if (invalid) return c.json({ error: invalid, code: 'workflow_invalid_graph', details: { issues: [] } }, 400);
 
-    const id = crypto.randomUUID();
-    const now = new Date();
-    // Canvas workflows default to the builderforce-hosted cloud runtime: the
-    // canvas offers no host picker, and a `host` default would compile a
-    // definition whose very first run fails on a missing agentHost.
-    const target = coerceRunTarget({ ...body, runTargetRuntime: body.runTargetRuntime ?? 'cloud' });
-    await db.insert(workflowDefinitions).values({
-      id,
+    const row = await createWorkflowDefinition(db, c.env as Env, {
       tenantId,
       segmentId,
-      name: body.name.trim(),
+      name: body.name,
       description: body.description ?? null,
       projectId: body.projectId ?? null,
-      definition: JSON.stringify(compiled.definition),
-      ...target,
-      executionScope: scopeFromProject(body.projectId, body.executionScope),
-      createdAt: now,
-      updatedAt: now,
+      definition: compiled.definition,
+      // Canvas workflows default to the builderforce-hosted cloud runtime: the
+      // canvas offers no host picker, and a `host` default would compile a
+      // definition whose very first run fails on a missing agentHost.
+      target: coerceRunTarget({ ...body, runTargetRuntime: body.runTargetRuntime ?? 'cloud' }),
+      executionScope: body.executionScope ?? null,
     });
-    await syncDefinitionTriggers(db, {
-      definitionId: id, tenantId, segmentId, definition: compiled.definition, target: runTargetFromDefinition(target),
-    });
-    await invalidateCached(c.env as Env, listCacheKey(tenantId));
-    const [row] = await db.select().from(workflowDefinitions).where(eq(workflowDefinitions.id, id));
     return c.json({ ...row, definition: compiled.definition, compiledCount: compiled.compiledCount, issues: [] }, 201);
   });
 
@@ -586,32 +510,20 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
     if (!src) return c.json({ error: 'Workflow definition not found' }, 404);
 
-    const forkId = crypto.randomUUID();
-    const now = new Date();
     const projectId = body.projectId !== undefined ? body.projectId : src.projectId;
     const def = parseDefinition(src.definition);
-    await db.insert(workflowDefinitions).values({
-      id: forkId,
+    const row = await createWorkflowDefinition(db, c.env as Env, {
       tenantId,
       segmentId,
       name: body.name?.trim() || `${src.name} (custom)`,
       description: src.description,
       projectId: projectId ?? null,
-      definition: JSON.stringify(def),
-      runTargetRuntime: src.runTargetRuntime,
-      runTargetAgentHostId: src.runTargetAgentHostId,
-      runTargetCloudAgentRef: src.runTargetCloudAgentRef,
-      executionScope: scopeFromProject(projectId, src.executionScope),
+      definition: def,
+      target: coerceRunTarget(src),
+      executionScope: src.executionScope,
       parentDefinitionId: src.id,
-      createdAt: now,
-      updatedAt: now,
     });
-    await syncDefinitionTriggers(db, {
-      definitionId: forkId, tenantId, segmentId, definition: def, target: runTargetFromDefinition(src),
-    });
-    await invalidateCached(c.env as Env, listCacheKey(tenantId));
-    const [row] = await db.select().from(workflowDefinitions).where(eq(workflowDefinitions.id, forkId));
-    return c.json({ ...row, definition: parseDefinition(row!.definition) }, 201);
+    return c.json({ ...row, definition: parseDefinition(row.definition) }, 201);
   });
 
   return router;

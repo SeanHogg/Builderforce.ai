@@ -164,7 +164,12 @@
   background:transparent; color:var(--canvas-ink); font-family:inherit; font-size:14px; font-weight:650;
 }
 .titleBlock input:hover, .titleBlock input:focus { border-color:var(--canvas-line); background:var(--canvas-panel); outline:none; }
-.saved { color:var(--canvas-muted); font-size:11px; white-space:nowrap; }
+/* `white-space:nowrap` with nowhere to overflow to meant this was HARD CLIPPED by the
+   bar rather than shortened — "Saved on this device" reading "Saved or" mid-word, which
+   looks like a rendering fault rather than a squeeze. The row has since grown (a fourth
+   surface tab, a Publish button), so the clip shows up on an ordinary 1440px desktop.
+   It shrinks and ellipsises now: a truncated status still reads as a status. */
+.saved { min-width:0; overflow:hidden; color:var(--canvas-muted); font-size:11px; white-space:nowrap; text-overflow:ellipsis; }
 .sessionActions { gap:8px; position:relative; }
 .collaborators span, .collaborators button {
   width:28px; height:28px; border-radius:50%; display:grid; place-items:center; margin-left:-5px;
@@ -239,6 +244,20 @@
 .sessionActionLabelled[aria-expanded='true'] > svg,.sessionActionLabelled[aria-expanded='true'] i { color:var(--canvas-accent); }
 .sessionActionLabelled[aria-expanded='true'] i > svg { transform:rotate(180deg); }
 @media (prefers-reduced-motion:reduce) { .sessionActionLabelled i > svg { transition:none; } }
+/* A worded action INSIDE a trough is a segment, not a button sitting in a box. Share and
+   Publish became a pair the moment Publish was declared beside it, and a pair of fully
+   chromed buttons inside a chromed shell draws three borders and stands 6px taller than
+   the icon troughs next to it. Same trade the surface tabs make: the trough carries the
+   shell, the segment carries only the word and its lit state. */
+.sessionActionCluster > .sessionActionLabelled {
+  min-height:28px; padding:5px 9px; border:0; border-radius:var(--radius-sm);
+  background:transparent; color:var(--canvas-muted);
+}
+.sessionActionCluster > .sessionActionLabelled:hover,
+.sessionActionCluster > .sessionActionLabelled:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); }
+.sessionActionCluster > .sessionActionLabelled[aria-expanded='true'] {
+  background:var(--canvas-panel); color:var(--canvas-accent); box-shadow:0 1px 2px var(--canvas-shadow);
+}
 /* The same actions inside the ••• sheet, where a phone reaches the ones the bar had no
    room for. Words, always — a sheet opened to find a named thing must not answer with a
    second row of glyphs. Chrome comes from `.moreMenu button`, so a session action and a
@@ -375,10 +394,26 @@
 .selectionToolbar span { padding:0 7px; color:var(--canvas-muted); font-size:10px; white-space:nowrap; }
 .selectionToolbar button { border:0; border-radius:var(--radius-sm); padding:6px 8px; background:transparent; color:var(--canvas-ink); font:600 10px var(--font-sans); cursor:pointer; }
 .selectionToolbar button:hover { background:var(--canvas-panel-muted); }.selectionToolbar button:disabled { opacity:.4; cursor:not-allowed; }
-.flowWrap:global(.react-flow__edge-path) { stroke:var(--canvas-line); stroke-width:1.6; }
-.flowWrap:global(.react-flow__edge-text) { fill:var(--canvas-muted); font-size:10px; }
-.flowWrap:global(.react-flow__edge-textbg) { fill:#f7faff; }
-.flowWrap:global(.react-flow__controls), .flowWrap :global(.react-flow__minimap) { border:1px solid var(--canvas-line); box-shadow:0 7px 20px rgba(60,48,36,.1); border-radius:var(--radius-md); overflow:hidden; }
+/* ── `.flowWrap :global(...)`, WITH THE SPACE ──────────────────────────────────────
+   Thirteen rules in this file were written `.flowWrap:global(.react-flow__…)`, which
+   compiles to a COMPOUND selector — one element carrying both classes. React Flow puts
+   every one of these classes on a DESCENDANT of `.flowWrap`, never on `.flowWrap`
+   itself, so none of the thirteen had ever matched anything. The rule below used to
+   read `.flowWrap:global(.react-flow__controls), .flowWrap :global(.react-flow__minimap)`
+   — the two halves of one declaration written both ways — which is what gives the typo
+   away.
+
+   What that cost, in the order it was noticed: the phone's `display:none` for the
+   desktop zoom rail never fired, so React Flow's own vertical control column kept
+   drawing at the left edge UNDERNEATH the phone's board rail. Two floating toolbars
+   down the same edge of a 360px screen, one of them the desktop's. The rest of the
+   family went with it — the edge/label colours, the control-button and mini-map chrome
+   (including both dark-theme overrides), and the phone rule that keeps the interactive
+   viewport clear of the prompt. */
+.flowWrap :global(.react-flow__edge-path) { stroke:var(--canvas-line); stroke-width:1.6; }
+.flowWrap :global(.react-flow__edge-text) { fill:var(--canvas-muted); font-size:10px; }
+.flowWrap :global(.react-flow__edge-textbg) { fill:#f7faff; }
+.flowWrap :global(.react-flow__controls), .flowWrap :global(.react-flow__minimap) { border:1px solid var(--canvas-line); box-shadow:0 7px 20px rgba(60,48,36,.1); border-radius:var(--radius-md); overflow:hidden; }
 .realtimeStatus { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--canvas-line); border-radius:var(--radius-full); padding:3px 7px; color:var(--canvas-muted); background:#fff; font-size:10px; white-space:nowrap; }
 .realtimeStatus::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--warning); }
 .realtimeStatus[data-state='online']::before { background:#10b981; }
@@ -392,7 +427,7 @@
 .performanceNotice { position:absolute; z-index:14; top:14px; left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2); transform:translateX(-50%); display:flex; align-items:center; gap:8px; max-width:min(660px,max(240px,calc(100% - 500px - var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)))); padding:8px 10px; border:1px solid #f3cf82; border-radius:var(--radius-md); background:#fff9e8; color:#704f10; box-shadow:0 8px 22px rgba(76,55,14,.1); font-size:10px; }.performanceNotice span{flex:1}.performanceNotice button{border:1px solid #d9ad54;border-radius:var(--radius-sm);background:#fff;color:inherit;padding:4px 7px;cursor:pointer}
 @keyframes canvasShimmer { to { background-position:-220% 0; } }
 @media (prefers-reduced-motion:reduce) { .canvasSkeleton span { animation:none; } }
-.flowWrap:global(.react-flow__controls-button) { background:#fff; border-color:var(--canvas-line); color:var(--canvas-muted); }
+.flowWrap :global(.react-flow__controls-button) { background:#fff; border-color:var(--canvas-line); color:var(--canvas-muted); }
 .remoteCursors { position:absolute; inset:0; z-index:12; pointer-events:none; overflow:hidden; }
 .remoteCursors > span { position:absolute; display:grid; grid-template-columns:13px auto; align-items:start; transform:translate(-2px,-2px); filter:drop-shadow(0 2px 3px rgba(60,48,36,.18)); }
 .remoteCursors i { font-size:17px; line-height:1; font-style:normal; }.remoteCursors b { margin:12px 0 0 2px; padding:3px 6px; border-radius:var(--radius-sm); background:currentColor; color:var(--text-on-accent); font-size:8px; white-space:nowrap; }
@@ -1696,6 +1731,103 @@
 .objectSurfaceAction:focus-visible,.objectSurfaceExit:focus-visible,.objectSurfaceOpen:focus-visible { border-color:var(--canvas-brain-accent); background:var(--canvas-hover); outline:none; }
 .objectSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; overflow:auto; overscroll-behavior:contain; }
 
+/* ── The app surface ─────────────────────────────────────────────────────────────
+   The one BOARD-scoped runtime, so it wears its own chrome rather than
+   `CanvasObjectSurface`'s: that header names the object it is about, and this surface is
+   about the session. It borrows `.objectSurfaceExit` on purpose — "back to the board"
+   must be the same control everywhere it appears. Every value is a canvas token, the
+   header wraps rather than fixing a width, and the toolbar collapses to two rows before
+   360px instead of overflowing. */
+.appSurface { position:absolute; z-index:7; inset:0; box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-bottom:var(--composer-space); background:var(--canvas-board-background); color:var(--canvas-ink); }
+.appSurfaceHeader { display:flex; flex:none; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 16px 10px 62px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
+.appSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; min-width:0; }
+
+/* Run is the loudest control on the surface, and the only one that is loud. */
+.appRunButton {
+  display:inline-flex; align-items:center; gap:7px; flex:none; min-height:32px; padding:6px 14px;
+  border:1px solid transparent; border-radius:var(--radius-full);
+  background:var(--tone-success-mark); color:#fff; font:650 11px var(--font-sans); cursor:pointer;
+}
+.appRunButton[data-running='true'] { border-color:var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-ink); }
+.appRunButton:disabled { opacity:.45; cursor:not-allowed; }
+.appRunButton:hover:not(:disabled),.appRunButton:focus-visible:not(:disabled) { filter:brightness(1.06); outline:none; }
+.appRunDot { width:7px; height:7px; flex:none; border-radius:50%; background:currentColor; }
+.appRunButton[data-running='true'] .appRunDot { background:var(--tone-success-mark); animation:appRunPulse 2s ease-in-out infinite; }
+@keyframes appRunPulse { 0%,100% { opacity:1; } 50% { opacity:.35; } }
+@media (prefers-reduced-motion: reduce) { .appRunButton[data-running='true'] .appRunDot { animation:none; } }
+
+/* Two segmented groups, same trough as the site surface's widths — a trough is what
+   says "these belong together" without a caption saying it. */
+.appReadings,.appViewports { display:flex; align-items:center; gap:2px; padding:2px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
+.appReadings button,.appViewports button {
+  display:inline-flex; align-items:center; gap:5px; min-height:24px; padding:3px 9px; border:0; border-radius:var(--radius-sm);
+  background:transparent; color:var(--canvas-muted); font-family:inherit; font-size:11px; font-weight:650; cursor:pointer;
+}
+.appReadings button:hover,.appReadings button:focus-visible,
+.appViewports button:hover,.appViewports button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.appReadings button[aria-pressed='true'],.appViewports button[aria-pressed='true'] { background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 1px 2px var(--canvas-shadow); }
+.appErrorCount { min-width:15px; padding:0 4px; border-radius:var(--radius-full); background:var(--tone-danger-bg); color:var(--tone-danger-ink); font-size:9px; font-weight:700; text-align:center; }
+
+.appAddress { min-width:0; flex:1; overflow:hidden; color:var(--canvas-muted); font-family:var(--font-mono,ui-monospace,monospace); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+.appPublishButton {
+  flex:none; min-height:32px; padding:6px 14px; border:1px solid var(--canvas-brain-accent); border-radius:var(--radius-full);
+  background:var(--canvas-brain-accent); color:var(--canvas-panel); font:650 11px var(--font-sans); cursor:pointer;
+}
+.appPublishButton:hover,.appPublishButton:focus-visible { filter:brightness(1.08); outline:none; }
+
+/* Preview. Same three measures the site surface uses, same reasoning. */
+.appStage { min-height:0; flex:1; display:flex; justify-content:center; padding:16px; background:var(--canvas-board-background); overflow:auto; overscroll-behavior:contain; }
+.appStage[data-viewport='desktop'] { --app-width:1180px; }
+.appStage[data-viewport='tablet'] { --app-width:820px; }
+.appStage[data-viewport='mobile'] { --app-width:390px; }
+.appFrame { width:min(100%,var(--app-width,1180px)); min-height:0; flex:1; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); box-shadow:0 10px 34px var(--canvas-shadow); }
+.appIdle,.appEmpty { display:grid; place-content:center; justify-items:center; gap:6px; flex:1; padding:32px 24px; text-align:center; }
+.appIdle strong,.appEmpty strong { color:var(--canvas-ink); font-size:13px; }
+.appIdle p,.appEmpty p { max-width:44ch; margin:0; color:var(--canvas-muted); font-size:11.5px; line-height:1.6; }
+
+/* Code. The tree collapses above the source on a phone rather than fighting it for width. */
+.appCode { min-height:0; flex:1; display:grid; grid-template-columns:minmax(150px,220px) minmax(0,1fr); }
+.appTree { display:flex; flex-direction:column; padding:8px 0; border-right:1px solid var(--canvas-line); background:var(--canvas-panel-muted); overflow:auto; }
+.appTree button {
+  display:flex; align-items:baseline; justify-content:space-between; gap:8px; padding:5px 12px;
+  border:0; background:transparent; color:var(--canvas-muted); font-family:var(--font-mono,ui-monospace,monospace); font-size:11px; text-align:left; cursor:pointer;
+}
+.appTree button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.appTree button em { flex:none; color:var(--tone-warning-ink); font-size:9px; font-style:normal; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+.appTree button:hover,.appTree button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.appTree button[aria-current='true'] { background:var(--canvas-panel); color:var(--canvas-ink); }
+.appSource { min-width:0; display:flex; flex-direction:column; overflow:hidden; }
+.appSourceBar { display:flex; flex:none; align-items:center; justify-content:space-between; gap:10px; padding:7px 12px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
+.appSourceBar b { min-width:0; overflow:hidden; color:var(--canvas-ink); font-family:var(--font-mono,ui-monospace,monospace); font-size:11px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+.appSourceBar button { flex:none; min-height:24px; padding:3px 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-ink); font:650 10px var(--font-sans); cursor:pointer; }
+.appSourceBar button:hover,.appSourceBar button:focus-visible { border-color:var(--canvas-brain-accent); background:var(--canvas-hover); outline:none; }
+.appSource pre { min-height:0; flex:1; margin:0; padding:12px 14px; color:var(--canvas-ink); font-family:var(--font-mono,ui-monospace,monospace); font-size:11px; line-height:1.7; overflow:auto; }
+
+/* Console. Levels are marked by WORD as well as colour, so the verdict survives a
+   monochrome display and a colour-blind reader. */
+.appConsole { min-height:0; flex:1; display:flex; flex-direction:column; gap:0; overflow:auto; }
+.appServerNote { flex:none; margin:0; padding:10px 14px; border-bottom:1px solid var(--canvas-line); background:var(--tone-warning-bg); color:var(--tone-warning-ink); font-size:11px; line-height:1.55; }
+.appConsoleEmpty { display:grid; place-content:center; flex:1; margin:0; padding:24px; color:var(--canvas-muted); font-size:11.5px; text-align:center; }
+.appConsoleLines { margin:0; padding:0; list-style:none; }
+.appConsoleLines li { display:grid; grid-template-columns:44px 62px minmax(0,1fr); gap:10px; padding:5px 14px; border-bottom:1px solid var(--canvas-line); align-items:baseline; font-family:var(--font-mono,ui-monospace,monospace); font-size:10.5px; }
+.appConsoleTime { color:var(--canvas-muted); font-variant-numeric:tabular-nums; }
+.appConsoleLevel { font-size:9px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.appConsoleLines li[data-level='log'] .appConsoleLevel,
+.appConsoleLines li[data-level='request'] .appConsoleLevel { color:var(--canvas-muted); }
+.appConsoleLines li[data-level='warn'] .appConsoleLevel { color:var(--tone-warning-ink); }
+.appConsoleLines li[data-level='error'] .appConsoleLevel { color:var(--tone-danger-ink); }
+.appConsoleText { color:var(--canvas-ink); overflow-wrap:anywhere; }
+
+@media (max-width:720px) {
+  .appSurfaceHeader { padding-left:16px; }
+  .appAddress { order:9; flex-basis:100%; }
+  .appCode { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); }
+  .appTree { max-height:130px; border-right:0; border-bottom:1px solid var(--canvas-line); }
+  .appConsoleLines li { grid-template-columns:40px minmax(0,1fr); }
+  .appConsoleLines li .appConsoleLevel { grid-column:2; }
+  .appConsoleLines li .appConsoleText { grid-column:1/-1; }
+}
+
 /* A page keeps a MEASURE. Stretching prose to a 2560px monitor makes the surface bigger
    and the document worse, and the sheet is also what makes this resemble the export. */
 .pageSheet { width:min(100%,var(--page-sheet-width,880px)); margin:0 auto; padding:20px 16px 28px; }
@@ -1922,11 +2054,16 @@
   .sessionActionCluster { gap:2px; padding:0; border:0; border-radius:0; background:transparent; }
   .sessionActionButton { width:40px; height:40px; border-radius:var(--radius-md); }
   .sessionActionButton > svg { width:17px; height:17px; }
-  .sessionActionCluster > .sessionActionButton[data-phone='menu'],
-  .sessionActionSolo > .sessionActionButton[data-phone='menu'],
-  .sessionActionSolo > .sessionActionLabelled[data-phone='menu'] { display:none; }
+  /* Keyed on `data-phone` alone, not on the chrome class beside it. A cluster used to
+     hold only icon buttons, so `.sessionActionButton[data-phone='menu']` was enough —
+     until `publish` joined `share` and the session cluster became two WORDED buttons,
+     which that selector does not match. The registry publishes `data-phone` on every
+     chrome it renders; matching the declaration rather than the styling is what keeps
+     this correct for the next chrome as well. */
+  .sessionActionCluster > [data-phone='menu'],
+  .sessionActionSolo > [data-phone='menu'] { display:none; }
   /* An empty cluster still draws its gap, so it stands down as a whole. */
-  .sessionActionCluster:not(:has(.sessionActionButton[data-phone='bar'])),
+  .sessionActionCluster:not(:has([data-phone='bar'])),
   .sessionActionSolo:not(:has([data-phone='bar'])) { display:none; }
   .moreMenuPhoneOnly { display:grid; grid-column:1 / -1; gap:2px; }
   .sessionBar { height:50px; gap:7px; padding:0 8px; }.sessionActions { flex:none; gap:2px; }.titleBlock { flex:1; gap:3px; min-width:0; }.titleBlock input { width:100%; min-width:0; padding-inline:5px; font-size:13px; }.spark,.collaborators { display:none; }
@@ -1948,7 +2085,7 @@
   /* The composer is a dock on phones, so the interactive viewport must end
      above it. Nodes and React Flow controls can no longer settle underneath
      the prompt. */
-  .flowWrap:global(.react-flow) { height:calc(100% - var(--composer-space)); }
+  .flowWrap :global(.react-flow) { height:calc(100% - var(--composer-space)); }
   .node { max-width:calc(100vw - 32px); }
   .mobileAction { display:inline-flex; min-width:36px; min-height:36px; align-items:center; justify-content:center; padding:7px 8px; }.mobileAction span { display:none; }.primaryButton,.saveButton { min-height:36px; padding:7px 10px; font-size:10px; }.saveButton { display:inline-flex; align-items:center; }.saveButtonFull { display:none; }.saveButtonShort { display:inline; }
   /* The sheet is now the phone's ONLY route to five session actions, so it stops being
@@ -1977,10 +2114,15 @@
   .composer { --prompt-panel-action-gap:4px; }
   .scopeChip { min-width:48px; max-width:110px; flex:1 1 84px; padding:4px 5px; overflow:hidden; }
   .scopeChip select { width:100%; max-width:none; }
-  .composer:global(.bf-model-picker) [role='dialog'] { left:-40px!important; }
+  /* `.composer:global(.bf-model-picker) [role='dialog']` used to sit here, nudging the
+     model picker back onto a narrow screen. `bf-model-picker` is not a class any
+     component in this repo has ever set — grep the whole tree and this rule was its only
+     mention — so it was a second dead selector beside the thirteen above, and one that
+     would have silently kept a dialog off-screen if the picker ever needed the nudge.
+     Removed rather than repaired: there is nothing to key on. */
   .iconButton { width:32px; height:32px; }
-  .flowWrap:global(.react-flow__minimap) { display:none; }
-  .flowWrap:global(.react-flow__controls) { display:none; }
+  .flowWrap :global(.react-flow__minimap) { display:none; }
+  .flowWrap :global(.react-flow__controls) { display:none; }
   /* A phone has no side to choose and no room to drag, so the docked placement
      collapses to one sheet that sits ABOVE the prompt — the prompt keeps the bottom
      edge. An inline Brain needs nothing here:it is an Object, and Objects already
@@ -2026,6 +2168,12 @@
      short phone in landscape that ran off the top of the board with no way to reach
      what had gone. */
   .boardRail { position:absolute; z-index:13; left:10px; bottom:calc(var(--composer-space) + 8px); display:flex; flex-direction:column; max-height:calc(100% - var(--composer-space) - 68px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); box-shadow:0 7px 20px var(--canvas-shadow); }
+  /* …cut to a whole number of commands. The plain cap above lands wherever the
+     arithmetic falls, which on most phones is halfway through a button — and a rail
+     ending in half a glyph reads as broken chrome rather than as "there is more below".
+     Progressive enhancement on purpose: a browser without `round()` drops this line and
+     keeps the cap above, so nothing is ever unreachable either way. */
+  .boardRail { max-height:round(down, calc(100% - var(--composer-space) - 68px), 38px); }
   /* A transparent sub-group inside the rail rather than `display:contents`, because it
      carries `role="group"` and a name — and an element whose box is removed is an
      element some assistive tech stops announcing. It inherits the rail's direction, so
@@ -2237,11 +2385,11 @@
 .donut:after { background:var(--canvas-widget-surface); }
 .node_drawing .nodeHeader,
 .node_frame .nodeHeader { background:color-mix(in srgb, var(--canvas-panel) 88%, transparent); }
-.flowWrap:global(.react-flow__controls-button),
-.flowWrap:global(.react-flow__minimap) { background:var(--canvas-panel); border-color:var(--canvas-line); color:var(--canvas-ink); }
-.flowWrap:global(.react-flow__controls-button:hover) { background:var(--canvas-hover); }
-.flowWrap:global(.react-flow__edge-textbg) { fill:var(--canvas-board); }
-.flowWrap:global(.react-flow__edge-text) { fill:var(--canvas-muted); }
+.flowWrap :global(.react-flow__controls-button),
+.flowWrap :global(.react-flow__minimap) { background:var(--canvas-panel); border-color:var(--canvas-line); color:var(--canvas-ink); }
+.flowWrap :global(.react-flow__controls-button:hover) { background:var(--canvas-hover); }
+.flowWrap :global(.react-flow__edge-textbg) { fill:var(--canvas-board); }
+.flowWrap :global(.react-flow__edge-text) { fill:var(--canvas-muted); }
 .handle { border-color:var(--canvas-panel)!important; }
 .historyPanel,
 .changeSetPanel,

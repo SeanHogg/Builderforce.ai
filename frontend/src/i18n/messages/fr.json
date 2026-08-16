@@ -16501,6 +16501,8 @@
     "canvasViewControls": "Contrôles de vue de la toile",
     "undoCanvasChange": "Annuler la modification",
     "redoCanvasChange": "Rétablir la modification",
+    "publishCanvas": "Publier",
+    "publishCanvasTitle": "Publier cette toile : la vérifier, puis la mettre en ligne",
     "inviteCollaborators": "Inviter des collaborateurs",
     "clickToFollow": "cliquez pour suivre la vue",
     "connectionKind": "Type de connexion",
@@ -19030,6 +19032,50 @@
         "enter": "Voir ce canevas en 3D",
         "active": "Quitter la 3D"
       },
+      "app": {
+        "label": "App",
+        "enter": "Exécuter ce que ce canevas construit",
+        "active": "Vous êtes dans l'app",
+        "regionLabel": "Ce canevas, exécuté comme une seule app",
+        "run": "Exécuter",
+        "stop": "Arrêter",
+        "stopped": "À l'arrêt",
+        "readings": "Comment lire l'app",
+        "reading": {
+          "preview": "Aperçu",
+          "code": "Code",
+          "console": "Console"
+        },
+        "errorCount": "{count, plural, one {# erreur} other {# erreurs}}",
+        "viewport": "Largeur d'aperçu",
+        "viewportName": {
+          "desktop": "Bureau",
+          "tablet": "Tablette",
+          "mobile": "Mobile"
+        },
+        "publish": "Publier",
+        "frameTitle": "{path}, en cours d'exécution",
+        "idleTitle": "Prêt à s'exécuter",
+        "idleBody": "Appuyez sur Exécuter pour lancer l'app dans un bac à sable auquel vous seul avez accès.",
+        "noEntryTitle": "Aucune page à ouvrir",
+        "noEntryBody": "Ce canevas contient du code mais aucune page HTML de départ. Demandez-en une à Brain ou ouvrez un fichier ci-dessous.",
+        "emptyTitle": "Rien à exécuter pour l'instant",
+        "emptyBody": "Demandez à Brain de construire quelque chose et les fichiers qu'il écrira s'exécuteront ici.",
+        "files": "Fichiers de cette app",
+        "role": {
+          "server": "Serveur"
+        },
+        "openCard": "Ouvrir la carte",
+        "serverNote": "{files} a besoin d'un hôte pour s'exécuter. L'aperçu n'exécute que le front-end : les appels vers votre backend échoueront ici — publiez pour lui donner un serveur.",
+        "consoleQuiet": "En cours d'exécution. Rien de consigné pour l'instant.",
+        "consoleStopped": "Exécutez l'app pour voir ce qu'elle consigne.",
+        "level": {
+          "log": "journal",
+          "warn": "alerte",
+          "error": "erreur",
+          "request": "appel"
+        }
+      },
       "page": {
         "label": "Page",
         "open": "Ouvrir en pleine page"
@@ -19123,7 +19169,7 @@
     "sessionActionCluster": {
       "history": "Historique de la toile",
       "inspect": "Outils de la toile",
-      "session": "Partager cette toile"
+      "session": "Partager et publier"
     },
     "moreMenuSessionActions": "Cette toile"
   },
