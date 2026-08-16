@@ -4,6 +4,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations'))
   .realCatalogIntlMock((await import('@/i18n/messages/en.json')).default as Record<string, unknown>));
 
+import { canvasApp } from '@/lib/canvasApp';
 import { CANVAS_QUICK_ADD } from '@/lib/canvasQuickAdd';
 import { CREATION_PALETTE_GROUPS } from './creationObjectRegistry';
 import { CreationCanvas } from './CreationCanvas';
@@ -36,32 +37,29 @@ describe('the floating command bar', () => {
   /**
    * The whole point of the consolidation. Run is offered on the board because the board
    * is where somebody asks "how do I see this thing work" — the question this canvas
-   * could not answer at all — and it stands down on a surface that runs itself rather
-   * than drawing a second Run that can disagree with the first.
+   * could not answer at all, and the one the entire redesign started from.
+   *
+   * The gate is the APP PROJECTION, not the object count: a board holding a Brain
+   * conversation and three notes has plenty of objects and nothing to run, and a Run
+   * button over it is a promise that lands on an empty frame.
    */
-  it('offers Run on a board with something to run, and never beside the App surface\'s own', () => {
+  it('gates Run on there being an app, not on there being objects', () => {
+    const note = { id: 'n1', data: { kind: 'note', title: 'Ideas' } };
+    const draft = { id: 'n2', data: { kind: 'code', title: 'Notes', code: 'const x = 1;' } };
+    const page = { id: 'n3', data: { kind: 'code', path: 'index.html', code: '<h1>Live</h1>' } };
+
+    // Objects, and even source, are not an app: a lone module has no page to open.
+    expect(canvasApp([note]).entry).toBeNull();
+    expect(canvasApp([note, draft]).entry).toBeNull();
+    // A page is.
+    expect(canvasApp([note, draft, page]).entry?.path).toBe('index.html');
+  });
+
+  it('offers no Run over a board that builds nothing yet', () => {
     render(<CreationCanvas sessionId="command-bar-run" persistence="local" />);
-    const bar = () => screen.getByTestId('canvas-command-bar');
 
-    // A fresh board carries a Brain conversation and nothing else. That is objects
-    // without an app, and a Run button over it is a promise with nothing behind it.
-    expect(within(bar()).queryByTestId('canvas-run')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('canvas-quick-add-build'));
-    fireEvent.click(within(screen.getByTestId('canvas-palette')).getByRole('button', { name: 'Code' }));
-
-    const run = within(bar()).getByTestId('canvas-run');
-    expect(run).toHaveTextContent('Run');
-    // Named for WHAT it runs: a board can carry objects with Run buttons of their own,
-    // and a bare "Run" beside them is ambiguous to anyone reading by name.
-    expect(run).toHaveAccessibleName('Run this canvas');
-
-    fireEvent.click(run);
-
-    // It took us to the surface that runs it, and that surface contributes its own Run —
-    // so the board's stands down rather than doubling up.
-    expect(screen.getByRole('button', { name: 'App' })).toHaveAttribute('aria-pressed', 'true');
-    expect(within(bar()).queryByTestId('canvas-run')).toBeNull();
+    // A fresh board carries a Brain conversation and nothing else.
+    expect(within(screen.getByTestId('canvas-command-bar')).queryByTestId('canvas-run')).toBeNull();
   });
 
   /**
