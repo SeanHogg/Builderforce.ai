@@ -5332,646 +5332,31 @@
       "devin": "Devin",
       "openhands": "OpenHands",
       "aider": "Aider",
-      "continueDev": "Continue.dev"
+      "continueDev": "Continue.dev",
+      "jira": "Jira",
+      "linear": "Linear",
+      "asana": "Asana",
+      "monday": "Monday.com",
+      "azureBoards": "Azure Boards",
+      "figma": "Figma",
+      "canva": "Canva",
+      "miro": "Miro",
+      "notion": "Notion",
+      "zapier": "Zapier",
+      "n8n": "n8n",
+      "make": "Make",
+      "copilotStudio": "Copilot Studio",
+      "langgraph": "LangGraph / CrewAI",
+      "openrouter": "OpenRouter",
+      "litellm": "LiteLLM",
+      "portkey": "Portkey",
+      "bedrock": "Amazon Bedrock",
+      "helicone": "Helicone",
+      "upwork": "Upwork",
+      "fiverr": "Fiverr",
+      "toptal": "Toptal",
+      "agencies": "Dev agencies"
     },
-    "categories": [
-      {
-        "id": "ownership",
-        "title": "Eigentum & Deployment",
-        "blurb": "Wo die Plattform läuft und wer sie kontrolliert, bestimmt Kosten, Datenresidenz und Lock-in.",
-        "rows": [
-          {
-            "feature": "Preismodell",
-            "note": "Tarife ändern sich; aktuelle Anbieterpreise prüfen",
-            "values": {
-              "builderforce": "Kostenlos + kostenpflichtige Workspace-Tarife",
-              "copilot": "Siehe Anbieterpreise",
-              "cursor": "Siehe Anbieterpreise",
-              "claudeCode": "Nutzungsbasiert",
-              "devin": "Siehe Anbieterpreise",
-              "openhands": "Open Source + gehostete Optionen",
-              "aider": "Open Source; Modellnutzung variiert",
-              "continueDev": "Open Source + kostenpflichtige Optionen"
-            }
-          },
-          {
-            "feature": "Selbst gehostet / Open Source",
-            "note": "MIT, vollständig selbst gehostet",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌ MS-Cloud",
-              "cursor": "❌ Anbieter-Cloud",
-              "claudeCode": "❌ Anthropic-Cloud",
-              "devin": "❌ Nur Cloud",
-              "openhands": "✅",
-              "aider": "✅",
-              "continueDev": "✅"
-            }
-          },
-          {
-            "feature": "Air-gapped / private Bereitstellung",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "✅",
-              "aider": "✅",
-              "continueDev": "✅"
-            }
-          },
-          {
-            "feature": "RBAC + Audit-Trails",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "⚠️ Einfach",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "model-flexibility",
-        "title": "Modell- & Tooling-Flexibilität",
-        "blurb": "Die Freiheit, jedes Modell zu wählen, offline zu arbeiten und sich in das offene MCP-Ökosystem zu integrieren.",
-        "rows": [
-          {
-            "feature": "Beliebiger Modellanbieter",
-            "note": "Über 30 Anbieter",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌ GPT/Claude",
-              "cursor": "⚠️ Eingeschränkt",
-              "claudeCode": "❌ Nur Anthropic",
-              "devin": "❌ Proprietär",
-              "openhands": "✅",
-              "aider": "✅",
-              "continueDev": "✅"
-            }
-          },
-          {
-            "feature": "Lokale / Offline-Modelle (Ollama)",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "⚠️",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "✅",
-              "aider": "✅",
-              "continueDev": "✅"
-            }
-          },
-          {
-            "feature": "IDE-unabhängig",
-            "note": "Beliebiger Kanal / CLI",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌ VS Code",
-              "cursor": "❌ VS Code-Fork",
-              "claudeCode": "⚠️ Terminal",
-              "devin": "✅ Web-UI",
-              "openhands": "✅ Web/CLI",
-              "aider": "✅ CLI",
-              "continueDev": "❌ Erweiterung"
-            }
-          },
-          {
-            "feature": "MCP — nutzen",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "✅ Nativ",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "✅ Nativ"
-            }
-          },
-          {
-            "feature": "MCP — als Server bereitstellen",
-            "note": "/mcp-Endpunkt",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "self-improving",
-        "title": "Selbstverbessernde Modelle & Nachweis der Fertigstellung",
-        "blurb": "Modelle, die aus Ihrer Arbeit lernen, sich nach Ergebnis selbst routen und beweisen, dass „Fertig“ wirklich fertig ist — Fähigkeiten, die eingefrorenen Einzelagenten-Tools strukturell fehlen.",
-        "rows": [
-          {
-            "feature": "Trainiert Ihr eigenes Modell mit Ihrer Arbeit",
-            "note": "Frontier-Modell-Lehrer-Destillation",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Selbstaktualisierendes Modell pro Projekt",
-            "note": "Evermind, läuft auf dem Gerät",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Erlerntes, ergebnisbasiertes Modell-Routing",
-            "note": "bewertet Läufe, ordnet Modelle neu",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Validator-Agent — Nachweis der Fertigstellung",
-            "note": "öffnet GAP-Aufgaben bei Defiziten",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Rollengeschütztes Board mit Freigabeaudit",
-            "note": "Rolle + Diagnose pro Ticket",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "orchestration",
-        "title": "Multi-Agenten-Orchestrierung",
-        "blurb": "Koordination spezialisierter Agenten über strukturierte Workflows, nicht über Single-Pass-Prompts.",
-        "rows": [
-          {
-            "feature": "Multi-Agenten-Orchestrierung",
-            "note": "7 Rollen + Abhängigkeits-DAG",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Planungs-Workflow",
-            "note": "PRD → Arch → Tasks via /spec",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "⚠️ Einfacher Plan",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Bugfix-Workflow",
-            "note": "Analyzer → Creator → Reviewer",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "⚠️ Inline",
-              "cursor": "⚠️ Inline",
-              "claudeCode": "⚠️ Inline",
-              "devin": "✅",
-              "openhands": "⚠️ Single-Pass",
-              "aider": "⚠️ Single-Pass",
-              "continueDev": "⚠️ Inline"
-            }
-          },
-          {
-            "feature": "Refactoring-Workflow",
-            "note": "Reviewer → Refactor → Tests",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "⚠️ Single-Pass",
-              "claudeCode": "⚠️ Single-Pass",
-              "devin": "⚠️ Single-Pass",
-              "openhands": "⚠️ Single-Pass",
-              "aider": "⚠️ Single-Pass",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Adversarieller Review-Durchlauf",
-            "note": "Integrierter Workflow",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Benutzerdefinierte Agenten-Personas / -Rollen",
-            "note": "YAML in .builderforce/personas/",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "governance",
-        "title": "Governance & Zuverlässigkeit",
-        "blurb": "Freigabe-Gates, Wiederherstellung und Automatisierung, die Agenten sicher im Produktivbetrieb machen.",
-        "rows": [
-          {
-            "feature": "Human-in-the-Loop-Freigabe-Gates",
-            "note": "Aussetzen + Freigeben über Portal",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "⚠️ Einfach",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Selbstheilung / Fehlerwiederherstellung",
-            "note": "Automatische Erkennung + erneute Ausführung",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "⚠️ Nur Wiederholung",
-              "openhands": "⚠️ Nur Wiederholung",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Geplante Automatisierung (cron)",
-            "note": "Builderforce-synchronisiert",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "CI/CD-Pipeline-Integration",
-            "note": "CLI- + Webhook-Trigger",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "⚠️ PR-Vorschlag",
-              "cursor": "❌",
-              "claudeCode": "⚠️ Nur CLI",
-              "devin": "⚠️ API",
-              "openhands": "⚠️ API",
-              "aider": "⚠️ CLI",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Semantische Antwortbewertung",
-            "note": "Treue / Relevanz / Halluzination",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Überwachung von Qualitätsdrift",
-            "note": "Regressionswarnungen pro Modell",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "codebase-context",
-        "title": "Codebasis-Verständnis & Bearbeitung",
-        "blurb": "Wie tief das Tool Ihr Repository liest und wie sauber es Änderungen zur Prüfung bereitstellt.",
-        "rows": [
-          {
-            "feature": "Semantische Suche in der Codebasis",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "⚠️",
-              "cursor": "✅",
-              "claudeCode": "⚠️ Einfaches RAG",
-              "devin": "✅",
-              "openhands": "⚠️ Einfach",
-              "aider": "⚠️ Git-fähig",
-              "continueDev": "✅"
-            }
-          },
-          {
-            "feature": "Hybrides Retrieval (dicht + BM25 + Rerank)",
-            "note": "RRF-Fusion + MMR-Diversität",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "⚠️ Nur Vektor",
-              "claudeCode": "⚠️ Nur Vektor",
-              "devin": "⚠️ Nur Vektor",
-              "openhands": "⚠️ Nur Vektor",
-              "aider": "⚠️ Git-fähig",
-              "continueDev": "⚠️ Nur Vektor"
-            }
-          },
-          {
-            "feature": "Tiefe AST- + Git-Historie-Analyse",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "⚠️ Einfaches RAG",
-              "claudeCode": "⚠️ Einfaches RAG",
-              "devin": "⚠️ Einfaches RAG",
-              "openhands": "⚠️ Einfaches RAG",
-              "aider": "⚠️ Git-fähig",
-              "continueDev": "⚠️ Einfaches RAG"
-            }
-          },
-          {
-            "feature": "Bereitgestellter Diff / Annehmen-Ablehnen",
-            "note": "/diff, /accept, /reject",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "✅ Composer",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "✅ Git-Diff",
-              "continueDev": "✅ ⌘K-Diff"
-            }
-          },
-          {
-            "feature": "Mitgelieferte Skills",
-            "note": "53 integriert + Marktplatz",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "memory-fleet",
-        "title": "Speicher & Flotte",
-        "blurb": "Persistentes Wissen über Sitzungen hinweg und Koordination über Maschinen hinweg.",
-        "rows": [
-          {
-            "feature": "Persistentes Projektwissen",
-            "note": ".builderforce/",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "⚠️ Innerhalb der Sitzung",
-              "claudeCode": "⚠️ Innerhalb der Sitzung",
-              "devin": "⚠️ Innerhalb der Sitzung",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Sitzungsübergaben",
-            "note": "/handoff + automatisches Laden",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Workflow-Persistenz über Neustarts hinweg",
-            "note": "YAML-Checkpoint + Fortsetzung",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "⚠️ Sitzungsbasiert",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Wissensschleife nach Aufgabenabschluss",
-            "note": ".builderforce/memory/ automatisch aktualisiert",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Verteilte Agent-zu-Agent-Delegation",
-            "note": "remote:<id>-Dispatch",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Flotten- / maschinenübergreifende Koordination",
-            "note": "Builderforce-Flottenregister",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "reach",
-        "title": "Kanäle & Reichweite",
-        "blurb": "Ihr Team dort abholen, wo es bereits arbeitet, auf jedem Gerät.",
-        "rows": [
-          {
-            "feature": "Funktioniert in WhatsApp / Telegram / Slack",
-            "note": "Über 15 Kanäle",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Sprach- + Talk-Modus",
-            "note": "macOS / iOS / Android",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "Mobile Begleit-Apps",
-            "note": "iOS + Android",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      }
-    ],
-    "faq": [
-      {
-        "question": "Ist Builderforce.ai eine Alternative zu GitHub Copilot?",
-        "answer": "Ja, aber sie lösen unterschiedliche Aufgabenbereiche. GitHub Copilot ist eine Single-Agent-Autovervollständigung innerhalb von VS Code, gebunden an GPT- und Claude-Modelle. Builderforce.ai ist eine selbst gehostete, MIT-lizenzierte Multi-Agenten-Plattform, die sieben spezialisierte Rollen durch vollständige Planungs-, Bugfix-, Refactoring- und adversarielle Review-Workflows orchestriert, auf über 30 Modellanbietern einschließlich lokalem Ollama läuft und Freigaben, Audit und persistenten Speicher hinzufügt. Teams, die der Zeilenvervollständigung entwachsen sind, setzen Builderforce.ai für End-to-End-Delivery ein."
-      },
-      {
-        "question": "Wie schneidet Builderforce.ai im Vergleich zu Cursor und Windsurf ab?",
-        "answer": "Cursor und Windsurf sind exzellente KI-native Editoren, aber sie sind nach wie vor Single-Agent und an die IDE gebunden. Builderforce.ai ist IDE-unabhängig und funktioniert von jedem Kanal oder CLI aus, koordiniert mehrere Agenten an einer Aufgabe über einen Abhängigkeits-DAG und ist vollständig selbst gehostet mit Modellfreiheit über mehr als 30 Anbieter. Sie können Cursor oder Windsurf sogar über MCP mit Builderforce.ai verbinden und es als Ihre Orchestrierungs- und Speicherebene nutzen."
-      },
-      {
-        "question": "Builderforce.ai im Vergleich zu Claude Code und Aider — wo liegt der Unterschied?",
-        "answer": "Claude Code ist an Anthropic-Modelle gebunden, und Aider betreibt einen einzelnen CLI-Agenten. Builderforce.ai betreibt ein Team spezialisierter Agenten mit einem integrierten adversariellen Review-Durchlauf, Human-Freigabe-Gates, einem Audit-Trail und persistentem Projektspeicher in .builderforce/. Es ist modellunabhängig über mehr als 30 Anbieter und fügt Flotten-Mesh, remote:<id>-Dispatch und mehr als 15 Chat-Kanäle hinzu, sodass es von einem einzelnen Entwickler bis zu einer orchestrierten Flotte skaliert."
-      },
-      {
-        "question": "Builderforce.ai im Vergleich zu Devin und OpenHands — welches sollte ich für autonomes Engineering wählen?",
-        "answer": "Devin ist ein proprietärer, gehosteter autonomer Agent, und OpenHands ist eine offene Single-Agent-Laufzeitumgebung. Builderforce.ai unterscheidet sich dadurch, dass es selbst gehostet und MIT-lizenziert ist, mit echter Multi-Agenten-Orchestrierung und integrierter Governance: Freigabe-Gates, Audit-Trails und selbstheilende Wiederherstellung, die Fehler automatisch erkennt und betroffene Schritte erneut ausführt. Sie behalten Ihren Code auf Ihrer eigenen Infrastruktur und wählen jedes beliebige Modell, einschließlich lokaler."
-      },
-      {
-        "question": "Kann Builderforce.ai vollständig offline oder air-gapped laufen?",
-        "answer": "Ja. Builderforce.ai ist selbst gehostet und unterstützt air-gapped Deployment. Mit lokalen Modellen über Ollama können Sie die gesamte Agenten-Belegschaft betreiben, ohne dass Code oder Prompts Ihr Netzwerk verlassen — etwas, das die meisten geschlossenen Konkurrenten nicht bieten können. Der Projektspeicher bleibt lokal in .builderforce/ erhalten, sodass der Kontext über Sitzungen hinweg ohne Cloud-Abhängigkeit bestehen bleibt."
-      },
-      {
-        "question": "Bindet mich Builderforce.ai an ein Modell oder eine IDE?",
-        "answer": "Nein. Builderforce.ai ist modellunabhängig über mehr als 30 Anbieter, einschließlich Anthropic, OpenAI, Bedrock und lokalem Ollama, und es ist IDE-unabhängig, erreichbar von jedem CLI oder Chat-Kanal aus. Es gibt keinen Editor-Fork zu übernehmen und keine Bindung an das Modell eines einzigen Anbieters, was ein zentraler Unterschied zu Copilot, Cursor, Windsurf und Claude Code ist."
-      }
-    ],
     "capabilityHeader": "Fähigkeit",
     "faqHeading": "Builderforce.ai im Vergleich zum Wettbewerb — FAQ",
     "relatedHeading": "Die direkten Vergleiche lesen",
@@ -6027,7 +5412,1435 @@
     },
     "matrixHeading": "Funktion für Funktion",
     "matrixNote": "Jede Zeile steht für eine Funktion, jede Spalte für ein Werkzeug. Die Zellen beschreiben den Stand nach unserem derzeitigen Kenntnisstand. Produkte und Tarife der Anbieter ändern sich häufig – prüfen Sie alles Entscheidungsrelevante daher anhand der aktuellen Anbieterdokumentation und in einem praktischen Test.",
-    "matrixScrollHint": "Scrollen Sie die Tabelle seitwärts, um alle Werkzeuge zu sehen."
+    "matrixScrollHint": "Scrollen Sie die Tabelle seitwärts, um alle Werkzeuge zu sehen.",
+    "arenas": {
+      "agentic": {
+        "label": "KI-Coding-Agenten",
+        "blurb": "Editoren, Terminal-Agenten und gehostete Engineering-Agenten. Vergleichen Sie, was mit der Arbeit passiert, bevor der Code geschrieben und nachdem er gemergt wurde.",
+        "categories": [
+          {
+            "id": "ownership",
+            "title": "Eigentum & Deployment",
+            "blurb": "Wo die Plattform läuft und wer sie kontrolliert, bestimmt Kosten, Datenresidenz und Lock-in.",
+            "rows": [
+              {
+                "feature": "Preismodell",
+                "note": "Tarife ändern sich; aktuelle Anbieterpreise prüfen",
+                "values": {
+                  "builderforce": "Kostenlos + kostenpflichtige Workspace-Tarife",
+                  "copilot": "Siehe Anbieterpreise",
+                  "cursor": "Siehe Anbieterpreise",
+                  "claudeCode": "Nutzungsbasiert",
+                  "devin": "Siehe Anbieterpreise",
+                  "openhands": "Open Source + gehostete Optionen",
+                  "aider": "Open Source; Modellnutzung variiert",
+                  "continueDev": "Open Source + kostenpflichtige Optionen"
+                }
+              },
+              {
+                "feature": "Selbst gehostet / Open Source",
+                "note": "MIT, vollständig selbst gehostet",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌ MS-Cloud",
+                  "cursor": "❌ Anbieter-Cloud",
+                  "claudeCode": "❌ Anthropic-Cloud",
+                  "devin": "❌ Nur Cloud",
+                  "openhands": "✅",
+                  "aider": "✅",
+                  "continueDev": "✅"
+                }
+              },
+              {
+                "feature": "Air-gapped / private Bereitstellung",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "✅",
+                  "aider": "✅",
+                  "continueDev": "✅"
+                }
+              },
+              {
+                "feature": "RBAC + Audit-Trails",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "⚠️ Einfach",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "model-flexibility",
+            "title": "Modell- & Tooling-Flexibilität",
+            "blurb": "Die Freiheit, jedes Modell zu wählen, offline zu arbeiten und sich in das offene MCP-Ökosystem zu integrieren.",
+            "rows": [
+              {
+                "feature": "Beliebiger Modellanbieter",
+                "note": "Über 30 Anbieter",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌ GPT/Claude",
+                  "cursor": "⚠️ Eingeschränkt",
+                  "claudeCode": "❌ Nur Anthropic",
+                  "devin": "❌ Proprietär",
+                  "openhands": "✅",
+                  "aider": "✅",
+                  "continueDev": "✅"
+                }
+              },
+              {
+                "feature": "Lokale / Offline-Modelle (Ollama)",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "⚠️",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "✅",
+                  "aider": "✅",
+                  "continueDev": "✅"
+                }
+              },
+              {
+                "feature": "IDE-unabhängig",
+                "note": "Beliebiger Kanal / CLI",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌ VS Code",
+                  "cursor": "❌ VS Code-Fork",
+                  "claudeCode": "⚠️ Terminal",
+                  "devin": "✅ Web-UI",
+                  "openhands": "✅ Web/CLI",
+                  "aider": "✅ CLI",
+                  "continueDev": "❌ Erweiterung"
+                }
+              },
+              {
+                "feature": "MCP — nutzen",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "✅ Nativ",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "✅ Nativ"
+                }
+              },
+              {
+                "feature": "MCP — als Server bereitstellen",
+                "note": "/mcp-Endpunkt",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "self-improving",
+            "title": "Selbstverbessernde Modelle & Nachweis der Fertigstellung",
+            "blurb": "Modelle, die aus Ihrer Arbeit lernen, sich nach Ergebnis selbst routen und beweisen, dass „Fertig“ wirklich fertig ist — Fähigkeiten, die eingefrorenen Einzelagenten-Tools strukturell fehlen.",
+            "rows": [
+              {
+                "feature": "Trainiert Ihr eigenes Modell mit Ihrer Arbeit",
+                "note": "Frontier-Modell-Lehrer-Destillation",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Selbstaktualisierendes Modell pro Projekt",
+                "note": "Evermind, läuft auf dem Gerät",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Erlerntes, ergebnisbasiertes Modell-Routing",
+                "note": "bewertet Läufe, ordnet Modelle neu",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Validator-Agent — Nachweis der Fertigstellung",
+                "note": "öffnet GAP-Aufgaben bei Defiziten",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Rollengeschütztes Board mit Freigabeaudit",
+                "note": "Rolle + Diagnose pro Ticket",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "orchestration",
+            "title": "Multi-Agenten-Orchestrierung",
+            "blurb": "Koordination spezialisierter Agenten über strukturierte Workflows, nicht über Single-Pass-Prompts.",
+            "rows": [
+              {
+                "feature": "Multi-Agenten-Orchestrierung",
+                "note": "7 Rollen + Abhängigkeits-DAG",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Planungs-Workflow",
+                "note": "PRD → Arch → Tasks via /spec",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "⚠️ Einfacher Plan",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Bugfix-Workflow",
+                "note": "Analyzer → Creator → Reviewer",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "⚠️ Inline",
+                  "cursor": "⚠️ Inline",
+                  "claudeCode": "⚠️ Inline",
+                  "devin": "✅",
+                  "openhands": "⚠️ Single-Pass",
+                  "aider": "⚠️ Single-Pass",
+                  "continueDev": "⚠️ Inline"
+                }
+              },
+              {
+                "feature": "Refactoring-Workflow",
+                "note": "Reviewer → Refactor → Tests",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "⚠️ Single-Pass",
+                  "claudeCode": "⚠️ Single-Pass",
+                  "devin": "⚠️ Single-Pass",
+                  "openhands": "⚠️ Single-Pass",
+                  "aider": "⚠️ Single-Pass",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Adversarieller Review-Durchlauf",
+                "note": "Integrierter Workflow",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Benutzerdefinierte Agenten-Personas / -Rollen",
+                "note": "YAML in .builderforce/personas/",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "governance",
+            "title": "Governance & Zuverlässigkeit",
+            "blurb": "Freigabe-Gates, Wiederherstellung und Automatisierung, die Agenten sicher im Produktivbetrieb machen.",
+            "rows": [
+              {
+                "feature": "Human-in-the-Loop-Freigabe-Gates",
+                "note": "Aussetzen + Freigeben über Portal",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "⚠️ Einfach",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Selbstheilung / Fehlerwiederherstellung",
+                "note": "Automatische Erkennung + erneute Ausführung",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "⚠️ Nur Wiederholung",
+                  "openhands": "⚠️ Nur Wiederholung",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Geplante Automatisierung (cron)",
+                "note": "Builderforce-synchronisiert",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "CI/CD-Pipeline-Integration",
+                "note": "CLI- + Webhook-Trigger",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "⚠️ PR-Vorschlag",
+                  "cursor": "❌",
+                  "claudeCode": "⚠️ Nur CLI",
+                  "devin": "⚠️ API",
+                  "openhands": "⚠️ API",
+                  "aider": "⚠️ CLI",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Semantische Antwortbewertung",
+                "note": "Treue / Relevanz / Halluzination",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Überwachung von Qualitätsdrift",
+                "note": "Regressionswarnungen pro Modell",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "codebase-context",
+            "title": "Codebasis-Verständnis & Bearbeitung",
+            "blurb": "Wie tief das Tool Ihr Repository liest und wie sauber es Änderungen zur Prüfung bereitstellt.",
+            "rows": [
+              {
+                "feature": "Semantische Suche in der Codebasis",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "⚠️",
+                  "cursor": "✅",
+                  "claudeCode": "⚠️ Einfaches RAG",
+                  "devin": "✅",
+                  "openhands": "⚠️ Einfach",
+                  "aider": "⚠️ Git-fähig",
+                  "continueDev": "✅"
+                }
+              },
+              {
+                "feature": "Hybrides Retrieval (dicht + BM25 + Rerank)",
+                "note": "RRF-Fusion + MMR-Diversität",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "⚠️ Nur Vektor",
+                  "claudeCode": "⚠️ Nur Vektor",
+                  "devin": "⚠️ Nur Vektor",
+                  "openhands": "⚠️ Nur Vektor",
+                  "aider": "⚠️ Git-fähig",
+                  "continueDev": "⚠️ Nur Vektor"
+                }
+              },
+              {
+                "feature": "Tiefe AST- + Git-Historie-Analyse",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "⚠️ Einfaches RAG",
+                  "claudeCode": "⚠️ Einfaches RAG",
+                  "devin": "⚠️ Einfaches RAG",
+                  "openhands": "⚠️ Einfaches RAG",
+                  "aider": "⚠️ Git-fähig",
+                  "continueDev": "⚠️ Einfaches RAG"
+                }
+              },
+              {
+                "feature": "Bereitgestellter Diff / Annehmen-Ablehnen",
+                "note": "/diff, /accept, /reject",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "✅ Composer",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "✅ Git-Diff",
+                  "continueDev": "✅ ⌘K-Diff"
+                }
+              },
+              {
+                "feature": "Mitgelieferte Skills",
+                "note": "53 integriert + Marktplatz",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "memory-fleet",
+            "title": "Speicher & Flotte",
+            "blurb": "Persistentes Wissen über Sitzungen hinweg und Koordination über Maschinen hinweg.",
+            "rows": [
+              {
+                "feature": "Persistentes Projektwissen",
+                "note": ".builderforce/",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "⚠️ Innerhalb der Sitzung",
+                  "claudeCode": "⚠️ Innerhalb der Sitzung",
+                  "devin": "⚠️ Innerhalb der Sitzung",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Sitzungsübergaben",
+                "note": "/handoff + automatisches Laden",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Workflow-Persistenz über Neustarts hinweg",
+                "note": "YAML-Checkpoint + Fortsetzung",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "⚠️ Sitzungsbasiert",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Wissensschleife nach Aufgabenabschluss",
+                "note": ".builderforce/memory/ automatisch aktualisiert",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Verteilte Agent-zu-Agent-Delegation",
+                "note": "remote:<id>-Dispatch",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Flotten- / maschinenübergreifende Koordination",
+                "note": "Builderforce-Flottenregister",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "reach",
+            "title": "Kanäle & Reichweite",
+            "blurb": "Ihr Team dort abholen, wo es bereits arbeitet, auf jedem Gerät.",
+            "rows": [
+              {
+                "feature": "Funktioniert in WhatsApp / Telegram / Slack",
+                "note": "Über 15 Kanäle",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Sprach- + Talk-Modus",
+                "note": "macOS / iOS / Android",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "Mobile Begleit-Apps",
+                "note": "iOS + Android",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "Ist Builderforce.ai eine Alternative zu GitHub Copilot?",
+            "answer": "Ja, aber sie lösen unterschiedliche Aufgabenbereiche. GitHub Copilot ist eine Single-Agent-Autovervollständigung innerhalb von VS Code, gebunden an GPT- und Claude-Modelle. Builderforce.ai ist eine selbst gehostete, MIT-lizenzierte Multi-Agenten-Plattform, die sieben spezialisierte Rollen durch vollständige Planungs-, Bugfix-, Refactoring- und adversarielle Review-Workflows orchestriert, auf über 30 Modellanbietern einschließlich lokalem Ollama läuft und Freigaben, Audit und persistenten Speicher hinzufügt. Teams, die der Zeilenvervollständigung entwachsen sind, setzen Builderforce.ai für End-to-End-Delivery ein."
+          },
+          {
+            "question": "Wie schneidet Builderforce.ai im Vergleich zu Cursor und Windsurf ab?",
+            "answer": "Cursor und Windsurf sind exzellente KI-native Editoren, aber sie sind nach wie vor Single-Agent und an die IDE gebunden. Builderforce.ai ist IDE-unabhängig und funktioniert von jedem Kanal oder CLI aus, koordiniert mehrere Agenten an einer Aufgabe über einen Abhängigkeits-DAG und ist vollständig selbst gehostet mit Modellfreiheit über mehr als 30 Anbieter. Sie können Cursor oder Windsurf sogar über MCP mit Builderforce.ai verbinden und es als Ihre Orchestrierungs- und Speicherebene nutzen."
+          },
+          {
+            "question": "Builderforce.ai im Vergleich zu Claude Code und Aider — wo liegt der Unterschied?",
+            "answer": "Claude Code ist an Anthropic-Modelle gebunden, und Aider betreibt einen einzelnen CLI-Agenten. Builderforce.ai betreibt ein Team spezialisierter Agenten mit einem integrierten adversariellen Review-Durchlauf, Human-Freigabe-Gates, einem Audit-Trail und persistentem Projektspeicher in .builderforce/. Es ist modellunabhängig über mehr als 30 Anbieter und fügt Flotten-Mesh, remote:<id>-Dispatch und mehr als 15 Chat-Kanäle hinzu, sodass es von einem einzelnen Entwickler bis zu einer orchestrierten Flotte skaliert."
+          },
+          {
+            "question": "Builderforce.ai im Vergleich zu Devin und OpenHands — welches sollte ich für autonomes Engineering wählen?",
+            "answer": "Devin ist ein proprietärer, gehosteter autonomer Agent, und OpenHands ist eine offene Single-Agent-Laufzeitumgebung. Builderforce.ai unterscheidet sich dadurch, dass es selbst gehostet und MIT-lizenziert ist, mit echter Multi-Agenten-Orchestrierung und integrierter Governance: Freigabe-Gates, Audit-Trails und selbstheilende Wiederherstellung, die Fehler automatisch erkennt und betroffene Schritte erneut ausführt. Sie behalten Ihren Code auf Ihrer eigenen Infrastruktur und wählen jedes beliebige Modell, einschließlich lokaler."
+          },
+          {
+            "question": "Kann Builderforce.ai vollständig offline oder air-gapped laufen?",
+            "answer": "Ja. Builderforce.ai ist selbst gehostet und unterstützt air-gapped Deployment. Mit lokalen Modellen über Ollama können Sie die gesamte Agenten-Belegschaft betreiben, ohne dass Code oder Prompts Ihr Netzwerk verlassen — etwas, das die meisten geschlossenen Konkurrenten nicht bieten können. Der Projektspeicher bleibt lokal in .builderforce/ erhalten, sodass der Kontext über Sitzungen hinweg ohne Cloud-Abhängigkeit bestehen bleibt."
+          },
+          {
+            "question": "Bindet mich Builderforce.ai an ein Modell oder eine IDE?",
+            "answer": "Nein. Builderforce.ai ist modellunabhängig über mehr als 30 Anbieter, einschließlich Anthropic, OpenAI, Bedrock und lokalem Ollama, und es ist IDE-unabhängig, erreichbar von jedem CLI oder Chat-Kanal aus. Es gibt keinen Editor-Fork zu übernehmen und keine Bindung an das Modell eines einzigen Anbieters, was ein zentraler Unterschied zu Copilot, Cursor, Windsurf und Claude Code ist."
+          }
+        ]
+      },
+      "delivery": {
+        "label": "Delivery & Arbeitsmanagement",
+        "blurb": "Tracker und Work-Management-Suiten organisieren die Arbeit. Vergleichen Sie, wer sie plant, wer sie ausführt und welche Nachweise zurückbleiben.",
+        "categories": [
+          {
+            "id": "delivery-planning",
+            "title": "Planung & Portfolio",
+            "blurb": "Backlogs, Ziele und die Zusammenfassung, die eine Führungskraft tatsächlich liest.",
+            "rows": [
+              {
+                "feature": "Backlog, Sprints und Boards",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "✅",
+                  "linear": "✅",
+                  "asana": "✅",
+                  "monday": "✅",
+                  "azureBoards": "✅"
+                }
+              },
+              {
+                "feature": "OKRs mit Delivery-Elementen verknüpft",
+                "note": "Objectives und Key Results als eigenständige Datensätze",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ Marketplace-App",
+                  "linear": "⚠️ Initiativen",
+                  "asana": "✅ Ziele",
+                  "monday": "⚠️ Zusatzmodul",
+                  "azureBoards": "❌"
+                }
+              },
+              {
+                "feature": "Portfolio-Rollup über Projekte hinweg",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ Höherer Tarif",
+                  "linear": "⚠️ Eingeschränkt",
+                  "asana": "⚠️ Portfolios",
+                  "monday": "⚠️ Höherer Tarif",
+                  "azureBoards": "⚠️ Eingeschränkt"
+                }
+              },
+              {
+                "feature": "Health-Bewertung aus Ausführungsnachweisen berechnet",
+                "note": "eine Bewertungsregel statt eines manuell gesetzten Status",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ Manueller Status",
+                  "linear": "⚠️ Manueller Status",
+                  "asana": "⚠️ Manueller Status",
+                  "monday": "⚠️ Manueller Status",
+                  "azureBoards": "⚠️ Manueller Status"
+                }
+              }
+            ]
+          },
+          {
+            "id": "delivery-execution",
+            "title": "Wer die Arbeit erledigt",
+            "blurb": "Ob der Tracker die Arbeit nur erfasst oder sie auch ausführt.",
+            "rows": [
+              {
+                "feature": "KI-Agenten wie Teammitglieder zuweisbar",
+                "note": "Menschen und Agenten auf einem Board",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "❌",
+                  "linear": "❌",
+                  "asana": "❌",
+                  "monday": "❌",
+                  "azureBoards": "❌"
+                }
+              },
+              {
+                "feature": "Ticket durchgängig von einem Agenten-Lauf erledigt",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "❌",
+                  "linear": "❌",
+                  "asana": "❌",
+                  "monday": "❌",
+                  "azureBoards": "❌"
+                }
+              },
+              {
+                "feature": "Autonome Lane startet beim Ablegen einen Lauf",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ Automatisierungsregeln",
+                  "linear": "⚠️ Automatisierungsregeln",
+                  "asana": "⚠️ Automatisierungsregeln",
+                  "monday": "⚠️ Automatisierungsregeln",
+                  "azureBoards": "⚠️ Automatisierungsregeln"
+                }
+              },
+              {
+                "feature": "Rollenbasierter Lebenszyklus mit protokollierter Freigabe",
+                "note": "Rolle je Ticket plus Freigabeeintrag",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ Workflow-Regeln",
+                  "linear": "⚠️ Grundlegend",
+                  "asana": "⚠️ Freigaben",
+                  "monday": "⚠️ Freigaben",
+                  "azureBoards": "⚠️ Workflow-Regeln"
+                }
+              }
+            ]
+          },
+          {
+            "id": "delivery-evidence",
+            "title": "Zeremonien & Nachweise",
+            "blurb": "Was das Team im Produkt selbst durchführt und was danach prüfbar bleibt.",
+            "rows": [
+              {
+                "feature": "Standups, Retros und Schätzung im Produkt",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ Marketplace-Apps",
+                  "linear": "❌",
+                  "asana": "❌",
+                  "monday": "⚠️ Marketplace-Apps",
+                  "azureBoards": "⚠️ Erweiterungen"
+                }
+              },
+              {
+                "feature": "Menschen und Agenten in einem Audit-Log",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ Historie je Element",
+                  "linear": "⚠️ Historie je Element",
+                  "asana": "⚠️ Historie je Element",
+                  "monday": "⚠️ Historie je Element",
+                  "azureBoards": "⚠️ Historie je Element"
+                }
+              },
+              {
+                "feature": "Ausführungsprotokoll am Element angehängt",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "❌",
+                  "linear": "❌",
+                  "asana": "❌",
+                  "monday": "❌",
+                  "azureBoards": "❌"
+                }
+              },
+              {
+                "feature": "Zwei-Wege-Sync mit vorhandenen Trackern",
+                "note": "Board-Sync-Konnektoren",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ Über Apps",
+                  "linear": "⚠️ Über Apps",
+                  "asana": "⚠️ Über Apps",
+                  "monday": "⚠️ Über Apps",
+                  "azureBoards": "⚠️ Über Apps"
+                }
+              }
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "Kann Builderforce.ai Jira oder Linear ersetzen?",
+            "answer": "Es kann Delivery durchgängig abbilden: Backlog, Sprints, Ziele, Zeremonien und einen Portfolio-Rollup, mit Agenten, die sich wie Menschen zuweisen lassen, und jedem Lauf dokumentiert am bearbeiteten Element. Teams, die ihren bestehenden Tracker behalten, binden ihn stattdessen an – die Board-Sync-Konnektoren halten beide Seiten aktuell. Das ist damit meist eine Migrationsentscheidung und keine Funktionslücke."
+          },
+          {
+            "question": "Was bietet das, was ein Tracker nicht bietet?",
+            "answer": "Die Ausführung. Ein Tracker hält fest, dass ein Ticket bewegt wurde; hier kann das Ticket von einem Agenten-Lauf übernommen werden, von der freigebenden Rolle abgesichert, mit Protokoll, Kosten und Diagnosen daran. Die Delivery-Health-Bewertung wird dann aus diesen Nachweisen berechnet statt manuell gesetzt."
+          }
+        ]
+      },
+      "canvas": {
+        "label": "Kreativ-Canvas & Dokumente",
+        "blurb": "Design-, Whiteboard- und Dokumentwerkzeuge formen das Artefakt. Vergleichen Sie, was mit diesem Artefakt geschieht, sobald daraus Arbeit werden muss.",
+        "categories": [
+          {
+            "id": "canvas-surface",
+            "title": "Die Arbeitsfläche",
+            "blurb": "Was Sie auf die Arbeitsfläche legen können und wer das darf.",
+            "rows": [
+              {
+                "feature": "Unendliche Arbeitsfläche mit typisierten Objekten",
+                "note": "spezifikationsgetriebene Objekte statt freier Formen",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ Freie Frames",
+                  "canva": "⚠️ Seitenvorlagen",
+                  "miro": "⚠️ Freie Formen",
+                  "notion": "❌ Dokumentzentriert"
+                }
+              },
+              {
+                "feature": "Dokumente, Folien, Tabellen und Boards auf einer Fläche",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ Design + Folien",
+                  "canva": "✅",
+                  "miro": "⚠️ Board-zentriert",
+                  "notion": "⚠️ Dokumente + Datenbanken"
+                }
+              },
+              {
+                "feature": "Agenten erstellen und bearbeiten Objekte an Ihrer Seite",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ Assistiertes Bearbeiten",
+                  "canva": "⚠️ Assistierte Generierung",
+                  "miro": "⚠️ Assistierte Diagramme",
+                  "notion": "⚠️ Assistiertes Schreiben"
+                }
+              },
+              {
+                "feature": "Export als PDF und Druck-Layout",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "✅",
+                  "canva": "✅",
+                  "miro": "✅",
+                  "notion": "✅"
+                }
+              }
+            ]
+          },
+          {
+            "id": "canvas-connected",
+            "title": "Mit der Lieferung verbunden",
+            "blurb": "Ob eine Idee auf der Arbeitsfläche zu nachverfolgter, gesteuerter Arbeit wird, ohne sie zu verlassen.",
+            "rows": [
+              {
+                "feature": "Ein Objekt der Arbeitsfläche wird zum Delivery-Ticket",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ Über eine Integration",
+                  "canva": "❌",
+                  "miro": "⚠️ Über eine Integration",
+                  "notion": "⚠️ Über eine Integration"
+                }
+              },
+              {
+                "feature": "Summen aus den eigenen Zeilen abgeleitet",
+                "note": "nie doppelt gespeichert",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "❌",
+                  "canva": "❌",
+                  "miro": "❌",
+                  "notion": "⚠️ Formeln"
+                }
+              },
+              {
+                "feature": "Eine Kreation als verkäufliches Angebot veröffentlichen",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ Community-Assets",
+                  "canva": "⚠️ Vorlagen-Marktplatz",
+                  "miro": "⚠️ Vorlagengalerie",
+                  "notion": "⚠️ Vorlagengalerie"
+                }
+              },
+              {
+                "feature": "Führt aus demselben Projekt eine lauffähige App aus",
+                "note": "eingebettete Apps, die aus der Kreation ausgeliefert werden",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ Prototypen",
+                  "canva": "❌",
+                  "miro": "❌",
+                  "notion": "⚠️ Veröffentlichte Seiten"
+                }
+              }
+            ]
+          },
+          {
+            "id": "canvas-control",
+            "title": "Kontrolle & Reichweite",
+            "blurb": "Wo die Arbeit gespeichert ist und wer sie öffnen darf.",
+            "rows": [
+              {
+                "feature": "Self-Hosting / private Bereitstellung",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "❌",
+                  "canva": "❌",
+                  "miro": "❌",
+                  "notion": "❌"
+                }
+              },
+              {
+                "feature": "Rollenbasierter Zugriff mit Freigabe-Gates",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ Team-Berechtigungen",
+                  "canva": "⚠️ Team-Berechtigungen",
+                  "miro": "⚠️ Team-Berechtigungen",
+                  "notion": "⚠️ Team-Berechtigungen"
+                }
+              },
+              {
+                "feature": "Gäste können vor der Registrierung arbeiten",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ Nur-Lese-Links",
+                  "canva": "⚠️ Bearbeiten per Link",
+                  "miro": "⚠️ Gäste-Boards",
+                  "notion": "⚠️ Nur-Lese-Links"
+                }
+              }
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "Wie unterscheidet sich das von Figma, Miro oder Notion?",
+            "answer": "Diese Werkzeuge formen das Artefakt; die Arbeitsfläche verbindet es. Objekte sind typisiert und spezifikationsgetrieben: Ein Dokument, Board oder Tabellenblatt kann im selben Projekt zum Delivery-Ticket, zum veröffentlichten Angebot oder zur laufenden App werden, und Summen entstehen aus den eigenen Zeilen statt doppelt gespeichert zu werden. Für reine visuelle Gestaltung behalten Sie Ihr Designwerkzeug und binden es an."
+          },
+          {
+            "question": "Muss ich meine Designarbeit nach Builderforce.ai verlagern?",
+            "answer": "Nein. Die Arbeitsfläche ist der Ort, an dem aus einer Idee verbundene Arbeit wird, kein Ersatz für ein Zeichenwerkzeug. Importieren Sie aus den Boards und Laufwerken, die Sie ohnehin nutzen, lassen Sie spezialisiertes Design dort, wo es ist, und holen Sie das Artefakt herein, wenn es ein Ticket, eine Freigabe, einen Käufer oder eine Laufzeitumgebung braucht."
+          }
+        ]
+      },
+      "automation": {
+        "label": "Workflow- & Agenten-Automatisierung",
+        "blurb": "Automatisierungs-Builder und Agenten-Frameworks verketten Schritte. Vergleichen Sie, was passiert, wenn ein Schritt Urteilsvermögen, eine Prüfung oder einen Menschen erfordert.",
+        "categories": [
+          {
+            "id": "automation-authoring",
+            "title": "Den Workflow bauen",
+            "blurb": "Wie ein Flow erstellt wird und wie viel davon Reasoning statt Verdrahtung sein kann.",
+            "rows": [
+              {
+                "feature": "Visueller Workflow-Builder",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "✅",
+                  "n8n": "✅",
+                  "make": "✅",
+                  "copilotStudio": "✅",
+                  "langgraph": "❌ Code-zentriert"
+                }
+              },
+              {
+                "feature": "LLM-Reasoning als eigenständiger Knoten",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "⚠️ KI-Schritte",
+                  "n8n": "✅",
+                  "make": "⚠️ KI-Module",
+                  "copilotStudio": "✅",
+                  "langgraph": "✅"
+                }
+              },
+              {
+                "feature": "Spezialisierte Agentenrollen mit Abhängigkeitsgraph",
+                "note": "Rollen, nicht nur Schritte",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "❌",
+                  "n8n": "⚠️ Sub-Workflows",
+                  "make": "❌",
+                  "copilotStudio": "⚠️ Topics",
+                  "langgraph": "✅"
+                }
+              },
+              {
+                "feature": "MCP – nutzen und als Server bereitstellen",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "⚠️ Nur nutzen",
+                  "n8n": "⚠️ Nur nutzen",
+                  "make": "❌",
+                  "copilotStudio": "⚠️ Nur nutzen",
+                  "langgraph": "⚠️ Nur nutzen"
+                }
+              }
+            ]
+          },
+          {
+            "id": "automation-runtime",
+            "title": "Sicher ausführen",
+            "blurb": "Was zwischen einem automatisierten Schritt und einer nicht umkehrbaren Folge steht.",
+            "rows": [
+              {
+                "feature": "Freigabe-Gate vor einer folgenreichen Aktion",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "⚠️ Manueller Schritt",
+                  "n8n": "⚠️ Warte-Knoten",
+                  "make": "⚠️ Manueller Schritt",
+                  "copilotStudio": "⚠️ Grundlegend",
+                  "langgraph": "⚠️ Eigener Code"
+                }
+              },
+              {
+                "feature": "Policy-Packs, die bei der Ausführung greifen",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "❌",
+                  "n8n": "❌",
+                  "make": "❌",
+                  "copilotStudio": "⚠️ Mandanten-Richtlinie",
+                  "langgraph": "❌"
+                }
+              },
+              {
+                "feature": "Ausführungsprotokoll, Kosten und Retries beobachtbar",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "⚠️ Aufgabenverlauf",
+                  "n8n": "✅ Ausführungen",
+                  "make": "⚠️ Ausführungsverlauf",
+                  "copilotStudio": "⚠️ Analysen",
+                  "langgraph": "⚠️ Tracing-Zusatzmodul"
+                }
+              },
+              {
+                "feature": "Ein Circuit Breaker stoppt eine fehlschlagende Schleife",
+                "note": "wiederholte Fehler begrenzen die Lane",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "⚠️ Automatische Pause",
+                  "n8n": "⚠️ Fehler-Workflow",
+                  "make": "⚠️ Automatische Deaktivierung",
+                  "copilotStudio": "❌",
+                  "langgraph": "⚠️ Eigener Code"
+                }
+              }
+            ]
+          },
+          {
+            "id": "automation-scope",
+            "title": "Über die Automatisierung hinaus",
+            "blurb": "Was dasselbe Produkt tut, nachdem der Flow gelaufen ist.",
+            "rows": [
+              {
+                "feature": "Dasselbe Produkt plant und verfolgt die Arbeit",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "❌",
+                  "n8n": "❌",
+                  "make": "❌",
+                  "copilotStudio": "❌",
+                  "langgraph": "❌"
+                }
+              },
+              {
+                "feature": "Schreibt und reviewt Code in einem Repository",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "❌",
+                  "n8n": "⚠️ Code-Knoten",
+                  "make": "❌",
+                  "copilotStudio": "❌",
+                  "langgraph": "⚠️ Selbst zu bauen"
+                }
+              },
+              {
+                "feature": "Self-Hosting / offene Runtime",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "❌",
+                  "n8n": "✅",
+                  "make": "❌",
+                  "copilotStudio": "❌",
+                  "langgraph": "✅"
+                }
+              }
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "Ist das eine Alternative zu Zapier, n8n oder einem Agenten-Framework?",
+            "answer": "Es deckt dieselbe Verdrahtung in einem visuellen Builder ab, mit Modell-Reasoning als eigenständigem Knoten und spezialisierten Agentenrollen in einem Abhängigkeitsgraphen statt in einer einzelnen Kette. Der Unterschied liegt darin, was einen Lauf umgibt: Freigabe-Gates, bei der Ausführung durchgesetzte Policy-Packs, ein Circuit Breaker bei wiederholten Fehlern und ein Protokoll mit Kosten und Retries am Arbeitselement."
+          },
+          {
+            "question": "Können Agenten meine vorhandenen Werkzeuge aufrufen?",
+            "answer": "Ja – über MCP, das die Plattform sowohl nutzt als auch als Server bereitstellt, sowie über den Konnektorkatalog für Tracker, Laufwerke, Postfächer, Repositories und Werbe- oder Analysekonten. Eine bestehende Automatisierungsplattform kann bleiben und als Schritt aufgerufen werden; nichts zwingt dazu, funktionierende Flows neu zu bauen."
+          }
+        ]
+      },
+      "gateway": {
+        "label": "KI-Gateway & Modell-Routing",
+        "blurb": "Gateways stellen eine API vor viele Modelle. Vergleichen Sie Routing, Zuordnung und was geschieht, nachdem die Tokens verbraucht sind.",
+        "categories": [
+          {
+            "id": "gateway-access",
+            "title": "Eine API, viele Modelle",
+            "blurb": "Welche Modelle Sie erreichen und über wessen Zugangsdaten sie bezahlt werden.",
+            "rows": [
+              {
+                "feature": "Eine API über alle Modellanbieter hinweg",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "✅",
+                  "litellm": "✅",
+                  "portkey": "✅",
+                  "bedrock": "⚠️ Eigener Katalog",
+                  "helicone": "✅"
+                }
+              },
+              {
+                "feature": "Eigene Anbieter-Schlüssel nutzbar",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "⚠️ Einige Anbieter",
+                  "litellm": "✅",
+                  "portkey": "✅",
+                  "bedrock": "❌ Cloud-Konto",
+                  "helicone": "✅"
+                }
+              },
+              {
+                "feature": "Lokale / Offline-Modelle",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "❌",
+                  "litellm": "✅",
+                  "portkey": "⚠️ Self-Hosting",
+                  "bedrock": "❌",
+                  "helicone": "⚠️ Beliebigen Endpunkt proxen"
+                }
+              },
+              {
+                "feature": "Abo-Anmeldung als Zugangsdaten",
+                "note": "OAuth, nicht nur ein API-Schlüssel",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "❌",
+                  "litellm": "❌",
+                  "portkey": "❌",
+                  "bedrock": "❌",
+                  "helicone": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "gateway-routing",
+            "title": "Routing & Kosten",
+            "blurb": "Wie eine Anfrage ein Modell findet und wie die Kosten zugeordnet werden.",
+            "rows": [
+              {
+                "feature": "Fallback, wenn ein Anbieter ausfällt",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "✅",
+                  "litellm": "✅",
+                  "portkey": "✅",
+                  "bedrock": "⚠️ Eingeschränkt",
+                  "helicone": "⚠️ Eingeschränkt"
+                }
+              },
+              {
+                "feature": "Routing nach gemessenen Ergebnissen neu geordnet",
+                "note": "Lauf-Scores fließen in die nächste Auswahl ein",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "⚠️ Preis / Latenz",
+                  "litellm": "⚠️ Latenzbasiert",
+                  "portkey": "⚠️ Bedingte Regeln",
+                  "bedrock": "❌",
+                  "helicone": "❌"
+                }
+              },
+              {
+                "feature": "Prompt-Caching am Gateway angewendet",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "⚠️ Anbieterabhängig",
+                  "litellm": "✅",
+                  "portkey": "✅",
+                  "bedrock": "⚠️ Anbieterabhängig",
+                  "helicone": "✅"
+                }
+              },
+              {
+                "feature": "Messung und Abrechnung je Mandant",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "⚠️ Guthaben je Schlüssel",
+                  "litellm": "✅ Virtuelle Schlüssel",
+                  "portkey": "✅",
+                  "bedrock": "⚠️ Cloud-Abrechnung",
+                  "helicone": "⚠️ Nur Analysen"
+                }
+              }
+            ]
+          },
+          {
+            "id": "gateway-beyond",
+            "title": "Wofür die Tokens verbraucht wurden",
+            "blurb": "Ob sich Ausgaben auf die Arbeit zurückführen lassen, die sie verursacht hat.",
+            "rows": [
+              {
+                "feature": "Verbrauch einem Projekt und Ticket zugeordnet",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "⚠️ Metadaten-Tags",
+                  "litellm": "⚠️ Metadaten-Tags",
+                  "portkey": "⚠️ Metadaten-Tags",
+                  "bedrock": "❌",
+                  "helicone": "⚠️ Eigene Eigenschaften"
+                }
+              },
+              {
+                "feature": "Die Agenten, die die Tokens verbrauchen, sind enthalten",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "❌",
+                  "litellm": "❌",
+                  "portkey": "❌",
+                  "bedrock": "⚠️ Selbst zu bauen",
+                  "helicone": "❌"
+                }
+              },
+              {
+                "feature": "Self-Hosting / Open Source",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "❌",
+                  "litellm": "✅",
+                  "portkey": "✅",
+                  "bedrock": "❌",
+                  "helicone": "✅"
+                }
+              }
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "Brauche ich weiterhin ein KI-Gateway wie OpenRouter oder LiteLLM?",
+            "answer": "Eines ist enthalten: viele Anbieter hinter einer API, eigene Schlüssel oder Abo-Anmeldung, lokale Modelle, Fallback, Prompt-Caching und Messung je Mandant. Der Unterschied ist die Zuordnung – der Verbrauch hängt an dem Projekt und dem Ticket, die ihn ausgelöst haben, weil die Agenten, die die Tokens verbrauchen, Teil der Plattform sind. Ein vorhandenes Gateway kann dahinter bestehen bleiben."
+          },
+          {
+            "question": "Wie wird das Routing entschieden?",
+            "answer": "Nach Ergebnis, nicht nur nach Preis und Latenz. Läufe werden bewertet, und diese Bewertungen ordnen neu, welches Modell für diese Art Arbeit als Nächstes gewählt wird – Routing verbessert sich also mit der Nutzung, statt eine statische Präferenzliste zu bleiben. Die Modellwahl bleibt jederzeit explizit möglich, je Workspace oder je Lauf."
+          }
+        ]
+      },
+      "talent": {
+        "label": "Talent- & Agenten-Marktplatz",
+        "blurb": "Marktplätze bringen Arbeit und Menschen zusammen. Vergleichen Sie, wie Arbeit gefunden, ausgeführt und bezahlt wird, wenn ein Teil des Teams ein Agent ist.",
+        "categories": [
+          {
+            "id": "talent-sourcing",
+            "title": "Kapazität finden",
+            "blurb": "Wie ein Team zusammengestellt wird, wenn ein Teil davon nicht menschlich ist.",
+            "rows": [
+              {
+                "feature": "Eine Person für ein abgegrenztes Engagement beauftragen",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "✅",
+                  "fiverr": "✅",
+                  "toptal": "✅",
+                  "agencies": "✅"
+                }
+              },
+              {
+                "feature": "Einen KI-Agenten auf dieselbe Weise beauftragen",
+                "note": "Agenten sind Datensätze der Belegschaft",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "❌",
+                  "fiverr": "❌",
+                  "toptal": "❌",
+                  "agencies": "❌"
+                }
+              },
+              {
+                "feature": "Skills und Agenten in einem Katalog",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "⚠️ Freelancer-Profile",
+                  "fiverr": "⚠️ Gig-Angebote",
+                  "toptal": "⚠️ Geprüfte Profile",
+                  "agencies": "❌"
+                }
+              },
+              {
+                "feature": "Drittanbieter liefern Konnektoren und Skills",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "❌",
+                  "fiverr": "❌",
+                  "toptal": "❌",
+                  "agencies": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "talent-delivery",
+            "title": "Die Arbeit erledigen",
+            "blurb": "Wo das Engagement nach Vertragsabschluss tatsächlich läuft.",
+            "rows": [
+              {
+                "feature": "Zum Engagement gehört ein Delivery-Board",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "⚠️ Einfacher Tracker",
+                  "fiverr": "❌",
+                  "toptal": "❌",
+                  "agencies": "⚠️ Das der Agentur"
+                }
+              },
+              {
+                "feature": "Arbeit wird im selben Produkt ausgeführt und geprüft",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "❌",
+                  "fiverr": "❌",
+                  "toptal": "❌",
+                  "agencies": "❌"
+                }
+              },
+              {
+                "feature": "Freigabe-Gates vor der Abnahme der Arbeit",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "⚠️ Meilensteine",
+                  "fiverr": "⚠️ Bestellprüfung",
+                  "toptal": "⚠️ Vertragsbedingungen",
+                  "agencies": "⚠️ Vertragsbedingungen"
+                }
+              }
+            ]
+          },
+          {
+            "id": "talent-commercial",
+            "title": "Kommerzielle Bedingungen",
+            "blurb": "Was verkauft wird und was die Plattform davon einbehält.",
+            "rows": [
+              {
+                "feature": "Provision auf Marktplatz-Verkäufe",
+                "note": "keine Plattformgebühr unterhalb der veröffentlichten Schwelle",
+                "values": {
+                  "builderforce": "✅ 0 % unterhalb der Schwelle",
+                  "upwork": "Siehe Anbieterpreise",
+                  "fiverr": "Siehe Anbieterpreise",
+                  "toptal": "Siehe Anbieterpreise",
+                  "agencies": "Verhandelbar"
+                }
+              },
+              {
+                "feature": "Eine Kreation verkaufen, nicht nur Stunden",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "⚠️ Projektkatalog",
+                  "fiverr": "✅ Gigs",
+                  "toptal": "❌",
+                  "agencies": "⚠️ Verhandelbar"
+                }
+              },
+              {
+                "feature": "Dieselbe Plattform auf eigener Infrastruktur betreiben",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "❌",
+                  "fiverr": "❌",
+                  "toptal": "❌",
+                  "agencies": "❌"
+                }
+              }
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "Wie unterscheidet sich der Marktplatz von Upwork oder Fiverr?",
+            "answer": "Sie können eine Person für ein abgegrenztes Engagement beauftragen – und einen KI-Agenten auf genau dieselbe Weise, denn Agenten sind Belegschaftsdatensätze auf demselben Board. Zum Engagement gehören ein Delivery-Board, Freigabe-Gates und Arbeit, die im selben Produkt ausgeführt und geprüft wird. Zudem lässt sich eine Kreation als solche verkaufen, nicht nur Stunden."
+          },
+          {
+            "question": "Was behält die Plattform ein?",
+            "answer": "Unterhalb der veröffentlichten Schwelle fällt auf Marktplatz-Verkäufe keine Plattformgebühr an, und dieselbe Plattform lässt sich auf eigener Infrastruktur betreiben. Publisher können außerdem Konnektoren, Skills und Agenten in den Katalog stellen – der Marktplatz verkauft damit fertige Kreationen und Fähigkeiten, nicht nur Verfügbarkeit."
+          }
+        ]
+      }
+    },
+    "arenaTabsLabel": "Vergleich auswählen"
   },
   "promptUseCases": {
     "tabLabel": "Ausgangspunkt wählen",

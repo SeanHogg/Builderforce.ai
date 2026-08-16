@@ -137,7 +137,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
-| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 41 |
+| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 42 |
 | 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 29 |
 Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
 
@@ -157,7 +157,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
-| 14 | 41 |
+| 14 | 42 |
 | 15 | 29 |
 ---
 
@@ -1665,6 +1665,8 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
 ### 🌐 Marketing / SEO / public surfaces
 
 - **Docs proxy** — verify post-deploy that next-on-pages *proxies* `/docs/*` (strip `/docs`) rather than 301-redirecting cross-origin; fall back to a Workers Route or bind `docs.builderforce.ai`. Marketing/public pages still center on `.page-inner` (decide per-page migration to left-aligned `PageContainer`). Per-route feature teasers still set `<title>`/`<meta>` from the CLIENT (convert to the server-wrapper pattern for indexable heads) — the `Disallow` half of this is CLOSED (→ DONE.md: `robots.txt` is now generated from the same registry as the sitemap). `/compile` not in `PUBLIC_SHELL_PREFIXES` (it is now a `noindex` generic teaser, which is the honest answer for an internal route, so this is a note rather than a defect). Per-article OG card text lost (generate per-article PNGs at build time). 23/25 blog posts have only the auto-cover. Feature copy in three unconnected lists (one `Feature`-shaped source). Marketing header dropdowns are CSS-only (no JS `aria-expanded`/touch toggle). Hero backdrop pivoted to a procedural solar-system fly-through (pacing/light-mode tuning remains). Stale `nav.tab.{finops,devfinops,allocation}` keys (remove in the insights tab-key cleanup).
+
+- **`/compare` has six arenas but leaf pages for only one.** `COMPARE_ARENAS` (frontend/src/lib/content.ts) now carries 6 markets and 30 vendor columns, and `arenaForCompetitor()` already resolves a leaf page to its arena — but `COMPETITOR_SEO` still has entries for the 7 AI-coding-agent vendors only, so `/compare/{slug}` exists for those and 404s for Jira, Figma, Zapier, OpenRouter, Upwork and the other 16. The plumbing is done; what is missing is CONTENT: each leaf needs a curated tagline, summary and verdict (`compare.competitors.<key>.*`) in all five catalogs, and 23 auto-generated ones would be exactly the thin-page bloat `SEO_INTEGRATIONS` is curated to avoid. **Blocked on an operator decision** — which of the 23 markets are worth an indexed "vs" page, since that is a positioning call and not an engineering one. Unblocks: long-tail "{vendor} alternative" capture beyond coding agents.
 
 - **Distribution: three channels still need a credential or a live environment** *(narrowed 2026-08-07 — the engineering half shipped, see [DONE.md](./DONE.md) and [distribution/README.md](./distribution/README.md))* — the remote MCP server, the Claude Code plugin, the GitHub Action, the generated Docker MCP payload and the CI publish jobs all exist. What is left is **not code**: (a) **Hugging Face** — `hf-export/Evermind` has its card and all four artifact formats ready, blocked on an HF account + write token; (b) **a reviewer test tenant** — a seeded tenant with realistic projects/tickets/agents plus a shareable credential, blocked on a live environment; it is a hard gate for Anthropic, Slack, Atlassian, AWS and Microsoft review; (c) **cloud marketplaces (AWS / Microsoft / Google)** — blocked on legal-entity + partner-program enrolment before a listing can be created at all. Also unset and therefore skipped at release: `VSCE_PAT`, `OVSX_PAT`, `ACTION_MIRROR_TOKEN`/`ACTION_MIRROR_REPO`. Unblocks: the ~10 remaining Tier-1/Tier-2 listings.
 

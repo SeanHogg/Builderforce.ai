@@ -9,7 +9,7 @@ import MarketingFaq, { type MarketingFaqItem } from '@/components/marketing/Mark
 import { pageMetadata } from '@/lib/seo';
 import { competitorCompareSchema } from '@/lib/structured-data';
 import {
-  COMPETITORS,
+  arenaForCompetitor,
   COMPETITOR_SEO,
   COMPETITOR_SLUG_TO_KEY,
 } from '@/lib/content';
@@ -29,8 +29,11 @@ function resolve(slug: string) {
   const key = COMPETITOR_SLUG_TO_KEY[slug];
   if (!key) return null;
   const seo = COMPETITOR_SEO[key];
-  const hasCol = COMPETITORS.some((c) => c.key === key);
-  return seo && hasCol ? { key, seo } : null;
+  // The vendor's own arena decides which capability categories this leaf
+  // argues over, so a leaf added for a tracker or a gateway gets that arena's
+  // rows rather than the coding-agent ones.
+  const arena = arenaForCompetitor(key);
+  return seo && arena ? { key, seo, arena: arena.key } : null;
 }
 
 export async function generateMetadata({
@@ -59,15 +62,16 @@ export default async function CompetitorComparePage({
   const { competitor } = await params;
   const hit = resolve(competitor);
   if (!hit) notFound();
-  const { key, seo } = hit;
+  const { key, seo, arena } = hit;
   const t = await getTranslations();
   const label = t(`compare.competitorLabels.${key}`);
-  const categories = t.raw('compare.categories') as CompareCategory[];
+  const categories = (t.raw(`compare.arenas.${arena}.categories`) as CompareCategory[] | undefined) ?? [];
   // Per-vendor narrative. Translated in all five catalogs since the leaf pages
   // were built, and rendered by none of them until now — every "vs" page showed
   // the same generic `leaf.*` criteria copy, so all seven read identically.
   const vendor = (t.raw('compare.competitors') as Record<string, { tagline: string; summary: string; verdict: string }>)[key];
-  const faq = t.raw('compare.faq') as MarketingFaqItem[];
+  // The arena's FAQ, not a fixed one: a leaf argues in its vendor's market.
+  const faq = (t.raw(`compare.arenas.${arena}.faq`) as MarketingFaqItem[] | undefined) ?? [];
 
   return (
     <>
@@ -124,7 +128,7 @@ export default async function CompetitorComparePage({
 
         {/* Two columns only — Builderforce.ai against this vendor. Somebody who
             followed a "vs Cursor" link wants that row, not all seven. */}
-        <CompetitorMatrix only={key} />
+        <CompetitorMatrix arena={arena} only={key} />
 
         {vendor?.verdict && (
           <section className="vs-section">

@@ -5332,646 +5332,31 @@
       "devin": "Devin",
       "openhands": "OpenHands",
       "aider": "Aider",
-      "continueDev": "Continue.dev"
+      "continueDev": "Continue.dev",
+      "jira": "Jira",
+      "linear": "Linear",
+      "asana": "Asana",
+      "monday": "Monday.com",
+      "azureBoards": "Azure Boards",
+      "figma": "Figma",
+      "canva": "Canva",
+      "miro": "Miro",
+      "notion": "Notion",
+      "zapier": "Zapier",
+      "n8n": "n8n",
+      "make": "Make",
+      "copilotStudio": "Copilot Studio",
+      "langgraph": "LangGraph / CrewAI",
+      "openrouter": "OpenRouter",
+      "litellm": "LiteLLM",
+      "portkey": "Portkey",
+      "bedrock": "Amazon Bedrock",
+      "helicone": "Helicone",
+      "upwork": "Upwork",
+      "fiverr": "Fiverr",
+      "toptal": "Toptal",
+      "agencies": "Dev agencies"
     },
-    "categories": [
-      {
-        "id": "ownership",
-        "title": "所有权与部署",
-        "blurb": "平台在哪里运行、由谁掌控，决定了成本、数据驻留和锁定程度。",
-        "rows": [
-          {
-            "feature": "价格模式",
-            "note": "方案会变动，请以厂商当前定价为准",
-            "values": {
-              "builderforce": "免费 + 付费工作区方案",
-              "copilot": "见厂商定价",
-              "cursor": "见厂商定价",
-              "claudeCode": "按用量计费",
-              "devin": "见厂商定价",
-              "openhands": "开源 + 托管方案",
-              "aider": "开源；模型用量另计",
-              "continueDev": "开源 + 付费方案"
-            }
-          },
-          {
-            "feature": "自托管 / 开源",
-            "note": "MIT，完全自托管",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌ 微软云",
-              "cursor": "❌ 厂商云",
-              "claudeCode": "❌ Anthropic 云",
-              "devin": "❌ 仅云端",
-              "openhands": "✅",
-              "aider": "✅",
-              "continueDev": "✅"
-            }
-          },
-          {
-            "feature": "气隙 / 私有部署",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "✅",
-              "aider": "✅",
-              "continueDev": "✅"
-            }
-          },
-          {
-            "feature": "RBAC + 审计轨迹",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "⚠️ 基础",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "model-flexibility",
-        "title": "模型与工具灵活性",
-        "blurb": "可自由选择任意模型、离线运行，并与开放的 MCP 生态集成。",
-        "rows": [
-          {
-            "feature": "任意模型供应商",
-            "note": "30+ 家供应商",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌ GPT/Claude",
-              "cursor": "⚠️ 有限",
-              "claudeCode": "❌ 仅 Anthropic",
-              "devin": "❌ 专有",
-              "openhands": "✅",
-              "aider": "✅",
-              "continueDev": "✅"
-            }
-          },
-          {
-            "feature": "本地 / 离线模型（Ollama）",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "⚠️",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "✅",
-              "aider": "✅",
-              "continueDev": "✅"
-            }
-          },
-          {
-            "feature": "独立于 IDE",
-            "note": "任意渠道 / CLI",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌ VS Code",
-              "cursor": "❌ VS Code 分支",
-              "claudeCode": "⚠️ 终端",
-              "devin": "✅ Web UI",
-              "openhands": "✅ Web/CLI",
-              "aider": "✅ CLI",
-              "continueDev": "❌ 扩展"
-            }
-          },
-          {
-            "feature": "MCP — 消费",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "✅ 原生",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "✅ 原生"
-            }
-          },
-          {
-            "feature": "MCP — 作为服务端暴露",
-            "note": "/mcp 端点",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "self-improving",
-        "title": "自我改进的模型与完成凭证",
-        "blurb": "从你的工作中学习、按结果自我路由、并证明“完成”确实完成的模型——这些能力是冻结的单智能体工具在结构上所缺乏的。",
-        "rows": [
-          {
-            "feature": "用你的工作训练你自己的模型",
-            "note": "前沿模型老师蒸馏",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "每个项目一个自更新模型",
-            "note": "Evermind，本地运行",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "基于结果的学习型模型路由",
-            "note": "为运行评分、重排模型",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "验证智能体——完成的凭证",
-            "note": "不达标时开启 GAP 任务",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "按角色放行、带签字审计的看板",
-            "note": "逐单角色 + 诊断",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "orchestration",
-        "title": "多智能体编排",
-        "blurb": "跨结构化工作流协调专业化的智能体，而非单次提示。",
-        "rows": [
-          {
-            "feature": "多智能体编排",
-            "note": "7 个角色 + 依赖 DAG",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "规划工作流",
-            "note": "PRD → Arch → 任务，经由 /spec",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "⚠️ 基础规划",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "缺陷修复工作流",
-            "note": "分析者 → 创建者 → 评审者",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "⚠️ 内联",
-              "cursor": "⚠️ 内联",
-              "claudeCode": "⚠️ 内联",
-              "devin": "✅",
-              "openhands": "⚠️ 单次",
-              "aider": "⚠️ 单次",
-              "continueDev": "⚠️ 内联"
-            }
-          },
-          {
-            "feature": "重构工作流",
-            "note": "评审者 → 重构 → 测试",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "⚠️ 单次",
-              "claudeCode": "⚠️ 单次",
-              "devin": "⚠️ 单次",
-              "openhands": "⚠️ 单次",
-              "aider": "⚠️ 单次",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "对抗式评审环节",
-            "note": "内置工作流",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "自定义智能体人设 / 角色",
-            "note": ".builderforce/personas/ 中的 YAML",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "governance",
-        "title": "治理与可靠性",
-        "blurb": "审批关卡、恢复机制和自动化，让智能体可安全地在生产环境运行。",
-        "rows": [
-          {
-            "feature": "人在回路的审批关卡",
-            "note": "经由门户挂起 + 审批",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "⚠️ 基础",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "自愈 / 错误恢复",
-            "note": "自动检测 + 重跑",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "⚠️ 仅重试",
-              "openhands": "⚠️ 仅重试",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "定时自动化（cron）",
-            "note": "与 Builderforce 同步",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "CI/CD 流水线集成",
-            "note": "CLI + webhook 触发",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "⚠️ PR 建议",
-              "cursor": "❌",
-              "claudeCode": "⚠️ 仅 CLI",
-              "devin": "⚠️ API",
-              "openhands": "⚠️ API",
-              "aider": "⚠️ CLI",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "语义答案评估",
-            "note": "忠实度 / 相关性 / 幻觉",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "质量漂移监控",
-            "note": "按模型的回归告警",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "codebase-context",
-        "title": "代码库理解与编辑",
-        "blurb": "工具对你的代码仓库读取得有多深入，以及它将变更暂存以供评审时有多干净利落。",
-        "rows": [
-          {
-            "feature": "代码库语义搜索",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "⚠️",
-              "cursor": "✅",
-              "claudeCode": "⚠️ 基础 RAG",
-              "devin": "✅",
-              "openhands": "⚠️ 基础",
-              "aider": "⚠️ Git 感知",
-              "continueDev": "✅"
-            }
-          },
-          {
-            "feature": "混合检索（稠密 + BM25 + 重排）",
-            "note": "RRF 融合 + MMR 多样性",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "⚠️ 仅向量",
-              "claudeCode": "⚠️ 仅向量",
-              "devin": "⚠️ 仅向量",
-              "openhands": "⚠️ 仅向量",
-              "aider": "⚠️ Git 感知",
-              "continueDev": "⚠️ 仅向量"
-            }
-          },
-          {
-            "feature": "深度 AST + git 历史分析",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "⚠️ 基础 RAG",
-              "claudeCode": "⚠️ 基础 RAG",
-              "devin": "⚠️ 基础 RAG",
-              "openhands": "⚠️ 基础 RAG",
-              "aider": "⚠️ Git 感知",
-              "continueDev": "⚠️ 基础 RAG"
-            }
-          },
-          {
-            "feature": "暂存差异 / 接受-拒绝",
-            "note": "/diff、/accept、/reject",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "✅ Composer",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "✅ Git diff",
-              "continueDev": "✅ ⌘K diff"
-            }
-          },
-          {
-            "feature": "内置技能",
-            "note": "53 个内置 + 市场",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "memory-fleet",
-        "title": "记忆与机群",
-        "blurb": "跨会话的持久化知识，以及跨机器的协调能力。",
-        "rows": [
-          {
-            "feature": "持久化项目知识",
-            "note": ".builderforce/",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "⚠️ 会话内",
-              "claudeCode": "⚠️ 会话内",
-              "devin": "⚠️ 会话内",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "会话交接",
-            "note": "/handoff + 自动加载",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "跨重启的工作流持久化",
-            "note": "YAML 检查点 + 恢复",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "⚠️ 基于会话",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "任务后知识闭环",
-            "note": ".builderforce/memory/ 自动更新",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "智能体之间的分布式委派",
-            "note": "remote:<id> 调度",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "机群 / 多机协调",
-            "note": "Builderforce 机群注册表",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      },
-      {
-        "id": "reach",
-        "title": "渠道与覆盖",
-        "blurb": "在团队已经工作的地方、在任意设备上与他们相遇。",
-        "rows": [
-          {
-            "feature": "可在 WhatsApp / Telegram / Slack 中运行",
-            "note": "15+ 个渠道",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "语音 + Talk 模式",
-            "note": "macOS / iOS / Android",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          },
-          {
-            "feature": "移动端伴侣应用",
-            "note": "iOS + Android",
-            "values": {
-              "builderforce": "✅",
-              "copilot": "❌",
-              "cursor": "❌",
-              "claudeCode": "❌",
-              "devin": "❌",
-              "openhands": "❌",
-              "aider": "❌",
-              "continueDev": "❌"
-            }
-          }
-        ]
-      }
-    ],
-    "faq": [
-      {
-        "question": "Builderforce.ai 是 GitHub Copilot 的替代品吗？",
-        "answer": "是的，但二者解决的范畴不同。GitHub Copilot 是 VS Code 内的单智能体自动补全，绑定 GPT 和 Claude 模型。Builderforce.ai 是一个自托管、MIT 许可的多智能体平台，通过完整的规划、缺陷修复、重构和对抗式评审工作流编排七个专家角色，运行于 30+ 家模型供应商（包括本地的 Ollama），并增加了审批、审计和持久化记忆。已超越行级补全的团队会采用 Builderforce.ai 来实现端到端交付。"
-      },
-      {
-        "question": "Builderforce.ai 与 Cursor 和 Windsurf 相比如何？",
-        "answer": "Cursor 和 Windsurf 是出色的 AI 原生编辑器，但它们仍是单智能体且绑定 IDE。Builderforce.ai 独立于 IDE，可从任意渠道或 CLI 工作，通过依赖 DAG 在一项任务上协调多个智能体，并完全自托管，跨 30+ 家供应商拥有模型自由。你甚至可以通过 MCP 将 Cursor 或 Windsurf 连接到 Builderforce.ai，将其用作你的编排和记忆层。"
-      },
-      {
-        "question": "Builderforce.ai 对比 Claude Code 和 Aider，区别是什么？",
-        "answer": "Claude Code 被锁定于 Anthropic 模型，而 Aider 运行的是单个 CLI 智能体。Builderforce.ai 运行一支专家智能体团队，内置对抗式评审环节、人工审批关卡、审计轨迹，以及位于 .builderforce/ 的持久化项目记忆。它跨 30+ 家供应商保持模型无关，并增加了机群网格、remote:<id> 调度和 15+ 个聊天渠道，因而可从一名开发者扩展到一支被编排的机群。"
-      },
-      {
-        "question": "Builderforce.ai 对比 Devin 和 OpenHands，自主工程该选哪一个？",
-        "answer": "Devin 是一个专有的托管式自主智能体，OpenHands 则是一个开源的单智能体运行时。Builderforce.ai 的不同之处在于：它自托管、MIT 许可，内置真正的多智能体编排与治理：审批关卡、审计轨迹，以及能自动检测故障并重跑受影响步骤的自愈恢复机制。你的代码保留在你自己的基础设施上，并可选择任意模型，包括本地模型。"
-      },
-      {
-        "question": "Builderforce.ai 能完全离线或气隙运行吗？",
-        "answer": "可以。Builderforce.ai 是自托管的，并支持气隙部署。借助通过 Ollama 运行的本地模型，你可以在不让任何代码或提示离开你的网络的情况下运行整支智能体团队，而这是大多数封闭竞品所无法提供的。项目记忆持久化保存在本地的 .builderforce/ 中，因此上下文可在多个会话间存续，而无需依赖云端。"
-      },
-      {
-        "question": "Builderforce.ai 会把我锁定在某一种模型或 IDE 上吗？",
-        "answer": "不会。Builderforce.ai 跨 30+ 家供应商保持模型无关，包括 Anthropic、OpenAI、Bedrock 和本地的 Ollama，并且独立于 IDE，可从任意 CLI 或聊天渠道访问。无需采用任何编辑器分支，也没有单一厂商的模型要求，这正是它与 Copilot、Cursor、Windsurf 和 Claude Code 的核心区别。"
-      }
-    ],
     "capabilityHeader": "能力",
     "faqHeading": "Builderforce.ai 与同类产品对比 — 常见问题",
     "relatedHeading": "阅读逐一对决",
@@ -6027,7 +5412,1435 @@
     },
     "matrixHeading": "逐项能力对比",
     "matrixNote": "每一行代表一项能力，每一列代表一款工具。单元格描述的是我们目前所了解的支持情况。各厂商的产品与方案变动频繁，因此对决策至关重要的内容，请对照厂商的最新文档并通过实际试用加以核实。",
-    "matrixScrollHint": "左右滑动表格即可查看全部工具。"
+    "matrixScrollHint": "左右滑动表格即可查看全部工具。",
+    "arenas": {
+      "agentic": {
+        "label": "AI 编码智能体",
+        "blurb": "编辑器、终端智能体与托管式工程智能体。对比一下：代码写出来之前和合并之后，这些工作分别会怎样推进。",
+        "categories": [
+          {
+            "id": "ownership",
+            "title": "所有权与部署",
+            "blurb": "平台在哪里运行、由谁掌控，决定了成本、数据驻留和锁定程度。",
+            "rows": [
+              {
+                "feature": "价格模式",
+                "note": "方案会变动，请以厂商当前定价为准",
+                "values": {
+                  "builderforce": "免费 + 付费工作区方案",
+                  "copilot": "见厂商定价",
+                  "cursor": "见厂商定价",
+                  "claudeCode": "按用量计费",
+                  "devin": "见厂商定价",
+                  "openhands": "开源 + 托管方案",
+                  "aider": "开源；模型用量另计",
+                  "continueDev": "开源 + 付费方案"
+                }
+              },
+              {
+                "feature": "自托管 / 开源",
+                "note": "MIT，完全自托管",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌ 微软云",
+                  "cursor": "❌ 厂商云",
+                  "claudeCode": "❌ Anthropic 云",
+                  "devin": "❌ 仅云端",
+                  "openhands": "✅",
+                  "aider": "✅",
+                  "continueDev": "✅"
+                }
+              },
+              {
+                "feature": "气隙 / 私有部署",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "✅",
+                  "aider": "✅",
+                  "continueDev": "✅"
+                }
+              },
+              {
+                "feature": "RBAC + 审计轨迹",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "⚠️ 基础",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "model-flexibility",
+            "title": "模型与工具灵活性",
+            "blurb": "可自由选择任意模型、离线运行，并与开放的 MCP 生态集成。",
+            "rows": [
+              {
+                "feature": "任意模型供应商",
+                "note": "30+ 家供应商",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌ GPT/Claude",
+                  "cursor": "⚠️ 有限",
+                  "claudeCode": "❌ 仅 Anthropic",
+                  "devin": "❌ 专有",
+                  "openhands": "✅",
+                  "aider": "✅",
+                  "continueDev": "✅"
+                }
+              },
+              {
+                "feature": "本地 / 离线模型（Ollama）",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "⚠️",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "✅",
+                  "aider": "✅",
+                  "continueDev": "✅"
+                }
+              },
+              {
+                "feature": "独立于 IDE",
+                "note": "任意渠道 / CLI",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌ VS Code",
+                  "cursor": "❌ VS Code 分支",
+                  "claudeCode": "⚠️ 终端",
+                  "devin": "✅ Web UI",
+                  "openhands": "✅ Web/CLI",
+                  "aider": "✅ CLI",
+                  "continueDev": "❌ 扩展"
+                }
+              },
+              {
+                "feature": "MCP — 消费",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "✅ 原生",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "✅ 原生"
+                }
+              },
+              {
+                "feature": "MCP — 作为服务端暴露",
+                "note": "/mcp 端点",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "self-improving",
+            "title": "自我改进的模型与完成凭证",
+            "blurb": "从你的工作中学习、按结果自我路由、并证明“完成”确实完成的模型——这些能力是冻结的单智能体工具在结构上所缺乏的。",
+            "rows": [
+              {
+                "feature": "用你的工作训练你自己的模型",
+                "note": "前沿模型老师蒸馏",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "每个项目一个自更新模型",
+                "note": "Evermind，本地运行",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "基于结果的学习型模型路由",
+                "note": "为运行评分、重排模型",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "验证智能体——完成的凭证",
+                "note": "不达标时开启 GAP 任务",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "按角色放行、带签字审计的看板",
+                "note": "逐单角色 + 诊断",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "orchestration",
+            "title": "多智能体编排",
+            "blurb": "跨结构化工作流协调专业化的智能体，而非单次提示。",
+            "rows": [
+              {
+                "feature": "多智能体编排",
+                "note": "7 个角色 + 依赖 DAG",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "规划工作流",
+                "note": "PRD → Arch → 任务，经由 /spec",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "⚠️ 基础规划",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "缺陷修复工作流",
+                "note": "分析者 → 创建者 → 评审者",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "⚠️ 内联",
+                  "cursor": "⚠️ 内联",
+                  "claudeCode": "⚠️ 内联",
+                  "devin": "✅",
+                  "openhands": "⚠️ 单次",
+                  "aider": "⚠️ 单次",
+                  "continueDev": "⚠️ 内联"
+                }
+              },
+              {
+                "feature": "重构工作流",
+                "note": "评审者 → 重构 → 测试",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "⚠️ 单次",
+                  "claudeCode": "⚠️ 单次",
+                  "devin": "⚠️ 单次",
+                  "openhands": "⚠️ 单次",
+                  "aider": "⚠️ 单次",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "对抗式评审环节",
+                "note": "内置工作流",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "自定义智能体人设 / 角色",
+                "note": ".builderforce/personas/ 中的 YAML",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "governance",
+            "title": "治理与可靠性",
+            "blurb": "审批关卡、恢复机制和自动化，让智能体可安全地在生产环境运行。",
+            "rows": [
+              {
+                "feature": "人在回路的审批关卡",
+                "note": "经由门户挂起 + 审批",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "⚠️ 基础",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "自愈 / 错误恢复",
+                "note": "自动检测 + 重跑",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "⚠️ 仅重试",
+                  "openhands": "⚠️ 仅重试",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "定时自动化（cron）",
+                "note": "与 Builderforce 同步",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "CI/CD 流水线集成",
+                "note": "CLI + webhook 触发",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "⚠️ PR 建议",
+                  "cursor": "❌",
+                  "claudeCode": "⚠️ 仅 CLI",
+                  "devin": "⚠️ API",
+                  "openhands": "⚠️ API",
+                  "aider": "⚠️ CLI",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "语义答案评估",
+                "note": "忠实度 / 相关性 / 幻觉",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "质量漂移监控",
+                "note": "按模型的回归告警",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "codebase-context",
+            "title": "代码库理解与编辑",
+            "blurb": "工具对你的代码仓库读取得有多深入，以及它将变更暂存以供评审时有多干净利落。",
+            "rows": [
+              {
+                "feature": "代码库语义搜索",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "⚠️",
+                  "cursor": "✅",
+                  "claudeCode": "⚠️ 基础 RAG",
+                  "devin": "✅",
+                  "openhands": "⚠️ 基础",
+                  "aider": "⚠️ Git 感知",
+                  "continueDev": "✅"
+                }
+              },
+              {
+                "feature": "混合检索（稠密 + BM25 + 重排）",
+                "note": "RRF 融合 + MMR 多样性",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "⚠️ 仅向量",
+                  "claudeCode": "⚠️ 仅向量",
+                  "devin": "⚠️ 仅向量",
+                  "openhands": "⚠️ 仅向量",
+                  "aider": "⚠️ Git 感知",
+                  "continueDev": "⚠️ 仅向量"
+                }
+              },
+              {
+                "feature": "深度 AST + git 历史分析",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "⚠️ 基础 RAG",
+                  "claudeCode": "⚠️ 基础 RAG",
+                  "devin": "⚠️ 基础 RAG",
+                  "openhands": "⚠️ 基础 RAG",
+                  "aider": "⚠️ Git 感知",
+                  "continueDev": "⚠️ 基础 RAG"
+                }
+              },
+              {
+                "feature": "暂存差异 / 接受-拒绝",
+                "note": "/diff、/accept、/reject",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "✅ Composer",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "✅ Git diff",
+                  "continueDev": "✅ ⌘K diff"
+                }
+              },
+              {
+                "feature": "内置技能",
+                "note": "53 个内置 + 市场",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "memory-fleet",
+            "title": "记忆与机群",
+            "blurb": "跨会话的持久化知识，以及跨机器的协调能力。",
+            "rows": [
+              {
+                "feature": "持久化项目知识",
+                "note": ".builderforce/",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "⚠️ 会话内",
+                  "claudeCode": "⚠️ 会话内",
+                  "devin": "⚠️ 会话内",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "会话交接",
+                "note": "/handoff + 自动加载",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "跨重启的工作流持久化",
+                "note": "YAML 检查点 + 恢复",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "⚠️ 基于会话",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "任务后知识闭环",
+                "note": ".builderforce/memory/ 自动更新",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "智能体之间的分布式委派",
+                "note": "remote:<id> 调度",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "机群 / 多机协调",
+                "note": "Builderforce 机群注册表",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "reach",
+            "title": "渠道与覆盖",
+            "blurb": "在团队已经工作的地方、在任意设备上与他们相遇。",
+            "rows": [
+              {
+                "feature": "可在 WhatsApp / Telegram / Slack 中运行",
+                "note": "15+ 个渠道",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "语音 + Talk 模式",
+                "note": "macOS / iOS / Android",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              },
+              {
+                "feature": "移动端伴侣应用",
+                "note": "iOS + Android",
+                "values": {
+                  "builderforce": "✅",
+                  "copilot": "❌",
+                  "cursor": "❌",
+                  "claudeCode": "❌",
+                  "devin": "❌",
+                  "openhands": "❌",
+                  "aider": "❌",
+                  "continueDev": "❌"
+                }
+              }
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "Builderforce.ai 是 GitHub Copilot 的替代品吗？",
+            "answer": "是的，但二者解决的范畴不同。GitHub Copilot 是 VS Code 内的单智能体自动补全，绑定 GPT 和 Claude 模型。Builderforce.ai 是一个自托管、MIT 许可的多智能体平台，通过完整的规划、缺陷修复、重构和对抗式评审工作流编排七个专家角色，运行于 30+ 家模型供应商（包括本地的 Ollama），并增加了审批、审计和持久化记忆。已超越行级补全的团队会采用 Builderforce.ai 来实现端到端交付。"
+          },
+          {
+            "question": "Builderforce.ai 与 Cursor 和 Windsurf 相比如何？",
+            "answer": "Cursor 和 Windsurf 是出色的 AI 原生编辑器，但它们仍是单智能体且绑定 IDE。Builderforce.ai 独立于 IDE，可从任意渠道或 CLI 工作，通过依赖 DAG 在一项任务上协调多个智能体，并完全自托管，跨 30+ 家供应商拥有模型自由。你甚至可以通过 MCP 将 Cursor 或 Windsurf 连接到 Builderforce.ai，将其用作你的编排和记忆层。"
+          },
+          {
+            "question": "Builderforce.ai 对比 Claude Code 和 Aider，区别是什么？",
+            "answer": "Claude Code 被锁定于 Anthropic 模型，而 Aider 运行的是单个 CLI 智能体。Builderforce.ai 运行一支专家智能体团队，内置对抗式评审环节、人工审批关卡、审计轨迹，以及位于 .builderforce/ 的持久化项目记忆。它跨 30+ 家供应商保持模型无关，并增加了机群网格、remote:<id> 调度和 15+ 个聊天渠道，因而可从一名开发者扩展到一支被编排的机群。"
+          },
+          {
+            "question": "Builderforce.ai 对比 Devin 和 OpenHands，自主工程该选哪一个？",
+            "answer": "Devin 是一个专有的托管式自主智能体，OpenHands 则是一个开源的单智能体运行时。Builderforce.ai 的不同之处在于：它自托管、MIT 许可，内置真正的多智能体编排与治理：审批关卡、审计轨迹，以及能自动检测故障并重跑受影响步骤的自愈恢复机制。你的代码保留在你自己的基础设施上，并可选择任意模型，包括本地模型。"
+          },
+          {
+            "question": "Builderforce.ai 能完全离线或气隙运行吗？",
+            "answer": "可以。Builderforce.ai 是自托管的，并支持气隙部署。借助通过 Ollama 运行的本地模型，你可以在不让任何代码或提示离开你的网络的情况下运行整支智能体团队，而这是大多数封闭竞品所无法提供的。项目记忆持久化保存在本地的 .builderforce/ 中，因此上下文可在多个会话间存续，而无需依赖云端。"
+          },
+          {
+            "question": "Builderforce.ai 会把我锁定在某一种模型或 IDE 上吗？",
+            "answer": "不会。Builderforce.ai 跨 30+ 家供应商保持模型无关，包括 Anthropic、OpenAI、Bedrock 和本地的 Ollama，并且独立于 IDE，可从任意 CLI 或聊天渠道访问。无需采用任何编辑器分支，也没有单一厂商的模型要求，这正是它与 Copilot、Cursor、Windsurf 和 Claude Code 的核心区别。"
+          }
+        ]
+      },
+      "delivery": {
+        "label": "交付与工作管理",
+        "blurb": "各类工单系统与工作管理套件负责组织工作。对比一下：谁来规划、谁来执行，以及最后留下了哪些可追溯的证据。",
+        "categories": [
+          {
+            "id": "delivery-planning",
+            "title": "规划与项目组合",
+            "blurb": "待办列表、目标，以及高管真正会看的汇总视图。",
+            "rows": [
+              {
+                "feature": "待办列表、迭代与看板",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "✅",
+                  "linear": "✅",
+                  "asana": "✅",
+                  "monday": "✅",
+                  "azureBoards": "✅"
+                }
+              },
+              {
+                "feature": "OKR 与交付事项相互关联",
+                "note": "目标与关键结果都是一等公民记录",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ 需应用市场插件",
+                  "linear": "⚠️ 仅“计划”功能",
+                  "asana": "✅ 目标功能",
+                  "monday": "⚠️ 需附加组件",
+                  "azureBoards": "❌"
+                }
+              },
+              {
+                "feature": "跨项目的组合汇总",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ 需更高套餐",
+                  "linear": "⚠️ 有限支持",
+                  "asana": "⚠️ 组合功能",
+                  "monday": "⚠️ 需更高套餐",
+                  "azureBoards": "⚠️ 有限支持"
+                }
+              },
+              {
+                "feature": "基于运行证据计算出的健康度判定",
+                "note": "统一的评分规则，而非手工设定的状态",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ 手工设置状态",
+                  "linear": "⚠️ 手工设置状态",
+                  "asana": "⚠️ 手工设置状态",
+                  "monday": "⚠️ 手工设置状态",
+                  "azureBoards": "⚠️ 手工设置状态"
+                }
+              }
+            ]
+          },
+          {
+            "id": "delivery-execution",
+            "title": "由谁来完成工作",
+            "blurb": "工单系统只是记录工作，还是也能实际执行工作。",
+            "rows": [
+              {
+                "feature": "AI 智能体可像团队成员一样被指派",
+                "note": "人与智能体同处一个看板",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "❌",
+                  "linear": "❌",
+                  "asana": "❌",
+                  "monday": "❌",
+                  "azureBoards": "❌"
+                }
+              },
+              {
+                "feature": "工单可由一次智能体运行端到端完成",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "❌",
+                  "linear": "❌",
+                  "asana": "❌",
+                  "monday": "❌",
+                  "azureBoards": "❌"
+                }
+              },
+              {
+                "feature": "自治泳道在卡片拖入时自动发起运行",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ 自动化规则",
+                  "linear": "⚠️ 自动化规则",
+                  "asana": "⚠️ 自动化规则",
+                  "monday": "⚠️ 自动化规则",
+                  "azureBoards": "⚠️ 自动化规则"
+                }
+              },
+              {
+                "feature": "按角色把关的生命周期，并记录签核",
+                "note": "每张工单都有角色，并留下审批记录",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ 工作流规则",
+                  "linear": "⚠️ 基础支持",
+                  "asana": "⚠️ 审批功能",
+                  "monday": "⚠️ 审批功能",
+                  "azureBoards": "⚠️ 工作流规则"
+                }
+              }
+            ]
+          },
+          {
+            "id": "delivery-evidence",
+            "title": "敏捷仪式与证据留存",
+            "blurb": "团队能在产品内部完成哪些活动，以及事后还能审计到什么。",
+            "rows": [
+              {
+                "feature": "站会、回顾与估点均在产品内进行",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ 需应用市场插件",
+                  "linear": "❌",
+                  "asana": "❌",
+                  "monday": "⚠️ 需应用市场插件",
+                  "azureBoards": "⚠️ 需扩展插件"
+                }
+              },
+              {
+                "feature": "人与智能体共用一份审计日志",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ 仅单条记录的历史",
+                  "linear": "⚠️ 仅单条记录的历史",
+                  "asana": "⚠️ 仅单条记录的历史",
+                  "monday": "⚠️ 仅单条记录的历史",
+                  "azureBoards": "⚠️ 仅单条记录的历史"
+                }
+              },
+              {
+                "feature": "执行过程记录直接附在事项上",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "❌",
+                  "linear": "❌",
+                  "asana": "❌",
+                  "monday": "❌",
+                  "azureBoards": "❌"
+                }
+              },
+              {
+                "feature": "与既有工单系统双向同步",
+                "note": "看板同步连接器",
+                "values": {
+                  "builderforce": "✅",
+                  "jira": "⚠️ 需借助插件",
+                  "linear": "⚠️ 需借助插件",
+                  "asana": "⚠️ 需借助插件",
+                  "monday": "⚠️ 需借助插件",
+                  "azureBoards": "⚠️ 需借助插件"
+                }
+              }
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "Builderforce.ai 能取代 Jira 或 Linear 吗？",
+            "answer": "它可以端到端地承载交付：待办列表、迭代、目标、敏捷仪式，以及项目组合汇总；智能体可以和人一样被指派，每一次运行都会记录在它所处理的事项上。若团队希望保留现有工单系统，也可以直接接入——看板同步连接器会让两边保持一致。因此这通常是一个迁移决策，而不是能力上的缺口。"
+          },
+          {
+            "question": "相比传统工单系统，它多提供了什么？",
+            "answer": "执行本身。工单系统只记录某张卡片被移动过；在这里，工单可以由一次智能体运行接手，由必须签核的角色把关，并把执行记录、成本与诊断结果一并留在卡片上。交付健康度也因此是从这些证据中计算出来的，而不是靠人工设定。"
+          }
+        ]
+      },
+      "canvas": {
+        "label": "创作画布与文档",
+        "blurb": "设计、白板与文档工具负责打磨成果物。对比一下：当这份成果物需要转化为实际工作时，会发生什么。",
+        "categories": [
+          {
+            "id": "canvas-surface",
+            "title": "创作所在的界面",
+            "blurb": "你能在画布上放置哪些内容，以及谁有权限放置它们。",
+            "rows": [
+              {
+                "feature": "带类型对象的无限画布",
+                "note": "由规格定义的对象，而非自由绘制的图形",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ 自由画框",
+                  "canva": "⚠️ 页面模板",
+                  "miro": "⚠️ 自由图形",
+                  "notion": "❌ 以文档为主"
+                }
+              },
+              {
+                "feature": "文档、幻灯片、表格与看板同处一个界面",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ 设计 + 幻灯片",
+                  "canva": "✅",
+                  "miro": "⚠️ 以白板为主",
+                  "notion": "⚠️ 文档 + 数据库"
+                }
+              },
+              {
+                "feature": "智能体与你一同创建和编辑对象",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ 辅助编辑",
+                  "canva": "⚠️ 辅助生成",
+                  "miro": "⚠️ 辅助绘图",
+                  "notion": "⚠️ 辅助写作"
+                }
+              },
+              {
+                "feature": "导出为 PDF 并支持打印排版",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "✅",
+                  "canva": "✅",
+                  "miro": "✅",
+                  "notion": "✅"
+                }
+              }
+            ]
+          },
+          {
+            "id": "canvas-connected",
+            "title": "与交付相连",
+            "blurb": "画布上的一个想法，能否在不离开画布的情况下变成可追踪、可治理的工作。",
+            "rows": [
+              {
+                "feature": "画布上的对象可直接变成交付工单",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ 需借助集成",
+                  "canva": "❌",
+                  "miro": "⚠️ 需借助集成",
+                  "notion": "⚠️ 需借助集成"
+                }
+              },
+              {
+                "feature": "合计值由其自身的明细行推导得出",
+                "note": "绝不重复存储",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "❌",
+                  "canva": "❌",
+                  "miro": "❌",
+                  "notion": "⚠️ 公式功能"
+                }
+              },
+              {
+                "feature": "把创作发布为可售卖的商品",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ 社区资源",
+                  "canva": "⚠️ 模板市场",
+                  "miro": "⚠️ 模板库",
+                  "notion": "⚠️ 模板库"
+                }
+              },
+              {
+                "feature": "可从同一个项目直接运行一个可用的应用",
+                "note": "直接由该创作提供服务的嵌入式应用",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ 仅原型",
+                  "canva": "❌",
+                  "miro": "❌",
+                  "notion": "⚠️ 仅发布页面"
+                }
+              }
+            ]
+          },
+          {
+            "id": "canvas-control",
+            "title": "控制权与可达范围",
+            "blurb": "工作内容存放在哪里，以及谁有权限打开它。",
+            "rows": [
+              {
+                "feature": "自托管 / 私有化部署",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "❌",
+                  "canva": "❌",
+                  "miro": "❌",
+                  "notion": "❌"
+                }
+              },
+              {
+                "feature": "基于角色的访问控制与审批关卡",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ 团队权限",
+                  "canva": "⚠️ 团队权限",
+                  "miro": "⚠️ 团队权限",
+                  "notion": "⚠️ 团队权限"
+                }
+              },
+              {
+                "feature": "访客无需注册即可先开始使用",
+                "values": {
+                  "builderforce": "✅",
+                  "figma": "⚠️ 仅查看链接",
+                  "canva": "⚠️ 通过链接编辑",
+                  "miro": "⚠️ 访客白板",
+                  "notion": "⚠️ 仅查看链接"
+                }
+              }
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "它与 Figma、Miro 或 Notion 有什么不同？",
+            "answer": "那些工具负责打磨成果物，而这块画布负责把成果物连接起来。画布上的对象是带类型、由规格驱动的，因此一份文档、白板或表格可以在同一个项目内变成交付工单、可售商品，甚至一个可运行的应用；合计值也由其自身的明细行推导得出，而不会被重复存储。若只是做纯视觉设计，请继续使用你的设计工具，并把它接入进来。"
+          },
+          {
+            "question": "我必须把设计工作全部搬到 Builderforce.ai 吗？",
+            "answer": "不必。这块画布的作用是把想法变成彼此连接的工作，而不是取代绘图工具。你可以从现有的白板和云盘导入内容，专业设计仍留在原处；当某份成果物需要工单、审批、买家或运行环境时，再把它带进来即可。"
+          }
+        ]
+      },
+      "automation": {
+        "label": "工作流与智能体自动化",
+        "blurb": "自动化搭建工具与智能体框架负责把各个步骤串联起来。对比一下：当某个步骤需要判断、需要评审或需要人介入时，会发生什么。",
+        "categories": [
+          {
+            "id": "automation-authoring",
+            "title": "构建工作流",
+            "blurb": "一条流程是如何编排的，其中有多少可以交给推理判断，而不是靠手工连线。",
+            "rows": [
+              {
+                "feature": "可视化工作流搭建器",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "✅",
+                  "n8n": "✅",
+                  "make": "✅",
+                  "copilotStudio": "✅",
+                  "langgraph": "❌ 以代码为主"
+                }
+              },
+              {
+                "feature": "把 LLM 推理作为一等公民节点",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "⚠️ AI 步骤",
+                  "n8n": "✅",
+                  "make": "⚠️ AI 模块",
+                  "copilotStudio": "✅",
+                  "langgraph": "✅"
+                }
+              },
+              {
+                "feature": "专业化的智能体角色与依赖关系图",
+                "note": "是角色，而不只是步骤",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "❌",
+                  "n8n": "⚠️ 子工作流",
+                  "make": "❌",
+                  "copilotStudio": "⚠️ 主题机制",
+                  "langgraph": "✅"
+                }
+              },
+              {
+                "feature": "MCP —— 既能调用也能作为服务端暴露",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "⚠️ 仅能调用",
+                  "n8n": "⚠️ 仅能调用",
+                  "make": "❌",
+                  "copilotStudio": "⚠️ 仅能调用",
+                  "langgraph": "⚠️ 仅能调用"
+                }
+              }
+            ]
+          },
+          {
+            "id": "automation-runtime",
+            "title": "安全地运行",
+            "blurb": "在一个自动化步骤与不可撤销的后果之间，还隔着什么。",
+            "rows": [
+              {
+                "feature": "在有实质后果的动作前设置审批关卡",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "⚠️ 手动步骤",
+                  "n8n": "⚠️ 等待节点",
+                  "make": "⚠️ 手动步骤",
+                  "copilotStudio": "⚠️ 基础支持",
+                  "langgraph": "⚠️ 需自行编码"
+                }
+              },
+              {
+                "feature": "在执行时强制生效的策略包",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "❌",
+                  "n8n": "❌",
+                  "make": "❌",
+                  "copilotStudio": "⚠️ 租户策略",
+                  "langgraph": "❌"
+                }
+              },
+              {
+                "feature": "运行记录、成本与重试全部可观测",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "⚠️ 任务历史",
+                  "n8n": "✅ 执行记录",
+                  "make": "⚠️ 运行历史",
+                  "copilotStudio": "⚠️ 仅分析报表",
+                  "langgraph": "⚠️ 需追踪附加组件"
+                }
+              },
+              {
+                "feature": "熔断器可中止不断失败的循环",
+                "note": "连续失败会为该泳道设置上限",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "⚠️ 自动暂停",
+                  "n8n": "⚠️ 错误处理工作流",
+                  "make": "⚠️ 自动停用",
+                  "copilotStudio": "❌",
+                  "langgraph": "⚠️ 需自行编码"
+                }
+              }
+            ]
+          },
+          {
+            "id": "automation-scope",
+            "title": "自动化之外",
+            "blurb": "流程跑完之后，同一个产品还能做什么。",
+            "rows": [
+              {
+                "feature": "同一个产品同时负责规划与跟踪工作",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "❌",
+                  "n8n": "❌",
+                  "make": "❌",
+                  "copilotStudio": "❌",
+                  "langgraph": "❌"
+                }
+              },
+              {
+                "feature": "可在代码仓库中编写并评审代码",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "❌",
+                  "n8n": "⚠️ 代码节点",
+                  "make": "❌",
+                  "copilotStudio": "❌",
+                  "langgraph": "⚠️ 需自行构建"
+                }
+              },
+              {
+                "feature": "自托管 / 开放运行时",
+                "values": {
+                  "builderforce": "✅",
+                  "zapier": "❌",
+                  "n8n": "✅",
+                  "make": "❌",
+                  "copilotStudio": "❌",
+                  "langgraph": "✅"
+                }
+              }
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "它可以替代 Zapier、n8n 或某个智能体框架吗？",
+            "answer": "它用可视化搭建器覆盖了同样的编排能力：模型推理是一等公民节点，专业化的智能体角色按依赖关系图组织，而不是排成一条单链。真正的区别在于运行周围的那一圈保障：审批关卡、执行时强制生效的策略包、连续失败时的熔断，以及连同成本与重试一起附加在工作项上的执行记录。"
+          },
+          {
+            "question": "智能体能调用我现有的工具吗？",
+            "answer": "可以。一方面通过 MCP——本平台既能作为客户端调用，也能作为服务端对外暴露；另一方面通过连接器目录，覆盖工单系统、云盘、邮箱、代码仓库以及广告与分析账号。你现有的自动化平台可以保持不动，并作为流程中的一个步骤被调用；这里不要求你重建那些已经跑得好好的流程。"
+          }
+        ]
+      },
+      "gateway": {
+        "label": "AI 网关与模型路由",
+        "blurb": "网关用一个 API 统一接入多个模型。对比一下：请求如何路由、用量如何归属，以及 token 花掉之后会怎样。",
+        "categories": [
+          {
+            "id": "gateway-access",
+            "title": "一个 API，多个模型",
+            "blurb": "你能接入哪些模型，以及由谁的凭据来付费。",
+            "rows": [
+              {
+                "feature": "一个 API 打通多家模型厂商",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "✅",
+                  "litellm": "✅",
+                  "portkey": "✅",
+                  "bedrock": "⚠️ 仅自有模型目录",
+                  "helicone": "✅"
+                }
+              },
+              {
+                "feature": "可自带厂商密钥",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "⚠️ 仅部分厂商",
+                  "litellm": "✅",
+                  "portkey": "✅",
+                  "bedrock": "❌ 需云账号",
+                  "helicone": "✅"
+                }
+              },
+              {
+                "feature": "本地 / 离线模型",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "❌",
+                  "litellm": "✅",
+                  "portkey": "⚠️ 需自托管",
+                  "bedrock": "❌",
+                  "helicone": "⚠️ 可代理任意端点"
+                }
+              },
+              {
+                "feature": "可用订阅账号登录作为凭据",
+                "note": "OAuth，而不只是 API 密钥",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "❌",
+                  "litellm": "❌",
+                  "portkey": "❌",
+                  "bedrock": "❌",
+                  "helicone": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "gateway-routing",
+            "title": "路由与花费",
+            "blurb": "一个请求如何找到合适的模型，以及成本如何归属。",
+            "rows": [
+              {
+                "feature": "厂商故障时可自动回退",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "✅",
+                  "litellm": "✅",
+                  "portkey": "✅",
+                  "bedrock": "⚠️ 有限支持",
+                  "helicone": "⚠️ 有限支持"
+                }
+              },
+              {
+                "feature": "根据实测结果重新排序路由",
+                "note": "运行评分会影响下一次的选择",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "⚠️ 按价格 / 延迟",
+                  "litellm": "⚠️ 基于延迟",
+                  "portkey": "⚠️ 条件规则",
+                  "bedrock": "❌",
+                  "helicone": "❌"
+                }
+              },
+              {
+                "feature": "在网关层应用提示词缓存",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "⚠️ 取决于厂商",
+                  "litellm": "✅",
+                  "portkey": "✅",
+                  "bedrock": "⚠️ 取决于厂商",
+                  "helicone": "✅"
+                }
+              },
+              {
+                "feature": "按租户计量与计费",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "⚠️ 按密钥计额度",
+                  "litellm": "✅ 虚拟密钥",
+                  "portkey": "✅",
+                  "bedrock": "⚠️ 走云厂商账单",
+                  "helicone": "⚠️ 仅分析报表"
+                }
+              }
+            ]
+          },
+          {
+            "id": "gateway-beyond",
+            "title": "token 究竟花在了什么上",
+            "blurb": "花费能否追溯到产生它的那项工作。",
+            "rows": [
+              {
+                "feature": "用量可归属到具体项目与工单",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "⚠️ 元数据标签",
+                  "litellm": "⚠️ 元数据标签",
+                  "portkey": "⚠️ 元数据标签",
+                  "bedrock": "❌",
+                  "helicone": "⚠️ 自定义属性"
+                }
+              },
+              {
+                "feature": "消耗这些 token 的智能体本身就随产品一起提供",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "❌",
+                  "litellm": "❌",
+                  "portkey": "❌",
+                  "bedrock": "⚠️ 需自行构建",
+                  "helicone": "❌"
+                }
+              },
+              {
+                "feature": "自托管 / 开源",
+                "values": {
+                  "builderforce": "✅",
+                  "openrouter": "❌",
+                  "litellm": "✅",
+                  "portkey": "✅",
+                  "bedrock": "❌",
+                  "helicone": "✅"
+                }
+              }
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "我还需要 OpenRouter 或 LiteLLM 这样的 AI 网关吗？",
+            "answer": "平台本身就自带一个：用一个 API 接入多家厂商，支持自带密钥或订阅账号登录、本地模型、失败回退、提示词缓存以及按租户计量。真正的差别在于归属——用量会绑定到引发它的项目与工单，因为消耗这些 token 的智能体本身就随平台一起提供。你现有的网关依然可以放在它后面继续使用。"
+          },
+          {
+            "question": "路由是如何决定的？",
+            "answer": "除了价格与延迟，还会看实际结果。每次运行都会被评分，这些评分会重新排列同类工作下一次优先选用的模型，因此路由会随着使用不断改进，而不是一份一成不变的偏好清单。当然，你也可以随时按工作区或按单次运行显式指定模型。"
+          }
+        ]
+      },
+      "talent": {
+        "label": "人才与智能体市场",
+        "blurb": "各类市场把工作与人对接起来。对比一下：当团队中有一部分成员是智能体时，工作如何寻源、如何执行、如何结算。",
+        "categories": [
+          {
+            "id": "talent-sourcing",
+            "title": "寻找产能",
+            "blurb": "当团队中有一部分成员不是人类时，团队该如何组建。",
+            "rows": [
+              {
+                "feature": "为界定范围的合作聘用人员",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "✅",
+                  "fiverr": "✅",
+                  "toptal": "✅",
+                  "agencies": "✅"
+                }
+              },
+              {
+                "feature": "用同样的方式聘用 AI 智能体",
+                "note": "智能体也是劳动力名册中的记录",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "❌",
+                  "fiverr": "❌",
+                  "toptal": "❌",
+                  "agencies": "❌"
+                }
+              },
+              {
+                "feature": "技能与智能体同处一个目录",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "⚠️ 自由职业者主页",
+                  "fiverr": "⚠️ 服务列表",
+                  "toptal": "⚠️ 经审核的人才主页",
+                  "agencies": "❌"
+                }
+              },
+              {
+                "feature": "第三方发布者可提供连接器与技能",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "❌",
+                  "fiverr": "❌",
+                  "toptal": "❌",
+                  "agencies": "❌"
+                }
+              }
+            ]
+          },
+          {
+            "id": "talent-delivery",
+            "title": "实际开展工作",
+            "blurb": "合作一旦签订，实际的工作在哪里进行。",
+            "rows": [
+              {
+                "feature": "合作本身就自带一个交付看板",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "⚠️ 基础工单跟踪",
+                  "fiverr": "❌",
+                  "toptal": "❌",
+                  "agencies": "⚠️ 各代理商自有工具"
+                }
+              },
+              {
+                "feature": "工作在同一个产品内执行并评审",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "❌",
+                  "fiverr": "❌",
+                  "toptal": "❌",
+                  "agencies": "❌"
+                }
+              },
+              {
+                "feature": "在验收工作前设置审批关卡",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "⚠️ 里程碑机制",
+                  "fiverr": "⚠️ 订单验收",
+                  "toptal": "⚠️ 按合同约定",
+                  "agencies": "⚠️ 按合同约定"
+                }
+              }
+            ]
+          },
+          {
+            "id": "talent-commercial",
+            "title": "商务条款",
+            "blurb": "卖的究竟是什么，以及平台从中抽取多少。",
+            "rows": [
+              {
+                "feature": "市场销售的平台抽成",
+                "note": "低于公示门槛的部分不收取平台费用",
+                "values": {
+                  "builderforce": "✅ 门槛以下 0% 抽成",
+                  "upwork": "见厂商定价",
+                  "fiverr": "见厂商定价",
+                  "toptal": "见厂商定价",
+                  "agencies": "需另行商议"
+                }
+              },
+              {
+                "feature": "售卖的是创作成果，而不只是工时",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "⚠️ 项目化服务目录",
+                  "fiverr": "✅ 服务商品",
+                  "toptal": "❌",
+                  "agencies": "⚠️ 需另行商议"
+                }
+              },
+              {
+                "feature": "可在你自己的基础设施上运行同一套平台",
+                "values": {
+                  "builderforce": "✅",
+                  "upwork": "❌",
+                  "fiverr": "❌",
+                  "toptal": "❌",
+                  "agencies": "❌"
+                }
+              }
+            ]
+          }
+        ],
+        "faq": [
+          {
+            "question": "这个市场与 Upwork 或 Fiverr 有什么不同？",
+            "answer": "你既可以为界定范围的合作聘用人员，也可以用完全相同的方式聘用 AI 智能体——因为智能体本身就是同一块看板上的劳动力记录。合作本身自带交付看板与审批关卡，工作在同一个产品内执行并评审；而且你可以直接售卖创作成果，而不只是出售工时。"
+          },
+          {
+            "question": "平台会抽取多少？",
+            "answer": "市场销售在公示门槛以下不收取平台费用，而且同一套平台也可以运行在你自己的基础设施上。发布者还可以把连接器、技能与智能体上架到目录中，因此这个市场卖的是成型的创作与能力，而不只是可用工时。"
+          }
+        ]
+      }
+    },
+    "arenaTabsLabel": "选择对比领域"
   },
   "promptUseCases": {
     "tabLabel": "选择起点",

@@ -4992,7 +4992,13 @@ select.input option {
 }
 
 /* ── FAQ ──────────────────────────────────────────────────────────────── */
-.mk-faq { display: flex; flex-direction: column; gap: var(--space-2); max-width: 760px; margin: 0 auto; }
+/* The list fills the band it is placed in — the CONTAINER owns the width, the
+   same way every other marketing section does. It used to cap itself at 760px
+   and centre, so on any page whose sections ride the full marketing column
+   (`/compare` most visibly) the FAQ was the one band that stopped short of the
+   content edges. A caller that wants a narrower measure sets it on its own
+   wrapper; the shared component no longer decides that for eight pages. */
+.mk-faq { display: flex; flex-direction: column; gap: var(--space-2); width: 100%; }
 .mk-q { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-card); overflow: hidden; }
 .mk-q > summary {
   display: flex; align-items: center; gap: var(--space-3);
@@ -5004,6 +5010,49 @@ select.input option {
 .mk-q__chev { margin-left: auto; flex: none; color: var(--text-muted); transition: transform var(--duration-fast) ease; }
 .mk-q[open] .mk-q__chev { transform: rotate(180deg); }
 .mk-q > p { margin: 0; padding: 0 16px 15px; font-size: var(--font-size-small); color: var(--text-secondary); line-height: 1.65; }
+
+/* ── Comparison matrix (components/marketing/CompetitorMatrix.tsx) ─────────
+   Here rather than inline in the component because `/compare` renders one
+   matrix per arena tab; an inline <style> would be emitted once per arena. */
+.cm { max-width: var(--marketing-max); margin: 0 auto; padding: 8px var(--marketing-gutter) 16px; width: 100%; }
+.cm-heading {
+  font-family: var(--font-display); font-weight: 700; font-size: var(--font-size-section);
+  color: var(--text-primary); margin: 24px 0 10px;
+}
+.cm-note { font-size: var(--font-size-small); color: var(--text-muted); line-height: 1.6; margin: 0 0 8px; max-width: 72ch; }
+/* Only worth saying when the table is actually wider than the screen. A media
+   query rather than a measurement, because this renders on the server and a
+   hint that appears after hydration is a layout shift. */
+.cm-hint { font-size: var(--font-size-small); color: var(--text-muted); margin: 0 0 20px; }
+@media (min-width: 1200px) { .cm-hint { display: none; } }
+
+.cm-cat { margin-bottom: 28px; }
+.cm-cat-title {
+  font-family: var(--font-display); font-weight: 600; font-size: var(--font-size-card-title);
+  color: var(--text-primary); margin: 0 0 4px;
+}
+.cm-cat-blurb { font-size: var(--font-size-small); color: var(--text-secondary); line-height: 1.6; margin: 0 0 12px; max-width: 72ch; }
+
+/* .table-wrap / .data-table are the shared table chrome above; it already
+   scrolls on x, which is what a matrix this wide needs on a phone. Everything
+   below is the comparison-specific part only. */
+.cm-table { min-width: 560px; }
+.cm-table th, .cm-table td { vertical-align: top; font-size: var(--font-size-small); }
+.cm-table thead th {
+  font-family: var(--font-display); font-weight: 650; color: var(--text-primary);
+  white-space: nowrap;
+}
+/* The feature column stays put while the vendor columns scroll under it, so a
+   cell is never orphaned from the capability it answers. It needs an opaque
+   background of its own — a sticky cell paints over the row it left behind, and
+   --bg-elevated/--bg-muted are the solid pair. */
+.cm-feature { position: sticky; left: 0; z-index: 1; background: var(--bg-elevated); min-width: 190px; }
+.cm-table thead .cm-feature { background: var(--bg-muted); }
+.cm-feature-name { font-weight: 600; color: var(--text-primary); }
+.cm-feature-note { display: block; margin-top: 3px; font-size: var(--font-size-eyebrow); color: var(--text-muted); line-height: 1.5; }
+.cm-cell { color: var(--text-secondary); min-width: 116px; }
+.cm-us { background: var(--surface-sunken); color: var(--text-primary); font-weight: 600; }
+.cm-table thead .cm-us { color: var(--coral-bright); }
 
 @media (max-width: 860px) {
   .mk-hero { grid-template-columns: 1fr; }

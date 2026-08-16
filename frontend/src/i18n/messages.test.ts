@@ -27,6 +27,7 @@ import {
   destTaglineKey,
   destTitleKey
 } from '@/lib/publicDestinations';
+import { COMPARE_ARENAS } from '@/lib/content';
 import { FAMILIES, FAMILY_IDS, kindLabelKey } from '@/lib/marketplaceFamilies';
 import { BLOG_TOPICS } from '@/lib/blogTopics';
 import { METHOD_STEPS, PROOF_FORMS, methodStepKey, proofFormKey } from '@/lib/methodology';
@@ -270,9 +271,55 @@ describe('message catalogs', () => {
         ...(descKey ? [`widgets.desc.${descKey}`] : []),
       ]),
       ...panelKeys,
+      // Every comparison arena's tab label and blurb, and a vendor name for
+      // every column in it. `/compare` renders the tab strip straight off
+      // COMPARE_ARENAS, so an arena added to the registry without catalog copy
+      // would put a dotted key on a tab in five languages.
+      ...COMPARE_ARENAS.flatMap((arena) => [
+        `compare.arenas.${arena.key}.label`,
+        `compare.arenas.${arena.key}.blurb`,
+        ...arena.competitors.map((column) => `compare.competitorLabels.${column.key}`),
+      ]),
     ]);
     const missing = [...keys].filter((key) => t(key as never) === key).sort();
     expect(missing).toEqual([]);
+  });
+
+  /**
+   * The matrix is a grid, and a grid drifts one cell at a time: a column added
+   * to `COMPARE_ARENAS` with no `values` entry renders a silently empty cell
+   * under a vendor's name, which reads as "not supported" rather than as the
+   * missing data it is.
+   */
+  it.each(LOCALES)('%s fills every comparison cell for every arena column', (locale) => {
+    const arenas = (CATALOGS[locale].compare as Record<string, unknown>).arenas as Record<
+      string,
+      {
+        categories?: { id: string; rows?: { feature: string; values?: Record<string, string> }[] }[];
+        faq?: { question?: string; answer?: string }[];
+      }
+    >;
+    const gaps: string[] = [];
+    for (const arena of COMPARE_ARENAS) {
+      const categories = arenas?.[arena.key]?.categories ?? [];
+      expect(categories.length, `${arena.key} has no categories`).toBeGreaterThan(0);
+      // Each tab carries its own FAQ, so a tab without one renders a heading
+      // over nothing — `MarketingFaq` self-gates and the section reads empty.
+      const faq = arenas?.[arena.key]?.faq ?? [];
+      expect(faq.length, `${arena.key} has no faq`).toBeGreaterThan(0);
+      for (const item of faq) {
+        if (!item.question?.trim() || !item.answer?.trim()) gaps.push(`${arena.key}/faq/${item.question ?? '(no question)'}`);
+      }
+      const columns = ['builderforce', ...arena.competitors.map((column) => column.key)];
+      for (const category of categories) {
+        for (const row of category.rows ?? []) {
+          for (const column of columns) {
+            if (!row.values?.[column]?.trim()) gaps.push(`${arena.key}/${category.id}/${row.feature}/${column}`);
+          }
+        }
+      }
+    }
+    expect(gaps).toEqual([]);
   });
 
   it.each(LOCALES.filter((l) => l !== DEFAULT_LOCALE))('%s has exactly the keys en has', (locale) => {

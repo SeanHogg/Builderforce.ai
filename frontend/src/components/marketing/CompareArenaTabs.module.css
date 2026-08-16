@@ -1,0 +1,64 @@
+/* Tabs for the comparison arenas. Chrome only — every string is a prop. */
+
+.wrap {
+  max-width: var(--marketing-max);
+  margin: 0 auto;
+  padding: 8px var(--marketing-gutter) 0;
+  width: 100%;
+}
+
+/* Wraps rather than scrolls: six labels on a phone become three short rows,
+   which stays readable, where a horizontal strip hides the last two tabs
+   behind a scroll gesture nothing signals. */
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 12px;
+}
+
+.tab {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-md);
+  padding: 8px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) ease, color var(--duration-fast) ease;
+}
+
+.tab:hover {
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+.tab[aria-selected='true'] {
+  background: var(--coral-bright);
+  border-color: var(--coral-bright);
+  color: var(--text-on-accent);
+}
+
+.blurb {
+  font-size: var(--font-size-body);
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin: 18px 0 0;
+}
+
+.panel:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 4px;
+}

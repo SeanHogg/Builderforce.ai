@@ -83,6 +83,16 @@
  *   pages. The share view (`references/shared/[token]`) is a Server Component
  *   too — an employer reading it never interacts with anything.
  *
+ *   799 → 800 (`useClientFiles`, 2026-08-16) — `components/marketing/
+ *   CompareArenaTabs.tsx`, the arena tab strip on `/compare`. Selecting a tab is
+ *   the whole component, so it holds the one piece of state and the roving
+ *   focus the ARIA tabs pattern requires. What it deliberately does NOT own is
+ *   the content: the six comparison PANELS are rendered by the Server Component
+ *   page and handed in as a `ReactNode[]`, so six matrices and their catalog
+ *   reads stay on the server and the client boundary costs exactly one index.
+ *   That is the shape to copy — a client file whose interactivity is real and
+ *   whose payload is somebody else's.
+ *
  *   The THIRD, `components/resume/ResumeDocumentView.tsx`, is why this is +2 and
  *   not +3: it had the directive and needed none. Props in, paper out, no hook and
  *   no handler. Its interactive hosts pull it into their bundle by importing it,

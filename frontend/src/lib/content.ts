@@ -473,16 +473,108 @@ export interface CompetitorCol {
   label: string;
 }
 
-/** Rival tools in display order. Builderforce.ai is always the first, highlighted column. */
-export const COMPETITORS: CompetitorCol[] = [
-  { key: 'copilot', label: 'GitHub Copilot' },
-  { key: 'cursor', label: 'Cursor / Windsurf' },
-  { key: 'claudeCode', label: 'Claude Code' },
-  { key: 'devin', label: 'Devin' },
-  { key: 'openhands', label: 'OpenHands' },
-  { key: 'aider', label: 'Aider' },
-  { key: 'continueDev', label: 'Continue.dev' },
+/**
+ * A comparison ARENA — one market Builderforce.ai is measured in, and the rival
+ * columns that belong to it.
+ *
+ * `/compare` used to be a single table of AI coding agents, which described one
+ * of the products this platform actually competes with. A tracker buyer, a
+ * canvas buyer, a gateway buyer and a marketplace buyer all land on the same
+ * URL, and each of them was shown Copilot and Aider. The arena is the second
+ * axis: the page renders one tab per arena, each with its own columns and its
+ * own capability categories.
+ *
+ * This registry owns the stable KEY and ORDER only. Every visible string — the
+ * tab label, the blurb, the categories, the cells — lives in the `compare`
+ * catalog under `compare.arenas.<key>`, so a locale translates a comparison
+ * rather than inheriting an English one. Adding an arena is a row here plus a
+ * catalog block; it is never a new component or a new branch.
+ */
+export interface CompareArena {
+  /** Stable key — resolves `compare.arenas.<key>.{label,blurb,categories}`. */
+  key: string;
+  /** Rival columns for this arena, in display order. */
+  competitors: CompetitorCol[];
+}
+
+/** Every arena in tab order. The first is the default tab. */
+export const COMPARE_ARENAS: CompareArena[] = [
+  {
+    key: 'agentic',
+    competitors: [
+      { key: 'copilot', label: 'GitHub Copilot' },
+      { key: 'cursor', label: 'Cursor / Windsurf' },
+      { key: 'claudeCode', label: 'Claude Code' },
+      { key: 'devin', label: 'Devin' },
+      { key: 'openhands', label: 'OpenHands' },
+      { key: 'aider', label: 'Aider' },
+      { key: 'continueDev', label: 'Continue.dev' },
+    ],
+  },
+  {
+    key: 'delivery',
+    competitors: [
+      { key: 'jira', label: 'Jira' },
+      { key: 'linear', label: 'Linear' },
+      { key: 'asana', label: 'Asana' },
+      { key: 'monday', label: 'Monday.com' },
+      { key: 'azureBoards', label: 'Azure Boards' },
+    ],
+  },
+  {
+    key: 'canvas',
+    competitors: [
+      { key: 'figma', label: 'Figma' },
+      { key: 'canva', label: 'Canva' },
+      { key: 'miro', label: 'Miro' },
+      { key: 'notion', label: 'Notion' },
+    ],
+  },
+  {
+    key: 'automation',
+    competitors: [
+      { key: 'zapier', label: 'Zapier' },
+      { key: 'n8n', label: 'n8n' },
+      { key: 'make', label: 'Make' },
+      { key: 'copilotStudio', label: 'Copilot Studio' },
+      { key: 'langgraph', label: 'LangGraph / CrewAI' },
+    ],
+  },
+  {
+    key: 'gateway',
+    competitors: [
+      { key: 'openrouter', label: 'OpenRouter' },
+      { key: 'litellm', label: 'LiteLLM' },
+      { key: 'portkey', label: 'Portkey' },
+      { key: 'bedrock', label: 'Amazon Bedrock' },
+      { key: 'helicone', label: 'Helicone' },
+    ],
+  },
+  {
+    key: 'talent',
+    competitors: [
+      { key: 'upwork', label: 'Upwork' },
+      { key: 'fiverr', label: 'Fiverr' },
+      { key: 'toptal', label: 'Toptal' },
+      { key: 'agencies', label: 'Dev agencies' },
+    ],
+  },
 ];
+
+/** The default arena's key — the tab `/compare` opens on. */
+export const DEFAULT_COMPARE_ARENA = COMPARE_ARENAS[0].key;
+
+/**
+ * The arena a competitor column belongs to, or `undefined` for an unknown key.
+ * `/compare/{slug}` leaf pages use it to render the right arena's categories
+ * against that one vendor, so a leaf never has to know which tab it came from.
+ */
+export function arenaForCompetitor(key: string): CompareArena | undefined {
+  return COMPARE_ARENAS.find((arena) => arena.competitors.some((c) => c.key === key));
+}
+
+/** The AI-coding-agent columns — the first arena, and the only one with `/compare/{slug}` leaf pages. */
+export const COMPETITORS: CompetitorCol[] = COMPARE_ARENAS[0].competitors;
 
 export interface CompetitiveRow {
   feature: string;
@@ -883,7 +975,14 @@ export const PRICING_FAQ: FaqItem[] = [
   },
 ];
 
-/** Compare page FAQ — competitor-intent Q&As for "vs" search capture */
+/**
+ * Compare page FAQ — competitor-intent Q&As for "vs" search capture.
+ *
+ * This is the crawler-facing copy (`compareSchema()` emits it as an FAQPage);
+ * the rendered page reads the localized `compare.arenas.<key>.faq` blocks. It
+ * therefore has to span the same ARENAS the page does — a FAQPage describing
+ * only the coding-agent tab would under-describe five sixths of the page.
+ */
 export const COMPARE_FAQ: FaqItem[] = [
   {
     question: 'Is Builderforce.ai an alternative to GitHub Copilot?',
@@ -914,6 +1013,61 @@ export const COMPARE_FAQ: FaqItem[] = [
     question: 'Does Builderforce.ai lock me into one model or IDE?',
     answer:
       'Builderforce.ai supports multiple cloud and local model options, and engineering context can be used on the web or in VS Code. Availability depends on the current catalog, plan, credentials, region, and runtime; verify those requirements before choosing a deployment.',
+  },
+  // Delivery & work management
+  {
+    question: 'Can Builderforce.ai replace Jira or Linear?',
+    answer:
+      'It can run delivery end to end: backlog, sprints, objectives, ceremonies and a portfolio rollup, with agents assignable next to people and every run recorded against the item it worked on. Teams that keep an existing tracker connect it instead — the board-sync connectors keep both sides current — so this is usually a migration decision rather than a capability gap.',
+  },
+  {
+    question: 'What does a tracker not give me that this does?',
+    answer:
+      'Execution. A tracker records that a ticket moved; here the ticket can be picked up by an agent run, gated by the role that has to sign it off, and left with its transcript, cost and diagnostics attached. The delivery health verdict is then computed from that evidence instead of set by hand.',
+  },
+  // Creative canvas & docs
+  {
+    question: 'How does this compare with Figma, Miro or Notion?',
+    answer:
+      'Those tools shape the artifact; the canvas connects it. Objects are typed and spec-driven, so a document, board or sheet can become a delivery ticket, a published listing or a running app inside the same project, and totals are derived from their own rows rather than stored twice. For pure visual design, keep the design tool and connect it.',
+  },
+  {
+    question: 'Do I have to move my design work into Builderforce.ai?',
+    answer:
+      'No. The canvas is where an idea becomes connected work, not a replacement for a drawing tool. Import from the boards and drives you already use, keep specialist design where it is, and bring the artifact in when it needs a ticket, an approval, a buyer or a runtime.',
+  },
+  // Workflow & agent automation
+  {
+    question: 'Is this an alternative to Zapier, n8n or an agent framework?',
+    answer:
+      'It covers the same wiring in a visual builder, with model reasoning as a first-class node and specialist agent roles arranged on a dependency graph rather than a single chain. What differs is what surrounds a run: approval gates, policy packs enforced at execution, a circuit breaker on repeated failure, and a transcript with cost and retries attached to the work item.',
+  },
+  {
+    question: 'Can agents call my existing tools?',
+    answer:
+      'Yes — through MCP, which the platform both consumes and exposes as a server, plus the connector catalog for trackers, drives, mailboxes, repositories and ad or analytics accounts. An existing automation platform can stay in place and be called as a step; nothing here requires rebuilding flows that already work.',
+  },
+  // AI gateway & model routing
+  {
+    question: 'Do I still need an AI gateway like OpenRouter or LiteLLM?',
+    answer:
+      'One is included: many providers behind a single API, your own keys or a subscription sign-in, local models, fallback, prompt caching and per-tenant metering. The difference is attribution — usage is tied to the project and ticket that caused it, because the agents spending the tokens ship with the platform. An existing gateway can still sit behind it.',
+  },
+  {
+    question: 'How is routing decided?',
+    answer:
+      'By outcome as well as by price and latency. Runs are scored, and those scores reorder which model is picked next for that kind of work, so routing improves with use rather than staying a static preference list. Model choice stays explicit whenever you want it to be, per workspace or per run.',
+  },
+  // Talent & agent marketplace
+  {
+    question: 'How is the marketplace different from Upwork or Fiverr?',
+    answer:
+      'You can hire a person for a scoped engagement, and hire an AI agent the same way, because agents are workforce records on the same board. The engagement arrives with a delivery board, approval gates, and the work executed and reviewed in the same product — and a creation can be sold outright rather than only hours.',
+  },
+  {
+    question: 'What does the platform take?',
+    answer:
+      'There is no platform fee on marketplace sales below the published threshold, and the same platform can be run on your own infrastructure. Publishers can also ship connectors, skills and agents into the catalog, so the marketplace sells finished creations and capabilities, not only availability.',
   },
 ];
 

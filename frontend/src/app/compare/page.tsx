@@ -3,11 +3,12 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
+import CompareArenaTabs from '@/components/marketing/CompareArenaTabs';
 import CompetitorMatrix, { type CompareCategory } from '@/components/marketing/CompetitorMatrix';
 import MarketingFaq, { type MarketingFaqItem } from '@/components/marketing/MarketingFaq';
 import { compareSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
-import { COMPARE } from '@/lib/content';
+import { COMPARE, COMPARE_ARENAS } from '@/lib/content';
 import { Icon } from '@/components/ui/Icon';
 
 export const runtime = 'edge';
@@ -29,8 +30,21 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function ComparePage() {
   const t = await getTranslations();
   const pillars = t.raw('compare.pillars') as { title: string; desc: string }[];
-  const categories = t.raw('compare.categories') as CompareCategory[];
-  const faq = t.raw('compare.faq') as MarketingFaqItem[];
+
+  // One tab per arena, in registry order. The panel is that arena's criteria
+  // cards, its matrix and its FAQ — the cards and the table read the SAME
+  // `compare.arenas.<key>.categories` block, so they can never disagree about
+  // which categories exist, and the FAQ answers the objections of the market
+  // the reader is actually looking at rather than a fixed set about editors.
+  // Panels are server-rendered here and handed to the client tab strip as
+  // nodes, so every arena is in the HTML a crawler receives.
+  const arenas = COMPARE_ARENAS.map((arena) => ({
+    key: arena.key,
+    label: t(`compare.arenas.${arena.key}.label`),
+    blurb: t(`compare.arenas.${arena.key}.blurb`),
+    categories: (t.raw(`compare.arenas.${arena.key}.categories`) as CompareCategory[] | undefined) ?? [],
+    faq: (t.raw(`compare.arenas.${arena.key}.faq`) as MarketingFaqItem[] | undefined) ?? [],
+  }));
 
   return (
     <>
@@ -121,25 +135,32 @@ export default async function ComparePage() {
 
           <section className="cmp-section">
             <p className="cmp-intro">{t('compare.intro')}</p>
-            <div className="cmp-criteria" aria-label={t('compare.capabilityHeader')}>
-              {categories.map((cat) => (
-                <article className="cmp-criterion" key={cat.id}>
-                  <h2 className="cmp-cat-title">{cat.title}</h2>
-                  <p className="cmp-cat-blurb">{cat.blurb}</p>
-                </article>
-              ))}
-            </div>
           </section>
 
-          {/* The matrix the criteria cards above are a summary OF. It reads the
-              same `compare.categories` block, so the cards and the table can
-              never disagree about which categories exist. */}
-          <CompetitorMatrix />
-
-          <section className="cmp-section cmp-faq">
-            <h2 className="cmp-faq-title">{t('compare.faqHeading')}</h2>
-            <MarketingFaq items={faq} />
-          </section>
+          <CompareArenaTabs
+            label={t('compare.arenaTabsLabel')}
+            tabs={arenas.map(({ key, label, blurb }) => ({ key, label, blurb }))}
+            panels={arenas.map((arena) => (
+              <div key={arena.key}>
+                <section className="cmp-section">
+                  <div className="cmp-criteria" aria-label={t('compare.capabilityHeader')}>
+                    {arena.categories.map((cat) => (
+                      <article className="cmp-criterion" key={cat.id}>
+                        <h2 className="cmp-cat-title">{cat.title}</h2>
+                        <p className="cmp-cat-blurb">{cat.blurb}</p>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+                {/* The matrix the criteria cards above are a summary OF. */}
+                <CompetitorMatrix arena={arena.key} />
+                <section className="cmp-section cmp-faq">
+                  <h2 className="cmp-faq-title">{t('compare.faqHeading')}</h2>
+                  <MarketingFaq items={arena.faq} />
+                </section>
+              </div>
+            ))}
+          />
 
           <RelatedArticles surface="compare" heading={t('compare.relatedHeading')} />
 
