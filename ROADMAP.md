@@ -133,7 +133,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
 | 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 36 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 154 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 155 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
@@ -153,7 +153,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 7 | 25 |
 | 8 | 3 |
 | 9 | 36 |
-| 10 | 154 |
+| 10 | 155 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
@@ -1256,6 +1256,8 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
 
 
 ### Marketplace, talent, freelance
+
+- **Two API design guards are red on `reference_shares`, a table written minutes before this was logged.** *(observed 2026-08-16 while taking the register's last two entries green)* Migration `0476_professional_references.sql` creates `professional_references` and `reference_shares`; `check:shape-lint` says `reference_shares` **matches the kernel `share_link` shape** and asks whether it should be a `share_link` row with a kind, and `check:tenant-column` says it carries no `tenant_id`/`segment_id`/`account_id`, so `check:tenant-scope` cannot see it and no query against it can ever be checked. Neither is a mechanical fix and neither should be silenced with `--update`: this is the same conversation migration 0467 had with the same guards about `developer_orgs`, argued with rather than answered, and undone wholesale by 0471. **Blocked on the author of that migration**, who is the only one who can say whether a professional reference's share link is genuinely a different noun from every other share link, and what a reference row is scoped to when it belongs to a PERSON rather than a workspace. The same work also leaves `professional_references` and `reference_shares` undeclared in Drizzle and absent from the entity catalog, which reds `tableAdoption.test.ts` and `entityCatalog.test.ts`. Unblocks: `api npm run check` and the API suite green end to end.
 
 
 - **Six data-model ratchets are green but their baselines are not zero — 258 known violations to pay down.** *(guards landed 2026-08-08, PRD 20 §5 Step 0; see [PRD 20](./specs/builderforce/20-prd-consolidated-data-model.md))* The guards now exist and stop the NEXT violation; the existing ones are still there. Open balances: **8 duplicate-shape clusters** (`drive_connections`=`mailbox_connections` · `portfolios`=`initiatives` · `tenant_custom_roles`=`platform_modules` · `tool_runs`=`marketing_tool_runs` · `tenant_manager_defaults`=`project_manager_configs` · `tenant_skill_assignments`=`agent_host_skill_assignments` · `import_type_mappings`=`board_type_mappings` · `kanban_template_lane_requirements`=`swimlane_requirements`) · **93 table names matching a kernel shape** (each needs a one-line verdict: legitimate primitive, or duplication to migrate) · **72 tables with no tenant-scoping column** (global catalogues are fine here; customer-data tables are not, and they are invisible to `check-tenant-scope.mjs` by construction) · **3 polymorphic `(kind, id)` references with nothing to point at** (`activity_log`, `creation_session_objects`, `proposal_evaluations` — clears the day the `objects` registry lands) · **82 cross-module schema imports including cycles** (`brain`↔`collaboration`, `work`↔`runtime`, `identity`↔`billing`) · **target schema 140/362 written**. Baselines live at `api/scripts/.<name>-baseline.txt` and are enforced to shrink-only. **Blocked on an operator decision** for the parts that are schema changes rather than cleanup — which of the 25 kernel primitives are accepted (PRD 20 §6), since collapsing `drive`/`mailbox` into `connection` and `portfolios`/`initiatives` into `work_item` IS three of the eight. The 93 shape-lint verdicts and the 82 import edges need no decision and can start now. Unblocks: `npm test` becomes a real gate on the data model instead of a shrinking allowance.

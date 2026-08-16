@@ -179,10 +179,17 @@ export interface EmailTemplate {
   updatedAt: string;
 }
 
+/**
+ * What a stored asset IS. `logo` is a ROLE an image plays — templates reference
+ * it as `{{logo}}` rather than by id — which is why it sits beside the two media
+ * classes instead of above them.
+ */
+export type AssetKind = 'logo' | 'image' | 'video';
+
 export interface MarketingAsset {
   id: number;
   name: string;
-  kind: 'logo' | 'image' | string;
+  kind: AssetKind | string;
   mimeType: string;
   byteSize: number;
   width: number | null;
@@ -301,31 +308,35 @@ export const growthApi = {
   deleteTemplate: (templateId: number): Promise<void> =>
     apiRequest(`${GROWTH}/templates/${templateId}`, { method: 'DELETE' }),
 
-  // ---- assets (logos + images) -----------------------------------------
+  // ---- assets (logos, images + videos) ----------------------------------
 
-  listAssets: (kind?: 'logo' | 'image'): Promise<{ assets: MarketingAsset[] }> =>
+  listAssets: (kind?: AssetKind): Promise<{ assets: MarketingAsset[] }> =>
     apiRequest(`${GROWTH}/assets${kind ? `?kind=${kind}` : ''}`),
 
   /** multipart, not base64 JSON — a 2 MB logo would inflate to 2.7 MB on the
-   *  wire. No Content-Type header: the browser must set the form boundary. */
-  uploadAsset: (file: File, kind: 'logo' | 'image' = 'image', name?: string): Promise<MarketingAsset> => {
+   *  wire, and a 32 MB clip to 43 MB. No Content-Type header: the browser must
+   *  set the form boundary. */
+  uploadAsset: (file: File, kind?: AssetKind, name?: string): Promise<MarketingAsset> => {
     const form = new FormData();
     form.append('file', file);
-    form.append('kind', kind);
+    // Only sent when the caller MEANS it. The server reads the kind off the
+    // bytes otherwise, so a hard-coded 'image' here is how an MP4 gets filed as
+    // a picture.
+    if (kind) form.append('kind', kind);
     if (name) form.append('name', name);
     return apiRequest(`${GROWTH}/assets`, { method: 'POST', body: form });
   },
 
   /**
-   * Store an image the caller does NOT hold as a `File` — a `data:` URI the
-   * board generated, or a stock `https` URL — and get its public token URL back.
+   * Store media the caller does NOT hold as a `File` — a `data:` URI the board
+   * generated, or a stock `https` URL — and get its public token URL back.
    *
    * The same route as {@link uploadAsset}, in its JSON encoding, because it is
    * the same act. A canvas creative object has pixels but no File, and Instagram
-   * fetches media itself with no session, so this is the step between "the board
-   * made a picture" and "the picture can be published".
+   * and TikTok fetch media themselves with no session, so this is the step
+   * between "the board made this" and "this can be published".
    */
-  createAssetFromSource: (body: { source: string; name?: string; kind?: 'logo' | 'image' }): Promise<MarketingAsset> =>
+  createAssetFromSource: (body: { source: string; name?: string; kind?: AssetKind }): Promise<MarketingAsset> =>
     apiRequest(`${GROWTH}/assets`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     }),

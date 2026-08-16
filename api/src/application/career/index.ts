@@ -26,6 +26,7 @@ export * from './jobMatch';
 export * from './jobDocument';
 export * from './interviewKit';
 export * from './compensation';
+export * from './salaryDirectory';
 export * from './career360';
 export * from './listing';
 export * from './runway';

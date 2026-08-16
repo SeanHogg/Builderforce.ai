@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assetMediaClass,
+  assetTooLargeMessage,
   assetUrl,
   extractMergeFields,
+  isAssetKind,
   logoPrompt,
+  maxAssetBytes,
   resolveAssetOrigin,
   readMediaSource,
   sanitizeTemplateHtml,
@@ -199,5 +203,63 @@ describe('readMediaSource', () => {
 
   it('rejects an empty source instead of storing a zero-byte asset', async () => {
     expect((await readMediaSource('   ')).ok).toBe(false);
+  });
+
+  it('accepts a video, which is what makes TikTok reachable from the board', async () => {
+    // TikTok publishes video ONLY, so an images-only store meant "post this clip"
+    // had nowhere to put the clip and the target was skipped with a blocker
+    // nobody could clear from the canvas.
+    const read = await readMediaSource('data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28y');
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.mimeType).toBe('video/mp4');
+  });
+
+  it('gives video its own ceiling rather than the mail-client one', async () => {
+    // 3 MB is over the 2 MB IMAGE limit and well under the 32 MB video one. The
+    // same payload therefore has to be refused as a picture and accepted as a
+    // clip — which is the whole point of the ceiling being per media class.
+    const payload = 'A'.repeat(4 * 1024 * 1024);
+    expect((await readMediaSource(`data:image/png;base64,${payload}`)).ok).toBe(false);
+    expect((await readMediaSource(`data:video/mp4;base64,${payload}`)).ok).toBe(true);
+  });
+
+});
+
+describe('the media classes this store holds', () => {
+  it('classifies by MIME type and nothing else', () => {
+    expect(assetMediaClass('image/png')).toBe('image');
+    expect(assetMediaClass('VIDEO/MP4')).toBe('video');
+    expect(assetMediaClass('video/mp4; codecs=avc1')).toBe('video');
+    expect(assetMediaClass('application/pdf')).toBeNull();
+  });
+
+  it('bounds video at 32 MB — this path buffers, so the limit is the isolate not TikTok', () => {
+    // Asserted as a number rather than by decoding a 48 MB data URL: proving the
+    // ceiling should not cost 17 seconds of base64 on every run.
+    expect(maxAssetBytes('video/mp4')).toBe(32 * 1024 * 1024);
+    expect(maxAssetBytes('image/png')).toBe(2 * 1024 * 1024);
+  });
+
+  it('gives an unknown type the SMALLEST ceiling, so an early size check still refuses', () => {
+    // The upload route checks size before the store has judged the type, so the
+    // fallback has to be the strict one — the alternative is buffering 32 MB of
+    // something that was never going to be stored.
+    expect(maxAssetBytes('application/octet-stream')).toBe(maxAssetBytes('image/png'));
+    expect(maxAssetBytes('video/mp4')).toBeGreaterThan(maxAssetBytes('image/png'));
+  });
+
+  it('says the same sentence early and late', () => {
+    // The route refuses an oversized upload before reading it; the store refuses
+    // it after. Two wordings for one limit is how a 413 stops being actionable.
+    expect(assetTooLargeMessage('video/mp4')).toContain('32 MB');
+    expect(assetTooLargeMessage('image/png')).toContain('2 MB');
+  });
+
+  it('accepts only the three kinds a row may carry', () => {
+    expect(isAssetKind('video')).toBe(true);
+    expect(isAssetKind('logo')).toBe(true);
+    expect(isAssetKind('image')).toBe(true);
+    expect(isAssetKind('audio')).toBe(false);
   });
 });

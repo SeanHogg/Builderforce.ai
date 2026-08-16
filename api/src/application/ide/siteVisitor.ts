@@ -12,24 +12,40 @@
  *
  * ── THE RULE, AND WHY IT IS SHAPED THIS WAY ──────────────────────────────────────
  *   no session                        → visitor.  Nobody is entitled anonymously.
- *   session, no subscription row      → entitled. A FREE app has no subscription to
- *                                       hold, so requiring one would lock every free
- *                                       app behind a payment that does not exist.
- *                                       Signing in is the entitlement.
  *   session, live subscription        → entitled.
  *   session, lapsed or cancelled      → visitor. They see the shop window again, which
  *                                       is where the renewal is — a dead end with an
  *                                       error would be the alternative.
+ *   session, never subscribed         → ASK THE SELLER. See below.
  *
- * The last line is the one worth stating out loud: a lapsed subscriber is deliberately
- * NOT told "access denied". They are returned to the page that sells the thing they
- * already wanted, still signed in, one click from resubscribing.
+ * The lapsed line is worth stating out loud: a lapsed subscriber is deliberately NOT
+ * told "access denied". They are returned to the page that sells the thing they already
+ * wanted, still signed in, one click from resubscribing.
+ *
+ * ── THE LAST LINE USED TO BE "ENTITLED", AND THAT WAS A HOLE ─────────────────────
+ * "No subscription row → entitled" is right for a FREE app — there is no subscription
+ * to hold, and requiring one would lock everybody out of something nobody is charging
+ * for. It is wrong for a PAID one, because this site's own sign-in is an emailed code
+ * anybody can request: sign in, never pay, get the product.
+ *
+ * The missing fact was never the visitor's, it was the SELLER's — free, priced, opened
+ * to a full trial, or withdrawn. That lives on the `app` listing published from the
+ * board that became this project (`siteListing.ts` finds it, cached and invalidated by
+ * the marketplace's own version token), and the decision it feeds is
+ * `entitledToListing` in `creationListings.ts` — THE rule, which the marketplace
+ * listing page already asks. Two copies of that sentence is a paid product served free
+ * at one address or a paying customer locked out at the other.
+ *
+ * A site with NO listing is unchanged: nothing is on sale, signing in is the gate the
+ * creator put up, and a signed-in end user is entitled.
  */
 
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveSiteUser, siteSessionCookie } from './siteAuth';
 import { siteSubscriptionState, type SiteSubscriptionState } from '../marketplace/siteSubscriptions';
+import { entitledToListing } from '../marketplace/creationListings';
+import { siteListing } from './siteListing';
 import type { SiteRecord } from './siteHosting';
 
 export interface SiteVisitor {
@@ -44,20 +60,34 @@ export interface SiteVisitor {
 const ANONYMOUS: SiteVisitor = { siteUserId: null, email: null, entitled: false, subscription: 'none' };
 
 export async function resolveSiteVisitor(
+  env: Env,
   db: Db,
-  site: Pick<SiteRecord, 'siteId' | 'tenantId'>,
+  site: Pick<SiteRecord, 'siteId' | 'tenantId' | 'projectId'>,
   request: Request,
 ): Promise<SiteVisitor> {
   const identity = await resolveSiteUser(
     db, site.siteId, site.tenantId, siteSessionCookie(request.headers.get('cookie')),
   );
+  // Answered before any other read: an anonymous visitor is the overwhelming majority
+  // of traffic to a public page, and they cannot be an entitled `site_user` by
+  // definition.
   if (!identity) return ANONYMOUS;
 
   const { state } = await siteSubscriptionState(db, site.tenantId, site.siteId, identity.userId);
+  // A lapsed subscriber is never entitled, whatever the seller has since decided —
+  // including a seller who has since made the app free, because the shop window is
+  // where they find that out.
+  if (state === 'lapsed') {
+    return { siteUserId: identity.userId, email: identity.email, entitled: false, subscription: state };
+  }
+
+  const listing = await siteListing(env, db, site);
   return {
     siteUserId: identity.userId,
     email: identity.email,
-    entitled: state !== 'lapsed',
+    // Nothing on sale → signing in IS the gate the creator put up. Otherwise the
+    // seller's own terms decide, through the rule the marketplace already owns.
+    entitled: listing ? entitledToListing(listing, state === 'live') : true,
     subscription: state,
   };
 }

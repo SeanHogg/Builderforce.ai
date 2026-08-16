@@ -943,3 +943,58 @@ export const inboxSeatAddons = pgTable('inbox_seat_addons', {
 }, (t) => [
   index('idx_inbox_seat_addons_tenant').on(t.tenantId, t.status, t.endsAt),
 ]);
+
+/**
+ * The people who will vouch for you (migration 0476).
+ *
+ * Owned by the individual, like `freelancer_profiles` beside it — a reference is
+ * part of a person's career, not a workspace's HR record, so it is keyed by user
+ * and carries no tenant.
+ */
+export const professionalReferences = pgTable('professional_references', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  userId:        varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name:          varchar('name', { length: 160 }).notNull(),
+  /** One line: "Manager at Fintech Co, 2021–2024" — what an employer reads first. */
+  relationship:  varchar('relationship', { length: 240 }),
+  company:       varchar('company', { length: 160 }),
+  title:         varchar('title', { length: 160 }),
+  email:         varchar('email', { length: 320 }),
+  phone:         varchar('phone', { length: 60 }),
+  /** The two or three things this person can actually confirm. */
+  canSpeakTo:    text('can_speak_to'),
+  /** draft | requested | confirmed | declined. Recorded by the owner — the referee
+   *  has no account here, so it is a claim rather than a signature. */
+  status:        varchar('status', { length: 16 }).notNull().default('draft'),
+  requestedAt:   timestamp('requested_at', { withTimezone: true }),
+  confirmedAt:   timestamp('confirmed_at', { withTimezone: true }),
+  notes:         text('notes'),
+  createdAt:     timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_professional_references_user').on(t.userId, t.createdAt),
+]);
+
+/**
+ * One share = one token = one chosen subset, immutable once issued.
+ *
+ * Widening an existing token would silently extend an employer's access to a link
+ * they already hold, so changing the selection means issuing a new one.
+ */
+export const referenceShares = pgTable('reference_shares', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  userId:         varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  token:          varchar('token', { length: 64 }).notNull().unique(),
+  label:          varchar('label', { length: 160 }),
+  referenceIds:   jsonb('reference_ids').$type<string[]>().notNull().default([]),
+  /** Contact details are the sensitive half; a share can prove the reference exists
+   *  and what they can speak to without handing over their phone number. */
+  includeContact: boolean('include_contact').notNull().default(false),
+  expiresAt:      timestamp('expires_at', { withTimezone: true }),
+  revokedAt:      timestamp('revoked_at', { withTimezone: true }),
+  viewCount:      integer('view_count').notNull().default(0),
+  lastViewedAt:   timestamp('last_viewed_at', { withTimezone: true }),
+  createdAt:      timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_reference_shares_user').on(t.userId, t.createdAt),
+]);

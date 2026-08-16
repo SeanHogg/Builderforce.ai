@@ -23,7 +23,7 @@
  */
 import {
   analyzeSalary, auditProfile, compareResumeToJob, consolidateResumes,
-  employerResearchBrief, extractSkills, optimizeResume, planForTarget,
+  buildInterviewKit, employerResearchBrief, extractSkills, optimizeResume, planForTarget,
   resumeSentiment, scoreResume, suggestTargets, summarizeResume, tailorResume,
   valueProposition, ROLE_PROFILES,
 } from '../career';
@@ -783,6 +783,72 @@ const vendorSync: AnalyzerTool = {
   },
 };
 
+// ── 16. Interview Prep ────────────────────────────────────────────────────────
+
+const interviewPrep: AnalyzerTool = {
+  id: 'interview-prep',
+  name: 'Interview Prep',
+  tagline: 'The questions this posting will actually ask you, and the rubric behind each.',
+  icon: '🎤',
+  category: 'career',
+  kind: 'analyzer',
+  about:
+    'Builds the question set one posting is likely to probe, each with why it is being asked of you specifically and what a strong answer has to contain. Add your résumé and it also names your exposed flank — the skills the posting wants that your document does not evidence, which is where an interview goes wrong.',
+  fields: [
+    { id: 'job', label: 'Job description', type: 'document', required: true, placeholder: 'Paste the posting…' },
+    { id: 'resume', label: 'Résumé text', type: 'document', required: false, placeholder: 'Optional — add it to see which questions you are exposed on.' },
+    { id: 'role', label: 'Role', type: 'line', required: false, placeholder: 'Senior Product Manager' },
+    {
+      id: 'type', label: 'Interview type', type: 'select', required: false,
+      options: [
+        { value: 'behavioral', label: 'Behavioural' },
+        { value: 'technical', label: 'Technical' },
+        { value: 'situational', label: 'Situational' },
+        { value: 'leadership', label: 'Leadership' },
+        { value: 'screening', label: 'Screening call' },
+      ],
+    },
+  ],
+  analyze: (values) => {
+    const job = text(values, 'job');
+    if (!job) return needsInput('a job description');
+    const chosen = text(values, 'type');
+    const type = (['behavioral', 'technical', 'situational', 'leadership', 'screening'] as const)
+      .find((t) => t === chosen) ?? 'behavioral';
+    const kit = buildInterviewKit({
+      jobDescription: job,
+      role: text(values, 'role') || undefined,
+      type,
+      resumeText: text(values, 'resume') || undefined,
+    });
+    return {
+      headline: `${kit.questions.length} questions for ${kit.role}`,
+      summary: kit.riskAreas.length
+        ? `Your exposed flank: ${kit.riskAreas.slice(0, 4).join(', ')} — named in the posting, not evidenced on your résumé.`
+        : 'Nothing the posting asks for is missing from your résumé.',
+      score: null,
+      scoreLabel: null,
+      metrics: [
+        countMetric('Interview type', type),
+        listMetric('Risk areas', kit.riskAreas, 'None — or add your résumé to find out'),
+        ...kit.questions.map((q) => ({
+          label: `${q.category} · ${q.difficulty}`,
+          value: q.question,
+          hint: q.why,
+        })),
+      ],
+      recommendations: [
+        ...kit.questions.map((q) => ({
+          title: q.question,
+          detail: `A strong answer contains: ${q.lookFor.join('; ')}.`,
+          priority: (q.difficulty === 'hard' ? 'high' : q.difficulty === 'core' ? 'medium' : 'low') as 'high' | 'medium' | 'low',
+        })),
+        ...instructionRec(kit.instruction),
+      ],
+    };
+  },
+};
+
 /**
  * The career tools, in the order the hub shows them: measure first, then match,
  * then plan, then the market. Spread into `TOOLS` by `toolDefinitions.ts`.
@@ -802,5 +868,6 @@ export const CAREER_TOOLS: readonly AnalyzerTool[] = [
   career360,
   salaryCalculator,
   employerResearch,
+  interviewPrep,
   vendorSync,
 ];

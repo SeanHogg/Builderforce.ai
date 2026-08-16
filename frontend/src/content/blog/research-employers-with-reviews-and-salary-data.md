@@ -16,7 +16,7 @@ Most candidates skip this step and find out about the bad parts of the company i
 
 **Minutes 1–3 — Reviews.** Type the company name. The Companies panel returns up to 6 matches with their overall rating + review count. Click *Reviews* on any match to jump to the full reviews page (`/companies/{slug}/reviews`) and read the six sub-axis ratings: culture, leadership, work-life balance, compensation, career growth, diversity. If any single axis is more than 1.0 below the overall average, that's where you should ask follow-up questions in your final round.
 
-**Minutes 4–6 — Salary by role × city.** Type your target role and city. The Salary panel shows the average, min, and max salary derived from real active listings on the platform — not self-reported levels.fyi data. Click *Open full salary guide* to see related cities and related roles at `/salary/{role}/{city}`.
+**Minutes 4–6 — Salary by role × city.** Type your target role and city. The Salary panel shows the low, median and upper-quartile band, modelled from the role, its seniority, the region and the work mode — with every multiplier listed, so the number is one you can argue with rather than one you have to trust. Click *Open full salary guide* to see the same role across every other city at `/salary/{role}/{city}`.
 
 **Minutes 7–10 — Cross-reference.** On the full reviews page, search the written reviews for the keyword *compensation* or *pay*. A high compensation rating combined with a market-aligned offer from the salary panel is the green light. A low compensation rating combined with a below-market offer is a hard signal to negotiate or walk away.
 
@@ -39,11 +39,11 @@ When you read reviews, sort by Most Recent — companies change faster than annu
 
 Builderforce's salary guides derive from **active job listings** on the platform, not from anonymous self-reporting. This has three practical implications:
 
-1. **The numbers are forward-looking.** A self-reported salary from 2023 doesn't tell you what a company will pay in 2026. A live listing posted last week does.
+1. **The model is inspectable.** A scraped average tells you a number and not how it got there. Every band here lists the anchor and each multiplier applied to it, so you can check whether the assumption about your region or seniority is the one you would have made.
 
-2. **The sample size is transparent.** Every salary page shows the number of listings the figure is based on. If a role × city page says "Based on 6 listings," treat the number as directional. "Based on 142 listings" is a real signal.
+2. **The method is transparent.** Every salary page lists the anchor and the multipliers behind the band. A model you can inspect is arguable in a way an opaque average is not — if the regional multiplier does not match your market, you can say so with a specific objection.
 
-3. **The city dimension matters.** `/salary/staff-product-manager/austin` is a completely different number from `/salary/staff-product-manager/san-francisco` even for the same company tier — and the comp benchmark you should negotiate against is the city-level one, not the national average.
+3. **The city dimension matters.** `/salary/product-manager/austin` is a completely different number from `/salary/product-manager/san-francisco` even for the same company tier — and the comp benchmark you should negotiate against is the city-level one, not the national average.
 
 Use the related-cities and related-roles links at the bottom of each salary page to pivot quickly: "What does this same role pay in Seattle?" or "What does a Staff Engineer make in this city versus a Principal?"
 
@@ -81,7 +81,7 @@ Reviews are bound to authenticated user accounts (one review per user per compan
 
 ### Where does the salary data come from?
 
-From the `salaryMin` / `salaryMax` fields on active job listings posted on Builderforce. The numbers are forward-looking (what companies are paying today) rather than self-reported (what people made years ago). Every salary page shows the underlying sample size.
+They are modelled, not scraped. A per-discipline base anchor is adjusted by seniority, by region and by work mode, and every page lists the multipliers it applied. That makes the band reproducible and checkable — the same inputs always produce the same number — and it means you should treat it as a well-argued starting point rather than a measurement of any one employer.
 
 ### What's the difference between /salary/:role and /salary/:role/:city?
 

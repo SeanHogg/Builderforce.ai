@@ -72,4 +72,4 @@ AI practice and human practice serve different purposes. AI practice excels at v
 
 ---
 
-**Try it:** [AI Interview Practice](/interview) on Builderforce.
+**Try it:** [AI Interview Practice](/tools/interview-prep) on Builderforce.

@@ -1907,4 +1907,11 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   // Newer enterprise surfaces.
   knowledge: ['knowledge-management-sops-and-compliance', 'every-role-operating-picture', 'security-and-multi-tenant-architecture'],
   quality: ['quality-error-observability-one-click-fix', 'incident-management-on-call-and-war-rooms', 'agentic-tester-autonomous-qa', 'task-execution-and-observability'],
+  // The salary guide — the four ported posts that send readers to a pay page.
+  salary: [
+    'how-to-research-your-market-salary',
+    'research-employers-with-reviews-and-salary-data',
+    'hired-video-vs-glassdoor-reviews-salary-employer-branding',
+    'how-to-write-your-personal-value-proposition',
+  ],
 };

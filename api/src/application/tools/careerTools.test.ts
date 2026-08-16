@@ -33,6 +33,7 @@ const ARTICLE_SLUGS = [
   'career-360',
   'salary-calculator',
   'employer-research',
+  'interview-prep',
   'vendor-sync',
 ] as const;
 
@@ -81,7 +82,10 @@ describe('career tools — the article contract', () => {
       const def = toDefinition(tool);
       expect(def.kind).toBe('analyzer');
       expect((def as { fields: unknown[] }).fields.length).toBeGreaterThan(0);
-      expect((def as Record<string, unknown>).analyze).toBeUndefined();
+      // Through `unknown` deliberately: the whole point is to probe for a property the
+      // client-safe type does NOT declare, so a direct assertion is one the compiler is
+      // right to refuse.
+      expect((def as unknown as Record<string, unknown>).analyze).toBeUndefined();
     }
   });
 

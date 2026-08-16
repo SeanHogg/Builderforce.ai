@@ -1119,6 +1119,46 @@
       }
     }
   },
+  "salary": {
+    "backToIndex": "← Todas las guías salariales",
+    "backToRole": "← Salarios de {role}",
+    "modelNote": "Estas bandas se modelan a partir del puesto, la antigüedad, la región y la modalidad de trabajo; todos los multiplicadores aparecen arriba, así que la cifra es discutible.",
+    "calculatorCta": "Calcula tu propia cifra →",
+    "index": {
+      "metaTitle": "Guías salariales por puesto y ciudad",
+      "metaDescription": "Bandas salariales modeladas para puestos de ingeniería, datos, producto, diseño y ventas en dieciséis roles y catorce ciudades.",
+      "title": "Guías salariales",
+      "lede": "Lo que paga un puesto, por ciudad y por antigüedad. Cada banda muestra el mínimo, la mediana y el cuartil superior, porque la cifra con la que negocias es el ancla, no el promedio.",
+      "unavailable": "Las guías salariales no están disponibles por el momento. Inténtalo de nuevo en unos minutos."
+    },
+    "role": {
+      "metaTitle": "Salario de {role} por ciudad",
+      "metaDescription": "La mediana salarial de {role} es {median}, comparada en {cities} ciudades con bandas mínima, mediana y de cuartil superior.",
+      "title": "Salario de {role}",
+      "lede": "Un {role} de nivel medio tiene una mediana nacional de {median}, con una banda típica de {low} a {high}. Elige una ciudad para ver la banda local y la escala.",
+      "byCity": "Por ciudad",
+      "bySeniority": "Por antigüedad"
+    },
+    "city": {
+      "metaTitle": "Salario de {role} en {city}",
+      "metaDescription": "Salario de {role} en {city}: mediana {median}, con una banda típica de {low} a {high} y la escala completa por antigüedad.",
+      "title": "Salario de {role} en {city}",
+      "lede": "Un {role} de nivel medio en {city} tiene una mediana de {median}, con una banda típica de {low} a {high}.",
+      "anchorLabel": "Ancla en",
+      "anchorHint": "Si das una cifra primero, ánclala en el cuartil superior y ofrece un rango cuyo mínimo aún aceptarías.",
+      "assumptions": "Cómo se construyó esta banda",
+      "elsewhere": "Salario de {role} en otras ciudades"
+    },
+    "table": {
+      "city": "Ciudad",
+      "seniority": "Antigüedad",
+      "low": "Mínimo (P25)",
+      "median": "Mediana",
+      "high": "Máximo (P75)",
+      "spread": "Rango",
+      "vsNational": "Vs nacional"
+    }
+  },
   "tools": {
     "outOf5": "de 5,0",
     "breakdown": "Desglose",
@@ -16633,7 +16673,7 @@
       "campaignScheduled": "Programado para {count} cuentas.",
       "campaignUpdateFailed": "No se pudo actualizar esa campaña.",
       "boardMedia": "Adjuntar desde este lienzo",
-      "boardMediaHelp": "Las imágenes seleccionadas se publican automáticamente en una URL pública: eso es lo que Instagram y TikTok necesitan para descargarlas."
+      "boardMediaHelp": "Las imágenes y los vídeos seleccionados se publican automáticamente en una URL pública: eso es lo que Instagram y TikTok necesitan para descargarlos."
     },
     "noticeGuestLimitRoom": "Esta sesión compartida ya usó sus {limit} mensajes gratuitos de hoy. Regístrate gratis para continuar: tu lienzo te acompaña.",
     "founder": {

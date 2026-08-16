@@ -79,7 +79,19 @@ import { registerObject } from '../kernel/ObjectRegistry';
  * `marketplaceRoutes.ts`, deliberately: two invalidation strategies for two public
  * catalogues is how one of them goes stale for a fortnight without anyone noticing.
  */
-const LISTINGS_VERSION_KEY = 'marketplace:creations:list';
+/**
+ * Exported because it is the invalidation signal for readers OUTSIDE this
+ * module, not just for the browse feed.
+ *
+ * `application/ide/siteListing.ts` caches which listing sells a hosted site and
+ * the seller facts that decide access to it, and both answers change on exactly
+ * the writes that bump this token. Folding the token into that cache's KEY means
+ * a publish, a re-publish, a price change or a withdrawal orphans it
+ * automatically — no call from here into the hosting side, no import cycle, and
+ * no reader this module has to remember exists. The alternative, a list of
+ * invalidation callbacks, is a list somebody eventually forgets to add to.
+ */
+export const LISTINGS_VERSION_KEY = 'marketplace:creations:list';
 const LISTINGS_TTL_SECONDS = 120;
 
 /** A single listing's public payload. Bounded keyspace (one key per slug), so it
@@ -797,6 +809,54 @@ export async function sellerListings(
 // Launch — what a visitor actually gets
 // ---------------------------------------------------------------------------
 
+/**
+ * The three seller-controlled facts that decide access, and nothing else.
+ *
+ * A narrow interface on purpose. The full `catalog_items` row is 20 columns and
+ * a JSONB body; a caller that has to hold all of it in order to ask "may this
+ * person in" cannot cache the answer's inputs, and one that cannot cache them
+ * reads the catalogue on every request to a public website.
+ */
+export interface ListingAccessFacts {
+  /** `public` = on sale. Anything else is withdrawn. */
+  visibility: string;
+  priceCents: number | null;
+  trial: ListingTrialPolicy | null;
+}
+
+/** Project a listing row onto {@link ListingAccessFacts}. Exported so a caller
+ *  that caches the inputs projects them the same way `launchListing` does. */
+export function listingAccessFacts(row: CatalogRow): ListingAccessFacts {
+  return {
+    visibility: row.visibility,
+    priceCents: row.priceCents,
+    trial: (row.body as ListingBody | null)?.trial ?? null,
+  };
+}
+
+/**
+ * IS THIS CALLER ENTITLED TO THE PRODUCT, RATHER THAN THE PREVIEW?
+ *
+ * ── THE ONE RULE, AND THE ONLY COPY OF IT ────────────────────────────────────
+ * `hasPaid` is the caller's own fact — a purchase on record, or a live
+ * subscription. This function folds in the SELLER's: a free listing, or one
+ * whose trial is `full`, is entitled for everybody, and a WITHDRAWN listing is
+ * entitled for nobody who had not already bought it (withdrawing takes a thing
+ * off sale; it does not repossess it).
+ *
+ * It is a pure function over three values precisely so that both shop windows
+ * can call it. `launchListing` asks it for the marketplace listing page;
+ * `application/ide/siteVisitor.ts` asks it for the creator's own address. Two
+ * copies of this sentence is a paid product served free at one address, or a
+ * paying customer locked out at the other — and whichever one is wrong,
+ * somebody is owed something.
+ */
+export function entitledToListing(facts: ListingAccessFacts, hasPaid: boolean): boolean {
+  if (facts.visibility !== 'public') return hasPaid;
+  const open = (facts.priceCents ?? 0) === 0 || facts.trial === 'full';
+  return open || hasPaid;
+}
+
 export interface LaunchPayload {
   mode: ListingLaunchMode;
   /** True when the caller is entitled to the full thing (free listing, full trial,
@@ -868,8 +928,9 @@ export async function launchListing(
   const spec = listingKindSpec(row.kind);
   const mode = body.launch ?? spec?.launch ?? 'preview';
   // A free listing, or one whose seller opened the trial, is entitled for everyone.
-  const open = (row.priceCents ?? 0) === 0 || body.trial === 'full';
-  const allowed = open || entitled;
+  // THE rule, called rather than restated — see `entitledToListing`. The
+  // creator's own address asks this same function about this same listing.
+  const allowed = entitledToListing(listingAccessFacts(row), entitled);
 
   // The buyer's pinned snapshot wins over the listing's current one. Only for a
   // caller who is actually entitled: an unpinned visitor asking for an old snapshot

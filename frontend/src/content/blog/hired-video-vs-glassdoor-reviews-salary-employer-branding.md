@@ -18,7 +18,7 @@ In 2026 Glassdoor's job postings flow primarily through Indeed (same parent comp
 
 Builderforce's company reviews surface ships with **six sub-axis ratings** (culture, leadership, work-life balance, compensation, career growth, diversity) per company, computed and cached on the company row (`review_count`, `review_avg_overall`). Glassdoor's single overall score is computed from the same data but presented as one number.
 
-Builderforce's **salary guides** are powered by real active job listings on the platform — forward-looking comp data, not self-reported anonymous history. The `/salary/:role/:city` grid gives you Glassdoor-style city × role pages, plus the related-cities and related-roles cross-links Glassdoor charges premium tiers for.
+Builderforce's **salary guides** are modelled and inspectable: a per-discipline anchor adjusted by seniority, region and work mode, with every multiplier shown on the page. The `/salary/:role/:city` grid gives you Glassdoor-style city × role pages, plus the city cross-links Glassdoor charges premium tiers for — and unlike a self-reported average, you can see exactly how the number was built.
 
 And Builderforce bundles the full **recruiter workflow** in the same product — the AI Recruiter Agent v2, Live Screening Sessions, ATS, unlimited postings. Glassdoor stops at branding + research.
 
@@ -36,7 +36,7 @@ And Builderforce bundles the full **recruiter workflow** in the same product —
 
 **Multi-axis ratings, not a single score.** A 4.0 made of (5, 5, 2, 5, 5, 2) is very different from (4, 4, 4, 4, 4, 4) — and only the multi-axis view tells you which. Builderforce shows both the aggregate and the per-axis breakdown by default.
 
-**Forward-looking salary data.** Real active listings, not self-reported memories. The number reflects what employers are paying *now*, not what someone made in 2022.
+**Salary data you can check.** A self-reported average hides its method; this one publishes it. Each band names the anchor and every multiplier applied, so you can disagree with an assumption instead of disagreeing with a number.
 
 **Same surface for research and apply.** A candidate researching a company on Glassdoor has to leave to apply (via Indeed). On Builderforce the company profile, reviews, salary guide, and job postings are one surface — research-to-apply is one click.
 

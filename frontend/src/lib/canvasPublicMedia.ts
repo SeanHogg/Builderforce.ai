@@ -4,11 +4,12 @@
  * ── THE GAP THIS CLOSES ──────────────────────────────────────────────────────
  * Instagram and TikTok do not receive media, they FETCH it — with no session and
  * no headers of ours. `social_campaigns.media_urls` therefore holds public
- * `https` URLs, while the canvas's own generated pictures live in a `data:` URI
- * or behind authenticated storage. The two halves never met: "post the image the
- * board just made" meant downloading it, uploading it somewhere public, and
- * pasting that URL back — and until someone did, the Instagram target was
- * silently `skipped` with a blocker nobody could clear from the canvas.
+ * `https` URLs, while the canvas's own generated pictures and clips live in a
+ * `data:` URI or behind authenticated storage. The two halves never met: "post
+ * what the board just made" meant downloading it, uploading it somewhere public,
+ * and pasting that URL back — and until someone did, the Instagram or TikTok
+ * target was silently `skipped` with a blocker nobody could clear from the
+ * canvas.
  *
  * ── WHY IT IS A MODULE AND NOT A BRANCH IN THE TOOL ──────────────────────────
  * Two callers publish social media from this board — `canvas_create_social_campaign`
@@ -26,8 +27,10 @@
 import { growthApi } from './growthApi';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
-/** Object kinds that can carry a picture worth publishing. `video` is here so a
- *  video object reports the right reason rather than looking unsupported. */
+/** Object kinds that can carry media worth publishing. Video is on this list on
+ *  the same footing as the picture kinds: the asset store holds MP4, MOV and
+ *  WebM up to 32 MB, which is what makes a TikTok post reachable from a board
+ *  that rendered the clip. */
 const MEDIA_KINDS = new Set(['image', 'mockup', 'drawing', 'chart', 'comic', 'video', 'animation']);
 
 export function isCanvasMediaKind(kind: unknown): boolean {
@@ -74,9 +77,10 @@ const label = (source: string): string =>
  * Resolve every source to a publicly fetchable URL, storing what needs storing.
  *
  * Sequential rather than parallel on purpose: each unresolved source is an upload
- * of up to 2 MB, and a campaign with five of them firing at once from a browser
- * is a burst nobody asked for. There are never many — a post carries one or two
- * pictures — so the wall-clock difference is a fraction of the publish itself.
+ * of up to 2 MB for a picture and up to 32 MB for a clip, and a campaign with
+ * five of them firing at once from a browser is a burst nobody asked for. There
+ * are never many — a post carries one or two attachments — so the wall-clock
+ * difference is a fraction of the publish itself.
  */
 export async function resolvePublicMediaUrls(
   sources: readonly string[],
@@ -92,18 +96,18 @@ export async function resolvePublicMediaUrls(
     if (source.startsWith('blob:')) {
       // A blob URL only exists inside the tab that minted it. Nothing server-side
       // can read one, so say that rather than uploading an empty file.
-      problems.push({ source: label(source), reason: 'That picture is only held in this browser tab. Re-generate or re-upload it so it has a durable source.' });
+      problems.push({ source: label(source), reason: 'That file is only held in this browser tab. Re-generate or re-upload it so it has a durable source.' });
       continue;
     }
     if (!source.startsWith('data:')) {
-      problems.push({ source: label(source), reason: 'A social network fetches media itself, so it needs a public https URL — this one is neither https nor an inline image.' });
+      problems.push({ source: label(source), reason: 'A social network fetches media itself, so it needs a public https URL — this one is neither https nor inline media.' });
       continue;
     }
     try {
-      const asset = await growthApi.createAssetFromSource({ source, name: opts.name?.slice(0, 120) || 'Canvas image' });
+      const asset = await growthApi.createAssetFromSource({ source, name: opts.name?.slice(0, 120) || 'Canvas media' });
       urls.push(asset.url);
     } catch (error) {
-      problems.push({ source: label(source), reason: error instanceof Error ? error.message : 'That picture could not be published to a public URL.' });
+      problems.push({ source: label(source), reason: error instanceof Error ? error.message : 'That file could not be published to a public URL.' });
     }
   }
 

@@ -1119,6 +1119,46 @@
       }
     }
   },
+  "salary": {
+    "backToIndex": "← Tous les guides salariaux",
+    "backToRole": "← Salaires {role}",
+    "modelNote": "Ces fourchettes sont modélisées à partir du poste, du niveau, de la région et du mode de travail ; tous les multiplicateurs sont listés ci-dessus, donc le chiffre se discute.",
+    "calculatorCta": "Modélisez votre propre chiffre →",
+    "index": {
+      "metaTitle": "Guides salariaux par poste et par ville",
+      "metaDescription": "Fourchettes salariales modélisées pour les postes en ingénierie, data, produit, design et commercial — seize postes, quatorze villes.",
+      "title": "Guides salariaux",
+      "lede": "Ce que paie un poste, par ville et par niveau. Chaque fourchette montre le minimum, la médiane et le quartile supérieur, car le chiffre sur lequel on négocie est le point d’ancrage, pas la moyenne.",
+      "unavailable": "Les guides salariaux sont momentanément indisponibles. Réessayez d’ici peu."
+    },
+    "role": {
+      "metaTitle": "Salaire {role} par ville",
+      "metaDescription": "Le salaire médian d’un {role} est de {median}, comparé dans {cities} villes avec les fourchettes basse, médiane et haute.",
+      "title": "Salaire {role}",
+      "lede": "Un {role} de niveau intermédiaire a une médiane nationale de {median}, avec une fourchette typique de {low} à {high}. Choisissez une ville pour voir la fourchette locale.",
+      "byCity": "Par ville",
+      "bySeniority": "Par niveau"
+    },
+    "city": {
+      "metaTitle": "Salaire {role} à {city}",
+      "metaDescription": "Salaire {role} à {city} : médiane {median}, fourchette typique de {low} à {high} et l’échelle complète par niveau.",
+      "title": "Salaire {role} à {city}",
+      "lede": "Un {role} de niveau intermédiaire à {city} a une médiane de {median}, avec une fourchette typique de {low} à {high}.",
+      "anchorLabel": "Ancrez à",
+      "anchorHint": "Si vous annoncez un chiffre en premier, ancrez-le au quartile supérieur et donnez une fourchette dont le bas resterait acceptable.",
+      "assumptions": "Comment cette fourchette a été construite",
+      "elsewhere": "Salaire {role} ailleurs"
+    },
+    "table": {
+      "city": "Ville",
+      "seniority": "Niveau",
+      "low": "Bas (P25)",
+      "median": "Médiane",
+      "high": "Haut (P75)",
+      "spread": "Amplitude",
+      "vsNational": "Vs national"
+    }
+  },
   "tools": {
     "outOf5": "sur 5,0",
     "breakdown": "Détail",
@@ -16633,7 +16673,7 @@
       "campaignScheduled": "Programmé pour {count} comptes.",
       "campaignUpdateFailed": "Cette campagne n’a pas pu être mise à jour.",
       "boardMedia": "Joindre depuis ce canevas",
-      "boardMediaHelp": "Les images choisies sont automatiquement publiées sur une URL publique — c'est ce dont Instagram et TikTok ont besoin pour les récupérer."
+      "boardMediaHelp": "Les images et les vidéos choisies sont automatiquement publiées sur une URL publique — c'est ce dont Instagram et TikTok ont besoin pour les récupérer."
     },
     "noticeGuestLimitRoom": "Cette session partagée a utilisé ses {limit} messages gratuits du jour. Inscrivez-vous gratuitement pour continuer — votre canevas vous suit.",
     "founder": {

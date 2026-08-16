@@ -415,7 +415,7 @@ export async function listAssets(
   db: Db,
   tenantId: number,
   origin: string,
-  kind?: 'logo' | 'image',
+  kind?: AssetKind,
 ): Promise<AssetView[]> {
   const rows = await db
     .select(ASSET_COLUMNS)
@@ -427,17 +427,90 @@ export async function listAssets(
   return rows.map((r) => assetView(r, origin));
 }
 
-/** Images only, and small enough that a mail client will actually render it
- *  inline rather than hiding it behind "download". */
-export const MAX_ASSET_BYTES = 2 * 1024 * 1024;
-const ALLOWED_ASSET_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'] as const;
+/**
+ * WHAT THIS STORE HOLDS, and how big each class of it may be.
+ *
+ * ── WHY A TABLE AND NOT TWO CONSTANTS ───────────────────────────────────────
+ * The type list and the size ceiling are ONE decision made twice — "we accept
+ * this kind of media, and this much of it" — and they were previously two
+ * unrelated constants read in four places. Widening for video that way would
+ * have meant four more branches, each of which could disagree about whether an
+ * MP4 was allowed or how large it could be.
+ *
+ * ── WHY THE CEILINGS DIFFER BY TWO ORDERS OF MAGNITUDE ──────────────────────
+ * 2 MB for an image is not a storage limit, it is a RENDERING one: an image is
+ * mostly read in an inbox, and a mail client hides anything larger behind
+ * "download". Nothing about that argument applies to a video, which is never
+ * inlined in an email and is fetched by TikTok's own downloader.
+ *
+ * 32 MB for a video is the honest ceiling for THIS path rather than TikTok's
+ * (which is far higher): a Worker isolate has 128 MB, and `readMediaSource`
+ * holds the whole object in an `ArrayBuffer` before handing it to R2. A larger
+ * limit would not be a larger upload, it would be an out-of-memory error part
+ * way through one. Streaming straight into R2 is what would raise it, and that
+ * needs the size known before the body is read, which is a different design.
+ */
+const ASSET_MEDIA = {
+  image: {
+    types: ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'],
+    maxBytes: 2 * 1024 * 1024,
+    /** Used in the refusal, so the message names what WOULD work. */
+    accepts: 'a PNG, JPEG, GIF, WebP or SVG image',
+    tooBig: 'Images must be 2 MB or smaller.',
+  },
+  video: {
+    types: ['video/mp4', 'video/quicktime', 'video/webm'],
+    maxBytes: 32 * 1024 * 1024,
+    accepts: 'an MP4, MOV or WebM video',
+    tooBig: 'Videos must be 32 MB or smaller.',
+  },
+} as const satisfies Record<string, { types: readonly string[]; maxBytes: number; accepts: string; tooBig: string }>;
+
+/** What a stored object IS. `logo` is a ROLE an image plays, not a fourth media
+ *  type — templates reference it by `{{logo}}` rather than by id. */
+export type AssetKind = 'logo' | 'image' | 'video';
+
+const ASSET_KINDS: readonly AssetKind[] = ['logo', 'image', 'video'];
+export const isAssetKind = (value: unknown): value is AssetKind =>
+  typeof value === 'string' && (ASSET_KINDS as readonly string[]).includes(value);
+
+/** The media class a MIME type belongs to, or null when this store will not
+ *  hold it at all. The one place a content type is judged. */
+export function assetMediaClass(mimeType: string): 'image' | 'video' | null {
+  const type = mimeType.split(';')[0]!.trim().toLowerCase();
+  for (const [name, media] of Object.entries(ASSET_MEDIA)) {
+    if ((media.types as readonly string[]).includes(type)) return name as 'image' | 'video';
+  }
+  return null;
+}
+
+/** The ceiling that applies to this content type. An unrecognised type gets the
+ *  SMALLEST one, so a caller checking size before type still refuses early. */
+export function maxAssetBytes(mimeType: string): number {
+  const media = assetMediaClass(mimeType);
+  return media ? ASSET_MEDIA[media].maxBytes : ASSET_MEDIA.image.maxBytes;
+}
+
+/** The refusal that goes with that ceiling. Exported so the route rejecting an
+ *  oversized upload BEFORE reading it says the same sentence the store would
+ *  have said after — one limit, one wording. */
+export function assetTooLargeMessage(mimeType: string): string {
+  return ASSET_MEDIA[assetMediaClass(mimeType) ?? 'image'].tooBig;
+}
+
+/** The ceiling for an image. Kept as a named export because the two callers that
+ *  know they are dealing with pictures — the logo generator, the email
+ *  composer — read better naming it than asking a function about a MIME type. */
+export const MAX_ASSET_BYTES = ASSET_MEDIA.image.maxBytes;
+
+const ACCEPTED_MEDIA = Object.values(ASSET_MEDIA).map((media) => media.accepts).join(', or ');
 
 export type AssetResult =
   | { ok: true; asset: AssetView }
   | { ok: false; status: 400 | 404 | 413 | 503; error: string };
 
 /**
- * Store an image and return its public URL.
+ * Store a picture or a clip and return its public URL.
  *
  * SVG is accepted because logos are vectors, but it is stored with an
  * `image/svg+xml` content type that the serving route pins along with a
@@ -452,7 +525,7 @@ export async function createAsset(
     name: string;
     bytes: ArrayBuffer;
     mimeType: string;
-    kind?: 'logo' | 'image';
+    kind?: AssetKind;
     source?: 'uploaded' | 'generated';
     prompt?: string | null;
     createdBy?: string | null;
@@ -462,12 +535,17 @@ export async function createAsset(
     return { ok: false, status: 503, error: 'Asset storage is not configured on this deployment.' };
   }
   const mimeType = input.mimeType.split(';')[0]!.trim().toLowerCase();
-  if (!(ALLOWED_ASSET_TYPES as readonly string[]).includes(mimeType)) {
-    return { ok: false, status: 400, error: 'Upload a PNG, JPEG, GIF, WebP or SVG image.' };
+  const media = assetMediaClass(mimeType);
+  if (!media) return { ok: false, status: 400, error: `Upload ${ACCEPTED_MEDIA}.` };
+  // A logo is a role an IMAGE plays: it is rendered inline by `{{logo}}` in an
+  // email, which a video cannot be. Accepting one would put a file in a slot
+  // whose every consumer is an `<img>`.
+  if (input.kind === 'logo' && media !== 'image') {
+    return { ok: false, status: 400, error: 'A logo has to be an image.' };
   }
   if (input.bytes.byteLength === 0) return { ok: false, status: 400, error: 'That file is empty.' };
-  if (input.bytes.byteLength > MAX_ASSET_BYTES) {
-    return { ok: false, status: 413, error: 'Images must be 2 MB or smaller.' };
+  if (input.bytes.byteLength > ASSET_MEDIA[media].maxBytes) {
+    return { ok: false, status: 413, error: ASSET_MEDIA[media].tooBig };
   }
 
   const publicToken = newChallengeToken();
@@ -484,7 +562,9 @@ export async function createAsset(
     .values({
       tenantId,
       name: input.name.trim().slice(0, 255) || 'Image',
-      kind: input.kind ?? 'image',
+      // Absent kind follows the bytes: an MP4 nobody classified is a video, and
+      // defaulting it to `image` would file it where every reader expects one.
+      kind: input.kind ?? media,
       r2Key,
       mimeType,
       byteSize: input.bytes.byteLength,
@@ -630,18 +710,20 @@ export type MediaSourceResult =
  */
 export async function readMediaSource(source: string): Promise<MediaSourceResult> {
   const raw = source.trim();
-  if (!raw) return { ok: false, status: 400, error: 'No image was supplied.' };
-  const tooBig = { ok: false, status: 413, error: 'Images must be 2 MB or smaller.' } as const;
+  if (!raw) return { ok: false, status: 400, error: 'No media was supplied.' };
   const rejectType = (mimeType: string): MediaSourceResult => ({
     ok: false, status: 400,
-    error: `${mimeType || 'That file'} cannot be published — use a PNG, JPEG, GIF, WebP or SVG image.`,
+    error: `${mimeType || 'That file'} cannot be published — use ${ACCEPTED_MEDIA}.`,
   });
+  const tooBigFor = (media: 'image' | 'video'): MediaSourceResult =>
+    ({ ok: false, status: 413, error: ASSET_MEDIA[media].tooBig });
 
   if (raw.startsWith('data:')) {
     const match = /^data:([^;,]+)(;base64)?,([\s\S]*)$/.exec(raw);
     if (!match) return { ok: false, status: 400, error: 'That data URL could not be read.' };
     const mimeType = match[1]!.trim().toLowerCase();
-    if (!(ALLOWED_ASSET_TYPES as readonly string[]).includes(mimeType)) return rejectType(mimeType);
+    const media = assetMediaClass(mimeType);
+    if (!media) return rejectType(mimeType);
     let bytes: ArrayBuffer;
     try {
       bytes = match[2]
@@ -650,8 +732,8 @@ export async function readMediaSource(source: string): Promise<MediaSourceResult
     } catch {
       return { ok: false, status: 400, error: 'That data URL could not be decoded.' };
     }
-    if (bytes.byteLength === 0) return { ok: false, status: 400, error: 'That image is empty.' };
-    if (bytes.byteLength > MAX_ASSET_BYTES) return tooBig;
+    if (bytes.byteLength === 0) return { ok: false, status: 400, error: 'That file is empty.' };
+    if (bytes.byteLength > ASSET_MEDIA[media].maxBytes) return tooBigFor(media);
     return { ok: true, bytes, mimeType };
   }
 
@@ -676,18 +758,20 @@ export async function readMediaSource(source: string): Promise<MediaSourceResult
     reportCaughtError(error, { source: 'application/marketing/templateLibrary.ts', operation: 'readMediaSource' });
     return { ok: false, status: 502, error: 'That image could not be downloaded.' };
   }
-  if (!res.ok) return { ok: false, status: 502, error: `That image could not be downloaded (${res.status}).` };
+  if (!res.ok) return { ok: false, status: 502, error: `That file could not be downloaded (${res.status}).` };
 
   const mimeType = (res.headers.get('content-type') ?? 'image/png').split(';')[0]!.trim().toLowerCase();
-  if (!(ALLOWED_ASSET_TYPES as readonly string[]).includes(mimeType)) return rejectType(mimeType);
+  const media = assetMediaClass(mimeType);
+  if (!media) return rejectType(mimeType);
   // Read from the header first, where the server was honest about it, so an
   // oversized body is refused before it is buffered — and again after, because
-  // `content-length` is optional.
+  // `content-length` is optional. This matters far more for video than it ever
+  // did for images: an unchecked 500 MB body is an out-of-memory isolate.
   const declared = Number(res.headers.get('content-length'));
-  if (Number.isFinite(declared) && declared > MAX_ASSET_BYTES) return tooBig;
+  if (Number.isFinite(declared) && declared > ASSET_MEDIA[media].maxBytes) return tooBigFor(media);
   const bytes = await res.arrayBuffer();
-  if (bytes.byteLength === 0) return { ok: false, status: 400, error: 'That image is empty.' };
-  if (bytes.byteLength > MAX_ASSET_BYTES) return tooBig;
+  if (bytes.byteLength === 0) return { ok: false, status: 400, error: 'That file is empty.' };
+  if (bytes.byteLength > ASSET_MEDIA[media].maxBytes) return tooBigFor(media);
   return { ok: true, bytes, mimeType };
 }
 
@@ -710,7 +794,7 @@ export async function createAssetFromSource(
   db: Db,
   env: Env,
   tenantId: number,
-  input: { source: string; name: string; kind?: 'logo' | 'image'; prompt?: string | null; createdBy?: string | null },
+  input: { source: string; name: string; kind?: AssetKind; prompt?: string | null; createdBy?: string | null },
 ): Promise<AssetResult> {
   const read = await readMediaSource(input.source);
   // A 502 from the reader is a bad INPUT url as far as the caller is concerned —
@@ -720,7 +804,9 @@ export async function createAssetFromSource(
     name: input.name,
     bytes: read.bytes,
     mimeType: read.mimeType,
-    kind: input.kind ?? 'image',
+    // Unstated kind is decided by `createAsset` from the bytes, so a clip posted
+    // from the board is filed as a video without the caller having to sniff it.
+    ...(input.kind ? { kind: input.kind } : {}),
     // `generated` is the truth for everything arriving this way: it was made on
     // the board, not uploaded from a disk by a person.
     source: 'generated',

@@ -30,7 +30,7 @@ Builderforce's Salary Calculator shows all five percentile bands for any role, l
 
 ## How to Find Your Market Rate (Step-by-Step)
 
-1. **Use the Builderforce Salary Calculator.** Enter your job title, years of experience, city, and industry. The AI returns P10–P90 bands with sample sizes and confidence indicators.
+1. **Use the Builderforce Salary Calculator.** Enter your role, seniority, city and work mode. It returns a P25–P75 band and lists every multiplier it applied to get there, so you can check the assumptions rather than take the number on faith.
 2. **Cross-reference with 2–3 other sources.** Glassdoor, Levels.fyi (for tech), the Bureau of Labor Statistics, and LinkedIn Salary Insights all provide useful data points. No single source is perfect.
 3. **Adjust for total compensation.** Base salary is one component. Factor in bonuses (typically 10–20% for senior roles), equity/RSUs, benefits value, and perks. A $150K base with $50K in RSUs is worth $200K total comp.
 4. **Account for cost of living.** $130K in Austin has more purchasing power than $160K in San Francisco. Use a cost-of-living calculator to normalize.
