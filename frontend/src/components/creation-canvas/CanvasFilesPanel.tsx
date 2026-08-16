@@ -83,42 +83,42 @@ export function CanvasFilesPanel({
       {source === 'cloud'
         ? <CanvasDriveBrowser onImport={onImportFile} onClose={onClose} returnTo={returnTo} />
         : <>
-      {files.length > 0 && <CanvasPanelFilters
-        search={search}
-        onSearchChange={setSearch}
-        searchLabel={t('search')}
-        filterGroupLabel={t('filterByType')}
-        filter={filter}
-        onFilterChange={(value) => setFilter(value as CanvasFileCategory | 'all')}
-        chips={available.map((category) => ({
-          value: category,
-          label: category === 'all' ? t('filterAll') : t(`category_${category}` as 'category_document'),
-        }))}
-      />}
-      {files.length === 0
-        ? <p className={styles.filesEmpty}>{t('empty')}</p>
-        : visible.length === 0
-          ? <p className={styles.filesEmpty}>{t('noMatches')}</p>
-          : <ul className={styles.filesList}>
-            {visible.map((file) => <li key={file.id} className={styles.fileRow}>
-              <button type="button" className={styles.fileOpen} onClick={() => onOpen(file.nodeId)} title={t('openOnCanvas')}>
-                {file.previewImageUrl
-                  ? <img src={file.previewImageUrl} alt="" aria-hidden />
-                  : <span className={styles.fileIcon} aria-hidden><Icon source={CATEGORY_ICON[file.category]} size={18} /></span>}
-                <span className={styles.fileText}>
-                  <b>{file.name}</b>
-                  <small>
-                    {[
-                      t(`category_${file.category}` as 'category_document'),
-                      file.sizeBytes ? formatBytes(file.sizeBytes) : '',
-                      file.source === 'export' ? t('exported') : file.editable ? t('editable') : '',
-                    ].filter(Boolean).join(' · ')}
-                  </small>
-                </span>
-              </button>
-              <button type="button" className={styles.fileDownload} aria-label={t('download', { name: file.name })} title={t('download', { name: file.name })} onClick={() => onDownload(file)}>↓</button>
-            </li>)}
-          </ul>}
+        {files.length > 0 && <CanvasPanelFilters
+          search={search}
+          onSearchChange={setSearch}
+          searchLabel={t('search')}
+          filterGroupLabel={t('filterByType')}
+          filter={filter}
+          onFilterChange={(value) => setFilter(value as CanvasFileCategory | 'all')}
+          chips={available.map((category) => ({
+            value: category,
+            label: category === 'all' ? t('filterAll') : t(`category_${category}` as 'category_document'),
+          }))}
+        />}
+        {files.length === 0
+          ? <p className={styles.filesEmpty}>{t('empty')}</p>
+          : visible.length === 0
+            ? <p className={styles.filesEmpty}>{t('noMatches')}</p>
+            : <ul className={styles.filesList}>
+              {visible.map((file) => <li key={file.id} className={styles.fileRow}>
+                <button type="button" className={styles.fileOpen} onClick={() => onOpen(file.nodeId)} title={t('openOnCanvas')}>
+                  {file.previewImageUrl
+                    ? <img src={file.previewImageUrl} alt="" aria-hidden />
+                    : <span className={styles.fileIcon} aria-hidden><Icon source={CATEGORY_ICON[file.category]} size={18} /></span>}
+                  <span className={styles.fileText}>
+                    <b>{file.name}</b>
+                    <small>
+                      {[
+                        t(`category_${file.category}` as 'category_document'),
+                        file.sizeBytes ? formatBytes(file.sizeBytes) : '',
+                        file.source === 'export' ? t('exported') : file.editable ? t('editable') : '',
+                      ].filter(Boolean).join(' · ')}
+                    </small>
+                  </span>
+                </button>
+                <button type="button" className={styles.fileDownload} aria-label={t('download', { name: file.name })} title={t('download', { name: file.name })} onClick={() => onDownload(file)}>↓</button>
+              </li>)}
+            </ul>}
         </>}
     </aside>
   );

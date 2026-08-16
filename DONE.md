@@ -1,3 +1,65 @@
+## ✅ RESOLVED 2026-08-15 — Nine diagram notations read, six written, through one shared graph (frontend 2026.8.25)
+
+**The gap.** The canvas knew exactly one diagram notation end to end. `.drawio` was the only drawing file
+the importer recognised; "convert" had a single hard-wired destination that EMBEDDED a bitmap; and a
+person holding a Mermaid file from a repo, a Visio drawing from a client, a BPMN process from the workflow
+tool, an ArchiMate model, a PlantUML file from the wiki, a Graphviz `.dot` a build tool emitted, or an
+Excalidraw sketch from a workshop got an attachment icon and nothing else. "draw.io" was spelled out in
+nine places — importer test, stored format, card renderer, inspector picker, convert action, export
+extension, export MIME, MCP tool description, and the notice a person read afterwards — and two of the
+nine were already wrong: a Mermaid diagram could be SELECTED in the inspector and then downloaded with a
+`.drawio` extension and a draw.io MIME type, which is a file nothing opens.
+
+**A notation is now DATA.** `lib/diagramNotations.ts` is the single registry: one row declares how a format
+is recognised, how it reads into the shared graph, whether it can be written back, its extensions, its MIME
+type and its name. Every consumer reads that table, so a tenth notation is a row rather than a tenth place
+to remember. `lib/diagramGraph.ts` holds the neutral IR every reader produces and every writer consumes —
+N readers + M writers instead of the seventy-two pairwise converters nine notations would otherwise need.
+
+| Notation | Read | Write | Note |
+|---|---|---|---|
+| Draw.io | ✓ | ✓ | Compressed and plain payloads; written uncompressed so it diffs |
+| Mermaid | ✓ | ✓ | Flowcharts. Sequence/class/gantt/ER render and export but are never flattened into boxes |
+| PlantUML | ✓ | ✓ | Component/deployment vocabulary, plus `[Component]` and `(Use case)` shorthand |
+| Graphviz DOT | ✓ | ✓ | Honours `node [shape=…]` defaults; Graphviz's own default is an ellipse |
+| BPMN 2.0 | ✓ | ✓ | Real DI coordinates when present, laid out from sequence flows when absent |
+| Excalidraw | ✓ | ✓ | Bindings become endpoints; deterministic export, so it diffs |
+| ArchiMate | ✓ | — | Labels resolved from the model elements a view REFERS to; a type per box cannot be invented |
+| Visio `.vsdx` | ✓ | — | Inches from bottom-left, positioned by centre; endpoints from `<Connects>` |
+| SVG | ✓ | — | Shapes recovered on request — the escape hatch out of every tool that only exports pictures |
+
+**Conversion resolves its SOURCE first.** `lib/canvasDiagramConvert.ts` decides whether an object holds real
+shapes (a diagram in another notation, a vector image, a CAD drawing → a graph, writable to any of the six)
+or is a picture (a photograph, a freehand sketch → an asset, embeddable only in draw.io). `DiagramConvertPanel`
+offers exactly what came back and decides its own visibility, so the menu cannot fail after the click. Edge
+endpoints are recovered from geometry ONCE before any writer runs, so a Visio connector survives the trip to
+Mermaid; anything still unresolvable is COUNTED and reported in the result notice rather than vanishing.
+
+**Five defects found and fixed on the way.**
+
+1. **A Mermaid diagram downloaded as `.drawio`.** Extension and MIME were hardcoded in three places
+   (`canvasDocuments.ts`, the export path, the Files panel). All now read the notation row.
+2. **An Excalidraw scene saved as `.json` became a one-row Dataset** — the same trap the JSON-résumé path
+   documents. Recognised by its `type: "excalidraw"` declaration, not its file name.
+3. **PlantUML's `@startuml` swallowed the first line of the diagram.** The optional name after the directive
+   was matched with `\s+`, which matches a newline. Horizontal whitespace only.
+4. **Draw.io labels containing `<…>` lost their text on write.** A `value` is HTML inside an XML attribute,
+   so it passes two decoders; escaped once, `<now>` reached the reader as markup and the tag stripper deleted
+   it. Escaped for HTML first, as draw.io's own files are.
+5. **The Mermaid writer emitted an entity its own reader could not decode** (`#124;`). The reader now decodes
+   named and numeric Mermaid entities; the writer derives them from the code point.
+
+**Also closed:** `CanvasFilesPanel`'s test had drifted from its props (`onImportFile`, `returnTo`) and no
+longer typechecked. `canvas_convert_to_drawio` became `canvas_convert_diagram` with a `format` enum built
+from the registry (contract package updated). Dead keys removed from all five catalogs — a notation's NAME
+is a brand, and `diagramFormatDrawio: "Draw.io"` was five identical copies of a string no locale changes.
+
+**Surface.** Drop any of the nine on a board; convert any diagram to any of the six from the details panel or
+via `canvas_convert_diagram`; export in the notation the object is actually written in. New tests:
+`diagramNotations.test.ts` (39), `canvasDiagramConvert.test.ts` (13), plus import and draw.io round-trip
+cases. Three articles ship with it: *Every Diagram Format the Creation Canvas Reads and Writes*,
+*Which Diagram Should You Draw? Twelve Types, With Examples*, and *Escape Your Diagramming Tool*.
+
 ## ✅ RESOLVED 2026-08-15 — The canvas rail stopped being an integration list, cloud files moved inside Files, and a signed-out visitor stopped filing 401s as support tickets (frontend 2026.8.24)
 
 **The gap.** The canvas's left rail had grown a button per integration — Files, Cloud files, Miro boards,

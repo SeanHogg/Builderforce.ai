@@ -1,24 +1,50 @@
-import '@testing-library/jest-dom';
-import { configure } from '@testing-library/react';
 import { vi } from 'vitest';
 
 /**
- * `findBy*` / `waitFor` ceiling, raised from the 1s default.
+ * THE DOM HALF OF SETUP, LOADED ONLY WHERE THERE IS A DOM.
  *
- * These queries POLL until the condition holds, so a longer ceiling cannot make a
- * wrong assertion pass — it only stops a correct one from being cut off. Under the
- * full suite (100+ jsdom files on a shared thread pool) a component whose first
- * paint is "loading…" can genuinely take more than a second of wall-clock to reach
- * its resolved state, which produced failures that vanished when the same file was
- * run alone. A test that fails for that reason is telling you about the scheduler,
- * not the code, and it trains people to re-run rather than read failures.
+ * This file is the `setupFiles` entry for BOTH projects, and it runs per test
+ * FILE — so every eager import here is paid 157 times by the `lib` project
+ * alone, 134 of whose files run in `node` and have no document to match
+ * against. `@testing-library/jest-dom` and `@testing-library/react` (which
+ * drags in react-dom) were both at the top of this file unconditionally.
  *
- * Raised again (5s → 15s) on 2026-08-07: with the canvas suite finally able to
- * run to completion, two of its heaviest mounts were still being cut off inside
- * a 56-file `src/components` run while passing comfortably in a directory run of
- * their own — the same scheduler story, one level further up.
+ * Measured 2026-08-15 on the `lib` project: 815s of cumulative setup and 404s
+ * of environment against 44s of actual tests. That cost is also what made the
+ * suite's one intermittent failure possible — vitest's worker START_TIMEOUT is
+ * a HARD-CODED 60s constant (`START_TIMEOUT` in the pool runner; there is no
+ * config lever for it), and starting a worker means loading this file. A
+ * jsdom-overriding file at the tail of a contended run has to build a document
+ * AND pay this, and `lib/brain/platformActions.test.ts` went over the 60s cliff
+ * — reported as `Failed to start threads worker`, which reads exactly like a
+ * hang in the code under test.
+ *
+ * So the DOM half is behind a document check. The 23 `src/lib` files that carry
+ * their own `@vitest-environment jsdom` docblock still get the matchers,
+ * because they genuinely have a document; the 134 that do not, do not — and
+ * none of them uses a jest-dom matcher (asserted below, so this cannot rot).
  */
-configure({ asyncUtilTimeout: 20_000 });
+if (typeof document !== 'undefined') {
+  await import('@testing-library/jest-dom');
+  const { configure } = await import('@testing-library/react');
+  /**
+   * `findBy*` / `waitFor` ceiling, raised from the 1s default.
+   *
+   * These queries POLL until the condition holds, so a longer ceiling cannot make a
+   * wrong assertion pass — it only stops a correct one from being cut off. Under the
+   * full suite (100+ jsdom files on a shared thread pool) a component whose first
+   * paint is "loading…" can genuinely take more than a second of wall-clock to reach
+   * its resolved state, which produced failures that vanished when the same file was
+   * run alone. A test that fails for that reason is telling you about the scheduler,
+   * not the code, and it trains people to re-run rather than read failures.
+   *
+   * Raised again (5s → 15s) on 2026-08-07: with the canvas suite finally able to
+   * run to completion, two of its heaviest mounts were still being cut off inside
+   * a 56-file `src/components` run while passing comfortably in a directory run of
+   * their own — the same scheduler story, one level further up.
+   */
+  configure({ asyncUtilTimeout: 20_000 });
+}
 
 /**
  * Global next-intl mock for the test environment.

@@ -4,7 +4,7 @@ import { Suspense, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { getRouteMarketing, isNoindexTeaserRoute } from '@/lib/routeMarketing';
+import { destinationForRoute, destinationPitchKey, getRouteMarketing, isNoindexTeaserRoute } from '@/lib/routeMarketing';
 import { PRODUCT_SECTIONS } from '@/lib/content';
 import { routeMarketingSchema } from '@/lib/structured-data';
 import { ButtonLink, Icon, Surface, surfaceClassName } from '@/components/ui';
@@ -12,27 +12,48 @@ import JsonLd from './JsonLd';
 import RelatedArticles from './blog/RelatedArticles';
 import { signInHref } from '@/lib/auth';
 import { ProjectManagerVisual } from './marketing/ProjectManagerVisual';
+import MethodologySection from './marketing/MethodologySection';
 
 /**
  * Marketing page rendered (inside MarketingShell) when a logged-out visitor or
  * crawler hits an authenticated route — a feature-specific hero, "how it works"
- * highlights, the product map, a per-feature FAQ, associated blog articles, and
- * JSON-LD. Replaces the old one-line gate so every authed deep link is a real,
- * indexable marketing page rather than a dead end.
+ * highlights, what the destination contains, the method the product runs on, the
+ * product map, a per-feature FAQ, associated blog articles, and JSON-LD.
  *
- * All per-route copy lives in lib/routeMarketing.ts (single source of truth);
- * this component only renders it and decides its own section visibility.
+ * THREE TIERS of copy, resolved here and documented in `lib/routeMarketing.ts`:
+ * a hand-authored surface, a NAMED DESTINATION (its localized rail label, icon,
+ * pitch and tabs), or — for a route that is neither — the METHOD itself. The
+ * third case is the one worth naming: it used to be a lock glyph over "This is
+ * part of Builderforce.ai", which told a visitor standing at /inbox nothing
+ * about the product, the page, or why they should want an account. A visitor who
+ * cannot get in should at least leave knowing how the thing works.
+ *
+ * All per-route copy lives in lib/routeMarketing.ts (structure) and the message
+ * catalogs (destination + generic copy, five locales); this component only
+ * renders them and decides its own section visibility.
  */
 function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: string | null }) {
   const t = useTranslations('routeMarketing');
+  const tNav = useTranslations('nav');
   const m = getRouteMarketing(pathname);
+  // Resolved even when `m` exists: the destination is what places this route in
+  // the arc (Idea → Make → Run → Measure) for the method band, and it owns the
+  // tab list, so a marketed surface gets both too.
+  const group = destinationForRoute(pathname);
   const isProjectsRoute = pathname === '/projects';
   const conversionVariant = isProjectsRoute && tab === 'manager' ? 'manager' : isProjectsRoute ? 'projects' : null;
   const loginHref = signInHref(conversionVariant === 'manager' ? `${pathname}?tab=manager` : pathname);
-  const title = conversionVariant ? t(`${conversionVariant}.title`) : m.title;
-  const description = conversionVariant ? t(`${conversionVariant}.description`) : m.description;
-  const metaDesc = conversionVariant ? t(`${conversionVariant}.seoDescription`) : m.seoDescription ?? m.description;
-  const faq = conversionVariant === 'manager' ? undefined : m.faq;
+  const surface = m?.title ?? (group ? tNav(group.labelKey) : t('generic.title'));
+  const icon = m?.icon ?? group?.icon ?? '🔒';
+  const pitch = m?.description ?? (group ? t(destinationPitchKey(group.id)) : t('generic.description'));
+  const title = conversionVariant ? t(`${conversionVariant}.title`) : surface;
+  const description = conversionVariant ? t(`${conversionVariant}.description`) : pitch;
+  const metaDesc = conversionVariant ? t(`${conversionVariant}.seoDescription`) : m?.seoDescription ?? pitch;
+  const faq = conversionVariant === 'manager' ? undefined : m?.faq;
+  // The fuller telling of the method for a page that has nothing else to say,
+  // the loop alone for one that does. A page carrying its own highlights and FAQ
+  // does not need the eight proof forms as well.
+  const methodVariant = m?.highlights?.length ? 'loop' : 'full';
 
   // Client-set <title>/description so each feature route has a unique, crawlable
   // head (these routes render client-side, so there is no server metadata
@@ -78,14 +99,14 @@ function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: strin
           {conversionVariant ? (
             <div className="ui-eyebrow rm-eyebrow">{t(`${conversionVariant}.eyebrow`)}</div>
           ) : (
-            <div className="rm-icon" aria-hidden="true"><Icon source={m.icon} size={28} /></div>
+            <div className="rm-icon" aria-hidden="true"><Icon source={icon} size={28} /></div>
           )}
           <h1 className="ui-text-page-title rm-title">{title}</h1>
           <p className="rm-desc">{description}</p>
           {conversionVariant === 'manager' ? (
             <div className="rm-auth-note"><Icon source="lock" size={15} />{t('manager.authRequired')}</div>
           ) : !conversionVariant ? (
-            <p className="ui-text-small rm-sub">{t('subtitle', { surface: m.title })}</p>
+            <p className="ui-text-small rm-sub">{t('subtitle', { surface })}</p>
           ) : null}
           <div className="rm-actions">
             {conversionVariant === 'manager' ? (
@@ -115,9 +136,9 @@ function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: strin
         {conversionVariant && <ProjectManagerVisual variant={conversionVariant} />}
       </section>
 
-      {m.highlights && m.highlights.length > 0 && (
+      {m?.highlights && m.highlights.length > 0 && (
         <section className="rm-highlights">
-          <div className="ui-eyebrow rm-inside-head">{t('howItWorks', { surface: m.title })}</div>
+          <div className="ui-eyebrow rm-inside-head">{t('howItWorks', { surface })}</div>
           <div className="rm-hl-grid">
             {m.highlights.map((h) => (
               <Surface key={h.title} tone="raised" padding="md">
@@ -129,7 +150,35 @@ function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: strin
         </section>
       )}
 
-      {m.figures && m.figures.length > 0 && (
+      {/* What this destination CONTAINS, taken from the rail's own tab list.
+          Not retyped copy: `nav.tab.*` already names every tab in five locales,
+          so this band is accurate the day a tab is added and cannot describe a
+          sub-view the product no longer has. Chips rather than links — every one
+          of them is behind the wall this page exists because of. */}
+      {group?.tabs && group.tabs.length > 0 && (
+        <section className="rm-tabs">
+          <div className="ui-eyebrow rm-inside-head">{t('insideHeading', { surface })}</div>
+          <ul className="rm-tab-list">
+            {group.tabs.map((navTab) => (
+              <li key={`${navTab.id}:${navTab.labelKey}`} className={surfaceClassName({ tone: 'raised', padding: 'none' }, 'rm-tab')}>
+                <span aria-hidden="true"><Icon source={navTab.icon} size={16} /></span>
+                {tNav(navTab.labelKey)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* THE METHOD. The page a locked-out visitor actually meets is the last
+          place the product gets to say what it believes, so it says the thing it
+          believes: read the idea, choose the proof, then build. `activeStage`
+          places THIS destination in the arc, which turns a generic band into an
+          answer — "Inbox is a RUN surface" — for the route they were denied. */}
+      <section className="rm-method">
+        <MethodologySection variant={methodVariant} activeStage={group?.stage} />
+      </section>
+
+      {m?.figures && m.figures.length > 0 && (
         <section className="rm-figures">
           <div className="ui-eyebrow rm-inside-head">{t('seeHowItWorks')}</div>
           {m.figures.map((f) => (
@@ -189,7 +238,7 @@ function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: strin
         </section>
       )}
 
-      {m.relatedSurface && (
+      {m?.relatedSurface && (
         <RelatedArticles surface={m.relatedSurface} heading={t('relatedReading')} embedded />
       )}
 
@@ -231,7 +280,19 @@ function RouteMarketingContent({ pathname, tab }: { pathname: string; tab: strin
         .rm-sub { color: var(--text-muted); margin: 0 auto var(--space-6); }
         .rm-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: center; align-items: center; }
 
-        .rm-highlights, .rm-figures, .rm-inside, .rm-faq { margin-top: var(--space-10); }
+        .rm-highlights, .rm-tabs, .rm-method, .rm-figures, .rm-inside, .rm-faq { margin-top: var(--space-10); }
+        /* Wraps at any width and never sets a track, so a destination with three
+           tabs and one with fifteen both read as a list rather than a grid with
+           holes in it. */
+        .rm-tab-list { display: flex; flex-wrap: wrap; gap: var(--space-2); list-style: none; margin: 0; padding: 0; justify-content: center; }
+        .rm-tab {
+          display: inline-flex; align-items: center; gap: var(--space-2);
+          padding: var(--space-2) var(--space-4);
+          border-radius: var(--radius-full);
+          color: var(--text-secondary);
+          font-size: var(--font-size-small);
+        }
+        .rm-tab svg { color: var(--accent); }
         .rm-hl-grid, .rm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-4); }
         .rm-hl-title { margin-bottom: var(--space-1); }
         .rm-hl-desc, .rm-card-blurb { color: var(--text-secondary); }

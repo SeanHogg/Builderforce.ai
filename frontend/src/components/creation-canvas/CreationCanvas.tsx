@@ -8570,6 +8570,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else if (target.data.kind === 'website' && pending.action === 'publish') publishWebsite(target.id);
     else if (target.data.kind === 'build' && pending.action === 'open') openBuild(target.id);
     else if (target.data.kind === 'video' && pending.action === 'generate') generateVideo(target.id);
+    // BEFORE the creative-generator branch, which would otherwise swallow it:
+    // `image` and `cad` are both generator kinds, and routing a conversion into
+    // `runCreativeAction` is why this action was advertised as connected and
+    // answered "no delivery adapter" for every kind that offered it.
+    else if (pending.action === 'convert-to-diagram') {
+      void convertObjectToDiagram(target.id).then((result) => setNotice(result.ok ? t('diagramCreatedStatus') : result.error ?? t('drawioAppendFailed')));
+    }
     else if (CREATIVE_GENERATOR_KINDS.has(target.data.kind)) runCreativeAction(target.id, pending.action);
     else if (target.data.kind === 'dataset' && pending.action === 'visualize') visualizeDataset();
     else if (target.data.kind === 'dataset' && pending.action === 'plot') plotDataset();

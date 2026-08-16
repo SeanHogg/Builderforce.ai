@@ -1,4 +1,6 @@
 import { PRODUCT_SECTIONS, PROJECTS_TASKS_FAQ, type FaqItem } from './content';
+import { FOR_HIRE_NAV_GROUPS, NAV_GROUPS, SALES_NAV_GROUPS, findActiveGroup, type NavGroup } from './navGroups';
+import { classifyShell } from './shellRouting';
 
 /**
  * Marketing copy shown to logged-out visitors who land on an authenticated
@@ -12,6 +14,29 @@ import { PRODUCT_SECTIONS, PROJECTS_TASKS_FAQ, type FaqItem } from './content';
  * the marketing body, FAQ, SEO description, and the RELATED_ARTICLES surface key
  * used to attach associated blog content. Lookup is longest-prefix so /create/123
  * and /settings/members resolve.
+ *
+ * ── THE THREE TIERS ─────────────────────────────────────────────────────────
+ * There are 86 authenticated routes and this file hand-writes copy for 25 of
+ * them, so "what does the OTHER route show" is the question that decides what a
+ * visitor actually meets. It used to be one generic sentence — "This is part of
+ * Builderforce.ai" — served identically at /inbox, /insights, /incidents and
+ * every seat, which is the closest thing to a 404 a working page can be.
+ *
+ *   1. REGISTRY   — a hand-authored surface (below). Full hero, highlights, FAQ.
+ *   2. DESTINATION — no entry here, but the route belongs to a NAV_GROUPS row.
+ *                    The hero is the destination's own localized name, icon and
+ *                    one-line pitch, and the "what's inside" band is its tabs.
+ *                    Nothing is retyped: `nav.group.*` already names every row
+ *                    in five languages, so a new destination is a marketing page
+ *                    the day it is a menu row, in every locale, or it fails the
+ *                    catalog ratchet in `routeMarketing.test.ts`.
+ *   3. GENERIC    — neither. The method itself (Read → Prove → Build) rather
+ *                  than a lock icon, and `noindex`, because a page with the same
+ *                  body at forty URLs is duplicate content by definition.
+ *
+ * Tiers 2 and 3 carry no English in this file — their copy is i18n keys resolved
+ * by `<RouteMarketing>`, which is what lets them exist at all: 28 destinations ×
+ * five locales is a catalog entry each, not 28 hand-written pages.
  */
 export interface RouteHighlight {
   title: string;
@@ -43,14 +68,35 @@ export interface RouteMarketing {
   seoDescription?: string;
 }
 
+/**
+ * The marketed surfaces, keyed by PATH.
+ *
+ * Two corrections over the naive `fromSurfaces[s.href] = …`, both of which were
+ * silently wrong. A surface's `href` is a LINK, so it may carry a query
+ * (`/projects?tab=portfolio`) or point off-site (the VS Code extension) — and a
+ * key with a `?` in it can never equal a pathname, so those rows registered
+ * nothing while the extension row registered a marketplace.visualstudio.com key.
+ * Stripping the query makes them match, and FIRST-WINS keeps the destination's
+ * own row: four surfaces link into `/projects`, and last-wins had `/projects`
+ * titled "Workforce Kanban & Templates".
+ */
 const fromSurfaces: Record<string, RouteMarketing> = {};
 for (const section of PRODUCT_SECTIONS) {
   for (const s of section.surfaces) {
-    fromSurfaces[s.href] = { icon: s.icon, title: s.title, description: s.desc };
+    if (!s.href.startsWith('/')) continue;
+    const path = s.href.split('?')[0];
+    if (fromSurfaces[path]) continue;
+    fromSurfaces[path] = { icon: s.icon, title: s.title, description: s.desc };
   }
 }
 
 const extra: Record<string, RouteMarketing> = {
+  // `/brainstorm` and `/training` carried a full DETAILS body (highlights, FAQ,
+  // SEO copy) and no base, so the overlay landed on the generic default: a page
+  // headed "This is part of Builderforce.ai" with three Brain Storm highlights
+  // under it. A DETAILS key without a base row is now a test failure.
+  '/brainstorm': { icon: '🧠', title: 'Brain Storm', description: 'Describe what you want to build in plain language and turn it into projects, tasks, datasets, and agent work.' },
+  '/training': { icon: '🎓', title: 'Training', description: 'Generate a dataset, fine-tune a model, have an independent judge score it, then publish the result to your workforce.' },
   '/workflows': { icon: '🔀', title: 'Workflow Builder', description: 'Compose agents and tools into repeatable, approval-gated workflows.' },
   '/tasks': { icon: '▦', title: 'Tasks', description: 'A task board for your agent workforce — plan, prioritize, and assign tasks to agents, then watch them flow through every status.' },
   '/contributors': { icon: '📈', title: 'Contributors', description: 'Dev analytics and team intelligence — reconcile developer identity across tools, track activity and PR cycle time, and roll up engagement across your tenant.' },
@@ -227,14 +273,71 @@ const DETAILS: Record<string, Omit<RouteMarketing, 'icon' | 'title' | 'descripti
   },
 };
 
-/** Default copy for any authed route without a specific entry. */
-const DEFAULT: RouteMarketing = {
-  icon: '🔒',
-  title: 'This is part of Builderforce.ai',
-  description: 'Sign in to continue creating with your team and AI agents, with connected work from the first idea through delivery.',
-};
-
 const REGISTRY: Record<string, RouteMarketing> = { ...fromSurfaces, ...extra };
+
+/**
+ * Every registry a signed-out visitor's path could belong to.
+ *
+ * `NAV_GROUPS` alone is the builder's menu, and the three restricted account
+ * types navigate their own — so resolving `/freelancer/profile` or `/sales`
+ * against the builder list returns nothing and those routes fall to the generic
+ * page. `FREELANCER_NAV_GROUPS` is deliberately absent: it is `FOR_HIRE_NAV_GROUPS`
+ * plus a Settings row that is already here.
+ */
+const TEASER_NAV_GROUPS: NavGroup[] = [...NAV_GROUPS, ...FOR_HIRE_NAV_GROUPS, ...SALES_NAV_GROUPS];
+
+/**
+ * The destination that owns this route, if any — tier 2 above.
+ *
+ * This is the SAME resolver the authenticated rail uses to decide which row is
+ * lit (`findActiveGroup`), which is the point: a signed-out visitor and a
+ * signed-in one are told they are in the same place, because one function
+ * answers "where is this" for both.
+ */
+export function destinationForRoute(pathname: string): NavGroup | undefined {
+  return findActiveGroup(pathname, TEASER_NAV_GROUPS);
+}
+
+/**
+ * Destination teasers that must NOT be indexed: operator tooling and PERSONAL
+ * consoles. Same reasoning as {@link NOINDEX_TEASER_ROUTES} — the page stays for
+ * anyone holding the link, it just has nothing to rank for. Superadmin-only rows
+ * are DERIVED rather than listed, so a new one is excluded by existing.
+ */
+const NOINDEX_DESTINATION_IDS = new Set([
+  'settings',
+  'sales',
+  'freelancer-dashboard',
+  'freelancer-profile',
+  'freelancer-workspace',
+  'freelancer-timecard',
+  'freelancer-gigs',
+]);
+
+function isNoindexDestination(group: NavGroup): boolean {
+  return group.superadminOnly === true || NOINDEX_DESTINATION_IDS.has(group.id);
+}
+
+/**
+ * Destination rows that render a teaser of their own — a nav row whose href is a
+ * plain path on an app route that no registry entry already covers.
+ *
+ * Filtered by `classifyShell` rather than by a second list: `/marketplace` and
+ * `/knowledge` are nav rows AND public pages, and a public page does not need a
+ * teaser (nor a second sitemap row pointing at the same URL).
+ */
+function destinationTeaserRoutes(): { route: string; group: NavGroup }[] {
+  const seen = new Set<string>();
+  const rows: { route: string; group: NavGroup }[] = [];
+  for (const group of TEASER_NAV_GROUPS) {
+    const route = group.href;
+    if (route.includes('?') || seen.has(route)) continue;
+    if (REGISTRY[route] || classifyShell(route) !== 'app') continue;
+    seen.add(route);
+    rows.push({ route, group });
+  }
+  return rows;
+}
 
 /**
  * Registry routes that must NOT be indexed.
@@ -262,12 +365,26 @@ const NOINDEX_TEASER_ROUTES = new Set(['/admin', '/tenants', '/settings', '/agen
  * excluded by being named above.
  */
 export function indexableTeaserRoutes(): string[] {
-  return Object.keys(REGISTRY).filter((route) => !NOINDEX_TEASER_ROUTES.has(route)).sort();
+  const marketed = Object.keys(REGISTRY).filter((route) => !NOINDEX_TEASER_ROUTES.has(route));
+  const destinations = destinationTeaserRoutes()
+    .filter(({ group }) => !isNoindexDestination(group))
+    .map(({ route }) => route);
+  return [...new Set([...marketed, ...destinations])].sort();
 }
 
-/** Should this route tell crawlers to stay away? Consumed by robots metadata. */
+/**
+ * Should this route tell crawlers to stay away? Consumed by robots metadata.
+ *
+ * The generic tier is noindex BY DEFAULT, and that is the interesting half: its
+ * body is identical at every route that reaches it, so indexing it would file
+ * forty URLs of duplicate content under forty different names. A route earns its
+ * place in the index by being a marketed surface or a named destination.
+ */
 export function isNoindexTeaserRoute(pathname: string): boolean {
-  return NOINDEX_TEASER_ROUTES.has(pathname);
+  if (NOINDEX_TEASER_ROUTES.has(pathname)) return true;
+  if (getRouteMarketing(pathname)) return false;
+  const group = destinationForRoute(pathname);
+  return group ? isNoindexDestination(group) : true;
 }
 
 /** Longest-prefix match of `pathname` against a `key → value` map. */
@@ -281,8 +398,27 @@ function longestPrefixMatch<T>(pathname: string, map: Record<string, T>): { key:
   return best;
 }
 
-export function getRouteMarketing(pathname: string): RouteMarketing {
-  const base = REGISTRY[pathname] ?? longestPrefixMatch(pathname, REGISTRY)?.val ?? DEFAULT;
+/**
+ * The hand-authored copy for this route, or `null` when it has none.
+ *
+ * Null rather than a default: a default returned here is a default nobody can
+ * see coming, and the caller is the only place that knows whether it can fall
+ * back to a destination (tier 2) before it falls back to the method (tier 3).
+ */
+export function getRouteMarketing(pathname: string): RouteMarketing | null {
+  const base = REGISTRY[pathname] ?? longestPrefixMatch(pathname, REGISTRY)?.val ?? null;
+  if (!base) return null;
   const details = DETAILS[pathname] ?? longestPrefixMatch(pathname, DETAILS)?.val;
   return details ? { ...base, ...details } : base;
+}
+
+/** i18n key for a destination's one-line marketing pitch, under `routeMarketing`. */
+export function destinationPitchKey(groupId: string): string {
+  return `destination.${groupId}.description`;
+}
+
+/** Every destination id that needs a pitch — the ratchet's input, and the reason
+ *  a new nav row cannot ship as an unnamed page in four languages. */
+export function teaserDestinationIds(): string[] {
+  return [...new Set(TEASER_NAV_GROUPS.map((group) => group.id))].sort();
 }
