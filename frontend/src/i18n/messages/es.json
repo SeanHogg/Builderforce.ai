@@ -16499,10 +16499,8 @@
     "zoomOut": "Alejar",
     "fitCanvas": "Ajustar el lienzo a la vista",
     "canvasViewControls": "Controles de vista del lienzo",
-    "canvasHistory": "Historial del lienzo",
     "undoCanvasChange": "Deshacer cambio del lienzo",
     "redoCanvasChange": "Rehacer cambio del lienzo",
-    "inviteCollaborator": "Invitar colaborador",
     "inviteCollaborators": "Invitar colaboradores",
     "clickToFollow": "haz clic para seguir la vista",
     "connectionKind": "Tipo de conexión",
@@ -19121,7 +19119,13 @@
     "founderCompetitorMapProposal": "Mapa de competidores: {title}",
     "founderMetricLive": "En vivo",
     "founderMetricRefreshed": "Métrica actualizada: {title}",
-    "founderTriggerEvaluated": "Disparador evaluado: {title}"
+    "founderTriggerEvaluated": "Disparador evaluado: {title}",
+    "sessionActionCluster": {
+      "history": "Historial del lienzo",
+      "inspect": "Herramientas del lienzo",
+      "session": "Compartir este lienzo"
+    },
+    "moreMenuSessionActions": "Este lienzo"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

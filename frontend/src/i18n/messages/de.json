@@ -16499,10 +16499,8 @@
     "zoomOut": "Verkleinern",
     "fitCanvas": "Leinwand einpassen",
     "canvasViewControls": "Ansichtssteuerung der Leinwand",
-    "canvasHistory": "Leinwandverlauf",
     "undoCanvasChange": "Leinwandänderung rückgängig",
     "redoCanvasChange": "Leinwandänderung wiederholen",
-    "inviteCollaborator": "Mitarbeiter einladen",
     "inviteCollaborators": "Mitarbeiter einladen",
     "clickToFollow": "klicken, um der Ansicht zu folgen",
     "connectionKind": "Verbindungstyp",
@@ -19121,7 +19119,13 @@
     "founderCompetitorMapProposal": "Wettbewerbskarte: {title}",
     "founderMetricLive": "Live",
     "founderMetricRefreshed": "Kennzahl aktualisiert: {title}",
-    "founderTriggerEvaluated": "Auslöser ausgewertet: {title}"
+    "founderTriggerEvaluated": "Auslöser ausgewertet: {title}",
+    "sessionActionCluster": {
+      "history": "Leinwandverlauf",
+      "inspect": "Leinwand-Werkzeuge",
+      "session": "Diese Leinwand teilen"
+    },
+    "moreMenuSessionActions": "Diese Leinwand"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

@@ -1639,23 +1639,48 @@ html[data-theme='light'] .nebula {
   outline: none;
 }
 
-/* Version + Terms/Privacy strip, bottom-RIGHT corner of the frame (moved out of
-   the sidebar footer, which put it at the widest edge of the board). Last row of
-   `.app-frame`, in normal flow under the team roster, so it can never cover the
-   canvas. One line, right-aligned, separators drawn by CSS. */
+/* Copyright + version + Terms/Privacy strip, bottom-RIGHT corner of the frame
+   (moved out of the sidebar footer, which put it at the widest edge of the
+   board). Last row of `.app-frame`, in normal flow under the team roster, so it
+   can never cover the canvas. Separators drawn by CSS.
+
+   ONE line on every viewport — phone included. It used to wrap, which put a
+   second row of chrome under the canvas on exactly the screens with the least
+   vertical space to give. Nothing here wraps now; at narrow widths the strip
+   sheds DETAIL instead (see the media queries below). Measured: one row, no
+   scroll, from 320px to 1440px. `overflow-x` is the safety valve for the case
+   the tape cannot predict — a longer version string, a wider translation — so
+   the strip scrolls itself rather than widening the frame.
+   `margin-inline-start: auto` on the first item does the right-alignment
+   rather than `justify-content`, which would make the overflowing start of the
+   strip unreachable when it does scroll. */
 .legal-corner {
   flex-shrink: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: flex-end;
-  gap: 2px 10px;
+  white-space: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 0 10px;
   padding: 4px var(--space-4);
   background: var(--surface-sunken);
   border-top: 1px solid var(--border-subtle);
   color: var(--muted);
   font-size: var(--font-size-eyebrow);
   line-height: 1.5;
+}
+
+.legal-corner::-webkit-scrollbar {
+  display: none;
+}
+
+.legal-corner > *:first-child {
+  margin-inline-start: auto;
+}
+
+.legal-corner > * {
+  flex: 0 0 auto;
 }
 
 /* A button, not a label: the version opens the Product Updates panel and the two
@@ -1670,7 +1695,9 @@ html[data-theme='light'] .nebula {
   cursor: pointer;
 }
 
-.legal-corner-link + .legal-corner-link::before {
+/* Separator between EVERY pair of items, not just two links — the copyright
+   opens the strip and is not a link. */
+.legal-corner > * + *::before {
   content: '·';
   margin-right: 10px;
   color: var(--border);
@@ -1687,16 +1714,37 @@ html[data-theme='light'] .nebula {
   border-radius: var(--radius-sm);
 }
 
-/* At 360px the three items wrap rather than pushing the frame's last row wide;
-   they stay right-aligned so the corner reads as one block. */
-@media (max-width: 480px) {
+/* Narrow screens keep the single line by dropping DETAIL, in the order it can
+   be spared: first the tablet step tightens the spacing, then the phone step
+   drops the `(v2.1.0)` suffixes (the reader states the version in its own
+   title) and the brand word from the copyright (the shell says the brand in the
+   header). What survives at 360px is the copyright, both version numbers and
+   both document names — on one row. */
+@media (max-width: 900px) {
   .legal-corner {
     gap: 0 8px;
     padding: 4px var(--space-3);
   }
 
-  .legal-corner-link + .legal-corner-link::before {
+  .legal-corner > * + *::before {
     margin-right: 8px;
+  }
+}
+
+@media (max-width: 620px) {
+  .legal-corner {
+    gap: 0 5px;
+    padding: 4px var(--space-2);
+    font-size: 0.6rem;
+  }
+
+  .legal-corner > * + *::before {
+    margin-right: 5px;
+  }
+
+  .legal-corner .legal-doc-version,
+  .legal-corner-brand {
+    display: none;
   }
 }
 

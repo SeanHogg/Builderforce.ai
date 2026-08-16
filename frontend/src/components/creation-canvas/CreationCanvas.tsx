@@ -19,12 +19,14 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, AddObjectIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, ClosePaletteIcon, DepthIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MoreActionsIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
 import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
+import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
+import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
 import { CanvasChatSurface } from './CanvasChatSurface';
 import { CanvasPageSurface } from './CanvasPageSurface';
 import { CanvasPlaySurface } from './CanvasPlaySurface';
@@ -9289,6 +9291,31 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     </div>
   </div>;
 
+  /**
+   * What each session action DOES. The registry owns the rest — the glyph, the name, the
+   * cluster it belongs to and whether a phone keeps it in the bar or in the ••• sheet —
+   * so this map is behaviour only, and the desktop bar and the phone sheet are driven by
+   * the same entry rather than by two copies of the same `onClick`.
+   */
+  const sessionActionHandlers: Record<CanvasSessionActionId, CanvasSessionActionHandler> = (() => {
+    // Every one of these can be pressed from the ••• sheet as well as from the bar, and a
+    // sheet that stays open over the panel it just opened is a sheet in the way. Wrapping
+    // once here is what keeps that true for an action added later.
+    const act = (run: () => void, active?: boolean): CanvasSessionActionHandler =>
+      ({ run: () => { setMoreOpen(false); run(); }, active });
+    return {
+      undo: act(undo),
+      redo: act(redo),
+      outcomes: act(openOutcomeMetrics, outcomeMetricsOpen),
+      diagnostics: act(() => void openDiagnostics(), diagnosticsOpen),
+      fullscreen: act(toggleFullscreen, fullscreen),
+      // A local canvas opens the SAME share sheet a saved one does. It used to open a
+      // sign-up gate, which answered a question nobody asked: they wanted to show
+      // someone the board, not to create an account.
+      share: act(() => setShareOpen((value) => !value), shareOpen),
+    };
+  })();
+
   return (
     // Published to the whole shell, not just the board: the Brain surface's controls
     // render in three places and each needs the same answer to "is there a board to move
@@ -9318,7 +9345,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 ? room.participants.map((person) => ({ userId: `guest:${person.name}:${person.joinedAt}`, displayName: person.name, role: person.isHost ? ('owner' as const) : ('editor' as const) }))
                 : [{ userId: 'local', displayName: t('you'), role: 'owner' as const }]
             ).slice(0, 4).map((member, index) => <button key={member.userId} type="button" data-typing={'typing' in member && member.typing ? 'true' : 'false'} aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${'typing' in member && member.typing ? ` · ${t('writingPrompt')}` : ''}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
-            <button aria-label={t('inviteCollaborator')} onClick={() => setShareOpen(true)}>+</button>
+            {/* The roster's `+` used to open the invite sheet — the same sheet the
+                Share button opens, which is one decision with two controls and the
+                exact failure the surface registry was written to prevent. The roster
+                now only reports who is here; Share is the door. */}
           </div>
           {/* Editor-only capture actions. Renders nothing on the web — it asks the
               host port whether an editor is present rather than being told. */}
@@ -9328,24 +9358,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             onCapture={addHostCapture}
             onError={setNotice}
           />
-          <div className={styles.undoRedoGroup} role="group" aria-label={t('canvasHistory')}>
-            <button className={styles.secondaryButton} onClick={undo} aria-label={t('undoCanvasChange')}>↶</button>
-            <button className={styles.secondaryButton} onClick={redo} aria-label={t('redoCanvasChange')}>↷</button>
-          </div>
-          <button className={styles.secondaryButton} aria-expanded={outcomeMetricsOpen} aria-label={t('viewOutcomeMetrics')} title={t('outcomeMetricsTitle')} onClick={openOutcomeMetrics}><Icon source="↗" size="1em" /></button>
-          {/* Full screen survives the phone layout (hence `mobileAction`): a small
-              screen is where trading the app chrome for board is worth the most,
-              and the ⛶ / ⤡ glyphs it used to draw are exactly the characters a
-              phone font is most likely to render as a blank box. */}
-          <button className={`${styles.secondaryButton} ${styles.iconAction} ${styles.mobileAction}`} aria-pressed={fullscreen} aria-label={fullscreen ? t('exitFullScreen') : t('fullScreen')} title={fullscreen ? t('exitFullScreen') : t('fullScreen')} onClick={toggleFullscreen}>{fullscreen ? <ExitFullscreenIcon /> : <FullscreenIcon />}</button>
-          <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={diagnosticsOpen} aria-label={t('openDiagnostics')} title={t('openDiagnostics')} onClick={() => void openDiagnostics()}><Icon source="⚠" size="1em" /></button>
-          <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
-          {/* A local canvas opens the SAME share menu a saved one does. It used to
-              open a sign-up gate, which answered a question nobody asked: they
-              wanted to show someone the board, not to create an account. */}
-          <button className={styles.secondaryButton} data-tour="creation-share" onClick={() => { setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
+          {/* Everything this session bar DOES to the canvas, from one registry: which
+              actions exist, which of them are a set, and where each one lives on a
+              phone. The same list renders inside the ••• sheet below, so a small
+              screen loses placement rather than losing the action. */}
+          <CanvasSessionActions variant="bar" handlers={sessionActionHandlers} />
+          <button className={`${styles.secondaryButton} ${styles.iconAction} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}><MoreActionsIcon /></button>
           {persistence === 'local' && <button className={`${styles.secondaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', t('gateSaveTitle'), t('gateSaveBody'))}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>{t('save')}</span></button>}
-          {moreOpen && <div className={styles.moreMenu} aria-label={t('moreActions')}>
+          {moreOpen && <div className={styles.moreMenu} data-testid="canvas-more-menu" aria-label={t('moreActions')}>
+            {/* First, because these are the session-bar actions a phone gave up its
+                room for — including the only way to invite anybody, which used to be
+                reachable on a desktop and nowhere else. On a desktop the bar already
+                draws them, so the section stands down. */}
+            <div className={styles.moreMenuPhoneOnly}>
+              <span className={styles.moreMenuHeading}>{t('moreMenuSessionActions')}</span>
+              <CanvasSessionActions variant="menu" handlers={sessionActionHandlers} />
+            </div>
             <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
             <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden><Icon source="▦" size="1em" /></span>{t('templates')}</button>
             <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="◌" size="1em" /></span>{t('conversation')}</button>
@@ -9600,9 +9628,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         </ReactFlow>
         </BrainSurfaceProvider>
 
-        {/* The phone's board controls. Every command draws its glyph from the shared
-            canvas icon set, so the rail is one toolbar at one size rather than a
-            column of whatever a phone font makes of ⌗ / ⌘ / ◱ next to two real icons. */}
+        {/* ── THE BOARD'S FLOATING CONTROLS ────────────────────────────────────────
+            ONE rail on a phone, not two. The "add to canvas" toggle used to float on
+            its own at the top-left while the view commands stacked at the bottom-left,
+            which put two separate toolbars down the same edge of a 360px screen with
+            nothing saying why the add button was not part of the set. They are siblings
+            in one container now: on a desktop the container is `display:contents`, so
+            the toggle keeps its own corner and the phone column stays stood down; on a
+            phone the container IS the rail and the toggle is its first command.
+
+            Every command draws its glyph from the shared canvas icon set, so the rail is
+            one toolbar at one size rather than a column of whatever a phone font makes
+            of ⌗ / ⌘ / ◱ next to two real icons. */}
+        <div className={styles.boardRail}>
+        {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label={t('toggleObjectPalette')}>{paletteOpen ? <ClosePaletteIcon /> : <AddObjectIcon />}</button>}
         <div className={styles.mobileCanvasActions} role="group" aria-label={t('canvasViewControls')}>
           <button type="button" onClick={zoomInAction} aria-label={t('zoomIn')}><ZoomInIcon /></button>
           <button type="button" onClick={zoomOutAction} aria-label={t('zoomOut')}><ZoomOutIcon /></button>
@@ -9614,6 +9653,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           {threeDControls?.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
           <button type="button" onClick={() => toggleDockPanel('files')} aria-pressed={dockPanel === 'files'} aria-label={tFiles('title')}><CanvasFilesIcon /></button>
           <button type="button" onClick={() => toggleDockPanel('outline')} aria-pressed={dockPanel === 'outline'} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
+        </div>
         </div>
 
         {/* The runtime that takes the centre. The board itself is not in the map — it is
@@ -9747,7 +9787,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onClose={closeDockPanel}
         />}
 
-        {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label={t('toggleObjectPalette')}>{paletteOpen ? '‹' : '+'}</button>}
         {!presentMode && paletteOpen && <aside id="canvas-object-palette" data-testid="canvas-palette" className={styles.palette}>
           <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label={t('closePalette')}>×</button></div>
           <div className={styles.paletteSearchWrap}><span aria-hidden><Icon source="⌕" size="1em" /></span><input ref={paletteSearchRef} data-testid="canvas-palette-search" className={styles.search} aria-label={t('searchEverything')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>

@@ -1,3 +1,81 @@
+## ✅ RESOLVED 2026-08-16 — the other half of the canvas session bar, and the five actions a phone never had
+
+The Chat / Board / 3D switcher answers *what am I looking at*. The eight buttons beside it answer
+*what can I do to it*, and that half was never declared anywhere — it was hand-rolled JSX in
+`CreationCanvas.tsx`, each button spelling its own Unicode glyph, choosing its own chrome, and
+deciding on its own whether a phone would ever see it. Three consequences, all closed here.
+
+**1 · A phone could not share a canvas at all.** `@media (max-width:760px)` carried
+`.saved,.secondaryButton { display:none }`, which was every unlabelled button in the bar, and the
+••• sheet that survived it did not list one of them. So a phone lost undo, redo, Canvas
+diagnostics, the outcome scorecard **and every route to the invite panel** — five actions, none of
+them declared missing anywhere; it fell out of a blanket rule on a class name. Placement is data
+now: `frontend/src/lib/canvasSessionActions.ts` gives every action a `phone: 'bar' | 'menu'`, and
+`CanvasSessionActions` renders BOTH sets from that one list, so bar and overflow are complements
+of each other and an action cannot land in neither. `canvasSessionActions.test.tsx` asserts exactly
+that, plus the two-action budget for the phone bar (past two, the title — the only thing saying
+which canvas you are on — is what gets squeezed out).
+
+**2 · One decision, two controls.** The collaborator roster's `+` and the `Share ▾` button opened
+the same invite panel. Share is the one door now, and it reports the sheet it owns with
+`aria-expanded`. Removing the `+` also fixed a bug it had been causing since it was added: every
+avatar in the roster IS a button (press one to follow that person's viewport), so
+`.collaborators button { border:1px dashed; background:var(--canvas-panel) }` was landing on all of
+them — and at one class plus one type it outranked `.avatarPink` / `.avatarOrange` /
+`.avatarGreen`, so the roster hues had never once been drawn.
+
+**3 · Nothing said which buttons were a set.** Undo/redo were segmented; the three view actions
+next to them were not, so five icons of equal weight said nothing about what belonged with what.
+Clusters are declared in the registry and drawn in the same trough the surface switcher uses, with
+the same lit state. The glyphs went with them: `↶ ↷ ↗ ⚠ ••• ▾` are now real 16×16 icons in the shared
+canvas set (`CanvasCommands.tsx`) — the two that mattered being `↗`, the universal *opens somewhere
+else* arrow standing in for a scorecard, and `⚠`, a standing warning triangle for a report that is
+usually clean.
+
+**Also mobile.** The phone had TWO floating toolbars down its left edge — the "add to canvas"
+toggle alone at the top-left, the view commands stacked at the bottom-left, with nothing saying why
+the add button was not part of the set. They are siblings in one `.boardRail` container now
+(`display:contents` on a desktop, so that layout is untouched; the rail itself below 560px), `+`
+leads it as a create action should, and the two menus that used to anchor at `right:76px` /
+`right:150px` — measurements of buttons that happened to follow them, so both drifted on every
+signed-in session, where the save button is absent — anchor to `right:0` of the action row instead.
+The ••• sheet stops being a two-column grid of 28px rows and becomes one column of 40px targets
+that scrolls, because it is now the phone's only route to five actions.
+
+Dead copy dropped from all five catalogs (`canvasHistory`, `inviteCollaborator`); `sessionActionCluster.*`
+and `moreMenuSessionActions` added to all five with real translations. 10/10 guards, `tsgo` clean,
+and the creation-canvas suite green.
+
+---
+
+## ✅ RESOLVED 2026-08-16 — the frontend deploy died on an export PAIR no local check could see
+
+`src/app/references/shared/[token]/page.tsx` exported BOTH `metadata` and `generateMetadata`. Next
+refuses that combination in the webpack build — *"`metadata` and `generateMetadata` cannot be exported
+at the same time"* — so `cf-build` failed the deploy 2m43s in. The two exports were not even in
+disagreement: the static one set `robots: { index: false, follow: false, nocache: true }` and the async
+one set the same flags plus a localized title. That is why it passed review — the rule is structural,
+not semantic, and nothing local models it. `tsc`, `tsgo`, eslint, all nine guards and the whole vitest
+suite were green on the exact tree that could not build.
+
+**Fixed** by keeping `generateMetadata` (the title comes from the catalog, so the async form is
+required) with the robots flags folded into its return value, and by writing the reason into the file
+so the static object is not put back.
+
+**Guarded** by `scripts/check-route-exports.mjs` (`npm run check:route-exports`) — a sibling of
+`check-edge-runtime.mjs` in purpose and in voice: reproduce a Next build rule statically, in
+milliseconds, instead of learning it minutes into CI. It scans every `page` / `layout` / `route` /
+`error` / `loading` / `not-found` / `template` / `default` module for pairs Next rejects (`metadata` +
+`generateMetadata`, `viewport` + `generateViewport`), stripping comments first so a documented example
+is not read as an export. Wired into `scripts/checks.manifest.mjs` — so `npm test` runs it, 10/10
+guards — and into the `deploy-frontend` job of `.github/workflows/release.yml` beside
+`check:edge-runtime` and `check:declared-deps`, BEFORE `cf-build`, which is the only place that spends
+milliseconds to save the build. Verified against the pre-fix source: the guard flags it.
+
+A repo-wide sweep of all 168 App Router route modules found no second instance.
+
+---
+
 ## ✅ RESOLVED 2026-08-16 — the five things Wave 1 had written down and could not reach (W1B, second pass)
 
 Five register entries were logged as **blocked on file ownership** while lane W1B was fenced; the operator

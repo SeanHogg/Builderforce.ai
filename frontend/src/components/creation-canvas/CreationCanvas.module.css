@@ -170,7 +170,13 @@
   width:28px; height:28px; border-radius:50%; display:grid; place-items:center; margin-left:-5px;
   border:2px solid var(--canvas-panel); color:var(--text-on-accent); font-size:10px; font-weight:750;
 }
-.collaborators button { color:var(--canvas-muted); background:var(--canvas-panel); border:1px dashed var(--canvas-line); cursor:pointer; }
+/* Every avatar IS a button (press one to follow that person's viewport), so the dashed
+   outline the invite `+` used to want was landing on all of them — and at one class plus
+   one type it outranked `.avatarPink` / `.avatarOrange` / `.avatarGreen`, so the hues
+   below have never actually been drawn. The `+` has since moved into Share, which is now
+   the one door to the invite panel, so the rule keeps only the part that was ever about
+   the roster. */
+.collaborators button { padding:0; cursor:pointer; }
 .collaborators button[data-typing="true"] { border:2px solid var(--canvas-accent); box-shadow:0 0 0 3px color-mix(in srgb,var(--canvas-accent) 20%,transparent); animation:collaboratorTyping 1.4s ease-in-out infinite; }
 .avatarPink { background:#e94b9b; }.avatarOrange { background:#ff9827; }.avatarGreen { background:#43b77d; }
 .primaryButton, .secondaryButton, .fullButton {
@@ -181,11 +187,7 @@
 .secondaryFullButton { border-radius:var(--radius-md); padding:8px 13px; border:1px solid var(--canvas-line); background:var(--canvas-panel-muted); color:var(--canvas-ink); font:650 12px inherit; font-family:inherit; cursor:pointer; }
 .secondaryFullButton:disabled { opacity:.5; cursor:not-allowed; }
 .secondaryButton { background:var(--canvas-panel); color:var(--canvas-ink); }
-.undoRedoGroup { display:inline-flex; gap:0; overflow:hidden; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
-.undoRedoGroup .secondaryButton { width:36px; height:34px; display:grid; place-items:center; padding:0; border:0; border-radius:0; }
-.undoRedoGroup .secondaryButton + .secondaryButton { border-left:1px solid var(--canvas-line); }
-.undoRedoGroup .secondaryButton:hover,.undoRedoGroup .secondaryButton:focus-visible { z-index:1; background:var(--canvas-hover); outline:none; }
-/* Editor-only capture actions (VS Code). Same segmented-group shape as undo/redo
+/* Editor-only capture actions (VS Code). Same segmented-group shape as the session
    so the session bar reads as one row of controls rather than a bolted-on strip;
    it inherits the canvas palette, so both themes come from the tokens above. */
 .hostActions { display:inline-flex; gap:0; overflow:hidden; border:1px solid var(--canvas-line); border-radius:var(--radius-md); }
@@ -195,6 +197,56 @@
 .hostActions .secondaryButton:disabled { opacity:.45; cursor:not-allowed; }
 .hostActions .secondaryButton[aria-busy='true'] { opacity:.6; }
 .saveButtonShort { display:none; }
+
+/* ── Session actions ───────────────────────────────────────────────────────────────
+   The other half of the session bar, and the same argument the surface switcher makes:
+   a trough is what says "these belong together". Undo/redo were already segmented and
+   the three view actions beside them were not, so a row of five equally-weighted icons
+   read as five unrelated things. Same shell, same radius and same lit state as
+   `.surfaceTabs`, so the bar reads as ONE language of controls left to right. */
+.sessionActionCluster { display:inline-flex; flex:none; align-items:center; gap:2px; padding:3px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
+/* A cluster of one gets no shell — a lone button in a segmented trough reads as a
+   group with a member missing. */
+.sessionActionSolo { display:inline-flex; flex:none; align-items:center; }
+.sessionActionButton {
+  width:30px; height:28px; display:inline-grid; place-items:center; padding:0;
+  border:0; border-radius:var(--radius-sm); background:transparent;
+  color:var(--canvas-muted); font-family:inherit; cursor:pointer;
+}
+.sessionActionButton > svg { display:block; width:15px; height:15px; }
+.sessionActionButton:hover,.sessionActionButton:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.sessionActionButton:disabled { opacity:.45; cursor:not-allowed; }
+/* A mode that is on, or a panel this button owns that is open, is LIT — the same
+   signal the surface switcher uses for the surface you are on. */
+.sessionActionButton[aria-pressed='true'],.sessionActionButton[aria-expanded='true'] {
+  background:var(--canvas-panel); color:var(--canvas-accent); box-shadow:0 1px 2px var(--canvas-shadow);
+}
+/* The one worded action. It opens a panel rather than acting on the board, and
+   "Share" is a promise a glyph cannot make. */
+.sessionActionLabelled {
+  display:inline-flex; flex:none; align-items:center; gap:6px; min-height:34px; padding:8px 11px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel);
+  color:var(--canvas-ink); font-family:inherit; font-size:12px; font-weight:650; cursor:pointer;
+}
+.sessionActionLabelled > svg { display:block; width:15px; height:15px; color:var(--canvas-muted); }
+.sessionActionLabelled i { display:block; color:var(--canvas-muted); }
+.sessionActionLabelled i > svg { display:block; width:12px; height:12px; transition:transform .15s ease; }
+.sessionActionLabelled:hover,.sessionActionLabelled:focus-visible { border-color:var(--canvas-accent); color:var(--canvas-accent); outline:none; }
+.sessionActionLabelled:hover > svg,.sessionActionLabelled:focus-visible > svg { color:var(--canvas-accent); }
+/* The disclosure marker points at the sheet it opened, so the button says "this is
+   mine" while the invite panel is on screen. */
+.sessionActionLabelled[aria-expanded='true'] { border-color:var(--canvas-accent); color:var(--canvas-accent); background:color-mix(in srgb,var(--canvas-accent) 10%,var(--canvas-panel)); }
+.sessionActionLabelled[aria-expanded='true'] > svg,.sessionActionLabelled[aria-expanded='true'] i { color:var(--canvas-accent); }
+.sessionActionLabelled[aria-expanded='true'] i > svg { transform:rotate(180deg); }
+@media (prefers-reduced-motion:reduce) { .sessionActionLabelled i > svg { transition:none; } }
+/* The same actions inside the ••• sheet, where a phone reaches the ones the bar had no
+   room for. Words, always — a sheet opened to find a named thing must not answer with a
+   second row of glyphs. Chrome comes from `.moreMenu button`, so a session action and a
+   session tool are the same kind of row rather than two visitors' idea of one.
+   Only the phone needs this copy: on a desktop the bar already draws them, and a menu
+   that repeats the row above it is a menu with two answers. */
+.moreMenuPhoneOnly { display:none; }
+
 .iconAction { width:34px; min-width:34px; height:34px; display:inline-grid; place-items:center; padding:0; font-size:14px; line-height:1; }
 /* An <svg> with a viewBox and no width/height fills its box, so an icon action
    would paint a 34px glyph next to a 14px character one. Pin the drawn size here,
@@ -202,8 +254,13 @@
    which size them differently. */
 .iconAction > svg { display:block; width:15px; height:15px; }
 .iconAction[aria-pressed='true'] { border-color:var(--canvas-accent); color:var(--canvas-accent); background:color-mix(in srgb,var(--canvas-accent) 12%,var(--canvas-panel)); }
+/* Anchored to the END of the action row, not to a hard-coded offset from it. The two
+   menus used to sit at `right:76px` and `right:150px`, which were measurements of the
+   buttons that happened to follow them — so both drifted the moment the save button was
+   absent (every signed-in session) or the row was reordered. `.sessionActions` is the
+   positioning context; right:0 is the answer that stays true. */
 .shareMenu {
-  position:absolute; right:76px; top:42px; width:300px; padding:15px; background:var(--canvas-panel);
+  position:absolute; right:0; top:42px; width:300px; padding:15px; background:var(--canvas-panel);
   color:var(--canvas-ink); border:1px solid var(--canvas-line); border-radius:var(--radius-lg); box-shadow:0 18px 55px var(--canvas-shadow);
 }
 .shareMenu .shareMenuHeader { display:flex; align-items:center; justify-content:space-between; gap:12px; }
@@ -244,11 +301,15 @@
 .accountGateActions { width:100%; display:grid; grid-template-columns:1fr 1fr; gap:8px; }.accountGateActions button { min-height:39px; }
 .accountGateLater { margin-top:12px; border:0; background:transparent; color:var(--canvas-muted); font:600 10px var(--font-sans); cursor:pointer; }.accountGateLater:hover { color:var(--canvas-ink); text-decoration:underline; }
 .moreMenu {
-  position:absolute; right:150px; top:42px; width:250px; display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:9px;
+  position:absolute; right:0; top:42px; width:250px; display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:9px;
   border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); box-shadow:0 20px 60px var(--canvas-shadow);
 }
 .moreMenu button,.moreMenu label { min-width:0; padding:7px 8px; border:0; border-radius:var(--radius-md); background:transparent; color:var(--canvas-ink); font:600 11px var(--font-sans); text-align:left; cursor:pointer; }
 .moreMenu button { display:flex; align-items:center; gap:8px; }.moreMenu button > span { width:22px; height:22px; flex:none; display:grid; place-items:center; border-radius:var(--radius-sm); font-size:12px; }
+/* One drawn size for every glyph in the sheet. Without it an icon with a viewBox and
+   no width fills its whole 22px chip while the `1em` ones sit at 11px beside it — the
+   same mismatch the phone rail had before the shared icon set. */
+.moreMenu button > span > svg,.moreMenu label i > svg { display:block; width:14px; height:14px; }
 .moreMenu button:hover,.moreMenu button:focus-visible { outline:none; background:var(--canvas-hover); color:var(--canvas-accent); }.moreMenu button:hover > span,.moreMenu button:focus-visible > span { background:color-mix(in srgb,var(--canvas-accent) 24%,var(--canvas-panel)); color:var(--canvas-accent); }
 .moreMenuHeading { grid-column:1 / -1; margin:5px 5px 1px; color:var(--canvas-muted); font-size:8px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }.moreMenuHeading:first-child { margin-top:1px; }
 .moreMenu label { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; margin-top:3px; border-top:1px solid var(--canvas-line); border-radius:0; cursor:default; }.moreMenu label > span { display:flex; align-items:center; gap:8px; }.moreMenu label i { width:22px; height:22px; display:grid; place-items:center; border-radius:var(--radius-sm); font-style:normal; }
@@ -1824,6 +1885,13 @@
   .brainMarker[data-state='running'] .brainMarkerMark { animation:none; }
   .brainMarker[data-state='running'] .brainMarkerPulse { animation:none; opacity:.75; }
 }
+
+/* ── The board's floating controls ────────────────────────────────────────────────
+   `display:contents` is the whole desktop story: the wrapper adds no box, so the
+   palette toggle keeps the corner it has always had and the phone column stays stood
+   down. It exists so that on a phone the two can become ONE rail (see the 560px block)
+   rather than two separate toolbars stacked down the same edge of a 360px screen. */
+.boardRail { display:contents; }
 .mobileCanvasActions { display:none; }
 
 @media (max-width:1100px) {
@@ -1835,13 +1903,39 @@
 }
 @media (max-width:760px) {
   .canvasShell { flex:1; height:100%; min-height:0; }
-  .undoRedoGroup { display:none; }
   .saved,.secondaryButton { display:none; }
   /* The header has already given up its save button and its collaborators by here, so
      the segmented switcher stands down too and the phone's own control column carries
      the surface decision. Exactly ONE of the two is ever on screen. */
   .surfaceTabs { display:none; }
-  .sessionBar { height:50px; gap:7px; padding:0 8px; }.sessionActions { flex:none; gap:5px; }.titleBlock { flex:1; gap:3px; min-width:0; }.titleBlock input { width:100%; min-width:0; padding-inline:5px; font-size:13px; }.spark,.collaborators { display:none; }
+  /* ── The phone's session actions ────────────────────────────────────────────────
+     `display:none` on a class name is what used to take undo, redo, diagnostics, the
+     outcome scorecard AND every way to invite anybody off a phone — silently, because
+     nothing in the code said those five were meant to survive. Placement is declared in
+     `lib/canvasSessionActions.ts` now: an action marked `phone:'bar'` keeps its own
+     button here, everything else is drawn by the ••• sheet below, and the two sets are
+     complements of each other so an action cannot fall out of both.
+
+     The troughs go with them — a segmented shell around two 30px buttons is border on a
+     screen that has none to spare — leaving the commands themselves at a 40px touch
+     target, which is what they were missing even where they did survive. */
+  .sessionActionCluster { gap:2px; padding:0; border:0; border-radius:0; background:transparent; }
+  .sessionActionButton { width:40px; height:40px; border-radius:var(--radius-md); }
+  .sessionActionButton > svg { width:17px; height:17px; }
+  .sessionActionCluster > .sessionActionButton[data-phone='menu'],
+  .sessionActionSolo > .sessionActionButton[data-phone='menu'],
+  .sessionActionSolo > .sessionActionLabelled[data-phone='menu'] { display:none; }
+  /* An empty cluster still draws its gap, so it stands down as a whole. */
+  .sessionActionCluster:not(:has(.sessionActionButton[data-phone='bar'])),
+  .sessionActionSolo:not(:has([data-phone='bar'])) { display:none; }
+  .moreMenuPhoneOnly { display:grid; grid-column:1 / -1; gap:2px; }
+  .sessionBar { height:50px; gap:7px; padding:0 8px; }.sessionActions { flex:none; gap:2px; }.titleBlock { flex:1; gap:3px; min-width:0; }.titleBlock input { width:100%; min-width:0; padding-inline:5px; font-size:13px; }.spark,.collaborators { display:none; }
+  /* The VS Code webview is routinely narrower than this breakpoint, and its capture
+     actions are the whole reason the canvas is in an editor. They stay, and scroll
+     sideways rather than pushing the title off the bar. */
+  .hostActions { max-width:34vw; overflow-x:auto; scrollbar-width:none; }
+  .hostActions::-webkit-scrollbar { display:none; }
+  .hostActions .secondaryButton { display:grid; min-width:36px; }
   .flowWrap {
     /* On a phone the dock is a bottom sheet, so it claims NO side. The width is
        written inline by the component, and !important is what lets the phone
@@ -1857,8 +1951,19 @@
   .flowWrap:global(.react-flow) { height:calc(100% - var(--composer-space)); }
   .node { max-width:calc(100vw - 32px); }
   .mobileAction { display:inline-flex; min-width:36px; min-height:36px; align-items:center; justify-content:center; padding:7px 8px; }.mobileAction span { display:none; }.primaryButton,.saveButton { min-height:36px; padding:7px 10px; font-size:10px; }.saveButton { display:inline-flex; align-items:center; }.saveButtonFull { display:none; }.saveButtonShort { display:inline; }
-  .moreMenu { top:44px; right:0; width:min(280px,calc(100vw - 16px)); }
-  .shareMenu { top:44px; right:0; width:min(300px,calc(100vw - 16px)); box-sizing:border-box; }
+  /* The sheet is now the phone's ONLY route to five session actions, so it stops being
+     a two-column grid of 28px rows. One column, one 40px target per row, and it may
+     scroll — a menu that runs off the bottom of a phone is a menu with a hidden half. */
+  .moreMenu { top:44px; right:0; width:min(300px,calc(100vw - 16px)); max-height:calc(100dvh - 120px); overflow-y:auto; overscroll-behavior:contain; grid-template-columns:1fr; box-sizing:border-box; }
+  .moreMenu button,.moreMenu label { min-height:40px; padding:8px 10px; font-size:12px; }
+  .moreMenu select { max-width:50%; min-height:32px; }
+  .shareMenu { top:44px; right:0; width:min(300px,calc(100vw - 16px)); max-height:calc(100dvh - 120px); overflow-y:auto; overscroll-behavior:contain; box-sizing:border-box; }
+  .shareMenu button { min-height:40px; }
+  .shareMenu > div { flex-wrap:wrap; }
+  .shareMenu input,.shareMenu select { min-height:40px; flex:1 1 140px; }
+  /* Clears the floating palette toggle, which still owns the top-left corner at this
+     width — the single board rail only forms below 560px, where the inset grows to match
+     it (see that block). */
   .palette { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:44px; width:auto; max-height:none; }
   .templateMenu { top:8px; right:8px; left:8px; width:auto; max-height:calc(100% - var(--composer-space) - 16px); box-sizing:border-box; }
   .mergePanel { inset:8px 8px calc(var(--composer-space) + 8px); width:auto; box-sizing:border-box; }
@@ -1902,32 +2007,55 @@
   .chatSurfaceHeader { padding:10px 12px 8px; }
   .chatSurfaceBody { padding:0 2px 0 54px; }
   .chatSurfaceFooter { padding:4px 12px 8px; }
-  /* The rail grows upward from above the prompt. `--composer-space` is measured
-     (see `useComposerSpace`), so the execution chip that appears in the prompt's
-     utility row pushes the rail up instead of landing on its last two commands.
-     The cap is the other half: a rail with every command on it is ~9 buttons
-     tall, and on a short phone in landscape that ran off the top of the board
-     with no way to reach what had gone. */
-  .mobileCanvasActions { position:absolute; z-index:13; left:10px; bottom:calc(var(--composer-space) + 8px); display:flex; flex-direction:column; max-height:calc(100% - var(--composer-space) - 68px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); box-shadow:0 7px 20px var(--canvas-shadow); }
-  .mobileCanvasActions button { flex:none; }
-  .mobileCanvasActions button { width:38px; height:38px; display:grid; place-items:center; padding:0; border:0; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-ink); cursor:pointer; }
+  /* ── ONE rail, not two ────────────────────────────────────────────────────────
+     The phone used to carry two floating toolbars down its left edge: the "add to
+     canvas" toggle alone at the top-left, and the view commands stacked at the
+     bottom-left. Two bars on one edge, with nothing saying why the add button was
+     not part of the set — and, on a short screen, one of them regularly landing
+     under the Brain sheet.
+
+     The wrapper takes over the box the column used to draw (the border, the radius,
+     the shadow, the scroll) and the toggle becomes its first command. So there is
+     exactly one rail, `+` is at the top of it where a create action belongs, and
+     both members give up their own chrome to it.
+
+     It grows upward from above the prompt. `--composer-space` is measured (see
+     `useComposerSpace`), so the execution chip that appears in the prompt's utility
+     row pushes the rail up instead of landing on its last two commands. The cap is
+     the other half: a rail with every command on it is ~10 buttons tall, and on a
+     short phone in landscape that ran off the top of the board with no way to reach
+     what had gone. */
+  .boardRail { position:absolute; z-index:13; left:10px; bottom:calc(var(--composer-space) + 8px); display:flex; flex-direction:column; max-height:calc(100% - var(--composer-space) - 68px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); box-shadow:0 7px 20px var(--canvas-shadow); }
+  /* A transparent sub-group inside the rail rather than `display:contents`, because it
+     carries `role="group"` and a name — and an element whose box is removed is an
+     element some assistive tech stops announcing. It inherits the rail's direction, so
+     the whole thing still lies down in a row when the Brain sheet takes the bottom. */
+  .mobileCanvasActions { display:flex; flex-direction:inherit; min-width:0; min-height:0; }
+  .paletteToggle { position:static; }
+  .boardRail button { flex:none; width:38px; height:38px; display:grid; place-items:center; padding:0; border:0; border-bottom:1px solid var(--canvas-line); border-radius:0; background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:none; cursor:pointer; }
   /* One drawn size for every command on the rail. Without it each icon fills the
      whole 38px cell, which is what made Files and the accessible outline tower
      over the zoom controls. */
-  .mobileCanvasActions button > svg { display:block; width:17px; height:17px; }
-  .mobileCanvasActions button:last-child { border-bottom:0; }
+  .boardRail button > svg { display:block; width:17px; height:17px; }
+  .boardRail button:last-child { border-bottom:0; }
   /* Same rule as the desktop rail, applied to the edge a phone actually loses:
      the Brain sheet covers the bottom of the board, so the board's controls move
      to the free strip at the top and lie down in a row to fit a 360px screen. */
-  .flowWrap[data-brain-open='true'] .mobileCanvasActions { top:56px; bottom:auto; flex-direction:row; }
-  .flowWrap[data-brain-open='true'] .mobileCanvasActions button { border-bottom:0; border-right:1px solid var(--canvas-line); }
-  .flowWrap[data-brain-open='true'] .mobileCanvasActions button:last-child { border-right:0; }
+  .flowWrap[data-brain-open='true'] .boardRail { top:56px; bottom:auto; flex-direction:row; max-width:calc(100% - 20px); overflow-x:auto; }
+  .flowWrap[data-brain-open='true'] .boardRail button { border-bottom:0; border-right:1px solid var(--canvas-line); }
+  .flowWrap[data-brain-open='true'] .boardRail button:last-child { border-right:0; }
   /* The palette is the phone's own full-board sheet and owns that top strip while
-     it is open, so the row stands down rather than hiding under it. */
-  .flowWrap[data-brain-open='true']:has(.palette) .mobileCanvasActions { display:none; }
-  .mobileCanvasActions button:hover,.mobileCanvasActions button:focus-visible { background:var(--canvas-hover); outline:none; }
+     it is open, so the row stands down rather than hiding under it. The toggle that
+     CLOSES the palette has to survive that, though — standing the whole rail down
+     with the sheet open leaves the `×` in the sheet's own header as the only way
+     out, and the rail's own button reading as broken. */
+  .flowWrap[data-brain-open='true']:has(.palette) .boardRail > .mobileCanvasActions { display:none; }
+  .boardRail button:hover,.boardRail button:focus-visible { background:var(--canvas-hover); outline:none; }
   /* A mode that is ON is lit here exactly as it is on the desktop rail. */
-  .mobileCanvasActions button[aria-pressed='true'] { background:color-mix(in srgb,var(--canvas-accent) 88%,#000); color:var(--text-on-accent); }
+  .boardRail button[aria-pressed='true'] { background:color-mix(in srgb,var(--canvas-accent) 88%,#000); color:var(--text-on-accent); }
+  /* The palette sheet clears the rail, and the rail's width is what decides by how
+     much — 10px inset plus a 38px command plus the gap. */
+  .palette { left:56px; }
   .historyPanel,.diagnosticsPanel { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:8px; width:auto; }
   .changeSetPanel { top:8px; right:8px; bottom:calc(var(--composer-space) + 8px); left:8px; width:auto; max-height:none; display:flex; flex-direction:column; }
   .changeSetPanel > div { flex:1; min-height:0; max-height:none; }

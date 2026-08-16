@@ -438,6 +438,11 @@ jobs:
           # only in CI — and a type-only one survives every test and dies in the
           # middle of `next build`. Also milliseconds.
           pnpm run check:declared-deps
+          # Next rejects some export COMBINATIONS in a route module (`metadata`
+          # beside `generateMetadata`, `viewport` beside `generateViewport`) in
+          # the webpack build itself. Nothing types it, nothing tests it, and it
+          # took this deploy down once already. Milliseconds again.
+          pnpm run check:route-exports
           pnpm run cf-build
           wrangler deploy --no-bundle
 

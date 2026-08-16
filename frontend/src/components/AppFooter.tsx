@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useLegalDocs } from './legal/useLegalDocs';
 import LegalDocModal, { type LegalModalType } from './legal/LegalDocModal';
+import LegalDocLink from './legal/LegalDocLink';
 import ProductUpdatesTrigger from './releaseNotes/ProductUpdatesTrigger';
 import { BRAND, STATS } from '@/lib/content';
 import { destTitleKey, footerColumns } from '@/lib/publicDestinations';
@@ -49,20 +50,18 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
         <button type="button" onClick={() => window.dispatchEvent(new Event('builderforce:cookie-preferences'))} className="global-footer-link">{t('cookies')}</button>
         <Link href="/legal/subprocessors" className="global-footer-link">{t('subprocessors')}</Link>
         <Link href="/legal/accessibility" className="global-footer-link">{t('accessibility')}</Link>
-        <button
-          type="button"
-          onClick={() => setModalType('terms')}
+        <LegalDocLink
+          type="terms"
+          docVersion={termsVersion}
           className="global-footer-link"
-        >
-          {t('termsOfUse')}{termsVersion ? ` (v${termsVersion})` : ''}
-        </button>
-        <button
-          type="button"
-          onClick={() => setModalType('privacy')}
+          onOpen={setModalType}
+        />
+        <LegalDocLink
+          type="privacy"
+          docVersion={privacyVersion}
           className="global-footer-link"
-        >
-          {t('privacyPolicy')}{privacyVersion ? ` (v${privacyVersion})` : ''}
-        </button>
+          onOpen={setModalType}
+        />
       </div>
     </div>
   );

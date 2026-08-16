@@ -16499,10 +16499,8 @@
     "zoomOut": "缩小",
     "fitCanvas": "适应画布视图",
     "canvasViewControls": "画布视图控件",
-    "canvasHistory": "画布历史",
     "undoCanvasChange": "撤销画布更改",
     "redoCanvasChange": "重做画布更改",
-    "inviteCollaborator": "邀请协作者",
     "inviteCollaborators": "邀请协作者",
     "clickToFollow": "点击以跟随视图",
     "connectionKind": "连接类型",
@@ -19121,7 +19119,13 @@
     "founderCompetitorMapProposal": "竞争格局图：{title}",
     "founderMetricLive": "实时",
     "founderMetricRefreshed": "指标已刷新：{title}",
-    "founderTriggerEvaluated": "触发条件已评估：{title}"
+    "founderTriggerEvaluated": "触发条件已评估：{title}",
+    "sessionActionCluster": {
+      "history": "画布历史",
+      "inspect": "画布工具",
+      "session": "共享此画布"
+    },
+    "moreMenuSessionActions": "此画布"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

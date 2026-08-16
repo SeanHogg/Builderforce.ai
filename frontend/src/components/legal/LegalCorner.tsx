@@ -4,17 +4,24 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useLegalDocs } from './useLegalDocs';
 import LegalDocModal, { type LegalModalType } from './LegalDocModal';
+import LegalDocLink from './LegalDocLink';
 import ProductUpdatesTrigger from '../releaseNotes/ProductUpdatesTrigger';
+import { BRAND } from '@/lib/content';
 
 /**
- * Version + Terms/Privacy strip for the operator shell, in the BOTTOM-RIGHT
- * corner of the frame.
+ * Copyright + version + Terms/Privacy strip for the operator shell, in the
+ * BOTTOM-RIGHT corner of the frame.
  *
  * It used to hang off the bottom of the sidebar, where it competed with the
  * rail's navigation for the eye at the exact edge the board wants to be widest.
  * The shell already ends in a footer band (`TeamBar`), so this is the last row
  * of `.app-frame` and sits in normal flow — chrome in the corner can never
  * cover the canvas, and no page has to reserve space for it.
+ *
+ * ONE line, on every viewport: the strip never wraps. What gives at narrow
+ * widths is DETAIL, not rows — the stylesheet drops the brand word from the
+ * copyright and the `(v…)` suffix from each document, both of which are stated
+ * elsewhere on screen, rather than pushing a second line under the canvas.
  *
  * The version is a BUTTON, exactly as it is in the marketing footer: both open
  * the one app-wide Product Updates panel (`ProductUpdatesHost`), so the
@@ -29,17 +36,26 @@ export default function LegalCorner() {
   return (
     <>
       <div className="legal-corner" role="group" aria-label={t('navLabel')}>
+        <span>
+          <span className="legal-corner-brand">{BRAND.name} </span>© {BRAND.year}
+        </span>
         <ProductUpdatesTrigger
           appVersion={appVersion}
           apiVersion={apiVersion}
           className="legal-corner-link"
         />
-        <button type="button" className="legal-corner-link" onClick={() => setModalType('terms')}>
-          {t('termsTitle')}{termsVersion ? ` (v${termsVersion})` : ''}
-        </button>
-        <button type="button" className="legal-corner-link" onClick={() => setModalType('privacy')}>
-          {t('privacyTitle')}{privacyVersion ? ` (v${privacyVersion})` : ''}
-        </button>
+        <LegalDocLink
+          type="terms"
+          docVersion={termsVersion}
+          className="legal-corner-link"
+          onOpen={setModalType}
+        />
+        <LegalDocLink
+          type="privacy"
+          docVersion={privacyVersion}
+          className="legal-corner-link"
+          onOpen={setModalType}
+        />
       </div>
 
       <LegalDocModal type={modalType} legal={legal} onClose={() => setModalType(null)} />

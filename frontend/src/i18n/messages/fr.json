@@ -16499,10 +16499,8 @@
     "zoomOut": "Zoom arrière",
     "fitCanvas": "Ajuster la toile à la vue",
     "canvasViewControls": "Contrôles de vue de la toile",
-    "canvasHistory": "Historique de la toile",
     "undoCanvasChange": "Annuler la modification",
     "redoCanvasChange": "Rétablir la modification",
-    "inviteCollaborator": "Inviter un collaborateur",
     "inviteCollaborators": "Inviter des collaborateurs",
     "clickToFollow": "cliquez pour suivre la vue",
     "connectionKind": "Type de connexion",
@@ -19121,7 +19119,13 @@
     "founderCompetitorMapProposal": "Carte des concurrents : {title}",
     "founderMetricLive": "En direct",
     "founderMetricRefreshed": "Indicateur actualisé : {title}",
-    "founderTriggerEvaluated": "Déclencheur évalué : {title}"
+    "founderTriggerEvaluated": "Déclencheur évalué : {title}",
+    "sessionActionCluster": {
+      "history": "Historique de la toile",
+      "inspect": "Outils de la toile",
+      "session": "Partager cette toile"
+    },
+    "moreMenuSessionActions": "Cette toile"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

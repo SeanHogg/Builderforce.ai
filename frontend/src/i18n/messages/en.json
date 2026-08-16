@@ -16499,10 +16499,8 @@
     "zoomOut": "Zoom out",
     "fitCanvas": "Fit canvas to view",
     "canvasViewControls": "Canvas view controls",
-    "canvasHistory": "Canvas history",
     "undoCanvasChange": "Undo canvas change",
     "redoCanvasChange": "Redo canvas change",
-    "inviteCollaborator": "Invite collaborator",
     "inviteCollaborators": "Invite collaborators",
     "clickToFollow": "click to follow viewport",
     "connectionKind": "Connection kind",
@@ -19121,7 +19119,13 @@
     "founderCompetitorMapProposal": "Competitor map: {title}",
     "founderMetricLive": "Live",
     "founderMetricRefreshed": "Metric refreshed: {title}",
-    "founderTriggerEvaluated": "Trigger evaluated: {title}"
+    "founderTriggerEvaluated": "Trigger evaluated: {title}",
+    "sessionActionCluster": {
+      "history": "Canvas history",
+      "inspect": "Canvas tools",
+      "session": "Share this canvas"
+    },
+    "moreMenuSessionActions": "This canvas"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

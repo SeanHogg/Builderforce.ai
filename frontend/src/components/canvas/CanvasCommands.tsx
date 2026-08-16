@@ -181,6 +181,92 @@ export function CanvasAdsIcon() {
   </svg>;
 }
 
+/* ── Session-bar commands ─────────────────────────────────────────────────────────
+   The session bar used to spell these six with Unicode (`↶ ↷ ↗ ⚠ ••• ▾`), which is the
+   same mistake the phone rail made and worse in two places: `↗` is the universal
+   "opens somewhere else" arrow and was standing in for a SCORECARD, and `⚠` drew a
+   standing warning triangle for a diagnostics report that is usually clean. Both said
+   something untrue about the button under them, at whatever weight the OS font chose.
+   Drawn here on the same grid as the rest of the set. */
+
+/** Step back through the canvas's own history. */
+export function UndoIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M3.1 6.4h6.3a3.6 3.6 0 0 1 0 7.2H6.2" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M5.8 3.5 2.9 6.4l2.9 2.9" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
+/** The same arc, mirrored — so the pair reads as one control with two directions. */
+export function RedoIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M12.9 6.4H6.6a3.6 3.6 0 0 0 0 7.2h3.2" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M10.2 3.5l2.9 2.9-2.9 2.9" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
+/** The outcome scorecard: measured bars with the trend drawn over them. It names a
+ *  READING of this session, which is why it is not an arrow leaving the page. */
+export function OutcomeMetricsIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M2 13.6h12" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    <path d="M4.1 13.6v-3.4M8 13.6V7.4M11.9 13.6V9.1" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+    <path d="M3.4 6.6 7.2 3.4l2.4 2 3.1-2.6" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="1.7 1.4" />
+  </svg>;
+}
+
+/** Diagnostics: a trace being read, not an alarm being raised. The report is usually
+ *  clean, and a permanent warning triangle for a clean report is an alarm nobody reads. */
+export function DiagnosticsIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="1.6" y="2.6" width="12.8" height="10.8" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.25" />
+    <path d="M3.4 8.6h2.2l1.3-2.9 1.6 5 1.1-2.1h2.9" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
+/** Everything else this session can do. */
+export function MoreActionsIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="3.4" cy="8" r="1.25" fill="currentColor" />
+    <circle cx="8" cy="8" r="1.25" fill="currentColor" />
+    <circle cx="12.6" cy="8" r="1.25" fill="currentColor" />
+  </svg>;
+}
+
+/** Bring somebody in: a person with a plus. Deliberately NOT the share-node graph
+ *  {@link CanvasSocialIcon} draws — that one publishes to accounts, this one invites
+ *  a human onto this board, and the two must not look like the same button. */
+export function ShareCanvasIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="6.2" cy="5.2" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.25" />
+    <path d="M1.8 13.8a4.4 4.4 0 0 1 8.8 0" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    <path d="M12.6 5.4v4.2M14.7 7.5h-4.2" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>;
+}
+
+/** The menu-opens marker on a worded button. Replaces the `▾` character, which the
+ *  session bar drew at a different size and colour to everything beside it. */
+export function DisclosureIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="m4.4 6.3 3.6 3.6 3.6-3.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
+/** Open the object palette. The board's create action, and now the first command on
+ *  the phone's single board rail rather than a `+` character floating on its own. */
+export function AddObjectIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M8 3.2v9.6M3.2 8h9.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>;
+}
+
+/** Put the palette away — the same rail slot, folded back. */
+export function ClosePaletteIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M9.8 3.9 5.7 8l4.1 4.1" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
 /** The universal-access glyph used by every canvas that publishes a text outline. */
 export function AccessibleOutlineIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
