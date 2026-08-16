@@ -131,11 +131,26 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // read as unrelated: `↗` said "opens elsewhere" for a scorecard, and `⚠` drew a standing
   // warning triangle for a report that is usually clean — a permanent alarm on a healthy
   // board is an alarm nobody reads.
-  // Both read THIS BOARD'S OBJECTS — an outcome scorecard and a canvas diagnostic over a
-  // conversation with nothing on it are two buttons whose only answer is "nothing". They
-  // ask the surface for objects rather than naming the surfaces that have them.
+  // The outcome scorecard reads THIS BOARD'S OBJECTS — deliverables, and what they were
+  // worth. Over a conversation with nothing on it that is a button whose only answer is
+  // "nothing", so it asks the surface for objects rather than naming which surfaces have
+  // them.
   { id: 'outcomes', cluster: 'inspect', order: 2, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'viewOutcomeMetrics', titleKey: 'outcomeMetricsTitle', needs: 'objects' },
-  { id: 'diagnostics', cluster: 'inspect', order: 3, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'openDiagnostics', needs: 'objects' },
+  //
+  // DIAGNOSTICS NEEDS NOTHING, and getting that wrong is why this comment is long.
+  //
+  // It was briefly given `needs: 'objects'` on the reasoning that it reports on the
+  // board. It does not. Read what it actually emits: environment and versions, session
+  // state, realtime and persistence, timings, the full action log, the Brain tool trace
+  // with every failed call, and the raw payload. Every one of those exists on a
+  // conversation with no objects and on a running app that has hidden the board — and
+  // those are precisely the surfaces where something has gone wrong and the operator
+  // needs the report. Scoping it to `showsObjects` took the failure report away from two
+  // of the four places a failure is most likely to be looked for.
+  //
+  // So it is unconditional, deliberately, and the test asserts that it survives on every
+  // surface the registry declares.
+  { id: 'diagnostics', cluster: 'inspect', order: 3, chrome: 'icon', state: 'expanded', phone: 'menu', labelKey: 'openDiagnostics' },
   // Full screen keeps its phone slot for the reason it always had one: a small screen is
   // where trading app chrome for board is worth the most.
   { id: 'fullscreen', cluster: 'inspect', order: 4, chrome: 'icon', state: 'pressed', phone: 'bar', labelKey: 'fullScreen', activeLabelKey: 'exitFullScreen' },

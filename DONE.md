@@ -1,3 +1,53 @@
+## ✅ RESOLVED 2026-08-16 — the most-connected Twilio connector was the one that told you to paste the wrong secret
+
+Twilio recommends an API key (`SK…` + secret) over the account-wide Auth Token, and five
+built-in manifests take that credential pair. Four of them said so. The fifth — `twilio`,
+the SMS/voice connector nearly everyone connects first — labelled its username field "API
+key SID (or Account SID)" and the password field underneath it **"Auth token"** with no
+mention of a key secret. **An operator following Twilio's own recommendation put an `SK…`
+in the first field, read "Auth token" under it, pasted their Auth Token, and got a 401 on
+every send with nothing on the form to explain it.**
+
+**One definition, because five copies means the most-used one is the one that drifts.**
+`TWILIO_REST_CREDENTIALS` and `TWILIO_ACCOUNT_SID_FIELD` in `connectors/defaults/dsl.ts`
+are now the single source, and all five manifests (`twilio`, `twilio-verify`,
+`twilio-lookup`, `twilio-conversations`, `twilio-assistants`) spread it. Labels lead with
+the API key because that is what Twilio tells you to use, and the `help` text names the
+actual trap: the two fields must be partners — an `SK…` with its secret, an `AC…` with the
+Auth Token — and half of each is the usual 401. `twilio-segment` keeps its own fields; a
+Segment write key is a different vendor's credential, not a drifted copy.
+
+**The Account SID is not the caller.** Only `twilio` templates `{{auth.accountSid}}` into
+its base URL, and that field stays the `AC…` even when the credentials are an API key — it
+names whose account the request is against, not who is calling. People using a key put the
+`SK…` there and get a 404 on a URL that no longer names a real account, so the field says so.
+
+**Inbound is a different credential, and that is now written down where it will be read.**
+Twilio signs `X-Twilio-Signature` with the account Auth Token and publishes no API-key
+equivalent, so `TWILIO_AUTH_TOKEN` in a project's secret vault must STAY the Auth Token
+even for an account that sends over a key. `realization/targets/phoneLine.ts` (runbook,
+setup step and `requiredSecrets`) and the `sms-inbox` template field now say which of the
+two each variable is for — otherwise the obvious next move after this change is to
+"finish the migration" and 403 every inbound call.
+
+**A field named after a credential it never used.** The `phone-verification` template
+collected `auth_token` titled "Twilio auth token", but both its triggers are
+`verify: 'hmac'` on endpoints the tenant's OWN app calls — Twilio never signs them. It was
+asking people to paste an account-wide Twilio credential into a workflow config that only
+needed any long random string. Renamed to `signing_secret` ("Request signing secret") with
+both `{{setup.*}}` references migrated.
+
+**Generated code follows the same rule.** The canvas Twilio directive in
+`creationCanvasAi.ts` now requires `twilio(apiKeySid, apiKeySecret, { accountSid })` over
+`twilio(accountSid, authToken)`, allows `TWILIO_AUTH_TOKEN` only for signature validation,
+and forbids asking anyone to paste a secret into the conversation — Brain had been
+scaffolding the Auth Token form and prompting for credentials in chat.
+
+Verified: api typecheck clean, 135 tests green across connectors/templates/realization/
+guidedSetup; frontend typecheck clean, 43 `creationCanvasAi` tests green.
+
+---
+
 ## ✅ RESOLVED 2026-08-16 — four catalogues of "a starting point", and none of them set anything up
 
 The prompt bar's "Choose a starting point" menu merged the 48 localized

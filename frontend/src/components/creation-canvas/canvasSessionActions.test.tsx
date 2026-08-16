@@ -76,18 +76,25 @@ describe('canvas session action registry', () => {
     const on = (surface: Parameters<typeof canvasSessionActionsFor>[0]) =>
       canvasSessionActionsFor(surface).map((def) => def.id);
 
-    // The board and the 3D space draw objects, so both readings of them belong.
+    // The board and the 3D space draw objects, so the outcome scorecard belongs on both.
     expect(on('graph')).toContain('outcomes');
-    expect(on('graph')).toContain('diagnostics');
     expect(on('scene3d')).toContain('outcomes');
 
     // Chat is the zero-object surface, and the app surface draws a running app rather
-    // than the board's objects. Neither has anything for those two to report on.
+    // than the board's objects. Neither has deliverables to score.
     expect(on('chat')).not.toContain('outcomes');
-    expect(on('chat')).not.toContain('diagnostics');
     expect(on('app')).not.toContain('outcomes');
 
-    // What survives everywhere is what means the same thing everywhere.
+    // What survives everywhere is what means the same thing everywhere — and
+    // DIAGNOSTICS IS ONE OF THEM. It reports the session: versions, timings, the action
+    // log, the Brain trace and every failed call. All of that exists on a conversation
+    // with no objects and on a running app that has hidden the board, and those are
+    // exactly the surfaces where something has gone wrong and the report is wanted.
+    // Scoping it to `showsObjects` took the failure report away from two of the four
+    // places a failure is most likely to be looked for; this is the regression guard.
+    for (const surface of CANVAS_SURFACES) {
+      expect(on(surface.id)).toContain('diagnostics');
+    }
     for (const surface of ['chat', 'graph', 'scene3d', 'app'] as const) {
       expect(on(surface)).toEqual(expect.arrayContaining(['undo', 'redo', 'fullscreen', 'share', 'publish']));
     }

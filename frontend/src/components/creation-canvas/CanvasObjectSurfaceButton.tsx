@@ -6,8 +6,8 @@
  */
 import { useTranslations } from 'next-intl';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
-import styles from './CreationCanvas.module.css';
 import { creationObjectSurface } from './creationObjectSurfaces';
+import { canvasSurfaceGlyph } from './canvasSurfaceIcons';
 import type { CreationNodeData } from './types';
 
 /**
@@ -21,6 +21,14 @@ import type { CreationNodeData } from './types';
  * It is deliberately ONE control rather than three ("Open page" / "Play" / "Open
  * timeline"): every one of them means "give this object the canvas", and the surface's own
  * name is what changes. Three buttons would be three places to add a fourth runtime to.
+ *
+ * ── WHY IT IS A GLYPH AND NOT A WORD ─────────────────────────────────────────────
+ * It renders into `.inspectorHeaderActions`, which is a row of 25×25 icon slots beside
+ * the expand and close buttons. It used to draw its LABEL there — "Open the site" in a
+ * 25px box — which overflowed the slot in every direction and printed itself across the
+ * panel title, the close button and the tab strip underneath. It is a glyph now, from the
+ * shared surface icon table, and the words survive as its accessible name and its
+ * tooltip, so nothing is lost to a screen reader or to a hover.
  */
 
 export interface CanvasObjectSurfaceButtonProps {
@@ -34,14 +42,16 @@ export function CanvasObjectSurfaceButton({ data, onOpen }: CanvasObjectSurfaceB
   if (!surface) return null;
 
   const label = t(`surface.${surface}.open` as 'surface.page.open');
+  // No class of its own: the chrome comes from `.inspectorHeaderActions button`, so this
+  // and the expand and close buttons beside it are one row of slots rather than three
+  // visitors' idea of one — which is what let a worded button escape its box before.
   return (
     <button
       type="button"
-      className={styles.objectSurfaceOpen}
       onClick={() => onOpen(surface)}
       aria-label={label}
       title={label}
       data-testid={`open-${surface}-surface`}
-    >{label}</button>
+    >{canvasSurfaceGlyph(surface, label)}</button>
   );
 }

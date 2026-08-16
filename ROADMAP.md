@@ -796,6 +796,10 @@ sequenced into waves because nothing in them gates the sell motion.
 
 ## 9 · 🔌 Integrations, Connectors & Workflows
 
+### ⌗ Canvas publish — residuals
+
+- **"Publish website" dead-ends on an object Brain never tells you to create.** `publishWebsite` in `CreationCanvas.tsx` resolves its target project with `connectedCanvasProjectNode(...) ?? projects[0]` and bails with `noticeConnectWebsite` when the board holds no canonical `project` object (one carrying `resourceId: 'project:<id>'`). Brain authoring a `website` — the whole Idea→Real path — creates no such object, so the flagship demo produces a publishable site whose Publish button refuses, and the notice names a connection the user has no way to know they needed. Fixing it means the publish path either provisions a project on demand or the website authoring flow seeds one, which unblocks Idea→Real ending at a live URL instead of a notice. **BLOCKED: `CreationCanvas.tsx` is owned by a concurrent session (commit `6b091a0e3`); needs that session to land before the seam can be touched without a collision.**
+
 ### ⌗ Templates — residuals
 
 > The templates framework landed 2026-08-16: a guided-setup contract with a step-kind registry, a template manifest with an output-kind registry, a three-source catalogue merged like the connector one, and the four parallel "starting point" catalogues consolidated onto one entry contract (see [DONE.md](./DONE.md)). These are the parts deliberately left out of that pass.
@@ -927,13 +931,12 @@ sequenced into waves because nothing in them gates the sell motion.
   **Blocked on an explicit user decision:** the design is done and mocked up interactively
   (https://claude.ai/code/artifact/c935a6ce-18cc-4ea4-bccf-1859a50c20a1) — building it edits the app
   shell, `CreationCanvas.tsx`, `CanvasAppSurface.tsx`, `canvasSessionActions.ts`, the object palette,
-  the inspector, the agent/persona cards and five i18n catalogs. **Decided 2026-08-16 (operator):**
-  a collapsed command bar KEEPS the team avatars — Make hides everything behind `‹`, but a collapsed
-  team is a team nobody can see is working. The general rule the build must follow is **collapse
-  hides controls, never status**: anything in the bar reporting what the canvas is doing right now
-  (who is on, whether a run is live) survives the collapse; anything you press to make something
-  happen does not. The chips keep their drag-to-board behaviour and availability dot when folded in
-  from `TeamBar`.
+  the inspector, the agent/persona cards and five i18n catalogs. The collapse behaviour itself is
+  BUILT (see DONE.md 2026-08-16, "collapse hides controls, never status") — `lib/canvasChrome.ts`
+  owns the status/control table and the session bar obeys it, so the remaining work here is folding
+  `TeamBar`'s chips into that bar as a `roster`-kind slot, keeping their drag-to-board behaviour and
+  availability dot. Note that `TeamBar` renders in `AppShell` on EVERY route, so this is a move that
+  has to leave the non-canvas routes with a roster somewhere, not a deletion.
 
 - **A SCANNED document dropped on the canvas can never become a résumé, because the canvas keeps no
   bytes to escalate with.** *(registered 2026-08-16 by the "convert this pdf into a resume" pass,
