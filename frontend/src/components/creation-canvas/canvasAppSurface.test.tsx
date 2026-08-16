@@ -15,6 +15,20 @@ import {
 } from '@/lib/canvasApp';
 import type { CreationNodeData } from './types';
 import { CanvasAppSurface } from './CanvasAppSurface';
+import { CanvasSurfaceActionsProvider, useContributedSurfaceActions } from './canvasSurfaceActions';
+
+/**
+ * The surface's controls are PUBLISHED into the session bar, not drawn by the surface —
+ * so a test that renders it bare would see a body with no Run button and conclude the
+ * feature was gone. This host stands in for the bar: it renders the contribution exactly
+ * where `CanvasSessionActions` does.
+ */
+function WithBar({ children }: { children: React.ReactNode }) {
+  return <CanvasSurfaceActionsProvider><Bar />{children}</CanvasSurfaceActionsProvider>;
+}
+function Bar() {
+  return <div data-testid="session-bar">{useContributedSurfaceActions()}</div>;
+}
 
 /**
  * The first canvas derivation that reads MANY objects as one artifact.
@@ -112,14 +126,39 @@ describe('the app a canvas session is', () => {
 });
 
 describe('the app surface', () => {
+  /**
+   * THE ONE THAT KEEPS THE CANVAS AT ONE BAR. These controls used to be a second toolbar
+   * drawn by this surface, 40px under the session bar and looking just like it. They are
+   * now published into the bar, and this asserts they arrive THERE rather than here —
+   * which is what a regression would silently undo.
+   */
+  it('puts its controls in the session bar rather than a toolbar of its own', () => {
+    render(<WithBar><CanvasAppSurface nodes={SESSION} onExit={vi.fn()} /></WithBar>);
+    const bar = screen.getByTestId('session-bar');
+    expect(within(bar).getByRole('button', { name: 'Run' })).toBeInTheDocument();
+    expect(within(bar).getByRole('group', { name: 'Preview width' })).toBeInTheDocument();
+    expect(within(bar).getByRole('button', { name: 'Preview' })).toBeInTheDocument();
+    // The surface itself draws no bar — one press, one place.
+    expect(within(screen.getByTestId('canvas-app-surface')).queryByRole('button', { name: 'Run' })).toBeNull();
+  });
+
+  /** Withdrawn on unmount: a Run button left in the bar would be wired to a runtime
+   *  that no longer exists, which is the one failure a shared bar has and two do not. */
+  it('takes its controls back out of the bar when it closes', () => {
+    const { rerender } = render(<WithBar><CanvasAppSurface nodes={SESSION} onExit={vi.fn()} /></WithBar>);
+    expect(within(screen.getByTestId('session-bar')).getByRole('button', { name: 'Run' })).toBeInTheDocument();
+    rerender(<WithBar><p>the board</p></WithBar>);
+    expect(within(screen.getByTestId('session-bar')).queryByRole('button', { name: 'Run' })).toBeNull();
+  });
+
   it('says so plainly when the board holds nothing to run', () => {
-    render(<CanvasAppSurface nodes={[]} onExit={vi.fn()} />);
+    render(<WithBar><CanvasAppSurface nodes={[]} onExit={vi.fn()} /></WithBar>);
     expect(screen.getByText('Nothing to run yet')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
   });
 
   it('does not run until asked, then mounts the app in a sandboxed frame', () => {
-    render(<CanvasAppSurface nodes={SESSION} onExit={vi.fn()} />);
+    render(<WithBar><CanvasAppSurface nodes={SESSION} onExit={vi.fn()} /></WithBar>);
     expect(screen.getByText('Ready to run')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Run' }));
@@ -131,7 +170,7 @@ describe('the app surface', () => {
   });
 
   it('lists every file under Code and marks the ones that need a host', () => {
-    render(<CanvasAppSurface nodes={SESSION} onExit={vi.fn()} />);
+    render(<WithBar><CanvasAppSurface nodes={SESSION} onExit={vi.fn()} /></WithBar>);
     fireEvent.click(screen.getByRole('button', { name: 'Code' }));
 
     const tree = screen.getByRole('navigation', { name: 'Files in this app' });
@@ -141,7 +180,7 @@ describe('the app surface', () => {
 
   it('sends the reader back to the card a file came from', () => {
     const onOpenObject = vi.fn();
-    render(<CanvasAppSurface nodes={SESSION} onExit={vi.fn()} onOpenObject={onOpenObject} />);
+    render(<WithBar><CanvasAppSurface nodes={SESSION} onExit={vi.fn()} onOpenObject={onOpenObject} /></WithBar>);
     fireEvent.click(screen.getByRole('button', { name: 'Code' }));
     fireEvent.click(screen.getByRole('button', { name: /frontend\/app\.js/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Open the card' }));
@@ -152,26 +191,23 @@ describe('the app surface', () => {
    *  server; saying which file that is, before the user watches a fetch fail, is the
    *  difference between an honest preview and a misleading one. */
   it('names the files it cannot run rather than letting them fail silently', () => {
-    render(<CanvasAppSurface nodes={SESSION} onExit={vi.fn()} />);
+    render(<WithBar><CanvasAppSurface nodes={SESSION} onExit={vi.fn()} /></WithBar>);
     fireEvent.click(screen.getByRole('button', { name: 'Console' }));
     expect(screen.getByRole('note')).toHaveTextContent('backend/server.js');
     expect(screen.getByRole('note')).toHaveTextContent(/needs a host/i);
   });
 
-  it('offers publishing as a door onto the release lifecycle, not a second one', () => {
-    const onPublish = vi.fn();
-    const { rerender } = render(<CanvasAppSurface nodes={SESSION} onExit={vi.fn()} onPublish={onPublish} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
-    expect(onPublish).toHaveBeenCalledTimes(1);
-
-    // A session that cannot publish stands the control down rather than drawing it dead.
-    rerender(<CanvasAppSurface nodes={SESSION} onExit={vi.fn()} />);
+  /** Publishing is the session bar's `publish` action, scoped to the whole board. A
+   *  second Publish here would be one decision with two controls — the thing the
+   *  surface registry exists to prevent. */
+  it('draws no publish control of its own', () => {
+    render(<WithBar><CanvasAppSurface nodes={SESSION} onExit={vi.fn()} /></WithBar>);
     expect(screen.queryByRole('button', { name: 'Publish' })).toBeNull();
   });
 
   it('hands the board back on Escape, the way every other surface does', () => {
     const onExit = vi.fn();
-    render(<CanvasAppSurface nodes={SESSION} onExit={onExit} />);
+    render(<WithBar><CanvasAppSurface nodes={SESSION} onExit={onExit} /></WithBar>);
     fireEvent.keyDown(screen.getByTestId('canvas-app-surface'), { key: 'Escape' });
     expect(onExit).toHaveBeenCalledTimes(1);
   });

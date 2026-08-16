@@ -35,6 +35,7 @@ import { CanvasSiteSurface } from './CanvasSiteSurface';
 import { CanvasTimelineSurface } from './CanvasTimelineSurface';
 import { CanvasObjectSurfaceButton } from './CanvasObjectSurfaceButton';
 import { CanvasSurfaceProvider } from './canvasSurfaceContext';
+import { CanvasSurfaceActionsProvider } from './canvasSurfaceActions';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
@@ -9235,7 +9236,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           if (entry.id === 'twilio-ai-journey') setTwilioPromptSelected(true);
         },
         onPack: (template) => applyTemplate(template),
-        onInstall: (key) => router.push(`/templates/${encodeURIComponent(key)}`),
+        onInstall: (key) => router.push(`/templates?open=${encodeURIComponent(key)}`),
       });
     }} />
   </div>;
@@ -9405,7 +9406,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               actions exist, which of them are a set, and where each one lives on a
               phone. The same list renders inside the ••• sheet below, so a small
               screen loses placement rather than losing the action. */}
-          <CanvasSessionActions variant="bar" handlers={sessionActionHandlers} />
+          <CanvasSessionActions variant="bar" surface={surface} handlers={sessionActionHandlers} />
           <button className={`${styles.secondaryButton} ${styles.iconAction} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} title={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}><MoreActionsIcon /></button>
           {persistence === 'local' && <button className={`${styles.secondaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', t('gateSaveTitle'), t('gateSaveBody'))}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>{t('save')}</span></button>}
           {moreOpen && <div className={styles.moreMenu} data-testid="canvas-more-menu" aria-label={t('moreActions')}>
@@ -9415,7 +9416,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 draws them, so the section stands down. */}
             <div className={styles.moreMenuPhoneOnly}>
               <span className={styles.moreMenuHeading}>{t('moreMenuSessionActions')}</span>
-              <CanvasSessionActions variant="menu" handlers={sessionActionHandlers} />
+              <CanvasSessionActions variant="menu" surface={surface} handlers={sessionActionHandlers} />
             </div>
             <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
             <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden><Icon source="▦" size="1em" /></span>{t('templates')}</button>
@@ -9485,7 +9486,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 || (templateCategory === 'prompt' && (entry.source === 'canvas' || entry.source === 'executive')))
               .filter((entry) => templateKind === 'all' || (entry.action.kind === 'pack' && entry.action.template.objects.some((object) => object.kind === templateKind)))
               .filter((entry) => matchesTemplateQuery(entry, templateSearch))
-              .map((entry) => <button key={entry.id} onClick={() => { applyTemplateEntry(entry, { onPrompt: (nextPrompt) => { setPrompt(nextPrompt); setTemplateOpen(false); }, onPack: (template) => applyTemplate(template), onInstall: (key) => router.push(`/templates/${encodeURIComponent(key)}`) }); }}><b>{entry.name}</b><small>{entry.action.kind === 'pack' ? t('templateMeta', { category: entry.categoryLabel, count: entry.action.template.objects.length }) : entry.categoryLabel}</small><span>{entry.summary}</span><i>{entry.keywords.slice(0, 6).join(' · ')}</i></button>)}
+              .map((entry) => <button key={entry.id} onClick={() => { applyTemplateEntry(entry, { onPrompt: (nextPrompt) => { setPrompt(nextPrompt); setTemplateOpen(false); }, onPack: (template) => applyTemplate(template), onInstall: (key) => router.push(`/templates?open=${encodeURIComponent(key)}`) }); }}><b>{entry.name}</b><small>{entry.action.kind === 'pack' ? t('templateMeta', { category: entry.categoryLabel, count: entry.action.template.objects.length }) : entry.categoryLabel}</small><span>{entry.summary}</span><i>{entry.keywords.slice(0, 6).join(' · ')}</i></button>)}
             {!!serverTemplates.length && <><h4>{t('savedAccount')}</h4>{serverTemplates.map((template) => <button key={template.id} onClick={() => applyServerTemplate(template)}><b>{template.name}</b><small>{template.visibility === 'tenant' ? t('sharedWithTenant') : t('private')} · {template.category}</small><span>{template.description}</span></button>)}</>}
             {!!framePresets.length && <><h4>{t('reusableFrames')}</h4>{framePresets.map((preset) => <button key={preset.id} onClick={() => addFramePreset(preset)}><b>{preset.name}</b><small><span>{t('privateCustomFrame')}</span> · {t('thisDevice')}</small></button>)}</>}
           </div>}
@@ -9760,7 +9761,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             app: <CanvasAppSurface
               nodes={nodes}
               onExit={() => setSurface('graph')}
-              onPublish={() => openReleasesPanel()}
               onOpenObject={revealObject}
             />,
             // The four medium runtimes. Each takes the object the surface is ABOUT, so
@@ -10865,6 +10865,8 @@ function ActivityInspector({ sessionId, objectId, data, persistence, role, membe
 
 export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialBuildOpen, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent, initialModelComparisonIds, stageActive = true }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
   // The 3D scene publishes its view commands to the canvas rail rather than
-  // carrying a toolbar of its own, so both live under one provider.
-  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialBuildOpen={initialBuildOpen} initialBuildChatId={initialBuildChatId} initialBuildTicket={initialBuildTicket} initialPrompt={initialPrompt} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} /></Canvas3DControlsProvider></ReactFlowProvider>;
+  // carrying a toolbar of its own, so both live under one provider — and the app
+  // surface publishes ITS controls into the session bar for the same reason, which
+  // is what leaves this canvas with one bar instead of one per runtime.
+  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasSurfaceActionsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialBuildOpen={initialBuildOpen} initialBuildChatId={initialBuildChatId} initialBuildTicket={initialBuildTicket} initialPrompt={initialPrompt} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} /></CanvasSurfaceActionsProvider></Canvas3DControlsProvider></ReactFlowProvider>;
 }

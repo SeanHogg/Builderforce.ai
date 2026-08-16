@@ -353,7 +353,7 @@ function Composer({ value, onChange, onSubmit, chatMode, onChatModeChange, onEng
       <PromptUseCasePicker placement="bottom" onSelect={(entry) => {
         applyTemplateEntry(entry, {
           onPrompt: (prompt) => onChange(prompt),
-          onInstall: (key) => router.push(`/templates/${encodeURIComponent(key)}`),
+          onInstall: (key) => router.push(`/templates?open=${encodeURIComponent(key)}`),
         });
       }} />
     </div>

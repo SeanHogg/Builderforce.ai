@@ -1,3 +1,109 @@
+## ✅ RESOLVED 2026-08-16 — four catalogues of "a starting point", and none of them set anything up
+
+The prompt bar's "Choose a starting point" menu merged the 48 localized
+`promptUseCases.items` with 48 hard-coded `C_SUITE_CANVAS_USE_CASES`. The canvas kept a
+SECOND browser, with its own search box and its own category names, over
+`CREATION_TEMPLATES`. The scenarios the product actually supports end to end — the ATS
+connectors, the Twilio stack, Stripe dunning — had no menu at all: they were reachable
+only by building the workflow by hand. **Somebody looking for "email campaign" found a
+canvas prompt in one menu and a working Mailchimp automation in neither.**
+
+**The framework is a guided step, and its kinds are a registry.** `domain/guidedSetup`
+declares `connect | field | choice | resource | schedule | toggle`; each kind is ONE
+registered spec carrying its own parse, its own answer validation and its own
+satisfaction rule, so a new kind is `registerGuidedStepKind(...)` rather than a fifth
+branch in four separate `switch` statements — and the one that always got forgotten was
+the validator. `resolveGuidedPlan` is a pure function of (steps, answers, workspace
+facts), which is what lets the wizard and the install endpoint run the IDENTICAL
+resolution. A wizard that validates in a browser somebody can edit, and an install that
+trusts it, is how a template lands half-configured.
+
+**A template is a `catalog_items` row.** `kind = 'template'`, manifest in `body` — the
+kernel table that already carries every listing, preset and pack — so pricing,
+visibility, install counts, publisher attribution and the storefront grid all worked
+already. `templateRegistry` merges built-in (code) + the workspace's own + published,
+in that precedence, cached through `getOrSetCached`, exactly as `connectorRegistry`
+does. Publishing is a visibility change on the row its owner keeps editing, never a copy.
+
+**What installing WRITES is the second registry.** `outputKinds.ts` owns the effect;
+`templateManifest` owns the shape. Split so a publisher's manifest can be validated with
+no database, and a contract test asserts every declarable kind has a materialiser — a
+kind present in one and absent from the other installs nothing and says nothing.
+
+Three author-time checks earn their place because each one's symptom is a template that
+LOOKS installed: an output binding `{{setup.x}}` no step collects (silently empty field),
+a `tasks` output with no `resource: project` step (tickets with nowhere to go), and a
+required connector with no connect step (setup completes, first run fails on a missing
+credential). The eight built-ins run through the same validator an untrusted published
+manifest gets, at module load.
+
+**One catalogue, four sources.** `lib/templates/contract.ts` is the entry every source
+resolves to and `apply.ts` is the client-side action registry — `prompt` seeds the
+composer, `pack` lands objects on the board, `install` opens the guided setup. The prompt
+picker and the canvas browser now render the same merge and own nothing; a surface
+declares what it CAN do and `applyTemplateEntry` reports what it cannot, so a press never
+silently does nothing. The 48 executive contracts now ride ON the entry instead of being
+re-composed at one call site, so every surface offering one runs the same prompt.
+
+Also closed on the way through: `createWorkflowDefinition` replaced FOUR hand-written
+copies of insert → `syncDefinitionTriggers` → invalidate in `workflowDefinitionRoutes`
+(one had already drifted — `from-canvas` read its row back by id alone where the other
+three scoped by tenant), and `RequiredConnector` / `RequiredSecret` stopped being declared
+twice by having `challenge/blueprint.ts` import the shared primitive.
+
+Endpoints: `GET /api/templates`, `GET|POST|DELETE /api/templates/:key`,
+`POST /:key/setup`, `POST /:key/install`, `POST /:key/publish`. Surfaces: `/templates`,
+`/templates?open=<key>`, the marketplace's `asset:template` chip, and the starting-point
+picker under every prompt bar. Localized in all five catalogs.
+
+## ✅ RESOLVED 2026-08-16 — one bar per canvas, not one bar per runtime
+
+Adding the `app` surface earlier the same day immediately produced the thing Make's editor exists to
+avoid: **two toolbars**. The session bar sat at the top, and `CanvasAppSurface` drew its own bar
+40px underneath it — same height, same chrome, same segmented troughs — so the canvas had two rows
+of controls that looked alike and disagreed about which one you press to do something. A third
+surface with a runtime would have made three. Separately, the session bar was the same eight buttons
+on *every* surface, which put "read the outcome numbers for this board" and "run the canvas
+diagnostics" on a conversation that has no objects on it — two controls whose only possible answer
+is nothing.
+
+**Both halves are now decided by registries rather than by call sites.**
+
+**1 · Actions declare a requirement, not a list of surfaces.** `CanvasSessionActionDef` gained
+`needs?: 'objects' | 'board'`, and `canvasSessionActionsFor(surface)` answers it from
+`canvasSurfaceDefinition` — the same `showsObjects` / `showsBoard` flags every surface already
+declares. The obvious alternative (`surfaces: ['graph','scene3d']` per entry) was rejected on
+purpose: every future surface would have to be added to every list that happens to apply to it, in
+a file about actions, and the lists would drift the first time somebody forgot one. `outcomes` and
+`diagnostics` now need objects, so they are absent on `chat` and on `app` and present on `graph` and
+`scene3d` — and a surface nobody has added yet composes correctly with no edit here, which is what
+the test asserts. `canvasSessionClusters`, `phoneSessionBarActions` and `phoneOverflowActions` all
+take the surface, so the phone's two-button budget is measured against what is actually on screen.
+
+**2 · A surface contributes its controls to the ONE bar.**
+`components/creation-canvas/canvasSurfaceActions.tsx` is the seam: `useCanvasSurfaceActions(build,
+deps)` publishes a ReactNode, `useContributedSurfaceActions()` reads it, and `CanvasSessionActions`
+renders it first — on a running app, "Stop" is what the reader is reaching for, and burying it
+behind undo/redo would make the shared bar worse than the second toolbar it replaces. Publishing a
+node into context rather than using `createPortal` is deliberate: a real portal needs a DOM node
+that exists before the surface renders, so the first paint would be a bar with a hole in it. The
+contribution is withdrawn on unmount, unconditionally — a Run button left in the bar would be wired
+to a runtime that is gone, which is the one failure mode a shared bar has that two separate bars do
+not, and it has its own test.
+
+`CanvasAppSurface` now draws **no header at all**: Run/Stop, Preview·Code·Console and the width
+switcher publish into the session bar, and its `onPublish` prop and exit button are gone — publishing
+is the bar's `publish` action scoped to the whole board, and leaving the surface is the rail's own
+"press App again", so neither decision has two controls any more. `.appSurfaceHeader` and
+`.appPublishButton` were deleted with them.
+
+Files: `lib/canvasSessionActions.ts`, `canvasSurfaceActions.tsx` (new), `CanvasSessionActions.tsx`,
+`CanvasAppSurface.tsx`, `CreationCanvas.tsx`, `CreationCanvas.module.css`, both test files.
+Mockup this came from: https://claude.ai/code/artifact/c935a6ce-18cc-4ea4-bccf-1859a50c20a1 —
+10/10 guards green, 379 canvas tests green.
+
+---
+
 ## ✅ RESOLVED 2026-08-16 — the canvas could build an app and never run it: the `app` surface
 
 Ask Brain for an SMS sender and four cards land — `backend/server.js`, `frontend/index.html`, a

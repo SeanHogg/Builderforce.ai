@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The guided setup — the wizard a template is set up in.
  *
@@ -37,7 +35,6 @@ import {
 const fieldStyle: React.CSSProperties = {
   width: '100%',
   padding: '10px 12px',
-  fontSize: 14,
   color: 'var(--text-primary)',
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
@@ -54,7 +51,6 @@ const primaryBtn: React.CSSProperties = {
   justifyContent: 'center',
   gap: 8,
   padding: '10px 18px',
-  fontSize: '0.875rem',
   fontWeight: 600,
   background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
   color: 'var(--text-on-accent)',
@@ -65,7 +61,6 @@ const primaryBtn: React.CSSProperties = {
 
 const subtleBtn: React.CSSProperties = {
   padding: '8px 14px',
-  fontSize: 13,
   fontWeight: 600,
   color: 'var(--coral-bright)',
   background: 'var(--bg-base)',
@@ -90,6 +85,7 @@ const STEP_FIELDS: Record<string, (props: FieldProps) => React.ReactNode> = {
   connect: ({ resolved, onConnect }) => (
     <button
       type="button"
+      className="ui-text-small"
       style={{ ...subtleBtn, opacity: resolved.satisfied ? 0.6 : 1 }}
       onClick={() => onConnect(resolved.step.connector ?? '')}
       disabled={resolved.satisfied}
@@ -102,11 +98,12 @@ const STEP_FIELDS: Record<string, (props: FieldProps) => React.ReactNode> = {
     const { step } = resolved;
     const common = { style: fieldStyle, id: `step-${step.id}`, placeholder: step.placeholder ?? '' };
     if (step.fieldType === 'multiline') {
-      return <textarea {...common} rows={4} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
+      return <textarea {...common} className="ui-text-body" rows={4} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />;
     }
     return (
       <input
         {...common}
+        className="ui-text-body"
         type={step.fieldType === 'secret' ? 'password' : step.fieldType === 'number' ? 'number' : step.fieldType === 'email' ? 'email' : 'text'}
         value={String(value ?? '')}
         onChange={(e) => onChange(step.fieldType === 'number' ? Number(e.target.value) : e.target.value)}
@@ -117,6 +114,7 @@ const STEP_FIELDS: Record<string, (props: FieldProps) => React.ReactNode> = {
   choice: ({ resolved, value, onChange }) => (
     <select
       id={`step-${resolved.step.id}`}
+      className="ui-text-body"
       style={fieldStyle}
       value={String(value ?? '')}
       onChange={(e) => onChange(e.target.value)}
@@ -131,6 +129,7 @@ const STEP_FIELDS: Record<string, (props: FieldProps) => React.ReactNode> = {
   resource: ({ resolved, value, onChange }) => (
     <select
       id={`step-${resolved.step.id}`}
+      className="ui-text-body"
       style={fieldStyle}
       value={String(value ?? '')}
       onChange={(e) => onChange(e.target.value)}
@@ -152,12 +151,14 @@ const STEP_FIELDS: Record<string, (props: FieldProps) => React.ReactNode> = {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <input
           id={`step-${resolved.step.id}`}
+          className="ui-text-body"
           style={{ ...fieldStyle, flex: '2 1 160px' }}
           value={current.cron ?? ''}
           onChange={(e) => onChange({ cron: e.target.value, timezone: current.timezone ?? fallbackZone })}
           placeholder={resolved.step.defaultCron ?? ''}
         />
         <input
+          className="ui-text-body"
           style={{ ...fieldStyle, flex: '1 1 120px' }}
           value={current.timezone ?? fallbackZone}
           onChange={(e) => onChange({ cron: current.cron ?? '', timezone: e.target.value })}
@@ -169,7 +170,7 @@ const STEP_FIELDS: Record<string, (props: FieldProps) => React.ReactNode> = {
   },
 
   toggle: ({ resolved, value, onChange }) => (
-    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
+    <label className="ui-text-small" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)' }}>
       <input
         id={`step-${resolved.step.id}`}
         type="checkbox"
@@ -276,35 +277,35 @@ export function GuidedSetupPanel({ templateKey, templateName, open, onClose }: {
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: 4 }}>
         {error && (
-          <div style={{ padding: 12, fontSize: 13, color: 'var(--coral-bright)', background: 'var(--surface-coral-soft, rgba(244,114,94,0.12))', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
+          <div className="ui-text-small" style={{ padding: 12, color: 'var(--coral-bright)', background: 'var(--surface-coral-soft, rgba(244,114,94,0.12))', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
             {error}
           </div>
         )}
 
         {outputs ? (
           <>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>{t('installedBody')}</p>
+            <p className="ui-text-small" style={{ color: 'var(--text-secondary)', margin: 0 }}>{t('installedBody')}</p>
             {outputs.map((output) => (
               <div key={output.outputId} style={{ padding: 14, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Icon source={output.ok ? 'check' : 'warning'} size="1em" />
-                  <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>{output.label}</strong>
+                  <strong className="ui-text-card-title" style={{ color: 'var(--text-primary)' }}>{output.label}</strong>
                 </div>
-                <div style={{ fontSize: 12, color: output.ok ? 'var(--text-muted)' : 'var(--coral-bright)', marginTop: 4 }}>
+                <div className="ui-text-small" style={{ color: output.ok ? 'var(--text-muted)' : 'var(--coral-bright)', marginTop: 4 }}>
                   {output.error ?? output.detail}
                 </div>
                 {output.href && (
-                  <button type="button" style={{ ...subtleBtn, marginTop: 10 }} onClick={() => router.push(output.href!)}>
+                  <button type="button" className="ui-text-small" style={{ ...subtleBtn, marginTop: 10 }} onClick={() => router.push(output.href!)}>
                     {t('openOutput')}
                   </button>
                 )}
               </div>
             ))}
-            <button type="button" style={primaryBtn} onClick={onClose}>{tc('done')}</button>
+            <button type="button" className="ui-text-small" style={primaryBtn} onClick={onClose}>{tc('done')}</button>
           </>
         ) : (
           <>
-            {loading && !plan && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loadingSetup')}</div>}
+            {loading && !plan && <div className="ui-text-small" style={{ color: 'var(--text-muted)' }}>{t('loadingSetup')}</div>}
 
             {plan?.steps.map((resolved) => {
               const render = STEP_FIELDS[resolved.step.kind];
@@ -312,14 +313,15 @@ export function GuidedSetupPanel({ templateKey, templateName, open, onClose }: {
                 <div key={resolved.step.id} onBlur={() => commit(resolved.step.id)}>
                   <label
                     htmlFor={`step-${resolved.step.id}`}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}
+                    className="ui-text-small"
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}
                   >
                     {resolved.satisfied && <Icon source="check" size="0.9em" />}
                     {resolved.step.title}
                     {!resolved.step.required && <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>{t('optional')}</span>}
                   </label>
                   {resolved.step.help && resolved.step.kind !== 'toggle' && (
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>{resolved.step.help}</p>
+                    <p className="ui-text-small" style={{ color: 'var(--text-muted)', margin: '0 0 8px' }}>{resolved.step.help}</p>
                   )}
                   {/* A kind with no renderer is reported, never skipped: a step
                       silently missing from the form is an answer the install
@@ -332,9 +334,9 @@ export function GuidedSetupPanel({ templateKey, templateName, open, onClose }: {
                         onConnect: (key) => router.push(`/integrations?connector=${encodeURIComponent(key)}`),
                         timezoneLabel: t('timezoneFor', { title: resolved.step.title }),
                       })
-                    : <div style={{ fontSize: 12, color: 'var(--coral-bright)' }}>{t('unsupportedStep', { kind: resolved.step.kind })}</div>}
+                    : <div className="ui-text-small" style={{ color: 'var(--coral-bright)' }}>{t('unsupportedStep', { kind: resolved.step.kind })}</div>}
                   {resolved.error && (
-                    <div role="alert" style={{ fontSize: 12, color: 'var(--coral-bright)', marginTop: 6 }}>{resolved.error}</div>
+                    <div role="alert" className="ui-text-small" style={{ color: 'var(--coral-bright)', marginTop: 6 }}>{resolved.error}</div>
                   )}
                 </div>
               );
@@ -343,6 +345,7 @@ export function GuidedSetupPanel({ templateKey, templateName, open, onClose }: {
             {plan && (
               <button
                 type="button"
+                className="ui-text-small"
                 style={{ ...primaryBtn, opacity: plan.complete && !installing ? 1 : 0.6 }}
                 disabled={!plan.complete || installing}
                 onClick={install}

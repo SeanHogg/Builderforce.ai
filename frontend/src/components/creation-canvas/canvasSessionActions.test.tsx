@@ -9,11 +9,13 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
 
 import {
   CANVAS_SESSION_ACTIONS,
+  canvasSessionActionsFor,
   canvasSessionClusters,
   PHONE_SESSION_BAR_LIMIT,
   phoneOverflowActions,
   phoneSessionBarActions,
 } from '@/lib/canvasSessionActions';
+import { CANVAS_SURFACES, canvasSurfaceDefinition } from '@/lib/canvasSurfaces';
 import enMessages from '@/i18n/messages/en.json';
 import { CreationCanvas } from './CreationCanvas';
 
@@ -57,6 +59,60 @@ describe('canvas session action registry', () => {
     // unsafe to touch. Full screen keeps the other: a small screen is where trading app
     // chrome for board is worth the most.
     expect(bar).toEqual(['undo', 'fullscreen']);
+  });
+
+  /**
+   * THE SECOND ONE THIS FILE EXISTS FOR. The bar used to be the same eight buttons on
+   * every surface, which put "read the outcome numbers for this board" and "run the
+   * canvas diagnostics" on a conversation that has no objects on it — two controls whose
+   * only possible answer is nothing.
+   *
+   * The fix is a REQUIREMENT, not a list of surfaces: an action says it needs objects and
+   * the surface registry answers from `showsObjects`, which every surface already
+   * declares. That is what this asserts — including the property that makes it worth
+   * doing, that a surface nobody has added yet composes correctly without editing here.
+   */
+  it('drops the actions a surface cannot answer, from what the surface declares', () => {
+    const on = (surface: Parameters<typeof canvasSessionActionsFor>[0]) =>
+      canvasSessionActionsFor(surface).map((def) => def.id);
+
+    // The board and the 3D space draw objects, so both readings of them belong.
+    expect(on('graph')).toContain('outcomes');
+    expect(on('graph')).toContain('diagnostics');
+    expect(on('scene3d')).toContain('outcomes');
+
+    // Chat is the zero-object surface, and the app surface draws a running app rather
+    // than the board's objects. Neither has anything for those two to report on.
+    expect(on('chat')).not.toContain('outcomes');
+    expect(on('chat')).not.toContain('diagnostics');
+    expect(on('app')).not.toContain('outcomes');
+
+    // What survives everywhere is what means the same thing everywhere.
+    for (const surface of ['chat', 'graph', 'scene3d', 'app'] as const) {
+      expect(on(surface)).toEqual(expect.arrayContaining(['undo', 'redo', 'fullscreen', 'share', 'publish']));
+    }
+
+    // Derived, not hand-listed: every action kept is one the surface can answer.
+    for (const surface of CANVAS_SURFACES) {
+      const def = canvasSurfaceDefinition(surface.id);
+      for (const action of canvasSessionActionsFor(surface.id)) {
+        if (action.needs === 'objects') expect(def.showsObjects).toBe(true);
+        if (action.needs === 'board') expect(def.showsBoard).toBe(true);
+      }
+    }
+  });
+
+  /** The phone split has to survive the filter: an action hidden on this surface must
+   *  not still be counted against the two-button budget, and one that IS shown must
+   *  still land in exactly one of bar or sheet. */
+  it('keeps the phone bar and the overflow sheet complementary on every surface', () => {
+    for (const surface of CANVAS_SURFACES) {
+      const bar = phoneSessionBarActions(surface.id).map((def) => def.id);
+      const menu = phoneOverflowActions(surface.id).map((def) => def.id);
+      expect(bar.filter((id) => menu.includes(id))).toEqual([]);
+      expect([...bar, ...menu].sort()).toEqual(canvasSessionActionsFor(surface.id).map((def) => def.id).sort());
+      expect(bar.length).toBeLessThanOrEqual(PHONE_SESSION_BAR_LIMIT);
+    }
   });
 
   /** A cluster is a trough, and a trough is what says "these are the same kind of

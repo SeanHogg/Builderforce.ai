@@ -132,7 +132,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 6 | [Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 31 |
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
-| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 36 |
+| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 38 |
 | 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 153 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
@@ -152,7 +152,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 6 | 31 |
 | 7 | 25 |
 | 8 | 3 |
-| 9 | 36 |
+| 9 | 38 |
 | 10 | 153 |
 | 11 | 9 |
 | 12 | 10 |
@@ -796,6 +796,13 @@ sequenced into waves because nothing in them gates the sell motion.
 
 ## 9 · 🔌 Integrations, Connectors & Workflows
 
+### ⌗ Templates — residuals
+
+> The templates framework landed 2026-08-16: a guided-setup contract with a step-kind registry, a template manifest with an output-kind registry, a three-source catalogue merged like the connector one, and the four parallel "starting point" catalogues consolidated onto one entry contract (see [DONE.md](./DONE.md)). These are the parts deliberately left out of that pass.
+
+- **A publisher can list an installable template but not a canvas pack or a prompt.** `POST /api/templates` accepts a manifest whose outputs are `workflow` / `tasks`; the `pack` and `prompt` entries in the merged catalogue are CLIENT sources (`lib/templates/catalog.ts`) with no server manifest behind them, so a third party cannot publish either. Closing it means two more registered output kinds (`canvas`, `prompt`) whose materialisers write a creation session rather than workspace rows — which needs a product decision first about whether a purchased pack lands as a session, an object group, or a board. Until then the marketplace's Templates chip lists automations only, and the packs/prompts beside them are ours.
+- **`connectedCount` on a gallery card is a snapshot, not a subscription.** `summarizeTemplates` computes it server-side per catalogue read (cached 5 min), so connecting an integration in another tab leaves a card reading "2 of 3 connected" until the cache turns over. The wizard is always live — it re-resolves the plan on every answer — so this only affects the card, but it is the number that decides whether somebody starts.
+
 ### ⌘ Canvas workflow compile — residuals
 
 > The canvas `workflow` object became genuinely executable 2026-08-08: authored `steps` compile to a real definition via `POST /api/workflow-definitions/from-canvas` and Run builds first (see [DONE.md](./DONE.md)). These are the parts deliberately left out of that pass.
@@ -908,12 +915,8 @@ sequenced into waves because nothing in them gates the sell motion.
   existing object palette as a visual icon picker at the node; and a per-step clock badge opening
   anchored schedule settings. This is what turns the canvas from "describe it and hope" into
   something a non-developer can assemble, and it reclaims roughly 180px of vertical room.
-  **Four further pieces settled in the second review pass:** (a) the command bar is ONE bar whose
-  contents follow the surface — each group declares which surfaces it belongs to, the way
-  `canvasSurfaces.ts` already declares `showsBoard`/`showsObjects`, so pressing **App** swaps the
-  board's arrange tool and category circles for Preview/Code/Console + width + preview URL + an
-  error pill, and `CanvasAppSurface`'s own toolbar is retired into it rather than being a second
-  bar; (b) **people are nodes** — a built-in seat (CTO, from the `role:<key>` catalog) and a custom
+  **Three further pieces settled in the second review pass** (the fourth — the surface-aware
+  single command bar — is BUILT, see DONE.md 2026-08-16): (b) **people are nodes** — a built-in seat (CTO, from the `role:<key>` catalog) and a custom
   agent both sit on the board with connectors, a clock and a centre `+`, and share ONE panel shape
   (model · autonomy · toolbox · personality traits · Advanced), differing only in what is read-only,
   which is what keeps `psychometric-persona` a single trait engine with two doors in; (c) **messages

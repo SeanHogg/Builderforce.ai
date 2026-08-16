@@ -14,6 +14,7 @@ import {
   type CanvasAppLogEntry,
   type CanvasAppViewport,
 } from '@/lib/canvasApp';
+import { useCanvasSurfaceActions } from './canvasSurfaceActions';
 import styles from './CreationCanvas.module.css';
 import type { CreationNodeData } from './types';
 
@@ -39,6 +40,15 @@ import type { CreationNodeData } from './types';
  * attached is reported in the console with that reason. A preview that swallowed them
  * would be worse than none.
  *
+ * ── WHY ITS CONTROLS ARE NOT DRAWN HERE ──────────────────────────────────────────
+ * Run/Stop, the three readings and the preview width used to be a toolbar of this
+ * surface's own, drawn directly under the session bar — two rows of controls that looked
+ * alike, sat 40px apart, and disagreed about which one you press to do something. A third
+ * surface with a runtime would have made three. They are now PUBLISHED into the one
+ * session bar through `useCanvasSurfaceActions`, so the canvas has a single bar whose
+ * contents follow the surface. The host never learns what an app surface is; this surface
+ * never learns where the bar is.
+ *
  * ── WHY THE SHIP CONTROL IS A BUTTON AND NOT A RAIL ──────────────────────────────
  * Build → Stage → Live already exists, complete, in `CanvasReleasesPanel`: it snapshots,
  * runs the harness, refuses to publish while anything blocks, shows the buyer's own view
@@ -56,18 +66,17 @@ const MAX_LOG_LINES = 200;
 
 export interface CanvasAppSurfaceProps {
   nodes: ReadonlyArray<{ id: string; data: CreationNodeData }>;
+  /** Escape hands the board back. There is no exit BUTTON here, unlike the object
+   *  surfaces: this one is in the rail, so pressing "App" again is the way out — and a
+   *  second control for a decision the switcher already owns is the thing the surface
+   *  registry exists to prevent. */
   onExit: () => void;
-  /** Open the release lifecycle for the whole board. Absent when the session cannot
-   *  publish at all (a guest board with nothing persisted), in which case the control
-   *  stands down rather than being drawn dead. */
-  onPublish?: () => void;
   /** Send the reader to the card a file came from. */
   onOpenObject?: (nodeId: string) => void;
 }
 
-export function CanvasAppSurface({ nodes, onExit, onPublish, onOpenObject }: CanvasAppSurfaceProps) {
+export function CanvasAppSurface({ nodes, onExit, onOpenObject }: CanvasAppSurfaceProps) {
   const t = useTranslations('creationCanvas.surface.app');
-  const tSurface = useTranslations('creationCanvas');
   const app = useMemo(() => canvasApp(nodes), [nodes]);
   const [reading, setReading] = useState<AppReading>('preview');
   const [viewport, setViewport] = useState<CanvasAppViewport>('desktop');
@@ -110,6 +119,60 @@ export function CanvasAppSurface({ nodes, onExit, onPublish, onOpenObject }: Can
   const entryPath = app.entry?.path ?? '';
   const selected = app.files.find((file) => file.path === openFile) ?? app.files[0] ?? null;
 
+  // Into the ONE session bar, for as long as this surface is mounted. See the header:
+  // these used to be a second toolbar of this surface's own.
+  useCanvasSurfaceActions(() => (
+    <div className={styles.appBarControls} role="group" aria-label={t('regionLabel')}>
+      <button
+        type="button"
+        className={styles.appRunButton}
+        data-running={running}
+        disabled={!app.document}
+        onClick={() => (running ? setRunning(false) : run())}
+      >
+        <span className={styles.appRunDot} aria-hidden />
+        {running ? t('stop') : t('run')}
+      </button>
+
+      <div className={styles.appReadings} role="group" aria-label={t('readings')}>
+        {READINGS.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setReading(option)}
+            aria-pressed={reading === option}
+          >
+            {t(`reading.${option}` as 'reading.preview')}
+            {option === 'console' && errors > 0 && (
+              <span className={styles.appErrorCount} aria-label={t('errorCount', { count: errors })}>{errors}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* The width the READER is checking. Local and unpersisted for the same reason
+          the site surface keeps its own: looking at a desktop app on a phone frame for
+          a moment must not quietly re-author what the app is designed for. */}
+      <div className={styles.appViewports} role="group" aria-label={t('viewport')}>
+        {CANVAS_APP_VIEWPORTS.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setViewport(option)}
+            aria-pressed={viewport === option}
+            title={t(`viewportName.${option}` as 'viewportName.desktop')}
+          >
+            {t(`viewportName.${option}` as 'viewportName.desktop')}
+          </button>
+        ))}
+      </div>
+
+      <span className={styles.appAddress} aria-live="polite">
+        {running && entryPath ? entryPath : t('stopped')}
+      </span>
+    </div>
+  ), [running, reading, viewport, errors, entryPath, app.document, t]);
+
   return (
     <section
       className={styles.appSurface}
@@ -117,65 +180,6 @@ export function CanvasAppSurface({ nodes, onExit, onPublish, onOpenObject }: Can
       aria-label={t('regionLabel')}
       onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); onExit(); } }}
     >
-      <header className={styles.appSurfaceHeader}>
-        <button
-          type="button"
-          className={styles.appRunButton}
-          data-running={running}
-          disabled={!app.document}
-          onClick={() => (running ? setRunning(false) : run())}
-        >
-          <span className={styles.appRunDot} aria-hidden />
-          {running ? t('stop') : t('run')}
-        </button>
-
-        <div className={styles.appReadings} role="group" aria-label={t('readings')}>
-          {READINGS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setReading(option)}
-              aria-pressed={reading === option}
-            >
-              {t(`reading.${option}` as 'reading.preview')}
-              {option === 'console' && errors > 0 && (
-                <span className={styles.appErrorCount} aria-label={t('errorCount', { count: errors })}>{errors}</span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* The width the READER is checking. Local and unpersisted for the same reason
-            the site surface keeps its own: looking at a desktop app on a phone frame for
-            a moment must not quietly re-author what the app is designed for. */}
-        <div className={styles.appViewports} role="group" aria-label={t('viewport')}>
-          {CANVAS_APP_VIEWPORTS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setViewport(option)}
-              aria-pressed={viewport === option}
-              title={t(`viewportName.${option}` as 'viewportName.desktop')}
-            >
-              {t(`viewportName.${option}` as 'viewportName.desktop')}
-            </button>
-          ))}
-        </div>
-
-        <span className={styles.appAddress} aria-live="polite">
-          {running && entryPath ? entryPath : t('stopped')}
-        </span>
-
-        {onPublish && (
-          <button type="button" className={styles.appPublishButton} onClick={onPublish}>
-            {t('publish')}
-          </button>
-        )}
-        <button type="button" className={styles.objectSurfaceExit} onClick={onExit}>
-          {tSurface('surface.backToBoard')}
-        </button>
-      </header>
-
       <div className={styles.appSurfaceBody}>
         {app.files.length === 0 ? (
           <div className={styles.appEmpty} role="status">

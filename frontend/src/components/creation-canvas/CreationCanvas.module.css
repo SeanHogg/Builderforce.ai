@@ -1739,8 +1739,11 @@
    header wraps rather than fixing a width, and the toolbar collapses to two rows before
    360px instead of overflowing. */
 .appSurface { position:absolute; z-index:7; inset:0; box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-bottom:var(--composer-space); background:var(--canvas-board-background); color:var(--canvas-ink); }
-.appSurfaceHeader { display:flex; flex:none; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 16px 10px 62px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
 .appSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; min-width:0; }
+/* The surface's own controls, INSIDE the session bar. Wraps rather than fixing a width,
+   because it shares that bar's row with undo/redo, Share and Publish and must give way
+   first — the bar is the session's, and this is a guest in it. */
+.appBarControls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
 
 /* Run is the loudest control on the surface, and the only one that is loud. */
 .appRunButton {
@@ -1768,12 +1771,9 @@
 .appReadings button[aria-pressed='true'],.appViewports button[aria-pressed='true'] { background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 1px 2px var(--canvas-shadow); }
 .appErrorCount { min-width:15px; padding:0 4px; border-radius:var(--radius-full); background:var(--tone-danger-bg); color:var(--tone-danger-ink); font-size:9px; font-weight:700; text-align:center; }
 
-.appAddress { min-width:0; flex:1; overflow:hidden; color:var(--canvas-muted); font-family:var(--font-mono,ui-monospace,monospace); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
-.appPublishButton {
-  flex:none; min-height:32px; padding:6px 14px; border:1px solid var(--canvas-brain-accent); border-radius:var(--radius-full);
-  background:var(--canvas-brain-accent); color:var(--canvas-panel); font:650 11px var(--font-sans); cursor:pointer;
-}
-.appPublishButton:hover,.appPublishButton:focus-visible { filter:brightness(1.08); outline:none; }
+/* Where it is running. Capped rather than flexed: in the session bar an unbounded
+   address would push Share and Publish off the end on a laptop. */
+.appAddress { min-width:0; max-width:220px; overflow:hidden; color:var(--canvas-muted); font-family:var(--font-mono,ui-monospace,monospace); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
 
 /* Preview. Same three measures the site surface uses, same reasoning. */
 .appStage { min-height:0; flex:1; display:flex; justify-content:center; padding:16px; background:var(--canvas-board-background); overflow:auto; overscroll-behavior:contain; }
@@ -1819,8 +1819,9 @@
 .appConsoleText { color:var(--canvas-ink); overflow-wrap:anywhere; }
 
 @media (max-width:720px) {
-  .appSurfaceHeader { padding-left:16px; }
-  .appAddress { order:9; flex-basis:100%; }
+  /* The address is the first thing to go on a phone: the bar's budget is two controls
+     beside the title, and "which file is running" is answerable from the Code reading. */
+  .appAddress { display:none; }
   .appCode { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); }
   .appTree { max-height:130px; border-right:0; border-bottom:1px solid var(--canvas-line); }
   .appConsoleLines li { grid-template-columns:40px minmax(0,1fr); }

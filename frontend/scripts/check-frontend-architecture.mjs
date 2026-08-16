@@ -100,6 +100,23 @@
  *   public share link — render the document on the server, which is where a page
  *   whose whole job is to be shared and indexed wants to be. Check for that shape
  *   before raising this number: the directive is sometimes the bug.
+ *
+ *   800 → 801 (`useClientFiles`, 2026-08-16) — `components/creation-canvas/
+ *   canvasSurfaceActions.tsx`, the context that lets a canvas SURFACE put its own
+ *   controls into the one session bar. A provider is the boundary by definition:
+ *   it holds state and hands it down through context, neither of which a server
+ *   render has.
+ *
+ *   801 → 802 (`useClientFiles`, 2026-08-16) — `components/templates/
+ *   TemplateGallery.tsx`, the template grid. It is +1 and not +4 because the rest
+ *   of the templates feature deliberately does not spend the budget: `/templates`
+ *   is a Server Component that reads its heading through `getTranslations` and
+ *   mounts this below (zero client-rooted pages), and `GuidedSetupPanel` and
+ *   `useTemplateCatalog` carry NO directive — every module that imports them
+ *   already declares the boundary, so the directive would have changed nothing
+ *   except this count. The deep link `/templates?open=<key>` is the other half of
+ *   the saving: a `/templates/<key>` route was the obvious shape and would have
+ *   cost a second client file rendering a second copy of the same wizard.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';

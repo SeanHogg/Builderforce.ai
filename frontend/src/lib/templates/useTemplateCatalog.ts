@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The one hook every starting-point surface reads.
  *

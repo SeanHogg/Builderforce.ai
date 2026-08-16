@@ -1408,7 +1408,8 @@
       "pageOf": "Página {page} de {pages}",
       "pageN": "Página {n}"
     },
-    "resultCount": "{n, plural, =0 {Sin resultados} one {# resultado} other {# resultados}}"
+    "resultCount": "{n, plural, =0 {Sin resultados} one {# resultado} other {# resultados}}",
+    "done": "Listo"
   },
   "prdCreate": {
     "title": "Nuevo PRD",

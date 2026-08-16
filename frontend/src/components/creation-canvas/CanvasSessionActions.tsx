@@ -72,10 +72,21 @@ export interface CanvasSessionActionHandler {
 export interface CanvasSessionActionsProps {
   handlers: Record<CanvasSessionActionId, CanvasSessionActionHandler>;
   variant: 'bar' | 'menu';
+  /**
+   * The surface being read. The registry decides which actions mean anything on it —
+   * an outcome scorecard over a conversation with no objects is a button whose only
+   * possible answer is nothing — so this is passed rather than each call site
+   * remembering which buttons to hide where.
+   */
+  surface?: CanvasSurfaceId;
 }
 
-export function CanvasSessionActions({ handlers, variant }: CanvasSessionActionsProps) {
+export function CanvasSessionActions({ handlers, variant, surface }: CanvasSessionActionsProps) {
   const t = useTranslations('creationCanvas');
+  // What the active surface has put in the bar — a runtime's Run/Stop and its readings,
+  // published from the surface itself. Null on every surface that contributes nothing,
+  // so there is no branch here about which surfaces have runtimes.
+  const contributed = useContributedSurfaceActions();
 
   /** Name, hover text and ARIA state — decided once, for both chromes. */
   const describe = (def: CanvasSessionActionDef) => {
@@ -100,7 +111,7 @@ export function CanvasSessionActions({ handlers, variant }: CanvasSessionActions
     // Words, always. The sheet has room for them and a phone user pressing ••• is
     // looking for a named thing, not scanning a second row of glyphs.
     return <>
-      {phoneOverflowActions().map((def) => {
+      {phoneOverflowActions(surface).map((def) => {
         const { handler, active, label, title, ...aria } = describe(def);
         const Glyph = (active && ACTIVE_ACTION_ICON[def.id]) || ACTION_ICON[def.id];
         // No class of its own: chrome comes from `.moreMenu button`, so a session action
@@ -119,7 +130,11 @@ export function CanvasSessionActions({ handlers, variant }: CanvasSessionActions
   }
 
   return <>
-    {canvasSessionClusters().map(({ cluster, actions }) => {
+    {/* The surface's own controls come FIRST: on a running app "Stop" is what the reader
+        is reaching for, and burying it behind undo/redo would make the shared bar worse
+        than the second toolbar it replaces. */}
+    {contributed}
+    {canvasSessionClusters(surface).map(({ cluster, actions }) => {
       const buttons = actions.map((def) => {
         const { handler, active, label, title, ...aria } = describe(def);
         const Glyph = (active && ACTIVE_ACTION_ICON[def.id]) || ACTION_ICON[def.id];
