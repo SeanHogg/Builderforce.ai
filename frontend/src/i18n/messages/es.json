@@ -15979,7 +15979,8 @@
       "scheduledEvery": "Se ejecuta cada {minutes} minutos",
       "messageCount": "{count} mensajes en este objeto",
       "insertAfter": "Anadir un paso despues de {title}",
-      "openSettings": "Ajustes de {title}"
+      "openSettings": "Ajustes de {title}",
+      "websiteMarkupFrameTitle": "Contenido incrustado"
     },
     "editor": {
       "toolbar": "Formato",

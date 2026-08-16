@@ -27,7 +27,9 @@
 
 import { and, eq } from 'drizzle-orm';
 import {
+  WEBSITE_CONTENT_FRAME_SANDBOX,
   activeWebsitePage,
+  isMarkupSectionBody,
   websitePagesFrom,
   websiteThemeFrom,
   type WebsitePage,
@@ -159,7 +161,16 @@ function renderSection(section: WebsiteSection, ctaHref: string): string {
       return `<section class="s quote"><blockquote>${escapeHtml(section.quote ?? '')}</blockquote>${
         section.author ? `<cite>${escapeHtml(section.author)}</cite>` : ''}</section>`;
     case 'content':
-      return `<section class="s">${eyebrow}${heading}${body}${cta}</section>`;
+      // A model-authored section body sometimes carries real markup — a `<form>` plus
+      // its `<script>` — rather than prose. Printed as `body` that is escaped source
+      // code on the page; the fix is the sandboxed frame the canvas editor also uses,
+      // never `dangerouslySetInnerHTML`-equivalent raw interpolation into this document,
+      // because it is untrusted content from a free-text brief. `escapeHtml` here is
+      // entity-encoding for the `srcdoc` ATTRIBUTE position — the browser decodes it
+      // back to the real markup before handing it to the sandboxed frame's own parser.
+      return isMarkupSectionBody(section)
+        ? `<section class="s">${eyebrow}${heading}<iframe class="content-frame" title="${escapeHtml(section.heading || 'content')}" sandbox="${WEBSITE_CONTENT_FRAME_SANDBOX}" srcdoc="${escapeHtml(section.body ?? '')}"></iframe>${cta}</section>`
+        : `<section class="s">${eyebrow}${heading}${body}${cta}</section>`;
     case 'cta':
       return `<section class="s call">${eyebrow}${heading}${body}${cta}</section>`;
   }
@@ -197,6 +208,7 @@ ul.features p{color:var(--muted);font-size:.92rem;margin:0}
 ul.stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 ul.stats b{display:block;font-size:2.1rem;letter-spacing:-.03em;color:var(--accent);font-variant-numeric:tabular-nums}
 ul.stats span{color:var(--muted);font-size:.85rem}
+.content-frame{width:100%;min-height:420px;border:0;border-radius:8px;background:var(--panel)}
 .quote blockquote{margin:0;font-size:clamp(1.15rem,2.6vw,1.6rem);line-height:1.4;letter-spacing:-.02em;text-wrap:balance}
 .quote cite{display:block;margin-top:14px;font-style:normal;color:var(--muted);font-size:.88rem}
 .call{text-align:center}

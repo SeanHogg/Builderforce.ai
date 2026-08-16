@@ -9,7 +9,13 @@ import { useTranslations } from 'next-intl';
 import ReactMarkdown from 'react-markdown';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
 import styles from './CreationCanvas.module.css';
-import { websitePagesFrom, websiteThemeFrom, type WebsiteSection } from './websiteWysiwyg';
+import {
+  WEBSITE_CONTENT_FRAME_SANDBOX,
+  isMarkupSectionBody,
+  websitePagesFrom,
+  websiteThemeFrom,
+  type WebsiteSection,
+} from './websiteWysiwyg';
 import type { CreationNodeData } from './types';
 
 /**
@@ -30,6 +36,16 @@ import type { CreationNodeData } from './types';
 /** One section of one page. Kinds are DATA on the section, so a new section kind is an
  *  arm here and nothing else in the canvas learns about it. */
 function WebsiteSectionBody({ section, accent }: { section: WebsiteSection; accent: string }) {
+  const t = useTranslations('creationCanvas.node');
+  if (isMarkupSectionBody(section)) return <section className={styles.wysiwygSection}>
+    {section.heading && <h4>{section.heading}</h4>}
+    <iframe
+      className={`${styles.wysiwygMarkupFrame} nodrag nowheel`}
+      title={section.heading || t('websiteMarkupFrameTitle')}
+      sandbox={WEBSITE_CONTENT_FRAME_SANDBOX}
+      srcDoc={section.body}
+    />
+  </section>;
   if (section.kind === 'hero') return <section className={styles.wysiwygHero}>
     <div>{section.eyebrow && <small>{section.eyebrow}</small>}<h3>{section.heading}</h3>{section.body && <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS}>{section.body}</ReactMarkdown>}<span>{section.cta && <button style={{ background: accent }}>{section.cta}</button>}{section.secondaryCta && <button className={styles.wysiwygSecondary}>{section.secondaryCta}</button>}</span></div>
     <div className={styles.wysiwygArt} style={{ color: accent }}><i /><i /><i /></div>

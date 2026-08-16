@@ -15979,7 +15979,8 @@
       "scheduledEvery": "Runs every {minutes} minutes",
       "messageCount": "{count} messages on this object",
       "insertAfter": "Add a step after {title}",
-      "openSettings": "Settings for {title}"
+      "openSettings": "Settings for {title}",
+      "websiteMarkupFrameTitle": "Embedded content"
     },
     "editor": {
       "toolbar": "Formatting",

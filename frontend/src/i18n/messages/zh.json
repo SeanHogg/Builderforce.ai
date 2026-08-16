@@ -15979,7 +15979,8 @@
       "scheduledEvery": "每 {minutes} 分钟运行一次",
       "messageCount": "此对象上有 {count} 条消息",
       "insertAfter": "在“{title}”之后添加步骤",
-      "openSettings": "“{title}”的设置"
+      "openSettings": "“{title}”的设置",
+      "websiteMarkupFrameTitle": "嵌入内容"
     },
     "editor": {
       "toolbar": "格式",

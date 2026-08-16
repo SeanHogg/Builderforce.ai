@@ -86,6 +86,26 @@ export function isWebsiteSectionKind(value: unknown): value is WebsiteSectionKin
   return typeof value === 'string' && SECTION_KINDS.has(value as WebsiteSectionKind);
 }
 
+/**
+ * A `content` section whose body is real markup — a model-authored `<form>` plus its
+ * `<script>` — rather than prose. Both renderers (the React editor and the static
+ * publisher) need the SAME answer to "is this HTML or text", or one would sandbox a
+ * section the other prints as an escaped paragraph.
+ */
+export function isMarkupSectionBody(section: Pick<WebsiteSection, 'kind' | 'body'>): boolean {
+  return section.kind === 'content' && typeof section.body === 'string' && /<[a-z][^>]*>/i.test(section.body);
+}
+
+/**
+ * Sandbox for a `content` section's own markup. `allow-scripts` without
+ * `allow-same-origin` — same rule as `CANVAS_APP_FRAME_SANDBOX` / `GAME_FRAME_SANDBOX` —
+ * because this is model-authored HTML from a free-text brief and must never reach this
+ * page's cookies, storage or DOM. `allow-forms` is additional to those two: a generated
+ * site's whole point is often a form, and a sandboxed frame refuses form submission by
+ * default unless granted.
+ */
+export const WEBSITE_CONTENT_FRAME_SANDBOX = 'allow-scripts allow-forms';
+
 function text(value: unknown, max = 2_000): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : undefined;
 }
@@ -109,6 +129,11 @@ function websiteItems(value: unknown): WebsiteSection['items'] {
   return items.length ? items : undefined;
 }
 
+/** A `content` body sometimes carries a whole `<form>` plus its `<script>` rather than a
+ *  paragraph — the prose cap below would truncate mid-tag and hand the sandboxed frame
+ *  broken markup. `content` alone gets the wider cap; every other kind stays a caption. */
+const WEBSITE_MARKUP_BODY_MAX = 20_000;
+
 export function websiteSection(value: unknown, index: number): WebsiteSection | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
@@ -117,7 +142,8 @@ export function websiteSection(value: unknown, index: number): WebsiteSection | 
   const section: WebsiteSection = {
     id: text(record.id, 100) || `${kind}-${index + 1}`,
     kind,
-    eyebrow: text(record.eyebrow, 160), heading: text(record.heading, 240), body: text(record.body),
+    eyebrow: text(record.eyebrow, 160), heading: text(record.heading, 240),
+    body: text(record.body, kind === 'content' ? WEBSITE_MARKUP_BODY_MAX : 2_000),
     cta: text(record.cta, 120), secondaryCta: text(record.secondaryCta, 120),
     items: websiteItems(record.items), quote: text(record.quote, 1_000), author: text(record.author, 200),
   };

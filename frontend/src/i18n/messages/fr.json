@@ -15979,7 +15979,8 @@
       "scheduledEvery": "Execute toutes les {minutes} minutes",
       "messageCount": "{count} messages sur cet objet",
       "insertAfter": "Ajouter une etape apres {title}",
-      "openSettings": "Reglages de {title}"
+      "openSettings": "Reglages de {title}",
+      "websiteMarkupFrameTitle": "Contenu intégré"
     },
     "editor": {
       "toolbar": "Mise en forme",

@@ -24,12 +24,14 @@ import type { CreationNodeData } from './types';
 
 export {
   WEBSITE_ADDABLE_SECTION_KINDS,
+  WEBSITE_CONTENT_FRAME_SANDBOX,
   WEBSITE_MAX_PAGES,
   WEBSITE_MAX_SECTIONS,
   WEBSITE_SECTION_KINDS,
   WEBSITE_THEME_STYLES,
   activeWebsitePage,
   authoredWebsiteProblem,
+  isMarkupSectionBody,
   isWebsiteSectionKind,
   websiteHeroFrom,
   websitePagesFrom,

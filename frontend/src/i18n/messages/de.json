@@ -15979,7 +15979,8 @@
       "scheduledEvery": "Laeuft alle {minutes} Minuten",
       "messageCount": "{count} Meldungen an diesem Objekt",
       "insertAfter": "Einen Schritt nach {title} hinzufuegen",
-      "openSettings": "Einstellungen fuer {title}"
+      "openSettings": "Einstellungen fuer {title}",
+      "websiteMarkupFrameTitle": "Eingebetteter Inhalt"
     },
     "editor": {
       "toolbar": "Formatierung",

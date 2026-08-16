@@ -50,6 +50,34 @@ describe('landing page rendering', () => {
     expect(html).not.toContain('<script>');
   });
 
+  it('renders a content section carrying real markup in a sandboxed frame, not as escaped text', () => {
+    const markup: WebsitePage[] = [{
+      id: 'quote', name: 'Quote', path: '/quote', sections: [
+        { id: 'hero', kind: 'hero', heading: 'Get a quote', body: 'Fill it in', cta: 'Go' },
+        { id: 'form', kind: 'content', heading: 'Request a quote', body: '<form><input name="email"><script>track()</script></form>' },
+      ],
+    }];
+    const html = renderLandingPage({ pages: markup, theme, brand: 'Acme' })!;
+    // The raw markup never appears unescaped in the document body…
+    expect(html).not.toContain('<form><input name="email">');
+    // …it is entity-encoded into a sandboxed iframe's `srcdoc` attribute, which the
+    // browser decodes back to real markup only inside the isolated frame.
+    expect(html).toMatch(/<iframe class="content-frame"[^>]*sandbox="allow-scripts allow-forms"[^>]*srcdoc="[^"]*&lt;form&gt;/);
+    expect(html).not.toContain('allow-same-origin');
+  });
+
+  it('still escapes a content section with plain prose, not markup', () => {
+    const prose: WebsitePage[] = [{
+      id: 'about', name: 'About', path: '/about', sections: [
+        { id: 'hero', kind: 'hero', heading: 'About us', body: 'Hi', cta: 'Go' },
+        { id: 'about-body', kind: 'content', heading: 'Our story', body: 'We started in a garage.' },
+      ],
+    }];
+    const html = renderLandingPage({ pages: prose, theme, brand: 'Acme' })!;
+    expect(html).toContain('<p class="body">We started in a garage.</p>');
+    expect(html).not.toMatch(/<iframe class="content-frame"/);
+  });
+
   it('escapes the brand in the title as well as the body', () => {
     const html = renderLandingPage({ pages: [pages[0]!], theme, brand: '"><b>x' })!;
     expect(html).not.toContain('"><b>x');

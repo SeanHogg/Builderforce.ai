@@ -4,6 +4,7 @@ import {
   WEBSITE_MAX_SECTIONS,
   applyWebsiteEdit,
   authoredWebsiteProblem,
+  isMarkupSectionBody,
   patchWebsiteHero,
   websitePagesFrom,
   websiteSectionCapabilities,
@@ -34,6 +35,15 @@ describe('website WYSIWYG contract', () => {
   it('edits the rendered WYSIWYG hero through the simple inspector fields', () => {
     const patch = patchWebsiteHero(node(), { websiteHeadline: 'A sharper decision layer' });
     expect(websitePagesFrom({ pages: patch.pages })[0]?.sections[0]).toMatchObject({ heading: 'A sharper decision layer', body: 'Acme Analytics gives operators a clear view.' });
+  });
+
+  it('flags a content section as markup only when its body actually contains an HTML tag', () => {
+    expect(isMarkupSectionBody({ kind: 'content', body: '<form><input name="email"></form>' })).toBe(true);
+    expect(isMarkupSectionBody({ kind: 'content', body: 'Just prose about the company.' })).toBe(false);
+    expect(isMarkupSectionBody({ kind: 'content', body: undefined })).toBe(false);
+    // Other kinds never take the markup path, even with an HTML-shaped body — `hero`,
+    // `cta` etc. render through their own fixed layout, not a free-text frame.
+    expect(isMarkupSectionBody({ kind: 'hero', body: '<form></form>' })).toBe(false);
   });
 });
 
