@@ -235,16 +235,27 @@ describe('the board rail', () => {
    * same edge of a 360px screen, with nothing saying why the add button was not part of
    * the set. They are siblings in one container now, and the toggle is its first command.
    */
-  it('keeps the palette toggle and the view commands in one container', () => {
+  /**
+   * MOVING AROUND THE BOARD IS NOT ON THE RAIL ANY MORE.
+   *
+   * Zoom, fit and arrange moved into the one command bar, which is where "what can I do
+   * to this canvas" lives. The rail keeps only what the bar does not carry: the palette
+   * toggle, the phone's surface switcher and the panels. Two floating toolbars each
+   * holding half the view commands is the split this seam exists to prevent — so the
+   * assertion is that there is exactly ONE of each, and that it is in the bar.
+   */
+  it('gives the view commands to the command bar and leaves the rail its panels', () => {
     render(<CreationCanvas sessionId="board-rail-test" persistence="local" />);
 
-    const toggle = screen.getByRole('button', { name: 'Toggle object palette' });
-    const controls = screen.getByRole('group', { name: 'Canvas view controls' });
-    expect(toggle.parentElement).toBe(controls.parentElement);
-    // The create action leads: on the rail it is the first thing under the finger.
-    expect(toggle.compareDocumentPosition(controls) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // And there is still exactly one of it — a second copy for the phone would be two
-    // buttons for one decision, which is the thing this whole seam is against.
+    for (const name of ['Zoom in', 'Zoom out', 'Fit canvas to view', 'Arrange canvas objects']) {
+      const buttons = screen.getAllByRole('button', { name });
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0].closest('[data-testid="canvas-command-bar"]')).not.toBeNull();
+    }
+
+    // The palette toggle stays on the rail — it drops objects ONTO the board, which is a
+    // board gesture rather than a session command — and there is still exactly one of it.
     expect(screen.getAllByRole('button', { name: 'Toggle object palette' })).toHaveLength(1);
+    expect(screen.getByRole('group', { name: 'Canvas panels' })).toBeInTheDocument();
   });
 });

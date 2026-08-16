@@ -978,18 +978,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setPalettePreferencesReady(true);
   }, []);
   /**
-   * What the command bar's coloured circles do.
-   *
-   * They point INTO the palette rather than carrying a second catalogue beside it: the
-   * object registry is the only place that knows which kinds exist, and a hand-written
-   * bar menu would have gone stale the first time a kind was added to one and not the
-   * other. So a circle opens the palette and focuses its group — every other group folds
-   * away, which is a state the palette already has, persists and draws.
-   *
-   * The circle with no group opens the palette WHOLE, with nothing folded. That is what
-   * stops a six-item shortlist becoming the only way into a sixteen-group catalogue.
-   */
-  /**
    * Whether this board builds something the App surface could actually open.
    *
    * Asked of `canvasApp` rather than of `nodes.length`, because "there are objects on the
@@ -998,13 +986,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * plenty of objects and nothing to run.
    */
   const runnableApp = useMemo(() => canvasApp(nodes).entry !== null, [nodes]);
-  const openPaletteGroup = useCallback((group?: CreationObjectGroup) => {
-    setPaletteOpen(true);
-    setPaletteSearch('');
-    setCollapsedPaletteGroups(group
-      ? new Set(CREATION_PALETTE_GROUPS.map((entry) => entry.group).filter((entry) => entry !== group))
-      : new Set());
-  }, []);
 
   /**
    * THE ANCHORED PANEL AND THE PICKER — two overlays, one rule.
@@ -9693,9 +9674,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // contributing its own Run: two Run buttons that can disagree about whether
         // something is running is worse than none.
         onRun={surface === 'graph' && runnableApp ? () => setSurface('app') : undefined}
-        // The circles open the PICKER now — the same component a node's centre `+` opens,
-        // so "choose an object" is one interaction with one search and one contents,
-        // reached from two places. `openPaletteGroup` still backs the palette rail.
+        // The circles open the PICKER — the same component a node's centre `+` opens, so
+        // "choose an object" is ONE interaction with one search and one contents, reached
+        // from two places. It replaced a group-focus helper that drove the palette rail;
+        // keeping both would have been two answers to one question.
         onQuickAdd={(group, rect) => {
           setNodePanel(null);
           setObjectPicker({ anchor: { x: Math.min(Math.max(12, rect.left - 170), Math.max(12, window.innerWidth - 412)), y: Math.max(12, rect.top - 330) }, ...(group ? { group } : {}) });

@@ -77,20 +77,45 @@ describe('the floating command bar', () => {
     expect(CANVAS_QUICK_ADD.filter((entry) => !entry.group)).toHaveLength(1);
   });
 
-  it('opens the palette focused on the group its circle names', () => {
+  /**
+   * ONE picker, two doors. The circles and a node's centre `+` open the SAME component,
+   * which is what stops "choose an object" being two interactions with two searches and
+   * two ideas of what exists.
+   */
+  it('opens the shared picker on the group its circle names', () => {
     render(<CreationCanvas sessionId="command-bar-quick-add" persistence="local" />);
 
     fireEvent.click(screen.getByTestId('canvas-quick-add-agents'));
-    const palette = screen.getByTestId('canvas-palette');
+    const picker = screen.getByTestId('canvas-object-picker');
 
-    // Focused, not filtered: the other groups fold rather than vanish, so nothing is
-    // unreachable and the state is one the palette already persists and draws.
-    expect(within(palette).getByRole('button', { name: 'Collapse Agents section' })).toHaveAttribute('aria-expanded', 'true');
-    expect(within(palette).getAllByRole('button', { name: /^Expand .* section$/ }).length).toBeGreaterThan(0);
+    // Opened ON the group, and the rail offers every other one — so a six-circle
+    // shortlist is a shortcut into the catalogue and never the boundary of it.
+    expect(within(picker).getByRole('button', { name: 'Agents' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(picker).getByRole('button', { name: 'Everything' })).toHaveAttribute('aria-pressed', 'false');
+    expect(within(picker).getByTestId('canvas-picker-agent')).toBeInTheDocument();
+    // A kind from another group is NOT listed while a group is open...
+    expect(within(picker).queryByTestId('canvas-picker-website')).toBeNull();
 
-    // …and the last circle brings all of them back.
-    fireEvent.click(screen.getByTestId('canvas-quick-add-all'));
-    expect(within(screen.getByTestId('canvas-palette')).queryByRole('button', { name: /^Expand .* section$/ })).toBeNull();
+    // ...but searching ignores the open group on purpose. Somebody who opens Agents and
+    // types "website" wants the website, not an empty list.
+    fireEvent.change(within(picker).getByRole('textbox'), { target: { value: 'website' } });
+    expect(within(picker).getByTestId('canvas-picker-website')).toBeInTheDocument();
+  });
+
+  it('adds the object the picker was asked for', () => {
+    render(<CreationCanvas sessionId="command-bar-pick" persistence="local" />);
+
+    fireEvent.click(screen.getByTestId('canvas-quick-add-build'));
+    fireEvent.click(within(screen.getByTestId('canvas-object-picker')).getByTestId('canvas-picker-website'));
+
+    // `getAllBy`: React Flow renders a node and a measurement copy under jsdom, so the
+    // testid legitimately matches more than once for ONE object on the board.
+    const drawn = screen.getAllByTestId('canvas-node-website');
+    expect(drawn.length).toBeGreaterThan(0);
+    expect(new Set(drawn.map((node) => node.getAttribute('data-node-id'))).size).toBe(1);
+    // It closes behind itself — a picker that stays open over the thing it just made is
+    // a picker in the way.
+    expect(screen.queryByTestId('canvas-object-picker')).toBeNull();
   });
 
   /** The circles add OBJECTS, so they belong to a surface that HAS objects. Over a
