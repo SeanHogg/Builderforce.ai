@@ -19,13 +19,25 @@
  * Read from the same shared derivation the server gates on, so the promise on this
  * button and the gate behind it cannot disagree.
  *
+ * ── WHY IT RESOLVES A DELIVERY IT DOES NOT LET YOU CHOOSE ────────────────────────
+ * The harness follows the delivery: the same `website` is a captured document when
+ * you sell the BUILD and a live address when you sell ACCESS. This is a hint in an
+ * inspector, not the place that decides — the seller chooses in the release panel,
+ * against a staged candidate. So it resolves the delivery the SERVER would choose if
+ * they changed nothing (`resolveDelivery(kind, null)`) and names it, which makes the
+ * sentence true for the default path and says which default it is. Offering the
+ * choice here as well would be a third place holding one answer, and the third place
+ * is always the one that goes stale.
+ *
  * Deliberately buttons and not forms. The inspector already holds forty controls.
  */
 
 import { useTranslations } from 'next-intl';
 import {
+  deliveriesForKind,
   isPublishableObjectKind,
   listingKindsForObjectKind,
+  resolveDelivery,
   resolveListingHarness,
 } from '@builderforce/creation-canvas-contract';
 import styles from './CreationCanvas.module.css';
@@ -45,9 +57,17 @@ export function SellInMarketplace({
 }) {
   const t = useTranslations('creationCanvas.publish');
   const tr = useTranslations('creationCanvas.releases');
+  const ts = useTranslations('commerce.stage');
   if (!isPublishableObjectKind(kind)) return null;
   const first = listingKindsForObjectKind(kind)[0];
-  const harness = first ? resolveListingHarness(first.id, kind) : null;
+  // The delivery the server would pick if the seller changed nothing — one
+  // derivation, so this hint and the harness that actually runs agree.
+  const delivery = first ? resolveDelivery(first.id, null) : null;
+  const harness = first && delivery ? resolveListingHarness(first.id, kind, delivery) : null;
+  // Said out loud only when there is another door to choose. For the thirteen kinds
+  // that hand over the thing itself there is no decision, and naming it would be
+  // noise on every card on the board.
+  const choosable = first ? deliveriesForKind(first.id).length > 1 : false;
 
   return (
     <section
@@ -64,6 +84,11 @@ export function SellInMarketplace({
       <small className={styles.inspectorHint}>
         {harness ? tr('harnessLine', { harness: tr(`harness.${harness}`) }) : t('sellHint')}
       </small>
+      {choosable && delivery && (
+        <small className={styles.inspectorHint}>
+          {ts('deliveryDefaultHint', { delivery: ts(`delivery.${delivery}`) })}
+        </small>
+      )}
     </section>
   );
 }

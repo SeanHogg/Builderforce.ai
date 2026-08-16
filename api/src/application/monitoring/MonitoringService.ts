@@ -25,6 +25,7 @@ import { comparatorMatches } from '../alerts/runAlertSweep';
 import { evaluateMetric } from '../alerts/metricEvaluators';
 import { fireEventTriggers } from '../workflow/eventTriggers';
 import { BACKEND_HEALTH_MARKER } from '../backend/adapters/handlerEngineSource';
+import { httpCheck, type HttpCheckConfig } from './httpCheck';
 import type { EvaluateMetricArgs } from '../alerts/metricEvaluators';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -34,13 +35,16 @@ export type MonitorStatus = 'ok' | 'breached' | 'unknown';
 /** A single evaluation outcome; 'skip' = not sweep-evaluated (webhook/manual). */
 type EvalResult = 'ok' | 'breach' | 'unknown' | 'skip';
 
-interface MonitorConfig {
+/**
+ * What a monitor row's `config` may hold.
+ *
+ * The `http_check` half is `HttpCheckConfig` by EXTENSION rather than by repetition:
+ * a stored monitor is one of those plus a schedule, and restating `url` / `method` /
+ * `bodyMatch` here would be two declarations of one shape — the way a field comes to
+ * mean something slightly different on each side.
+ */
+interface MonitorConfig extends HttpCheckConfig {
   intervalSeconds?: number;   // heartbeat staleness window
-  url?: string;               // http_check target
-  expectedStatus?: number;    // http_check expected status (default: any 2xx)
-  method?: string;            // http_check request method (default GET)
-  headers?: Record<string, string>; // http_check request headers (e.g. an auth header)
-  bodyMatch?: string;         // http_check: substring the response body must contain to be healthy
   metric?: string;            // metric_threshold: an AlertMetric
   comparator?: string;        // gt|lt|gte|lte
   threshold?: number;
@@ -322,24 +326,12 @@ export class MonitoringService {
         const intervalMs = Math.max(30, cfg.intervalSeconds ?? 300) * 1000;
         return now.getTime() - new Date(monitor.lastSignalAt).getTime() > intervalMs ? 'breach' : 'ok';
       }
-      case 'http_check': {
-        if (!cfg.url) return 'unknown';
-        try {
-          const method = (cfg.method ?? 'GET').toUpperCase();
-          const headers = cfg.headers && Object.keys(cfg.headers).length ? cfg.headers : undefined;
-          const res = await fetch(cfg.url, { method, redirect: 'follow', ...(headers ? { headers } : {}) });
-          const okStatus = cfg.expectedStatus != null ? res.status === cfg.expectedStatus : res.ok;
-          if (!okStatus) return 'breach';
-          // Optional content assertion: the response body must contain a marker
-          // (e.g. a health endpoint that returns 200 but reports "degraded").
-          const wanted = cfg.bodyMatch?.trim();
-          if (wanted) {
-            const text = await res.text().catch(() => '');
-            return text.includes(wanted) ? 'ok' : 'breach';
-          }
-          return 'ok';
-        } catch { return 'breach'; }
-      }
+      // The rule itself lives in `httpCheck.ts`, so the Stage deployment harness can
+      // ask a URL one question WITHOUT a persisted monitor row — it has no row, and
+      // writing a sev2 one per stage press would page on-call for a seller's
+      // half-finished app. One definition of "is this URL healthy"; this case is the
+      // scheduling half of it.
+      case 'http_check': return httpCheck(cfg);
       case 'metric_threshold': {
         if (!cfg.metric || !cfg.comparator || cfg.threshold == null) return 'unknown';
         const { value } = await evaluateMetric(this.db, env, {

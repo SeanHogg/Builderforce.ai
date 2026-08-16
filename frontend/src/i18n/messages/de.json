@@ -20654,6 +20654,7 @@
         "copy": "Sie landet auf einem Board im Arbeitsbereich der Käufer und gehört ihnen. Du kommst nie wieder daran.",
         "hosted": "Du betreibst sie weiter; Käufer erhalten ein Konto und ein Abonnement. Deine Adresse wird vor dem Verkauf geprüft."
       },
+      "deliveryDefaultHint": "Standardmäßig: {delivery}. Beim Bereitstellen einer Version änderbar.",
       "hosted": {
         "grace": "Diese App antwortet nicht mehr. Der Verkäufer hat {days} Tage Zeit, sie zurückzuholen, bevor dein Abonnement pausiert.",
         "readOnly": "Diese App ist zu lange ausgefallen. Die Abrechnung wurde gestoppt und du kannst alles exportieren, was du eingegeben hast.",

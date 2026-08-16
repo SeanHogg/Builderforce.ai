@@ -37,7 +37,7 @@ import {
   resolveSiteForHost,
   type SiteRecord,
 } from './siteHosting';
-import { listOwnedSiteRecords, submitSiteRecord } from './siteData';
+import { exportOwnedSiteRecords, listOwnedSiteRecords, submitSiteRecord } from './siteData';
 import {
   SESSION_TTL_MS,
   requestSiteSignIn,
@@ -60,10 +60,11 @@ import {
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { ListingError } from '../marketplace/creationListings';
 import {
-  activeSiteSubscription,
   cancelSiteSubscription,
   completeSiteSubscription,
   startSiteSubscriptionCheckout,
+  subscriberStanding,
+  takeAbandonedBuild,
 } from '../marketplace/siteSubscriptions';
 import { SITE_LANDING_KEY } from './siteLandingPage';
 import { forkedDocumentHeaders, landingPageApplies, resolveSiteVisitor } from './siteVisitor';
@@ -403,8 +404,48 @@ async function handleSiteBilling(
   if (!identity) return jsonResponse({ error: 'Sign in first.' }, 401);
 
   if (action === 'me' && request.method === 'GET') {
-    const subscription = await activeSiteSubscription(db, site.tenantId, site.siteId, identity.userId);
-    return jsonResponse({ ok: true, subscription }, 200);
+    // Subscription AND the app's own lifecycle, from one call. "Am I subscribed" and
+    // "is the thing I subscribed to still running" have one answer between them, and
+    // answering only the first is what let a live subscription to a dead app look
+    // healthy. The flags the caller acts on are derived by the shared contract.
+    const standing = await subscriberStanding(db, env, {
+      tenantId: site.tenantId, siteId: site.siteId, siteUserId: identity.userId,
+    });
+    return jsonResponse({ ok: true, ...standing }, 200);
+  }
+
+  /**
+   * THE TWO REMEDIES A SUBSCRIBER IS OWED WHEN THE APP GOES DARK.
+   *
+   * Both are gated on the hosted lifecycle and nothing else — `subscriberMayExport`
+   * from the read-only window, `subscriberMayTake` once it is released. Deliberately
+   * not gated on a price, a status or a role: three more ways to give a working
+   * product away, and the lifecycle is the only one of the four that means what the
+   * buyer was promised.
+   */
+  if (action === 'export' && request.method === 'GET') {
+    const standing = await subscriberStanding(db, env, {
+      tenantId: site.tenantId, siteId: site.siteId, siteUserId: identity.userId,
+    });
+    if (!standing.hosted?.subscriberMayExport) {
+      return jsonResponse({ error: 'This app is running — use it to read your data.' }, 409);
+    }
+    const collections = await exportOwnedSiteRecords({
+      db, siteId: site.siteId, tenantId: site.tenantId, siteUserId: identity.userId,
+    });
+    return jsonResponse({ ok: true, collections }, 200);
+  }
+
+  if (action === 'take' && request.method === 'GET') {
+    try {
+      const build = await takeAbandonedBuild(db, env, {
+        tenantId: site.tenantId, siteId: site.siteId, siteUserId: identity.userId,
+      });
+      return jsonResponse({ ok: true, build }, 200);
+    } catch (error) {
+      const status = error instanceof ListingError ? error.status : 400;
+      return jsonResponse({ error: error instanceof Error ? error.message : 'Not available.' }, status);
+    }
   }
 
   if (action === 'subscribe' && request.method === 'POST') {
@@ -449,7 +490,7 @@ async function handleSiteBilling(
   }
 
   if (action === 'cancel' && request.method === 'POST') {
-    const result = await cancelSiteSubscription(db, site.tenantId, site.siteId, identity.userId);
+    const result = await cancelSiteSubscription(db, env, site.tenantId, site.siteId, identity.userId);
     return jsonResponse({ ok: result.ok }, result.ok ? 200 : 404);
   }
 

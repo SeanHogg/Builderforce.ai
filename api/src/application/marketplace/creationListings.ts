@@ -714,7 +714,7 @@ export async function publishCreationListing(
     trial: target.trial,
     delivery: target.delivery,
     strippedFields: payload.strippedFields ?? [],
-    probe: deploymentProbe(db, env),
+    probe: deploymentProbe(),
   });
   if (!isPublishable(checks)) {
     // 409 rather than 400: the request is well-formed and the seller is entitled to

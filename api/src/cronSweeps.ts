@@ -44,6 +44,7 @@ import { runAdInsightsSweep } from './application/advertising/adInsightsSync';
 import { runSocialCampaignSweep } from './application/social/socialCampaignService';
 import { runMailboxAutomationSweep } from './application/mailbox/mailboxAutomationService';
 import { runCustomDomainSweep } from './application/ide/customDomain';
+import { runHostedListingSweep } from './application/marketplace/creationListings.hostedSweep';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
 import { reconcileGithubActionsRuns } from './application/runtime/githubActionsReconcile';
 import { runExecutionLifecycleOutboxSweep } from './application/runtime/executionLifecycleOutbox';
@@ -378,6 +379,25 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       const r = await runCustomDomainSweep(env, buildDatabase(env));
       return r.activated > 0 ? `checked=${r.checked} activated=${r.activated}` : null;
+    },
+  },
+  {
+    key: 'hosted-listings',
+    // Daily, not frequent, and the cadence IS the promise: abandonment is defined in
+    // DAYS (14 of grace, 30 more of read-only), so asking every five minutes would
+    // buy nothing but outbound requests against other people's infrastructure. One
+    // observation a day is enough to place the first dark day correctly, which is the
+    // only precision any of the four states depends on.
+    cadence: 'daily',
+    description:
+      'Ask every published hosted listing’s address whether it is still serving, so a '
+      + 'subscriber’s grace → read-only → released clock starts when the app goes dark '
+      + 'rather than when somebody happens to look.',
+    run: async ({ env }) => {
+      const r = await runHostedListingSweep(buildDatabase(env), env);
+      // Quiet when everything is up, which is the normal day. A log line per healthy
+      // sweep is how the one that matters gets scrolled past.
+      return r.dark > 0 ? `probed=${r.probed} dark=${r.dark} suspended=${r.suspended}` : null;
     },
   },
   {

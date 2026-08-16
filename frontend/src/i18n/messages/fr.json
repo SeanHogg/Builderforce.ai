@@ -20654,6 +20654,7 @@
         "copy": "Elle arrive sur un tableau de son espace de travail et lui appartient. Vous ne pourrez plus y toucher.",
         "hosted": "Vous continuez à l’exécuter ; l’acheteur obtient un compte et un abonnement. Votre adresse est vérifiée avant la mise en vente."
       },
+      "deliveryDefaultHint": "Par défaut : {delivery}. Vous pouvez le modifier au moment de préparer une version.",
       "hosted": {
         "grace": "Cette application ne répond plus. Le vendeur dispose de {days} jours pour la rétablir avant la suspension de votre abonnement.",
         "readOnly": "Cette application est hors service depuis trop longtemps. La facturation est arrêtée et vous pouvez exporter tout ce que vous y avez saisi.",

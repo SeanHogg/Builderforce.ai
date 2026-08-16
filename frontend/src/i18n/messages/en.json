@@ -20654,6 +20654,7 @@
         "copy": "It lands on a board in their workspace and they own it. You can never reach it again.",
         "hosted": "You keep running it; they get an account and a subscription. Your address is checked before it goes on sale."
       },
+      "deliveryDefaultHint": "By default — {delivery}. You can change this when you stage a release.",
       "hosted": {
         "grace": "This app has stopped answering. The seller has {days} days to bring it back before your subscription pauses.",
         "readOnly": "This app has been down too long. Billing has stopped and you can export everything you put in.",

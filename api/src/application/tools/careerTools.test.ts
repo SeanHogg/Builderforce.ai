@@ -81,7 +81,11 @@ describe('career tools — the article contract', () => {
       const def = toDefinition(tool);
       expect(def.kind).toBe('analyzer');
       expect((def as { fields: unknown[] }).fields.length).toBeGreaterThan(0);
-      expect((def as Record<string, unknown>).analyze).toBeUndefined();
+      // Through `unknown`: the point of the assertion is that a key the TYPE does
+      // not have is also absent at RUN TIME, and a direct cast to an index signature
+      // no longer compiles now that `ToolDefinition` is a closed union — which would
+      // make the compiler's own guarantee the reason the runtime check disappeared.
+      expect((def as unknown as Record<string, unknown>).analyze).toBeUndefined();
     }
   });
 

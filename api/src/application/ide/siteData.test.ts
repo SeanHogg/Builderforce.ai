@@ -5,11 +5,12 @@ import {
   MAX_PAYLOAD_BYTES,
   MAX_VALUE_LENGTH,
   createCollection,
+  exportOwnedSiteRecords,
   normalizeCollectionName,
   sanitizeSubmission,
   submitSiteRecord,
 } from './siteData';
-import { fakeDb } from '../../../test/fakeDb';
+import { fakeDb, whereColumns } from '../../../test/fakeDb';
 import type { Db } from '../../infrastructure/database/connection';
 
 describe('normalizeCollectionName', () => {
@@ -194,5 +195,54 @@ describe('default collection', () => {
   it('is the zero-setup one publishing provisions', () => {
     expect(DEFAULT_COLLECTION).toBe('signups');
     expect(normalizeCollectionName(DEFAULT_COLLECTION)).toBe(DEFAULT_COLLECTION);
+  });
+});
+
+describe('exportOwnedSiteRecords', () => {
+  const args = { siteId: 1, tenantId: 7, siteUserId: 99 };
+
+  it('returns everything this person put in, grouped by collection', async () => {
+    const db = fakeDb([[
+      { collection: 'signups', id: 3, payload: { name: 'Sam' }, createdAt: '2026-08-01T00:00:00Z' },
+      { collection: 'orders', id: 2, payload: { total: 9 }, createdAt: '2026-07-01T00:00:00Z' },
+      { collection: 'signups', id: 1, payload: null, createdAt: '2026-06-01T00:00:00Z' },
+    ]]);
+    const result = await exportOwnedSiteRecords({ ...args, db: db as unknown as Db });
+    expect(result).toEqual([
+      { collection: 'signups', records: [
+        { id: 3, payload: { name: 'Sam' }, createdAt: '2026-08-01T00:00:00.000Z' },
+        { id: 1, payload: {}, createdAt: '2026-06-01T00:00:00.000Z' },
+      ] },
+      { collection: 'orders', records: [
+        { id: 2, payload: { total: 9 }, createdAt: '2026-07-01T00:00:00.000Z' },
+      ] },
+    ]);
+  });
+
+  it('is ONE query across every collection — an app with forty forms is not forty round-trips', async () => {
+    // This runs while somebody waits for a download, on a path reached only after
+    // the seller has already stopped answering.
+    const db = fakeDb([[]]);
+    await exportOwnedSiteRecords({ ...args, db: db as unknown as Db });
+    expect(db.calls).toHaveLength(1);
+    expect(db.calls[0]?.chain).toContain('innerJoin');
+  });
+
+  it('is scoped to the tenant, the site AND the person — never a table dump', async () => {
+    const db = fakeDb([[]]);
+    await exportOwnedSiteRecords({ ...args, db: db as unknown as Db });
+    const columns = whereColumns(db.calls[0]?.where);
+    expect(columns).toEqual(expect.arrayContaining(['tenant_id', 'site_id', 'site_user_id']));
+  });
+
+  it('is bounded — an export is a courtesy, not a replication channel', async () => {
+    const db = fakeDb([[]]);
+    await exportOwnedSiteRecords({ ...args, db: db as unknown as Db });
+    expect(db.calls[0]?.chain).toContain('limit');
+  });
+
+  it('returns an empty list, not a fabricated collection, when there is nothing', async () => {
+    const db = fakeDb([[]]);
+    await expect(exportOwnedSiteRecords({ ...args, db: db as unknown as Db })).resolves.toEqual([]);
   });
 });

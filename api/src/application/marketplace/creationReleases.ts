@@ -357,7 +357,7 @@ export async function stageRelease(db: Db, env: Env, input: PublishInput): Promi
   });
   const staged = rail.releases.find((release) => release.snapshotId === snapshot.id);
 
-  return stagedView(db, env, payload, {
+  return stagedView(payload, {
     snapshotId: snapshot.id,
     version: staged?.version ?? '1.0.0',
     listingKind: target.spec.id,
@@ -380,17 +380,6 @@ export async function stageRelease(db: Db, env: Env, input: PublishInput): Promi
 export async function checksForStagedRelease(
   db: Db,
   query: ReleaseQuery & { snapshotId: string },
-  /**
-   * Present when the caller can reach the network.
-   *
-   * Optional, and only here: this is a RE-READ of findings, while the two paths that
-   * actually decide anything — `stageRelease` and `publishCreationListing` — both hold
-   * an `Env` and both always probe. Absent, the deployment harness says it could not
-   * re-check rather than inventing a verdict, which is a `warn` and never a gate.
-   * (The route that supplies it is another lane's file this wave; the one-line change
-   * is queued for the integration step.)
-   */
-  env?: Env,
 ): Promise<StagedRelease> {
   const listing = await listingForSource(db, query.tenantId, query.sessionId, query.objectId);
   if (!listing) throw new ListingError('Nothing has been staged for this yet', 404);
@@ -411,7 +400,7 @@ export async function checksForStagedRelease(
   const rail = await listReleases(db, query);
   const release = rail.releases.find((entry) => entry.snapshotId === query.snapshotId);
 
-  return stagedView(db, env ?? null, payload, {
+  return stagedView(payload, {
     snapshotId: query.snapshotId,
     version: release?.version ?? listing.version,
     listingKind: listing.kind,
@@ -433,8 +422,6 @@ export async function checksForStagedRelease(
  * that a staged release carries a rendered preview as well as findings.
  */
 async function stagedView(
-  db: Db,
-  env: Env | null,
   payload: ListingSnapshotPayload,
   meta: {
     snapshotId: string;
@@ -455,7 +442,10 @@ async function stagedView(
     trial: meta.trial,
     delivery: meta.delivery,
     strippedFields: payload.strippedFields ?? [],
-    probe: env ? deploymentProbe(db, env) : null,
+    // Always. The probe needs nothing but a URL now that `httpCheck` is a primitive
+    // rather than a method on a service that wanted an `Env` — which is why
+    // re-opening Stage re-asks the address instead of redisplaying a stale verdict.
+    probe: deploymentProbe(),
   });
 
   return {

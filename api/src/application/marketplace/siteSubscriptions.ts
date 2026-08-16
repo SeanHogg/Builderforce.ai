@@ -32,7 +32,7 @@
  * pastes its id.
  */
 
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import {
@@ -46,14 +46,31 @@ import {
 import { buildPaymentProvider } from '../../infrastructure/payment';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { registerObject } from '../kernel/ObjectRegistry';
-import { ListingError, invalidateListingCaches, recordInstall } from './creationListings';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
+import {
+  ListingError,
+  invalidateListingCaches,
+  publishedSnapshot,
+  recordInstall,
+} from './creationListings';
+import { hostedListingStatus, type HostedListingStatus } from './creationListings.hosted';
 import { resolveTakeRateBps } from './listingCommerce';
 
 const USD_CENTS = 'usd_cents';
 
-/** The states a subscription can hold. `cancelled` rows are KEPT — they are the
- *  record that somebody used to pay. */
-export const SUBSCRIPTION_STATUSES = ['active', 'past_due', 'cancelled'] as const;
+/**
+ * The states a subscription can hold. `cancelled` rows are KEPT — they are the
+ * record that somebody used to pay.
+ *
+ * `suspended` is the one that is not about the SUBSCRIBER at all: the app they pay
+ * for stopped answering and its hosted lifecycle left the billable window, so the
+ * recurring charge is cancelled at the processor while their access to what they
+ * already have continues. Cancelling them outright would be the platform punishing a
+ * customer for a seller's silence; leaving them `active` would be charging them for
+ * nothing. It is a column VALUE rather than a second table, because it is one more
+ * state of one relationship.
+ */
+export const SUBSCRIPTION_STATUSES = ['active', 'past_due', 'suspended', 'cancelled'] as const;
 export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
 
 /** The metadata key that says a checkout session is one of ours. */
@@ -129,6 +146,25 @@ export async function siteSubscriptionState(
     .limit(1);
   if (!row) return { state: 'none', subscription: null };
   if (row.cancelledAt || row.status === 'cancelled') return { state: 'lapsed', subscription: null };
+  // A SUSPENDED row is still access. The charge stopped because the seller's app
+  // went dark, and taking the subscriber's access away as well would punish them
+  // twice for something neither they nor we did — they keep what they hold, which is
+  // exactly what the hosted lifecycle promised them. Checked BEFORE the period test,
+  // because a suspended subscription is deliberately not renewed and its period end
+  // will pass.
+  if (row.status === 'suspended') {
+    return {
+      state: 'live',
+      subscription: {
+        id: row.id,
+        status: 'suspended',
+        priceCents: row.priceCents,
+        currency: row.currency,
+        snapshotId: row.snapshotId,
+        currentPeriodEndISO: row.currentPeriodEnd?.toISOString() ?? null,
+      },
+    };
+  }
   // A lapsed period is not access. The renewal webhook moves `current_period_end`
   // forward; until it does, an expired row is refused here rather than being
   // trusted because its status still reads 'active'.
@@ -421,6 +457,7 @@ export async function completeSiteSubscription(
  */
 export async function cancelSiteSubscription(
   db: Db,
+  env: Env,
   tenantId: number,
   siteId: number,
   siteUserId: number,
@@ -434,8 +471,205 @@ export async function cancelSiteSubscription(
       eq(siteSubscriptions.siteId, siteId),
       eq(siteSubscriptions.siteUserId, siteUserId),
     ))
-    .returning({ id: siteSubscriptions.id });
-  return { ok: Boolean(row) };
+    .returning({ id: siteSubscriptions.id, providerRef: siteSubscriptions.providerRef });
+  if (!row) return { ok: false };
+  // AND AT THE PROCESSOR. Marking the row alone ended their access and left the
+  // recurring charge running — a consumer pressing Cancel would have stopped
+  // receiving the thing and kept paying for it every month, which is the worst
+  // possible reading of the button. Best-effort and last, so a processor outage
+  // cannot leave a customer who asked to stop still holding access.
+  await stopRecurringCharge(env, row.providerRef, { tenantId, siteId, siteUserId });
+  return { ok: true };
+}
+
+/**
+ * End the recurring charge at the processor. Never throws.
+ *
+ * Shared by the two paths that stop money — a subscriber cancelling and the platform
+ * suspending an abandoned app — because "stop charging this person" is one action and
+ * two copies of it is how one of them keeps billing.
+ */
+async function stopRecurringCharge(
+  env: Env,
+  providerRef: string | null,
+  context: Record<string, unknown>,
+): Promise<void> {
+  if (!providerRef || !env.STRIPE_SECRET_KEY) return;
+  try {
+    await buildPaymentProvider(env).cancelSubscription(providerRef);
+  } catch (cause) {
+    // Reported, never rethrown: the local record is already correct and a customer
+    // must not be told their cancellation failed because a vendor was slow. A charge
+    // that keeps running is a real problem, which is exactly why it is reported
+    // rather than swallowed.
+    reportCaughtError(cause, {
+      source: 'marketplace',
+      operation: 'stopRecurringCharge',
+      context: { ...context, providerRef },
+    });
+  }
+}
+
+/**
+ * STOP CHARGING EVERY SUBSCRIBER OF AN APP THAT HAS GONE DARK.
+ *
+ * ── WHY THIS IS THE PLATFORM'S JOB AND NOT THE SELLER'S ──────────────────────────
+ * `resolveHostedLifecycle` says a hosted listing outside its grace window is not
+ * `billable`. That is a promise made to a buyer BEFORE they subscribed, and the only
+ * party in a position to keep it is the platform: the seller is, by definition, the
+ * one who has stopped answering. A rule that only takes effect if the person it is
+ * enforced against chooses to enforce it is not a rule.
+ *
+ * Access is left ALONE. The subscription becomes `suspended`, which
+ * `siteSubscriptionState` still reads as live — they keep what they already hold, and
+ * on `released` they may take the build. Cancelling them would be the platform
+ * punishing a customer for a seller's silence.
+ *
+ * Idempotent by the `status = 'active'` predicate: a sweep that runs every day on a
+ * listing that has been dark for a month suspends nobody after the first pass, and
+ * therefore asks the processor nothing.
+ */
+export async function suspendSubscriptionsForListing(
+  db: Db,
+  env: Env,
+  tenantId: number,
+  listingId: string,
+): Promise<{ suspended: number }> {
+  const rows = await db
+    .update(siteSubscriptions)
+    .set({ status: 'suspended', updatedAt: new Date() })
+    // Scoped to the SELLER's tenant, which is where both the listing and every
+    // subscription to it live. The listing id alone would be enough today because it
+    // is globally unique — and that is exactly the kind of reasoning that turns into
+    // a cross-tenant write the day an id becomes a slug.
+    .where(scopedToTenant(
+      siteSubscriptions,
+      tenantId,
+      eq(siteSubscriptions.catalogItemId, listingId),
+      eq(siteSubscriptions.status, 'active'),
+    ))
+    .returning({ id: siteSubscriptions.id, providerRef: siteSubscriptions.providerRef });
+
+  // Sequential rather than a fan-out: this is a vendor API being asked to cancel
+  // real subscriptions, and firing four thousand of them at once is how a rate limit
+  // turns "we stopped charging them" into "we stopped charging some of them".
+  for (const row of rows) {
+    await stopRecurringCharge(env, row.providerRef, { listingId, subscriptionId: row.id });
+  }
+  return { suspended: rows.length };
+}
+
+/**
+ * WHERE A SUBSCRIBER STANDS — their subscription AND the app's own lifecycle.
+ *
+ * ── WHY BOTH FACTS COME BACK FROM ONE CALL ───────────────────────────────────────
+ * "Am I subscribed" and "is the thing I subscribed to still running" are two
+ * questions with one answer between them, and a surface that asked them separately
+ * would show a live subscription to a dead app — which is precisely the state the
+ * hosted lifecycle exists to make visible. The flags a caller acts on
+ * (`billable`, `subscriberMayExport`, `subscriberMayTake`) are DERIVED by the shared
+ * contract, never restated here, so what the buyer's page says and what the platform
+ * does are one rule.
+ *
+ * A free app has no subscription and no hosted lifecycle to report; a `copy` listing
+ * never reaches this path at all. `hosted` is null in both cases rather than a
+ * fabricated `operating`, so a caller can tell "fine" from "not applicable".
+ */
+export interface SubscriberStanding {
+  subscription: SiteSubscriptionView | null;
+  hosted: HostedListingStatus | null;
+}
+
+export async function subscriberStanding(
+  db: Db,
+  env: Env,
+  input: { tenantId: number; siteId: number; siteUserId: number },
+): Promise<SubscriberStanding> {
+  const { standing } = await standingWithListing(db, env, input);
+  return standing;
+}
+
+/**
+ * The standing AND the listing it came from, in ONE pass.
+ *
+ * The remedy path needs both, and reading the subscriber's row a second time to
+ * recover the listing id would be a redundant round-trip on a path where somebody is
+ * waiting for a download. The listing id stays out of `SubscriberStanding` itself
+ * because that shape is serialised to the site user and an internal join key is not
+ * theirs to receive.
+ */
+async function standingWithListing(
+  db: Db,
+  env: Env,
+  input: { tenantId: number; siteId: number; siteUserId: number },
+): Promise<{ standing: SubscriberStanding; listingId: string | null }> {
+  const [row] = await db
+    .select({
+      catalogItemId: siteSubscriptions.catalogItemId,
+    })
+    .from(siteSubscriptions)
+    .where(scopedToTenant(
+      siteSubscriptions,
+      input.tenantId,
+      eq(siteSubscriptions.siteId, input.siteId),
+      eq(siteSubscriptions.siteUserId, input.siteUserId),
+    ))
+    .limit(1);
+  const listingId = row?.catalogItemId ?? null;
+  const { subscription } = await siteSubscriptionState(
+    db, input.tenantId, input.siteId, input.siteUserId,
+  );
+  return {
+    standing: {
+      subscription,
+      hosted: listingId ? await hostedListingStatus(db, env, listingId) : null,
+    },
+    listingId,
+  };
+}
+
+/**
+ * THE BUILD, HANDED TO A SUBSCRIBER OF AN ABANDONED APP.
+ *
+ * ── WHAT "TAKE IT" MEANS FOR SOMEBODY WITH NO WORKSPACE ──────────────────────────
+ * A `copy` buyer receives the published snapshot onto a board in their own workspace.
+ * A subscriber has no workspace — that is the whole point of a `site_user`, and the
+ * reason a hosted purchase needs no second signup. So what they receive is the same
+ * PAYLOAD, as a document they hold: the identical immutable snapshot, which they can
+ * install the day they do create an account, and which is theirs regardless.
+ *
+ * Pinned to the version THEY hold, not the seller's latest — the same rule that
+ * governs every other read of a bought thing. A subscriber offered an update they
+ * never accepted must not be handed it by the remedy.
+ *
+ * The gate is the lifecycle and nothing else: `subscriberMayTake` is true only in
+ * `released`, which is 44 days of a dark address. It is deliberately NOT a price
+ * check, a status check or a role check — three ways to accidentally give a working
+ * product away.
+ */
+export async function takeAbandonedBuild(
+  db: Db,
+  env: Env,
+  input: { tenantId: number; siteId: number; siteUserId: number },
+): Promise<{ title: string; objects: unknown[] }> {
+  const { standing, listingId } = await standingWithListing(db, env, input);
+  if (!standing.subscription) throw new ListingError('You are not subscribed to this app', 403);
+  if (!standing.hosted?.subscriberMayTake) {
+    throw new ListingError('This app is still running — there is nothing to take', 409);
+  }
+
+  const [listing] = listingId
+    ? await db
+        .select({ body: catalogItems.body, name: catalogItems.name })
+        .from(catalogItems)
+        .where(acrossTenants(catalogItems, 'public_catalogue', eq(catalogItems.id, listingId)))
+        .limit(1)
+    : [];
+  const body = (listing?.body ?? null) as { snapshotId?: string } | null;
+  const snapshotId = standing.subscription.snapshotId || body?.snapshotId;
+  const payload = snapshotId ? await publishedSnapshot(db, env, snapshotId) : null;
+  if (!payload) throw new ListingError('That version is no longer available', 404);
+  return { title: payload.title || listing?.name || 'App', objects: payload.objects };
 }
 
 /**

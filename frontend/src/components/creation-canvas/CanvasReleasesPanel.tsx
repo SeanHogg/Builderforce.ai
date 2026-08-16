@@ -373,7 +373,7 @@ export function CanvasReleasesPanel({
  * It sits ABOVE the harness line because it is what selects the harness: sell the
  * build and the captured document is checked; sell access and the live address is.
  */
-export function DeliveryChoice({
+function DeliveryChoice({
   kindId,
   chosen,
   busy,

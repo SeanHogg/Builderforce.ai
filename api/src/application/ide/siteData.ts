@@ -557,6 +557,78 @@ export async function listOwnedSiteRecords(args: {
   };
 }
 
+/**
+ * EVERYTHING THIS PERSON PUT INTO THIS APP — the abandonment remedy.
+ *
+ * ── WHY IT IGNORES `readPolicy`, WHICH NOTHING ELSE MAY DO ───────────────────────
+ * `listOwnedSiteRecords` above refuses a collection whose owner has not opted into
+ * owner-scoped reads, and that is right: normally the person who built the app
+ * decides what its users may read back, and a platform that overrode them would be
+ * handing out data on somebody else's behalf.
+ *
+ * That reasoning has one exception and this is it. When a hosted listing reaches
+ * `released` — the seller stopped operating it, the grace window passed and the
+ * read-only window passed too — there is no longer an owner exercising a policy;
+ * there is a subscriber who paid for a service that no longer exists and whose data
+ * is sitting inside it. The hosted lifecycle promises them an export, and a promise
+ * that any collection's default setting can silently void is not a promise.
+ *
+ * So: NOT a general endpoint, and deliberately not reachable through the normal data
+ * routes. The single caller is the subscriber-remedy path, which reaches it only
+ * after `resolveHostedLifecycle` says `subscriberMayExport`. Rows belonging to nobody
+ * (`site_user_id IS NULL` — an anonymous form post) are never included, because they
+ * are not this person's to take.
+ *
+ * ONE query across every collection, not one per collection: an app with forty forms
+ * is forty round-trips otherwise, and this runs while somebody waits for a download.
+ */
+export interface ExportedCollection {
+  collection: string;
+  records: OwnedRecordView[];
+}
+
+/** Bounded: an export is a courtesy, not a replication channel, and an unbounded
+ *  read here is a way to make the worker fetch a table. */
+const EXPORT_ROW_CAP = 5_000;
+
+export async function exportOwnedSiteRecords(args: {
+  db: Db;
+  siteId: number;
+  tenantId: number;
+  siteUserId: number;
+}): Promise<ExportedCollection[]> {
+  const { db, siteId, tenantId, siteUserId } = args;
+  const rows = await db
+    .select({
+      collection: siteCollections.name,
+      id: siteRecords.id,
+      payload: siteRecords.payload,
+      createdAt: siteRecords.createdAt,
+    })
+    .from(siteRecords)
+    .innerJoin(siteCollections, eq(siteCollections.id, siteRecords.collectionId))
+    .where(scopedToTenant(
+      siteRecords,
+      tenantId,
+      eq(siteCollections.siteId, siteId),
+      eq(siteRecords.siteUserId, siteUserId),
+    ))
+    .orderBy(desc(siteRecords.createdAt))
+    .limit(EXPORT_ROW_CAP);
+
+  const byCollection = new Map<string, OwnedRecordView[]>();
+  for (const row of rows) {
+    const list = byCollection.get(row.collection) ?? [];
+    list.push({
+      id: Number(row.id),
+      payload: (row.payload ?? {}) as Record<string, unknown>,
+      createdAt: new Date(row.createdAt).toISOString(),
+    });
+    byCollection.set(row.collection, list);
+  }
+  return [...byCollection.entries()].map(([collection, records]) => ({ collection, records }));
+}
+
 /** Set a collection's read policy. Owner-side; the tenant decides, never the app. */
 export async function setCollectionReadPolicy(
   db: Db,

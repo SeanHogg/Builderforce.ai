@@ -26,7 +26,8 @@ import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { deploymentProbe } from './stageChecks.probe';
 import { liveUrl, type StageObject } from './stageChecks';
 import { publishedSnapshot, type ListingBody } from './creationListings';
-import { recordHostedProbe } from './creationListings.hosted';
+import { hostedListingStatus, recordHostedProbe } from './creationListings.hosted';
+import { suspendSubscriptionsForListing } from './siteSubscriptions';
 
 /**
  * Bounded on purpose, and ordered by staleness.
@@ -49,7 +50,7 @@ const SWEEP_LIMIT = 200;
 export async function runHostedListingSweep(
   db: Db,
   env: Env,
-): Promise<{ probed: number; dark: number }> {
+): Promise<{ probed: number; dark: number; suspended: number }> {
   const rows = await db
     .select({ id: catalogItems.id, tenantId: catalogItems.tenantId, body: catalogItems.body })
     .from(catalogItems)
@@ -63,8 +64,9 @@ export async function runHostedListingSweep(
     .orderBy(sql`${catalogItems.updatedAt} asc`)
     .limit(SWEEP_LIMIT);
 
-  const probe = deploymentProbe(db, env);
+  const probe = deploymentProbe();
   let dark = 0;
+  let suspended = 0;
   for (const row of rows) {
     const body = row.body as ListingBody | null;
     // A catalogue row with no tenant is a platform preset, not somebody's product —
@@ -80,6 +82,21 @@ export async function runHostedListingSweep(
     const ok = result.root === 'ok' && result.health !== 'breach';
     if (!ok) dark += 1;
     await recordHostedProbe(db, env, { tenantId: row.tenantId, listingId: row.id, url, ok });
+    if (ok) continue;
+
+    // THE PROMISE, KEPT. `resolveHostedLifecycle` says a listing outside its grace
+    // window is not billable, and the only party able to act on that is the platform
+    // — the seller is by definition the one who has stopped answering. Read AFTER
+    // the write above, so the state reflects the observation just recorded.
+    //
+    // Idempotent twice over: the status re-read is cache-invalidated by the write,
+    // and `suspendSubscriptionsForListing` only touches rows that are still `active`,
+    // so a listing dark for a month asks the processor nothing after the first pass.
+    const status = await hostedListingStatus(db, env, row.id);
+    if (!status.billable) {
+      const { suspended: count } = await suspendSubscriptionsForListing(db, env, row.tenantId, row.id);
+      suspended += count;
+    }
   }
-  return { probed: rows.length, dark };
+  return { probed: rows.length, dark, suspended };
 }

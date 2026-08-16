@@ -20654,6 +20654,7 @@
         "copy": "Aterriza en un tablero de su espacio de trabajo y pasa a ser suya. Tú ya no podrás tocarla.",
         "hosted": "Tú la sigues ejecutando; quien compra obtiene una cuenta y una suscripción. Comprobamos tu dirección antes de ponerla a la venta."
       },
+      "deliveryDefaultHint": "Por defecto: {delivery}. Puedes cambiarlo al preparar una versión.",
       "hosted": {
         "grace": "Esta aplicación ha dejado de responder. Quien la vende tiene {days} días para restablecerla antes de que se pause tu suscripción.",
         "readOnly": "Esta aplicación lleva demasiado tiempo caída. Se ha detenido el cobro y puedes exportar todo lo que hayas introducido.",
