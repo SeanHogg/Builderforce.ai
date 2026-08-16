@@ -19190,7 +19190,8 @@
       "agents": "Agents",
       "people": "People",
       "all": "All objects"
-    }
+    },
+    "runCanvasLabel": "Run this canvas"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

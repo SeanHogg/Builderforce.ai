@@ -19190,7 +19190,8 @@
       "agents": "Agenten",
       "people": "Personen",
       "all": "Alle Objekte"
-    }
+    },
+    "runCanvasLabel": "Dieses Canvas ausführen"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

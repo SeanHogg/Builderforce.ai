@@ -19190,7 +19190,8 @@
       "agents": "Agents",
       "people": "Personnes",
       "all": "Tous les objets"
-    }
+    },
+    "runCanvasLabel": "Exécuter ce canevas"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

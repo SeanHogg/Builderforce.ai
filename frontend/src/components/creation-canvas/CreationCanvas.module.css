@@ -252,14 +252,7 @@
 .quickAdd button:focus-visible { box-shadow:0 0 0 2px var(--canvas-panel), 0 0 0 4px var(--canvas-accent); }
 @media (prefers-reduced-motion: reduce) { .quickAdd button { transition:none; } }
 
-.titleBlock, .sessionActions, .collaborators { display:flex; align-items:center; }
-.titleBlock { gap:9px; min-width:0; }
-.spark { color:#7257ec; font-size:18px; }
-.titleBlock input {
-  width:min(270px, 34vw); border:1px solid transparent; border-radius:var(--radius-md); padding:7px 9px;
-  background:transparent; color:var(--canvas-ink); font-family:inherit; font-size:14px; font-weight:650;
-}
-.titleBlock input:hover, .titleBlock input:focus { border-color:var(--canvas-line); background:var(--canvas-panel); outline:none; }
+.sessionActions, .collaborators { display:flex; align-items:center; }
 /* `white-space:nowrap` with nowhere to overflow to meant this was HARD CLIPPED by the
    bar rather than shortened — "Saved on this device" reading "Saved or" mid-word, which
    looks like a rendering fault rather than a squeeze. The row has since grown (a fourth
@@ -1436,7 +1429,7 @@
 .stickyInput:focus-visible { outline:2px solid var(--canvas-accent); outline-offset:3px; }
 .frameBody { min-height:220px; display:grid; align-content:start; gap:5px; padding:4px; color:#5d527d; }
 .canvasToolActive { border-color:#5b5ce2!important; background:#eeebff!important; color:#503cc9!important; }
-.templateMenu { position:absolute; z-index:18; right:190px; top:42px; width:330px; max-height:70vh; overflow:auto; padding:12px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:#fff; box-shadow:0 18px 55px rgba(60,48,36,.18); }
+.templateMenu { position:absolute; z-index:18; right:0; top:42px; width:330px; max-height:70vh; overflow:auto; padding:12px; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:#fff; box-shadow:0 18px 55px rgba(60,48,36,.18); }
 .templateMenu header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }.templateMenu header button { border:0;background:transparent;font-size:18px;cursor:pointer; }
 .templateMenu > button { display:grid; width:100%; gap:3px; margin:6px 0; padding:10px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:#fbfdff; color:var(--canvas-ink); text-align:left; cursor:pointer; }.templateMenu > button small { color:var(--canvas-muted); }
 .templateMenu > button i { color:var(--canvas-accent); font-size:8px; font-style:normal; }
@@ -1563,7 +1556,7 @@
    It shifts by exactly the width a docked Brain reserved, so it stays centred on
    whatever board is left — and it never moves when Brain floats, docks, or closes.
    The 300px reserve keeps it clear of the zoom rail and the minimap. */
-.composerDock { position:absolute; z-index:16; right:calc(300px + var(--brain-dock-right, 0px)); bottom:16px; left:calc(300px + var(--brain-dock-left, 0px)); box-sizing:border-box; width:auto; max-width:700px; margin-inline:auto; display:flex; flex-direction:column; align-items:center; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); }
+.composerDock { position:absolute; z-index:16; right:calc(300px + var(--brain-dock-right, 0px)); bottom:var(--canvas-command-bar-space, 66px); left:calc(300px + var(--brain-dock-left, 0px)); box-sizing:border-box; width:auto; max-width:700px; margin-inline:auto; display:flex; flex-direction:column; align-items:center; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); }
 .promptComposerShell { position:relative; width:100%; }
 .promptResizeHandle { position:absolute; z-index:2; top:-7px; left:50%; width:42px; height:17px; display:grid; place-items:center; padding:0; transform:translateX(-50%); touch-action:none; user-select:none; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); background:var(--canvas-brain-surface); color:var(--canvas-muted); box-shadow:0 2px 6px var(--canvas-shadow); font:700 13px/1 var(--font-sans); cursor:ns-resize; }
 .promptResizeHandle:hover,.promptResizeHandle:focus-visible { border-color:var(--canvas-brain-accent); color:var(--canvas-brain-accent); outline:none; }
@@ -2045,6 +2038,13 @@
    `flex:none` matters — the title input beside it is `flex:1` on narrow desktops and
    would otherwise squeeze the labels out one character at a time. */
 .surfaceTabs { display:flex; flex:none; align-items:center; gap:2px; padding:3px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
+/* How much room the floating command bar takes at the bottom of the canvas. The prompt
+   dock, the minimap and anything else that used to sit at `bottom:16px` reads THIS rather
+   than each carrying its own guess — the bar's height changes when it folds, and three
+   independent guesses is how a composer ends up printed through a toolbar. */
+.canvasShell { --canvas-command-bar-space:66px; }
+.canvasShell:has(.commandBar[data-collapsed='true']) { --canvas-command-bar-space:58px; }
+
 /* Inside the floating chip card the trough IS the card — a second border and a second
    fill one pixel apart is the "bar inside a bar" the redesign removed everywhere else. */
 .surfaceChips .surfaceTabs { padding:0; border:0; background:transparent; }
@@ -2175,7 +2175,20 @@
   .sessionActionCluster:not(:has([data-phone='bar'])),
   .sessionActionSolo:not(:has([data-phone='bar'])) { display:none; }
   .moreMenuPhoneOnly { display:grid; grid-column:1 / -1; gap:2px; }
-  .sessionBar { height:50px; gap:7px; padding:0 8px; }.sessionActions { flex:none; gap:2px; }.titleBlock { flex:1; gap:3px; min-width:0; }.titleBlock input { width:100%; min-width:0; padding-inline:5px; font-size:13px; }.spark,.collaborators { display:none; }
+  /* PHONE CHROME. Everything floats, so a narrow screen tightens the cards rather than
+     dropping what is in them. The roster in particular STAYS — it is the slot the whole
+     collapse rule exists to protect, and a 360px screen is exactly where "who else is
+     editing this" is hardest to work out from the board itself. The bar scrolls
+     sideways instead, which loses placement and never loses a control. */
+  .sessionPill { left:8px; top:8px; right:auto; max-width:calc(100% - 16px); gap:4px; padding:4px 7px 4px 6px; }
+  .sessionPill input { width:min(150px, 40vw); font-size:12px; }
+  .sessionPill .spark { display:none; }
+  .surfaceChips { top:54px; padding:3px; }
+  .topRightCard { top:8px; right:8px; gap:3px; padding:4px; }
+  .commandBar { left:8px; right:8px; bottom:8px; transform:none; max-width:none; gap:4px; padding:5px; overflow-x:auto; scrollbar-width:none; }
+  .commandBar::-webkit-scrollbar { display:none; }
+  .commandBar > * { flex:none; }
+  .sessionActions { flex:none; gap:2px; }
   /* The VS Code webview is routinely narrower than this breakpoint, and its capture
      actions are the whole reason the canvas is in an editor. They stay, and scroll
      sideways rather than pushing the title off the bar. */
@@ -2552,9 +2565,12 @@
   --canvas-frame-border:#6f5fc0;
   --canvas-edge:#5a6b83;
 }
-:global(html:not([data-theme='light'])) .sessionBar {
-  background:color-mix(in srgb,var(--canvas-panel) 94%,#172b48);
-  box-shadow:0 7px 22px rgba(0,0,0,.18);
+/* On the slate board a translucent card needs MORE fill, not less: at 92% over a
+   near-black canvas the border was the only thing separating a floating control from the
+   board behind it, and a blurred edge is not an edge. */
+:global(html:not([data-theme='light'])) .floatCard {
+  background:color-mix(in srgb,var(--canvas-panel) 96%,#172b48);
+  box-shadow:0 1px 2px rgba(0,0,0,.4), 0 18px 40px -16px rgba(0,0,0,.6);
 }
 :global(html:not([data-theme='light'])) .node {
   box-shadow:0 14px 38px rgba(0,0,0,.28);

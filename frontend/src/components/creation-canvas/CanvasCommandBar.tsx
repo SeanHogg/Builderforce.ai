@@ -1,5 +1,7 @@
-'use client';
-
+// No 'use client' directive: these are only ever rendered by `CreationCanvas`, which is
+// already a client component, so the boundary is inherited and a second declaration here
+// would only add another file to the architecture ratchet's client-component tally — the
+// same reason `CanvasSessionActions` omits it.
 import { useTranslations } from 'next-intl';
 import { CollapseBarIcon, ExpandBarIcon, RunCanvasIcon } from '@/components/canvas/CanvasCommands';
 import { canvasChromeShows } from '@/lib/canvasChrome';
@@ -98,11 +100,18 @@ export function CanvasCommandBar({
     >
       {/* Run, when the surface does not run itself. Green rather than brand blue: it is
           the only control on this bar that STARTS something, and the board's accent is
-          already spent on "which surface am I on". */}
+          already spent on "which surface am I on".
+
+          The word on it is "Run" and its ACCESSIBLE NAME is "Run this canvas", which is
+          not padding: a board can carry objects with run buttons of their own — a
+          workflow widget offers "Run Fall campaign" — and a bare "Run" beside them is
+          ambiguous to anyone reading the page by its names rather than its layout. The
+          bar has the room to be specific; the button does not. */}
       {onRun && showsActions && <button
         type="button"
         className={styles.runButton}
         data-testid="canvas-run"
+        aria-label={t('runCanvasLabel')}
         title={t('runCanvasTitle')}
         onClick={onRun}
       ><RunCanvasIcon /><span>{t('runCanvas')}</span></button>}

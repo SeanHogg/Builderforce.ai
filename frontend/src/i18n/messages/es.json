@@ -19190,7 +19190,8 @@
       "agents": "Agentes",
       "people": "Personas",
       "all": "Todos los objetos"
-    }
+    },
+    "runCanvasLabel": "Ejecutar este lienzo"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

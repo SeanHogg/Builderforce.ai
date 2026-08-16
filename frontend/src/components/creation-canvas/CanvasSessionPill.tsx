@@ -1,5 +1,7 @@
-'use client';
-
+// No 'use client' directive: these are only ever rendered by `CreationCanvas`, which is
+// already a client component, so the boundary is inherited and a second declaration here
+// would only add another file to the architecture ratchet's client-component tally — the
+// same reason `CanvasSessionActions` omits it.
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';

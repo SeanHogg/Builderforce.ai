@@ -7,7 +7,9 @@ vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')
 import {
   CANVAS_BAR_COLLAPSED_KEY,
   canvasChromeKind,
+  canvasChromePlace,
   canvasChromeShows,
+  canvasChromeSlotsIn,
   canvasChromeStatusSlots,
   readCanvasBarCollapsed,
   writeCanvasBarCollapsed,
@@ -30,7 +32,7 @@ describe('the canvas chrome rule', () => {
   it('keeps every status slot and drops every control when folded', () => {
     // Expanded, everything is on screen — a collapse that changes nothing when off
     // would make the whole table unfalsifiable.
-    for (const slot of ['title', 'saveState', 'roster', 'surfaces', 'actions', 'surfaceControls', 'surfaceStatus', 'save'] as const) {
+    for (const slot of ['title', 'saveState', 'roster', 'surfaces', 'actions', 'handoff', 'surfaceControls', 'surfaceStatus', 'save'] as const) {
       expect(canvasChromeShows(slot, false)).toBe(true);
     }
 
@@ -43,6 +45,7 @@ describe('the canvas chrome rule', () => {
     // What you DO to it — gone.
     expect(canvasChromeShows('surfaces', true)).toBe(false);
     expect(canvasChromeShows('actions', true)).toBe(false);
+    expect(canvasChromeShows('handoff', true)).toBe(false);
     expect(canvasChromeShows('surfaceControls', true)).toBe(false);
     expect(canvasChromeShows('save', true)).toBe(false);
   });
@@ -60,6 +63,43 @@ describe('the canvas chrome rule', () => {
     const survivors = canvasChromeStatusSlots();
     expect([...survivors].sort()).toEqual(['roster', 'saveState', 'surfaceStatus', 'title']);
     for (const slot of survivors) expect(canvasChromeShows(slot, true)).toBe(true);
+  });
+  /**
+   * PLACEMENT IS DATA TOO, and every slot has exactly one home.
+   *
+   * The failure this forbids is a slot added to the kind table and forgotten in the
+   * placement table: it would keep obeying the collapse rule perfectly and never be
+   * drawn anywhere, which is the quietest possible way to lose a control.
+   */
+  it('gives every slot exactly one floating region', () => {
+    const placed = (['pill', 'chips', 'topRight', 'bar'] as const).flatMap((place) => canvasChromeSlotsIn(place));
+    expect([...placed].sort()).toEqual(
+      ['actions', 'handoff', 'roster', 'saveState', 'surfaceControls', 'surfaceStatus', 'surfaces', 'save', 'title'].sort(),
+    );
+    // No slot in two regions.
+    expect(new Set(placed).size).toBe(placed.length);
+    for (const slot of placed) expect(canvasChromeSlotsIn(canvasChromePlace(slot))).toContain(slot);
+  });
+
+  /**
+   * The roster is in the BAR, and that is the placement the whole rule rests on. It is
+   * status, so it survives a collapse — and the bar is what a collapse leaves on screen,
+   * so anywhere else and "the team stays visible" would be a statement about an element
+   * that never folds in the first place.
+   */
+  it('puts every surviving control-bar slot where a collapse can be seen to spare it', () => {
+    expect(canvasChromePlace('roster')).toBe('bar');
+    expect(canvasChromePlace('surfaceStatus')).toBe('bar');
+    for (const slot of canvasChromeSlotsIn('bar')) {
+      if (canvasChromeKind(slot) === 'status') expect(canvasChromeShows(slot, true)).toBe(true);
+    }
+  });
+
+  /** Share and Publish are placed apart from the glyphs because they ARE apart: a word
+   *  opens somewhere else, a glyph acts here. */
+  it('separates the two doors out of the canvas from the buttons that act on it', () => {
+    expect(canvasChromePlace('handoff')).toBe('topRight');
+    expect(canvasChromePlace('actions')).toBe('bar');
   });
 });
 
@@ -98,6 +138,9 @@ describe('the collapsed session bar', () => {
     expect(screen.getByTestId('canvas-session-title')).toBeInTheDocument();
     const roster = screen.getByLabelText('Active collaborators');
     expect(within(roster).getAllByRole('button').length).toBeGreaterThan(0);
+    // The roster survives INSIDE the command bar — the element the collapse acts on —
+    // which is the whole reason `canvasChrome.ts` places it there.
+    expect(within(screen.getByTestId('canvas-command-bar')).getByLabelText('Active collaborators')).toBe(roster);
   });
 
   /** A collapse with no way back is a one-way door, so the toggle is the one control

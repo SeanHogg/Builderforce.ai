@@ -24,6 +24,7 @@ import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { canvasChromeShows, readCanvasBarCollapsed, writeCanvasBarCollapsed } from '@/lib/canvasChrome';
+import { canvasApp } from '@/lib/canvasApp';
 import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
 import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
@@ -966,6 +967,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * The circle with no group opens the palette WHOLE, with nothing folded. That is what
    * stops a six-item shortlist becoming the only way into a sixteen-group catalogue.
    */
+  /**
+   * Whether this board builds something the App surface could actually open.
+   *
+   * Asked of `canvasApp` rather than of `nodes.length`, because "there are objects on the
+   * board" and "there is an app here" are different questions and only the second one
+   * makes a Run button honest — a canvas holding a Brain conversation and three notes has
+   * plenty of objects and nothing to run.
+   */
+  const runnableApp = useMemo(() => canvasApp(nodes).entry !== null, [nodes]);
   const openPaletteGroup = useCallback((group?: CreationObjectGroup) => {
     setPaletteOpen(true);
     setPaletteSearch('');
@@ -9535,10 +9545,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         onToggleCollapse={() => setBarCollapsed(!barCollapsed)}
         handlers={sessionActionHandlers}
         // The board's Run takes this canvas to the surface that runs it. Offered only
-        // when there is something to run and only when the surface is not already
-        // contributing its own — two Run buttons that can disagree about whether
+        // when the App surface would actually have something to open — the SAME question
+        // that surface asks, asked of the same projection, so the bar can never promise a
+        // run that lands on an empty frame. And only when the surface is not already
+        // contributing its own Run: two Run buttons that can disagree about whether
         // something is running is worse than none.
-        onRun={surface === 'graph' && nodes.length ? () => setSurface('app') : undefined}
+        onRun={surface === 'graph' && runnableApp ? () => setSurface('app') : undefined}
         onQuickAdd={openPaletteGroup}
         quickAddOpen={paletteOpen}
         roster={

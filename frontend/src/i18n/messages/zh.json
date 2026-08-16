@@ -19190,7 +19190,8 @@
       "agents": "智能体",
       "people": "人员",
       "all": "全部对象"
-    }
+    },
+    "runCanvasLabel": "运行此画布"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
