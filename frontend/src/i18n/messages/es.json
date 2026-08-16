@@ -21145,17 +21145,20 @@
       "read": {
         "title": "Leer",
         "question": "¿Qué dijiste realmente?",
-        "body": "Pega una idea, un briefing, un pliego o las bases de un concurso: no hace falta ordenarlo antes. Vuelve como una especificación: qué tiene que hacer, qué capacidades nombra y los límites que el propio briefing fijó. Leer no escribe nada ni construye nada."
+        "body": "Pega una idea, un briefing, un pliego o las bases de un concurso: no hace falta ordenarlo antes. Vuelve como una especificación: qué tiene que hacer, qué capacidades nombra y los límites que el propio briefing fijó. Leer no escribe nada ni construye nada.",
+        "prompt": "Lee esta idea y conviértela en una especificación: qué tiene que hacer, qué capacidades nombra y los límites que ya he fijado. No construyas nada todavía. Mi idea: "
       },
       "prove": {
         "title": "Probar",
         "question": "¿Qué pregunta estás dispuesto a pagar por responder?",
-        "body": "Ocho formas de hacerlo real, ordenadas frente a tu especificación, de la más barata a la más cara. Cada una encabeza con la pregunta que responde y lleva una condición de parada —el número que detendría el proyecto— fijada antes de construir, no después de ver el resultado."
+        "body": "Ocho formas de hacerlo real, ordenadas frente a tu especificación, de la más barata a la más cara. Cada una encabeza con la pregunta que responde y lleva una condición de parada —el número que detendría el proyecto— fijada antes de construir, no después de ver el resultado.",
+        "prompt": "Ordena las formas de hacer real esta idea, de la más barata a la más cara. Para cada una, dime qué pregunta responde y cuánto costaría. Para la que recomiendes, dame la condición de parada: el número que me diría que pare. Mi idea: "
       },
       "build": {
         "title": "Construir",
         "question": "¿Es real y dónde puedo abrirlo?",
-        "body": "La prueba elegida se materializa: archivos en el lienzo, endpoints en marcha, tickets en el tablero, el sitio publicado y una dirección que puedes enviar a alguien. Los agentes recogen desde ahí los tickets de construcción."
+        "body": "La prueba elegida se materializa: archivos en el lienzo, endpoints en marcha, tickets en el tablero, el sitio publicado y una dirección que puedes enviar a alguien. Los agentes recogen desde ahí los tickets de construcción.",
+        "prompt": "Construye la prueba que elegimos: escribe los archivos, levanta los endpoints, crea los tickets y publícalo en una dirección que pueda enviar a alguien. Lo que vamos a construir: "
       }
     },
     "spends": {
@@ -21183,46 +21186,56 @@
       "demo-video": {
         "name": "Vídeo demo",
         "question": "¿Puedes enseñarme qué es esto?",
-        "summary": "Un montaje cronometrado y un guion de narración, para que hoy mismo exista una demo grabable de 90 segundos."
+        "summary": "Un montaje cronometrado y un guion de narración, para que hoy mismo exista una demo grabable de 90 segundos.",
+        "prompt": "Haz un vídeo demo de 90 segundos para esta idea: un montaje cronometrado y un guion de narración que pueda grabar hoy. La idea: "
       },
       "clickable-prototype": {
         "name": "Prototipo clicable",
         "question": "¿Alguien puede completar esto sin ayuda?",
-        "summary": "Un recorrido clicable del flujo, instrumentado, sin backend y sin datos."
+        "summary": "Un recorrido clicable del flujo, instrumentado, sin backend y sin datos.",
+        "prompt": "Construye un prototipo clicable de este flujo: todas las pantallas, sin backend ni datos, y un registro de clics para ver dónde se atasca la gente. El flujo: "
       },
       "smoke-test": {
         "name": "Prueba de humo",
         "question": "¿Alguien quiere esto de verdad?",
-        "summary": "Una landing de puerta falsa, una lista de espera y una consola de demanda evaluada frente a un umbral fijado de antemano."
+        "summary": "Una landing de puerta falsa, una lista de espera y una consola de demanda evaluada frente a un umbral fijado de antemano.",
+        "prompt": "Construye una prueba de humo para esta idea: una landing de puerta falsa, una lista de espera y una consola de demanda. Fija el umbral de registros que me diría que pare, antes de empezar. La idea: "
       },
       "wizard-of-oz": {
         "name": "Mago de Oz",
         "question": "¿Vale la pena pagar por el resultado antes de poder automatizarlo?",
-        "summary": "Un front end real con una persona detrás, con reloj de SLA, usando las mismas rutas que usará el sistema construido."
+        "summary": "Un front end real con una persona detrás, con reloj de SLA, usando las mismas rutas que usará el sistema construido.",
+        "prompt": "Monta una prueba Mago de Oz: un front end real con una cola de operadores detrás y reloj de SLA, usando las mismas rutas que usará el sistema construido. El servicio: "
       },
       "poc": {
         "name": "Prueba de concepto",
         "question": "¿La parte difícil funciona de verdad, con suficiente fiabilidad?",
-        "summary": "El paso más arriesgado aislado tras un banco de pruebas, con una tasa de acierto evaluada frente a un listón fijado de antemano."
+        "summary": "El paso más arriesgado aislado tras un banco de pruebas, con una tasa de acierto evaluada frente a un listón fijado de antemano.",
+        "prompt": "Aísla el paso más arriesgado de esta idea tras un banco de pruebas y reporta una tasa de acierto frente a un listón que acordemos antes. La parte arriesgada: "
       },
       "pilot": {
         "name": "Piloto",
         "question": "¿Aguanta con personas reales, a un tamaño en el que podamos sobrevivir a estar equivocados?",
-        "summary": "Una ejecución acotada con un grupo definido, un ciclo de feedback semanal y criterios de salida por escrito."
+        "summary": "Una ejecución acotada con un grupo definido, un ciclo de feedback semanal y criterios de salida por escrito.",
+        "prompt": "Planifica un piloto acotado: un grupo definido, un ciclo de feedback semanal y criterios de salida por escrito para que termine en vez de convertirse en el producto. Lo que vamos a pilotar: "
       },
       "phone-line": {
         "name": "Línea telefónica",
         "question": "¿Pueden los clientes llegar a esto por teléfono, y puede él llamarlos?",
-        "summary": "Un número entrante que contesta y entiende, más un endpoint que realiza llamadas salientes."
+        "summary": "Un número entrante que contesta y entiende, más un endpoint que realiza llamadas salientes.",
+        "prompt": "Levanta una línea telefónica para esto: un número entrante que conteste y entienda, más un endpoint que realice llamadas salientes. Lo que debe atender: "
       },
       "live-system": {
         "name": "Sistema en producción",
         "question": "¿Está funcionando de verdad y sabemos operarlo?",
-        "summary": "El sistema completo funcionando en una dirección real, con consola de operaciones y manual de guardia."
+        "summary": "El sistema completo funcionando en una dirección real, con consola de operaciones y manual de guardia.",
+        "prompt": "Construye el sistema completo y ponlo a funcionar en una dirección real, con consola de operaciones y un manual de guardia para el primer incidente. El sistema: "
       }
     },
     "ctaRealize": "Haz algo real →",
-    "youAreHere": "Estás aquí"
+    "youAreHere": "Estás aquí",
+    "cardAction": "Abrir en el lienzo →",
+    "cardActionFor": "Abrir {name} en el lienzo"
   },
   "sell": {
     "seo": {

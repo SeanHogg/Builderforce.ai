@@ -253,8 +253,11 @@ describe('message catalogs', () => {
       ...STAGES.flatMap((stage) => [`nav.stage.${stage}`, `methodology.arcQuestion.${stage}`]),
       // Read → Prove → Build, and the eight proof forms, as rendered on
       // /features, /about, /pricing and /sell-builderforce.
-      ...METHOD_STEPS.flatMap((step) => (['title', 'question', 'body'] as const).map((f) => `methodology.${methodStepKey(step, f)}`)),
-      ...PROOF_FORMS.flatMap(({ key }) => (['name', 'question', 'summary'] as const).map((f) => `methodology.${proofFormKey(key, f)}`)),
+      // `prompt` included: every card is a link into a canvas seeded with it, so
+      // a locale missing one opens a blank board for that language only.
+      ...METHOD_STEPS.flatMap((step) => (['title', 'question', 'body', 'prompt'] as const).map((f) => `methodology.${methodStepKey(step, f)}`)),
+      ...PROOF_FORMS.flatMap(({ key }) => (['name', 'question', 'summary', 'prompt'] as const).map((f) => `methodology.${proofFormKey(key, f)}`)),
+      'methodology.cardAction',
       ...['domains', 'seats', 'destinations', 'features'].map((stat) => `featuresPage.stat.${stat}`),
       ...FOOTER_COLUMNS.map((column) => `footer.${column.titleKey}`),
       ...familyKeys,

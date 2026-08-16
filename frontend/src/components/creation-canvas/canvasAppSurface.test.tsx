@@ -65,6 +65,22 @@ describe('the app a canvas session is', () => {
   });
 
   /**
+   * The bug this closes: Brain authors a code card's source into `content` — the field
+   * `canvas_add_object` actually receives and the field `CreationNode`'s own card preview
+   * reads first — not the rarer `code` field this projection used to read exclusively.
+   * A GreenEdge Yard Care session (2026-08-16) had six `code` cards written this way and
+   * the `app` surface reported "nothing to run" despite all six being on the board.
+   */
+  it('reads a code card\'s source from `content`, the field Brain actually authors', () => {
+    const authoredByBrain = { id: 'n8', data: {
+      kind: 'code', title: 'backend/server.js', content: "require('express');\napp.listen(3000);",
+    } as unknown as CreationNodeData };
+    const files = canvasAppFiles([authoredByBrain]);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatchObject({ path: 'backend/server.js', role: 'server', nodeId: 'n8' });
+  });
+
+  /**
    * The bug this closes: a `website` card with a form and the `code` card its form
    * posts to are one application, not a static preview beside an orphan file.
    */

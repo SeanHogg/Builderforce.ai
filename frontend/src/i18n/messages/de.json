@@ -21145,17 +21145,20 @@
       "read": {
         "title": "Lesen",
         "question": "Was haben Sie eigentlich gesagt?",
-        "body": "Fügen Sie eine Idee, ein Briefing, eine Ausschreibung oder Wettbewerbsregeln ein — nichts muss vorher aufgeräumt werden. Zurück kommt eine Spezifikation: was die Sache leisten muss, welche Fähigkeiten sie benennt und welche Grenzen das Briefing selbst gesetzt hat. Lesen schreibt nichts und baut nichts."
+        "body": "Fügen Sie eine Idee, ein Briefing, eine Ausschreibung oder Wettbewerbsregeln ein — nichts muss vorher aufgeräumt werden. Zurück kommt eine Spezifikation: was die Sache leisten muss, welche Fähigkeiten sie benennt und welche Grenzen das Briefing selbst gesetzt hat. Lesen schreibt nichts und baut nichts.",
+        "prompt": "Lies diese Idee und mach eine Spezifikation daraus: was sie leisten muss, welche Fähigkeiten sie benennt und welche Grenzen ich bereits gesetzt habe. Baue noch nichts. Meine Idee: "
       },
       "prove": {
         "title": "Beweisen",
         "question": "Für welche Frage sind Sie bereit, Geld auszugeben?",
-        "body": "Acht Wege, es real zu machen, gegen Ihre Spezifikation sortiert — das Günstigste zuerst. Jeder beginnt mit der Frage, die er beantwortet, und trägt eine Abbruchbedingung: die Zahl, die das Vorhaben stoppen würde, festgelegt vor dem Bau statt nach dem Ergebnis."
+        "body": "Acht Wege, es real zu machen, gegen Ihre Spezifikation sortiert — das Günstigste zuerst. Jeder beginnt mit der Frage, die er beantwortet, und trägt eine Abbruchbedingung: die Zahl, die das Vorhaben stoppen würde, festgelegt vor dem Bau statt nach dem Ergebnis.",
+        "prompt": "Sortiere die Wege, diese Idee real zu machen, vom günstigsten zum teuersten. Sag mir zu jedem, welche Frage er beantwortet und was er kosten würde. Für den, den du empfiehlst: nenne die Abbruchbedingung – die Zahl, die mir sagen würde aufzuhören. Meine Idee: "
       },
       "build": {
         "title": "Bauen",
         "question": "Ist es real, und wo kann ich es öffnen?",
-        "body": "Der gewählte Nachweis wird materialisiert: Dateien auf dem Canvas, aktive Endpunkte, Tickets auf dem Board, die veröffentlichte Site und eine Adresse, die Sie jemandem schicken können. Agenten übernehmen die Build-Tickets ab dort."
+        "body": "Der gewählte Nachweis wird materialisiert: Dateien auf dem Canvas, aktive Endpunkte, Tickets auf dem Board, die veröffentlichte Site und eine Adresse, die Sie jemandem schicken können. Agenten übernehmen die Build-Tickets ab dort.",
+        "prompt": "Baue den Nachweis, für den wir uns entschieden haben: schreibe die Dateien, bringe die Endpunkte in Betrieb, lege die Tickets an und veröffentliche das Ganze unter einer Adresse, die ich jemandem schicken kann. Was wir bauen: "
       }
     },
     "spends": {
@@ -21183,46 +21186,56 @@
       "demo-video": {
         "name": "Demo-Video",
         "question": "Können Sie mir zeigen, was das ist?",
-        "summary": "Ein getakteter Clip und ein Sprechertext, damit heute schon eine aufnehmbare 90-Sekunden-Demo existiert."
+        "summary": "Ein getakteter Clip und ein Sprechertext, damit heute schon eine aufnehmbare 90-Sekunden-Demo existiert.",
+        "prompt": "Mach ein 90-Sekunden-Demo-Video für diese Idee: einen getakteten Ablauf und einen Sprechertext, den ich heute aufnehmen kann. Die Idee: "
       },
       "clickable-prototype": {
         "name": "Klickbarer Prototyp",
         "question": "Kommt jemand ohne Hilfe wirklich bis zum Ende?",
-        "summary": "Ein instrumentierter Klickdurchlauf des Ablaufs, ohne Backend und ohne Daten."
+        "summary": "Ein instrumentierter Klickdurchlauf des Ablaufs, ohne Backend und ohne Daten.",
+        "prompt": "Baue einen klickbaren Prototyp dieses Ablaufs: jeden Screen, ohne Backend und ohne Daten, mit einem Klickprotokoll, damit ich sehe, wo Leute hängen bleiben. Der Ablauf: "
       },
       "smoke-test": {
         "name": "Rauchtest",
         "question": "Will das überhaupt jemand?",
-        "summary": "Eine Fake-Door-Landingpage, eine Warteliste und eine Nachfrage-Konsole, gemessen an einem vorab gesetzten Schwellenwert."
+        "summary": "Eine Fake-Door-Landingpage, eine Warteliste und eine Nachfrage-Konsole, gemessen an einem vorab gesetzten Schwellenwert.",
+        "prompt": "Baue einen Rauchtest für diese Idee: eine Fake-Door-Landingpage, eine Warteliste und eine Nachfrage-Konsole. Lege den Anmeldeschwellenwert, der mir sagen würde aufzuhören, vor dem Start fest. Die Idee: "
       },
       "wizard-of-oz": {
         "name": "Wizard of Oz",
         "question": "Ist das Ergebnis Geld wert, bevor wir es automatisieren können?",
-        "summary": "Ein echtes Frontend mit einem Menschen dahinter, auf SLA-Uhr, über dieselben Routen, die das gebaute System nutzen wird."
+        "summary": "Ein echtes Frontend mit einem Menschen dahinter, auf SLA-Uhr, über dieselben Routen, die das gebaute System nutzen wird.",
+        "prompt": "Richte einen Wizard-of-Oz-Test ein: ein echtes Frontend mit einer Bearbeiter-Warteschlange dahinter auf SLA-Uhr, über dieselben Routen, die das gebaute System nutzen wird. Der Dienst: "
       },
       "poc": {
         "name": "Machbarkeitsnachweis",
         "question": "Funktioniert der schwierige Teil wirklich, zuverlässig genug?",
-        "summary": "Der riskanteste Schritt isoliert hinter einem Testrahmen, mit einer Erfolgsquote gegen eine vorab gesetzte Latte."
+        "summary": "Der riskanteste Schritt isoliert hinter einem Testrahmen, mit einer Erfolgsquote gegen eine vorab gesetzte Latte.",
+        "prompt": "Isoliere den riskantesten Schritt dieser Idee hinter einem Testrahmen und melde eine Erfolgsquote gegen eine vorher vereinbarte Latte. Der riskante Teil: "
       },
       "pilot": {
         "name": "Pilot",
         "question": "Hält es mit echten Menschen stand, in einer Größe, in der wir einen Irrtum überleben?",
-        "summary": "Ein begrenzter Lauf mit einer benannten Gruppe, wöchentlicher Feedbackschleife und schriftlichen Ausstiegskriterien."
+        "summary": "Ein begrenzter Lauf mit einer benannten Gruppe, wöchentlicher Feedbackschleife und schriftlichen Ausstiegskriterien.",
+        "prompt": "Plane einen begrenzten Pilot: eine benannte Gruppe, eine wöchentliche Feedbackschleife und schriftliche Ausstiegskriterien, damit er endet statt zum Produkt zu werden. Was wir pilotieren: "
       },
       "phone-line": {
         "name": "Telefonleitung",
         "question": "Erreichen Kunden das per Telefon — und erreicht es sie?",
-        "summary": "Eine eingehende Nummer, die abnimmt und versteht, plus ein Endpunkt, der ausgehende Anrufe tätigt."
+        "summary": "Eine eingehende Nummer, die abnimmt und versteht, plus ein Endpunkt, der ausgehende Anrufe tätigt.",
+        "prompt": "Richte dafür eine Telefonleitung ein: eine eingehende Nummer, die abnimmt und versteht, plus einen Endpunkt für ausgehende Anrufe. Was sie abdecken soll: "
       },
       "live-system": {
         "name": "Live-System",
         "question": "Läuft es tatsächlich, und können wir es betreiben?",
-        "summary": "Das ganze System unter einer echten Adresse, mit Betriebskonsole und Rufbereitschafts-Runbook."
+        "summary": "Das ganze System unter einer echten Adresse, mit Betriebskonsole und Rufbereitschafts-Runbook.",
+        "prompt": "Baue das ganze System und betreibe es unter einer echten Adresse, mit Betriebskonsole und einem Rufbereitschafts-Runbook für den ersten Vorfall. Das System: "
       }
     },
     "ctaRealize": "Machen Sie etwas real →",
-    "youAreHere": "Sie sind hier"
+    "youAreHere": "Sie sind hier",
+    "cardAction": "Im Canvas öffnen →",
+    "cardActionFor": "{name} im Canvas öffnen"
   },
   "sell": {
     "seo": {

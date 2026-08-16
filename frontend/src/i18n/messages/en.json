@@ -21145,17 +21145,20 @@
       "read": {
         "title": "Read",
         "question": "What did you actually say?",
-        "body": "Paste an idea, a brief, an RFP or a contest — nothing needs cleaning up first. It comes back as a specification: what the thing has to do, which capabilities it names, and the limits the brief itself set. Reading writes nothing and builds nothing."
+        "body": "Paste an idea, a brief, an RFP or a contest — nothing needs cleaning up first. It comes back as a specification: what the thing has to do, which capabilities it names, and the limits the brief itself set. Reading writes nothing and builds nothing.",
+        "prompt": "Read this idea and turn it into a specification — what it has to do, which capabilities it names, and the limits I have already set. Do not build anything yet. My idea: "
       },
       "prove": {
         "title": "Prove",
         "question": "Which question are you willing to spend money answering?",
-        "body": "Eight ways to make it real, ranked against your specification, cheapest first. Each leads with the question it answers and carries a kill condition — the number that would stop the project — set before it is built rather than after the result is in."
+        "body": "Eight ways to make it real, ranked against your specification, cheapest first. Each leads with the question it answers and carries a kill condition — the number that would stop the project — set before it is built rather than after the result is in.",
+        "prompt": "Rank the ways to make this idea real, cheapest first. For each, tell me the question it answers and what it would cost. For the one you recommend, give me the kill condition — the number that would tell me to stop. My idea: "
       },
       "build": {
         "title": "Build",
         "question": "Is it real, and where can I open it?",
-        "body": "The chosen proof is materialised: files on the canvas, endpoints live, tickets on the board, the site published, and an address you can send to somebody. Agents pick the build tickets up from there."
+        "body": "The chosen proof is materialised: files on the canvas, endpoints live, tickets on the board, the site published, and an address you can send to somebody. Agents pick the build tickets up from there.",
+        "prompt": "Build the proof we settled on: write the files, stand up the endpoints, seed the tickets and publish it to an address I can send to somebody. What we are building: "
       }
     },
     "spends": {
@@ -21183,46 +21186,56 @@
       "demo-video": {
         "name": "Demo video",
         "question": "Can you show me what this is?",
-        "summary": "A timed reel and a narration script, so a recordable 90-second demo exists today."
+        "summary": "A timed reel and a narration script, so a recordable 90-second demo exists today.",
+        "prompt": "Make a 90-second demo video for this idea — a timed reel and a narration script I can record today. The idea: "
       },
       "clickable-prototype": {
         "name": "Clickable prototype",
         "question": "Can someone actually complete this without help?",
-        "summary": "An instrumented click-through of the flow, with no backend and no data."
+        "summary": "An instrumented click-through of the flow, with no backend and no data.",
+        "prompt": "Build a clickable prototype of this flow: every screen, no backend, no data, and a click log so I can see where people stall. The flow: "
       },
       "smoke-test": {
         "name": "Smoke test",
         "question": "Does anyone actually want this?",
-        "summary": "A fake-door landing page, a waitlist, and a demand console judged against a pre-set threshold."
+        "summary": "A fake-door landing page, a waitlist, and a demand console judged against a pre-set threshold.",
+        "prompt": "Build a smoke test for this idea — a fake-door landing page, a waitlist and a demand console. Set the signup threshold that would tell me to stop before we start. The idea: "
       },
       "wizard-of-oz": {
         "name": "Wizard of Oz",
         "question": "Is the outcome worth paying for, before we can automate it?",
-        "summary": "A real front end with a human behind it, on an SLA clock, using the routes the built system will use."
+        "summary": "A real front end with a human behind it, on an SLA clock, using the routes the built system will use.",
+        "prompt": "Set up a Wizard of Oz test: a real front end with an operator queue behind it on an SLA clock, using the routes the built system will use. The service: "
       },
       "poc": {
         "name": "Proof of concept",
         "question": "Does the hard part actually work, reliably enough?",
-        "summary": "The riskiest step isolated behind a trial harness, with a pass rate judged against a pre-set bar."
+        "summary": "The riskiest step isolated behind a trial harness, with a pass rate judged against a pre-set bar.",
+        "prompt": "Isolate the riskiest step in this idea behind a trial harness and report a pass rate against a bar we agree first. The risky part: "
       },
       "pilot": {
         "name": "Pilot",
         "question": "Does it hold up with real people, at a size we can survive being wrong at?",
-        "summary": "A bounded run with a named cohort, a weekly feedback loop and written exit criteria."
+        "summary": "A bounded run with a named cohort, a weekly feedback loop and written exit criteria.",
+        "prompt": "Plan a bounded pilot: a named cohort, a weekly feedback loop and written exit criteria so it ends instead of becoming the product. What we are piloting: "
       },
       "phone-line": {
         "name": "Phone line",
         "question": "Can customers reach this by phone — and can it reach them?",
-        "summary": "An inbound number that answers and understands, plus an endpoint that places outbound calls."
+        "summary": "An inbound number that answers and understands, plus an endpoint that places outbound calls.",
+        "prompt": "Stand up a phone line for this — an inbound number that answers and understands, plus an endpoint that places outbound calls. What it should handle: "
       },
       "live-system": {
         "name": "Live system",
         "question": "Is it actually running, and can we operate it?",
-        "summary": "The whole system running at a real address, with an ops console and an on-call runbook."
+        "summary": "The whole system running at a real address, with an ops console and an on-call runbook.",
+        "prompt": "Build the whole system and run it at a real address, with an operations console and an on-call runbook for the first incident. The system: "
       }
     },
     "ctaRealize": "Make something real →",
-    "youAreHere": "You are here"
+    "youAreHere": "You are here",
+    "cardAction": "Open on the canvas →",
+    "cardActionFor": "Open {name} on the canvas"
   },
   "sell": {
     "seo": {

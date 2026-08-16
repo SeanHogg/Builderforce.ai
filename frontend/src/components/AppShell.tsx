@@ -19,6 +19,7 @@ import { ShellIndex } from './shell/ShellIndex';
 import { ShellPanel } from './shell/ShellPanel';
 import { TeamBar } from './team/TeamBar';
 import LegalCorner from './legal/LegalCorner';
+import CanvasUsageCorner from './legal/CanvasUsageCorner';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 // A reference page whose title is DATA (a diagnostic, named by the API catalog)
 // tells the panel what to call it; the provider is the wire between them and has
@@ -152,8 +153,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* The team, always on the footer — §3.3. It decides its own visibility. */}
       <TeamBar />
       {/* Version + Terms/Privacy, in the frame's bottom-right corner. In flow as
-          the last row, so it never covers the board or the roster above it. */}
+          the last row, so it never covers the board or the roster above it.
+          Stands down on a stage route, where `CanvasUsageCorner` carries the
+          same row (plus the usage meters) as a floating overlay instead. */}
       <LegalCorner />
+      <CanvasUsageCorner />
       <MobileBottomNav />
     </div>
     </ReferenceChromeProvider>

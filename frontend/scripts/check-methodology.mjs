@@ -148,6 +148,13 @@ for (const [key, target] of targets) {
     fail(`[same-words] en.json has no \`methodology.proof.${key}\` copy.`);
     continue;
   }
+  // Every proof card is a link into a canvas seeded with this. A missing prompt
+  // makes the card open a BLANK board, which is the exact failure — landing
+  // somebody on an empty canvas wearing an acquisition cost — that carrying
+  // intent exists to prevent, and it is invisible until somebody clicks.
+  if (!text.prompt) {
+    fail(`[actionable] \`methodology.proof.${key}.prompt\` is missing — that card would open an empty canvas.`);
+  }
   const compare = [
     ['name', text.name, target.name],
     ['question', text.question, target.answers],
@@ -167,11 +174,17 @@ for (const [key, target] of targets) {
 // ── 5 · Every step has copy ────────────────────────────────────────────────
 if (steps.length === 0) fail('[steps] METHOD_STEP_SPECS could not be located in lib/methodology.ts.');
 for (const step of steps) {
-  for (const field of ['title', 'question', 'body']) {
+  for (const field of ['title', 'question', 'body', 'prompt']) {
     if (!copy.step?.[step]?.[field]) {
       fail(`[steps] en.json has no \`methodology.step.${step}.${field}\`.`);
     }
   }
+}
+
+// Every card is a link, and the copy that labels the link is shared by all
+// eleven — so one missing key silently blanks every action on four pages.
+for (const key of ['cardAction', 'cardActionFor']) {
+  if (!copy[key]) fail(`[actionable] en.json has no \`methodology.${key}\`.`);
 }
 
 // ── 6 · Every stage has a question and a declared hue ──────────────────────

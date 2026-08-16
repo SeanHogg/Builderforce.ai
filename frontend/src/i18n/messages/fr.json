@@ -21145,17 +21145,20 @@
       "read": {
         "title": "Lire",
         "question": "Qu’avez-vous réellement dit ?",
-        "body": "Collez une idée, un brief, un appel d’offres ou un règlement de concours — rien n’a besoin d’être mis au propre. Cela revient sous forme de spécification : ce que la chose doit faire, les capacités qu’elle nomme et les limites que le brief a lui-même posées. Lire n’écrit rien et ne construit rien."
+        "body": "Collez une idée, un brief, un appel d’offres ou un règlement de concours — rien n’a besoin d’être mis au propre. Cela revient sous forme de spécification : ce que la chose doit faire, les capacités qu’elle nomme et les limites que le brief a lui-même posées. Lire n’écrit rien et ne construit rien.",
+        "prompt": "Lis cette idée et transforme-la en spécification : ce qu’elle doit faire, les capacités qu’elle nomme et les limites que j’ai déjà posées. Ne construis rien pour l’instant. Mon idée : "
       },
       "prove": {
         "title": "Prouver",
         "question": "À quelle question êtes-vous prêt à payer pour répondre ?",
-        "body": "Huit façons de rendre l’idée réelle, classées face à votre spécification, de la moins chère à la plus chère. Chacune s’ouvre sur la question qu’elle tranche et porte une condition d’arrêt — le chiffre qui stopperait le projet — fixée avant la construction, pas après le résultat."
+        "body": "Huit façons de rendre l’idée réelle, classées face à votre spécification, de la moins chère à la plus chère. Chacune s’ouvre sur la question qu’elle tranche et porte une condition d’arrêt — le chiffre qui stopperait le projet — fixée avant la construction, pas après le résultat.",
+        "prompt": "Classe les façons de rendre cette idée réelle, de la moins chère à la plus chère. Pour chacune, dis-moi à quelle question elle répond et ce qu’elle coûterait. Pour celle que tu recommandes, donne-moi la condition d’arrêt : le chiffre qui me dirait de m’arrêter. Mon idée : "
       },
       "build": {
         "title": "Construire",
         "question": "Est-ce réel, et où puis-je l’ouvrir ?",
-        "body": "La preuve choisie est matérialisée : fichiers sur le canevas, endpoints en service, tickets sur le tableau, site publié et une adresse que vous pouvez envoyer à quelqu’un. Les agents reprennent les tickets de construction à partir de là."
+        "body": "La preuve choisie est matérialisée : fichiers sur le canevas, endpoints en service, tickets sur le tableau, site publié et une adresse que vous pouvez envoyer à quelqu’un. Les agents reprennent les tickets de construction à partir de là.",
+        "prompt": "Construis la preuve que nous avons retenue : écris les fichiers, mets les endpoints en service, crée les tickets et publie le tout à une adresse que je peux envoyer à quelqu’un. Ce que nous construisons : "
       }
     },
     "spends": {
@@ -21183,46 +21186,56 @@
       "demo-video": {
         "name": "Vidéo de démo",
         "question": "Pouvez-vous me montrer ce que c’est ?",
-        "summary": "Un montage minuté et un script de narration, pour qu’une démo enregistrable de 90 secondes existe dès aujourd’hui."
+        "summary": "Un montage minuté et un script de narration, pour qu’une démo enregistrable de 90 secondes existe dès aujourd’hui.",
+        "prompt": "Fais une vidéo de démo de 90 secondes pour cette idée : un montage minuté et un script de narration que je peux enregistrer aujourd’hui. L’idée : "
       },
       "clickable-prototype": {
         "name": "Prototype cliquable",
         "question": "Quelqu’un peut-il vraiment aller au bout sans aide ?",
-        "summary": "Un parcours cliquable du flux, instrumenté, sans back-end ni données."
+        "summary": "Un parcours cliquable du flux, instrumenté, sans back-end ni données.",
+        "prompt": "Construis un prototype cliquable de ce parcours : tous les écrans, sans back-end ni données, avec un journal de clics pour voir où les gens bloquent. Le parcours : "
       },
       "smoke-test": {
         "name": "Test de fumée",
         "question": "Est-ce que quelqu’un en veut vraiment ?",
-        "summary": "Une landing « fausse porte », une liste d’attente et une console de demande jugée face à un seuil fixé à l’avance."
+        "summary": "Une landing « fausse porte », une liste d’attente et une console de demande jugée face à un seuil fixé à l’avance.",
+        "prompt": "Construis un test de fumée pour cette idée : une landing « fausse porte », une liste d’attente et une console de demande. Fixe le seuil d’inscriptions qui me dirait d’arrêter, avant de commencer. L’idée : "
       },
       "wizard-of-oz": {
         "name": "Magicien d’Oz",
         "question": "Le résultat vaut-il d’être payé, avant qu’on sache l’automatiser ?",
-        "summary": "Un vrai front-end avec un humain derrière, sur une horloge de SLA, empruntant les routes que le système construit utilisera."
+        "summary": "Un vrai front-end avec un humain derrière, sur une horloge de SLA, empruntant les routes que le système construit utilisera.",
+        "prompt": "Mets en place un test Magicien d’Oz : un vrai front-end avec une file d’opérateurs derrière et une horloge de SLA, empruntant les routes que le système construit utilisera. Le service : "
       },
       "poc": {
         "name": "Preuve de concept",
         "question": "La partie difficile fonctionne-t-elle vraiment, assez fiablement ?",
-        "summary": "L’étape la plus risquée isolée derrière un banc d’essai, avec un taux de réussite jugé face à une barre fixée à l’avance."
+        "summary": "L’étape la plus risquée isolée derrière un banc d’essai, avec un taux de réussite jugé face à une barre fixée à l’avance.",
+        "prompt": "Isole l’étape la plus risquée de cette idée derrière un banc d’essai et rapporte un taux de réussite face à une barre fixée à l’avance. La partie risquée : "
       },
       "pilot": {
         "name": "Pilote",
         "question": "Est-ce que ça tient avec de vraies personnes, à une taille où se tromper reste survivable ?",
-        "summary": "Un déploiement borné avec une cohorte nommée, une boucle de retour hebdomadaire et des critères de sortie écrits."
+        "summary": "Un déploiement borné avec une cohorte nommée, une boucle de retour hebdomadaire et des critères de sortie écrits.",
+        "prompt": "Planifie un pilote borné : une cohorte nommée, une boucle de retour hebdomadaire et des critères de sortie écrits, pour qu’il se termine au lieu de devenir le produit. Ce que nous pilotons : "
       },
       "phone-line": {
         "name": "Ligne téléphonique",
         "question": "Les clients peuvent-ils l’atteindre par téléphone — et peut-elle les rappeler ?",
-        "summary": "Un numéro entrant qui répond et comprend, plus un endpoint qui passe des appels sortants."
+        "summary": "Un numéro entrant qui répond et comprend, plus un endpoint qui passe des appels sortants.",
+        "prompt": "Mets en place une ligne téléphonique : un numéro entrant qui répond et comprend, plus un endpoint qui passe des appels sortants. Ce qu’elle doit traiter : "
       },
       "live-system": {
         "name": "Système en production",
         "question": "Est-ce que ça tourne vraiment, et savons-nous l’exploiter ?",
-        "summary": "Le système complet en service à une vraie adresse, avec une console d’exploitation et un runbook d’astreinte."
+        "summary": "Le système complet en service à une vraie adresse, avec une console d’exploitation et un runbook d’astreinte.",
+        "prompt": "Construis le système complet et fais-le tourner à une vraie adresse, avec une console d’exploitation et un runbook d’astreinte pour le premier incident. Le système : "
       }
     },
     "ctaRealize": "Rendez quelque chose réel →",
-    "youAreHere": "Vous êtes ici"
+    "youAreHere": "Vous êtes ici",
+    "cardAction": "Ouvrir dans le canevas →",
+    "cardActionFor": "Ouvrir {name} dans le canevas"
   },
   "sell": {
     "seo": {

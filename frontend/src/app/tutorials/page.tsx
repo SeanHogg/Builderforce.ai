@@ -6,6 +6,7 @@ import JsonLd from '@/components/JsonLd';
 import { pageMetadata } from '@/lib/seo';
 import { routeMarketingSchema } from '@/lib/structured-data';
 import { TUTORIAL_TOPICS, type TutorialTopicId } from '@/lib/tutorialCatalog';
+import { canvasIntentHref } from '@/lib/canvasIntent';
 import styles from './TutorialsPage.module.css';
 import { Icon } from '@/components/ui/Icon';
 
@@ -22,8 +23,8 @@ export default async function TutorialsPage() {
   const t = await getTranslations('tutorials');
   const topics = t.raw('topics') as Record<TutorialTopicId, TopicCopy>;
   const steps = t.raw('steps') as Array<{ title: string; description: string }>;
-  const courseHref = (topic: TopicCopy) => `/create/new?${new URLSearchParams({ prompt: t('coursePrompt', { topic: topic.title, focus: topic.focus, agent: topic.agent }) }).toString()}`;
-  const customHref = `/create/new?${new URLSearchParams({ prompt: t('customPrompt') }).toString()}`;
+  const courseHref = (topic: TopicCopy) => canvasIntentHref(t('coursePrompt', { topic: topic.title, focus: topic.focus, agent: topic.agent }));
+  const customHref = canvasIntentHref(t('customPrompt'));
 
   return (
     <>

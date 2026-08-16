@@ -76,6 +76,28 @@ describe('MethodologySection', () => {
     }
   });
 
+  it('makes every card an action that opens a canvas carrying its own intent', () => {
+    // The regression this guards: the eleven cards described a method beside one
+    // generic CTA, so somebody who wanted the smoke test specifically had to
+    // press a button and retype their intent onto a blank board.
+    const { container } = renderAt('full');
+    const links = Array.from(container.querySelectorAll('a[href^="/create/new"]'));
+    // Eleven cards + the closing CTA.
+    expect(links.length).toBe(METHOD_STEPS.length + PROOF_FORMS.length + 1);
+
+    const seeded = links
+      .map((link) => new URL(link.getAttribute('href') ?? '', 'https://x').searchParams.get('prompt'))
+      .filter((prompt): prompt is string => Boolean(prompt));
+
+    // One per card. The closing CTA carries no prompt, which is correct — it is
+    // "start anywhere", not "start with this".
+    expect(seeded).toHaveLength(METHOD_STEPS.length + PROOF_FORMS.length);
+    // Distinct: a copy/paste that pointed two cards at the same prompt would look
+    // completely correct on the page and send both visitors to the same board.
+    expect(new Set(seeded).size).toBe(seeded.length);
+    for (const prompt of seeded) expect(prompt.length).toBeGreaterThan(40);
+  });
+
   it('marks Read and Prove free and Build as the act that spends', () => {
     // The pricing claim the whole method rests on. If this inverted, /pricing
     // would tell a visitor the opposite of what their bill will say.

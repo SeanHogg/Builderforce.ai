@@ -20,6 +20,7 @@ import {
   type ModelRecord,
 } from '@/lib/modelCatalog';
 import { appendModelComparison, MAX_MODEL_COMPARISON } from '@/lib/modelComparisonRequest';
+import { canvasIntentHref } from '@/lib/canvasIntent';
 
 const MAX_COMPARE = MAX_MODEL_COMPARISON;
 const MODELS_PER_PAGE = 24;
@@ -663,10 +664,10 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
         onRemove={(id) => setSelectedIds((prev) => prev.filter((x) => x !== id))}
         onClear={() => setSelectedIds([])}
         onCompare={() => setCompareOpen(true)}
-        onExecute={(prompt) => {
-          const params = appendModelComparison(new URLSearchParams({ prompt: prompt.trim() }), selectedModels.map((model) => model.id));
-          router.push(`/create/new?${params.toString()}`);
-        }}
+        onExecute={(prompt) => router.push(canvasIntentHref(
+          prompt,
+          appendModelComparison(new URLSearchParams(), selectedModels.map((model) => model.id)),
+        ))}
       />
 
       {/* Comparison table slide-out (wide) */}

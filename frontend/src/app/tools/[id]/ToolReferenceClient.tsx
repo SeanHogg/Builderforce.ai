@@ -18,6 +18,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import RelatedArticles from '@/components/blog/RelatedArticles';
+import { canvasIntentHref } from '@/lib/canvasIntent';
 import {
   ReferenceCard, ReferenceCta, ReferenceGrid, ReferenceHero, ReferencePage, ReferenceSection,
 } from '@/components/reference/ReferencePage';
@@ -91,7 +92,7 @@ export default function ToolReferenceClient({ toolId, fallbackName }: { toolId: 
         <ReferenceCta
           title={tRef('canvas.title')}
           body={tRef('canvas.body')}
-          actions={[{ href: `/create/new?prompt=${encodeURIComponent(canvasPrompt)}`, label: `${tRef('canvas.cta')} →` }]}
+          actions={[{ href: canvasIntentHref(canvasPrompt), label: `${tRef('canvas.cta')} →` }]}
         >
           <p style={{ marginTop: 'var(--space-4)' }}><span className="mk-code">{canvasPrompt}</span></p>
         </ReferenceCta>

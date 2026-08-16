@@ -9,6 +9,7 @@ import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { getActiveGuestRoom } from '@/lib/guestRoomApi';
 import { GuestRoomJoinCard } from '@/components/guest/GuestRoomJoinCard';
 import { modelComparisonCanvasHref, readModelComparison } from '@/lib/modelComparisonRequest';
+import { CANVAS_PROMPT_MAX } from '@/lib/canvasIntent';
 
 export const runtime = 'edge';
 
@@ -41,7 +42,10 @@ export default function NewCreationSessionPage() {
       code = params.get('room')?.trim() || null;
       // Blog and product CTAs can start a real generated canvas. Keep the prompt
       // through this redirect rather than leaving the learner on a blank board.
-      setInitialPrompt(params.get('prompt')?.trim().slice(0, 4_000) || '');
+      // Same ceiling the LINK BUILDER clamps to (`lib/canvasIntent`). Two
+      // numbers here would mean a URL whose tail is silently dropped, and a
+      // truncated prompt reads as a complete instruction that happens to be wrong.
+      setInitialPrompt(params.get('prompt')?.trim().slice(0, CANVAS_PROMPT_MAX) || '');
       setModelComparisonIds(readModelComparison(params));
     } catch {
       code = null; // no URL access — fall through to the ordinary new-canvas path

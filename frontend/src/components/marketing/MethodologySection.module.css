@@ -69,6 +69,7 @@
   border-top: 3px solid var(--step-hue, var(--coral-bright));
   border-radius: var(--radius-lg);
   background: var(--surface-card);
+  transition: border-color 0.18s ease;
 }
 
 .stepTop {
@@ -119,9 +120,98 @@
   line-height: 1.6;
 }
 
-.stepCost {
-  justify-self: start;
+/* ── The card footer: what it costs, and how to act on it ────────────────────
+   Both cards end the same way — a status chip on the left, the action on the
+   right — so the eleven read as one family and the affordance sits in the same
+   place every time. `wrap` rather than a breakpoint: on a narrow card the action
+   drops under the chip instead of squeezing it. */
+.cardFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
   margin-top: var(--space-1);
+}
+
+/**
+ * The action, and the whole card with it.
+ *
+ * `::after` stretches over the card so the entire surface is one target — a
+ * marketing card whose only tappable part is six words of link text is a card
+ * most people will not press, especially on a phone. It is safe here precisely
+ * because these cards hold no OTHER interactive content: a second link under
+ * the same stretched overlay would be unreachable, which is the trap this
+ * pattern sets for whoever adds one next.
+ *
+ * The visible text stays, rather than relying on the invisible overlay alone —
+ * an affordance nobody can see is one nobody uses.
+ */
+.cardAction {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  /* A tap target that clears the 44px guidance without a fixed height, since the
+     stretched overlay is what most pointers will actually hit. */
+  padding: 6px 2px 6px 0;
+  color: var(--step-hue, var(--coral-bright));
+  font-size: var(--font-size-small);
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: gap 0.18s ease;
+}
+
+/**
+ * The overlay that makes the whole card the target.
+ *
+ * It resolves against the nearest POSITIONED ancestor, which is `.step` /
+ * `.proof` — so `.cardAction` itself must stay unpositioned. Giving the link
+ * `position: relative` (the obvious thing to do for a z-index) silently shrinks
+ * the overlay to the size of the words and undoes the entire pattern.
+ *
+ * The trade-off it buys: card text is no longer selectable by dragging. That is
+ * the accepted cost of a stretched link and the right side of it here — these
+ * are eleven marketing cards whose purpose is to be pressed, not passages
+ * somebody copies out.
+ */
+.cardAction::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+}
+
+.step:hover,
+.proof:hover {
+  border-color: color-mix(in srgb, var(--step-hue, var(--coral-bright)) 55%, var(--border-subtle));
+}
+
+.cardAction:hover {
+  gap: var(--space-2);
+}
+
+/* Keyboard focus lands on the link, so the ring has to read as the CARD being
+   focused — otherwise a keyboard user sees a highlight on six words and no
+   indication that the thing they are about to activate is the whole card. */
+.cardAction:focus-visible {
+  outline: none;
+}
+
+.step:has(.cardAction:focus-visible),
+.proof:has(.cardAction:focus-visible) {
+  outline: 2px solid var(--step-hue, var(--coral-bright));
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cardAction,
+  .step,
+  .proof { transition: none; }
+}
+
+/* Sits in `.cardFoot`, a flex row — no self-alignment of its own to set. */
+.stepCost {
   padding: 3px 10px;
   border-radius: var(--radius-full);
   border: 1px solid var(--border-subtle);
@@ -270,6 +360,8 @@
 }
 
 .proof {
+  /* Positioned so `.cardAction::after` stretches over the card, not the words. */
+  position: relative;
   display: grid;
   gap: var(--space-2);
   align-content: start;
@@ -277,6 +369,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background: var(--surface-card);
+  transition: border-color 0.18s ease;
 }
 
 .proofTop {
@@ -320,11 +413,11 @@
   line-height: 1.55;
 }
 
+/* Sits in `.cardFoot`, which owns the spacing above it. */
 .proofMeters {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
-  margin-top: var(--space-1);
 }
 
 .meter {

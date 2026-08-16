@@ -1,3 +1,32 @@
+## ✅ RESOLVED 2026-08-16 — the `app` surface was dropping every Brain-authored code card
+
+Reported live: a "build me the whole thing" turn (GreenEdge Yard Care — a business plan, a
+marketing site, and a Twilio/chatbot backend) landed six `code` cards and a `website` card
+on the board, all connected, Brain reporting success — and the `app` runtime surface still
+said "Nothing to run yet."
+
+**Root cause.** `canvasAppFiles` (`frontend/src/lib/canvasApp.ts`) read a `code` object's
+source from `data.code` only. Brain writes it to `data.content` — the field
+`canvas_add_object` actually carries and the field `CreationNode`'s own card preview reads
+FIRST (`content`, `markdown`, `code`, `transcript`, `subtitle`, in that order). Every
+`code` card Brain authors landed on `content`, so `canvasAppFiles` saw an empty string,
+`if (!source.trim()) continue`, and dropped it — silently, with no error, for every code
+card on every session. Confirmed with a reproduction harness against the exact GreenEdge
+payload before touching anything: the `website` object alone already composed into a
+working document (the empty-surface report was not about the website), and a `code` card
+authored with `content` produced zero files where the identical card authored with `code`
+produced one.
+
+**The fix reads `content` first, `code` second** — the same precedence `CreationNode`
+already uses, so the two readers of "what is this code card's source" cannot drift again.
+`canvasDocuments.ts`'s own code-export path was checked too: it already falls back to
+`content` (through `canvasObjectMarkdown` → `authoredMarkdown`), so it was not a second
+instance of the same bug. Regression test added to `canvasAppSurface.test.tsx` authoring a
+card the way Brain actually does (`content`, no `code` field) and asserting it composes
+into the file list. 21/21 tests pass; `tsgo` clean on the touched files.
+
+---
+
 ## ✅ RESOLVED 2026-08-16 — the fifth band folded into the bar, and a board of documents became a graph again
 
 Three items from the canvas-redesign audit, closed.
@@ -3185,6 +3214,52 @@ where a KV that had stopped accepting deletes would have gone unnoticed behind s
 that every harness is reachable by a real publish (`geometry` only via the source-kind override —
 the assertion that caught its own first draft), and that the runners are pure. The 21 existing
 `creationListings.test.ts` assertions pass unchanged against the refactored publish path.
+
+## ✅ RESOLVED 2026-08-15 — The method cards were a description; they are an action now
+
+### What was wrong
+
+`<MethodologySection>` rendered eleven cards — three acts and eight proof forms — and every one of
+them was inert prose. A visitor who read *"Does anyone actually want this?"* on the smoke-test card
+and wanted exactly that had one route: scroll past seven other proofs to a single generic CTA, land
+on a blank board, and retype an intent the page had just spelled out for them. Eleven statements of
+what the product does, one door, and no connection between them.
+
+Underneath it, the same defect one layer down: **four separate hand-built `\`/create/new?prompt=…\`
+strings** (`/tools/<id>`, `/tutorials` twice, the model compare tray), each with its own encoding and
+**none of them clamping**. `/create/new` slices the parameter at 4,000 characters, so a longer prompt
+produced a URL whose tail was silently discarded — and a truncated prompt is worse than no prompt,
+because it reads as a complete instruction that happens to be wrong.
+
+### What changed
+
+**`lib/canvasIntent.ts` — one way to hand a visitor to the canvas with their intent.**
+`canvasIntentHref(prompt, extra?)` builds the link and clamps at `CANVAS_PROMPT_MAX`, which
+`app/create/new/page.tsx` now imports rather than restating — the builder and the reader cannot hold
+different numbers. All four existing call sites migrated in the same pass; `grep` for
+`create/new?prompt=` returns nothing but a comment. `extra` uses `append`, not `set`, because a model
+comparison passes repeated `model` parameters and setting would collapse a three-way compare to one.
+
+**Every card is a link into a canvas seeded for THAT act or THAT proof.** The prompt is a registry
+copy field (`methodology.step.<id>.prompt`, `methodology.proof.<key>.prompt`), not a string in the
+component, so a card cannot advertise one thing and seed another. Each prompt ends with an open
+colon, so the visitor's own idea is the next thing they type rather than something to splice in.
+
+**The whole card is the target.** A stretched `::after` on the action link covers the card, with the
+affordance visible in a shared footer beside the cost chip — an invisible target is one nobody
+presses, and six words of link text is not a phone tap target. Focus is styled on the CARD via
+`:has()`, since a ring around the words would misdescribe what activating does. The pattern's trap is
+written down in the stylesheet: `.cardAction` must stay unpositioned or the overlay shrinks to the
+size of the words, and a second interactive element inside a card would be unreachable under it.
+
+**Guarded.** `check-methodology.mjs` now fails when any step or proof lacks a `prompt`, or when the
+shared action labels are missing — a card without a prompt opens a blank canvas, which is precisely
+the failure carrying intent exists to prevent, and it is invisible until somebody clicks.
+`MethodologySection.test.tsx` asserts twelve canvas links, eleven prompts, all **distinct** (a
+copy-paste pointing two cards at one prompt looks completely correct on the page) and all substantive.
+All thirteen new keys are in all five catalogs.
+
+---
 
 ## ✅ RESOLVED 2026-08-15 — Idea → Real: the methodology existed in the product and nowhere on the marketing site
 

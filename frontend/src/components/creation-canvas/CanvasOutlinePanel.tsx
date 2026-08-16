@@ -33,7 +33,9 @@ export function CanvasOutlinePanel({
 }: {
   nodes: CreationFlowNode[];
   edges: Edge[];
-  onFocus: (nodeId: string) => void;
+  /** Anchored from the button itself — the card this focuses may be off-screen,
+   *  so the config panel opens beside the control that asked for it. */
+  onFocus: (nodeId: string, rect: DOMRect) => void;
   onClose: () => void;
 }) {
   const t = useTranslations('creationCanvas');
@@ -78,7 +80,7 @@ export function CanvasOutlinePanel({
             <ol>{visible.map((node) => <li key={node.id}>
               {/* Named through the shared rule, so a blank-by-design object (a new
                   sticky note) is still a control with a name rather than "Focus ". */}
-              <button type="button" aria-label={t('focusObject', { title: creationObjectName(node.data) })} onClick={() => onFocus(node.id)}>{creationObjectName(node.data)} ({node.data.kind})</button>
+              <button type="button" aria-label={t('focusObject', { title: creationObjectName(node.data) })} onClick={(event) => onFocus(node.id, event.currentTarget.getBoundingClientRect())}>{creationObjectName(node.data)} ({node.data.kind})</button>
               <span>{String(node.data.status || t('canvasObject'))}{node.data.placementLocked === true ? ` · ${t('placementLocked')}` : ''}</span>
               <ul>{edges.filter((edge) => edge.source === node.id).map((edge) => <li key={edge.id}>
                 {t('outlineConnection', {

@@ -1748,6 +1748,77 @@ html[data-theme='light'] .nebula {
   }
 }
 
+/* The canvas's own bottom-right corner (`CanvasUsageCorner`) — `.legal-corner`'s
+ * row PLUS the usage meters, floating over the board the way every other piece
+ * of canvas chrome does rather than sitting in flow. Stacked column, right-
+ * aligned, so the meters sit just above the legal row rather than beside it —
+ * the corner is narrow on purpose and a second wide row would fight the board
+ * for width the way the strip it replaced fought the sidebar for height. */
+.canvas-usage-corner {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: min(60vw, 420px);
+  pointer-events: none;
+}
+.canvas-usage-corner > * {
+  pointer-events: auto;
+}
+.canvas-usage-corner-meters {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.canvas-usage-corner-meters::-webkit-scrollbar {
+  display: none;
+}
+.canvas-usage-corner-legal {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  white-space: nowrap;
+  gap: 0 10px;
+  padding: 5px 10px;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  color: var(--muted);
+  font-size: var(--font-size-eyebrow);
+  line-height: 1.5;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+.canvas-usage-corner-legal > * + *::before {
+  content: '·';
+  margin-right: 10px;
+  color: var(--border);
+}
+
+@media (max-width: 620px) {
+  .canvas-usage-corner {
+    right: 8px;
+    bottom: 8px;
+    max-width: min(75vw, 300px);
+  }
+  .canvas-usage-corner-legal {
+    gap: 0 5px;
+    padding: 4px var(--space-2);
+    font-size: 0.6rem;
+  }
+  .canvas-usage-corner-legal .legal-doc-version,
+  .canvas-usage-corner-legal .legal-corner-brand {
+    display: none;
+  }
+}
+
 /* Round chevron handle that collapses/expands the sidebar. Pinned to the top
    and straddling the right divider so it bridges the sidebar/content border. */
 .nav-collapse-toggle {

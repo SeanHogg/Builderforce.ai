@@ -162,7 +162,15 @@ export function canvasAppFiles(
   const seen = new Set<string>();
   for (const node of nodes) {
     if (node.data.kind === 'code') {
-      const source = typeof node.data.code === 'string' ? node.data.code : '';
+      // `content` is the field Brain actually authors — it is what `CreationNode`'s own
+      // card preview reads first — and `code` is a second, rarer field the same kind
+      // accepts (see `MUTABLE_FIELDS.code`). Reading `code` alone silently dropped every
+      // Brain-authored file from the app runtime: a session built from a chat turn (the
+      // GreenEdge Yard Care repro, 2026-08-16) had six `code` cards, all written to
+      // `content`, and the `app` surface reported "nothing to run" despite them.
+      const source = typeof node.data.content === 'string' && node.data.content.trim()
+        ? node.data.content
+        : typeof node.data.code === 'string' ? node.data.code : '';
       if (!source.trim()) continue;
       const declared = typeof node.data.path === 'string' ? node.data.path.trim() : '';
       const language = typeof node.data.language === 'string' ? node.data.language.trim().toLowerCase() : '';

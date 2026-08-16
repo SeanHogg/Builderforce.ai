@@ -12,6 +12,7 @@ import {
   proofsByCost,
 } from '@/lib/methodology';
 import type { Stage } from '@/lib/navGroups';
+import { canvasIntentHref } from '@/lib/canvasIntent';
 import styles from './MethodologySection.module.css';
 
 /**
@@ -33,6 +34,17 @@ import styles from './MethodologySection.module.css';
  * Every colour is a token and every track is fluid — the proof grid is
  * `auto-fit`/`minmax`, so it goes from four columns to one without a breakpoint
  * and without the page ever scrolling sideways.
+ *
+ * ── EVERY CARD IS AN ACTION ─────────────────────────────────────────────────
+ * The eleven cards were a description of a method beside a single CTA at the
+ * bottom, so somebody who read "does anyone actually want this?" and wanted
+ * exactly that had one route: scroll past seven other proofs, press a generic
+ * button, and retype their own intent onto a blank board. Each card now links
+ * into a canvas seeded with the prompt for THAT act or THAT proof, through the
+ * shared `canvasIntentHref` — the whole card is the target (a stretched link),
+ * with the affordance shown in the footer so it is visible as well as clickable.
+ * The prompt is a registry field, not a string in this file, so a card cannot
+ * advertise one thing and seed another.
  */
 
 /**
@@ -114,8 +126,17 @@ export default function MethodologySection({
             <h3 className={styles.stepTitle}>{t(methodStepKey(step.id, 'title'))}</h3>
             <p className={styles.stepQuestion}>{t(methodStepKey(step.id, 'question'))}</p>
             <p className={styles.stepBody}>{t(methodStepKey(step.id, 'body'))}</p>
-            <span className={styles.stepCost} data-spends={step.spends}>
-              {step.spends ? t('spends.yes') : t('spends.no')}
+            <span className={styles.cardFoot}>
+              <span className={styles.stepCost} data-spends={step.spends}>
+                {step.spends ? t('spends.yes') : t('spends.no')}
+              </span>
+              <Link
+                className={styles.cardAction}
+                href={canvasIntentHref(t(methodStepKey(step.id, 'prompt')))}
+                aria-label={t('cardActionFor', { name: t(methodStepKey(step.id, 'title')) })}
+              >
+                {t('cardAction')}
+              </Link>
             </span>
           </li>
         ))}
@@ -158,9 +179,18 @@ export default function MethodologySection({
                 </span>
                 <p className={styles.proofQuestion}>{t(proofFormKey(proof.key, 'question'))}</p>
                 <p className={styles.proofSummary}>{t(proofFormKey(proof.key, 'summary'))}</p>
-                <span className={styles.proofMeters}>
-                  <Meter value={proof.fidelity} label={t('fidelity')} />
-                  <Meter value={proof.effort} label={t('effort')} />
+                <span className={styles.cardFoot}>
+                  <span className={styles.proofMeters}>
+                    <Meter value={proof.fidelity} label={t('fidelity')} />
+                    <Meter value={proof.effort} label={t('effort')} />
+                  </span>
+                  <Link
+                    className={styles.cardAction}
+                    href={canvasIntentHref(t(proofFormKey(proof.key, 'prompt')))}
+                    aria-label={t('cardActionFor', { name: t(proofFormKey(proof.key, 'name')) })}
+                  >
+                    {t('cardAction')}
+                  </Link>
                 </span>
               </li>
             ))}
@@ -177,8 +207,11 @@ export default function MethodologySection({
           on a marketing surface has to work for the audience of that surface.
           `/create/new` is guest-capable (a real local-first board, no account),
           which is where Read → Prove → Build actually begins for a new visitor. */}
+      {/* The closing CTA is "start anywhere", so it carries no prompt — the
+          eleven cards above are the ones that carry a specific intent. Still
+          built through the helper so the route has one definition. */}
       <div className={styles.actions}>
-        <Link href="/create/new" className={styles.cta}>{t('ctaRealize')}</Link>
+        <Link href={canvasIntentHref('')} className={styles.cta}>{t('ctaRealize')}</Link>
       </div>
     </div>
   );

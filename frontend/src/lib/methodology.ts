@@ -126,13 +126,25 @@ export const PROOF_FORMS: readonly ProofForm[] = [
   { key: 'live-system', fidelity: 5, effort: 5, live: true },
 ];
 
+/**
+ * The copy fields a card carries.
+ *
+ * `prompt` is the one that makes a card DO something. Every card on the method
+ * section is a link into a seeded canvas, and the prompt is what it seeds — so
+ * it is a field of the registry rather than a string in the component, for the
+ * same reason the rest of the copy is: eleven cards across four marketing pages
+ * would otherwise be eleven prompts written once and edited never.
+ */
+export type MethodStepField = 'title' | 'question' | 'body' | 'prompt';
+export type ProofFormField = 'name' | 'question' | 'summary' | 'prompt';
+
 /** i18n key for a step's copy field, under the `methodology` namespace. */
-export function methodStepKey(step: MethodStep, field: 'title' | 'question' | 'body'): string {
+export function methodStepKey(step: MethodStep, field: MethodStepField): string {
   return `step.${step}.${field}`;
 }
 
 /** i18n key for a proof form's copy field, under the `methodology` namespace. */
-export function proofFormKey(key: RealizationKey, field: 'name' | 'question' | 'summary'): string {
+export function proofFormKey(key: RealizationKey, field: ProofFormField): string {
   return `proof.${key}.${field}`;
 }
 

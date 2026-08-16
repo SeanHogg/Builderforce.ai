@@ -1023,6 +1023,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodePanel(null);
     setObjectPicker({ anchor: anchorFrom(rect, 400), fromNodeId: nodeId });
   }, []);
+
+  /** For a freshly created object: no click to anchor from (`addAtCenter` places it at
+   *  the middle of the viewport with no DOM element yet), so the panel opens near
+   *  there instead — close enough to read as "beside what you just added". */
+  const centerAnchorRect = (): DOMRect => ({ right: window.innerWidth / 2, top: window.innerHeight / 2 } as DOMRect);
   /**
    * PRESENTATION AND FOLLOW ARE SHELL STATE NOW.
    *
@@ -2738,9 +2743,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (data) node.data = { ...node.data, ...data };
     setNodes((current) => [...current, node]);
     setSelectedId(node.id); setSelectedIds([node.id]);
+    if (node.data.kind !== 'chat') openNodePanel(node.id, 'config', centerAnchorRect());
     setNotice(t('objectAdded', { title: node.data.title }));
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
-  }, [canEdit, localizedTourDefaults, sessionId, setNodes, t, timeline]);
+  }, [canEdit, localizedTourDefaults, openNodePanel, sessionId, setNodes, t, timeline]);
 
   /**
    * What choosing an object in the picker DOES.
@@ -2762,9 +2768,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current, node]);
     setEdges((current) => addEdge({ id: `${fromNodeId}-${node.id}`, source: fromNodeId, target: node.id, type: connectionKind }, current));
     setSelectedId(node.id); setSelectedIds([node.id]);
+    if (node.data.kind !== 'chat') openNodePanel(node.id, 'config', centerAnchorRect());
     setNotice(t('objectAdded', { title: node.data.title }));
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
-  }, [addAtCenter, canEdit, connectionKind, nodes, sessionId, setEdges, setNodes, t]);
+  }, [addAtCenter, canEdit, connectionKind, nodes, openNodePanel, sessionId, setEdges, setNodes, t]);
 
   /**
    * ONE credential check in front of every social tool.
@@ -10103,7 +10110,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {dockPanel === 'outline' && <CanvasOutlinePanel
           nodes={nodes}
           edges={edges}
-          onFocus={(nodeId) => { setSelectedId(nodeId); setSelectedIds([nodeId]); }}
+          onFocus={(nodeId, rect) => { setSelectedId(nodeId); setSelectedIds([nodeId]); openNodePanel(nodeId, 'config', rect); }}
           onClose={closeDockPanel}
         />}
 
