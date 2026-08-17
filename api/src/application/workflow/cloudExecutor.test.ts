@@ -39,6 +39,11 @@ describe('executeCloudNode — outbound port', () => {
     expect(JSON.parse(result.output)).toMatchObject({ stubbed: true, kind: 'llm' });
   });
 
+  it('a stubbed web-search node makes no real vendor call', async () => {
+    const result = await executeCloudNode(env, { kind: 'web-search', config: { query: 'weather' } }, '', undefined, sandboxOutboundPort());
+    expect(JSON.parse(result.output)).toMatchObject({ stubbed: true, kind: 'webSearch' });
+  });
+
   it('without a real usageCtx, an UNSTUBBED gmail node still refuses exactly as before', async () => {
     await expect(executeCloudNode(env, { kind: 'gmail', config: {} }, ''))
       .rejects.toThrow(/tenant context/);

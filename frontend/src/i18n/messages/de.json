@@ -12894,7 +12894,8 @@
       "flowControl": "Ablaufsteuerung",
       "tools": "Werkzeuge",
       "textParser": "Textparser",
-      "diagnostics": "Diagnose"
+      "diagnostics": "Diagnose",
+      "aiAgentsGroup": "KI-Agenten"
     },
     "nodeKind": {
       "router": {
@@ -12936,6 +12937,10 @@
       "healthcheck": {
         "label": "Systemprüfung",
         "blurb": "Prüft eine URL und meldet, ob der erwartete Status zurückgegeben wurde."
+      },
+      "webSearch": {
+        "label": "Websuche",
+        "blurb": "Durchsucht das offene Web und liefert Ergebnisse mit Seiteninhalt — nutzt zuerst deinen verbundenen Tavily-/Exa-/Linkup-Schlüssel, dann eine SearXNG-Instanz des Betreibers und zuletzt eine schlüssellose Enzyklopädie-Quelle, damit immer ein Ergebnis zurückkommt."
       }
     }
   },

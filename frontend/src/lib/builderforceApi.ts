@@ -976,6 +976,7 @@ export type WorkflowNodeKind =
   | 'set-variable' | 'get-variable' | 'increment' | 'sleep'
   | 'regex-match' | 'html-to-text'
   | 'assert' | 'healthcheck'
+  | 'web-search'
   | EvermindBuildKind;
 
 export interface WorkflowDefNode {

@@ -32,6 +32,10 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *     agentHost agent/tool/SSM runtime that has no cloud equivalent here, so the
  *     task fails with a clear, recorded message (see Gap Register). Run those
  *     workflows on a self-hosted agentHost.
+ *   - web-search → executed natively (AI Agents). Resolves the same web-search
+ *     vendor backing the cloud agent's own `web_search` tool uses (tenant
+ *     Tavily/Exa/Linkup key → operator SearXNG → keyless Wikipedia), so it
+ *     never refuses for lack of a connected integration.
  *   - router / merge / set-variable / get-variable / increment / sleep /
  *     regex-match / html-to-text / assert / healthcheck → executed natively
  *     (Flow Control / Tools / Text Parser / Diagnostics). `router` generalizes
@@ -61,6 +65,9 @@ import { executeMcpNode, type McpNodeConfig } from './mcpNode';
 import { executeConnectorNode, type ConnectorNodeConfig } from './connectorNode';
 import { getWorkflowVariable, setWorkflowVariable, incrementWorkflowVariable } from './workflowVariables';
 import { assertSafeUrl, resolveAndAssertPublic, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
+import { resolveWebSearchBacking, platformWebSearchBacking } from '../runtime/webSearchCredential';
+import { searchWeb } from '../runtime/cloudWeb';
+import type { CloudWebSearchBacking } from '../runtime/cloudWeb';
 import type { ProxyEnv } from '../llm/LlmProxyService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -134,6 +141,7 @@ export interface OutboundPort {
   connector?(config: Record<string, unknown>, inputText: string): Promise<string>;
   mcp?(config: Record<string, unknown>, inputText: string): Promise<string>;
   llm?(config: Record<string, unknown>, inputText: string): Promise<string>;
+  webSearch?(config: Record<string, unknown>, inputText: string): Promise<string>;
 }
 
 /** Run one cloud-native node; returns its output (and a drop flag) or throws on failure.
@@ -184,6 +192,37 @@ export async function executeCloudNode(
         throw new Error(`llm call failed (${result.response.status})`);
       }
       return { output: (await readProxyChoice(result)).content };
+    }
+
+    case 'web-search': {
+      if (outbound?.webSearch) return { output: await outbound.webSearch(node.config, inputText) };
+      // Reuses the SAME vendor port + precedence the cloud agent's `web_search`
+      // tool already resolves through — tenant key (Tavily/Exa/Linkup) →
+      // operator SearXNG → keyless Wikipedia — so this node runs even for a
+      // tenant with nothing connected, and `searchWeb` gives it the same
+      // read-through cache + outbound-fetch metering every other search
+      // surface shares (see application/runtime/webSearchCredential.ts and
+      // cloudWeb.ts). Never null, so no "connect an integration" refusal.
+      const query = renderTemplate(
+        typeof node.config.query === 'string' && node.config.query ? node.config.query : '{{input}}',
+        inputText,
+      ).trim();
+      if (!query) throw new Error('Web Search needs a query');
+      const resolved = usageCtx
+        ? await resolveWebSearchBacking(env as unknown as Env, usageCtx.db, usageCtx.tenantId)
+        : platformWebSearchBacking(env as unknown as Env);
+      const backing: CloudWebSearchBacking = {
+        vendor: resolved.vendor,
+        auth: resolved.auth,
+        ...(usageCtx ? { meter: { db: usageCtx.db, tenantId: usageCtx.tenantId } } : {}),
+      };
+      const result = await searchWeb(env as unknown as Env, backing, query);
+      if (!result.ok) throw new Error(result.error ?? 'Web search failed');
+      return {
+        output: JSON.stringify({
+          query, results: result.results ?? [], source: resolved.source, attribution: result.attribution,
+        }),
+      };
     }
 
     // ETL kinds — evaluated cloud-side via the sandbox-safe expression engine

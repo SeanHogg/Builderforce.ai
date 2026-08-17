@@ -12894,7 +12894,8 @@
       "flowControl": "Flow Control",
       "tools": "Tools",
       "textParser": "Text Parser",
-      "diagnostics": "Diagnostics"
+      "diagnostics": "Diagnostics",
+      "aiAgentsGroup": "AI Agents"
     },
     "nodeKind": {
       "router": {
@@ -12936,6 +12937,10 @@
       "healthcheck": {
         "label": "Healthcheck",
         "blurb": "Probe a URL and report whether it returned the expected status."
+      },
+      "webSearch": {
+        "label": "Web Search",
+        "blurb": "Search the open web and return results with page content — resolves your connected Tavily/Exa/Linkup key, then an operator SearXNG instance, then a keyless encyclopedic fallback, so it always returns something."
       }
     }
   },

@@ -12894,7 +12894,8 @@
       "flowControl": "Control de flujo",
       "tools": "Herramientas",
       "textParser": "Analizador de texto",
-      "diagnostics": "Diagnósticos"
+      "diagnostics": "Diagnósticos",
+      "aiAgentsGroup": "Agentes de IA"
     },
     "nodeKind": {
       "router": {
@@ -12936,6 +12937,10 @@
       "healthcheck": {
         "label": "Comprobación de estado",
         "blurb": "Sondea una URL e informa si devolvió el estado esperado."
+      },
+      "webSearch": {
+        "label": "Búsqueda web",
+        "blurb": "Busca en la web abierta y devuelve resultados con el contenido de la página — usa tu clave conectada de Tavily/Exa/Linkup, luego una instancia SearXNG del operador y por último una fuente enciclopédica sin clave, para que siempre devuelva algo."
       }
     }
   },

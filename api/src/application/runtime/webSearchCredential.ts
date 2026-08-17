@@ -12,11 +12,14 @@
  *      `integration_credentials`, the SAME per-tenant vault every other non-LLM vendor
  *      uses (per-tenant PBKDF2 derivation, `is_enabled` health flag, one CRUD surface at
  *      /api/integrations),
- *   2. the OPERATOR's own SearXNG instance (`SEARXNG_URL`, unset by default). Open-web
+ *   2. the OPERATOR's own funded Tavily key (`TAVILY_API_KEY`, unset by default) — a
+ *      deliberate, real per-query cost the operator is choosing to absorb for every
+ *      tenant with no key of their own, rather than the platform funding nothing,
+ *   3. the OPERATOR's own SearXNG instance (`SEARXNG_URL`, unset by default). Open-web
  *      coverage with no vendor account, no per-query meter, and no third party learning
- *      what a tenant researches — the right shape for a self-hosted product, which is
- *      why it sits above the keyless floor and below a tenant's deliberate choice,
- *   3. the KEYLESS vendor — no account, no meter, no infrastructure, attribution-only
+ *      what a tenant researches — unmetered, which is why it sits beneath the funded
+ *      key above it and above the keyless floor below,
+ *   4. the KEYLESS vendor — no account, no meter, no infrastructure, attribution-only
  *      licence. Narrower coverage, stated as such in the result, but real citable
  *      sources.
  *
@@ -36,7 +39,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { decryptCredentials } from '../integrations/credentialCrypto';
 import {
-  CREDENTIALED_WEB_SEARCH_VENDOR_IDS, searxngSearchVendor, webSearchVendor, wikipediaSearchVendor,
+  CREDENTIALED_WEB_SEARCH_VENDOR_IDS, searxngSearchVendor, tavilySearchVendor, webSearchVendor, wikipediaSearchVendor,
   type WebSearchAuth, type WebSearchVendor,
 } from './webSearchVendors';
 
@@ -66,12 +69,15 @@ function pickApiKey(creds: Record<string, unknown>): string | null {
 }
 
 /**
- * The backing available to a surface with NO tenant in scope — the operator's own
+ * The backing available to a surface with NO tenant in scope, or a tenant with no BYO
+ * key of their own — the operator's funded Tavily key if set, else the operator's own
  * SearXNG instance if the deployment runs one, else the keyless vendor. This is what the
  * logged-out guest canvas searches with, and it is also the floor beneath every tenant
  * lookup, so the "what does search fall back to" answer exists in exactly one place.
  */
 export function platformWebSearchBacking(env: Env | undefined): ResolvedWebSearchBacking {
+  const tavilyKey = env?.TAVILY_API_KEY?.trim();
+  if (tavilyKey) return { vendor: tavilySearchVendor, auth: { apiKey: tavilyKey }, source: 'operator' };
   const searxngUrl = env?.SEARXNG_URL?.trim();
   if (searxngUrl) return { vendor: searxngSearchVendor, auth: { apiKey: null, baseUrl: searxngUrl }, source: 'operator' };
   return { vendor: wikipediaSearchVendor, auth: { apiKey: null }, source: 'keyless' };

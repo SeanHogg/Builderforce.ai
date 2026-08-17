@@ -81,10 +81,12 @@ export function integrationIcon(integ: Integration): string {
 export const INTEGRATIONS: Integration[] = [
   // ── AI Agents — curated task presets over the generic `llm` kind (same
   // execution path as an LLM Platform node; only the starting `system` prompt
-  // differs). A web-search-grounded agent (Make's "Generate a response") needs
-  // no dedicated preset: chain a Tavily/Perplexity node (below, official/llm
-  // categories) into one of these — its output becomes this node's {{input}}.
-  { id: 'ai-simple-prompt', label: 'Simple Prompt', category: 'ai-agents', kind: 'llm', auth: 'none', icon: '💬', description: 'Send a custom prompt to the AI and get a text response. For web-grounded answers, chain a Tavily/Perplexity node first.', operations: [{ id: 'chat-completion', label: 'Generate response' }], systemPrompt: '' },
+  // differs). A web-search-grounded agent (Make's "Generate a response") is
+  // the one exception: it needs a real HTTP call a prompt can't make, so it is
+  // its own node kind (`web-search`, in the Flow Control/Tools sidebar group
+  // "AI Agents" alongside these) rather than a fifth `llm` preset — chain it
+  // into one of these and its JSON output becomes this node's {{input}}.
+  { id: 'ai-simple-prompt', label: 'Simple Prompt', category: 'ai-agents', kind: 'llm', auth: 'none', icon: '💬', description: 'Send a custom prompt to the AI and get a text response. For web-grounded answers, chain a Web Search node first — its results become {{input}}.', operations: [{ id: 'chat-completion', label: 'Generate response' }], systemPrompt: '' },
   { id: 'ai-summarize', label: 'Summarize Text', category: 'ai-agents', kind: 'llm', auth: 'none', icon: '📝', description: 'Condense longer text into a shorter summary.', operations: [{ id: 'chat-completion', label: 'Generate response' }], systemPrompt: 'Summarize the input text concisely, preserving the key facts and any numbers or names. Reply with only the summary.' },
   { id: 'ai-categorize', label: 'Categorize Text', category: 'ai-agents', kind: 'llm', auth: 'none', icon: '🏷️', description: 'Classify text into one of your own categories.', operations: [{ id: 'chat-completion', label: 'Generate response' }], systemPrompt: 'Classify the input text into exactly one category from the list the user provides in the prompt. Reply with only the category name.' },
   { id: 'ai-sentiment', label: 'Analyze Sentiment', category: 'ai-agents', kind: 'llm', auth: 'none', icon: '📈', description: 'Determine whether text reads positive, neutral, or negative.', operations: [{ id: 'chat-completion', label: 'Generate response' }], systemPrompt: 'Analyze the sentiment of the input text. Reply with only one word: positive, neutral, or negative.' },
@@ -114,7 +116,13 @@ export const INTEGRATIONS: Integration[] = [
   { id: 'time', label: 'Time', category: 'official', kind: 'mcp', auth: 'none', icon: '⏰', description: 'Current time lookup and timezone conversion.', operations: [{ id: 'get-current-time', label: 'Get current time' }, { id: 'convert-time', label: 'Convert timezone' }] },
   { id: 'github', label: 'GitHub', category: 'official', kind: 'mcp', auth: 'api-key', icon: '🐙', description: 'Repos, files, issues, and pull requests via the GitHub API.', operations: [{ id: 'create-issue', label: 'Create issue' }, { id: 'create-pull-request', label: 'Create pull request' }, { id: 'search-repositories', label: 'Search repositories' }, { id: 'create-or-update-file', label: 'Create or update file' }] },
   { id: 'gitlab', label: 'GitLab', category: 'official', kind: 'mcp', auth: 'api-key', icon: '🦊', description: 'Projects, files, and merge requests via the GitLab API.', operations: [{ id: 'create-issue', label: 'Create issue' }, { id: 'create-merge-request', label: 'Create merge request' }, { id: 'search-projects', label: 'Search projects' }, { id: 'create-or-update-file', label: 'Create or update file' }] },
-  { id: 'tavily', label: 'Tavily', category: 'official', kind: 'trigger', auth: 'api-key', icon: '🔎', description: 'Open-web search with page content in the response.', operations: [{ id: 'web-search', label: 'Web search' }] },
+  // Tavily/Exa/Linkup web search lives at the `web-search` node kind (Flow
+  // Control/Tools sidebar, "AI Agents" group) — a real executor with a
+  // tenant-key → operator-SearXNG → keyless fallback, not a preset here. A
+  // `trigger`-kind catalog entry can only be a workflow's own entry point
+  // (see cloudExecutor's passthrough `case 'trigger':`), so an on-demand
+  // search chained mid-flow through THIS catalog's `trigger` kind would have
+  // been inert — removed rather than left broken.
   { id: 'google-drive', label: 'Google Drive', category: 'official', kind: 'trigger', auth: 'oauth', icon: '📂', description: 'File access and search across Google Drive.', operations: [{ id: 'search-files', label: 'Search files' }, { id: 'read-file', label: 'Read file' }, { id: 'list-files', label: 'List files' }] },
   { id: 'sqlite', label: 'SQLite', category: 'official', kind: 'mcp', auth: 'connection-string', icon: '🪶', description: 'SQLite database interaction with query execution.', operations: [{ id: 'read-query', label: 'Read query' }, { id: 'write-query', label: 'Write query' }, { id: 'list-tables', label: 'List tables' }, { id: 'create-table', label: 'Create table' }] },
 

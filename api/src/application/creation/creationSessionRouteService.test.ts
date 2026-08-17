@@ -6,6 +6,7 @@ import {
   creationObjectSearchText,
   creationSessionSearchStatus,
   isCreationEventWriteConflict,
+  sanitizeClaimConnectionIds,
   validCreationGraph,
 } from './creationSessionRouteService';
 
@@ -173,6 +174,49 @@ describe('durableCreationGraph', () => {
     const durable = durableCreationGraph(objects, connections, () => ids.shift()!);
     expect(durable.connections[0]!.sourceObjectId).toBe('10000000-0000-4000-8000-00000000000a');
     expect(durable.connections[0]!.targetObjectId).toBe('10000000-0000-4000-8000-00000000000a');
+  });
+});
+
+describe('sanitizeClaimConnectionIds', () => {
+  it('replaces a legacy malformed connection id rather than leaving the draft unclaimable', () => {
+    // The exact shape a fixed browser bug (`pickObject` in CreationCanvas.tsx) left
+    // baked into visitors' local storage: two UUIDs joined by a dash instead of one
+    // minted. The fix stops NEW drafts from getting this; it does nothing for a
+    // draft that already has it, so `claim` has to tolerate it going forward.
+    const malformed = 'e756ab15-283b-41ee-bf89-50d868435964-413a7c0c-1d2f-4170-a5ee-b3f641539472';
+    const [sanitized] = sanitizeClaimConnectionIds([{
+      id: malformed,
+      sourceObjectId: '00000000-0000-4000-8000-000000000001',
+      targetObjectId: '00000000-0000-4000-8000-000000000002',
+      kind: 'data',
+    }]);
+    expect(sanitized!.id).not.toBe(malformed);
+    expect(sanitized!.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    // Everything but the id — the actual graph structure — is untouched.
+    expect(sanitized).toMatchObject({ sourceObjectId: '00000000-0000-4000-8000-000000000001', targetObjectId: '00000000-0000-4000-8000-000000000002', kind: 'data' });
+  });
+
+  it('leaves an already-valid connection id alone', () => {
+    const id = '00000000-0000-4000-8000-000000000009';
+    const [sanitized] = sanitizeClaimConnectionIds([{ id, sourceObjectId: '00000000-0000-4000-8000-000000000001', targetObjectId: '00000000-0000-4000-8000-000000000002' }]);
+    expect(sanitized!.id).toBe(id);
+  });
+
+  it('gives two malformed connections distinct ids, so sanitizing cannot create a false duplicate', () => {
+    const connections = [
+      { id: 'not-a-uuid-1', sourceObjectId: '00000000-0000-4000-8000-000000000001', targetObjectId: '00000000-0000-4000-8000-000000000002' },
+      { id: 'not-a-uuid-1', sourceObjectId: '00000000-0000-4000-8000-000000000002', targetObjectId: '00000000-0000-4000-8000-000000000003' },
+    ];
+    const sanitized = sanitizeClaimConnectionIds(connections);
+    expect(sanitized[0]!.id).not.toBe(sanitized[1]!.id);
+    expect(validCreationGraph(
+      [
+        { id: '00000000-0000-4000-8000-000000000001', kind: 'dataset' },
+        { id: '00000000-0000-4000-8000-000000000002', kind: 'dataset' },
+        { id: '00000000-0000-4000-8000-000000000003', kind: 'dataset' },
+      ],
+      sanitized,
+    )).toBeNull();
   });
 });
 

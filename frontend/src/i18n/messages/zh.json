@@ -12894,7 +12894,8 @@
       "flowControl": "流程控制",
       "tools": "工具",
       "textParser": "文本解析",
-      "diagnostics": "诊断"
+      "diagnostics": "诊断",
+      "aiAgentsGroup": "AI 智能体"
     },
     "nodeKind": {
       "router": {
@@ -12936,6 +12937,10 @@
       "healthcheck": {
         "label": "健康检查",
         "blurb": "探测一个 URL，并报告其返回的状态是否符合预期。"
+      },
+      "webSearch": {
+        "label": "网页搜索",
+        "blurb": "搜索开放网络并返回带有页面内容的结果——依次尝试你已连接的 Tavily/Exa/Linkup 密钥、运营方的 SearXNG 实例，最后回退到无需密钥的百科来源，确保始终有结果返回。"
       }
     }
   },

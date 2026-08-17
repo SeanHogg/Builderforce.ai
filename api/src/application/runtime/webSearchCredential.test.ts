@@ -5,8 +5,9 @@
  * therefore withhold `web_search` entirely) for every way a stored row can be unusable;
  * now each of those ways must fall through to the platform floor instead, because a
  * workspace with a broken integration should research against a narrower index, not
- * lose research altogether. The precedence — tenant key, then the operator's own SearXNG
- * instance, then keyless — is the other half, and it must not invert.
+ * lose research altogether. The precedence — tenant key, then the operator's own funded
+ * Tavily key, then the operator's own SearXNG instance, then keyless — is the other
+ * half, and it must not invert.
  */
 import { describe, expect, it } from 'vitest';
 import type { Db } from '../../infrastructure/database/connection';
@@ -24,6 +25,9 @@ const KEYLESS = { vendor: wikipediaSearchVendor, auth: { apiKey: null }, source:
 
 /** An operator running their own SearXNG. */
 const SEARXNG = { vendor: searxngSearchVendor, auth: { apiKey: null, baseUrl: 'http://searxng:8080' }, source: 'operator' };
+
+/** An operator funding a shared Tavily key. */
+const OPERATOR_TAVILY = { vendor: tavilySearchVendor, auth: { apiKey: 'operator-tavily-key' }, source: 'operator' };
 
 /** Minimal drizzle-shaped stub: `.select().from().where()` resolves to `rows`. The
  *  resolver issues exactly one such query, so this is the whole surface it touches. */
@@ -56,6 +60,16 @@ describe('platformWebSearchBacking', () => {
   it('uses the operator’s own SearXNG instance when one is configured', () => {
     const withOperator = { ...env, SEARXNG_URL: ' http://searxng:8080 ' } as unknown as Env;
     expect(platformWebSearchBacking(withOperator)).toEqual(SEARXNG);
+  });
+
+  it('uses the operator’s funded Tavily key when one is configured', () => {
+    const withTavily = { ...env, TAVILY_API_KEY: ' operator-tavily-key ' } as unknown as Env;
+    expect(platformWebSearchBacking(withTavily)).toEqual(OPERATOR_TAVILY);
+  });
+
+  it('prefers the funded Tavily key over SearXNG when both are configured', () => {
+    const both = { ...env, TAVILY_API_KEY: 'operator-tavily-key', SEARXNG_URL: 'http://searxng:8080' } as unknown as Env;
+    expect(platformWebSearchBacking(both)).toEqual(OPERATOR_TAVILY);
   });
 });
 
@@ -126,5 +140,21 @@ describe('resolveWebSearchBacking', () => {
 
   it('degrades to the floor (never throws) when the lookup fails', async () => {
     expect(await resolveWebSearchBacking(env, stubDb([], { throws: true }), TENANT)).toEqual(KEYLESS);
+  });
+
+  it('falls back to the operator’s funded Tavily key when the tenant has no key', async () => {
+    const withTavily = { ...env, TAVILY_API_KEY: 'operator-tavily-key' } as unknown as Env;
+    expect(await resolveWebSearchBacking(withTavily, stubDb([]), TENANT)).toEqual(OPERATOR_TAVILY);
+  });
+
+  it('prefers the operator’s funded Tavily key over SearXNG', async () => {
+    const both = { ...env, TAVILY_API_KEY: 'operator-tavily-key', SEARXNG_URL: 'http://searxng:8080' } as unknown as Env;
+    expect(await resolveWebSearchBacking(both, stubDb([]), TENANT)).toEqual(OPERATOR_TAVILY);
+  });
+
+  it('prefers the tenant key over the operator’s funded Tavily key', async () => {
+    const withTavily = { ...env, TAVILY_API_KEY: 'operator-tavily-key' } as unknown as Env;
+    const got = await resolveWebSearchBacking(withTavily, stubDb([await row({ apiKey: 'tenant-key' })]), TENANT);
+    expect(got).toMatchObject({ auth: { apiKey: 'tenant-key' }, source: 'tenant' });
   });
 });

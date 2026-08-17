@@ -332,6 +332,30 @@ export function durableCreationGraph(
   };
 }
 
+/**
+ * Claim-only: a connection's client-supplied `id` never survives {@link
+ * durableCreationGraph} above — it is always discarded and re-minted — so
+ * `validCreationGraph`'s UUID-shape check on it protects nothing at the claim
+ * boundary, unlike `sourceObjectId`/`targetObjectId`, which genuinely have to
+ * resolve, or the `PUT /:id/graph` save path, which inserts `edge.id` as the
+ * real primary key and needs the strict check to keep a malformed value out
+ * of the database.
+ *
+ * A browser build (2026-08 and earlier) that shipped `pickObject`'s connection
+ * id as `` `${fromNodeId}-${node.id}` `` instead of a fresh UUID left drafts
+ * sitting in visitors' local storage with that malformed id baked in — the
+ * fix stops NEW drafts from getting a bad id, but does nothing for one already
+ * written before the fix shipped, and `claim` rejected it forever (`Invalid
+ * connection id: …`) with no way for that visitor to ever get past it. Since
+ * the id is thrown away regardless, replace a non-UUID one with a fresh UUID
+ * before validation rather than let a legacy client bug permanently block the
+ * one thing claiming exists to do — hand the visitor's own work to their new
+ * account.
+ */
+export function sanitizeClaimConnectionIds(connections: GraphConnectionInput[]): GraphConnectionInput[] {
+  return connections.map((edge) => (UUID_RE.test(edge.id) ? edge : { ...edge, id: crypto.randomUUID() }));
+}
+
 export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -790,7 +814,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const [prior] = await db.select({ sessionId: creationSessionClaims.serverSessionId }).from(creationSessionClaims).where(and(eq(creationSessionClaims.userId, userId), eq(creationSessionClaims.clientSessionId, clientSessionId))).limit(1);
     if (prior) return c.json({ session: { id: prior.sessionId, claimed: true, replayed: true } });
     const localObjects = Array.isArray(body.objects) ? body.objects : [];
-    const localConnections = Array.isArray(body.connections) ? body.connections : [];
+    const localConnections = sanitizeClaimConnectionIds(Array.isArray(body.connections) ? body.connections : []);
     const graphError = validCreationGraph(localObjects, localConnections);
     if (graphError) return c.json({ error: graphError }, 400);
     const resourceError = await validateResourceAccess(localObjects, tenantId, segmentId, userId);

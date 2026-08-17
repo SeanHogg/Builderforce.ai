@@ -178,10 +178,20 @@ export interface Env {
    *  Set via `wrangler secret put VOYAGE_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   VOYAGE_API_KEY?: string;
 
+  /** OPTIONAL operator-funded Tavily key — a SECOND tier in the search-backing
+   *  precedence in `webSearchCredential.ts`, used only when the tenant has no BYO
+   *  search key of their own (Tavily/Exa/Linkup, in `integration_credentials`, which
+   *  always wins). Unlike SEARXNG_URL below, this is a real per-query cost the
+   *  operator is choosing to absorb on every uncredentialed tenant's behalf — set it
+   *  only if that shared quota is an accepted tradeoff for this deployment.
+   *  Set via `wrangler secret put TAVILY_API_KEY` (or api/.env + `npm run secrets:from-env`). */
+  TAVILY_API_KEY?: string;
+
   /** OPTIONAL origin of a SearXNG instance YOU run, e.g. `https://search.internal` or
-   *  `http://searxng:8080` — the MIDDLE tier of the search-backing precedence in
-   *  `webSearchCredential.ts`. A tenant's own BYO key (Tavily/Exa/Linkup, in
-   *  `integration_credentials`) wins over it; beneath it sits the keyless encyclopedic
+   *  `http://searxng:8080` — the THIRD tier of the search-backing precedence in
+   *  `webSearchCredential.ts` (beneath a tenant's own BYO key and TAVILY_API_KEY
+   *  above). Unmetered and free to run, which is why it sits below the funded
+   *  operator key rather than above it; beneath it sits the keyless encyclopedic
    *  vendor that needs nothing at all.
    *
    *  This is the recommended way to give every tenant and every logged-out visitor real

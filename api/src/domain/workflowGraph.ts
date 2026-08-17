@@ -38,6 +38,7 @@ export type WorkflowNodeKind =
   | 'html-to-text' // Text Parser: strip HTML tags from the input
   | 'assert'       // Diagnostics: fail (or warn) the run unless an expression holds
   | 'healthcheck'  // Diagnostics: probe a URL for reachability / expected status
+  | 'web-search'   // AI Agents: search the open web (tenant key → operator SearXNG → keyless)
   | 'output'     // terminal: write artifact / notify / push to board
   | 'gmail';     // integration: send an email via the tenant's connected Gmail
 
@@ -65,6 +66,7 @@ export const NODE_HANDLER_ROLES: Record<Exclude<WorkflowNodeKind, 'agent'>, stri
   'html-to-text': 'node:html-to-text',
   assert:         'node:assert',
   healthcheck:    'node:healthcheck',
+  'web-search':   'node:web-search',
   output:    'node:output',
   gmail:     'node:gmail',
 };
@@ -227,6 +229,8 @@ export function taskTextForNode(node: WorkflowDefNode): string {
       return `Assert: ${String(c.expression ?? node.label)}`;
     case 'healthcheck':
       return `Healthcheck: ${String(c.url ?? node.label)}`;
+    case 'web-search':
+      return `Web search: ${String(c.query ?? '{{input}}')}`;
     case 'trigger':
       return `Trigger (${String(c.triggerType ?? 'manual')})`;
     case 'output':

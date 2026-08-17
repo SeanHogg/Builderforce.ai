@@ -57,6 +57,8 @@ export function configSummary(kind: WorkflowNodeKind, config: Record<string, unk
       return String(config.expression ?? '');
     case 'healthcheck':
       return String(config.url ?? '');
+    case 'web-search':
+      return String(config.query ?? '{{input}}');
     default:
       return '';
   }

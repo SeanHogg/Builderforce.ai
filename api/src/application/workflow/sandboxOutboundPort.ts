@@ -22,5 +22,6 @@ export function sandboxOutboundPort(): OutboundPort {
     connector: (config) => stub('connector', config),
     mcp: (config) => stub('mcp', config),
     llm: (config) => stub('llm', config),
+    webSearch: (config) => stub('webSearch', config),
   };
 }

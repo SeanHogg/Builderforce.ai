@@ -1,3 +1,59 @@
+## ✅ RESOLVED 2026-08-17 — `claim` permanently rejected a draft with a legacy malformed connection id
+
+Second support ticket for the SAME `Invalid connection id: e756ab15-…-413a7c0c-…` error
+(first one prompted the `pickObject` fix earlier the same day), reported 2026-08-17T02:33 —
+after that fix had already shipped. `frontend/src/components/creation-canvas/CreationCanvas.tsx:2941`
+confirmed still fixed (`crypto.randomUUID()`), so this was not a new occurrence of the bug —
+it is the OLD one, already inert for new drafts but permanent for any draft that already had
+the bad id baked into a visitor's browser local storage before the fix shipped. That fix only
+stops the id from being CREATED wrong going forward; it does nothing to repair a draft that
+already has one, and `claim` rejected the whole thing outright with no path forward for that
+visitor.
+
+Root cause of why this was even rejectable: `durableCreationGraph` in
+`api/src/application/creation/creationSessionRouteService.ts` ALREADY discards and re-mints
+every connection's `id` at claim time (only `sourceObjectId`/`targetObjectId` are looked up
+and preserved) — so `validCreationGraph`'s `UUID_RE.test(edge.id)` check on the CONNECTION's
+own id protects nothing at the claim boundary; the value is thrown away immediately after
+passing it. (Checked all 4 other `validCreationGraph` call sites first: `PUT /:id/graph`
+DOES insert `edge.id` as the literal database primary key, so the check stays load-bearing
+there — this fix is claim-specific, not a global relaxation.) Added
+`sanitizeClaimConnectionIds()`, called in `/claim` right before validation: any connection
+id that fails the UUID check gets a freshly minted one (each malformed id independently, so
+sanitizing two different-but-both-malformed ids can never manufacture a false "duplicate
+connection id"). Every currently-stuck local draft — not just this one ticket — is unblocked
+by this, since it doesn't depend on the visitor's browser having reloaded new client code.
+
+Added 3 unit tests (`sanitizeClaimConnectionIds` describe block, matching the file's existing
+`validCreationGraph`/`durableCreationGraph` test style): the exact malformed id from both
+tickets gets replaced while the rest of the edge is untouched, an already-valid id is left
+alone, and two malformed ids sanitize to distinct values that pass `validCreationGraph`
+cleanly. Verified: 19/19 tests in `creationSessionRouteService.test.ts`, `npm run check` →
+24/24.
+
+## ✅ RESOLVED 2026-08-17 — Deploy frontend: self-hosted JetBrains Mono, plus two more roadmap/silent-catch drifts
+
+`gh run view` on the actual latest CI run (`9315583` "Canvas features") showed the pasted
+zh.json failure was from an EARLIER commit ("Roblox") already superseded by the time this
+one landed — confirmed via `git show HEAD:frontend/src/i18n/messages/zh.json` parsing clean
+and `git fetch` showing local HEAD = `origin/main`. The current run's REAL failures:
+
+- **`check:roadmap` and `check:silent-catches` drifted again** (group 14 this time; a new
+  empty `catch {}` in `application/workflow/cloudExecutor.ts:241`, a different file each
+  time — concurrent writers keep landing work on both files). Recounted group 14 (43) and
+  routed the router node's malformed-JSON catch through `reportCaughtError` at `level:
+  'warning'`, same convention as the earlier `payables.ts` fix. `npm run check` → 24/24.
+- **`Deploy frontend` — `next/font/google` failed to fetch JetBrains Mono from Google Fonts
+  at build time**, the first occurrence of this specific error (the two runs before it
+  succeeded on this step) — a CI-runner network dependency, not a code defect. Asked the
+  operator how to handle it; chosen fix was to self-host rather than treat it as transient:
+  added `@fontsource/jetbrains-mono` (npm-distributed font FILES, not a manually-vendored
+  binary) and switched `frontend/src/app/layout.tsx` from `next/font/google` to
+  `next/font/local` pointing at its 400/500/600 latin `.woff2` files — same generated
+  `--font-jetbrains-mono` variable, same zero-layout-shift preloading, zero network access
+  at build OR request time from here on. Verified with a full `npx next build` — exit 0,
+  complete route manifest, no font errors.
+
 ## ✅ RESOLVED 2026-08-16 — The dev-manager canvas review's six remaining entries: manager seed path, PMO delivery object, `blocks` edge, delivery-lifecycle + risk kinds, board-highlight + saved views, per-object cost
 
 Follow-on to the canvas-settings pass above: those six entries were first logged

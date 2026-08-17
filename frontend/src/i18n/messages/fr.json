@@ -12894,7 +12894,8 @@
       "flowControl": "Contrôle de flux",
       "tools": "Outils",
       "textParser": "Analyseur de texte",
-      "diagnostics": "Diagnostics"
+      "diagnostics": "Diagnostics",
+      "aiAgentsGroup": "Agents IA"
     },
     "nodeKind": {
       "router": {
@@ -12936,6 +12937,10 @@
       "healthcheck": {
         "label": "Vérification d’état",
         "blurb": "Sonde une URL et indique si elle a renvoyé le statut attendu."
+      },
+      "webSearch": {
+        "label": "Recherche web",
+        "blurb": "Recherche sur le web ouvert et renvoie des résultats avec le contenu des pages — utilise votre clé Tavily/Exa/Linkup connectée, puis une instance SearXNG de l’opérateur, puis une source encyclopédique sans clé en dernier recours, afin de toujours renvoyer un résultat."
       }
     }
   },

@@ -1,10 +1,15 @@
 /**
- * Coverage for the Flow Control / Tools / Text Parser / Diagnostics node kinds
- * added for Make.com parity (see cloudExecutor.ts's `executeCloudNode` switch).
- * Mirrors cloudExecutor.test.ts's style: no DB, so only the usageCtx-free kinds
- * (pure expression/text evaluation) are exercised end-to-end here; the
- * usageCtx-gated kinds (set-variable/get-variable/increment) are checked only
- * for their "needs a tenant context" refusal, same as gmail/connector/mcp.
+ * Coverage for the Flow Control / Tools / Text Parser / Diagnostics / AI Agents
+ * node kinds added for Make.com parity (see cloudExecutor.ts's `executeCloudNode`
+ * switch). Mirrors cloudExecutor.test.ts's style: no DB, so only the
+ * usageCtx-free kinds (pure expression/text evaluation) are exercised end-to-end
+ * here; the usageCtx-gated kinds (set-variable/get-variable/increment) are
+ * checked only for their "needs a tenant context" refusal, same as
+ * gmail/connector/mcp. `web-search` needs neither DB nor usageCtx to RUN (it
+ * degrades to the keyless floor), so it is only exercised for its
+ * no-usageCtx-required validation path here; its real vendor call is covered by
+ * cloudExecutor.test.ts's stubbed-outbound-port test and by
+ * webSearchCredential.test.ts's backing-resolution coverage — not re-mocked here.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -123,6 +128,13 @@ describe('healthcheck', () => {
 
   it('requires a URL', async () => {
     await expect(executeCloudNode(env, { kind: 'healthcheck', config: {} }, '')).rejects.toThrow(/URL/);
+  });
+});
+
+describe('web-search', () => {
+  it('requires a query (no {{input}} and no upstream text to fall back to)', async () => {
+    await expect(executeCloudNode(env, { kind: 'web-search', config: {} }, ''))
+      .rejects.toThrow(/query/);
   });
 });
 

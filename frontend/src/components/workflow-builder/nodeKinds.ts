@@ -35,7 +35,7 @@ export function isFieldVisible(field: ConfigField, config: Record<string, unknow
 
 export type NodeGroup =
   | 'Trigger' | 'LLM Logic' | 'Evermind Build' | 'Integrations' | 'ETL' | 'Agent' | 'Output'
-  | 'Flow Control' | 'Tools' | 'Text Parser' | 'Diagnostics';
+  | 'Flow Control' | 'Tools' | 'Text Parser' | 'Diagnostics' | 'AI Agents';
 
 export interface NodeKindMeta {
   kind: WorkflowNodeKind;
@@ -525,6 +525,18 @@ export const NODE_KINDS: NodeKindMeta[] = [
     ],
   },
   {
+    kind: 'web-search',
+    label: 'Web Search',
+    icon: '🔎',
+    group: 'AI Agents',
+    accent: 'var(--teal-bright)',
+    blurb: 'Search the open web and return results with page content — resolves your connected Tavily/Exa/Linkup key, then an operator SearXNG instance, then a keyless encyclopedic fallback, so it always returns something.',
+    defaultConfig: { query: '' },
+    fields: [
+      { key: 'query', label: 'Query', type: 'text', placeholder: '{{input}} — defaults to the upstream output' },
+    ],
+  },
+  {
     kind: 'output',
     label: 'Output',
     icon: '📤',
@@ -548,7 +560,7 @@ export const NODE_KIND_MAP: Record<WorkflowNodeKind, NodeKindMeta> = NODE_KINDS.
 );
 
 export const NODE_GROUPS: NodeGroup[] = [
-  'Trigger', 'Flow Control', 'Tools', 'Text Parser', 'Diagnostics',
+  'Trigger', 'Flow Control', 'Tools', 'Text Parser', 'AI Agents', 'Diagnostics',
   'LLM Logic', 'Evermind Build', 'Integrations', 'Agent', 'ETL', 'Output',
 ];
 
@@ -571,6 +583,7 @@ export const NODE_GROUP_KEYS: Record<NodeGroup, string> = {
   'Tools': 'tools',
   'Text Parser': 'textParser',
   'Diagnostics': 'diagnostics',
+  'AI Agents': 'aiAgentsGroup',
 };
 
 /**
@@ -593,6 +606,7 @@ export const I18N_NODE_KIND_SLUG: Partial<Record<WorkflowNodeKind, string>> = {
   'html-to-text': 'htmlToText',
   assert: 'assert',
   healthcheck: 'healthcheck',
+  'web-search': 'webSearch',
 };
 
 /** A translator over the `evermindBuild` namespace — `useTranslations('evermindBuild')`'s
