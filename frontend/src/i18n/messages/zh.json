@@ -12868,10 +12868,9 @@
     "importTitle": "导入 YAML/JSON 工作流",
     "importLabel": "导入",
     "builderRun": "运行",
-    "searchIntegrations": "搜索集成…",
-    "dragHint": "拖动到画布上，或点击添加。",
-    "noIntegrationsMatch": "没有与“{query}”匹配的集成。",
-    "canvasHintLine1": "将节点从面板拖到画布上。",
+    "addNode": "添加",
+    "addNodeTitle": "为此工作流添加一个步骤",
+    "canvasHintLine1": "这里还没有内容 —— 点击“+ 添加”添加一个步骤。",
     "canvasHintLine2": "将它们连接起来，然后保存并运行。",
     "statusSaved": "已保存。",
     "statusSaveFailed": "保存失败",
@@ -12905,6 +12904,24 @@
       "textParser": "文本解析",
       "diagnostics": "诊断",
       "aiAgentsGroup": "AI 智能体"
+    },
+    "integrationCategory": {
+      "aiAgents": "AI 智能体",
+      "llmPlatforms": "LLM 平台",
+      "coreMcpServers": "核心 MCP 服务器",
+      "dataAndDatabases": "数据与数据库",
+      "productivityAndDocs": "效率与文档",
+      "communication": "通讯",
+      "marketingAndCrm": "营销与 CRM",
+      "analyticsAndDataCollection": "分析与数据采集"
+    },
+    "nodePicker": {
+      "search": "搜索步骤…",
+      "close": "关闭",
+      "categories": "类别",
+      "allGroups": "全部",
+      "noMatches": "没有与“{query}”匹配的结果。",
+      "addLabel": "添加步骤"
     },
     "nodeKind": {
       "router": {

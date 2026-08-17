@@ -12868,10 +12868,9 @@
     "importTitle": "Importar un flujo de trabajo YAML/JSON",
     "importLabel": "Importar",
     "builderRun": "Ejecutar",
-    "searchIntegrations": "Buscar integraciones…",
-    "dragHint": "Arrastra al lienzo o haz clic para añadir.",
-    "noIntegrationsMatch": "Ninguna integración coincide con «{query}».",
-    "canvasHintLine1": "Arrastra nodos desde la paleta al lienzo.",
+    "addNode": "Anadir",
+    "addNodeTitle": "Anadir un paso a este flujo de trabajo",
+    "canvasHintLine1": "Aun no hay nada aqui — pulsa + Anadir para un paso.",
     "canvasHintLine2": "Conéctalos entre sí y luego Guarda y Ejecuta.",
     "statusSaved": "Guardado.",
     "statusSaveFailed": "Error al guardar",
@@ -12905,6 +12904,24 @@
       "textParser": "Analizador de texto",
       "diagnostics": "Diagnósticos",
       "aiAgentsGroup": "Agentes de IA"
+    },
+    "integrationCategory": {
+      "aiAgents": "Agentes de IA",
+      "llmPlatforms": "Plataformas LLM",
+      "coreMcpServers": "Servidores MCP principales",
+      "dataAndDatabases": "Datos y bases de datos",
+      "productivityAndDocs": "Productividad y documentos",
+      "communication": "Comunicacion",
+      "marketingAndCrm": "Marketing y CRM",
+      "analyticsAndDataCollection": "Analitica y recoleccion de datos"
+    },
+    "nodePicker": {
+      "search": "Buscar pasos…",
+      "close": "Cerrar",
+      "categories": "Categorias",
+      "allGroups": "Todo",
+      "noMatches": "Nada coincide con «{query}».",
+      "addLabel": "Anadir un paso"
     },
     "nodeKind": {
       "router": {

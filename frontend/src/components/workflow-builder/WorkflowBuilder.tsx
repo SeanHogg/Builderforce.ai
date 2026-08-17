@@ -36,20 +36,14 @@ import { NodeConfigPanel } from './NodeConfigPanel';
 import { EvermindBuildPanel } from './EvermindBuildPanel';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { WorkflowRunHistoryPanel } from '@/components/WorkflowRunHistoryPanel';
-import { NODE_GROUPS, NODE_GROUP_KEYS, NODE_KINDS, NODE_KIND_MAP, nodeKindLabel, nodeKindBlurb, type NodeGroup } from './nodeKinds';
+import { WorkflowNodePicker } from './WorkflowNodePicker';
+import { NODE_GROUP_KEYS, NODE_KIND_MAP, type NodeGroup } from './nodeKinds';
 import { hasBuildNodes, loadTemplateGraph, EVERMIND_BUILD_TEMPLATES } from '@/lib/evermindBuild';
-import {
-  INTEGRATIONS, INTEGRATION_CATEGORIES, integrationAccent, integrationIcon, presetConfig,
-  type Integration,
-} from './integrations';
+import { presetConfig, type Integration } from './integrations';
 import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
 import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
-
-/** dataTransfer MIME for palette → canvas drag-and-drop. */
-const DND_MIME = 'application/x-wf-node';
-type DndPayload = { kind?: WorkflowNodeKind; integrationId?: string };
 
 const nodeTypes: NodeTypes = { builder: BuilderNode };
 
@@ -65,20 +59,6 @@ const fieldStyle: React.CSSProperties = {
   padding: '7px 10px', fontSize: 12.5, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
   background: 'var(--bg-deep)', color: 'var(--text-primary)',
 };
-const groupLabelStyle: React.CSSProperties = {
-  fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase',
-  letterSpacing: '0.04em', marginBottom: 5,
-};
-function paletteItemStyle(accent: string): React.CSSProperties {
-  return {
-    display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
-    padding: '6px 8px', marginBottom: 4, fontSize: 12, fontWeight: 600,
-    background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-    border: '1px solid var(--border-subtle)', borderLeft: `3px solid ${accent}`,
-    borderRadius: 'var(--radius-sm)', cursor: 'grab',
-  };
-}
-
 type XY = { x: number; y: number };
 
 /** Staggered fallback position when a node is added by click (no drop point). */
@@ -194,7 +174,8 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
 
   const rfRef = useRef<ReactFlowInstance<Node<BuilderNodeData>, Edge> | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [paletteSearch, setPaletteSearch] = useState('');
+  const addNodeButtonRef = useRef<HTMLButtonElement>(null);
+  const [nodePickerAnchor, setNodePickerAnchor] = useState<XY | null>(null);
 
   const cleanLayout = useCanvasCleanLayout({ boardRef: canvasRef, instanceRef: rfRef, setNodes, edges });
 
@@ -247,33 +228,6 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
 
   const addIntegration = useCallback(
     (integ: Integration) => setNodes((nds) => [...nds, makeIntegrationNode(integ, staggerPos(nds.length))]),
-    [setNodes],
-  );
-
-  // Drag-and-drop: palette items carry a JSON payload; the canvas drops them at
-  // the cursor's flow coordinates.
-  const onPaletteDragStart = useCallback((e: React.DragEvent, payload: DndPayload) => {
-    e.dataTransfer.setData(DND_MIME, JSON.stringify(payload));
-    e.dataTransfer.effectAllowed = 'move';
-  }, []);
-
-  const onCanvasDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  }, []);
-
-  const onCanvasDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      const raw = e.dataTransfer.getData(DND_MIME);
-      if (!raw) return;
-      let payload: DndPayload;
-      try { payload = JSON.parse(raw) as DndPayload; } catch { return; }
-      const position = rfRef.current?.screenToFlowPosition({ x: e.clientX, y: e.clientY }) ?? { x: 0, y: 0 };
-      const integ = payload.integrationId ? INTEGRATIONS.find((i) => i.id === payload.integrationId) : undefined;
-      const node = integ ? makeIntegrationNode(integ, position) : payload.kind ? makeNode(payload.kind, position) : null;
-      if (node) setNodes((nds) => [...nds, node]);
-    },
     [setNodes],
   );
 
@@ -466,18 +420,20 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
     return <div style={{ padding: 24, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('loadingWorkflow')}</div>;
   }
 
-  const q = paletteSearch.trim().toLowerCase();
-  const filteredIntegrations = q
-    ? INTEGRATIONS.filter(
-        (i) => i.label.toLowerCase().includes(q) || i.description.toLowerCase().includes(q) || i.category.includes(q),
-      )
-    : INTEGRATIONS;
-  const sortedCategories = INTEGRATION_CATEGORIES.slice().sort((a, b) => a.order - b.order);
-
   return (
     <div className="app-full-height" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          ref={addNodeButtonRef}
+          style={btnPrimary}
+          onClick={() => {
+            const rect = addNodeButtonRef.current?.getBoundingClientRect();
+            setNodePickerAnchor(rect ? { x: rect.left, y: rect.bottom + 6 } : { x: 16, y: 60 });
+          }}
+          title={t('addNodeTitle')}
+        ><Icon name="plus" size={14} /> {t('addNode')}</button>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -544,6 +500,15 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
         {status && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{status}</span>}
       </div>
 
+      {nodePickerAnchor && (
+        <WorkflowNodePicker
+          anchor={nodePickerAnchor}
+          onPickKind={(kind) => { addNode(kind); setNodePickerAnchor(null); }}
+          onPickIntegration={(integ) => { addIntegration(integ); setNodePickerAnchor(null); }}
+          onClose={() => setNodePickerAnchor(null)}
+        />
+      )}
+
       <EvermindBuildPanel
         open={buildOpen}
         onClose={() => setBuildOpen(false)}
@@ -565,75 +530,8 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
       )}
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        {/* Palette */}
-        <div style={{ width: 210, borderRight: '1px solid var(--border-subtle)', overflowY: 'auto', padding: 12 }}>
-          <input
-            value={paletteSearch}
-            onChange={(e) => setPaletteSearch(e.target.value)}
-            placeholder={t('searchIntegrations')}
-            style={{ ...fieldStyle, width: '100%', boxSizing: 'border-box', marginBottom: 8, fontSize: 'var(--font-size-small)' }}
-          />
-          <div style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)', marginBottom: 10 }}>{t('dragHint')}</div>
-
-          {/* Core node kinds */}
-          {NODE_GROUPS.map((group) => {
-            const items = NODE_KINDS.filter((m) => m.group === group);
-            if (!items.length) return null;
-            return (
-              <div key={group} style={{ marginBottom: 12 }}>
-                <div style={groupLabelStyle}>{nodeGroupLabel(group)}</div>
-                {items.map((m) => (
-                  <button
-                    key={m.kind}
-                    type="button"
-                    draggable
-                    onDragStart={(e) => onPaletteDragStart(e, { kind: m.kind })}
-                    onClick={() => addNode(m.kind)}
-                    title={nodeKindBlurb(m, t)}
-                    style={paletteItemStyle(m.accent)}
-                  >
-                    <Icon source={m.icon} size={18} /> {nodeKindLabel(m, t)}
-                  </button>
-                ))}
-              </div>
-            );
-          })}
-
-          {/* Integrations — MCP servers, LLM platforms, data-collection sources */}
-          {sortedCategories.map((cat) => {
-            const items = filteredIntegrations.filter((i) => i.category === cat.id);
-            if (!items.length) return null;
-            return (
-              <div key={cat.id} style={{ marginBottom: 12 }}>
-                <div style={groupLabelStyle}><Icon source={cat.icon} size={16} /> {cat.label}</div>
-                {items.map((i) => (
-                  <button
-                    key={i.id}
-                    type="button"
-                    draggable
-                    onDragStart={(e) => onPaletteDragStart(e, { integrationId: i.id })}
-                    onClick={() => addIntegration(i)}
-                    title={i.description}
-                    style={paletteItemStyle(integrationAccent(i.category))}
-                  >
-                    <Icon source={integrationIcon(i)} size={18} /> {i.label}
-                  </button>
-                ))}
-              </div>
-            );
-          })}
-          {filteredIntegrations.length === 0 && (
-            <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('noIntegrationsMatch', { query: paletteSearch })}</div>
-          )}
-        </div>
-
         {/* Canvas */}
-        <div
-          ref={canvasRef}
-          style={{ flex: 1, minWidth: 0, position: 'relative' }}
-          onDragOver={onCanvasDragOver}
-          onDrop={onCanvasDrop}
-        >
+        <div ref={canvasRef} style={{ flex: 1, minWidth: 0, position: 'relative' }}>
           <Canvas3DControlsProvider>
           <ReactFlow
             nodes={nodes}

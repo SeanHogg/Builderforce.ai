@@ -12868,10 +12868,9 @@
     "importTitle": "Einen YAML/JSON-Workflow importieren",
     "importLabel": "Importieren",
     "builderRun": "Ausführen",
-    "searchIntegrations": "Integrationen suchen…",
-    "dragHint": "Auf die Leinwand ziehen oder zum Hinzufügen klicken.",
-    "noIntegrationsMatch": "Keine Integrationen stimmen mit „{query}“ überein.",
-    "canvasHintLine1": "Ziehen Sie Knoten aus der Palette auf die Leinwand.",
+    "addNode": "Hinzufuegen",
+    "addNodeTitle": "Einen Schritt zu diesem Workflow hinzufuegen",
+    "canvasHintLine1": "Hier ist noch nichts — auf + Hinzufuegen tippen fuer einen Schritt.",
     "canvasHintLine2": "Verbinden Sie sie und speichern & führen Sie dann aus.",
     "statusSaved": "Gespeichert.",
     "statusSaveFailed": "Speichern fehlgeschlagen",
@@ -12905,6 +12904,24 @@
       "textParser": "Textparser",
       "diagnostics": "Diagnose",
       "aiAgentsGroup": "KI-Agenten"
+    },
+    "integrationCategory": {
+      "aiAgents": "KI-Agenten",
+      "llmPlatforms": "LLM-Plattformen",
+      "coreMcpServers": "Kern-MCP-Server",
+      "dataAndDatabases": "Daten & Datenbanken",
+      "productivityAndDocs": "Produktivitaet & Dokumente",
+      "communication": "Kommunikation",
+      "marketingAndCrm": "Marketing & CRM",
+      "analyticsAndDataCollection": "Analytik & Datenerfassung"
+    },
+    "nodePicker": {
+      "search": "Schritte suchen…",
+      "close": "Schliessen",
+      "categories": "Kategorien",
+      "allGroups": "Alles",
+      "noMatches": "Nichts passt zu „{query}“.",
+      "addLabel": "Einen Schritt hinzufuegen"
     },
     "nodeKind": {
       "router": {

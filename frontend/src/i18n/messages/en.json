@@ -12868,10 +12868,9 @@
     "importTitle": "Import a YAML/JSON workflow",
     "importLabel": "Import",
     "builderRun": "Run",
-    "searchIntegrations": "Search integrations…",
-    "dragHint": "Drag onto the canvas, or click to add.",
-    "noIntegrationsMatch": "No integrations match “{query}”.",
-    "canvasHintLine1": "Drag nodes from the palette onto the canvas.",
+    "addNode": "Add",
+    "addNodeTitle": "Add a step to this workflow",
+    "canvasHintLine1": "Nothing here yet — press + Add for a step.",
     "canvasHintLine2": "Wire them together, then Save & Run.",
     "statusSaved": "Saved.",
     "statusSaveFailed": "Save failed",
@@ -12905,6 +12904,24 @@
       "textParser": "Text Parser",
       "diagnostics": "Diagnostics",
       "aiAgentsGroup": "AI Agents"
+    },
+    "integrationCategory": {
+      "aiAgents": "AI Agents",
+      "llmPlatforms": "LLM Platforms",
+      "coreMcpServers": "Core MCP Servers",
+      "dataAndDatabases": "Data & Databases",
+      "productivityAndDocs": "Productivity & Docs",
+      "communication": "Communication",
+      "marketingAndCrm": "Marketing & CRM",
+      "analyticsAndDataCollection": "Analytics & Data Collection"
+    },
+    "nodePicker": {
+      "search": "Search steps…",
+      "close": "Close",
+      "categories": "Categories",
+      "allGroups": "Everything",
+      "noMatches": "Nothing matches “{query}”.",
+      "addLabel": "Add a step"
     },
     "nodeKind": {
       "router": {

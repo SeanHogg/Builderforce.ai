@@ -12868,10 +12868,9 @@
     "importTitle": "Importer un flux de travail YAML/JSON",
     "importLabel": "Importer",
     "builderRun": "Exécuter",
-    "searchIntegrations": "Rechercher des intégrations…",
-    "dragHint": "Faites glisser sur le canevas ou cliquez pour ajouter.",
-    "noIntegrationsMatch": "Aucune intégration ne correspond à « {query} ».",
-    "canvasHintLine1": "Faites glisser les nœuds depuis la palette sur le canevas.",
+    "addNode": "Ajouter",
+    "addNodeTitle": "Ajouter une etape a ce workflow",
+    "canvasHintLine1": "Rien ici pour l'instant — appuyez sur + Ajouter pour une etape.",
     "canvasHintLine2": "Reliez-les, puis Enregistrez et Exécutez.",
     "statusSaved": "Enregistré.",
     "statusSaveFailed": "Échec de l’enregistrement",
@@ -12905,6 +12904,24 @@
       "textParser": "Analyseur de texte",
       "diagnostics": "Diagnostics",
       "aiAgentsGroup": "Agents IA"
+    },
+    "integrationCategory": {
+      "aiAgents": "Agents IA",
+      "llmPlatforms": "Plateformes LLM",
+      "coreMcpServers": "Serveurs MCP principaux",
+      "dataAndDatabases": "Donnees et bases de donnees",
+      "productivityAndDocs": "Productivite et documents",
+      "communication": "Communication",
+      "marketingAndCrm": "Marketing et CRM",
+      "analyticsAndDataCollection": "Analytique et collecte de donnees"
+    },
+    "nodePicker": {
+      "search": "Rechercher des etapes…",
+      "close": "Fermer",
+      "categories": "Categories",
+      "allGroups": "Tout",
+      "noMatches": "Rien ne correspond a « {query} ».",
+      "addLabel": "Ajouter une etape"
     },
     "nodeKind": {
       "router": {

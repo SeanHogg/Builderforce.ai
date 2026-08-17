@@ -77,6 +77,23 @@ const CATEGORY_MAP: Record<string, IntegrationCategory> = INTEGRATION_CATEGORIES
   {} as Record<string, IntegrationCategory>,
 );
 
+/**
+ * The translation key each integration category is named by — same rationale
+ * as `NODE_GROUP_KEYS` in `nodeKinds.ts`: the catalog's `label` is an
+ * identifier, and the one place a reader sees it (the node picker's rail)
+ * reads a real translation rather than this file's own English.
+ */
+export const INTEGRATION_CATEGORY_KEYS: Record<string, string> = {
+  'ai-agents': 'aiAgents',
+  'llm': 'llmPlatforms',
+  'official': 'coreMcpServers',
+  'data-db': 'dataAndDatabases',
+  'productivity': 'productivityAndDocs',
+  'comms': 'communication',
+  'marketing-crm': 'marketingAndCrm',
+  'analytics-collection': 'analyticsAndDataCollection',
+};
+
 /** Accent color for an integration, derived from its category. */
 export function integrationAccent(category: string): string {
   return CATEGORY_MAP[category]?.accent ?? 'var(--text-muted)';

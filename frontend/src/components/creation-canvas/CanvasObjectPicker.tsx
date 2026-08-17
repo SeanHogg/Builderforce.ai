@@ -1,7 +1,7 @@
 // No 'use client': rendered only inside `CreationCanvas`'s client boundary.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { Icon } from '@/components/ui/Icon';
+import { SearchPicker, type SearchPickerSection } from '@/components/ui/SearchPicker';
 import type { CreationObjectGroup, CreationObjectKind } from './types';
 import { CREATION_PALETTE_GROUPS } from './creationObjectRegistry';
 import styles from './CreationCanvas.module.css';
@@ -20,11 +20,10 @@ import styles from './CreationCanvas.module.css';
  * authorable by Brain, and is unreachable by a person. So the contents come from
  * `CREATION_PALETTE_GROUPS` and nothing here knows any kind's name.
  *
- * ── WHY IT SEARCHES ACROSS GROUPS ────────────────────────────────────────────────
- * Opening on a category and then typing narrows the WHOLE catalogue, not the category.
- * Somebody who opens "Build" and types "invoice" wants the invoice, not an empty Build
- * list — and a picker that answers "no results" while holding the thing they asked for is
- * the single most annoying way to be wrong.
+ * The search/filter/keyboard-close/outside-click interaction itself lives in the shared
+ * `SearchPicker` — the workflow builder's step picker needs the exact same behaviour over
+ * a completely different catalog, so only the catalog mapping and the canvas's own theme
+ * classes live here.
  */
 
 export interface CanvasObjectPickerProps {
@@ -42,102 +41,51 @@ export interface CanvasObjectPickerProps {
   onClose: () => void;
 }
 
+const PICKER_CLASS_NAMES = {
+  root: styles.objectPicker,
+  search: styles.objectPickerSearch,
+  close: styles.objectPickerClose,
+  rows: styles.objectPickerRows,
+  rail: styles.objectPickerRail,
+  list: styles.objectPickerList,
+  icon: styles.objectPickerIcon,
+  empty: styles.anchoredPanelEmpty,
+};
+
 export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose }: CanvasObjectPickerProps) {
   const t = useTranslations('creationCanvas');
   const tPicker = useTranslations('creationCanvas.picker');
-  const [query, setQuery] = useState('');
-  const [activeGroup, setActiveGroup] = useState<CreationObjectGroup | null>(group ?? null);
-  const ref = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { searchRef.current?.focus(); }, []);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); onClose(); } };
-    const onDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (target instanceof Node && !ref.current?.contains(target)) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    // A frame later — the click that opened this is still propagating.
-    const timer = window.setTimeout(() => window.addEventListener('mousedown', onDown), 0);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      window.clearTimeout(timer);
-      window.removeEventListener('mousedown', onDown);
-    };
-  }, [onClose]);
-
-  const searching = query.trim().length > 0;
-  const items = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    // Searching ignores the open category on purpose — see the header note.
-    const source = searching || activeGroup === null
-      ? CREATION_PALETTE_GROUPS
-      : CREATION_PALETTE_GROUPS.filter((entry) => entry.group === activeGroup);
-    return source.flatMap((entry) => entry.items
-      .filter((item) => !needle || `${item.kind} ${item.label} ${entry.group}`.toLowerCase().includes(needle))
-      .map((item) => ({ ...item, group: entry.group })));
-  }, [activeGroup, query, searching]);
+  const sections = useMemo<SearchPickerSection<CreationObjectKind>[]>(
+    () => CREATION_PALETTE_GROUPS.map((entry) => ({
+      key: entry.group,
+      label: t(`group.${entry.group}` as 'group.Build'),
+      items: entry.items.map((item) => ({
+        kind: item.kind,
+        icon: item.icon,
+        label: t(`object.${item.kind}` as 'object.note'),
+        description: t(`objectDescription.${item.kind}` as 'objectDescription.note'),
+      })),
+    })),
+    [t],
+  );
 
   return (
-    <div
-      ref={ref}
-      className={styles.objectPicker}
-      data-testid="canvas-object-picker"
-      role="dialog"
-      aria-label={fromNodeId ? tPicker('insertLabel') : tPicker('addLabel')}
-      style={{ left: `${anchor.x}px`, top: `${anchor.y}px` }}
-    >
-      <div className={styles.objectPickerSearch}>
-        <input
-          ref={searchRef}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={tPicker('search')}
-          aria-label={tPicker('search')}
-        />
-        <button type="button" className={styles.objectPickerClose} aria-label={tPicker('close')} title={tPicker('close')} onClick={onClose}>
-          <Icon name="close" size={15} />
-        </button>
-      </div>
-      <div className={styles.objectPickerRows}>
-        {/* The rail is every real group, so the six circles on the bar are a shortcut
-            into this and never the boundary of it. */}
-        <div className={styles.objectPickerRail} role="group" aria-label={tPicker('categories')}>
-          <button
-            type="button"
-            aria-pressed={activeGroup === null}
-            onClick={() => setActiveGroup(null)}
-          >{tPicker('allGroups')}</button>
-          {CREATION_PALETTE_GROUPS.map((entry) => <button
-            key={entry.group}
-            type="button"
-            aria-pressed={activeGroup === entry.group}
-            onClick={() => setActiveGroup(entry.group)}
-          >{t(`group.${entry.group}` as 'group.Build')}</button>)}
-        </div>
-        <div className={styles.objectPickerList}>
-          {items.length === 0 && <p className={styles.anchoredPanelEmpty}>{tPicker('noMatches', { query: query.trim() })}</p>}
-          {items.map((item) => <button
-            key={`${item.group}-${item.kind}`}
-            type="button"
-            data-testid={`canvas-picker-${item.kind}`}
-            onClick={() => onPick(item.kind, fromNodeId)}
-          >
-            <span className={styles.objectPickerIcon} aria-hidden><Icon source={item.icon} size={18} /></span>
-            <span>
-              <b>{t(`object.${item.kind}` as 'object.note')}</b>
-              {/* The mockup's per-module line: what this kind actually does, not just
-                  its name. Search still appends the group, because a result list that
-                  spans sixteen groups is unreadable without saying which is which. */}
-              <small>
-                {t(`objectDescription.${item.kind}` as 'objectDescription.note')}
-                {searching && <> · {t(`group.${item.group}` as 'group.Build')}</>}
-              </small>
-            </span>
-          </button>)}
-        </div>
-      </div>
-    </div>
+    <SearchPicker
+      anchor={anchor}
+      sections={sections}
+      initialGroupKey={group}
+      classNames={PICKER_CLASS_NAMES}
+      ariaLabel={fromNodeId ? tPicker('insertLabel') : tPicker('addLabel')}
+      searchPlaceholder={tPicker('search')}
+      categoriesLabel={tPicker('categories')}
+      allGroupsLabel={tPicker('allGroups')}
+      closeLabel={tPicker('close')}
+      noMatches={(query) => tPicker('noMatches', { query })}
+      testIdPrefix="canvas-picker"
+      dialogTestId="canvas-object-picker"
+      onPick={(kind) => onPick(kind, fromNodeId)}
+      onClose={onClose}
+    />
   );
 }
