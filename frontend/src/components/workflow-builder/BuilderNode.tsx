@@ -43,16 +43,40 @@ export function configSummary(kind: WorkflowNodeKind, config: Record<string, unk
       return String(config.target ?? 'artifact');
     case 'router':
       return String(config.fallback ? `→ ${config.fallback}` : 'routes');
+    case 'switch':
+      return String(config.field ? `on ${config.field}` : 'switch');
     case 'merge':
       return String(config.strategy ?? 'array');
+    case 'numeric-aggregator':
+      return String(config.op ?? 'sum');
+    case 'table-aggregator':
+      return 'rows';
+    case 'text-aggregator':
+      return `sep: ${JSON.stringify(String(config.separator ?? '\n'))}`;
     case 'set-variable':
     case 'get-variable':
     case 'increment':
       return String(config.key ?? '');
+    case 'set-variables':
+      return 'multiple';
+    case 'get-variables':
+      return String(config.keys ?? '');
     case 'sleep':
       return `${String(config.seconds ?? 0)}s`;
+    case 'compose-string':
+      return String(config.template ?? '{{input}}');
+    case 'convert-encoding':
+      return String(config.mode ?? 'base64-encode');
     case 'regex-match':
+    case 'match-pattern-advanced':
       return String(config.pattern ?? '');
+    case 'html-elements':
+    case 'match-elements':
+      return `<${String(config.tag ?? '')}>`;
+    case 'replace':
+      return String(config.pattern ?? '');
+    case 'chunk-text':
+      return `${String(config.chunkSize ?? 1000)} chars`;
     case 'assert':
       return String(config.expression ?? '');
     case 'healthcheck':

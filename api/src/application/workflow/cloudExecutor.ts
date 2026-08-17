@@ -36,15 +36,20 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *     vendor backing the cloud agent's own `web_search` tool uses (tenant
  *     Tavily/Exa/Linkup key → operator SearXNG → keyless Wikipedia), so it
  *     never refuses for lack of a connected integration.
- *   - router / merge / set-variable / get-variable / increment / sleep /
- *     regex-match / html-to-text / assert / healthcheck → executed natively
- *     (Flow Control / Tools / Text Parser / Diagnostics). `router` generalizes
- *     `branch`'s `$branch`-tag mechanism to N named routes (`$route`); `merge`
- *     reads the raw per-dependency outputs off `node.depOutputs`, populated by
- *     the drain loop below rather than the pre-joined `inputText`. `set-variable`
- *     / `get-variable` / `increment` read/write `workflowVariables.ts`'s KV
- *     store. `sleep` is gated in `advanceCloudWorkflow` via `workflow_tasks
- *     .not_before` — by the time its `case` runs, the delay has already elapsed.
+ *   - router / switch / merge / numeric-aggregator / table-aggregator /
+ *     text-aggregator / set-variable / get-variable / set-variables /
+ *     get-variables / increment / sleep / compose-string / convert-encoding /
+ *     regex-match / html-to-text / html-table / html-elements /
+ *     match-elements / match-pattern-advanced / replace / chunk-text / assert
+ *     / healthcheck → executed natively (Flow Control / Tools / Text Parser /
+ *     Diagnostics). `router`/`switch` generalize `branch`'s `$branch`-tag
+ *     mechanism to N named routes (`$route`), by condition or by literal value
+ *     respectively; `merge`/the three `*-aggregator` kinds all read the raw
+ *     per-dependency outputs off `node.depOutputs`, populated by the drain
+ *     loop below rather than the pre-joined `inputText`. The `*-variable(s)`
+ *     kinds read/write `workflowVariables.ts`'s KV store. `sleep` is gated in
+ *     `advanceCloudWorkflow` via `workflow_tasks.not_before` — by the time its
+ *     `case` runs, the delay has already elapsed.
  *
  * A per-tick task budget bounds how much work one cron invocation does; a
  * multi-stage cloud workflow advances across successive ticks.
@@ -59,7 +64,10 @@ import { sendGmail } from '../integrations/googleOAuth';
 import { tenantProxyForPlan, byoAwareModel } from '../llm/tenantProxy';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { contextFromInput, evaluateBool, renderTransform } from '../../domain/workflowExpr';
-import { regexMatch, htmlToText } from '../../domain/workflowTextTools';
+import {
+  regexMatch, htmlToText, htmlTable, htmlElements, matchElements,
+  matchPatternAdvanced, replaceText, chunkText, convertEncoding,
+} from '../../domain/workflowTextTools';
 import { credentialSecret } from '../integrations/credentialCrypto';
 import { executeMcpNode, type McpNodeConfig } from './mcpNode';
 import { executeConnectorNode, type ConnectorNodeConfig } from './connectorNode';
@@ -301,6 +309,38 @@ export async function executeCloudNode(
       }
       return { output: inputText };
     }
+    case 'switch': {
+      // Like `router`, but matches a VALUE against literal cases rather than
+      // evaluating a boolean expression per route — Make's Switch module.
+      // `field` names a top-level property of the JSON payload to read; empty
+      // means match against the whole (trimmed) input text instead.
+      const ctx = contextFromInput(inputText);
+      const field = typeof node.config.field === 'string' ? node.config.field.trim() : '';
+      const actual = field ? String((ctx as Record<string, unknown>)[field] ?? '') : inputText.trim();
+      let cases: Array<{ match?: unknown; name?: unknown }> = [];
+      if (typeof node.config.cases === 'string') {
+        try {
+          const parsedCases = JSON.parse(node.config.cases) as unknown;
+          if (Array.isArray(parsedCases)) cases = parsedCases as Array<{ match?: unknown; name?: unknown }>;
+        } catch (error) {
+          reportCaughtError(error, { source: 'application/workflow/cloudExecutor.ts', operation: 'switch.parseCases', level: 'warning' });
+        }
+      }
+      let taken: string | null = null;
+      for (const c of cases) {
+        if (String(c?.match ?? '') === actual) { taken = typeof c?.name === 'string' && c.name ? c.name : actual; break; }
+      }
+      const route = taken ?? (typeof node.config.fallback === 'string' && node.config.fallback.trim() ? node.config.fallback.trim() : 'none');
+      try {
+        const parsed = JSON.parse(inputText || '{}') as Record<string, unknown>;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return { output: JSON.stringify({ ...parsed, $route: route }) };
+        }
+      } catch (error) {
+        reportCaughtError(error, { source: 'application/workflow/cloudExecutor.ts', operation: 'executeCloudNode' });
+      }
+      return { output: inputText };
+    }
     case 'merge': {
       // Reads the RAW per-dependency outputs (advanceCloudWorkflow populates
       // `node.depOutputs`), not the newline-joined `inputText` — a fan-in needs
@@ -318,6 +358,36 @@ export async function executeCloudNode(
         return { output: JSON.stringify(obj) };
       }
       return { output: JSON.stringify(parts.map(parseOrRaw)) };
+    }
+    case 'numeric-aggregator': {
+      // Same raw-depOutputs fan-in as `merge`, reduced to one number — Make's
+      // Numeric aggregator. Non-numeric branch outputs are dropped rather than
+      // failing the node (an aggregate over "the numbers that were there").
+      const op = typeof node.config.op === 'string' ? node.config.op : 'sum';
+      const parts = node.depOutputs ?? (inputText ? [inputText] : []);
+      const nums = parts.map((p) => Number(p)).filter((n) => Number.isFinite(n));
+      let result: number;
+      if (op === 'avg') result = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+      else if (op === 'min') result = nums.length ? Math.min(...nums) : 0;
+      else if (op === 'max') result = nums.length ? Math.max(...nums) : 0;
+      else if (op === 'count') result = nums.length;
+      else result = nums.reduce((a, b) => a + b, 0);
+      return { output: String(result) };
+    }
+    case 'table-aggregator': {
+      // `merge`'s 'array' strategy, filtered to rows that actually parsed as an
+      // object — Make's Table aggregator collects structured rows, not a mix
+      // of scalars and objects.
+      const parts = node.depOutputs ?? (inputText ? [inputText] : []);
+      const rows = parts
+        .map((p) => { try { return JSON.parse(p) as unknown; } catch { return null; } })
+        .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object' && !Array.isArray(r));
+      return { output: JSON.stringify(rows) };
+    }
+    case 'text-aggregator': {
+      const separator = typeof node.config.separator === 'string' ? node.config.separator : '\n';
+      const parts = node.depOutputs ?? (inputText ? [inputText] : []);
+      return { output: parts.join(separator) };
     }
     case 'set-variable': {
       if (!usageCtx) throw new Error('The Set Variable node needs a tenant context to store state');
@@ -347,6 +417,46 @@ export async function executeCloudNode(
       const value = await incrementWorkflowVariable(usageCtx.db, usageCtx.tenantId, scopeId, key, step);
       return { output: String(value) };
     }
+    case 'get-variables': {
+      if (!usageCtx) throw new Error('The Get Variables node needs a tenant context to read state');
+      const keys = typeof node.config.keys === 'string'
+        ? node.config.keys.split(',').map((k) => k.trim()).filter(Boolean)
+        : [];
+      const out: Record<string, string> = {};
+      for (const key of keys) {
+        out[key] = await getWorkflowVariable(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId, key);
+      }
+      return { output: JSON.stringify(out) };
+    }
+    case 'set-variables': {
+      if (!usageCtx) throw new Error('The Set Variables node needs a tenant context to store state');
+      // Authored as a JSON string, same convention as `router`'s `routes` and
+      // `mcp`'s `params` — {"key": "value or {{input}}"} per entry.
+      let values: Record<string, unknown> = {};
+      if (typeof node.config.values === 'string') {
+        try {
+          const parsedValues = JSON.parse(node.config.values) as unknown;
+          if (parsedValues && typeof parsedValues === 'object' && !Array.isArray(parsedValues)) {
+            values = parsedValues as Record<string, unknown>;
+          }
+        } catch (error) {
+          reportCaughtError(error, { source: 'application/workflow/cloudExecutor.ts', operation: 'set-variables.parseValues', level: 'warning' });
+        }
+      }
+      const written: Record<string, string> = {};
+      for (const [key, raw] of Object.entries(values)) {
+        const value = renderTemplate(String(raw ?? ''), inputText);
+        await setWorkflowVariable(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId, key, value);
+        written[key] = value;
+      }
+      return { output: JSON.stringify(written) };
+    }
+    case 'compose-string':
+      return { output: renderTemplate(typeof node.config.template === 'string' ? node.config.template : '{{input}}', inputText) };
+    case 'convert-encoding': {
+      const mode = typeof node.config.mode === 'string' ? node.config.mode : 'base64-encode';
+      return { output: convertEncoding(mode, inputText) };
+    }
     case 'sleep':
       // The delay itself is enforced by advanceCloudWorkflow's `not_before`
       // gate before this case ever runs — by the time we get here, it's due.
@@ -358,6 +468,34 @@ export async function executeCloudNode(
     }
     case 'html-to-text':
       return { output: htmlToText(inputText) };
+    case 'html-table':
+      return { output: JSON.stringify(htmlTable(inputText)) };
+    case 'html-elements': {
+      const tag = typeof node.config.tag === 'string' ? node.config.tag : '';
+      return { output: JSON.stringify(htmlElements(inputText, tag)) };
+    }
+    case 'match-elements': {
+      const tag = typeof node.config.tag === 'string' ? node.config.tag : '';
+      const pattern = typeof node.config.pattern === 'string' ? node.config.pattern : '';
+      return { output: JSON.stringify(matchElements(inputText, tag, pattern)) };
+    }
+    case 'match-pattern-advanced': {
+      const pattern = typeof node.config.pattern === 'string' ? node.config.pattern : '';
+      const flags = typeof node.config.flags === 'string' ? node.config.flags : '';
+      return { output: JSON.stringify(matchPatternAdvanced(pattern, flags, inputText)) };
+    }
+    case 'replace': {
+      const pattern = typeof node.config.pattern === 'string' ? node.config.pattern : '';
+      const replacement = typeof node.config.replacement === 'string' ? node.config.replacement : '';
+      const flags = typeof node.config.flags === 'string' ? node.config.flags : '';
+      const literal = node.config.literal === true || node.config.literal === 'true';
+      return { output: replaceText(inputText, pattern, replacement, flags, literal) };
+    }
+    case 'chunk-text': {
+      const chunkSize = typeof node.config.chunkSize === 'number' ? node.config.chunkSize : Number(node.config.chunkSize) || 1000;
+      const overlap = typeof node.config.overlap === 'number' ? node.config.overlap : Number(node.config.overlap) || 0;
+      return { output: JSON.stringify(chunkText(inputText, chunkSize, overlap)) };
+    }
     case 'assert': {
       const ctx = contextFromInput(inputText);
       const expression = typeof node.config.expression === 'string' ? node.config.expression : '';

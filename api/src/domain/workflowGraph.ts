@@ -29,13 +29,27 @@ export type WorkflowNodeKind =
   | 'filter'     // Flow Control: drop the payload unless a predicate holds
   | 'branch'     // Flow Control: conditional fan-out, tags $branch
   | 'router'     // Flow Control: N-way conditional fan-out, tags $route
+  | 'switch'     // Flow Control: N-way fan-out by literal value match, tags $route
   | 'merge'      // Flow Control: join multiple upstream branches into one payload
+  | 'numeric-aggregator' // Tools: reduce multiple upstream branches to one number
+  | 'table-aggregator'   // Tools: collect multiple upstream branches into one row array
+  | 'text-aggregator'    // Tools: join multiple upstream branches into one string
   | 'set-variable' // Tools: write a run-scoped variable
   | 'get-variable' // Tools: read a run-scoped variable
+  | 'set-variables' // Tools: write several run-scoped variables at once
+  | 'get-variables' // Tools: read several run-scoped variables at once
   | 'increment'    // Tools: a definition-scoped, cross-run persistent counter
   | 'sleep'        // Tools: delay this path by N seconds
+  | 'compose-string'   // Tools: build a string from a {{input}} template
+  | 'convert-encoding' // Tools: base64 / URL / hex encode or decode the input
   | 'regex-match'  // Text Parser: match a regular expression against the input
   | 'html-to-text' // Text Parser: strip HTML tags from the input
+  | 'html-table'   // Text Parser: parse the first <table> into rows of cell text
+  | 'html-elements'        // Text Parser: extract every matching tag's text + attributes
+  | 'match-elements'       // Text Parser: html-elements filtered by a text pattern
+  | 'match-pattern-advanced' // Text Parser: every regex match with named capture groups
+  | 'replace'      // Text Parser: find/replace (literal or regex)
+  | 'chunk-text'   // Text Parser: split the input into fixed-size chunks
   | 'assert'       // Diagnostics: fail (or warn) the run unless an expression holds
   | 'healthcheck'  // Diagnostics: probe a URL for reachability / expected status
   | 'web-search'   // AI Agents: search the open web (tenant key → operator SearXNG → keyless)
@@ -57,13 +71,27 @@ export const NODE_HANDLER_ROLES: Record<Exclude<WorkflowNodeKind, 'agent'>, stri
   filter:    'node:filter',
   branch:    'node:branch',
   router:    'node:router',
+  switch:    'node:switch',
   merge:     'node:merge',
+  'numeric-aggregator': 'node:numeric-aggregator',
+  'table-aggregator':   'node:table-aggregator',
+  'text-aggregator':    'node:text-aggregator',
   'set-variable': 'node:set-variable',
   'get-variable': 'node:get-variable',
+  'set-variables': 'node:set-variables',
+  'get-variables': 'node:get-variables',
   increment:      'node:increment',
   sleep:          'node:sleep',
+  'compose-string':   'node:compose-string',
+  'convert-encoding': 'node:convert-encoding',
   'regex-match':  'node:regex-match',
   'html-to-text': 'node:html-to-text',
+  'html-table':   'node:html-table',
+  'html-elements':          'node:html-elements',
+  'match-elements':         'node:match-elements',
+  'match-pattern-advanced': 'node:match-pattern-advanced',
+  replace:        'node:replace',
+  'chunk-text':   'node:chunk-text',
   assert:         'node:assert',
   healthcheck:    'node:healthcheck',
   'web-search':   'node:web-search',
@@ -211,20 +239,48 @@ export function taskTextForNode(node: WorkflowDefNode): string {
       return `Branch on: ${String(c.condition ?? node.label)}`;
     case 'router':
       return `Route on: ${String(c.fallback ?? node.label ?? 'first matching condition')}`;
+    case 'switch':
+      return `Switch on: ${String(c.field ?? '(input)')}`;
     case 'merge':
       return `Merge (${String(c.strategy ?? 'array')})`;
+    case 'numeric-aggregator':
+      return `Numeric aggregator (${String(c.op ?? 'sum')})`;
+    case 'table-aggregator':
+      return 'Table aggregator';
+    case 'text-aggregator':
+      return `Text aggregator (sep: ${JSON.stringify(String(c.separator ?? '\n'))})`;
     case 'set-variable':
       return `Set variable "${String(c.key ?? node.label)}"`;
     case 'get-variable':
       return `Get variable "${String(c.key ?? node.label)}"`;
+    case 'set-variables':
+      return 'Set variables';
+    case 'get-variables':
+      return `Get variables (${String(c.keys ?? '')})`;
     case 'increment':
       return `Increment "${String(c.key ?? node.label)}"`;
     case 'sleep':
       return `Sleep ${String(c.seconds ?? 0)}s`;
+    case 'compose-string':
+      return 'Compose a string';
+    case 'convert-encoding':
+      return `Convert encoding (${String(c.mode ?? 'base64-encode')})`;
     case 'regex-match':
       return `Match /${String(c.pattern ?? node.label)}/`;
     case 'html-to-text':
       return 'HTML to text';
+    case 'html-table':
+      return 'Get content from HTML table';
+    case 'html-elements':
+      return `Get elements: <${String(c.tag ?? node.label)}>`;
+    case 'match-elements':
+      return `Match elements: <${String(c.tag ?? node.label)}>`;
+    case 'match-pattern-advanced':
+      return `Match pattern (advanced): /${String(c.pattern ?? node.label)}/`;
+    case 'replace':
+      return `Replace: ${String(c.pattern ?? node.label)}`;
+    case 'chunk-text':
+      return `Chunk text (${String(c.chunkSize ?? 1000)} chars)`;
     case 'assert':
       return `Assert: ${String(c.expression ?? node.label)}`;
     case 'healthcheck':

@@ -34,16 +34,21 @@ import { sandboxOutboundPort } from '../workflow/sandboxOutboundPort';
 import type { StageCheck } from '@builderforce/creation-canvas-contract';
 
 /** Node kinds the cloud runtime executes AND that a dry-run can safely run —
- *  outbound-capable kinds only ever run stubbed. `router` and `assert` are pure
- *  expression evaluation exactly like `branch`/`filter`; `regex-match` and
- *  `html-to-text` are pure string transforms. `merge`/`set-variable`/
- *  `get-variable`/`increment`/`sleep`/`healthcheck` are deliberately excluded:
- *  they need a real tenant `usageCtx` (DB-backed variable state) or reach the
- *  network (`healthcheck`), neither of which this stubbed harness provides —
- *  they're skipped exactly like `memory`/`knowledge`/`train`/`agent` above. */
+ *  outbound-capable kinds only ever run stubbed. `router`/`switch`/`assert` are
+ *  pure expression/value evaluation exactly like `branch`/`filter`;
+ *  `regex-match`/`html-to-text`/`html-table`/`html-elements`/`match-elements`/
+ *  `match-pattern-advanced`/`replace`/`chunk-text`/`compose-string`/
+ *  `convert-encoding` are pure string transforms. `merge` and the three
+ *  `*-aggregator` kinds/`set-variable(s)`/`get-variable(s)`/`increment`/
+ *  `sleep`/`healthcheck` are deliberately excluded: they need the raw
+ *  per-dependency `depOutputs` this simple step harness never populates, a
+ *  real tenant `usageCtx` (DB-backed variable state), or reach the network
+ *  (`healthcheck`) — none of which this stubbed harness provides — they're
+ *  skipped exactly like `memory`/`knowledge`/`train`/`agent` above. */
 const EXECUTABLE_KINDS: ReadonlySet<string> = new Set([
   'trigger', 'llm', 'mcp', 'connector', 'gmail', 'web-search', 'transform', 'filter', 'branch', 'output',
-  'router', 'assert', 'regex-match', 'html-to-text',
+  'router', 'switch', 'assert', 'regex-match', 'html-to-text', 'html-table', 'html-elements',
+  'match-elements', 'match-pattern-advanced', 'replace', 'chunk-text', 'compose-string', 'convert-encoding',
 ]);
 
 function record(value: unknown): Record<string, unknown> {

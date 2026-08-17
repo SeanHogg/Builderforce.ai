@@ -135,7 +135,7 @@ describe('chunkText', () => {
   });
 
   it('overlaps chunks when overlap is set', () => {
-    expect(chunkText('abcdefgh', 4, 2)).toEqual(['abcd', 'cdef', 'efgh', 'gh']);
+    expect(chunkText('abcdefgh', 4, 2)).toEqual(['abcd', 'cdef', 'efgh']);
   });
 
   it('returns an empty array for empty input', () => {

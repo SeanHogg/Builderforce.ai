@@ -972,9 +972,12 @@ export type WorkflowNodeKind =
   | 'connector'
   // Flow Control (0), Tools, Text Parser, AI Agents (reuses 'llm'), Diagnostics —
   // see api/src/domain/workflowGraph.ts, kept in sync manually (no shared package).
-  | 'router' | 'merge'
-  | 'set-variable' | 'get-variable' | 'increment' | 'sleep'
-  | 'regex-match' | 'html-to-text'
+  | 'router' | 'switch' | 'merge'
+  | 'numeric-aggregator' | 'table-aggregator' | 'text-aggregator'
+  | 'set-variable' | 'get-variable' | 'set-variables' | 'get-variables' | 'increment' | 'sleep'
+  | 'compose-string' | 'convert-encoding'
+  | 'regex-match' | 'html-to-text' | 'html-table' | 'html-elements' | 'match-elements'
+  | 'match-pattern-advanced' | 'replace' | 'chunk-text'
   | 'assert' | 'healthcheck'
   | 'web-search'
   | EvermindBuildKind;
