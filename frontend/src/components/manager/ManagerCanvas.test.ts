@@ -25,6 +25,7 @@ function props(): ManagerCanvasProps {
     actionLabel: () => 'Prioritized',
     labels: {
       canvas: 'AI Manager', live: 'Live', open: 'Open', run: 'Run now', running: 'Running',
+      openCanvas: 'Open on canvas', openingCanvas: 'Opening…',
       policy: 'Policy', policyDescription: 'Rules', backlog: 'Backlog', backlogDescription: 'Ranked work',
       stuck: 'Stuck', stuckDescription: 'Blocked work', ask: 'Ask', askDescription: 'Accountability',
       today: 'Today', todayDescription: 'Outcomes', activity: 'Activity', activityDescription: 'Audit trail', total: 'Tickets', unscored: 'Unscored',

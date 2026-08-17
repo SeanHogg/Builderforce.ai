@@ -9017,6 +9017,11 @@
     },
     "runNow": "Manager jetzt ausführen",
     "running": "Wird verwaltet…",
+    "openCanvas": {
+      "action": "Auf dem Board öffnen",
+      "opening": "Wird geöffnet…",
+      "title": "{name} — Delivery-Board"
+    },
     "disabledNotice": "Die Verwaltung ist pausiert. Aktiviere „Dieses Backlog verwaltet halten“, um den Manager auszuführen.",
     "loading": "Manager wird geladen…",
     "noProject": {
@@ -18017,6 +18022,10 @@
     },
     "datasetImportedWithPii": "{name} importiert — {rows} Zeilen, {columns} Spalten. {pii} Spalten enthalten personenbezogene Daten und werden maskiert.",
     "outlineSearch": "Diese Leinwand durchsuchen",
+    "outlineSavedViews": "Gespeicherte Ansichten",
+    "outlineSaveView": "Ansicht speichern",
+    "outlineSaveViewPlaceholder": "Diese Suche benennen",
+    "outlineRemoveSavedView": "Gespeicherte Ansicht „{name}“ entfernen",
     "outlineFilterByKind": "Nach Objekttyp filtern",
     "outlineFilterAll": "Alle {count}",
     "outlineNoMatches": "Keine Objekte entsprechen dieser Suche.",

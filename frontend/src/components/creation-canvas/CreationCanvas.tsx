@@ -1426,6 +1426,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * the point: exclusivity is the data model, not a rule each toggle remembers.
    */
   const [dockPanel, setDockPanel] = useState<CanvasDockPanel | null>(null);
+  // "A hit is listed but not SHOWN" — the outline panel's own search already ranks
+  // and filters real board content (see its header comment); this is the board HALF
+  // that was missing: while a query is active, everything NOT in its result set
+  // dims, so the query reads as a map rather than only a list. Gated on `dockPanel`
+  // rather than cleared on unmount — the panel closing already means this stops
+  // applying, without needing its own cleanup effect.
+  const [outlineHighlightIds, setOutlineHighlightIds] = useState<ReadonlySet<string> | null>(null);
   const toggleDockPanel = useCallback((panel: CanvasDockPanel) => setDockPanel((current) => (current === panel ? null : panel)), []);
   const closeDockPanel = useCallback(() => setDockPanel(null), []);
   const [fullscreen, setFullscreen] = useState(false);
@@ -9544,8 +9551,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const withBlockedFlag = withLiveData.data.kind === 'task' && taskDependencyAnalysis.isBlocked[withLiveData.id]
       ? { ...withLiveData, data: { ...withLiveData.data, isBlocked: true } }
       : withLiveData;
-    return withBlockedFlag.data.placementHidden === true ? { ...withBlockedFlag, hidden: !showHidden, style: showHidden ? { ...withBlockedFlag.style, opacity: .42 } : withBlockedFlag.style } : withBlockedFlag;
-  }), [activeAgentIds, edges, evermindLiveByNodeId, nodes, showHidden, taskDependencyAnalysis, timeline]);
+    const withPlacement = withBlockedFlag.data.placementHidden === true ? { ...withBlockedFlag, hidden: !showHidden, style: showHidden ? { ...withBlockedFlag.style, opacity: .42 } : withBlockedFlag.style } : withBlockedFlag;
+    // The outline search's board half — see `outlineHighlightIds`'s own comment.
+    return dockPanel === 'outline' && outlineHighlightIds && !outlineHighlightIds.has(withPlacement.id)
+      ? { ...withPlacement, style: { ...withPlacement.style, opacity: .18 } }
+      : withPlacement;
+  }), [activeAgentIds, dockPanel, edges, evermindLiveByNodeId, nodes, outlineHighlightIds, showHidden, taskDependencyAnalysis, timeline]);
   /**
    * The 3D view reads the SAME nodes the board renders, minus the ones the board
    * is currently hiding — a mode that quietly resurrects hidden objects would
@@ -10815,6 +10826,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           edges={edges}
           onFocus={(nodeId, rect) => { setSelectedId(nodeId); setSelectedIds([nodeId]); openNodePanel(nodeId, 'config', rect); }}
           onClose={closeDockPanel}
+          onVisibleChange={setOutlineHighlightIds}
         />}
 
         {!presentMode && paletteOpen && <aside id="canvas-object-palette" data-testid="canvas-palette" className={styles.palette}>

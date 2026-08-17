@@ -9017,6 +9017,11 @@
     },
     "runNow": "Run manager now",
     "running": "Managing…",
+    "openCanvas": {
+      "action": "Open on canvas",
+      "opening": "Opening…",
+      "title": "{name} — delivery board"
+    },
     "disabledNotice": "Managing is paused. Turn on “Keep this backlog managed” to run the manager.",
     "loading": "Loading the manager…",
     "noProject": {
@@ -18017,6 +18022,10 @@
     },
     "datasetImportedWithPii": "Imported {name} — {rows} rows, {columns} columns. {pii} columns hold personal data and are masked.",
     "outlineSearch": "Search this board",
+    "outlineSavedViews": "Saved views",
+    "outlineSaveView": "Save view",
+    "outlineSaveViewPlaceholder": "Name this search",
+    "outlineRemoveSavedView": "Remove saved view \"{name}\"",
     "outlineFilterByKind": "Filter by object type",
     "outlineFilterAll": "All {count}",
     "outlineNoMatches": "No objects match that search.",

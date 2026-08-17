@@ -1,3 +1,100 @@
+## ✅ RESOLVED 2026-08-16 — The dev-manager canvas review's six remaining entries: manager seed path, PMO delivery object, `blocks` edge, delivery-lifecycle + risk kinds, board-highlight + saved views, per-object cost
+
+Follow-on to the canvas-settings pass above: those six entries were first logged
+"blocked on the concurrent canvas session," which the same investigation that closed
+the settings gap showed was the wrong blocker — none of the six had code to collide
+with. Re-scoped and built all six for real, in file areas separate enough from the
+concurrent workflow-builder session's own active edits (`WorkflowsContent.tsx`,
+`nodeKinds.ts`, `workflowGraph.ts`) that neither touched the other.
+
+- **`blocks` dependency edges + critical-path painting.** Added `'blocks'` to
+  `CREATION_CONNECTION_KINDS` (one line — the manual edge-kind `<select>` already maps
+  straight off that array, so it needed nothing else to become choosable). In
+  `CanvasInner`, a `taskDependencyAnalysis` memo runs the existing, already-tested
+  `analyzeDependencies` primitive (`packages/creation-canvas-contract/src/dependencyGraph.ts`
+  — the same one `portfolioRollup.ts` runs one altitude up) over the board's own `task`
+  nodes joined by `blocks` edges, weighted by `storyPoints` where a task has one. Two
+  consumers: `renderedEdges` gives a critical-path `blocks` edge a heavier, accented
+  stroke (the first per-edge conditional styling this board does — `renderedNodes` had
+  the `showHidden` precedent, edges had none); `renderedNodes` tags a blocked task's
+  `data.isBlocked`, and `CreationNode.tsx`'s `TaskBody` renders a small blocked notice
+  off it.
+- **Task estimate/schedule + human assignee picker** (the two of the original eight
+  W0-1 "hand-written branches" that turned out to be real). `MUTABLE_FIELDS.task`
+  gained `startDate`/`dueDate`/`storyPoints`/`sprintId` — `tasksApi.update` had always
+  accepted all four (its own doc comment already recorded this), nothing on the board
+  could set them. `TaskInspectorSection` now renders real controls for all four,
+  persisting through the same `persistTaskPatch` status/priority already use. Separately,
+  the assignee `<select>` always wrote `assignedUserId: null` — `tasksApi.assignees()`
+  (`GET /api/tasks/assignees`, already documented as "the human half of the unified
+  assignee picker") existed and was never called from the inspector. `Inspector` now
+  fetches it for an open `task`, and the picker renders an Agents/People `<optgroup>`
+  split that writes `assignedUserId` (clearing the agent refs) or `assignedAgentRef`
+  (clearing `assignedUserId`) depending which half was picked.
+- **Per-object cost.** `runtimeApi.taskCost` (`GET /api/runtime/tasks/:taskId/cost`,
+  already read-through cached, already summing `llm_usage_log` by `task_id`) existed
+  and was only ever called from `AgentExecutionPanel`. `Inspector` now fetches it
+  alongside the task's id, and `TaskInspectorSection` shows a "Cost to build" card
+  (runs + tokens) whenever the task has any billed runs — no new backend read, this
+  was purely a wiring gap.
+- **Five delivery-lifecycle kinds + `risk`.** `pullRequest`, `ciRun`, `deployment`,
+  `productionIncident`, `environment` — registry rows (`creationObjectRegistry.ts`),
+  `MUTABLE_FIELDS` entries, and settings manifests (`canvasKindSettings.delivery.ts`)
+  for the identifying fields a person would type when referencing something that
+  shipped outside the board (none has a wired sync action yet, so none advertises a
+  button nothing answers — same rule the 42-kind pass's data-architecture kinds
+  followed). Named `productionIncident`, not `incident`: Operations already owns
+  `incident` for a field-service/safety report (`operationsObjects.ts`) — a different
+  noun sharing one English word, the exact collision `customerInterview` was renamed
+  to avoid, caught by `tsgo` the moment `MUTABLE_FIELDS` got a duplicate key.
+  `risk` — `decision`'s sibling durable artifact, per the review's own framing — is a
+  founder spec-object (`founderObjects.ts`, mirroring `decision`'s shape:
+  likelihood/impact/owner/mitigation/reviewedAt), not a registry-row kind; the
+  decision-record half of this item was already closed on a prior pass (`decision`
+  already lived in `founderObjects.ts`).
+- **PMO rollup as a board object.** New kind `deliveryRollup` (not `delivery` — that
+  name is already a `CREATION_CONNECTION_KINDS` edge kind, and an object named
+  identically to an edge in the same vocabulary reads as one thing meaning two things).
+  Its settings manifest declares `scopeKind`/`scopeId` as the only authored fields;
+  every stat (`totalTasks`, `avgCycleTimeHours`, `agentLlmCostUsd`, all four DORA
+  numbers, `avgOkrProgress`, …) is locked (`editable: () => false`) because a `refresh`
+  action — newly wired in `CreationCanvas.tsx`'s `detailsActionHandlers`, calling
+  `pmoApi.rollup(scopeKind, scopeId)` — is what writes them, never a person.
+- **Manager seed path.** Rather than replace `ManagerCanvas`'s working, tested,
+  hardcoded-panel view with a full `CreationCanvas` mount (a much larger blast-radius
+  change than "seed a session" implies, and the actual architectural move the original
+  entry proposed), added an additive "Open on canvas" action beside the existing Run
+  button: `openManagerCanvas` (`ManagerContent.tsx`) fetches this project's live
+  `pmoApi.rollup('project', …)`, then `buildManagerDeliveryGraph`
+  (`lib/managerDeliveryCanvas.ts`, mirroring `buildSalesHubGraph`'s exact
+  "provision, seed, open" shape — `creationSessionsApi.create` + `saveGraph` +
+  `router.push('/create/:id')`) seeds a fresh session with a `deliveryRollup` node
+  (already populated, not an empty shell needing a manual refresh) beside an `agent`
+  node for the manager. No new backend storage: each open is a new snapshot board,
+  the same choice `SalesCanvasLauncher` already makes for a first-time associate —
+  real delivery-on-canvas without rewriting a page that works today.
+- **Board-content highlight + saved views**, closing `CanvasOutlinePanel`'s own
+  "board search reaches the outline but not the board" gap in full. `onVisibleChange`
+  reports the outline's current matched-id set up to `CanvasInner`, which dims
+  (`opacity: .18`) every node NOT in that set while the panel is open and a filter is
+  active — the "map, not a list" half. Saved views are a small localStorage-backed
+  preset list (name + search + kind), the same client-side-preference tier
+  `INSPECTOR_WIDTH_STORAGE_KEY` already uses — a person names the current query,
+  reapplies it later, removes it — deliberately NOT server state, since "what I always
+  look for" is a personal habit, not something that should sync to a collaborator's
+  screen. Also fixed in passing: `paletteSearch`'s `searchEverything` label/aria-label
+  claimed to search "everything" while only ever filtering the palette of addable
+  object TYPES — a prior rollup had mistaken this for a seventh per-kind hand-written
+  branch; it was one generic, mislabeled filter. Relabeled `searchObjectTypes` in all
+  five locales.
+
+Verified: `npx tsgo --noEmit -p .` → clean (the only errors seen mid-pass were in
+`WorkflowsContent.tsx`, the concurrent session's own in-flight file, self-resolved
+without this pass touching it); `npx vitest run src/i18n/messages.test.ts
+src/components/creation-canvas src/components/manager src/components/workspace-canvas
+src/lib` → full green; `node api/scripts/check-roadmap.mjs` → group 10 index corrected
+(144/141 → 135, both tables) and passing.
+
 ## ✅ RESOLVED 2026-08-17 — "Create a Roblox game" produced an essay, not a game
 
 Operator report (ui 2026.8.49, session `local-21d854…`). "Create a Roblox game" ran

@@ -528,13 +528,17 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         running={running}
         canManage={canManage && !managerRunDisabled}
         onRun={runNow}
+        openingCanvas={openingCanvas}
+        onOpenCanvas={openManagerCanvas}
         relative={relative}
         actionLabel={(action) => isManagerActionType(action.actionType)
           ? t(`action.${action.actionType}`)
           : action.actionType}
         labels={{
           canvas: t('title'), live: t('activity.working'), open: t('subnav.overview'),
-          run: t('runNow'), running: t('running'), policy: t('subnav.policy'),
+          run: t('runNow'), running: t('running'),
+          openCanvas: t('openCanvas.action'), openingCanvas: t('openCanvas.opening'),
+          policy: t('subnav.policy'),
           policyDescription: t('policy.subtitle'), backlog: t('subnav.backlog'),
           backlogDescription: t('backlog.title'), stuck: t('subnav.stuck'),
           stuckDescription: t('stalls.caption', { maxAttempts: 3 }), ask: t('subnav.ask'),

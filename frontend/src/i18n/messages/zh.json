@@ -9017,6 +9017,11 @@
     },
     "runNow": "立即运行经理",
     "running": "管理中…",
+    "openCanvas": {
+      "action": "在画布中打开",
+      "opening": "正在打开…",
+      "title": "{name} — 交付看板"
+    },
     "disabledNotice": "管理已暂停。开启“保持此待办列表处于管理状态”以运行经理。",
     "loading": "正在加载经理…",
     "noProject": {
@@ -18017,6 +18022,10 @@
     },
     "datasetImportedWithPii": "已导入 {name}——{rows} 行、{columns} 列。其中 {pii} 列包含个人数据并已脱敏显示。",
     "outlineSearch": "搜索此画布",
+    "outlineSavedViews": "已保存的视图",
+    "outlineSaveView": "保存视图",
+    "outlineSaveViewPlaceholder": "为此搜索命名",
+    "outlineRemoveSavedView": "删除已保存的视图“{name}”",
     "outlineFilterByKind": "按对象类型筛选",
     "outlineFilterAll": "全部 {count}",
     "outlineNoMatches": "没有与该搜索匹配的对象。",

@@ -9017,6 +9017,11 @@
     },
     "runNow": "Lancer le manager",
     "running": "Gestion en cours…",
+    "openCanvas": {
+      "action": "Ouvrir sur le canevas",
+      "opening": "Ouverture…",
+      "title": "{name} — tableau de livraison"
+    },
     "disabledNotice": "La gestion est en pause. Activez « Continuer à gérer ce backlog » pour lancer le manager.",
     "loading": "Chargement du manager…",
     "noProject": {
@@ -18017,6 +18022,10 @@
     },
     "datasetImportedWithPii": "{name} importé — {rows} lignes, {columns} colonnes. {pii} colonnes contiennent des données personnelles et sont masquées.",
     "outlineSearch": "Rechercher dans cette toile",
+    "outlineSavedViews": "Vues enregistrées",
+    "outlineSaveView": "Enregistrer la vue",
+    "outlineSaveViewPlaceholder": "Nommer cette recherche",
+    "outlineRemoveSavedView": "Supprimer la vue enregistrée « {name} »",
     "outlineFilterByKind": "Filtrer par type d'objet",
     "outlineFilterAll": "Tous {count}",
     "outlineNoMatches": "Aucun objet ne correspond à cette recherche.",

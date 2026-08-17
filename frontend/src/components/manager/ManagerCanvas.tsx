@@ -106,6 +106,8 @@ export interface ManagerCanvasProps {
     open: string;
     run: string;
     running: string;
+    openCanvas: string;
+    openingCanvas: string;
     policy: string;
     policyDescription: string;
     backlog: string;
@@ -135,7 +137,7 @@ export interface ManagerCanvasProps {
   };
 }
 
-export function buildManagerCanvasModel({ overview, managerName, managerType, lastManaged, running, canManage, onRun, relative, actionLabel, labels }: ManagerCanvasProps): { nodes: ManagerMapNode[]; edges: Edge[] } {
+export function buildManagerCanvasModel({ overview, managerName, managerType, lastManaged, running, canManage, onRun, openingCanvas, onOpenCanvas, relative, actionLabel, labels }: ManagerCanvasProps): { nodes: ManagerMapNode[]; edges: Edge[] } {
   const { stats, backlog, actions, runTasks, policy, directives, autonomy } = overview;
   const href = (sub: string) => `/projects?tab=manager${sub ? `&sub=${sub}` : ''}`;
   const recentActions: CanvasItem[] = actions.slice(0, 5).map((action) => ({
@@ -149,7 +151,7 @@ export function buildManagerCanvasModel({ overview, managerName, managerType, la
     { ...common, id: 'policy', position: { x: 0, y: 20 }, data: { eyebrow: labels.policy, title: labels.policy, description: labels.policyDescription, icon: '⚙️', href: canManage ? href('policy') : undefined, openLabel: labels.open, badge: policy.enabled ? labels.enabled : labels.paused, metrics: [{ label: labels.directives, value: directives.filter((d) => d.status === 'active').length }, { label: labels.autoAssign, value: policy.autoAssign ? labels.enabled : labels.paused }, { label: labels.autoMerge, value: policy.allowAutoMerge ? labels.enabled : labels.paused }] } },
     { ...common, id: 'backlog', position: { x: 0, y: 255 }, data: { eyebrow: labels.backlog, title: labels.backlog, description: labels.backlogDescription, icon: '📋', href: href('backlog'), openLabel: labels.open, badge: String(backlog.length), metrics: [{ label: labels.total, value: stats.total }, { label: labels.unscored, value: stats.unscored, alert: stats.unscored > 0 }, { label: labels.unowned, value: stats.unowned, alert: stats.unowned > 0 }] } },
     { ...common, id: 'stuck', position: { x: 0, y: 480 }, data: { eyebrow: labels.stuck, title: labels.stuck, description: labels.stuckDescription, icon: '🚧', href: href('stuck'), openLabel: labels.open, tone: stats.flagged > 0 ? 'warning' : undefined, badge: String(stats.flagged), metrics: [{ label: labels.flagged, value: stats.flagged, alert: stats.flagged > 0 }, { label: labels.blockedPullRequests, value: overview.blockedPrs?.length ?? 0 }, { label: labels.openPullRequests, value: stats.blockedPullRequests ?? 0 }] } },
-    { ...common, id: 'manager', position: { x: 390, y: 245 }, data: { eyebrow: managerType, title: managerName, description: lastManaged, icon: '🧭', tone: 'manager', badge: running ? labels.live : (!policy.enabled || autonomy?.tokenBlocked ? labels.paused : labels.enabled), runLabel: running ? labels.running : labels.run, running, onRun: canManage && policy.enabled ? onRun : undefined, metrics: [{ label: labels.runTasks, value: runTasks.length }, { label: labels.actions, value: actions.length }, { label: labels.openPullRequests, value: stats.openPullRequests }] } },
+    { ...common, id: 'manager', position: { x: 390, y: 245 }, data: { eyebrow: managerType, title: managerName, description: lastManaged, icon: '🧭', tone: 'manager', badge: running ? labels.live : (!policy.enabled || autonomy?.tokenBlocked ? labels.paused : labels.enabled), runLabel: running ? labels.running : labels.run, running, onRun: canManage && policy.enabled ? onRun : undefined, openCanvasLabel: openingCanvas ? labels.openingCanvas : labels.openCanvas, openingCanvas, onOpenCanvas, metrics: [{ label: labels.runTasks, value: runTasks.length }, { label: labels.actions, value: actions.length }, { label: labels.openPullRequests, value: stats.openPullRequests }] } },
     { ...common, id: 'ask', position: { x: 805, y: 20 }, data: { eyebrow: labels.ask, title: labels.ask, description: labels.askDescription, icon: '💬', href: href('ask'), openLabel: labels.open } },
     { ...common, id: 'today', position: { x: 805, y: 190 }, data: { eyebrow: labels.today, title: labels.today, description: labels.todayDescription, icon: '☀️', href: '#manager-today', openLabel: labels.open } },
     { ...common, id: 'activity', position: { x: 805, y: 365 }, data: { eyebrow: labels.activity, title: labels.activity, description: labels.activityDescription, icon: '📡', href: href('activity'), openLabel: labels.open, tone: 'activity', badge: String(actions.length), items: recentActions, emptyLabel: labels.emptyActivity, footer: `${actions.length} · ${labels.actions}` } },

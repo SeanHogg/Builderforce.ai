@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import { JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import { LocaleProvider } from './LocaleProvider';
 import './globals.css';
 // KaTeX's own stylesheet. Loaded once, at the root, because mathematics can
@@ -12,9 +12,20 @@ import { AuthProvider } from '@/lib/AuthContext';
 import { CartProvider } from '@/lib/CartContext';
 import { MessageHubProvider } from '@/components/messages/MessageHubContext';
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
+// Self-hosted via `@fontsource/jetbrains-mono` rather than `next/font/google`:
+// the Google variant fetches the font FILES from Google Fonts at BUILD time, so
+// a CI runner with no route to fonts.googleapis.com (or a rate-limited one)
+// fails the whole deploy on a font, not a defect in this codebase (observed
+// 2026-08-17, Deploy frontend). `next/font/local` gets the same zero-layout-
+// shift self-hosting, preloading and generated `--font-jetbrains-mono` variable
+// `next/font/google` gave us, from files already on disk — no network involved
+// at build OR request time.
+const jetbrainsMono = localFont({
+  src: [
+    { path: '../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2', weight: '400', style: 'normal' },
+    { path: '../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2', weight: '500', style: 'normal' },
+    { path: '../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff2', weight: '600', style: 'normal' },
+  ],
   variable: '--font-jetbrains-mono',
   display: 'swap',
 });
@@ -159,7 +170,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         */}
         <script dangerouslySetInnerHTML={{ __html: EMBED_ERROR_REPORTER }} />
 
-        {/* JetBrains Mono loaded via next/font/google (see jetbrainsMono variable above) — no <link> needed.
+        {/* JetBrains Mono self-hosted via next/font/local (see jetbrainsMono variable above) — no <link> needed.
             Body/display text uses the system stack in globals.css (--font-sans), so no font origin
             beyond 'self' is loaded and the CSP font-src/style-src stay at 'self'. */}
         {/* JSON-LD Structured Data (SEO) — homepage schema injected at layout

@@ -238,8 +238,9 @@ export async function executeCloudNode(
         try {
           const parsedRoutes = JSON.parse(node.config.routes) as unknown;
           if (Array.isArray(parsedRoutes)) routes = parsedRoutes as Array<{ name?: unknown; condition?: unknown }>;
-        } catch {
-          /* malformed routes JSON — treat as no routes, falls through to fallback */
+        } catch (error) {
+          // Malformed routes JSON — treat as no routes, falls through to fallback.
+          reportCaughtError(error, { source: 'application/workflow/cloudExecutor.ts', operation: 'router.parseRoutes', level: 'warning' });
         }
       }
       let taken: string | null = null;
