@@ -4132,9 +4132,10 @@
   color: var(--canvas-ink);
   box-shadow: 0 22px 60px var(--canvas-shadow);
 }
-.objectPickerSearch { padding: 9px 10px; border-bottom: 1px solid var(--canvas-line); }
+.objectPickerSearch { display: flex; align-items: center; gap: 7px; padding: 9px 10px; border-bottom: 1px solid var(--canvas-line); }
 .objectPickerSearch input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 6px 9px;
   border: 1px solid var(--canvas-line);
   border-radius: var(--radius-sm);
@@ -4143,6 +4144,20 @@
   font-family: inherit;
   font-size: 12px;
 }
+.objectPickerClose {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--canvas-muted);
+  cursor: pointer;
+}
+.objectPickerClose:hover, .objectPickerClose:focus-visible { background: var(--canvas-hover); color: var(--canvas-ink); outline: none; }
 .objectPickerRows { display: grid; grid-template-columns: 128px minmax(0, 1fr); min-height: 0; }
 .objectPickerRail {
   display: flex;

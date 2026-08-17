@@ -19673,6 +19673,7 @@
     },
     "picker": {
       "search": "Buscar objetos...",
+      "close": "Cerrar",
       "categories": "Categorias",
       "allGroups": "Todo",
       "noMatches": "Nada coincide con {query}.",

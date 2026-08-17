@@ -19673,6 +19673,7 @@
     },
     "picker": {
       "search": "Objekte suchen...",
+      "close": "Schliessen",
       "categories": "Kategorien",
       "allGroups": "Alles",
       "noMatches": "Nichts passt zu {query}.",

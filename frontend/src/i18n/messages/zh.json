@@ -19673,6 +19673,7 @@
     },
     "picker": {
       "search": "搜索对象……",
+      "close": "关闭",
       "categories": "类别",
       "allGroups": "全部",
       "noMatches": "没有匹配 {query} 的结果。",

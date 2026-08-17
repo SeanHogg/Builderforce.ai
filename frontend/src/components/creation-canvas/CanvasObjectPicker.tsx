@@ -96,6 +96,9 @@ export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose 
           placeholder={tPicker('search')}
           aria-label={tPicker('search')}
         />
+        <button type="button" className={styles.objectPickerClose} aria-label={tPicker('close')} title={tPicker('close')} onClick={onClose}>
+          <Icon name="close" size={15} />
+        </button>
       </div>
       <div className={styles.objectPickerRows}>
         {/* The rail is every real group, so the six circles on the bar are a shortcut
