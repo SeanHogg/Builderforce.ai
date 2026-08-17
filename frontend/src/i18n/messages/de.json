@@ -19004,6 +19004,52 @@
         "dueAt": "Fällig"
       }
     },
+    "legal": {
+      "empty": "Für dieses {label} ist noch nichts erfasst.",
+      "emptyHint": "Laden Sie eine Datei über die Upload-Funktion der Karte hoch, oder bitten Sie Brain, sie freizugeben oder zur Unterschrift zu senden.",
+      "meterLabel": "{label}: {score} von 100",
+      "freshJustNow": "gerade eben",
+      "freshMinutes": "vor {count} Min.",
+      "freshHours": "vor {count} Std.",
+      "freshDays": "vor {count} Tagen",
+      "label": {
+        "legalDocument": "Rechtsdokument"
+      },
+      "field": {
+        "category": "Kategorie",
+        "entityId": "Rechtsträger",
+        "matterId": "Vorgang",
+        "ipId": "IP-Eintrag",
+        "documentId": "Dokument-ID",
+        "artifactId": "Datei-ID",
+        "checksum": "Prüfsumme",
+        "mime": "Dateityp",
+        "byteSize": "Dateigröße",
+        "documentStatus": "Status",
+        "signatureRequestId": "Signaturanfrage",
+        "signedAt": "Unterschrieben",
+        "activeShares": "Aktive Freigaben",
+        "summary": "Zusammenfassung"
+      }
+    },
+    "legalUpload": {
+      "category": "Kategorie",
+      "category_nda": "NDA",
+      "category_msa": "Rahmenvertrag (MSA)",
+      "category_sow": "Leistungsbeschreibung (SOW)",
+      "category_offer_letter": "Angebotsschreiben",
+      "category_ip_assignment": "IP-Übertragung",
+      "category_formation": "Gründungsunterlage",
+      "category_registration": "Registrierung",
+      "category_other": "Sonstiges",
+      "upload": "Datei hochladen",
+      "replaceFile": "Neue Version hochladen",
+      "uploading": "Wird hochgeladen…",
+      "currentFile": "Aktuelle Datei: {kb} KB",
+      "tooLarge": "Diese Datei überschreitet das 25-MB-Limit für Rechtsdokumente.",
+      "uploadFailed": "Der Upload ist fehlgeschlagen. Bitte erneut versuchen.",
+      "statusDraft": "Entwurf"
+    },
     "notice": {
       "addedToCanvas": "Ich habe den gewünschten Inhalt auf der Arbeitsfläche ergänzt.",
       "noAnswer": "Aus dieser Anfrage konnte ich keine Änderung an der Arbeitsfläche vorbereiten.",

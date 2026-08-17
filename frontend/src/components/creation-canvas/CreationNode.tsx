@@ -79,6 +79,7 @@ import { canvasTourDesignFromNode } from '@/lib/onboarding/canvasTourDesign';
 import { WebsiteBody } from './WebsiteCanvas';
 import { CanvasVideoEditor } from './CanvasVideoEditor';
 import { CanvasResumeEditor } from './CanvasResumeEditor';
+import { CanvasLegalDocumentUpload } from './CanvasLegalDocumentUpload';
 import { SpecObjectBody } from './SpecObjectBody';
 // One provenance line and one gate badge, rendered by every body that shows a derived
 // number — see the header there for why a truncated number is worse than a blank one.
@@ -2604,6 +2605,10 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'drawing' && <DrawingBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
         {data.kind === 'frame' && <div className={styles.frameBody}><strong>{String(data.framePurpose || t('arrangeObjects'))}</strong><p>{data.subtitle || t('frameFallback')}</p></div>}
         {data.kind === 'release' && <ReleaseBody data={data} onOpen={() => onOpenDetails?.(id, 'delivery')} />}
+        {/* The one real UI control `legalDocument` needs beyond the stat rows
+            SpecObjectBody already draws for it — see the component's own header
+            for why this is a direct upload and not a BrainAction. */}
+        {data.kind === 'legalDocument' && <CanvasLegalDocumentUpload objectId={id} data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
         {/* All seventeen founder kinds, from the one spec that declares their fields.
             See SpecObjectBody for why this is one branch and not forty-seven. */}
         <SpecObjectBody data={data} board={specBoard} />

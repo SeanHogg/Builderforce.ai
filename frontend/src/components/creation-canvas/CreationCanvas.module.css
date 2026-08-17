@@ -1129,6 +1129,18 @@
 .resumeControls { justify-content:space-between; border-top:1px solid var(--border); padding-top:10px; }
 .resumeControls [role="tablist"] { display:flex; gap:4px; }
 .resumeControls [role="tab"][aria-selected="true"] { border-color:#7c3aed; background:color-mix(in srgb, #7c3aed 12%, var(--surface)); color:#6d28d9; }
+
+/* The `legalDocument` card's upload control. Flex-wrap rather than a fixed grid so
+   the category select and the upload button stack cleanly on a ~360px card instead
+   of forcing the card wider — the same rule `.resumeSourceBar` follows above. */
+.legalUpload { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px; padding:10px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface); max-width:100%; }
+.legalUpload label { display:flex; flex-direction:column; gap:4px; min-width:0; flex:1 1 120px; max-width:100%; }
+.legalUpload label span { color:var(--text-muted); font-size:11px; font-weight:700; text-transform:uppercase; }
+.legalUpload select { min-height:34px; width:100%; max-width:100%; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:6px 9px; }
+.legalUpload button { border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); color:inherit; padding:7px 10px; cursor:pointer; white-space:nowrap; }
+.legalUpload button:disabled { cursor:not-allowed; opacity:.48; }
+.legalUpload small { flex-basis:100%; color:var(--text-muted); font-size:10px; }
+.legalUploadError { flex-basis:100%; margin:0; color:var(--danger, #b91c1c) !important; font-size:11px; }
 .resumeControls input[type="range"] { width:140px; accent-color:#7c3aed; }
 .resumeTemplateGallery { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; max-height:520px; overflow:auto; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--canvas-panel-muted); padding:9px; }
 .resumeTemplateGallery > button { position:relative; display:flex; min-width:0; flex-direction:column; gap:4px; border:2px solid transparent; border-radius:8px; background:var(--surface); color:inherit; padding:6px; text-align:left; cursor:pointer; }

@@ -19004,6 +19004,52 @@
         "dueAt": "Due"
       }
     },
+    "legal": {
+      "empty": "This {label} has nothing authored yet.",
+      "emptyHint": "Upload a file with the card's upload control, or ask Brain to share it or send it for signature.",
+      "meterLabel": "{label}: {score} out of 100",
+      "freshJustNow": "just now",
+      "freshMinutes": "{count}m ago",
+      "freshHours": "{count}h ago",
+      "freshDays": "{count}d ago",
+      "label": {
+        "legalDocument": "Legal document"
+      },
+      "field": {
+        "category": "Category",
+        "entityId": "Entity",
+        "matterId": "Matter",
+        "ipId": "IP record",
+        "documentId": "Document id",
+        "artifactId": "File id",
+        "checksum": "Checksum",
+        "mime": "File type",
+        "byteSize": "File size",
+        "documentStatus": "Status",
+        "signatureRequestId": "Signature request",
+        "signedAt": "Signed",
+        "activeShares": "Active shares",
+        "summary": "Summary"
+      }
+    },
+    "legalUpload": {
+      "category": "Category",
+      "category_nda": "NDA",
+      "category_msa": "MSA",
+      "category_sow": "SOW",
+      "category_offer_letter": "Offer letter",
+      "category_ip_assignment": "IP assignment",
+      "category_formation": "Formation",
+      "category_registration": "Registration",
+      "category_other": "Other",
+      "upload": "Upload file",
+      "replaceFile": "Upload new version",
+      "uploading": "Uploading…",
+      "currentFile": "Current file: {kb} KB",
+      "tooLarge": "That file is larger than the 25MB legal-file limit.",
+      "uploadFailed": "The upload failed. Try again.",
+      "statusDraft": "Draft"
+    },
     "notice": {
       "addedToCanvas": "I added the requested content to the canvas.",
       "noAnswer": "I couldn't prepare any canvas changes from that request.",

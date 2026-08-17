@@ -78,6 +78,11 @@ export const GATED_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   // deliberately absent: it only re-reads a request `send` already created and
   // asserts nothing new, so gating it would ask a human to approve a status refresh.
   offer: ['send'],
+  // A `legalDocument`'s `share` mints a link an external party can read the real
+  // file through with no Builderforce account, and `request-signature` emails a
+  // counterparty — the same outbound shape as `dataRoom.share` and `contract.sign`.
+  // `upload` and `sync` stay open: uploading and refreshing expose nothing new.
+  legalDocument: ['share', 'request-signature'],
 };
 
 /** True when this act on this kind may not simply be performed. */

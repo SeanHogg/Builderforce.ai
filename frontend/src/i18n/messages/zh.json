@@ -19004,6 +19004,52 @@
         "dueAt": "截止"
       }
     },
+    "legal": {
+      "empty": "这个{label}还没有任何内容。",
+      "emptyHint": "使用卡片上的上传控件上传文件,或让 Brain 分享它或发送签署请求。",
+      "meterLabel": "{label}:{score} / 100",
+      "freshJustNow": "刚刚",
+      "freshMinutes": "{count} 分钟前",
+      "freshHours": "{count} 小时前",
+      "freshDays": "{count} 天前",
+      "label": {
+        "legalDocument": "法律文件"
+      },
+      "field": {
+        "category": "类别",
+        "entityId": "主体",
+        "matterId": "事项",
+        "ipId": "知识产权记录",
+        "documentId": "文件 ID",
+        "artifactId": "文件版本 ID",
+        "checksum": "校验和",
+        "mime": "文件类型",
+        "byteSize": "文件大小",
+        "documentStatus": "状态",
+        "signatureRequestId": "签署请求",
+        "signedAt": "签署时间",
+        "activeShares": "有效分享数",
+        "summary": "摘要"
+      }
+    },
+    "legalUpload": {
+      "category": "类别",
+      "category_nda": "保密协议(NDA)",
+      "category_msa": "主服务协议(MSA)",
+      "category_sow": "工作说明书(SOW)",
+      "category_offer_letter": "录用信",
+      "category_ip_assignment": "知识产权转让",
+      "category_formation": "公司设立文件",
+      "category_registration": "注册文件",
+      "category_other": "其他",
+      "upload": "上传文件",
+      "replaceFile": "上传新版本",
+      "uploading": "上传中…",
+      "currentFile": "当前文件:{kb} KB",
+      "tooLarge": "该文件超过了 25MB 的法律文件上限。",
+      "uploadFailed": "上传失败,请重试。",
+      "statusDraft": "草稿"
+    },
     "notice": {
       "addedToCanvas": "我已将所需内容添加到画布上。",
       "noAnswer": "我无法根据该请求准备任何画布改动。",

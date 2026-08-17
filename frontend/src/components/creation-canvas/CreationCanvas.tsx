@@ -270,7 +270,9 @@ import { generateFixture } from '@/lib/canvasTestData';
 import * as qaApi from '@/lib/qa/api';
 import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
 import { canvasBuildActions, type BoundCanvasBuild } from '@/lib/canvasBuildTools';
-import { canvasFounderOpsActions } from '@/lib/canvasFounderOpsTools';
+import { canvasFounderOpsActions, type CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
+import { canvasLegalDocumentActions } from '@/lib/canvasLegalDocumentTools';
+import { canvasSignatureActions } from '@/lib/canvasSignatureTools';
 import { sendInvestorUpdate } from '@/lib/founderOpsApi';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
 import { canvasWebPageUrl, normalizeWebPageUrl, webPageHost, webPageViewport } from '@/lib/canvasWebPage';
@@ -3948,7 +3950,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }), [createBuildForTool]);
 
   /**
-   * The founder-operations vocabulary — the counterparty and the one pipeline.
+   * The context every board-mutation AI tool GROUP shares — founder-ops, legal
+   * documents, and the generic e-signature tool all stage proposals against the
+   * SAME board through the SAME three primitives (read objects, stage an add, stage
+   * an update), so they read one context rather than three copies of the same three
+   * closures. `CanvasFounderOpsContext` is generic enough for all three; a second,
+   * near-identical interface would be exactly the duplication this consolidation
+   * exists to avoid.
    *
    * Staged as PROPOSALS like every other authoring tool (unlike the build tools
    * above, which commit): nothing here provisions a durable resource that a
@@ -3956,7 +3964,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * naming — it writes a real deal — but the write it performs is in the CRM and
    * is the user's stated intent; what gets staged is the board's redraw of it.
    */
-  const canvasFounderOpsActionList = useMemo<BrainAction[]>(() => canvasFounderOpsActions({
+  const canvasOpsContext = useMemo<CanvasFounderOpsContext>(() => ({
     hasTenant: persistence === 'server',
     canEdit,
     objects: () => {
@@ -3982,6 +3990,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
     },
   }), [canEdit, persistence]);
+
+  const canvasFounderOpsActionList = useMemo<BrainAction[]>(() => canvasFounderOpsActions(canvasOpsContext), [canvasOpsContext]);
+  /** The secure legal-document vocabulary — share, revoke, request signature, sync.
+   *  See `canvasLegalDocumentTools.ts` for why these are dedicated tools rather than
+   *  routed through `canvas_invoke_object_action`. */
+  const canvasLegalDocumentActionList = useMemo<BrainAction[]>(() => canvasLegalDocumentActions(canvasOpsContext), [canvasOpsContext]);
+  /** The generic e-signature request for authored (non-file) objects — closes the
+   *  `contract.sign` gap; see `canvasSignatureTools.ts`. */
+  const canvasSignatureActionList = useMemo<BrainAction[]>(() => canvasSignatureActions(canvasOpsContext), [canvasOpsContext]);
 
   const canvasActions = useMemo<BrainAction[]>(() => ([{
     name: 'canvas_prepare_executive_use_case',
@@ -7774,8 +7791,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(projectId == null ? { note: 'Published without a project. Add a project object to the canvas to file these under it, which is what gives them a run target and a persona.' } : {}),
       };
     },
-  }, ...canvasBuildActionList, ...canvasFounderOpsActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [canEdit, canvasBuildActionList, canvasFounderOpsActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
+  }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasLegalDocumentActionList, ...canvasSignatureActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
+  [canEdit, canvasBuildActionList, canvasFounderOpsActionList, canvasLegalDocumentActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');

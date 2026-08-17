@@ -149,7 +149,7 @@ function nextPropId(scene: CanvasWorldScene, kind: CanvasWorldPropKind): string 
   const re = new RegExp(`^${kind}-(\\d+)$`);
   for (const prop of scene.props) {
     const m = re.exec(prop.id);
-    if (m) max = Math.max(max, Number.parseInt(m[1], 10));
+    if (m) max = Math.max(max, Number.parseInt(m[1] ?? '0', 10));
   }
   return `${kind}-${max + 1}`;
 }

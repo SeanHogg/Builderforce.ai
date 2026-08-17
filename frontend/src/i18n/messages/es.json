@@ -19004,6 +19004,52 @@
         "dueAt": "Vence"
       }
     },
+    "legal": {
+      "empty": "Este {label} todavía no tiene nada redactado.",
+      "emptyHint": "Sube un archivo con el control de carga de la tarjeta, o pide a Brain que lo comparta o lo envíe a firmar.",
+      "meterLabel": "{label}: {score} de 100",
+      "freshJustNow": "justo ahora",
+      "freshMinutes": "hace {count} min",
+      "freshHours": "hace {count} h",
+      "freshDays": "hace {count} d",
+      "label": {
+        "legalDocument": "Documento legal"
+      },
+      "field": {
+        "category": "Categoría",
+        "entityId": "Entidad",
+        "matterId": "Expediente",
+        "ipId": "Registro de PI",
+        "documentId": "ID del documento",
+        "artifactId": "ID del archivo",
+        "checksum": "Suma de verificación",
+        "mime": "Tipo de archivo",
+        "byteSize": "Tamaño del archivo",
+        "documentStatus": "Estado",
+        "signatureRequestId": "Solicitud de firma",
+        "signedAt": "Firmado",
+        "activeShares": "Enlaces compartidos activos",
+        "summary": "Resumen"
+      }
+    },
+    "legalUpload": {
+      "category": "Categoría",
+      "category_nda": "Acuerdo de confidencialidad (NDA)",
+      "category_msa": "Contrato marco (MSA)",
+      "category_sow": "Alcance de trabajo (SOW)",
+      "category_offer_letter": "Carta de oferta",
+      "category_ip_assignment": "Cesión de propiedad intelectual",
+      "category_formation": "Constitución de sociedad",
+      "category_registration": "Registro",
+      "category_other": "Otro",
+      "upload": "Subir archivo",
+      "replaceFile": "Subir nueva versión",
+      "uploading": "Subiendo…",
+      "currentFile": "Archivo actual: {kb} KB",
+      "tooLarge": "Ese archivo supera el límite de 25 MB para documentos legales.",
+      "uploadFailed": "No se pudo subir el archivo. Inténtalo de nuevo.",
+      "statusDraft": "Borrador"
+    },
     "notice": {
       "addedToCanvas": "He añadido al lienzo el contenido solicitado.",
       "noAnswer": "No he podido preparar ningún cambio en el lienzo a partir de esa petición.",
