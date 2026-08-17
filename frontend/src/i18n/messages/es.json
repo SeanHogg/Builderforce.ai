@@ -12875,6 +12875,9 @@
     "statusRunFailed": "Error en la ejecución",
     "statusExportFailed": "Error al exportar",
     "statusImportFailed": "Error al importar",
+    "statusRunStarted": "Ejecución {id} iniciada",
+    "historyTitle": "Historial de ejecución y uso de este flujo de trabajo",
+    "historyLabel": "Historial",
     "nodeGroup": {
       "trigger": "Disparador",
       "llmLogic": "Lógica LLM",
@@ -12882,7 +12885,53 @@
       "integrations": "Integraciones",
       "agent": "Agente",
       "etl": "ETL",
-      "output": "Salida"
+      "output": "Salida",
+      "flowControl": "Control de flujo",
+      "tools": "Herramientas",
+      "textParser": "Analizador de texto",
+      "diagnostics": "Diagnósticos"
+    },
+    "nodeKind": {
+      "router": {
+        "label": "Enrutador / Si-Si no",
+        "blurb": "Ramificación condicional de N vías: etiqueta la carga útil con $route (el nombre de la primera ruta coincidente, o el valor alternativo). Combínalo con un nodo Filtro que lea $route == \"Nombre\" en cada ruta descendente."
+      },
+      "merge": {
+        "label": "Combinar",
+        "blurb": "Une varias ramas ascendentes de nuevo en una sola carga útil."
+      },
+      "setVariable": {
+        "label": "Establecer variable",
+        "blurb": "Escribe una variable que el resto de ESTA ejecución puede leer (no se comparte entre ejecuciones)."
+      },
+      "getVariable": {
+        "label": "Obtener variable",
+        "blurb": "Lee una variable establecida antes en ESTA ejecución."
+      },
+      "increment": {
+        "label": "Incrementar",
+        "blurb": "Un contador que PERSISTE ENTRE EJECUCIONES de este flujo de trabajo (a diferencia de Establecer/Obtener variable) — devuelve el nuevo valor."
+      },
+      "sleep": {
+        "label": "Pausar",
+        "blurb": "Retrasa esta ruta N segundos antes de continuar."
+      },
+      "regexMatch": {
+        "label": "Coincidir patrón",
+        "blurb": "Compara una expresión regular con la entrada; genera las coincidencias y los grupos de captura."
+      },
+      "htmlToText": {
+        "label": "HTML a texto",
+        "blurb": "Elimina las etiquetas HTML de la entrada, dejando texto plano."
+      },
+      "assert": {
+        "label": "Afirmar",
+        "blurb": "Falla (o solo advierte) la ejecución a menos que se cumpla una expresión — hace visible en el historial de ejecución un mal estado previo en lugar de continuar en silencio."
+      },
+      "healthcheck": {
+        "label": "Comprobación de estado",
+        "blurb": "Sondea una URL e informa si devolvió el estado esperado."
+      }
     }
   },
   "chunkError": {
@@ -13133,6 +13182,11 @@
     "runNow": "Ejecutar ahora",
     "loadingRuns": "Cargando ejecuciones…",
     "noRunsPeriod": "Sin ejecuciones aún.",
+    "loadingUsage": "Cargando uso…",
+    "usageRunsLast7": "ejecuciones, últimos {days} días",
+    "usageCostLast7": "costo estimado, últimos {days} días",
+    "usageChartLabel": "Ejecuciones diarias",
+    "usageRunsSeries": "Ejecuciones",
     "title": "Flujos de trabajo",
     "subtitle": "Automatizaciones de agentes de varios pasos creadas visualmente. Cada una se ejecuta dentro de un proyecto o en todo el inquilino, con un agente asignado.",
     "newWorkflow": "Nuevo flujo de trabajo",
@@ -14950,6 +15004,37 @@
     "unavailable": "Este enlace de currículum no está disponible."
   },
   "creationCanvas": {
+    "costToBuild": "Costo de construcción",
+    "costUnderOneCent": "<$0.01",
+    "costRunsAndTokens": "{requests} ejecuciones · {tokens} tokens",
+    "scopeKind": "Alcance",
+    "scopeId": "ID de alcance",
+    "scopeWorkspace": "Todo el espacio de trabajo",
+    "scopePortfolio": "Cartera",
+    "scopeInitiative": "Iniciativa",
+    "scopeProject": "Proyecto",
+    "totalTasks": "Tareas totales",
+    "completedCount": "Completadas",
+    "openCount": "Abiertas",
+    "avgCycleTimeHours": "Tiempo de ciclo prom. (h)",
+    "throughputPerWeek": "Rendimiento / semana",
+    "agentLlmCostUsd": "Gasto en LLM de agentes ($)",
+    "deploymentFrequencyPerDay": "Despliegues / día",
+    "leadTimeHours": "Tiempo de entrega (h)",
+    "changeFailureRatePct": "Tasa de fallos de cambio (%)",
+    "mttrHours": "MTTR (h)",
+    "avgOkrProgress": "Progreso promedio de OKR",
+    "deliveryRollupHint": "Refleja en este tablero el resumen del PMO para un alcance. Nada aquí se escribe a mano: Actualizar trae los números en vivo.",
+    "refreshDeliveryRollup": "Actualizar desde PMO",
+    "baseBranch": "Rama base",
+    "commitSha": "Commit",
+    "environmentName": "Entorno",
+    "postmortemUrl": "Enlace del post-mortem",
+    "environmentKind": "Tipo de entorno",
+    "environmentProduction": "Producción",
+    "environmentStaging": "Staging",
+    "environmentPreview": "Vista previa",
+    "environmentDevelopment": "Desarrollo",
     "storyPoints": "Puntos de historia",
     "startDate": "Fecha de inicio",
     "dueDate": "Fecha límite",
@@ -16291,6 +16376,12 @@
       "diagnostics": "Diagnósticos",
       "terminal": "Salida del terminal",
       "service": "Servicio local",
+      "pullRequest": "Solicitud de extracción",
+      "ciRun": "Ejecución de CI",
+      "deployment": "Despliegue",
+      "productionIncident": "Incidente de producción",
+      "environment": "Entorno",
+      "deliveryRollup": "Resumen de entrega",
       "salesPipeline": "Canal de ventas",
       "salesCampaign": "Campaña de ventas",
       "salesContact": "Contacto de ventas",
@@ -16356,6 +16447,7 @@
       "customerInterview": "Entrevista con cliente",
       "experiment": "Experimento",
       "decision": "Decisión",
+      "risk": "Riesgo",
       "objective": "Objetivo",
       "liveMetric": "Métrica en vivo",
       "trigger": "Disparador",
@@ -17785,6 +17877,11 @@
         "relationship": "Relación",
         "renewsAt": "Renovación",
         "result": "Resultado",
+        "description": "Descripción",
+        "likelihood": "Probabilidad",
+        "impact": "Impacto",
+        "mitigation": "Mitigación",
+        "reviewedAt": "Última revisión",
         "reversibility": "Reversibilidad",
         "revisitWhen": "Revisar si",
         "risks": "Riesgos",

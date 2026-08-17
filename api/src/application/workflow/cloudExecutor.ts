@@ -228,7 +228,20 @@ export async function executeCloudNode(
       // `$route` back downstream (via a `filter` node) is how a routed path
       // self-gates — see the module docstring's note on router/branch.
       const ctx = contextFromInput(inputText);
-      const routes = Array.isArray(node.config.routes) ? node.config.routes as Array<{ name?: unknown; condition?: unknown }> : [];
+      // `routes` is authored as a JSON string in the config panel (same
+      // convention as the `mcp` kind's `params` field) — parse defensively so a
+      // malformed/empty value degrades to "no routes" rather than throwing.
+      let routes: Array<{ name?: unknown; condition?: unknown }> = [];
+      if (Array.isArray(node.config.routes)) {
+        routes = node.config.routes as Array<{ name?: unknown; condition?: unknown }>;
+      } else if (typeof node.config.routes === 'string') {
+        try {
+          const parsedRoutes = JSON.parse(node.config.routes) as unknown;
+          if (Array.isArray(parsedRoutes)) routes = parsedRoutes as Array<{ name?: unknown; condition?: unknown }>;
+        } catch {
+          /* malformed routes JSON — treat as no routes, falls through to fallback */
+        }
+      }
       let taken: string | null = null;
       for (const r of routes) {
         const name = typeof r?.name === 'string' ? r.name.trim() : '';

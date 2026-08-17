@@ -407,7 +407,10 @@ export const NODE_KINDS: NodeKindMeta[] = [
     group: 'Flow Control',
     accent: 'var(--emerald-bright)',
     blurb: 'N-way conditional fan-out — tags the payload with $route (the first matching route\'s name, or the fallback). Pair with a Filter reading $route == "Name" on each downstream path, the same way as Branch/$branch.',
-    defaultConfig: { routes: [{ name: 'Then', condition: '' }], fallback: 'Else' },
+    // `routes` is a JSON-encoded string (not a live array) — same convention as
+    // the `mcp` kind's `params` field: a textarea field's config value is always
+    // a string, parsed by the executor (see cloudExecutor.ts's `router` case).
+    defaultConfig: { routes: '[{"name":"Then","condition":""}]', fallback: 'Else' },
     fields: [
       { key: 'routes', label: 'Routes (JSON: [{"name","condition"}])', type: 'textarea', placeholder: '[{"name":"Then","condition":"status == \\"ready\\""}]' },
       { key: 'fallback', label: 'Fallback route name', type: 'text', placeholder: 'e.g. Else' },

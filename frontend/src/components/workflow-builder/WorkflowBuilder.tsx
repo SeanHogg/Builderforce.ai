@@ -34,6 +34,8 @@ import type { Project } from '@/lib/types';
 import { BuilderNode, configSummary, type BuilderNodeData } from './BuilderNode';
 import { NodeConfigPanel } from './NodeConfigPanel';
 import { EvermindBuildPanel } from './EvermindBuildPanel';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { WorkflowRunHistoryPanel } from '@/components/WorkflowRunHistoryPanel';
 import { NODE_GROUPS, NODE_GROUP_KEYS, NODE_KINDS, NODE_KIND_MAP, nodeKindLabel, nodeKindBlurb, type NodeGroup } from './nodeKinds';
 import { hasBuildNodes, loadTemplateGraph, EVERMIND_BUILD_TEMPLATES } from '@/lib/evermindBuild';
 import {
@@ -149,6 +151,8 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
   const [loading, setLoading] = useState(!!definitionId);
   const [buildOpen, setBuildOpen] = useState(false);
   const [minimapOpen, setMinimapOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyInitialRunId, setHistoryInitialRunId] = useState<string | null>(null);
 
   useEffect(() => { workflowDefinitions.runTargets().then(setRunTargets).catch(() => {}); }, []);
   // Projects power the binding selector — a workflow runs under a project, or is
@@ -366,14 +370,18 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
       if (!id) return;
       const { workflowId } = await workflowDefinitions.run(id, runTarget);
       onRunStarted?.(workflowId);
-      if (!embedded) router.push(`/workflows?run=${workflowId}`);
-      else setStatus(`Workflow run ${workflowId} started`);
+      // Stay on the canvas and show the result in the History panel (matches
+      // Make: running surfaces status in the editor's own sidebar) rather than
+      // navigating away — `/workflows?run=` never had a consumer for the param.
+      setHistoryInitialRunId(workflowId);
+      setHistoryOpen(true);
+      setStatus(t('statusRunStarted', { id: workflowId }));
     } catch (e) {
       setStatus(e instanceof Error ? e.message : t('statusRunFailed'));
     } finally {
       setBusy(false);
     }
-  }, [embedded, nodes.length, onRunStarted, router, runTarget, save]);
+  }, [nodes.length, onRunStarted, runTarget, save, t]);
 
   // Load a one-click Evermind BUILD template onto the canvas (replaces the graph)
   // as an editable, wired step chain — then the user runs it with "🧠 Build".
@@ -529,6 +537,9 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
         {hasBuild && (
           <button type="button" style={btnPrimary} disabled={busy} onClick={() => setBuildOpen(true)} title={t('builderBuildTitle')}><Icon source="🧠" size="1em" /> {t('builderBuild')}</button>
         )}
+        {defId && (
+          <button type="button" style={btnSubtle} onClick={() => setHistoryOpen(true)} title={t('historyTitle')}><Icon source="📊" size="1em" /> {t('historyLabel')}</button>
+        )}
         <button type="button" style={hasBuild ? btnSubtle : btnPrimary} disabled={busy} onClick={() => void run()}><Icon source="▶" size="1em" /> {t('builderRun')}</button>
         {status && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{status}</span>}
       </div>
@@ -540,6 +551,18 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
         workflowName={name.trim() || 'Evermind build'}
         projectId={projectId}
       />
+
+      {defId && (
+        <SlideOutPanel
+          open={historyOpen}
+          onClose={() => { setHistoryOpen(false); setHistoryInitialRunId(null); }}
+          title={t('historyLabel')}
+          width="wide"
+          widthStorageKey="workflow-history"
+        >
+          <WorkflowRunHistoryPanel definitionId={defId} definitionName={name.trim() || t('workflowNamePlaceholder')} initialRunId={historyInitialRunId} />
+        </SlideOutPanel>
+      )}
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* Palette */}

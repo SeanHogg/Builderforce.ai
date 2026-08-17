@@ -24,7 +24,7 @@ import {
 } from '@/lib/builderforceApi';
 import { WorkflowDagView } from './WorkflowDagView';
 import { TrendChart } from './charts/TrendChart';
-import { StatusPill, STATUS_COLORS, cardStyle, subtleBtn } from './WorkflowsContent';
+import { StatusPill, STATUS_COLORS, cardStyle, subtleBtn } from './workflowRunUi';
 
 interface Props {
   definitionId: string;
@@ -136,10 +136,6 @@ export function WorkflowRunHistoryPanel({ definitionId, definitionName, initialR
       .then((wf) => { setSelectedDetail(wf); setDetailTab('tasks'); setGraph(null); })
       .catch(() => {})
       .finally(() => setLoadingDetail(false));
-    // Fires once per mount for a given initialRunId — re-running on every
-    // `openDetail` identity change (a stable useCallback) would be a no-op
-    // anyway, but omitting it keeps this effect's intent to "the one initial id".
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialRunId]);
 
   const loadGraph = useCallback(async (workflowId: string) => {

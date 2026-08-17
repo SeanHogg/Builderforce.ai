@@ -12875,6 +12875,9 @@
     "statusRunFailed": "运行失败",
     "statusExportFailed": "导出失败",
     "statusImportFailed": "导入失败",
+    "statusRunStarted": "运行 {id} 已开始",
+    "historyTitle": "此工作流的执行历史和使用情况",
+    "historyLabel": "历史记录",
     "nodeGroup": {
       "trigger": "触发器",
       "llmLogic": "LLM 逻辑",
@@ -12882,7 +12885,53 @@
       "integrations": "集成",
       "agent": "智能体",
       "etl": "ETL",
-      "output": "输出"
+      "output": "输出",
+      "flowControl": "流程控制",
+      "tools": "工具",
+      "textParser": "文本解析",
+      "diagnostics": "诊断"
+    },
+    "nodeKind": {
+      "router": {
+        "label": "路由 / 条件分支",
+        "blurb": "多路条件分流——用匹配到的路由名称（或回退值）标记负载的 $route 字段。搭配下游的过滤器节点，用 $route == \"名称\" 来筛选某一条路径。"
+      },
+      "merge": {
+        "label": "合并",
+        "blurb": "将多个上游分支合并回一个负载。"
+      },
+      "setVariable": {
+        "label": "设置变量",
+        "blurb": "写入一个仅在本次运行中可读的变量（不会在多次运行间共享）。"
+      },
+      "getVariable": {
+        "label": "获取变量",
+        "blurb": "读取本次运行中先前设置的变量。"
+      },
+      "increment": {
+        "label": "计数器",
+        "blurb": "一个在该工作流的多次运行之间持续保留的计数器（与设置/获取变量不同）——返回新的值。"
+      },
+      "sleep": {
+        "label": "延时",
+        "blurb": "在继续之前，将该路径延迟 N 秒。"
+      },
+      "regexMatch": {
+        "label": "正则匹配",
+        "blurb": "对输入执行正则表达式匹配；输出匹配结果和捕获组。"
+      },
+      "htmlToText": {
+        "label": "HTML 转文本",
+        "blurb": "去除输入中的 HTML 标签，只保留纯文本。"
+      },
+      "assert": {
+        "label": "断言",
+        "blurb": "除非表达式成立，否则使运行失败（或仅发出警告）——让异常的上游状态在运行历史中可见，而不是被静默忽略。"
+      },
+      "healthcheck": {
+        "label": "健康检查",
+        "blurb": "探测一个 URL，并报告其返回的状态是否符合预期。"
+      }
     }
   },
   "chunkError": {
@@ -13133,6 +13182,11 @@
     "runNow": "立即运行",
     "loadingRuns": "正在加载运行…",
     "noRunsPeriod": "暂无运行。",
+    "loadingUsage": "正在加载使用情况…",
+    "usageRunsLast7": "次运行，最近 {days} 天",
+    "usageCostLast7": "预估费用，最近 {days} 天",
+    "usageChartLabel": "每日运行次数",
+    "usageRunsSeries": "运行次数",
     "title": "工作流",
     "subtitle": "可视化编排的多步骤代理自动化。每个工作流在某个项目下或租户范围内运行，并配有指定的代理。",
     "newWorkflow": "新建工作流",
@@ -14953,6 +15007,34 @@
     "costToBuild": "构建成本",
     "costUnderOneCent": "<$0.01",
     "costRunsAndTokens": "{requests} 次运行 · {tokens} 个 token",
+    "scopeKind": "范围",
+    "scopeId": "范围 ID",
+    "scopeWorkspace": "整个工作区",
+    "scopePortfolio": "项目组合",
+    "scopeInitiative": "计划",
+    "scopeProject": "项目",
+    "totalTasks": "任务总数",
+    "completedCount": "已完成",
+    "openCount": "进行中",
+    "avgCycleTimeHours": "平均周期（小时）",
+    "throughputPerWeek": "每周吞吐量",
+    "agentLlmCostUsd": "智能体 LLM 支出（$）",
+    "deploymentFrequencyPerDay": "每日部署次数",
+    "leadTimeHours": "交付周期（小时）",
+    "changeFailureRatePct": "变更失败率（%）",
+    "mttrHours": "平均恢复时间（小时）",
+    "avgOkrProgress": "OKR 平均进度",
+    "deliveryRollupHint": "将某一范围的 PMO 汇总数据镜像到此看板上。此处内容均非手动编写，点击刷新即可拉取实时数据。",
+    "refreshDeliveryRollup": "从 PMO 刷新",
+    "baseBranch": "基础分支",
+    "commitSha": "提交",
+    "environmentName": "环境",
+    "postmortemUrl": "事后总结链接",
+    "environmentKind": "环境类型",
+    "environmentProduction": "生产环境",
+    "environmentStaging": "预发布环境",
+    "environmentPreview": "预览环境",
+    "environmentDevelopment": "开发环境",
     "storyPoints": "故事点数",
     "startDate": "开始日期",
     "dueDate": "截止日期",
@@ -16294,6 +16376,12 @@
       "diagnostics": "诊断",
       "terminal": "终端输出",
       "service": "本地服务",
+      "pullRequest": "拉取请求",
+      "ciRun": "CI 运行",
+      "deployment": "部署",
+      "productionIncident": "生产事故",
+      "environment": "环境",
+      "deliveryRollup": "交付汇总",
       "salesPipeline": "销售管道",
       "salesCampaign": "销售活动",
       "salesContact": "销售联系人",
@@ -16359,6 +16447,7 @@
       "customerInterview": "客户访谈",
       "experiment": "实验",
       "decision": "决策",
+      "risk": "风险",
       "objective": "目标",
       "liveMetric": "实时指标",
       "trigger": "触发器",
@@ -17788,6 +17877,11 @@
         "relationship": "关系",
         "renewsAt": "续约日",
         "result": "结果",
+        "description": "描述",
+        "likelihood": "可能性",
+        "impact": "影响",
+        "mitigation": "应对措施",
+        "reviewedAt": "最近评估",
         "reversibility": "可逆性",
         "revisitWhen": "重新评估条件",
         "risks": "风险条款",
@@ -22188,4 +22282,11 @@
       "engineering": "工程",
       "messaging": "消息通讯",
       "analytics": "数据分析",
-      "other"
+      "other": "其他"
+    },
+    "outputKind": {
+      "workflow": "一套自动化流程",
+      "tasks": "看板上的待办事项"
+    }
+  }
+}

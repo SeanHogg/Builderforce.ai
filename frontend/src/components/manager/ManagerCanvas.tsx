@@ -31,6 +31,9 @@ interface ManagerCanvasNodeData extends Record<string, unknown> {
   runLabel?: string;
   running?: boolean;
   onRun?: () => void;
+  openCanvasLabel?: string;
+  openingCanvas?: boolean;
+  onOpenCanvas?: () => void;
 }
 
 type ManagerMapNode = Node<ManagerCanvasNodeData, 'managerMap'>;
@@ -68,6 +71,11 @@ function ManagerArtifactBody({ data }: { data: ManagerCanvasNodeData }) {
           <button className={styles.run} type="button" disabled={data.running} onClick={data.onRun}>
             {data.runLabel}
           </button>
+          {data.onOpenCanvas && (
+            <button className={styles.run} type="button" disabled={data.openingCanvas} onClick={data.onOpenCanvas}>
+              {data.openCanvasLabel}
+            </button>
+          )}
         </div>
       )}
       {(data.href || data.footer) && (
@@ -88,6 +96,8 @@ export interface ManagerCanvasProps {
   running: boolean;
   canManage: boolean;
   onRun: () => void;
+  openingCanvas?: boolean;
+  onOpenCanvas?: () => void;
   relative: (iso: string | null) => string;
   actionLabel: (action: ManagerAction) => string;
   labels: {

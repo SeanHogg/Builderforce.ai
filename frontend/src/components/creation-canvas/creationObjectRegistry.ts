@@ -107,6 +107,22 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'diagnostics', label: 'Diagnostics', icon: '⚠', group: 'Build', createData: () => ({ kind: 'diagnostics', title: 'Editor diagnostics', status: 'Ready to run', diagnostics: [], results: [], nextSteps: [] }) },
   { kind: 'terminal', label: 'Terminal output', icon: '>_', group: 'Build', createData: () => ({ kind: 'terminal', title: 'Terminal output', status: 'Review for secrets' }) },
   { kind: 'service', label: 'Local service', icon: '◎', group: 'Build', createData: () => ({ kind: 'service', title: 'Local service', status: 'Preview from VS Code' }) },
+  // The delivery lifecycle, as its own kinds rather than degrading to `note` — see
+  // `MUTABLE_FIELDS` below for what each carries and `canvasKindSettings.delivery.ts`
+  // for their settings. `deployment`/`ciRun` are the two with a real backing table
+  // (`deployment_events`, already feeding DORA) to eventually sync from; the rest are
+  // authored/referenced the same way `repository`/`release` are today.
+  { kind: 'pullRequest', label: 'Pull request', icon: '⑂', group: 'Build', createData: () => ({ kind: 'pullRequest', title: 'Pull request', status: 'open' }) },
+  { kind: 'ciRun', label: 'CI run', icon: '▷', group: 'Build', createData: () => ({ kind: 'ciRun', title: 'CI run', status: 'queued' }) },
+  { kind: 'deployment', label: 'Deployment', icon: '▲', group: 'Build', createData: () => ({ kind: 'deployment', title: 'Deployment', status: 'pending' }) },
+  // Named `productionIncident`, not `incident` — see the contract's kind-list note for
+  // why (Operations already owns `incident` for a field-service/safety report).
+  { kind: 'productionIncident', label: 'Production incident', icon: '⚑', group: 'Build', createData: () => ({ kind: 'productionIncident', title: 'Production incident', status: 'investigating', severity: 'medium' }) },
+  // Mirrors `pmoApi.rollup()` onto the board — see the contract's kind-list note for why
+  // it is `deliveryRollup` and not `delivery`. `scopeKind`/`scopeId` name WHAT it mirrors;
+  // everything else is written by the `refresh` action, never authored.
+  { kind: 'deliveryRollup', label: 'Delivery rollup', icon: '◈', group: 'Work', createData: () => ({ kind: 'deliveryRollup', title: 'Delivery rollup', status: 'Not loaded', scopeKind: 'workspace', scopeId: null }) },
+  { kind: 'environment', label: 'Environment', icon: '◈', group: 'Build', createData: () => ({ kind: 'environment', title: 'Environment', status: 'active' }) },
   { kind: 'llm', label: 'LLM', icon: '◉', group: 'Models', createData: () => ({ kind: 'llm', title: 'Language model', status: 'Blueprint', model: 'gpt-4o' }) },
   // A course knows its SUBJECT, and Brain writes the rest. It used to be created
   // as `buildLlmCourse()` — so every course object on the platform, whatever it
@@ -361,6 +377,17 @@ const BASE_MUTABLE_FIELDS = {
   code: ['content', 'code', 'language', 'path'],
   browser: ['content', 'url', 'viewport', 'pageTitle'],
   repository: ['content', 'url', 'branch'],
+  pullRequest: ['content', 'url', 'number', 'branch', 'baseBranch', 'author', 'mergedAt'],
+  ciRun: ['content', 'url', 'branch', 'commitSha', 'conclusion', 'startedAt', 'finishedAt'],
+  deployment: ['content', 'environmentName', 'version', 'url', 'deployedAt', 'deployedBy'],
+  productionIncident: ['content', 'severity', 'startedAt', 'resolvedAt', 'owner', 'postmortemUrl'],
+  deliveryRollup: [
+    'content', 'scopeKind', 'scopeId', 'totalTasks', 'completedCount', 'openCount',
+    'avgCycleTimeHours', 'throughputPerWeek', 'agentLlmCostUsd',
+    'deploymentFrequencyPerDay', 'leadTimeHours', 'changeFailureRatePct', 'mttrHours',
+    'avgOkrProgress', 'fetchedAt',
+  ],
+  environment: ['content', 'environmentUrl', 'environmentKind', 'branch'],
   selection: ['content', 'code', 'language', 'path', 'range'],
   // `auditFindings` is the accessibility/performance verdict of a fetched page. It
   // lands on `diagnostics` rather than on a kind of its own because that is exactly

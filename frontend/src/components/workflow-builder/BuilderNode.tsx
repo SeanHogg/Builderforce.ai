@@ -41,6 +41,22 @@ export function configSummary(kind: WorkflowNodeKind, config: Record<string, unk
       return String(config.triggerType ?? 'manual');
     case 'output':
       return String(config.target ?? 'artifact');
+    case 'router':
+      return String(config.fallback ? `→ ${config.fallback}` : 'routes');
+    case 'merge':
+      return String(config.strategy ?? 'array');
+    case 'set-variable':
+    case 'get-variable':
+    case 'increment':
+      return String(config.key ?? '');
+    case 'sleep':
+      return `${String(config.seconds ?? 0)}s`;
+    case 'regex-match':
+      return String(config.pattern ?? '');
+    case 'assert':
+      return String(config.expression ?? '');
+    case 'healthcheck':
+      return String(config.url ?? '');
     default:
       return '';
   }

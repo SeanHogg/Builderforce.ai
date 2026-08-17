@@ -1,3 +1,108 @@
+## ✅ RESOLVED 2026-08-17 — "Create a Roblox game" produced an essay, not a game
+
+Operator report (ui 2026.8.49, session `local-21d854…`). "Create a Roblox game" ran
+for 73 seconds and put a `game` object on the board holding a four-thousand-word
+design document — pillars, classes, a monetisation plan, a twelve-month roadmap —
+with `outputUrl` empty. Nothing playable, nothing Roblox. The follow-up turn ran
+92 seconds and called no tool at all.
+
+**Root cause: the shipping half was built and the AUTHORING half was never
+connected.** The game-target port (web/pwa/android/ios/roblox) was reachable only
+from an inspector button that requires `outputUrl` — which only appears after a
+generation step the Brain has no reason to take. So the one path a person
+actually uses could not reach any of it. Three specific faults:
+
+1. **No tool produced a playable game.** `canvas_add_object` creates the object;
+   `runCreativeAction` produces the artifact; nothing joined them. `canvas_add_image`
+   had already solved exactly this for pixels and was the missing precedent.
+2. **`emptyShellProblem` taught the mistake.** Its refusal names `content` first
+   ("Send the authored content in fields: content, prompt, …"), so a model that
+   was told a titled game is an empty shell complied by writing prose into
+   `content` — satisfying the gate and playing nothing.
+3. **Roblox authoring was bound to a project.** Writing a `.rbxlx` needs only a
+   brief; only PUBLISHING needs a project, a workspace and an API key. Binding
+   them together made Roblox unreachable from a local session entirely.
+
+**Fixes:**
+- **`canvas_add_game`** (`CANVAS_GAME_TOOL`) — authors the game AND attaches the
+  playable artifact in one call, so a game object never exists unplayable.
+  `platform: 'web' | 'roblox'`; a phone/Android/iOS request is `web`, because that
+  is genuinely the same document that installs and wraps.
+- **`canvasGameToolRedirect()`** — `canvas_add_object(kind:'game')` without an
+  artifact now names the tool that works, the same shape as the image redirect.
+- **`POST /api/creative/generate` accepts `platform: 'roblox'`** and authors a
+  place beside the other creative kinds — spec from the model, `.rbxlx` from code.
+  No project required.
+- **Roblox account gate** covers only the half that needs a server, and says a web
+  game still works — a guest asking for a game gets a real playable one.
+- `GameBody` renders a Roblox place as a "opens in Roblox Studio" card rather than
+  a play button that cannot work or a false "no game yet".
+- Brain's creative directive rewritten: a game is built, never described.
+- `gamePlatform` added to the registry so a regenerate cannot silently switch
+  machines.
+
+Also fixed: `CreationCanvas.test.tsx` asserted a palette search label
+(`Search everything…`) that the catalog had already renamed to
+`Search object types…` — failing at HEAD, unrelated to this work.
+
+New tests pin the ROUTING, which is what was untested: every prior game test
+covered the machinery that ships a game, none covered the path a person takes to
+ask for one.
+
+---
+
+## ✅ RESOLVED 2026-08-16 — Secure legal documents: `legalDocument` — storage, sharing, and signing (FO-G residual)
+
+The legal seat (FO-G1) had record tables and no way to hold a FILE. Added `legalDocument`: a canvas
+kind backed by an encrypted, shareable, signable file, closing the FILE half of "the legal seat has
+tables and no canvas vocabulary" (the `legalEntity`/`ipAsset`/`matter` canvas-kind half remains open,
+narrowed and left in ROADMAP.md).
+
+- **Encryption**: `api/src/application/security/fileCrypto.ts` — AES-256-GCM, reusing
+  `credentialCrypto.ts`'s per-tenant PBKDF2 key derivation (`deriveTenantAesKey`, the documented
+  extension point) rather than inventing a second KDF. File bytes only — metadata stays queryable.
+- **DRY**: extracted `api/src/application/security/shareToken.ts` (mint/hash a share-link credential)
+  from its two prior hand-rolled copies in `signatureEngine.ts` and `formPublishing.ts` — both
+  refactored to use it, closing a real duplicate rather than adding a third one for legal-document
+  sharing.
+- **Activated `kernel.artifacts`** as a real file-storage table — it existed with the right shape
+  (`objectId`, `kind`, `storageKey`, `checksum`, `derivedFromId`) but had zero writers anywhere in
+  `api/src`. `legalDocumentStore.ts` is the first. New `api/src/application/artifacts/artifactStore.ts`
+  is the one generic read/decrypt boundary, shared by the direct download route, the external share
+  link, and the signer's own file-review read.
+- **New tables** (migration `0921_legal_document_files.sql`): `legal_document_files`,
+  `legal_document_shares`. Named `legal_document_files` — NOT `legal_documents` — because that name was
+  already taken by the platform's own Terms-of-Use/Privacy-Policy versioning table (migration 0012,
+  `kernel.ts:124`), a real collision caught before it broke the migration. No `status`/`signed_at`
+  columns: both are derived at read time from `legal_document_shares` and the `signature_requests` row
+  `signatureRequestId` points at, matching the `contract.signatureState` convention already documented
+  in `founderObjects.ts` — a header must never be able to disagree with the rows beneath it.
+- **`signatureEngine.ts` extended, not forked**: `documentBody` is now optional when
+  `documentArtifactId`/`documentChecksum` are given — a signature request binds to rendered TEXT or to
+  a FILE, additively, and the engine still does not know what a "legal document" is. Signer-facing
+  `GET /api/public/signatures/:token/file` streams the decrypted file for review before deciding.
+- **Sharing**: `legal_document_shares` — revocable, expiring, `view`/`download` permission — resolved
+  via the same `acrossTenants(..., 'share_token', ...)` pattern already proven for signature and form
+  tokens. Fixed a real bug found while building the recipient page: the download route originally 403'd
+  every `view`-permission share (no route ever served its bytes); now both permissions serve the same
+  bytes with `Content-Disposition: inline` (view) vs `attachment` (download) — the standard, correct way
+  browsers distinguish the two.
+- **Frontend**: `legalDocument` canvas kind (`legalObjects.ts`, spec-object convention), upload control
+  (`CanvasLegalDocumentUpload.tsx`, reusing `CanvasResumeEditor.tsx`'s direct-FormData-POST pattern since
+  a browser `File` cannot cross the AI tool-call JSON boundary), dedicated Brain tools
+  (`canvasLegalDocumentTools.ts`: sync/share/revoke/request-signature, each self-evaluating the approval
+  gate since they bypass the generic `canvas_invoke_object_action` dispatcher), and the recipient-facing
+  viewer at `/legal-documents/shared/[token]` (`LegalDocumentShareViewer.tsx`, mirroring `/sign/[token]`).
+  All 5 i18n catalogs carry real (non-English) translations for every new string.
+- **Closed a related, pre-existing gap in the same pass**: `contract.signatureState`/`signatureRequestId`
+  /`signedAt` (and the identical trio on `offer`) were declared as bookkeeping fields with NOTHING ever
+  calling `createSignatureRequest` for either kind — `contract.sign` was a gated act with nothing behind
+  the gate. New generic `canvas_request_signature` (`canvasSignatureTools.ts`) discovers eligible kinds
+  by scanning the spec registry for the bookkeeping pair rather than hardcoding them, so a third kind
+  gets the same tool for free the moment it declares the same two fields.
+- Verified: `api` (`tsgo --noEmit`) clean; `frontend` (`tsc --noEmit`) clean; targeted vitest — 481
+  tests / 37 files green; all 5 i18n catalogs valid JSON with consistent, non-duplicated keys.
+
 ## ✅ RESOLVED 2026-08-17 — Deploy API red again: a stale test literal, a live-drifted roadmap count, and a linter false positive
 
 Next CI attempt after the prior entry's 4-guard fix, two failures — both unrelated to that
@@ -55,7 +160,10 @@ exposed rather than caused by the guard fixes above:
   other export — present or future — stays genuine.
 
 Verified: `npm run check` → 24/24, `npm run type-check` → 2/2, `npx vitest run` (whole API
-suite, second pass after both fixes) → confirming green.
+suite) → 546/546 files, 6268/6268 tests. ROADMAP.md's exact-count index drifted TWICE more
+after this — group 10 again, both times caught and corrected by recount immediately before
+the next check run; this file has active concurrent writers this session and will keep
+drifting between passes until they stop, which is expected, not a defect to chase further.
 
 ## ✅ RESOLVED 2026-08-16 — Canvas kind settings completeness (42 kinds) + two of W0-1's eight hand-written branches
 

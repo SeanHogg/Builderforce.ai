@@ -12875,6 +12875,9 @@
     "statusRunFailed": "Échec de l’exécution",
     "statusExportFailed": "Échec de l’exportation",
     "statusImportFailed": "Échec de l’importation",
+    "statusRunStarted": "Exécution {id} démarrée",
+    "historyTitle": "Historique d’exécution et utilisation de ce workflow",
+    "historyLabel": "Historique",
     "nodeGroup": {
       "trigger": "Déclencheur",
       "llmLogic": "Logique LLM",
@@ -12882,7 +12885,53 @@
       "integrations": "Intégrations",
       "agent": "Agent",
       "etl": "ETL",
-      "output": "Sortie"
+      "output": "Sortie",
+      "flowControl": "Contrôle de flux",
+      "tools": "Outils",
+      "textParser": "Analyseur de texte",
+      "diagnostics": "Diagnostics"
+    },
+    "nodeKind": {
+      "router": {
+        "label": "Routeur / Si-Sinon",
+        "blurb": "Embranchement conditionnel à N voies — marque la charge utile avec $route (le nom de la première route correspondante, ou la route de repli). À associer à un nœud Filtre lisant $route == \"Nom\" sur chaque chemin en aval."
+      },
+      "merge": {
+        "label": "Fusionner",
+        "blurb": "Réunit plusieurs branches amont en une seule charge utile."
+      },
+      "setVariable": {
+        "label": "Définir une variable",
+        "blurb": "Écrit une variable que le reste de CETTE exécution peut lire (non partagée entre les exécutions)."
+      },
+      "getVariable": {
+        "label": "Lire une variable",
+        "blurb": "Lit une variable définie plus tôt dans CETTE exécution."
+      },
+      "increment": {
+        "label": "Incrémenter",
+        "blurb": "Un compteur qui PERSISTE ENTRE LES EXÉCUTIONS de ce workflow (contrairement à Définir/Lire une variable) — renvoie la nouvelle valeur."
+      },
+      "sleep": {
+        "label": "Pause",
+        "blurb": "Retarde ce chemin de N secondes avant de continuer."
+      },
+      "regexMatch": {
+        "label": "Correspondance de motif",
+        "blurb": "Applique une expression régulière à l’entrée ; renvoie les correspondances et les groupes de capture."
+      },
+      "htmlToText": {
+        "label": "HTML vers texte",
+        "blurb": "Supprime les balises HTML de l’entrée, ne laissant que du texte brut."
+      },
+      "assert": {
+        "label": "Assertion",
+        "blurb": "Échoue (ou avertit seulement) l’exécution sauf si une expression est vraie — rend visible un mauvais état en amont dans l’historique d’exécution plutôt que de continuer silencieusement."
+      },
+      "healthcheck": {
+        "label": "Vérification d’état",
+        "blurb": "Sonde une URL et indique si elle a renvoyé le statut attendu."
+      }
     }
   },
   "chunkError": {
@@ -13133,6 +13182,11 @@
     "runNow": "Exécuter maintenant",
     "loadingRuns": "Chargement des exécutions…",
     "noRunsPeriod": "Aucune exécution.",
+    "loadingUsage": "Chargement de l’utilisation…",
+    "usageRunsLast7": "exécutions, {days} derniers jours",
+    "usageCostLast7": "coût estimé, {days} derniers jours",
+    "usageChartLabel": "Exécutions quotidiennes",
+    "usageRunsSeries": "Exécutions",
     "title": "Flux de travail",
     "subtitle": "Automatisations d’agents multi-étapes conçues visuellement. Chacune s’exécute au sein d’un projet ou à l’échelle du locataire, avec un agent assigné.",
     "newWorkflow": "Nouveau flux de travail",
@@ -14950,6 +15004,37 @@
     "unavailable": "Ce lien de CV n’est pas disponible."
   },
   "creationCanvas": {
+    "costToBuild": "Coût de construction",
+    "costUnderOneCent": "<0,01 $",
+    "costRunsAndTokens": "{requests} exécutions · {tokens} jetons",
+    "scopeKind": "Portée",
+    "scopeId": "ID de portée",
+    "scopeWorkspace": "Tout l'espace de travail",
+    "scopePortfolio": "Portefeuille",
+    "scopeInitiative": "Initiative",
+    "scopeProject": "Projet",
+    "totalTasks": "Total des tâches",
+    "completedCount": "Terminées",
+    "openCount": "Ouvertes",
+    "avgCycleTimeHours": "Temps de cycle moy. (h)",
+    "throughputPerWeek": "Débit / semaine",
+    "agentLlmCostUsd": "Dépense LLM des agents ($)",
+    "deploymentFrequencyPerDay": "Déploiements / jour",
+    "leadTimeHours": "Délai de livraison (h)",
+    "changeFailureRatePct": "Taux d'échec des changements (%)",
+    "mttrHours": "MTTR (h)",
+    "avgOkrProgress": "Progression moyenne des OKR",
+    "deliveryRollupHint": "Reflète sur ce tableau le récapitulatif PMO d'une portée donnée. Rien ici n'est saisi à la main : Actualiser récupère les chiffres en direct.",
+    "refreshDeliveryRollup": "Actualiser depuis le PMO",
+    "baseBranch": "Branche de base",
+    "commitSha": "Commit",
+    "environmentName": "Environnement",
+    "postmortemUrl": "Lien du post-mortem",
+    "environmentKind": "Type d'environnement",
+    "environmentProduction": "Production",
+    "environmentStaging": "Staging",
+    "environmentPreview": "Aperçu",
+    "environmentDevelopment": "Développement",
     "storyPoints": "Points d'histoire",
     "startDate": "Date de début",
     "dueDate": "Date d'échéance",
@@ -16291,6 +16376,12 @@
       "diagnostics": "Diagnostics",
       "terminal": "Sortie du terminal",
       "service": "Service local",
+      "pullRequest": "Pull request",
+      "ciRun": "Exécution CI",
+      "deployment": "Déploiement",
+      "productionIncident": "Incident de production",
+      "environment": "Environnement",
+      "deliveryRollup": "Récapitulatif de livraison",
       "salesPipeline": "Pipeline commercial",
       "salesCampaign": "Campagne commerciale",
       "salesContact": "Contact commercial",
@@ -16356,6 +16447,7 @@
       "customerInterview": "Entretien client",
       "experiment": "Expérience",
       "decision": "Décision",
+      "risk": "Risque",
       "objective": "Objectif",
       "liveMetric": "Métrique en direct",
       "trigger": "Déclencheur",
@@ -17785,6 +17877,11 @@
         "relationship": "Relation",
         "renewsAt": "Renouvellement",
         "result": "Résultat",
+        "description": "Description",
+        "likelihood": "Probabilité",
+        "impact": "Impact",
+        "mitigation": "Mitigation",
+        "reviewedAt": "Dernière révision",
         "reversibility": "Réversibilité",
         "revisitWhen": "Réexaminer si",
         "risks": "Risques",

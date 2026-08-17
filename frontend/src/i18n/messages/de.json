@@ -12875,6 +12875,9 @@
     "statusRunFailed": "Ausführung fehlgeschlagen",
     "statusExportFailed": "Export fehlgeschlagen",
     "statusImportFailed": "Import fehlgeschlagen",
+    "statusRunStarted": "Ausführung {id} gestartet",
+    "historyTitle": "Ausführungsverlauf und Nutzung dieses Workflows",
+    "historyLabel": "Verlauf",
     "nodeGroup": {
       "trigger": "Auslöser",
       "llmLogic": "LLM-Logik",
@@ -12882,7 +12885,53 @@
       "integrations": "Integrationen",
       "agent": "Agent",
       "etl": "ETL",
-      "output": "Ausgabe"
+      "output": "Ausgabe",
+      "flowControl": "Ablaufsteuerung",
+      "tools": "Werkzeuge",
+      "textParser": "Textparser",
+      "diagnostics": "Diagnose"
+    },
+    "nodeKind": {
+      "router": {
+        "label": "Router / Wenn-Sonst",
+        "blurb": "Bedingte N-Wege-Verzweigung — markiert die Payload mit $route (dem Namen der ersten passenden Route oder dem Fallback). Kombinieren Sie dies mit einem Filter-Knoten, der $route == \"Name\" auf jedem nachgelagerten Pfad liest."
+      },
+      "merge": {
+        "label": "Zusammenführen",
+        "blurb": "Führt mehrere vorgelagerte Zweige wieder zu einer Payload zusammen."
+      },
+      "setVariable": {
+        "label": "Variable setzen",
+        "blurb": "Schreibt eine Variable, die der Rest DIESES Laufs lesen kann (nicht laufübergreifend geteilt)."
+      },
+      "getVariable": {
+        "label": "Variable lesen",
+        "blurb": "Liest eine zuvor in DIESEM Lauf gesetzte Variable."
+      },
+      "increment": {
+        "label": "Zähler",
+        "blurb": "Ein Zähler, der über mehrere LÄUFE dieses Workflows hinweg BESTEHEN BLEIBT (anders als Variable setzen/lesen) — gibt den neuen Wert zurück."
+      },
+      "sleep": {
+        "label": "Warten",
+        "blurb": "Verzögert diesen Pfad um N Sekunden, bevor es weitergeht."
+      },
+      "regexMatch": {
+        "label": "Muster abgleichen",
+        "blurb": "Gleicht einen regulären Ausdruck mit der Eingabe ab; gibt Treffer und Erfassungsgruppen aus."
+      },
+      "htmlToText": {
+        "label": "HTML zu Text",
+        "blurb": "Entfernt HTML-Tags aus der Eingabe und lässt reinen Text übrig."
+      },
+      "assert": {
+        "label": "Annahme prüfen",
+        "blurb": "Lässt den Lauf fehlschlagen (oder warnt nur), sofern ein Ausdruck nicht zutrifft — macht einen fehlerhaften vorgelagerten Zustand im Ausführungsverlauf sichtbar, statt stillschweigend fortzufahren."
+      },
+      "healthcheck": {
+        "label": "Systemprüfung",
+        "blurb": "Prüft eine URL und meldet, ob der erwartete Status zurückgegeben wurde."
+      }
     }
   },
   "chunkError": {
@@ -13133,6 +13182,11 @@
     "runNow": "Jetzt ausführen",
     "loadingRuns": "Ausführungen werden geladen…",
     "noRunsPeriod": "Noch keine Ausführungen.",
+    "loadingUsage": "Nutzung wird geladen…",
+    "usageRunsLast7": "Ausführungen, letzte {days} Tage",
+    "usageCostLast7": "geschätzte Kosten, letzte {days} Tage",
+    "usageChartLabel": "Tägliche Ausführungen",
+    "usageRunsSeries": "Ausführungen",
     "title": "Workflows",
     "subtitle": "Visuell erstellte, mehrstufige Agenten-Automatisierungen. Jede läuft innerhalb eines Projekts oder mandantenweit, mit einem zugewiesenen Agenten.",
     "newWorkflow": "Neuer Workflow",
@@ -14950,6 +15004,37 @@
     "unavailable": "Dieser Lebenslauf-Link ist nicht verfügbar."
   },
   "creationCanvas": {
+    "costToBuild": "Baukosten",
+    "costUnderOneCent": "<0,01 $",
+    "costRunsAndTokens": "{requests} Läufe · {tokens} Tokens",
+    "scopeKind": "Geltungsbereich",
+    "scopeId": "Bereichs-ID",
+    "scopeWorkspace": "Gesamter Workspace",
+    "scopePortfolio": "Portfolio",
+    "scopeInitiative": "Initiative",
+    "scopeProject": "Projekt",
+    "totalTasks": "Aufgaben gesamt",
+    "completedCount": "Abgeschlossen",
+    "openCount": "Offen",
+    "avgCycleTimeHours": "Ø Durchlaufzeit (Std.)",
+    "throughputPerWeek": "Durchsatz / Woche",
+    "agentLlmCostUsd": "Agenten-LLM-Ausgaben ($)",
+    "deploymentFrequencyPerDay": "Deployments / Tag",
+    "leadTimeHours": "Vorlaufzeit (Std.)",
+    "changeFailureRatePct": "Änderungsfehlerrate (%)",
+    "mttrHours": "MTTR (Std.)",
+    "avgOkrProgress": "Ø OKR-Fortschritt",
+    "deliveryRollupHint": "Spiegelt den PMO-Rollup für einen Geltungsbereich auf dieses Board. Nichts hier wird von Hand eingegeben — Aktualisieren holt die Live-Zahlen.",
+    "refreshDeliveryRollup": "Von PMO aktualisieren",
+    "baseBranch": "Basis-Branch",
+    "commitSha": "Commit",
+    "environmentName": "Umgebung",
+    "postmortemUrl": "Postmortem-Link",
+    "environmentKind": "Umgebungstyp",
+    "environmentProduction": "Produktion",
+    "environmentStaging": "Staging",
+    "environmentPreview": "Vorschau",
+    "environmentDevelopment": "Entwicklung",
     "storyPoints": "Story Points",
     "startDate": "Startdatum",
     "dueDate": "Fälligkeitsdatum",
@@ -16292,6 +16377,12 @@
       "diagnostics": "Diagnosen",
       "terminal": "Terminalausgabe",
       "service": "Lokaler Dienst",
+      "pullRequest": "Pull Request",
+      "ciRun": "CI-Lauf",
+      "deployment": "Deployment",
+      "productionIncident": "Produktionsvorfall",
+      "environment": "Umgebung",
+      "deliveryRollup": "Delivery-Rollup",
       "salesPipeline": "Vertriebspipeline",
       "salesCampaign": "Vertriebskampagne",
       "salesContact": "Vertriebskontakt",
@@ -16357,6 +16448,7 @@
       "customerInterview": "Kundeninterview",
       "experiment": "Experiment",
       "decision": "Entscheidung",
+      "risk": "Risiko",
       "objective": "Ziel",
       "liveMetric": "Live-Kennzahl",
       "trigger": "Auslöser",
@@ -17785,6 +17877,11 @@
         "relationship": "Beziehung",
         "renewsAt": "Verlängerung",
         "result": "Ergebnis",
+        "description": "Beschreibung",
+        "likelihood": "Wahrscheinlichkeit",
+        "impact": "Auswirkung",
+        "mitigation": "Gegenmaßnahme",
+        "reviewedAt": "Zuletzt bewertet",
         "reversibility": "Umkehrbarkeit",
         "revisitWhen": "Neu bewerten wenn",
         "risks": "Risiken",

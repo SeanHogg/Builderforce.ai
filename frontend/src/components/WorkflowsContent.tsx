@@ -8,38 +8,20 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { RoleGate } from '@/components/RoleGate';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
-  workflows,
   workflowDefinitions,
-  type Workflow,
-  type WorkflowTask,
-  type WorkflowGraph,
   type WorkflowDefinitionSummary,
   type WorkflowRunTarget,
 } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
-import { WorkflowDagView } from './WorkflowDagView';
+import { WorkflowRunHistoryPanel } from './WorkflowRunHistoryPanel';
 import { ViewToggle, type ViewMode } from './ViewToggle';
 import { tableWrapStyle, tableStyle } from './dataTableStyles';
+import { cardStyle, subtleBtn, StatusPill } from './workflowRunUi';
 
 interface WorkflowsContentProps {
   projectId?: number | null;
 }
-
-const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-lg)',
-  padding: 16,
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  pending: 'var(--text-muted)',
-  running: 'var(--cyan-bright, var(--cyan-bright))',
-  completed: 'rgba(34,197,94,0.9)',
-  failed: 'var(--coral-bright)',
-  cancelled: 'var(--text-muted)',
-};
 
 const primaryBtn: React.CSSProperties = {
   display: 'inline-flex',
@@ -57,17 +39,6 @@ const primaryBtn: React.CSSProperties = {
   boxShadow: '0 4px 14px var(--shadow-coral-mid)',
 };
 
-const subtleBtn: React.CSSProperties = {
-  padding: '6px 12px',
-  fontSize: 12,
-  fontWeight: 600,
-  color: 'var(--coral-bright)',
-  background: 'var(--bg-base)',
-  border: '1px solid var(--coral-bright)',
-  borderRadius: 'var(--radius-md)',
-  cursor: 'pointer',
-};
-
 /** Derive the saved run target from a definition summary, so the list can fire a
  *  run with the workflow's own assigned agent (no extra round-trip). */
 function savedRunTarget(def: WorkflowDefinitionSummary): WorkflowRunTarget {
@@ -81,16 +52,6 @@ function hasAgent(def: WorkflowDefinitionSummary): boolean {
   return def.runTargetRuntime === 'cloud' ? !!def.runTargetCloudAgentRef : !!def.runTargetAgentHostId;
 }
 
-/** Status pill — one source of truth for run/task status colouring. */
-function StatusPill({ status }: { status: string }) {
-  const color = STATUS_COLORS[status] ?? 'var(--text-muted)';
-  return (
-    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 'var(--radius-sm)', background: `${color}22`, color, whiteSpace: 'nowrap' }}>
-      {status}
-    </span>
-  );
-}
-
 /** Run-history rollup line ("12 runs · last completed") — shared by card + row. */
 function RunStats({ def }: { def: WorkflowDefinitionSummary }) {
   const t = useTranslations('workflowsContent');
@@ -101,28 +62,6 @@ function RunStats({ def }: { def: WorkflowDefinitionSummary }) {
       {t('runCount', { count })}
       {def.lastRunStatus && <>· {t('last')} <StatusPill status={def.lastRunStatus} /></>}
     </span>
-  );
-}
-
-function WorkflowTaskRow({ task }: { task: WorkflowTask }) {
-  const color = STATUS_COLORS[task.status] ?? 'var(--text-muted)';
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, marginTop: 5 }} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-          {task.agentRole}
-          <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 8 }}>{task.description}</span>
-        </div>
-        {task.output && (
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, maxHeight: 60, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {task.output}
-          </div>
-        )}
-        {task.error && <div style={{ fontSize: 11, color: 'var(--coral-bright)', marginTop: 4 }}>{task.error}</div>}
-      </div>
-      <StatusPill status={task.status} />
-    </div>
   );
 }
 
@@ -229,17 +168,11 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   const [runningId, setRunningId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Per-workflow run history drill-down.
+  // Per-workflow run history + detail drill-down — delegated entirely to
+  // WorkflowRunHistoryPanel; this only needs to know WHICH definition (and,
+  // for a run just started, which run to jump straight into).
   const [runsForDef, setRunsForDef] = useState<WorkflowDefinitionSummary | null>(null);
-  const [defRuns, setDefRuns] = useState<Workflow[]>([]);
-  const [loadingRuns, setLoadingRuns] = useState(false);
-
-  // Run detail (one execution) — tasks + dependency graph.
-  const [selectedDetail, setSelectedDetail] = useState<Workflow | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [detailTab, setDetailTab] = useState<'tasks' | 'graph'>('tasks');
-  const [graph, setGraph] = useState<WorkflowGraph | null>(null);
-  const [loadingGraph, setLoadingGraph] = useState(false);
+  const [initialRunId, setInitialRunId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -268,16 +201,9 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
   const openDef = (d: WorkflowDefinitionSummary) => router.push(`/workflows/builder?id=${d.id}`);
   const newWorkflow = () => router.push(projectId != null ? `/workflows/builder?project=${projectId}` : '/workflows/builder');
 
-  const viewRuns = useCallback(async (d: WorkflowDefinitionSummary) => {
+  const viewRuns = useCallback((d: WorkflowDefinitionSummary) => {
+    setInitialRunId(null);
     setRunsForDef(d);
-    setLoadingRuns(true);
-    try {
-      setDefRuns(await workflowDefinitions.runs(d.id));
-    } catch {
-      setDefRuns([]);
-    } finally {
-      setLoadingRuns(false);
-    }
   }, []);
 
   const runDef = async (d: WorkflowDefinitionSummary) => {
@@ -291,8 +217,8 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
       const { workflowId } = await workflowDefinitions.run(d.id, savedRunTarget(d));
       setNotice(t('noticeRunStarted', { name: d.name }));
       load(); // refresh run counts
-      const detail = await workflows.get(workflowId).catch(() => null);
-      if (detail) openDetail(detail);
+      setInitialRunId(workflowId);
+      setRunsForDef(d);
     } catch (e) {
       setNotice(e instanceof Error ? e.message : t('failedStartRun'));
     } finally {
@@ -310,147 +236,26 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
     }
   };
 
-  const openDetail = async (wf: Workflow) => {
-    setSelectedDetail(wf);
-    setDetailTab('tasks');
-    setGraph(null);
-    if (wf.tasks) return;
-    setLoadingDetail(true);
-    try {
-      setSelectedDetail(await workflows.get(wf.id));
-    } catch {
-      setSelectedDetail(wf);
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
-
-  const loadGraph = useCallback(async (workflowId: string) => {
-    setLoadingGraph(true);
-    try {
-      setGraph(await workflows.getGraph(workflowId));
-    } catch {
-      setGraph(null);
-    } finally {
-      setLoadingGraph(false);
-    }
-  }, []);
-
-  // ---- Run detail view ----------------------------------------------------
-  if (selectedDetail) {
-    const tasks = selectedDetail.tasks ?? [];
-    const tabBtnStyle = (active: boolean): React.CSSProperties => ({
-      padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-sm)',
-      border: '1px solid var(--border-subtle)',
-      background: active ? 'var(--surface-interactive)' : 'transparent',
-      color: active ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer',
-    });
-
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            type="button"
-            onClick={() => setSelectedDetail(null)}
-            style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
-          >
-            ← {t('back')}
-          </button>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {selectedDetail.description ?? t('runLabel', { id: selectedDetail.id.slice(0, 8) })}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
-              {selectedDetail.workflowType} · {selectedDetail.status}
-              {selectedDetail.projectName ? ` · ${selectedDetail.projectName}` : ''}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button type="button" style={tabBtnStyle(detailTab === 'tasks')} onClick={() => setDetailTab('tasks')}>{t('tasks')}</button>
-            <button
-              type="button"
-              style={tabBtnStyle(detailTab === 'graph')}
-              onClick={() => { setDetailTab('graph'); if (!graph && !loadingGraph) void loadGraph(selectedDetail.id); }}
-            >
-              {t('graph')}
-            </button>
-          </div>
-        </div>
-
-        <div style={cardStyle}>
-          {detailTab === 'tasks' ? (
-            <>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>{t('tasksCount', { count: tasks.length })}</div>
-              {loadingDetail ? (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('loadingTasks')}</div>
-              ) : tasks.length === 0 ? (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noTasksYet')}</div>
-              ) : (
-                tasks.map((task) => <WorkflowTaskRow key={task.id} task={task} />)
-              )}
-            </>
-          ) : (
-            <>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>{t('dependencyGraph')}</div>
-              {loadingGraph ? (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('loadingGraph')}</div>
-              ) : graph ? (
-                <WorkflowDagView nodes={graph.nodes} edges={graph.edges} />
-              ) : (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noGraphData')}</div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ---- Per-workflow run history view --------------------------------------
+  // ---- Per-workflow run history + detail view ------------------------------
   if (runsForDef) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button
             type="button"
-            onClick={() => { setRunsForDef(null); setDefRuns([]); }}
+            onClick={() => { setRunsForDef(null); setInitialRunId(null); }}
             style={{ padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--bg-base)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
           >
             ← {t('back')}
           </button>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{runsForDef.name} · {t('runs')}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{t('executionHistory')}</div>
-          </div>
+          <div style={{ flex: 1 }} />
           <RoleGate capability="runtime.execute">
             <button type="button" onClick={() => runDef(runsForDef)} disabled={runningId === runsForDef.id} style={{ ...subtleBtn, opacity: runningId === runsForDef.id ? 0.6 : 1 }}>
               {runningId === runsForDef.id ? t('running') : `${t('runNow')}`}
             </button>
           </RoleGate>
         </div>
-
-        {loadingRuns ? (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('loadingRuns')}</div>
-        ) : defRuns.length === 0 ? (
-          <div style={{ ...cardStyle, fontSize: 12, color: 'var(--text-muted)' }}>{t('noRunsPeriod')}</div>
-        ) : (
-          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
-            {defRuns.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => openDetail(r)}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)', background: 'none', cursor: 'pointer' }}
-              >
-                <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {r.description ?? t('runLabel', { id: r.id.slice(0, 8) })}
-                </span>
-                <StatusPill status={r.status} />
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(r.createdAt).toLocaleString()}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        <WorkflowRunHistoryPanel definitionId={runsForDef.id} definitionName={runsForDef.name} initialRunId={initialRunId} />
       </div>
     );
   }

@@ -93,7 +93,7 @@ function lower({ specs, labels, statuses }: SpecVocabulary): readonly SpecRegist
 const FOUNDER_LABELS: Record<FounderObjectKind, string> = {
   company: 'Company', competitor: 'Competitor', customerSegment: 'Customer segment',
   gtmPlan: 'GTM plan', battlecard: 'Battlecard', customerInterview: 'Customer interview',
-  experiment: 'Experiment', decision: 'Decision', objective: 'Objective',
+  experiment: 'Experiment', decision: 'Decision', risk: 'Risk', objective: 'Objective',
   liveMetric: 'Live metric', trigger: 'Trigger', pricing: 'Pricing',
   capTable: 'Cap table', fundingRound: 'Funding round', investorUpdate: 'Investor update',
   dataRoom: 'Data room', contract: 'Contract',

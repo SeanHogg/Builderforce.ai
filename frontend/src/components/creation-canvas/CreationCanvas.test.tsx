@@ -1187,7 +1187,7 @@ describe('CreationCanvas', () => {
     expect(build).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('button', { name: 'Workflow' })).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search everything…' }), { target: { value: 'Workflow' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search object types…' }), { target: { value: 'Workflow' } });
     expect(screen.getByRole('button', { name: 'Workflow' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
     expect(screen.queryByRole('button', { name: 'Workflow' })).not.toBeInTheDocument();

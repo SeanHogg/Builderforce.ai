@@ -116,6 +116,12 @@ export const FOUNDER_OBJECT_KINDS = [
   // WHAT WE CHOSE AND WHY. The canvas recorded what HAPPENED in five places (timeline,
   // activity, checkpoints, branches, the action journal) and why we CHOSE in none.
   'decision',
+  // WHAT COULD GO WRONG, TRACKED RATHER THAN BURIED IN A NOTE. `decision`'s sibling
+  // durable artifact: a decision is chosen and reasoned about once, a risk is watched
+  // and re-scored over the life of a project. Before this it degraded to a free-text
+  // `note`, which meant it could not roll up (how many open risks, what is the highest
+  // exposure) or be reported on — the same gap `decision` closed for the choices.
+  'risk',
   // WHAT WE ARE AIMING AT, on the board rather than only in the PMO spine.
   'objective',
   // THE LIVE HALF. See the block comment above.
@@ -366,6 +372,27 @@ export const CREATION_OBJECT_KINDS = [
   'evermind', 'projectComparison', 'standup',
   'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication',
   'repository', 'selection', 'diagnostics', 'terminal', 'service',
+  // THE DELIVERY LIFECYCLE. `repository`/`terminal`/`diagnostics`/`service`/`release`
+  // covered the workspace and the plan; nothing covered what actually SHIPS — a pull
+  // request, the CI run that gated it, the deployment it produced, an incident against
+  // that deployment, or the environment it landed in. `deployment_events` already feeds
+  // DORA without a canvas object to show for it, and the PR loop is a core runtime with
+  // no board presence at all.
+  //
+  // Named `productionIncident`, not `incident`: the Operations vocabulary already owns
+  // `incident` for a field-service/safety report (injury, near-miss, property damage —
+  // `operationsObjects.ts`), a different noun that happens to share the English word,
+  // exactly the collision `customerInterview` above was renamed to avoid. A botched
+  // deployment rollback and a warehouse near-miss are not the same shape of thing.
+  'pullRequest', 'ciRun', 'deployment', 'productionIncident', 'environment',
+  // THE PMO ROLLUP, AS A BOARD OBJECT. `pmoApi.rollup()`/`pmoApi.valueStream()` already
+  // compute delivery/DORA/spend/OKR for a portfolio, initiative, project or the whole
+  // workspace — nothing on the canvas read them, so a board could plan work and never
+  // see its own measurement. Named `deliveryRollup`, not `delivery`: a connection already
+  // uses `delivery` as an EDGE kind (`CREATION_CONNECTION_KINDS` above) and an object
+  // named identically to an edge in the same vocabulary reads as one thing having two
+  // meanings at a glance, the exact ambiguity `productionIncident` was renamed to avoid.
+  'deliveryRollup',
   'salesPipeline', 'salesContact', 'salesCampaign', 'targetMarket', 'salesGoal', 'salesMeeting',
   // A connected mailbox and one message out of it. Two kinds rather than one
   // because they answer different questions: an `inbox` is a LIVE, filtered view

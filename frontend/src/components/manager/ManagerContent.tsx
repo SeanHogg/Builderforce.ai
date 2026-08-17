@@ -27,6 +27,8 @@ import {
   agentHosts,
   workflowDefinitions,
   tasksApi,
+  pmoApi,
+  creationSessionsApi,
   type ManagerOverview,
   type ManagerConfigPatch,
   type ManagerAction,
@@ -34,6 +36,7 @@ import {
   type ManagerRunTask,
   type AgentHost,
 } from '@/lib/builderforceApi';
+import { buildManagerDeliveryGraph } from '@/lib/managerDeliveryCanvas';
 import type { CloudAgentTarget, TeamMember } from '@/lib/taskAssignee';
 import { assigneeName, parseAssigneeSelectValue } from '@/lib/taskAssignee';
 import { TASK_PRIORITIES_DESC, taskPriorityBadgeClass } from '@/lib/taskPriority';
@@ -142,6 +145,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
+  const [openingCanvas, setOpeningCanvas] = useState(false);
   // Coaching-session state (the human directs the manager).
   const [coachText, setCoachText] = useState('');
   const [coachScope, setCoachScope] = useState<'project' | 'tenant'>('project');
@@ -261,6 +265,43 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       assigneeName(hostId, ref, userId, hosts, cloudAgents, members),
     [hosts, cloudAgents, members],
   );
+
+  /**
+   * "Managing delivery on the canvas instead of looking at a picture of it" —
+   * provisions a fresh `CreationCanvas` session seeded with this project's live PMO
+   * rollup plus an agent card for the manager, then opens it. No session is reused
+   * or remembered server-side: each open is a new snapshot board, the same choice
+   * `SalesCanvasLauncher` makes for a first-time associate, which needed no new
+   * backend storage to deliver the real capability.
+   */
+  const openManagerCanvas = useCallback(async () => {
+    if (projectId == null || openingCanvas) return;
+    setOpeningCanvas(true);
+    setError(null);
+    try {
+      const isBuiltinManagerType = (id: string) => !id.startsWith('role:');
+      const managerTypesList = data?.managerTypes ?? [];
+      const resolvedType = managerTypesList.find((entry) => entry.id === data?.policy.managerType);
+      const managerTypeLabel = resolvedType
+        ? (isBuiltinManagerType(resolvedType.id) ? t(`type.${resolvedType.id}.label`) : resolvedType.label)
+        : t('title');
+      const managerRef = data?.policy.managerRef ?? '';
+      const assignee = parseAssigneeSelectValue(managerRef);
+      const managerNameValue = managerRef
+        ? memberName(assignee.assignedUserId, assignee.assignedAgentRef, assignee.assignedAgentHostId)
+        : t('policy.manager.system');
+      const rollup = await pmoApi.rollup('project', String(projectId));
+      const created = await creationSessionsApi.create({ title: t('openCanvas.title', { name: rollup.scope.name || t('title') }) });
+      await creationSessionsApi.saveGraph(created.session.id, {
+        ...buildManagerDeliveryGraph({ projectId, managerName: managerNameValue, managerType: managerTypeLabel, rollup }),
+        expectedRevision: created.session.revision,
+      });
+      router.push(`/create/${created.session.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('error.body'));
+      setOpeningCanvas(false);
+    }
+  }, [data, memberName, openingCanvas, projectId, router, t]);
 
   const coachNow = useCallback(async () => {
     if (projectId == null || coaching) return;

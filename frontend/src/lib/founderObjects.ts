@@ -360,6 +360,26 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     ],
   },
   {
+    // `decision`'s sibling durable artifact — see its own note in the contract's kind
+    // list. A risk is re-scored over a project's life rather than decided once, so
+    // `likelihood`/`impact` are the fields a review actually revisits, not a one-time
+    // verdict.
+    kind: 'risk',
+    icon: '⚠',
+    group: 'Work',
+    defaultStatus: 'open',
+    actions: ['review', 'mitigate'],
+    fields: [
+      { name: 'description', render: 'verdict', label: 'description', hint: 'What could go wrong, stated plainly enough that someone outside the project understands the exposure.' },
+      { name: 'likelihood', render: 'stat', label: 'likelihood', hint: 'low | medium | high. Re-scored at every review, not set once.' },
+      { name: 'impact', render: 'stat', label: 'impact', hint: 'low | medium | high — the cost if this actually happens.' },
+      { name: 'owner', render: 'stat', label: 'owner', hint: 'The single person accountable for watching and mitigating this. Not a team.' },
+      { name: 'mitigation', render: 'text', label: 'mitigation', hint: 'The plan to reduce the likelihood or the impact — not a hope that it will not happen.' },
+      { name: 'reviewedAt', render: 'stat', label: 'reviewedAt', hint: 'ISO date of the last likelihood/impact re-score.' },
+      SOURCES_FIELD,
+    ],
+  },
+  {
     kind: 'objective',
     icon: '◎',
     group: 'Work',

@@ -12875,6 +12875,9 @@
     "statusRunFailed": "Run failed",
     "statusExportFailed": "Export failed",
     "statusImportFailed": "Import failed",
+    "statusRunStarted": "Run {id} started",
+    "historyTitle": "Execution history and usage for this workflow",
+    "historyLabel": "History",
     "nodeGroup": {
       "trigger": "Trigger",
       "llmLogic": "LLM logic",
@@ -12882,7 +12885,53 @@
       "integrations": "Integrations",
       "agent": "Agent",
       "etl": "ETL",
-      "output": "Output"
+      "output": "Output",
+      "flowControl": "Flow Control",
+      "tools": "Tools",
+      "textParser": "Text Parser",
+      "diagnostics": "Diagnostics"
+    },
+    "nodeKind": {
+      "router": {
+        "label": "Router / If-Else",
+        "blurb": "N-way conditional fan-out — tags the payload with $route (the first matching route's name, or the fallback). Pair with a Filter reading $route == \"Name\" on each downstream path."
+      },
+      "merge": {
+        "label": "Merge",
+        "blurb": "Join multiple upstream branches back into one payload."
+      },
+      "setVariable": {
+        "label": "Set Variable",
+        "blurb": "Write a variable for the rest of THIS run to read (not shared across runs)."
+      },
+      "getVariable": {
+        "label": "Get Variable",
+        "blurb": "Read a variable set earlier in THIS run."
+      },
+      "increment": {
+        "label": "Increment",
+        "blurb": "A counter that PERSISTS ACROSS RUNS of this workflow (unlike Set/Get Variable) — returns the new value."
+      },
+      "sleep": {
+        "label": "Sleep",
+        "blurb": "Delay this path by N seconds before continuing."
+      },
+      "regexMatch": {
+        "label": "Match Pattern",
+        "blurb": "Match a regular expression against the input; outputs matches + capture groups."
+      },
+      "htmlToText": {
+        "label": "HTML to Text",
+        "blurb": "Strip HTML tags from the input, leaving plain text."
+      },
+      "assert": {
+        "label": "Assert",
+        "blurb": "Fail (or just warn) the run unless an expression holds — makes a bad upstream state visible in run history instead of silently continuing."
+      },
+      "healthcheck": {
+        "label": "Healthcheck",
+        "blurb": "Probe a URL and report whether it returned the expected status."
+      }
     }
   },
   "chunkError": {
@@ -13133,6 +13182,11 @@
     "runNow": "Run now",
     "loadingRuns": "Loading runs…",
     "noRunsPeriod": "No runs yet.",
+    "loadingUsage": "Loading usage…",
+    "usageRunsLast7": "runs, last {days} days",
+    "usageCostLast7": "est. cost, last {days} days",
+    "usageChartLabel": "Daily run count",
+    "usageRunsSeries": "Runs",
     "title": "Workflows",
     "subtitle": "Visually-authored, multi-step agent automations. Each runs under a project or tenant-wide, with an assigned agent.",
     "newWorkflow": "New workflow",
@@ -14950,6 +15004,34 @@
     "unavailable": "This résumé link is unavailable."
   },
   "creationCanvas": {
+    "scopeKind": "Scope",
+    "scopeId": "Scope ID",
+    "scopeWorkspace": "Whole workspace",
+    "scopePortfolio": "Portfolio",
+    "scopeInitiative": "Initiative",
+    "scopeProject": "Project",
+    "totalTasks": "Total tasks",
+    "completedCount": "Completed",
+    "openCount": "Open",
+    "avgCycleTimeHours": "Avg cycle time (hrs)",
+    "throughputPerWeek": "Throughput / week",
+    "agentLlmCostUsd": "Agent LLM spend ($)",
+    "deploymentFrequencyPerDay": "Deployments / day",
+    "leadTimeHours": "Lead time (hrs)",
+    "changeFailureRatePct": "Change failure rate (%)",
+    "mttrHours": "MTTR (hrs)",
+    "avgOkrProgress": "Avg OKR progress",
+    "deliveryRollupHint": "Mirrors the PMO rollup for one scope onto this board. Nothing here is authored by hand — Refresh pulls the live numbers.",
+    "refreshDeliveryRollup": "Refresh from PMO",
+    "baseBranch": "Base branch",
+    "commitSha": "Commit",
+    "environmentName": "Environment",
+    "postmortemUrl": "Postmortem link",
+    "environmentKind": "Environment type",
+    "environmentProduction": "Production",
+    "environmentStaging": "Staging",
+    "environmentPreview": "Preview",
+    "environmentDevelopment": "Development",
     "costToBuild": "Cost to build",
     "costUnderOneCent": "<$0.01",
     "costRunsAndTokens": "{requests} runs · {tokens} tokens",
@@ -16294,6 +16376,12 @@
       "diagnostics": "Diagnostics",
       "terminal": "Terminal output",
       "service": "Local service",
+      "pullRequest": "Pull request",
+      "ciRun": "CI run",
+      "deployment": "Deployment",
+      "productionIncident": "Production incident",
+      "environment": "Environment",
+      "deliveryRollup": "Delivery rollup",
       "salesPipeline": "Sales pipeline",
       "salesCampaign": "Sales campaign",
       "salesContact": "Sales contact",
@@ -16359,6 +16447,7 @@
       "customerInterview": "Customer interview",
       "experiment": "Experiment",
       "decision": "Decision",
+      "risk": "Risk",
       "objective": "Objective",
       "liveMetric": "Live metric",
       "trigger": "Trigger",
@@ -17788,6 +17877,11 @@
         "relationship": "Relationship",
         "renewsAt": "Renews",
         "result": "Result",
+        "description": "Description",
+        "likelihood": "Likelihood",
+        "impact": "Impact",
+        "mitigation": "Mitigation",
+        "reviewedAt": "Last reviewed",
         "reversibility": "Reversibility",
         "revisitWhen": "Revisit when",
         "risks": "Risks",

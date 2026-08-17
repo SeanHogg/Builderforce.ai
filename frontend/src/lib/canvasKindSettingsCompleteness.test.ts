@@ -15,6 +15,7 @@ import './canvasKindSettings.sales';
 import './canvasKindSettings.outreach';
 import './canvasKindSettings.dataArchitecture';
 import './canvasKindSettings.qa';
+import './canvasKindSettings.delivery';
 
 /**
  * Every canvas kind resolves to a declared configuration — a `SpecObjectSpec` (edited

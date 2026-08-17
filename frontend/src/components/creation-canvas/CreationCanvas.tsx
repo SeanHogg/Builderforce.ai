@@ -72,7 +72,7 @@ import type { CreationNodeData, CreationObjectKind } from './types';
 import { AUTHORED_DRAWING_STROKE, AUTHORED_WEBSITE_ACCENT } from './authoredColors';
 import { DiagramConvertPanel } from './DiagramConvertPanel';
 import styles from './CreationCanvas.module.css';
-import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, llmApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
+import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, llmApi, pmoApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage, type PmoScopeKind } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, localCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { answersComplete, defaultInput, questionIds, type ToolResult } from '@/lib/tools';
 
@@ -294,6 +294,7 @@ import '@/lib/canvasKindSettings.sales';
 import '@/lib/canvasKindSettings.outreach';
 import '@/lib/canvasKindSettings.dataArchitecture';
 import '@/lib/canvasKindSettings.qa';
+import '@/lib/canvasKindSettings.delivery';
 import type { IdeProject } from '@/lib/types';
 import { CanvasBuildPanel } from './CanvasBuildPanel';
 import { gamePayloadFrom } from '@/lib/gameTargets';
@@ -11190,6 +11191,28 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     deliverMockup: onDeliverMockup,
     saveFramePreset: onSaveFramePreset,
     refreshDashboard: () => onChange({ fetchedAt: new Date().toISOString(), status: 'Live' }),
+    // The board half of "one board where the plan and the measurement of the plan are
+    // the same artifact": pulls `pmoApi.rollup()` for this object's own `scopeKind`/
+    // `scopeId` and flattens it onto the node exactly as `MUTABLE_FIELDS.deliveryRollup`
+    // declares, so every stat the manifest locks as read-only has something real behind it.
+    refreshDeliveryRollup: () => {
+      const scopeKind = (typeof node.data.scopeKind === 'string' ? node.data.scopeKind : 'workspace') as PmoScopeKind;
+      const scopeId = typeof node.data.scopeId === 'string' && node.data.scopeId ? node.data.scopeId : undefined;
+      setActionStatus(t('preparing'));
+      void pmoApi.rollup(scopeKind, scopeId).then((rollup) => {
+        onChange({
+          title: rollup.scope.name || node.data.title,
+          totalTasks: rollup.delivery.totalTasks, completedCount: rollup.delivery.completedCount, openCount: rollup.delivery.openCount,
+          avgCycleTimeHours: rollup.delivery.avgCycleTimeHours, throughputPerWeek: rollup.delivery.throughputPerWeek,
+          agentLlmCostUsd: rollup.spend.agentLlmCostUsd,
+          deploymentFrequencyPerDay: rollup.dora.deploymentFrequencyPerDay, leadTimeHours: rollup.dora.leadTimeHours,
+          changeFailureRatePct: rollup.dora.changeFailureRatePct, mttrHours: rollup.dora.mttrHours,
+          avgOkrProgress: rollup.okr.avgProgress,
+          fetchedAt: new Date().toISOString(), status: 'Live',
+        });
+        setActionStatus('');
+      }).catch((error) => setActionStatus(error instanceof Error ? error.message : t('taskUpdateFailed')));
+    },
   };
   const kindCustomSection = KIND_DETAIL_SECTIONS[kindSettingsManifest(kind)?.custom?.component ?? ''];
   return <aside ref={inspectorRef} className={styles.inspector} aria-label="Details panel" style={{ '--inspector-width': `${inspectorWidth}px` } as CSSProperties}>
