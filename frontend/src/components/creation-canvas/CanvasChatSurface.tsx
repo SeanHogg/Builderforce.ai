@@ -22,13 +22,21 @@ import { memberAvatarClass, memberInitials } from './rosterAvatar';
  * live count — so "just asking" turns into "I have a board" without a migration, an
  * import, or a decision made up front.
  *
- * ── THE SESSION NAME AND THE PEOPLE IN IT ────────────────────────────────────────
- * A conversation with no name and no visible participants reads as a scratch pad, not
- * a shared session — so the title sits at the FAR LEFT of the header, ahead of even the
- * Brain mark, and the same roster the command bar's collapsed cluster shows is drawn
- * here too. It is the SAME `rosterMembers` array (see `CreationCanvas.tsx`), not a
- * second read: a participant added from here is a participant added to the session, and
- * therefore already on the board the moment the conversation graduates into one.
+ * ── THE PEOPLE IN IT, AND NOT THE NAME ───────────────────────────────────────────
+ * The same roster the command bar's collapsed cluster shows is drawn here too. It is the
+ * SAME `rosterMembers` array (see `CreationCanvas.tsx`), not a second read: a participant
+ * added to this conversation is a participant added to the session, and therefore already
+ * on the board the moment the conversation graduates into one.
+ *
+ * The session's NAME is not in here. This header used to open with it, which put a
+ * read-only copy of the title directly underneath the floating session pill — the pill is
+ * at `top:14px` and this surface starts at the shell's top edge — so the name was painted
+ * over by the same name, with only its last few characters showing between the cards. The
+ * pill is the one that can be EDITED, so the pill is the one that stays.
+ *
+ * There is no invite button here either. It opened the same share sheet the Share button
+ * opens, which is one decision with two controls — the exact duplicate the command bar's
+ * roster had its own `+` removed for. The roster reports who is here; Share is the door.
  *
  * ── WHAT IS DELIBERATELY NOT IN HERE ─────────────────────────────────────────────
  * The transcript is `BrainSurfaceBody`, verbatim — the SAME component the edge dock and
@@ -51,27 +59,20 @@ export interface CanvasChatSurfaceProps extends BrainSurfaceBodyProps {
   onOpenBoard: () => void;
   /** Objects already on the board behind this conversation. */
   objectCount: number;
-  /** The session's own name — the far-left of this header, not the floating pill's
-   *  alone, so a conversation reads as a named session and not a scratch pad. */
-  sessionTitle: string;
   /** Who is in this session — the SAME roster the command bar's cluster shows. */
   participants: readonly CanvasChatSurfaceMember[];
-  /** Opens the invite sheet. Absent when this viewer cannot invite anyone — the
-   *  cluster then reports who is here without offering a control it would refuse. */
-  onAddParticipant?: () => void;
 }
 
 export function CanvasChatSurface({
-  onExecutionDetailChange, onOpenBoard, objectCount, sessionTitle, participants, onAddParticipant, ...body
+  onExecutionDetailChange, onOpenBoard, objectCount, participants, ...body
 }: CanvasChatSurfaceProps) {
   const t = useTranslations('creationCanvas');
 
   return (
     <section className={styles.chatSurface} aria-label={t('surface.chat.label')} data-testid="canvas-chat-surface">
       <header className={styles.chatSurfaceHeader}>
-        <strong className={styles.chatSurfaceName} data-testid="canvas-chat-session-name">{sessionTitle}</strong>
         <span className={styles.brainDockMark} aria-hidden><Icon source="✦" size="1em" /></span>
-        <span>{t('brain')}</span>
+        <strong>{t('brain')}</strong>
         {/* The same roster the command bar's collapsed cluster draws — participants
             are part of the conversation, not a fact the bar alone reports. */}
         <span className={styles.chatSurfaceParticipants} aria-label={t('surface.chat.participants')}>
@@ -82,7 +83,6 @@ export function CanvasChatSurface({
               title={member.displayName ?? undefined}
             >{memberInitials(member.displayName)}</span>
           ))}
-          {onAddParticipant && <button type="button" aria-label={t('surface.chat.addParticipant')} title={t('surface.chat.addParticipant')} onClick={onAddParticipant}>+</button>}
         </span>
         {/* The shared controls decide for themselves which of them apply here, so this
             placement gets the execution-detail toggle and nothing else: the placement

@@ -5,14 +5,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import {
-  CANVAS_SCHEDULE_INTERVALS,
   canvasNodePanel,
-  canvasNodeSchedule,
-  canvasPersonOrigin,
   type CanvasNodeMessage,
   type CanvasNodePanelId,
-  type CanvasNodeSchedule,
 } from '@/lib/canvasNodeAffordances';
+import { KindSettingsFields } from './KindSettingsFields';
+import { TimingFields } from './TimingFields';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 
@@ -120,14 +118,8 @@ export function CanvasNodePanel({
 
       <div className={styles.anchoredPanelBody}>
         {panel === 'messages' && <MessagesBody messages={messages} translate={(key) => tMsg(key as 'emptyShell')} />}
-        {panel === 'schedule' && <ScheduleBody
-          schedule={canvasNodeSchedule(data)}
-          editable={editable}
-          advancedOpen={advancedOpen}
-          onChange={(schedule) => onChange({ schedule } as Partial<CreationNodeData>)}
-        />}
-        {panel === 'config' && <ConfigBody data={data} editable={editable} advancedOpen={advancedOpen} onChange={onChange} onOpenFull={onOpenFull} />}
-        {panel === 'persona' && <PersonaBody data={data} editable={editable} advancedOpen={advancedOpen} onChange={onChange} />}
+        {panel === 'schedule' && <TimingFields data={data} editable={editable} advancedOpen={advancedOpen} onChange={onChange} />}
+        {(panel === 'config' || panel === 'persona') && <KindSettingsFields data={data} editable={editable} advancedOpen={advancedOpen} onChange={onChange} onOpenFull={onOpenFull} />}
       </div>
 
       {def.advanced && <footer className={styles.anchoredPanelFooter}>
@@ -161,121 +153,6 @@ function MessagesBody({ messages, translate }: { messages: readonly CanvasNodeMe
   </ul>;
 }
 
-function ScheduleBody({ schedule, editable, advancedOpen, onChange }: {
-  schedule: CanvasNodeSchedule;
-  editable: boolean;
-  advancedOpen: boolean;
-  onChange: (schedule: CanvasNodeSchedule) => void;
-}) {
-  const t = useTranslations('creationCanvas.nodePanel');
-  return <>
-    <label className={styles.anchoredField}>
-      <span>{t('runOnItsOwn')}</span>
-      <button
-        type="button"
-        className={styles.advancedSwitch}
-        aria-pressed={schedule.enabled}
-        disabled={!editable}
-        onClick={() => onChange({ ...schedule, enabled: !schedule.enabled })}
-      ><i aria-hidden />{schedule.enabled ? t('scheduleOn') : t('scheduleOff')}</button>
-    </label>
-    <label className={styles.anchoredField}>
-      <span>{t('every')}</span>
-      <select
-        value={schedule.everyMinutes}
-        disabled={!editable || !schedule.enabled}
-        onChange={(event) => onChange({ ...schedule, everyMinutes: Number(event.target.value) as CanvasNodeSchedule['everyMinutes'] })}
-      >{CANVAS_SCHEDULE_INTERVALS.map((minutes) => <option key={minutes} value={minutes}>{t('everyMinutes', { minutes })}</option>)}</select>
-    </label>
-    {/* The floor is fifteen minutes and it is a cost decision, not a taste one — every
-        entry on that list is a poll, and the platform's own cron work-gate is tuned to
-        the same floor. Saying so here is cheaper than somebody discovering it from a bill. */}
-    <p className={styles.anchoredHint}>{t('scheduleFloorHint')}</p>
-    {advancedOpen && <>
-      <label className={styles.anchoredField}>
-        <span>{t('onlyBetween')}</span>
-        <span className={styles.anchoredRange}>
-          <input type="time" aria-label={t('fromHour')} value={schedule.fromHour ?? ''} disabled={!editable} onChange={(event) => onChange({ ...schedule, fromHour: event.target.value })} />
-          <input type="time" aria-label={t('toHour')} value={schedule.toHour ?? ''} disabled={!editable} onChange={(event) => onChange({ ...schedule, toHour: event.target.value })} />
-        </span>
-      </label>
-      <label className={styles.anchoredField}>
-        <span>{t('weekdaysOnly')}</span>
-        <button
-          type="button"
-          className={styles.advancedSwitch}
-          aria-pressed={schedule.weekdaysOnly === true}
-          disabled={!editable}
-          onClick={() => onChange({ ...schedule, weekdaysOnly: !schedule.weekdaysOnly })}
-        ><i aria-hidden />{schedule.weekdaysOnly ? t('scheduleOn') : t('scheduleOff')}</button>
-      </label>
-    </>}
-  </>;
-}
-
-function ConfigBody({ data, editable, advancedOpen, onChange, onOpenFull }: {
-  data: CreationNodeData;
-  editable: boolean;
-  advancedOpen: boolean;
-  onChange: (patch: Partial<CreationNodeData>) => void;
-  onOpenFull: () => void;
-}) {
-  const t = useTranslations('creationCanvas.nodePanel');
-  return <>
-    <label className={styles.anchoredField}>
-      <span>{t('name')}</span>
-      <input value={data.title} disabled={!editable} onChange={(event) => onChange({ title: event.target.value })} />
-    </label>
-    <label className={styles.anchoredField}>
-      <span>{t('status')}</span>
-      <input value={data.status ?? ''} disabled={!editable} placeholder={t('statusPlaceholder')} onChange={(event) => onChange({ status: event.target.value })} />
-    </label>
-    {advancedOpen && <>
-      <label className={styles.anchoredField}>
-        <span>{t('subtitle')}</span>
-        <input value={data.subtitle ?? ''} disabled={!editable} onChange={(event) => onChange({ subtitle: event.target.value })} />
-      </label>
-      {/* Naming the inspector and then not going there is what a dead end reads like:
-          somebody who opens Advanced looking for their object's OWN settings — a
-          dashboard's date range, a dataset's import — is told where those live and left
-          to find the door themselves. The sentence IS the door. Same `onOpenFull` the
-          header icon takes, so there is one route to the inspector, not two. */}
-      <button type="button" className={styles.anchoredHintAction} onClick={onOpenFull}>{t('configAdvancedHint')}</button>
-    </>}
-  </>;
-}
-
-function PersonaBody({ data, editable, advancedOpen, onChange }: {
-  data: CreationNodeData;
-  editable: boolean;
-  advancedOpen: boolean;
-  onChange: (patch: Partial<CreationNodeData>) => void;
-}) {
-  const t = useTranslations('creationCanvas.nodePanel');
-  const origin = canvasPersonOrigin(data.kind);
-  // A seat's identity comes WITH the seat — its brief, its tools and its review rights are
-  // the catalog's, not this board's. What you set here is how this one works on this
-  // board, which is the same set of controls a custom agent gets. ONE panel, one trait
-  // engine; the only difference is which fields are read-only.
-  const identityLocked = origin === 'builtin';
-  return <>
-    <span className={styles.personaOrigin} data-origin={origin}>{t(origin === 'builtin' ? 'builtinSeat' : 'customAgent')}</span>
-    <label className={styles.anchoredField}>
-      <span>{t('name')}</span>
-      <input value={data.title} disabled={!editable || identityLocked} onChange={(event) => onChange({ title: event.target.value })} />
-    </label>
-    <label className={styles.anchoredField}>
-      <span>{t('role')}</span>
-      <input value={data.role ?? ''} disabled={!editable || identityLocked} onChange={(event) => onChange({ role: event.target.value })} />
-    </label>
-    <label className={styles.anchoredField}>
-      <span>{t('focus')}</span>
-      <input value={data.focus ?? ''} disabled={!editable} onChange={(event) => onChange({ focus: event.target.value })} />
-    </label>
-    {identityLocked && <p className={styles.anchoredHint}>{t('builtinSeatHint')}</p>}
-    {advancedOpen && <label className={styles.anchoredField}>
-      <span>{t('model')}</span>
-      <input value={data.model ?? ''} disabled={!editable} placeholder={t('modelPlaceholder')} onChange={(event) => onChange({ model: event.target.value })} />
-    </label>}
-  </>;
-}
+/* `ScheduleBody`, `ConfigBody` and `PersonaBody` were folded into `TimingFields` and
+ * `KindSettingsFields` — one manifest-driven renderer per surface, shared with the full
+ * inspector, instead of each anchored-panel body hand-writing its own fields. */

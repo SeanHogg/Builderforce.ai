@@ -16,6 +16,12 @@
  * there is no platform branch to hide here.
  */
 export async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return sha256HexBytes(new TextEncoder().encode(value));
+}
+
+/** Same digest, for callers who already have bytes (a file upload) rather than
+ *  a string — encoding binary data as text first would corrupt it. */
+export async function sha256HexBytes(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }

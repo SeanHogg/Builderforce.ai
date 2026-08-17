@@ -219,6 +219,86 @@ export const legalMatters = pgTable('legal_matters', {
   index('idx_legal_matters_status').on(t.tenantId, t.status, t.nextActionAt),
 ]);
 
+/**
+ * A stored, encrypted legal FILE — an uploaded NDA, a formation certificate, an
+ * executed IP assignment — as distinct from `contract` (canvas-board JSON with
+ * no backing table, per that kind's own note) and from the unrelated
+ * `legal_documents` in the kernel (the platform's own Terms of Use / Privacy
+ * Policy versioning, migration 0012 — a name already taken, which is why this
+ * table is `legal_document_files`).
+ *
+ * Holds no file bytes itself: `currentArtifactId` points at a `kernel.artifacts`
+ * row (R2 storage key + checksum + mime), sealed at rest by `fileCrypto.ts`. The
+ * reference is a PLAIN uuid rather than a Drizzle `.references()` — `artifacts`
+ * lives in `kernel.ts` and this module's own header rule is no sibling imports
+ * beyond `objects` — but the constraint is real at the DATABASE level, declared
+ * in the migration, the same split `tenant_id` uses one file up.
+ *
+ * Re-uploading NEVER overwrites `currentArtifactId` in place: it points the
+ * column at a NEW `artifacts` row and the old one stays exactly as it was —
+ * which is what lets a completed signature keep resolving to the artifact it
+ * actually signed after a later version replaces the file on the card.
+ *
+ * No `status` or `signedAt` column, deliberately: whether this file is shared,
+ * awaiting signature or signed is derived at read time from
+ * `legal_document_shares` and the `signature_requests` row `signatureRequestId`
+ * points at — storing it here would be the exact drift `contract.signatureState`
+ * avoids by being written FROM that same join rather than asserted independently.
+ */
+export const legalDocumentFiles = pgTable('legal_document_files', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull(),
+  objectId:      uuid('object_id').references(() => objects.id, { onDelete: 'set null' }),
+  entityId:      integer('entity_id').references(() => legalEntities.id, { onDelete: 'set null' }),
+  matterId:      integer('matter_id').references(() => legalMatters.id, { onDelete: 'set null' }),
+  ipId:          integer('ip_id').references(() => intellectualProperty.id, { onDelete: 'set null' }),
+  title:         varchar('title', { length: 255 }).notNull(),
+  /** 'nda' | 'msa' | 'sow' | 'offer_letter' | 'ip_assignment' | 'formation' |
+   *  'registration' | 'other'. */
+  category:      varchar('category', { length: 32 }).notNull().default('other'),
+  /** The latest `artifacts.id` — the sealed file bytes. Real FK declared in the
+   *  migration; see the table note for why not here. */
+  currentArtifactId: uuid('current_artifact_id'),
+  /** The `signature_requests.id` this file's signature flow created, if any —
+   *  same cross-module split as `currentArtifactId`. */
+  signatureRequestId: integer('signature_request_id'),
+  createdBy:     varchar('created_by', { length: 64 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_legal_document_files_tenant').on(t.tenantId, t.updatedAt),
+  index('idx_legal_document_files_entity').on(t.entityId),
+  index('idx_legal_document_files_matter').on(t.matterId),
+]);
+
+/**
+ * A revocable link that lets an external counterparty — no account, no session
+ * — view or download one `legal_document_files` row. Same mint/hash/resolve
+ * shape as `signature_parties.tokenHash` and `form_recipients.tokenHash`
+ * (`shareToken.ts`), for the THIRD time now a genuinely repeated pattern.
+ *
+ * Deliberately separate from the signing flow: a document can be shared for
+ * review before anyone is asked to sign it, and a signature's own token
+ * (`signature_parties.tokenHash`) already governs the signing act itself — this
+ * table governs plain read access.
+ */
+export const legalDocumentShares = pgTable('legal_document_shares', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull(),
+  documentId:    uuid('document_id').notNull().references(() => legalDocumentFiles.id, { onDelete: 'cascade' }),
+  tokenHash:     varchar('token_hash', { length: 64 }).notNull(),
+  /** 'view' | 'download'. */
+  permission:    varchar('permission', { length: 16 }).notNull().default('view'),
+  recipientEmail: varchar('recipient_email', { length: 320 }),
+  expiresAt:     timestamp('expires_at'),
+  revokedAt:     timestamp('revoked_at'),
+  createdBy:     varchar('created_by', { length: 64 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_legal_document_shares_token').on(t.tokenHash),
+  index('idx_legal_document_shares_document').on(t.documentId),
+]);
+
 // ---------------------------------------------------------------------------
 // Co-founder matching (FO-D5's matching half)
 // ---------------------------------------------------------------------------

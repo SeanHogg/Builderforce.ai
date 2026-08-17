@@ -144,6 +144,7 @@ import { resolvePublicResume } from './application/creation/publicResumeProjecti
 // own network. See the mounts below for why two of these carry no auth.
 import { createFormRoutes, createPublicFormRoutes } from './presentation/routes/formRoutes';
 import { createSignatureRoutes, createPublicSignatureRoutes } from './presentation/routes/signatureRoutes';
+import { createLegalDocumentRoutes, createPublicLegalDocumentRoutes } from './presentation/routes/legalDocumentRoutes';
 import { createPayableRoutes } from './presentation/routes/payableRoutes';
 import {
   createCofounderRoutes,
@@ -809,9 +810,12 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // feature impossible.
   app.route('/api/public/forms',      createPublicFormRoutes(db));
   app.route('/api/public/signatures', createPublicSignatureRoutes(db));
+  // A legal-document share link is the same shape again: a token, no session.
+  app.route('/api/public/legal-documents', createPublicLegalDocumentRoutes(db));
   // The workspace halves.
   app.route('/api/forms',             createFormRoutes(db));
   app.route('/api/signatures',        createSignatureRoutes(db));
+  app.route('/api/legal-documents',   createLegalDocumentRoutes(db));
   // Receivable and payable, and the three acts a bill has. The approver comes
   // from the session inside the route — never from the body.
   app.route('/api/payables',          createPayableRoutes(db));

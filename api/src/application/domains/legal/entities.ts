@@ -19,6 +19,8 @@ import {
   cofounderIntroductions,
   cofounderProfiles,
   intellectualProperty,
+  legalDocumentFiles,
+  legalDocumentShares,
   legalEntities,
   legalMatters,
   legalRegistrations,
@@ -31,6 +33,16 @@ export const LEGAL_ENTITIES = defineDomainEntities('legal', [
   entity(legalRegistrations, { kind: 'registration' }),
   entity(intellectualProperty, { kind: 'ip_asset', registers: true }),
   entity(legalMatters, { kind: 'matter', registers: true }),
+  /**
+   * READ-ONLY through the generic path, for the same reason the signature
+   * entities and `cofounderIntroductions` are: uploading, sharing and signing a
+   * legal file each involve R2 + encryption + tokens a generic PATCH cannot
+   * safely perform. Every write goes through `legalDocumentStore.ts` /
+   * `legalDocumentRoutes.ts`; this registration only gives the file's metadata
+   * a seat on `canvas_read_domain` and the entity browser.
+   */
+  entity(legalDocumentFiles, { kind: 'legal_document_file', registers: true, title: 'title', readOnly: true }),
+  entity(legalDocumentShares, { kind: 'legal_document_share', readOnly: true }),
   /**
    * A co-founder profile is writable by its owner and READ cross-tenant, which is
    * the pair that makes the whole surface work: discovery has to see other

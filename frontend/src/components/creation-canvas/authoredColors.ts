@@ -29,3 +29,8 @@ export const AUTHORED_FRAME_FILL = '#f8f6ff';
 
 /** Default border for a frame, one step deeper than its fill. */
 export const AUTHORED_FRAME_BORDER = '#9d8bea';
+
+/** The floor every `<input type="color">` falls back to when a field declares no
+ *  `defaultColor` of its own — the control still needs SOME value to open the native
+ *  picker at. Not meant to be seen; every real color field should declare its own. */
+export const AUTHORED_COLOR_FALLBACK = '#000000';

@@ -36,5 +36,8 @@ import './sharedCanvasObjects';
 import './dataScienceObjects';
 // The field vocabulary — the operation a vertical company actually runs.
 import './operationsObjects';
+// The secure legal FILE — uploaded, encrypted, shared and signed. Distinct from the
+// authored `contract` the founder set already registers; see `legalObjects.ts`.
+import './legalObjects';
 
 export {};

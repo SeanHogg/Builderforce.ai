@@ -41,7 +41,7 @@ import {
 import type { Db } from '../../infrastructure/database/connection';
 import { formRecipients, questionSets, responses } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { sha256Hex } from '../../domain/shared/hash';
+import { hashShareToken, mintShareToken } from '../security/shareToken';
 
 /** The `question_sets.kind` a canvas `form` object projects to. A kind is a
  *  column value — see the table's own note. */
@@ -216,8 +216,7 @@ export async function publishForm(
 
   const invitations: PublishFormResult['invitations'] = [];
   for (const recipient of recipients) {
-    const token = crypto.randomUUID().replace(/-/g, '');
-    const tokenHash = await sha256Hex(token);
+    const { token, tokenHash } = await mintShareToken();
     // `onConflictDoNothing` rather than an upsert: re-publishing must not rotate
     // a credential somebody is already holding, or the link in their inbox stops
     // working the moment the author fixes a typo in the title.
@@ -292,7 +291,7 @@ export async function resolvePublicForm(db: Db, slug: string, token?: string): P
 
   let recipient: ResolvedForm['recipient'] = null;
   if (token) {
-    const tokenHash = await sha256Hex(token);
+    const tokenHash = await hashShareToken(token);
     const [found] = await db
       .select({
         id: formRecipients.id,

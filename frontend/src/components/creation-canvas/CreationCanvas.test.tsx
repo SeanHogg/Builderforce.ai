@@ -186,7 +186,7 @@ describe('CreationCanvas', () => {
     expect(namedButtons('Close mini map')).toHaveLength(0);
     expect(namedButtons('Hide mini map')).toHaveLength(0);
     expect(namedButtons('Show mini map')).toHaveLength(0);
-    // The rail owns every 3D command, so the scene carries no toolbar at all —
+    // The command bar owns every 3D command, so the scene carries no toolbar at all —
     // no exit, no depth control, no zoom. A second header stacked over the board
     // is what this replaced.
     expect(within(scene).queryByRole('button', { name: /3D/ })).not.toBeInTheDocument();
@@ -194,24 +194,22 @@ describe('CreationCanvas', () => {
     expect(within(scene).queryAllByRole('button', { name: 'Zoom in' })).toHaveLength(0);
     expect(toggle).toHaveAttribute('title', 'Exit 3D');
 
-    // The scene's own commands ride the chrome the board already had — the rail
-    // and the phone-sized stack both drive the scene, so each is offered twice.
-    expect(namedButtons('Zoom in')).toHaveLength(2);
-    expect(namedButtons('Zoom out')).toHaveLength(2);
-    expect(namedButtons('Reset view')).toHaveLength(2);
-    // Both read one controller: flipping the axis on the rail flips it everywhere.
+    // The scene's own commands ride the ONE command bar — the corner rail that used to
+    // carry a second copy of every one of them is gone, so each is offered exactly once.
+    expect(namedButtons('Zoom in')).toHaveLength(1);
+    expect(namedButtons('Zoom out')).toHaveLength(1);
+    expect(namedButtons('Reset view')).toHaveLength(1);
     const depth = namedButtons('Stack layers by object group');
-    expect(depth).toHaveLength(2);
-    expect(depth.map((button) => button.getAttribute('aria-pressed'))).toEqual(['false', 'false']);
+    expect(depth).toHaveLength(1);
+    expect(depth[0]).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(depth[0]!);
-    expect(namedButtons('Stack layers by object group')
-      .map((button) => button.getAttribute('aria-pressed'))).toEqual(['true', 'true']);
+    expect(namedButtons('Stack layers by object group')[0]).toHaveAttribute('aria-pressed', 'true');
 
     fireEvent.click(toggle!);
     expect(screen.queryByTestId('canvas-3d-view')).not.toBeInTheDocument();
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(toggle).toHaveAttribute('title', 'View this canvas in 3D');
-    // Leaving hands the rail back: the 3D commands go, the flat ones return.
+    // Leaving swaps the bar's contents back: the 3D commands go, the flat ones return.
     // The mini map was never toggled in this test, so it is still open — the
     // command bar's own control reports that as "Hide mini map".
     expect(namedButtons('Stack layers by object group')).toHaveLength(0);
@@ -273,12 +271,12 @@ describe('CreationCanvas', () => {
     // The guides are a reading aid over the space, so putting them away is a
     // question about the view and never about where anything sits.
     const guides = screen.getAllByRole('button', { name: 'Layer guides' });
-    expect(guides.map((button) => button.getAttribute('aria-pressed'))).toEqual(['true', 'true']);
+    expect(guides.map((button) => button.getAttribute('aria-pressed'))).toEqual(['true']);
     fireEvent.click(guides[0]!);
 
     expect(screen.getByTestId('canvas-3d-view').textContent).not.toContain('Layer 1');
     expect(screen.getAllByRole('button', { name: 'Layer guides' })
-      .map((button) => button.getAttribute('aria-pressed'))).toEqual(['false', 'false']);
+      .map((button) => button.getAttribute('aria-pressed'))).toEqual(['false']);
     expect(cardX(card)).toBe(placed);
   });
 

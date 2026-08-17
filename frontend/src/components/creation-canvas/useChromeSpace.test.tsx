@@ -8,7 +8,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it, vi, beforeAll } from 'vitest';
 import { useRef } from 'react';
-import { useBottomChromeSpace } from './useBottomChromeSpace';
+import { useChromeSpace } from './useChromeSpace';
 
 /** jsdom has no ResizeObserver. A no-op stub would make the "it grows" test pass
  *  vacuously — the hook publishes once on mount and would never be asked again —
@@ -42,7 +42,7 @@ function stubRect(element: HTMLElement, rect: { top: number; bottom: number }) {
 
 function Board({ withDock, dockTop, gap = 0 }: { withDock: boolean; dockTop: number; gap?: number }) {
   const board = useRef<HTMLDivElement | null>(null);
-  const dockRef = useBottomChromeSpace(board, '--composer-space', gap);
+  const dockRef = useChromeSpace(board, '--composer-space', { gap });
   return (
     <div
       ref={(node) => {
@@ -64,9 +64,23 @@ function Board({ withDock, dockTop, gap = 0 }: { withDock: boolean; dockTop: num
   );
 }
 
+/** The top-band counterpart: a card floating at the host's TOP edge. */
+function TopChrome({ bottom, gap }: { bottom: number; gap: number }) {
+  const board = useRef<HTMLDivElement | null>(null);
+  const cardRef = useChromeSpace(board, '--canvas-top-chrome-space', { edge: 'top', gap });
+  return (
+    <div
+      ref={(node) => { board.current = node; if (node) stubRect(node, { top: 0, bottom: 800 }); }}
+      data-testid="board"
+    >
+      <div ref={(node) => { if (node) stubRect(node, { top: 14, bottom }); cardRef(node); }} data-testid="card" />
+    </div>
+  );
+}
+
 const spaceOf = (element: HTMLElement) => element.style.getPropertyValue('--composer-space');
 
-describe('useBottomChromeSpace', () => {
+describe('useChromeSpace', () => {
   it('publishes the distance from the board bottom to the dock top', () => {
     const { getByTestId } = render(<Board withDock dockTop={650} />);
     expect(spaceOf(getByTestId('board'))).toBe('150px');

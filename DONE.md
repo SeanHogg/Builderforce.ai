@@ -1,3 +1,89 @@
+## ✅ RESOLVED 2026-08-16 — Canvas chat header, and the second toolbar in the corner
+
+Three defects reported from the conversation surface, fixed in one pass (frontend 2026.8.49):
+
+- **The chat surface drew its header underneath the floating chrome.** `.chatSurface` is
+  `inset:0` at z-index 7; the session pill, the surface chips and the handoff card float over
+  it at z-index 20 from `top:14px`. So the conversation's header row — which opened with the
+  session's NAME — was painted over by the same session's name in the pill, with only its last
+  few characters showing between two cards. The header now starts below a MEASURED top band
+  (`--canvas-top-chrome-space`, taken off the tallest of the three cards by `useChromeSpace`,
+  which grew an `edge: 'top'` option for it), and the duplicated title is gone entirely: the
+  pill's copy is the one that can be edited, so the pill's copy is the one that stays.
+
+- **A bare `+` beside the surface tabs opened the share panel.** It was the chat header's
+  invite button, marooned at the right of a header that ran the full width under the floating
+  cards. It opened the same sheet Share opens — one decision with two controls, the exact
+  duplicate the command bar's roster had its own `+` removed for. Removed, with its prop, its
+  handler and its catalogue key in all five locales; the roster reports who is here, Share is
+  the door.
+
+- **A second action panel in the bottom-left corner.** React Flow's control rail stood down on
+  the flat board only (`hideOnFlatBoard`), so this canvas showed ONE bar on the board and TWO
+  toolbars on every other surface, with Files and the accessible outline living in the bar on
+  one surface and in the corner on the next. The prop is now `hideRail` — a canvas either has a
+  bar of its own or it does not, and which surface it draws does not change that — and the
+  Creation Canvas passes it on every surface. Files and the outline are in the bar unconditionally,
+  and the 3D scene's depth / layer-guide / drop-to-layers commands are contributed there too,
+  beside the zoom and reset that already switched to the scene's camera. The two embedded
+  canvases that share the component (`ValueStreamGraph`, `DependencyGraph`) keep their rail:
+  they have no bar for it to move into. The phone column kept a duplicate of each of those
+  commands while the bar was gated on the board — it now carries only the mobile surface
+  switcher, which the bar does not have.
+
+Two adjacent bugs closed while they were in reach: `data-brain-open` claimed the phone's bottom
+edge from `brainSurfaceOpen && placement === 'docked'` without asking whether the dock is
+actually drawn, so on a surface that IS the conversation the board rail moved up to `top:56px`
+to clear a sheet that was not there — and landed on the header this pass just uncovered. It now
+reads the same `brainDockDrawn` the dock render does. And `CanvasCommands`' rail-only exports
+(`CanvasRailToggle`, `extraControls`, `showInteractive` at this call site) are no longer imported
+by the Creation Canvas.
+
+## ✅ RESOLVED 2026-08-16 — "Unknown executive Canvas use case": one transposed character killed a whole turn
+
+Picking **Create executive deck** from the starting-point menu produced *"I couldn't
+prepare the requested canvas changes: Unknown executive Canvas use case"* and a run that
+created nothing. The tool trace named the cause exactly:
+
+```
+args={"useCas1eId":"scratchpad.create_deck"} result={"error":"Unknown executive Canvas use case."}
+```
+
+**The value was perfectly correct. The KEY had a `1` in it.** The model (routed to
+`gemini-2.5-flash` mid-turn) mistyped `useCaseId`, `args.useCaseId` read `undefined`, the
+lookup missed, and `canvas_prepare_executive_use_case` answered with a dead end.
+
+Three things were wrong, and all three are fixed:
+
+**1 — The tool trusted only the model.** The canvas ALREADY knew which contract was in
+flight: `executiveCanvasPrompt` writes `Execution contract <id>:` into the prompt when the
+entry is picked, and the completion gate scans for it. The tool never consulted it.
+`inFlightUseCaseId` now publishes it for the turn, so a model that fumbles the argument
+cannot lose a contract the canvas put there itself.
+
+**2 — The lookup was exact-match on a key.** `resolveExecutiveUseCaseId` takes the exact
+argument first, then ANY argument value that IS one of the 48 ids, then the in-flight
+contract. Recovery is safe here for a reason that deliberately does not generalise, and it
+is written at the function: this tool has ONE meaningful argument and its value space is a
+CLOSED ENUM, so a value that is one of those ids can only have been meant as the use case.
+A tool with two free-text arguments must never do this.
+
+**3 — The error told the model nothing it could act on.** "Unknown executive Canvas use
+case." is a full stop; the model stopped rather than retrying, which is what actually
+ended the turn. It now returns a `hint` and the `validUseCaseIds`.
+
+Also fixed, because it is what made the rest of that report undiagnosable: **a failed tool
+call now journals its REASON.** `onTrace` recorded `detail: 'error'` — the one thing
+`ok: false` already says — and threw away `event.result`, while `brainTrace` is cleared at
+the start of every turn. So the same report's two `canvas_read_snapshot FAILED — error`
+entries from earlier turns were permanently unexplainable. They now carry the message.
+
+`executiveUseCaseFromPrompt` is the ONE reader of the contract marker, shared by the
+completion gate and the recovery path, so the writer and the reader cannot drift.
+Regression tests in `lib/templates/promptUseCases.test.ts` pin the mistyped key verbatim,
+round-trip all 48 ids through their own composed prompts, and assert the resolver never
+invents an id from a value that is not one.
+
 ## ✅ RESOLVED 2026-08-16 — Canvas prompt & command bar: the docked prompt is IN the chat, the bar is one icon row
 
 Three defects reported from the Creation Canvas, all fixed in one pass (frontend 2026.8.47):

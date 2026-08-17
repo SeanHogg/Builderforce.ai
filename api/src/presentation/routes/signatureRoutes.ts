@@ -15,7 +15,7 @@
 
 import { Hono, type Context } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { sha256Hex } from '../../domain/shared/hash';
 import {
@@ -26,12 +26,14 @@ import {
   resolveSigner,
   signatureProgress,
 } from '../../application/signature/signatureEngine';
+import { ArtifactNotFoundError, loadAndDecryptArtifact } from '../../application/artifacts/artifactStore';
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
     return await run();
   } catch (error) {
     if (error instanceof SignatureError) return Response.json({ error: error.message }, { status: error.status });
+    if (error instanceof ArtifactNotFoundError) return Response.json({ error: error.message }, { status: 404 });
     throw error;
   }
 };
@@ -52,7 +54,9 @@ export function createSignatureRoutes(db: Db): Hono<HonoEnv> {
       subject: String(body.subject ?? ''),
       intent: typeof body.intent === 'string' ? body.intent : undefined,
       documentTitle: String(body.documentTitle ?? ''),
-      documentBody: String(body.documentBody ?? ''),
+      documentBody: typeof body.documentBody === 'string' ? body.documentBody : null,
+      documentArtifactId: typeof body.documentArtifactId === 'string' ? body.documentArtifactId : null,
+      documentChecksum: typeof body.documentChecksum === 'string' ? body.documentChecksum : null,
       documentRef: typeof body.documentRef === 'string' ? body.documentRef : null,
       objectId: typeof body.objectId === 'string' ? body.objectId : null,
       expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : null,
@@ -102,6 +106,26 @@ export function createPublicSignatureRoutes(db: Db): Hono<HonoEnv> {
     // and nothing about whose workspace produced them.
     const { tenantId: _tenantId, ...rest } = view;
     return Response.json({ request: rest });
+  }));
+
+  /**
+   * The file behind a file-backed request (`documentArtifactId` set) — the
+   * signer's own review of a bound PDF/DOCX before they decide. Re-validates
+   * the token itself rather than trusting a prior GET, for the same reason the
+   * decision route below does: no session means every request re-proves itself.
+   */
+  router.get('/:token/file', (c) => handle(async () => {
+    const view = await resolveSigner(db, c.req.param('token'));
+    if (!view) return Response.json({ error: 'That signing link is not valid.' }, { status: 404 });
+    if (!view.documentArtifactId) return Response.json({ error: 'This request has no bound file — read documentBody instead.' }, { status: 404 });
+    const file = await loadAndDecryptArtifact(db, c.env as Env, view.tenantId, view.documentArtifactId);
+    return new Response(file.bytes, {
+      headers: {
+        'content-type': file.mime || 'application/octet-stream',
+        'content-disposition': `inline; filename="${file.title.replace(/"/g, '')}"`,
+        'cache-control': 'no-store',
+      },
+    });
   }));
 
   router.post('/:token', (c) => handle(async () => {

@@ -1,5 +1,5 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
-import { CREATION_CONNECTION_KINDS, emptyCanvasVideoTimeline, emptyCanvasWorldScene, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
+import { CREATION_CONNECTION_KINDS, emptyCanvasVideoTimeline, emptyCanvasWorldScene, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type LegalObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
 import { FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS, founderMutableFields } from '@/lib/founderObjects';
 // Importing the vocabulary registers it (see `specObjects.ts`), which is what makes the
 // academic kinds resolvable everywhere else without a second list of them here.
@@ -23,6 +23,7 @@ import {
   SHARED_MUTABLE_FIELDS, SHARED_REGISTRY, SPEC_ACTIONS,
   DATA_SCIENCE_MUTABLE_FIELDS, DATA_SCIENCE_REGISTRY,
   OPERATIONS_MUTABLE_FIELDS, OPERATIONS_REGISTRY,
+  LEGAL_MUTABLE_FIELDS, LEGAL_REGISTRY,
 } from './specDerivedRegistry';
 import {
   DATA_ARCHITECTURE_FIELD_NAMES, DATA_ARCHITECTURE_SPECS, dataArchitectureMutableFields, dataArchitectureSeed,
@@ -481,7 +482,7 @@ const BASE_MUTABLE_FIELDS = {
     // Their omission made this annotation demand six entries the object above is not
     // supposed to carry, so the exhaustiveness check it exists to perform could not
     // compile at all — a guard that fails for every kind protects none of them.
-    FounderObjectKind | AcademicObjectKind | HiringObjectKind | PeopleObjectKind | SharedObjectKind | DataArchitectureKind | DataScienceObjectKind | OperationsObjectKind
+    FounderObjectKind | AcademicObjectKind | HiringObjectKind | PeopleObjectKind | SharedObjectKind | DataArchitectureKind | DataScienceObjectKind | OperationsObjectKind | LegalObjectKind
   >,
   readonly string[]
 >;
@@ -497,6 +498,7 @@ const MUTABLE_FIELDS: Record<CreationObjectKind, readonly string[]> = {
   ...SHARED_MUTABLE_FIELDS,
   ...DATA_SCIENCE_MUTABLE_FIELDS,
   ...OPERATIONS_MUTABLE_FIELDS,
+  ...LEGAL_MUTABLE_FIELDS,
   // Cast to the named kind union rather than left as an index signature: an
   // index-signature map satisfies ANY key, so spreading one silently switched the
   // exhaustiveness annotation below off for these six kinds.
@@ -606,6 +608,11 @@ const SHELL_IS_LEGITIMATE: ReadonlySet<CreationObjectKind> = new Set<CreationObj
   // been dispatched and has not reported yet — the one case where a shell is the
   // truth rather than work handed back to the user.
   'testRun',
+  // A `legalDocument` is FILLED BY AN UPLOAD, exactly as a `dataset` is filled by an
+  // import — every field on it is `bookkeeping: true` (see `legalObjects.ts`), so a
+  // freshly authored card legitimately has nothing else to show until a real file
+  // lands on it.
+  'legalDocument',
 ]);
 
 /** Identity and bookkeeping — present on an empty object, so authoring one of these
@@ -736,6 +743,7 @@ export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = [
   ...DATA_SCIENCE_REGISTRY,
   ...DATA_ARCHITECTURE_REGISTRY,
   ...OPERATIONS_REGISTRY,
+  ...LEGAL_REGISTRY,
 ].map((definition) => ({
   ...definition,
   ...(CAPABILITIES[definition.kind] ? { capability: CAPABILITIES[definition.kind] } : {}),

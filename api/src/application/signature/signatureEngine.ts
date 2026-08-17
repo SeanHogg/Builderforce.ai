@@ -43,7 +43,7 @@ import {
 import type { Db } from '../../infrastructure/database/connection';
 import { signatureParties, signatureRequests } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
-import { sha256Hex } from '../../domain/shared/hash';
+import { hashShareToken, mintShareToken } from '../security/shareToken';
 
 export class SignatureError extends Error {
   constructor(message: string, readonly status: number) {
@@ -69,7 +69,20 @@ export interface CreateSignatureRequestInput {
   subject: string;
   intent?: string;
   documentTitle: string;
-  documentBody: string;
+  /** The terms, rendered to the signer verbatim. Required UNLESS
+   *  `documentArtifactId` is given — a request binds to text OR to a binary
+   *  file, never neither. */
+  documentBody?: string | null;
+  /** A binary file (a `kernel.artifacts` row) the signer reviews and signs,
+   *  instead of rendered text — e.g. an uploaded PDF/DOCX. The engine does not
+   *  know what an "artifact" means; it stores the pointer and the hash the
+   *  caller already computed, exactly as it freezes `documentBody` verbatim. */
+  documentArtifactId?: string | null;
+  /** SHA-256 of the artifact's PLAINTEXT bytes at the moment this request was
+   *  created — required together with `documentArtifactId`, frozen for the same
+   *  reason `documentBody` is copied rather than referenced: what this person
+   *  saw on that day must stay provable even if the file is later re-uploaded. */
+  documentChecksum?: string | null;
   documentRef?: string | null;
   objectId?: string | null;
   expiresAt?: string | null;
@@ -110,10 +123,15 @@ export async function createSignatureRequest(
 ): Promise<CreatedSignatureRequest> {
   const subject = input.subject.trim().slice(0, 200);
   const documentTitle = input.documentTitle.trim().slice(0, 200);
-  const documentBody = input.documentBody.trim();
+  const documentBody = input.documentBody?.trim() || null;
+  const documentArtifactId = input.documentArtifactId?.trim() || null;
+  const documentChecksum = input.documentChecksum?.trim() || null;
   if (!subject || !documentTitle) throw new SignatureError('A signature request needs a subject and a document title.', 400);
-  if (!documentBody) {
-    throw new SignatureError('A signature request with no terms is a request to agree to nothing. Send the text the signer is agreeing to.', 400);
+  if (!documentBody && !documentArtifactId) {
+    throw new SignatureError('A signature request with no terms is a request to agree to nothing. Send the text the signer is agreeing to, or bind it to a file.', 400);
+  }
+  if (documentArtifactId && !documentChecksum) {
+    throw new SignatureError('A file-backed signature request needs the checksum of what is being signed, frozen at send time.', 400);
   }
 
   const parties = input.parties
@@ -138,6 +156,8 @@ export async function createSignatureRequest(
       intent,
       documentTitle,
       documentBody,
+      documentArtifactId,
+      documentChecksum,
       documentRef: input.documentRef ?? null,
       objectId: input.objectId ?? null,
       status: 'sent',
@@ -151,7 +171,7 @@ export async function createSignatureRequest(
 
   const invitations: SignatureInvitation[] = [];
   for (const [position, party] of parties.entries()) {
-    const token = crypto.randomUUID().replace(/-/g, '');
+    const { token, tokenHash } = await mintShareToken();
     const [row] = await db
       .insert(signatureParties)
       .values({
@@ -161,7 +181,7 @@ export async function createSignatureRequest(
         email: party.email,
         partyRef: party.partyRef,
         position,
-        tokenHash: await sha256Hex(token),
+        tokenHash,
       })
       .returning({ id: signatureParties.id });
     if (row) invitations.push({ partyId: row.id, name: party.name, email: party.email, token });
@@ -197,7 +217,11 @@ export interface SignerView {
   subject: string;
   intent: SignatureIntent;
   documentTitle: string;
-  documentBody: string;
+  documentBody: string | null;
+  /** Set when this request is bound to a file rather than (or as well as)
+   *  rendered text — the signer-facing route fetches and decrypts it separately. */
+  documentArtifactId: string | null;
+  documentChecksum: string | null;
   signerName: string;
   status: SignaturePartyStatus;
   requestStatus: SignatureRequestStatus;
@@ -221,7 +245,7 @@ export interface SignerView {
 export async function resolveSigner(db: Db, token: string): Promise<SignerView | null> {
   const clean = token.trim();
   if (!clean || clean.length > 128) return null;
-  const tokenHash = await sha256Hex(clean);
+  const tokenHash = await hashShareToken(clean);
 
   const [row] = await db
     .select({
@@ -236,6 +260,8 @@ export async function resolveSigner(db: Db, token: string): Promise<SignerView |
       intent: signatureRequests.intent,
       documentTitle: signatureRequests.documentTitle,
       documentBody: signatureRequests.documentBody,
+      documentArtifactId: signatureRequests.documentArtifactId,
+      documentChecksum: signatureRequests.documentChecksum,
       requestStatus: signatureRequests.status,
       expiresAt: signatureRequests.expiresAt,
     })
@@ -276,6 +302,8 @@ export async function resolveSigner(db: Db, token: string): Promise<SignerView |
     intent: isSignatureIntent(row.intent) ? row.intent : 'sign',
     documentTitle: row.documentTitle,
     documentBody: row.documentBody,
+    documentArtifactId: row.documentArtifactId,
+    documentChecksum: row.documentChecksum,
     signerName: row.partyName,
     status: row.viewedAt || row.partyStatus !== 'pending' ? asPartyStatus(row.partyStatus === 'pending' ? 'viewed' : row.partyStatus) : 'viewed',
     requestStatus: row.requestStatus as SignatureRequestStatus,

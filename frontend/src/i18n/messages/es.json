@@ -19079,8 +19079,7 @@
         "enter": "Solo conversar",
         "active": "Estás en el chat",
         "openBoard": "{count, plural, =0 {Abrir el tablero} one {Abrir el tablero · # objeto} other {Abrir el tablero · # objetos}}",
-        "participants": "Quién participa en esta conversación",
-        "addParticipant": "Invitar a alguien"
+        "participants": "Quién participa en esta conversación"
       },
       "graph": {
         "label": "Tablero",

@@ -447,12 +447,19 @@ type CanvasCommandsProps = {
   onToggleThreeD?: () => void;
   threeDActive?: boolean;
   /**
-   * Stand the flat-board rail down entirely — zoom, fit, arrange and the mini
-   * map toggle move to the host's own command bar instead. Leaves the 3D rail
-   * untouched, since that view has no second bar competing with it. The mini
-   * map thumbnail itself still draws here; only the button that opens it moves.
+   * Stand the rail down entirely: this host has a command bar of its own, and every
+   * command the rail carries is contributed to that bar instead.
+   *
+   * It used to be `hideOnFlatBoard`, which stood the rail down on the flat board ONLY —
+   * so the Creation Canvas showed one bar on the board and TWO toolbars on every other
+   * surface, with Files and the accessible outline living in the bar on one surface and
+   * in the bottom-left corner on the next. A canvas either has a bar of its own or it
+   * does not; which surface it happens to be drawing does not change the answer.
+   *
+   * The mini map thumbnail is unaffected — it is a READING of the board rather than a
+   * command, and it is gated by `threeDActive` exactly as it always was.
    */
-  hideOnFlatBoard?: boolean;
+  hideRail?: boolean;
 };
 
 /**
@@ -482,12 +489,12 @@ export function CanvasCommands({
   extraControls,
   onToggleThreeD,
   threeDActive = false,
-  hideOnFlatBoard = false,
+  hideRail = false,
 }: CanvasCommandsProps) {
   const t = useTranslations('canvasCommands');
   // Published by the scene while it is on screen; null in the flat view.
   const threeD = useCanvas3DControls();
-  const showRail = threeDActive || !hideOnFlatBoard;
+  const showRail = !hideRail;
   return <>
     {showRail && <Controls
       position="bottom-left"

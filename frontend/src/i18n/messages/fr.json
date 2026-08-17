@@ -19079,8 +19079,7 @@
         "enter": "Simplement discuter",
         "active": "Vous êtes dans la discussion",
         "openBoard": "{count, plural, =0 {Ouvrir le tableau} one {Ouvrir le tableau · # objet} other {Ouvrir le tableau · # objets}}",
-        "participants": "Qui participe à cette conversation",
-        "addParticipant": "Inviter quelqu’un"
+        "participants": "Qui participe à cette conversation"
       },
       "graph": {
         "label": "Tableau",

@@ -19,13 +19,13 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, AddObjectIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasRailToggle, CanvasSocialIcon, CleanLayoutIcon, ClosePaletteIcon, DepthIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MinimapIcon, MoreActionsIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, AddObjectIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasAdsIcon, CanvasFilesIcon, CanvasMiroIcon, CanvasSocialIcon, CleanLayoutIcon, ClosePaletteIcon, DepthIcon, DropToLayersIcon, FitViewIcon, LayerGuidesIcon, MarqueeSelectIcon, MinimapIcon, MoreActionsIcon, ResetViewIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import type { Canvas3DMove, Canvas3DViewProps } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { canvasChromeShows, readCanvasBarCollapsed, writeCanvasBarCollapsed } from '@/lib/canvasChrome';
 import { canvasApp } from '@/lib/canvasApp';
-import { canvasNodeMessages, type CanvasNodePanelId } from '@/lib/canvasNodeAffordances';
+import { canvasNodeMessages, canvasPersonOrigin, isCanvasPersonKind, type CanvasNodePanelId } from '@/lib/canvasNodeAffordances';
 import { memberAvatarClass, memberInitials } from './rosterAvatar';
 import {
   DEFAULT_CANVAS_PROMPT_PLACEMENT,
@@ -69,7 +69,7 @@ import { BrainSurfaceProvider, type BrainSurfaceContextValue } from './brainSurf
 import { useToast } from '@/components/ToastProvider';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
-import { AUTHORED_DRAWING_STROKE, AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL, AUTHORED_WEBSITE_ACCENT } from './authoredColors';
+import { AUTHORED_DRAWING_STROKE, AUTHORED_WEBSITE_ACCENT } from './authoredColors';
 import { DiagramConvertPanel } from './DiagramConvertPanel';
 import styles from './CreationCanvas.module.css';
 import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, llmApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
@@ -99,7 +99,7 @@ import { canvasNoticesFrom } from '@/lib/canvasNotices';
 import { canvasTranscriptForModel } from '@/lib/canvasTranscript';
 import { approvalGuidance, evaluateGate, readProvenance, type ApprovalMode } from '@/lib/canvasApprovalGate';
 import { sheetFormulaGuidance } from '@/lib/canvasSheet';
-import { deadlineBearingKinds, makeSpecDeriveBoard, specRefKey } from '@/lib/specObjects';
+import { deadlineBearingKinds, isSpecObjectKind, makeSpecDeriveBoard, specRefKey } from '@/lib/specObjects';
 import { learnersFromCohort } from '@/lib/academic/gradebook';
 import { statsOf, curriculumMapProblems, mappingRows } from '@/lib/academic/derivations';
 import { applyRubric, applyLatePolicy, hoursLate, parseLatePolicy, rubricFromNode, rubricProblems, type CriterionSelection } from '@/lib/academic/marking';
@@ -192,7 +192,7 @@ import { useCoarsePointer } from '@/lib/useCoarsePointer';
 import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
 import { canvasStrokes, drawingPatch, DRAWING_TOOLS, eraseStrokes, strokesSvg, type CanvasDrawingTool, type CanvasStroke } from '@/lib/canvasDrawing';
 import { DEFAULT_DRAWING_PREFERENCES, readDrawingPreferences, writeDrawingPreferences, type DrawingPreferences } from './drawingPreferences';
-import { useBottomChromeSpace } from './useBottomChromeSpace';
+import { useChromeSpace } from './useChromeSpace';
 import {
   fileToDataUrl, importCanvasFile, type AttachmentBytesStrategy, type ImportTranslator,
 } from '@/lib/canvasFileImport';
@@ -230,7 +230,14 @@ import { canvasTourDesignFromNode, defaultCanvasTourDesign, type CanvasTourDesig
 import { useChatModelOptions } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
 import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
-import { C_SUITE_CANVAS_USE_CASES, cSuiteCanvasOwner, cSuiteCanvasWorkflow } from '@/lib/templates/promptUseCases';
+import {
+  C_SUITE_CANVAS_USE_CASES,
+  C_SUITE_USE_CASE_IDS,
+  cSuiteCanvasOwner,
+  cSuiteCanvasWorkflow,
+  executiveUseCaseFromPrompt,
+  resolveExecutiveUseCaseId,
+} from '@/lib/templates/promptUseCases';
 import { applyTemplateEntry } from '@/lib/templates/apply';
 import { useTemplateCatalog } from '@/lib/templates/useTemplateCatalog';
 import { matchesTemplateQuery } from '@/lib/templates/contract';
@@ -242,7 +249,7 @@ import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables,
 import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
 import { EXPORT_EXTENSION, EXPORT_MIME, SERVER_RENDERED_ACTIONS, defaultExportAction, type CanvasExportAction } from '@/lib/canvasExports';
 import {
-  PITCH_COMPETITIONS, PITCH_MAX_SCORE, formatPitchDuration, isPitchObjectKind, pitchApplicationAnswers,
+  PITCH_COMPETITIONS, PITCH_MAX_SCORE, formatPitchDuration, pitchApplicationAnswers,
   pitchApplicationReadiness, pitchBeats, pitchCompetitionFor, pitchCriteria, pitchEligibility, pitchQaCoverage,
   pitchQaItems, pitchReadiness, pitchRuntimeSeconds, pitchSpokenSeconds, pitchTimingTone, type PitchLabelled,
 } from '@/lib/pitchCompetition';
@@ -266,8 +273,20 @@ import { canvasBuildActions, type BoundCanvasBuild } from '@/lib/canvasBuildTool
 import { canvasFounderOpsActions } from '@/lib/canvasFounderOpsTools';
 import { sendInvestorUpdate } from '@/lib/founderOpsApi';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
-import { canvasWebPageUrl, isWebPageKind, normalizeWebPageUrl, webPageHost, webPageViewport } from '@/lib/canvasWebPage';
+import { canvasWebPageUrl, normalizeWebPageUrl, webPageHost, webPageViewport } from '@/lib/canvasWebPage';
 import { deleteIdeProject, listIdeProjects } from '@/lib/api';
+import { CREATIVE_GENERATOR_KINDS } from '@/lib/creationObjectGroups';
+import {
+  kindSettingsActions,
+  kindSettingsFields,
+  kindSettingsManifest,
+  kindSettingsSellable,
+} from '@/lib/canvasKindSettings';
+import { SettingsFieldControl } from './SettingsFieldControl';
+import '@/lib/canvasKindSettings.people';
+import '@/lib/canvasKindSettings.simple';
+import '@/lib/canvasKindSettings.dispatch';
+import '@/lib/canvasKindSettings.custom';
 import type { IdeProject } from '@/lib/types';
 import { CanvasBuildPanel } from './CanvasBuildPanel';
 import { gamePayloadFrom } from '@/lib/gameTargets';
@@ -358,9 +377,14 @@ const INSPECTOR_MIN_WIDTH = 270;
 const INSPECTOR_WIDE_WIDTH = 520;
 const INSPECTOR_MAX_WIDTH = 720;
 /** The air between the command bar and the prompt floating above it. The bar's HEIGHT is
- *  measured (see `useBottomChromeSpace`); this is the only part of that band a number can
+ *  measured (see `useChromeSpace`); this is the only part of that band a number can
  *  honestly state, because it is a spacing decision rather than a fact about an element. */
 const COMMAND_BAR_CLEARANCE = 10;
+/** The air between the floating TOP chrome and anything drawn under it — the panels that
+ *  open in the top-right corner, and every full-bleed surface. Same reasoning as
+ *  `COMMAND_BAR_CLEARANCE`, at the other edge: the cards' height is measured, and only the
+ *  gap is a number this file is entitled to state. */
+const TOP_CHROME_CLEARANCE = 8;
 const ACCOUNT_REQUIRED_OBJECT_ACTIONS =new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'train', 'start', 'compare', 'build']);
 
 /**
@@ -435,7 +459,6 @@ const WEBSITE_THEME_SCHEMA = {
   type: 'object', required: ['style'], additionalProperties: false,
   properties: { style: { type: 'string', enum: ['editorial', 'bold', 'minimal', 'soft', 'technical'] }, background: { type: 'string' }, foreground: { type: 'string' }, accent: { type: 'string' } },
 };
-const CREATIVE_GENERATOR_KINDS = new Set<CreationObjectKind>(['image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template']);
 const CREATIVE_OUTPUTS = Object.fromEntries(CREATIVE_CAPABILITIES.map((capability) => [capability.kind, capability.outputs])) as Partial<Record<CreationObjectKind, readonly string[]>>;
 
 /** Serialize one trace arg/result for the diagnostics report. A trace payload can
@@ -709,9 +732,6 @@ function safeDownloadName(value: string): string {
   return value.trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'creation';
 }
 
-/** Objects whose body is authored prose or an outline, and so get a writable
- * editor rather than a read-only "live object" note. */
-const DOCUMENT_EDITOR_KINDS = new Set<CreationObjectKind>(['document', 'prd', 'knowledge', 'note', 'report', 'slides']);
 
 /**
  * The rows an object holds, in the positional shape BOTH the CSV writer and the
@@ -1498,15 +1518,42 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // The prompt's real height, published to the board as `--composer-space` — the
   // band every bottom-anchored panel and the phone command rail sit above. It
   // was a hardcoded 112px, which the execution chip alone overran.
-  const composerDockRef = useBottomChromeSpace(flowWrapRef, '--composer-space');
+  const composerDockRef = useChromeSpace(flowWrapRef, '--composer-space');
   // The command bar's real height, published to the SHELL as `--canvas-command-bar-space`
   // — the band the floating prompt sits above. Measured for the same reason and by the
   // same hook: the bar grows by whatever the SURFACE contributes to it (the App surface's
   // Run, its three readings, its width switcher), and the literal `66px` it used to be is
   // how the bar came to be drawn straight over the prompt on exactly that surface.
-  const commandBarSpaceRef = useBottomChromeSpace(shellRef, '--canvas-command-bar-space', COMMAND_BAR_CLEARANCE);
+  const commandBarSpaceRef = useChromeSpace(shellRef, '--canvas-command-bar-space', { gap: COMMAND_BAR_CLEARANCE });
+  // The band the floating chrome owns at the TOP of the shell, published as
+  // `--canvas-top-chrome-space`. It is measured off the top-right card because that is the
+  // TALLEST of the three cards sharing that line (the session pill, the surface chips and
+  // this one all sit at `top:14px`), so clearing it clears all three.
+  //
+  // TWO things read it, and both were broken without it. Every panel that opens in the
+  // top-right corner is anchored to the same `top:14px; right:14px` as the card, which
+  // floats at z-index 20 over panels at 9 — so the details panel's expand and close buttons
+  // sat underneath Share / Publish / Save and could not be clicked: the panel could be
+  // opened and not shut. And every FULL-BLEED surface draws from the shell's top edge, so
+  // the conversation surface drew its own header underneath the pill — the session's name
+  // painted over by the same session's name, with its participants marooned beside the
+  // surface tabs. Measured rather than declared for the reason the bottom bands are: the
+  // card grows by a wrapped Save button, by whatever the surface contributes to `handoff`,
+  // and shrinks when the bar is collapsed.
+  const topChromeSpaceRef = useChromeSpace(shellRef, '--canvas-top-chrome-space', { edge: 'top', gap: TOP_CHROME_CLEARANCE });
   const paletteSearchRef = useRef<HTMLInputElement | null>(null);
   const proposalBuffer = useRef<ProposedCanvasChange[]>([]);
+  /**
+   * The executive contract THIS TURN is running, read off the prompt when the
+   * run starts.
+   *
+   * A ref rather than state because it is read inside a tool `run`, which the
+   * Brain calls mid-turn from a closure that must see the CURRENT value — state
+   * would hand it whatever was captured when `canvasActions` was memoised. It
+   * is what lets `canvas_prepare_executive_use_case` recover from a model that
+   * mistypes the one argument it was given.
+   */
+  const inFlightUseCaseId = useRef<string | null>(null);
   /** Set by the turn runner when the string it returned is a RUNTIME NOTICE rather
    *  than an answer Brain produced — read once when the turn settles so the notice is
    *  shown to the user without entering the transcript the next turn is built from. */
@@ -3949,10 +3996,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     },
     run: async (raw: unknown) => {
       const args = raw as { useCaseId?: unknown; days?: unknown; limit?: unknown };
-      const useCase = C_SUITE_CANVAS_USE_CASES.find((candidate) => candidate.id === args.useCaseId);
+      // Resolved tolerantly, and against the contract THIS TURN is running when
+      // the args carry nothing usable — see `resolveExecutiveUseCaseId` for why
+      // that is safe for this tool and not in general. A run died here on a
+      // model typing `useCas1eId`, with the right value under the wrong key.
+      const resolvedId = resolveExecutiveUseCaseId(raw, inFlightUseCaseId.current);
+      const useCase = C_SUITE_CANVAS_USE_CASES.find((candidate) => candidate.id === resolvedId);
       const workflow = useCase ? cSuiteCanvasWorkflow(useCase) : null;
       const owner = useCase ? cSuiteCanvasOwner(useCase) : null;
-      if (!useCase || !workflow || !owner) return { error: 'Unknown executive Canvas use case.' };
+      if (!useCase || !workflow || !owner) {
+        // The error names the way out. The dead-end version ("Unknown executive
+        // Canvas use case.") told the model nothing it could act on, so it
+        // stopped rather than retrying — the turn's real cause of death.
+        return {
+          error: 'Unknown executive Canvas use case.',
+          hint: 'Call this again with `useCaseId` set to one of the listed ids, spelled exactly.',
+          validUseCaseIds: [...C_SUITE_USE_CASE_IDS],
+        };
+      }
       const contract = {
         id: useCase.id,
         label: useCase.label,
@@ -7787,7 +7848,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
      * composer staying live while a run streams makes possible.
      */
     const clearComposer = () => { if (promptOverride === undefined) setPrompt(''); };
-    const executiveUseCase = C_SUITE_CANVAS_USE_CASES.find((candidate) => requestText.includes(`Execution contract ${candidate.id}:`)) ?? null;
+    // ONE reader of the contract marker, shared with the tool's recovery path —
+    // the prompt's `Execution contract <id>:` was written by
+    // `executiveCanvasPrompt`, so this scan and that writer are two halves of
+    // one fact and must not each carry their own copy of the string.
+    const executiveUseCase = executiveUseCaseFromPrompt(requestText);
+    // Published for the duration of the turn so the tool can fall back to it.
+    inFlightUseCaseId.current = executiveUseCase?.id ?? null;
     const executiveWorkflow = executiveUseCase ? cSuiteCanvasWorkflow(executiveUseCase) : null;
     trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: canvasSurface(), scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))], ...(executiveUseCase ? { useCaseId: executiveUseCase.id } : {}) } });
     setThinking(true);
@@ -7953,11 +8020,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             // Every tool and MCP call, as it happens. The trace already existed
             // for display; journalling it is what puts the CALLS beside the
             // timings and the user's actions in one ordered record.
+            //
+            // A FAILURE JOURNALS ITS REASON. This recorded `detail: 'error'` and
+            // nothing else, while the reason sat right there in `event.result` —
+            // and `brainTrace` is cleared at the start of every turn, so a
+            // failure from an earlier turn became permanently unexplainable.
+            // A real diagnostics report came in reading `canvas_read_snapshot
+            // FAILED — error` twice with no way to find out why. The word
+            // "error" is the one thing the reader already knows from `ok:false`.
             journal.current.record({
               kind: 'tool', label: event.label, at: event.ts,
               durationMs: event.durationMs ?? 0,
               ...(event.isError === true ? { ok: false } : {}),
-              ...(event.category ? { detail: event.category } : {}),
+              detail: event.isError === true
+                ? safeTraceJson(event.result) || event.category
+                : event.category,
             });
             setBrainTrace((current) => [...current, event]);
           },
@@ -9848,7 +9925,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // Measured ONLY while it floats over the board. In the Brain panel it is that panel's
     // last row rather than the board's chrome, so the band the board reserves for it is
     // zero — publishing the panel-relative height instead would push every low-anchored
-    // panel up by most of the window. `useBottomChromeSpace` publishes `0px` the moment
+    // panel up by most of the window. `useChromeSpace` publishes `0px` the moment
     // this ref stops being handed the node.
     ref={promptInBrainPanel ? undefined : composerDockRef}
     data-testid="canvas-composer"
@@ -10042,7 +10119,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       {canvasChromeShows('surfaces', barCollapsed) && <div className={`${styles.floatCard} ${styles.surfaceChips}`}>
         <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="header" />
       </div>}
-      <div className={`${styles.floatCard} ${styles.topRightCard}`} data-testid="canvas-handoff">
+      <div ref={topChromeSpaceRef} className={`${styles.floatCard} ${styles.topRightCard}`} data-testid="canvas-handoff">
           {/* The two doors OUT of this canvas — bring a person in, or put the result
               where strangers can reach it. They are the only worded actions in the
               registry and they are here for the same reason they are worded: a glyph
@@ -10215,16 +10292,28 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button type="button" onClick={zoomOutAction} aria-label={t('zoomOut')} title={t('zoomOut')}><ZoomOutIcon /></button>
           <button type="button" onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')} title={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>{threeDControls ? <ResetViewIcon /> : <FitViewIcon />}</button>
           <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')} title={t('arrangeObjects')}><CleanLayoutIcon /></button>
-          {/* The rest of the left-edge rail, folded in here. Gated on the same flag the
-              rail's own `hideOnFlatBoard` reads (`showsBoard`) — the flat board is the
-              only view whose rail this bar stood down, so these only appear where the
-              rail actually went missing. Chat and the 3D scene keep their own rail. */}
+          {/* WHAT THE BOARD ALONE HAS. A mini map is a map of the flat board, and pan vs
+              marquee is a decision about dragging on one; neither means anything on a
+              surface that has no board, so these two are the only view commands that read
+              the surface at all. */}
           {surfaceDef.showsBoard && <>
             <button type="button" onClick={() => setMinimapOpen((open) => !open)} aria-pressed={minimapOpen} aria-label={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')} title={minimapOpen ? tCommands('hideMiniMap') : tCommands('showMiniMap')}><MinimapIcon /></button>
             <button type="button" onClick={() => setCanvasGesture((current) => (current === 'select' ? 'pan' : 'select'))} aria-pressed={canvasGesture === 'select'} aria-label={t('canvasGestureToggle')} title={canvasGesture === 'select' ? t('canvasGestureSelectActive') : t('canvasGesturePanActive')}><MarqueeSelectIcon /></button>
-            <button type="button" onClick={() => toggleDockPanel('files')} aria-pressed={dockPanel === 'files'} aria-label={tFiles('title')} title={tFiles('title')}><CanvasFilesIcon /></button>
-            <button type="button" onClick={() => toggleDockPanel('outline')} aria-pressed={dockPanel === 'outline'} aria-label={t('canvasOutline')} title={t('canvasOutline')}><AccessibleOutlineIcon /></button>
           </>}
+          {/* WHAT THE SCENE ADDS while it is up. These were the last commands living on the
+              bottom-left rail; with the rail gone they are contributed here, beside the
+              zoom and reset that already switch to the scene's own camera. */}
+          {threeDControls && <>
+            <button type="button" onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')} title={threeDControls.depthMode !== 'flow' ? tCommands('threeD.depthGroupActive') : tCommands('threeD.depthGroupInactive')}><DepthIcon /></button>
+            <button type="button" onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')} title={threeDControls.layersVisible ? tCommands('threeD.layerGuidesActive') : tCommands('threeD.layerGuidesInactive')}><LayerGuidesIcon /></button>
+            {threeDControls.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')} title={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
+          </>}
+          {/* WHAT EVERY SURFACE HAS. This canvas's files and its readable outline are about
+              the SESSION, not about which way it is being read. They used to be gated on
+              the board here and drawn on the corner rail everywhere else — one control in
+              two places, and neither of them where you last saw it. */}
+          <button type="button" onClick={() => toggleDockPanel('files')} aria-pressed={dockPanel === 'files'} aria-label={tFiles('title')} title={tFiles('title')}><CanvasFilesIcon /></button>
+          <button type="button" onClick={() => toggleDockPanel('outline')} aria-pressed={dockPanel === 'outline'} aria-label={t('canvasOutline')} title={t('canvasOutline')}><AccessibleOutlineIcon /></button>
         </div>}
         onTogglePrompt={presentMode || surfaceDef.brainIsSurface ? undefined : () => setPromptPlacement(toggledCanvasPromptPlacement(promptPlacement))}
         promptOpen={effectivePromptPlacement !== 'closed'}
@@ -10297,7 +10386,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // loses there is the bottom edge — not a side. The phone layout moves the
         // board controls off that edge from this, not from the side. An inline Brain
         // is an Object on the board and takes no edge, so it must not set this.
-        data-brain-open={brainSurfaceOpen && brainPlacement === 'docked' ? 'true' : 'false'}
+        //
+        // It is the SAME condition that decides whether the dock is drawn at all
+        // (`brainDockDrawn`), which it was not before: a surface that IS the conversation
+        // stands the dock down, and the attribute still claimed the edge — so on a phone
+        // the board's rail moved up to `top:56px` to clear a sheet that was not there,
+        // and landed on the conversation's own header.
+        data-brain-open={brainDockDrawn ? 'true' : 'false'}
         // The active surface, published to the stylesheet. It keys on "not the board"
         // rather than on any single id, so a new runtime suppresses the flat viewport,
         // the palette and the remote cursors without a new rule being written for it.
@@ -10382,56 +10477,23 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             minimapOpen={minimapOpen}
             setMinimapOpen={setMinimapOpen}
             onCleanLayout={cleanLayout}
-            showInteractive={false}
             minimapNodeColor={minimapColor as (node: Node) => string}
             minimapMaskColor="var(--creation-minimap-mask, rgba(244,248,253,.72))"
-            // What this prop actually gates on the shared rail is "the flat board is not
-            // what is being drawn": it stands the zoom / fit / interactive commands and
-            // the mini map down, and lets whatever surface IS drawn publish its own
-            // commands in their place (the 3D scene does; the conversation has none). So
-            // it reads the board flag, not the 3D id — which is what makes the rail
-            // correct on the chat surface without a second rule.
+            // All this gates now is the mini map, which is a map OF the flat board: it
+            // stands down wherever that board is not what is being drawn, because the 3D
+            // scene is its own map and a conversation has nothing to map. That is why it
+            // reads the board flag rather than the 3D id.
             threeDActive={!surfaceDef.showsBoard}
             // `onToggleThreeD` is deliberately NOT passed: it would draw a second control
-            // for the decision the surface switcher below already owns.
-            // The flat-board rail stood down entirely: zoom, fit, arrange, the mini map
-            // toggle, pan/marquee, files and the outline all moved into the one command
-            // bar below (`view`/`extras`), which was the last toolbar competing with it.
-            hideOnFlatBoard
-            extraControls={<>
-              {/* The surface switcher used to sit here, which put "change what this
-                  canvas is" among zoom / fit / arrange at the same size and weight. It
-                  now lives in the session header, with words. The rail keeps only what
-                  it is actually for: navigating and reading THIS board. */}
-              {/* Pan vs marquee. A one-finger (or left-button) drag can only do one of
-                  them, so the choice is explicit rather than inferred — and making it
-                  explicit is what gives touch a marquee at all, since the modifier-key
-                  route it used to need does not exist on a phone. Offered only on the
-                  flat board: every other surface owns its own navigation. */}
-              {surfaceDef.showsBoard && <CanvasRailToggle
-                pressed={canvasGesture === 'select'}
-                onClick={() => setCanvasGesture((current) => (current === 'select' ? 'pan' : 'select'))}
-                label={t('canvasGestureToggle')}
-                activeTitle={t('canvasGestureSelectActive')}
-                inactiveTitle={t('canvasGesturePanActive')}
-              ><MarqueeSelectIcon /></CanvasRailToggle>}
-              {/* The rail is for what you do to THIS board, every session, with no
-                  account anywhere else: navigate it, read it, and reach its files.
-                  Cloud storage is a source inside Files rather than a button beside
-                  it, and Miro / social / paid media moved to the ••• menu — they are
-                  occasional errands against a connected account, and a rail that
-                  lists every integration stops reading as a toolbar. */}
-              <CanvasRailToggle
-                pressed={dockPanel === 'files'}
-                onClick={() => toggleDockPanel('files')}
-                label={tFiles('title')}
-              ><CanvasFilesIcon /></CanvasRailToggle>
-              <CanvasRailToggle
-                pressed={dockPanel === 'outline'}
-                onClick={() => toggleDockPanel('outline')}
-                label={t('canvasOutline')}
-              ><AccessibleOutlineIcon /></CanvasRailToggle>
-            </>}
+            // for the decision the surface switcher already owns.
+            // NO RAIL, on any surface. Zoom, fit, arrange, the mini map toggle,
+            // pan/marquee, Files, the outline and the scene's own depth/layer commands are
+            // all contributed to the ONE command bar below (`view`). The rail used to stand
+            // down on the flat board ONLY, which meant this canvas showed one bar on the
+            // board and two toolbars on every other surface — the bottom-left corner panel
+            // this removes. The other two canvases that share this component keep their
+            // rail: they have no bar of their own for it to move into.
+            hideRail
           />
         </ReactFlow>
         </BrainSurfaceProvider>
@@ -10456,13 +10518,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             toolbars, which is the exact failure the surface registry was written to
             prevent. What stays is what the bar does not carry: the surface switcher's
             phone form, the panels, and the 3D-only commands. */}
+        {/* The phone's column keeps ONLY what the bar does not carry: which surface this
+            canvas is read through, in the form that fits a 360px screen. Files, the
+            outline and the scene's depth/layer commands were duplicated here while the bar
+            drew them on the board alone; the bar draws them on every surface now, so a
+            second copy on the same screen is only a second place to look. */}
         <div className={styles.mobileCanvasActions} role="group" aria-label={t('canvasPanelControls')}>
           <CanvasSurfaceSwitcher surface={surface} onChange={setSurface} variant="mobile" />
-          {threeDControls && <button type="button" onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')}><DepthIcon /></button>}
-          {threeDControls && <button type="button" onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')}><LayerGuidesIcon /></button>}
-          {threeDControls?.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
-          <button type="button" onClick={() => toggleDockPanel('files')} aria-pressed={dockPanel === 'files'} aria-label={tFiles('title')}><CanvasFilesIcon /></button>
-          <button type="button" onClick={() => toggleDockPanel('outline')} aria-pressed={dockPanel === 'outline'} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
         </div>
         </div>
 
@@ -10492,9 +10554,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               onExecutionDetailChange={(showExecutionDetail) => updateBrainDock({ showExecutionDetail })}
               onOpenBoard={() => setSurface('graph')}
               objectCount={nodes.length}
-              sessionTitle={title}
               participants={rosterMembers}
-              {...(canEdit ? { onAddParticipant: () => setShareOpen(true) } : {})}
               messages={brainMessages}
               trace={brainTrace}
               running={thinking}
@@ -10932,6 +10992,41 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     setActionStatus(t('preparing'));
     setActionStatus(await onExportArtifact(action));
   };
+  // Everything a `custom.component` section might read, computed once per render —
+  // see `KindSectionProps` for why this is one bag rather than eleven prop lists.
+  const kindSectionProps: KindSectionProps = {
+    node, nodes, data: node.data, editable, persistence, onChange,
+    isBuiltinAgent, isBuiltinManager, isExistingAgent, connectedAgentKnowledge,
+    agentTools, availableAgentTools, knowledgeDraft, setKnowledgeDraft,
+    onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveAgent,
+    deliveryAgent, deliveryKnowledgeCount,
+    websiteHero, websiteTheme, onWebsiteChange, onPublishWebsite, onBuildWebsiteWithCode, onWebsiteViewportChange,
+    onGenerateVideo,
+    onImportDataset, onProfileDataset, onVisualizeDataset, onPlotDataset,
+    taskId, taskAgents, taskAgentValue, statusGuidance, normalizedTaskStatus,
+    prdStatus, prdTitle, prdSummary, actionStatus, setActionStatus, persistTaskPatch,
+    mockupProjects, mockupProjectValue, mockupAgents, mockupAgentValue, onDeliverMockup,
+    onRunCreativeAction, onShipGame,
+    creatingBuild, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace,
+    onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind,
+  };
+  // The manifest names an action by a stable string (`'refreshDashboard'`); this is the
+  // one place that string resolves to the function it actually calls — everywhere else
+  // (visibility, order, label) stays declared in the manifest, not here.
+  const detailsActionHandlers: Record<string, () => void> = {
+    loadProjectQuality: onLoadProjectQuality,
+    expandProject: onExpandProject,
+    compareProjects: onCompareProjects,
+    editWorkflow: onEditWorkflow,
+    buildWorkflow: onBuildWorkflow,
+    run: onRun,
+    startStandup: onStartStandup,
+    expandMockupSet: onExpandMockupSet,
+    deliverMockup: onDeliverMockup,
+    saveFramePreset: onSaveFramePreset,
+    refreshDashboard: () => onChange({ fetchedAt: new Date().toISOString(), status: 'Live' }),
+  };
+  const kindCustomSection = KIND_DETAIL_SECTIONS[kindSettingsManifest(kind)?.custom?.component ?? ''];
   return <aside ref={inspectorRef} className={styles.inspector} aria-label="Details panel" style={{ '--inspector-width': `${inspectorWidth}px` } as CSSProperties}>
     <div
       className={styles.inspectorResizeHandle}
@@ -10964,188 +11059,30 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     <div className={styles.inspectorBody}>
       {tab === 'details' ? <fieldset className={styles.inspectorFields} disabled={!editable}>
       {node.data.redacted === true && <><p className={styles.inspectorHint}>{t('redactedObject')}</p><button type="button" className={styles.fullButton} disabled={persistence !== 'server' || !!accessStatus} onClick={() => { setAccessStatus(t('requesting')); void creationSessionsApi.requestObjectAccess(sessionId, node.id).then(() => setAccessStatus(t('accessRequested'))).catch((error) => setAccessStatus(error instanceof Error ? error.message : t('requestFailed'))); }}>{accessStatus || t('requestAccess')}</button></>}
-      <label>{t('name')}<input value={node.data.title} onChange={(event) => onChange({ title: event.target.value })} /></label>
+      {/* A built-in seat's name is locked here too, not only in the anchored Persona
+          panel — the same object edited from two surfaces must agree on what is
+          actually editable, or renaming it from the full inspector would silently
+          undo the lock the compact panel promised. */}
+      <label>{t('name')}<input value={node.data.title} disabled={isCanvasPersonKind(kind) && canvasPersonOrigin(kind) === 'builtin'} onChange={(event) => onChange({ title: event.target.value })} /></label>
       {typeof node.data.pipelineStep === 'number' && <section className={styles.pipelineInspectorGuide} aria-label={t('evermindSetupStep', { step: node.data.pipelineStep })}><span>{t('evermindSetupOf5', { step: node.data.pipelineStep })}</span><strong>{node.data.pipelineStart === true ? t('startHere') : node.data.title}</strong><p>{String(node.data.pipelineInstruction || t('pipelineStageHint'))}</p>{node.data.pipelineStep === 1 && node.data.status !== 'Imported' && <small>{t('useFilePicker')}</small>}{node.data.pipelineStep === 1 && node.data.status === 'Imported' && <small>{t('dataReadyNext')}</small>}</section>}
-      {kind === 'agent' && <>
-        {isBuiltinAgent ? <>
-          <section className={styles.agentSetupGuide} data-existing="true" aria-label={t('agentSetupProgress')}>
-            <strong>{t('agentBuiltin')}</strong>
-            <p>{t('agentBuiltinHint', { seat: String(node.data.agentSeat) })}</p>
-          </section>
-          <div className={styles.agentWorkbench}>
-            <button type="button" className={styles.fullButton} onClick={() => onOpenBuiltinAgent('execute')}>{t('node.executeBuiltin')}</button>
-            {isBuiltinManager && <button type="button" className={styles.secondaryFullButton} onClick={() => onOpenBuiltinAgent('diagnostics')}>{t('node.builtinDiagnostics')}</button>}
-          </div>
-        </> : <>
-        <section className={styles.agentSetupGuide} data-existing={isExistingAgent} aria-label={t('agentSetupProgress')}>
-          <strong>{isExistingAgent ? t('agentExisting') : t('agentPrepareNew')}</strong>
-          <p>{isExistingAgent ? t('agentExistingHint') : t('agentPrepareHint')}</p>
-          {!isExistingAgent && <div className={styles.agentSetupSteps}><span data-done={!!String(node.data.personality || '').trim()}>{t('agentStepPersonality')}</span><span data-done={connectedAgentKnowledge.length > 0}>{connectedAgentKnowledge.length ? t('agentStepTrainingAdded') : t('agentStepTrainingNeeded')}</span><span data-done={!!String(node.data.instructions || '').trim()}>{t('agentStepDirection')}</span><span data-done={!!node.data.testResponse}>{node.data.testResponse ? t('agentStepTestRun') : t('agentStepTestNeeded')}</span></div>}
-        </section>
-        {!isExistingAgent && <label>{t('personality')}<textarea aria-label={t('personality')} value={typeof node.data.personality === 'string' ? node.data.personality : ''} onChange={(event) => onChange({ personality: event.target.value })} rows={3} placeholder={t('personalityPlaceholder')} /></label>}
-        <label>{t('model')}<select value={node.data.model || 'auto'} onChange={(event) => onChange({ model: event.target.value })}><option value="auto">{t('modelAuto')}</option><option value="gpt-4o">gpt-4o</option><option value="claude-3.5-sonnet">claude-3.5-sonnet</option><option value="Evermind">Evermind</option></select></label>
-        <label>{isExistingAgent ? t('instructions') : t('agentDirection')}<textarea aria-label={t('instructions')} value={typeof node.data.instructions === 'string' ? node.data.instructions : node.data.subtitle || ''} onChange={(event) => onChange({ instructions: event.target.value, subtitle: event.target.value })} rows={5} placeholder={isExistingAgent ? undefined : t('agentDirectionPlaceholder')} /></label>
-        <label>{t('tools')}<div className={styles.inspectorPills}>{agentTools.map((tool) => <button type="button" key={tool} aria-label={t('removeTool', { tool })} onClick={() => onChange({ tools: agentTools.filter((candidate) => candidate !== tool) })}>{tool} ×</button>)}<button type="button" disabled={availableAgentTools.every((tool) => agentTools.includes(tool))} onClick={() => { const next = availableAgentTools.find((tool) => !agentTools.includes(tool)); if (next) onChange({ tools: [...agentTools, next] }); }}>{t('addTool')}</button></div></label>
-        <label>{t('autonomy')}<select value={typeof node.data.autonomy === 'string' ? node.data.autonomy : 'medium'} onChange={(event) => onChange({ autonomy: event.target.value })}><option value="medium">{t('autonomyMedium')}</option><option value="low">{t('autonomyLow')}</option><option value="high">{t('autonomyHigh')}</option></select></label>
-        <section className={styles.agentWorkbench} aria-label={t('agentKnowledge')} data-inspector-section="knowledge">
-          <div className={styles.workbenchHeading}><strong>{t('knowledge')}</strong><span>{t('connectedCount', { count: connectedAgentKnowledge.length })}</span></div>
-          {connectedAgentKnowledge.length > 0 && <div className={styles.knowledgeList}>{connectedAgentKnowledge.map((item) => <span key={item.id}>{item.data.kind} · {item.data.title}</span>)}</div>}
-          <label>{t('addKnowledge')}<textarea rows={4} value={knowledgeDraft} onChange={(event) => setKnowledgeDraft(event.target.value)} placeholder={t('addKnowledgePlaceholder')} /></label>
-          <button type="button" className={styles.fullButton} disabled={!knowledgeDraft.trim()} onClick={() => { onAddAgentKnowledge(knowledgeDraft); setKnowledgeDraft(''); }}>{t('addAndConnectKnowledge')}</button>
-        </section>
-        <section className={styles.agentWorkbench} aria-label={t('agentTestBench')} data-inspector-section="test">
-          <div className={styles.workbenchHeading}><strong>{t('testBench')}</strong><span>{String(node.data.testStatus || t('notRun'))}</span></div>
-          <label>{t('customerMessage')}<textarea rows={3} value={typeof node.data.testPrompt === 'string' ? node.data.testPrompt : ''} onChange={(event) => onChange({ testPrompt: event.target.value })} placeholder={t('customerMessagePlaceholder')} /></label>
-          <label>{t('expectedSignals')}<textarea rows={2} value={typeof node.data.testExpected === 'string' ? node.data.testExpected : ''} onChange={(event) => onChange({ testExpected: event.target.value })} placeholder={t('expectedSignalsPlaceholder')} /></label>
-          <button type="button" className={styles.fullButton} disabled={!String(node.data.testPrompt || '').trim() || node.data.testStatus === 'Running'} onClick={() => void onRunAgentTest(String(node.data.testPrompt || ''), String(node.data.testExpected || ''))}>{node.data.testStatus === 'Running' ? t('runningTest') : t('runAgentTest')}</button>
-          {typeof node.data.testResponse === 'string' && node.data.testResponse && <div className={styles.testResponse}><strong>{t('agentResponse')}</strong><p>{node.data.testResponse}</p></div>}
-        </section>
-        <button type="button" className={styles.fullButton} onClick={onSaveAgent}>{isExistingAgent ? t('saveAgentEverywhere') : t('createInviteAgent')}</button>
-        </>}
-      </>}
-      {kind === 'evaluation' && <section data-inspector-section="evaluation">
-        <div className={styles.evaluationSummary}><strong>{String(node.data.verdict || t('notRun'))}</strong><span>{typeof node.data.passRate === 'number' ? t('passRate', { rate: node.data.passRate }) : t('runTestForResult')}</span></div>
-        <label>{t('evaluationCriteria')}<textarea rows={5} value={typeof node.data.criteria === 'string' ? node.data.criteria : typeof node.data.content === 'string' ? node.data.content : ''} onChange={(event) => onChange({ criteria: event.target.value })} placeholder={t('evaluationCriteriaPlaceholder')} /></label>
-        <p className={styles.inspectorHint}>{t('evaluationHint')}</p>
-        {Array.isArray(node.data.testResults) && node.data.testResults.length > 0 && <div className={styles.testResults}>{node.data.testResults.slice(0, 10).map((value, index) => { const result = value as Record<string, unknown>; return <div key={String(result.id || index)}><b>{String(result.status || t('completed'))}</b><span>{String(result.prompt || t('testCase'))}</span><small>{String(result.runAt || '')}</small></div>; })}</div>}
-      </section>}
-      {kind === 'release' && <section className={styles.deliveryChecklist} data-inspector-section="delivery" aria-label={t('agentDeliveryChecklist')}>
-        <strong>{t('deliveryChecklist')}</strong>
-        <span>{`${deliveryAgent ? '✓' : '○'} ${t('agentSelected')} ${deliveryAgent ? `· ${deliveryAgent.data.title}` : `· ${t('connectAgentCard')}`}`}</span>
-        <span>{`${deliveryKnowledgeCount > 0 ? '✓' : '○'} ${t('knowledgeConnected')} ${deliveryKnowledgeCount ? `· ${t('sourceCount', { count: deliveryKnowledgeCount })}` : ''}`}</span>
-        <span>{`${deliveryAgent?.data.testResponse ? '✓' : '○'} ${t('testResponseRecorded')}`}</span>
-        <span>{`${deliveryAgent?.data.resourceId ? '✓' : '○'} ${t('workforceAgentSaved')}`}</span>
-        <p className={styles.inspectorHint}>{deliveryAgent?.data.resourceId ? t('deliveryConnectedHint') : t('deliveryPendingHint')}</p>
-      </section>}
-      {kind === 'staff' && <><label>{t('role')}<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>{t('currentFocus')}<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
-      {(kind === 'website' || kind === 'prototype') && <><label>{t('headline')}<input value={websiteHero.heading} onChange={(event) => onWebsiteChange({ websiteHeadline: event.target.value })} /></label><label>{t('supportingCopy')}<textarea rows={3} value={websiteHero.body} onChange={(event) => onWebsiteChange({ websiteBody: event.target.value })} /></label><label>{t('callToAction')}<input value={websiteHero.cta} onChange={(event) => onWebsiteChange({ websiteCta: event.target.value })} /></label><label>{t('accentColor')}<input type="color" value={websiteTheme.accent && /^#[0-9a-f]{6}$/i.test(websiteTheme.accent) ? websiteTheme.accent : AUTHORED_WEBSITE_ACCENT} onChange={(event) => onChange({ websiteAccent: event.target.value, websiteTheme: { ...(typeof node.data.websiteTheme === 'object' && node.data.websiteTheme ? node.data.websiteTheme as Record<string, unknown> : {}), accent: event.target.value } })} /></label><label>{t('viewport')}<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">{t('viewportDesktop')}</option><option value="tablet">{t('viewportTablet')}</option><option value="mobile">{t('viewportMobile')}</option></select></label>{kind === 'website' && <><label>{t('subdomain')}<input value={typeof node.data.subdomain === 'string' ? node.data.subdomain : ''} placeholder={t('subdomainPlaceholder')} onChange={(event) => onChange({ subdomain: event.target.value })} /></label><button type="button" className={styles.fullButton} onClick={onPublishWebsite}>{t('publishWebsite')}</button>{typeof node.data.siteUrl === 'string' && <a href={node.data.siteUrl} target="_blank" rel="noreferrer">{t('openPublishedSite')}</a>}<button type="button" className={styles.secondaryFullButton} onClick={onBuildWebsiteWithCode}>{t('build.websiteWithCode')}</button><p className={styles.inspectorHint}>{t('build.websiteWithCodeHint')}</p></>}<p className={styles.inspectorHint}>{t('websiteLiveHint')}</p></>}
-      {kind === 'guidedTour' && <GuidedTourInspector node={node} nodes={nodes} onChange={onChange} />}
-      {kind === 'build' && <BuildInspectorSection node={node} editable={editable} creating={creatingBuild} persistence={persistence} onChange={onChange} onOpenBuild={onOpenBuild} onAttachBuild={onAttachBuild} onDeleteBuildWorkspace={onDeleteBuildWorkspace} />}
-      {kind === 'video' && <><label>{t('prompt')}<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : ''} onChange={(event) => onChange({ prompt: event.target.value })} placeholder={t('videoPromptPlaceholder')} /></label><label>{t('publishedEvermindModel')}<input value={typeof node.data.modelSlug === 'string' ? node.data.modelSlug : ''} onChange={(event) => onChange({ modelSlug: event.target.value })} placeholder={t('mediaModelPlaceholder')} /></label><label>{t('frames')}<input type="number" min="1" max="64" value={typeof node.data.maxFrames === 'number' ? node.data.maxFrames : 16} onChange={(event) => onChange({ maxFrames: Math.max(1, Math.min(64, Number(event.target.value) || 16)) })} /></label><button type="button" className={styles.fullButton} onClick={onGenerateVideo}>{t('generateVideo')}</button>{typeof node.data.videoUrl === 'string' && <img src={node.data.videoUrl} alt={t('videoFirstFrame')} style={{ width: '100%', borderRadius: 'var(--radius-lg)' }} />}</>}
-      {kind === 'workflow' && <><label>{t('executionTarget')}<select value={typeof node.data.runTarget === 'string' ? node.data.runTarget : 'builderforce'} onChange={(event) => onChange({ runTarget: event.target.value })}><option value="builderforce">BuilderForce.AI</option><option value="campaign-strategist">Campaign Strategist</option></select></label><label>{t('approvalMode')}<select value={typeof node.data.approvalMode === 'string' ? node.data.approvalMode : 'required'} onChange={(event) => onChange({ approvalMode: event.target.value })}><option value="required">{t('approvalRequiredBeforePublish')}</option><option value="autonomous">{t('fullyAutonomous')}</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>{t('editWorkflowOnCanvas')}</button><button type="button" className={styles.fullButton} onClick={onBuildWorkflow}>{t('buildWorkflow')}</button><button className={styles.fullButton} onClick={onRun}>{`${t('runWorkflow')}`}</button></>}
-      {kind === 'dashboard' && <><label>{t('dateRange')}<select value={typeof node.data.dateRange === 'string' ? node.data.dateRange : '30d'} onChange={(event) => onChange({ dateRange: event.target.value })}><option value="30d">{t('last30Days')}</option><option value="7d">{t('last7Days')}</option><option value="qtd">{t('quarterToDate')}</option></select></label><button type="button" className={styles.fullButton} onClick={() => onChange({ fetchedAt: new Date().toISOString(), status: 'Live' })}>{t('refreshLiveData')}</button></>}
-      {kind === 'dataset' && <>
-        <label>{t('datasetImportLabel')}<input type="file" accept=".csv,.tsv,.tab,.json,.jsonl,.xlsx,.xlsm,text/csv,text/tab-separated-values,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label>
-        <p className={styles.inspectorHint}>{t('datasetImportHint')}</p>
-        <DatasetProfileSummary data={node.data} />
-        <button type="button" className={styles.fullButton} onClick={() => onProfileDataset(node.id)}>{t('datasetProfileAction')}</button>
-        <button type="button" className={styles.fullButton} onClick={onVisualizeDataset}>{t('datasetVisualizeAction')}</button>
-        <DatasetPlotAction data={node.data} onPlot={onPlotDataset} />
-      </>}
-      {kind === 'file' && <>
-        <label>{t('fileNameLabel')}<input value={typeof node.data.fileName === 'string' ? node.data.fileName : node.data.title} onChange={(event) => onChange({ fileName: event.target.value })} /></label>
-        <p className={styles.inspectorHint}>{t('fileInspectorHint')}</p>
-      </>}
-      {isWebPageKind(kind) && <>
-        <label>{t('webPage.addressLabel')}<input
-          type="url"
-          inputMode="url"
-          spellCheck={false}
-          value={typeof node.data.url === 'string' ? node.data.url : ''}
-          placeholder={t('webPage.addressPlaceholder')}
-          onChange={(event) => onChange({ url: event.target.value })}
-          // Clearing the probe is what re-arms the panel: it re-reads the page
-          // and re-asks whether the new origin allows being framed.
-          onBlur={(event) => { const next = normalizeWebPageUrl(event.target.value); if (next) onChange({ url: next, frameCheckedUrl: '', frameable: true, frameBlockedBy: null }); }}
-        /></label>
-        <label>{t('viewport')}<select value={webPageViewport(node.data.viewport)} onChange={(event) => onChange({ viewport: event.target.value })}>
-          <option value="desktop">{t('viewportDesktop')}</option>
-          <option value="tablet">{t('viewportTablet')}</option>
-          <option value="mobile">{t('viewportMobile')}</option>
-        </select></label>
-        <button type="button" className={styles.fullButton} disabled={!canvasWebPageUrl(node.data)} onClick={() => onChange({ frameCheckedUrl: '' })}>{t('webPage.reread')}</button>
-        <p className={styles.inspectorHint}>{t('webPage.inspectorHint')}</p>
-        {node.data.frameable === false && <p className={styles.inspectorHint}>{t('webPage.blockedHint')}</p>}
-      </>}
-      {kind === 'voice' && <CanvasVoiceInspector node={node} persistence={persistence} onChange={onChange} />}
-      {kind === 'email' && <CanvasEmailComposer data={node.data} editable={editable} persistence={persistence} onChange={onChange} />}
-      {kind === 'project' && <><label>{t('projectView')}<select value={typeof node.data.projectLens === 'string' ? node.data.projectLens : 'everything'} onChange={(event) => onChange({ projectLens: event.target.value })}><option value="everything">{t('lensEverything')}</option><option value="delivery">{t('lensDelivery')}</option><option value="metrics">{t('lensMetrics')}</option><option value="customer-feedback">{t('lensFeedback')}</option></select></label><p className={styles.inspectorHint}>{t('projectContextHint')}</p><button className={styles.fullButton} onClick={onLoadProjectQuality}>{t('visualizeQuality')}</button><button className={styles.fullButton} onClick={onExpandProject}>{t('addRelatedItems')}</button><button className={styles.fullButton} onClick={onCompareProjects}>{t('compareProjects')}</button></>}
-      {kind === 'task' && <>
-        <div className={styles.taskInspectorGrid}>
-          <label>{t('status')}<select value={String(node.data.status || 'ready')} onChange={(event) => void persistTaskPatch({ status: event.target.value }, { status: event.target.value })}>
-            {!['backlog','todo','ready','assigned','in_progress','in_review','blocked','done'].includes(String(node.data.status || 'ready')) && <option value={String(node.data.status)}>{String(node.data.status)}</option>}
-            <option value="backlog">{t('statusBacklog')}</option><option value="todo">{t('statusTodo')}</option><option value="ready">{t('statusReady')}</option><option value="assigned">{t('statusAssigned')}</option><option value="in_progress">{t('statusInProgress')}</option><option value="in_review">{t('statusInReview')}</option><option value="blocked">{t('statusBlocked')}</option><option value="done">{t('statusDone')}</option>
-          </select></label>
-          <label>{t('priority')}<select value={typeof node.data.priority === 'string' ? node.data.priority : 'medium'} onChange={(event) => void persistTaskPatch({ priority: event.target.value as 'low' | 'medium' | 'high' | 'urgent' }, { priority: event.target.value })}><option value="low">{t('priorityLow')}</option><option value="medium">{t('priorityMedium')}</option><option value="high">{t('priorityHigh')}</option><option value="urgent">{t('priorityUrgent')}</option></select></label>
-        </div>
-        <div className={styles.statusGuidance}><b>{t('howToMoveForward')}</b><p>{statusGuidance[normalizedTaskStatus] || t('taskGuidanceFallback')}</p></div>
-        <label>{t('assignedAgent')}<select value={taskAgentValue} onChange={(event) => {
-          const selected = taskAgents.find((agent) => (agent.data.resourceId?.replace(/^agent:/, '') || agent.id) === event.target.value);
-          const agentRef = selected?.data.resourceId?.startsWith('agent:') ? selected.data.resourceId.slice(6) : null;
-          if (taskId != null && persistence === 'server' && selected && !agentRef) { setActionStatus(t('saveAgentBeforeAssign')); return; }
-          void persistTaskPatch({ assignedAgentRef: agentRef, assignedAgentHostId: null, assignedUserId: null }, { agentRef: event.target.value || undefined, assignee: selected?.data.title || undefined, role: selected?.data.title || undefined });
-        }}><option value="">{t('unassigned')}</option>{taskAgents.map((agent) => { const value = agent.data.resourceId?.replace(/^agent:/, '') || agent.id; return <option key={agent.id} value={value}>{agent.data.title}{agent.data.model ? ` · ${String(agent.data.model)}` : ''}</option>; })}</select></label>
-        <label>{t('description')}<textarea rows={5} value={typeof node.data.content === 'string' ? node.data.content : typeof node.data.subtitle === 'string' ? node.data.subtitle : ''} onChange={(event) => onChange({ content: event.target.value })} onBlur={(event) => { if (taskId != null && persistence === 'server') void persistTaskPatch({ description: event.target.value || null }, { content: event.target.value }); }} /></label>
-        <label>{t('acceptanceCriteria')}<textarea rows={4} value={typeof node.data.acceptanceCriteria === 'string' ? node.data.acceptanceCriteria : ''} placeholder={t('acceptanceCriteriaPlaceholder')} onChange={(event) => onChange({ acceptanceCriteria: event.target.value })} /></label>
-        <section className={styles.taskPrdSummary} aria-label={t('taskPrd')}>
-          <div><span>{t('prd')}</span>{prdStatus && <small>{prdStatus}</small>}</div>
-          {prdTitle ? <><strong>{prdTitle}</strong>{prdSummary && <p>{prdSummary.replace(/[#*_`>\[\]]/g, '').trim().slice(0, 360)}</p>}</> : <><strong>{t('noPrdLinked')}</strong><p>{t('noPrdLinkedHint')}</p></>}
-        </section>
-        {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
-      </>}
-      {kind === 'projectComparison' && <><p className={styles.inspectorHint}>{t('portfolioViewHint')}</p><button className={styles.fullButton} onClick={onCompareProjects}>{t('refreshQualityComparison')}</button></>}
-      {kind === 'mockup' && <><label>{t('deliveryProject')}<select value={mockupProjectValue} onChange={(event) => { const project = mockupProjects.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ deliveryProjectRef: event.target.value, deliveryProjectName: project?.data.title || (event.target.value === 'draft:builderforce-launch' ? 'BuilderForce launch' : t('noProject')) }); }}><option value="draft:builderforce-launch">BuilderForce launch</option>{mockupProjects.filter((project) => (project.data.resourceId || project.id) !== 'draft:builderforce-launch').map((project) => <option key={project.id} value={project.data.resourceId || project.id}>{project.data.title}</option>)}<option value="">{t('noProject')}</option></select></label><label>{t('assignAgent')}<select value={mockupAgentValue} onChange={(event) => { const agent = mockupAgents.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ mockupAgentRef: event.target.value, mockupAgentName: agent?.data.title || (event.target.value === 'web-analyst' ? 'Web Analyst' : t('unassigned')) }); }}><option value="campaign-strategist">Campaign Strategist</option>{mockupAgents.filter((agent) => (agent.data.resourceId || agent.id) !== 'campaign-strategist').map((agent) => <option key={agent.id} value={agent.data.resourceId || agent.id}>{agent.data.title}</option>)}<option value="web-analyst">Web Analyst</option><option value="">{t('unassigned')}</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>{t('addToProjectAssign')}</button></>}
-      {kind === 'mockupSet' && <><p className={styles.inspectorHint}>{t('mockupSetHint')}</p><button className={styles.fullButton} onClick={onExpandMockupSet}>{t('expandAllMockups')}</button><button className={styles.fullButton} onClick={onDeliverMockup}>{t('addToProjectAssign')}</button></>}
-      {kind === 'evermind' && <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} onTrain={onTrainEvermind} />}
-      {isPitchObjectKind(kind) && <PitchInspector node={node} editable={editable} onChange={onChange} />}
-      {kind === 'standup' && <><p className={styles.inspectorHint}>{t('standupHint')}</p><button className={styles.fullButton} onClick={onStartStandup}>{t('gatherStandup')}</button></>}
+      {/* Every kind below used to be its own `kind === 'x'` branch in this fieldset —
+          ~30 of them, one 700-line conditional chain. Now each is a manifest entry
+          (`lib/canvasKindSettings.*.ts`): plain fields render generically via
+          `KindDetailsFields`, a kind with real cross-node state or file/network side
+          effects (agent's workbench, a dataset's import, a task's PRD join…) names a
+          `custom.component` looked up in `KIND_DETAIL_SECTIONS` — DATA, not a chain —
+          and `KindDetailsActions` renders whatever buttons the manifest declares,
+          wired through the ONE handler map built above. A kind in neither registry
+          (spec-object kinds edit on their card; `chat` has its own surface) falls
+          through to the same "this object lives on the board" hint every kind without
+          settings always showed. */}
+      <KindDetailsFields kind={kind} data={node.data} editable={editable} onChange={onChange} />
+      {kindCustomSection && kindCustomSection(kindSectionProps)}
       {/* The panel decides for itself whether this object has anything to
           convert, and to which notations — so no kind list is maintained here. */}
       <DiagramConvertPanel node={node} nodes={nodes} onConvert={onConvertDiagram} />
-      {CREATIVE_GENERATOR_KINDS.has(kind) && <>
-        <label>{t('creativeBrief')}<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : typeof node.data.content === 'string' ? node.data.content : ''} onChange={(event) => onChange({ prompt: event.target.value, content: event.target.value })} placeholder={t('creativeBriefPlaceholder', { label: creationObjectDefinition(kind).label.toLowerCase() })} /></label>
-        <label>{t('templateId')}<input value={typeof node.data.templateId === 'string' ? node.data.templateId : ''} onChange={(event) => onChange({ templateId: event.target.value })} placeholder={kind === 'template' ? t('browseWithBrain') : t('optionalTemplate')} /></label>
-        <label>{t('outputFormat')}<select value={typeof node.data.outputFormat === 'string' ? node.data.outputFormat : ''} onChange={(event) => onChange({ outputFormat: event.target.value })}><option value="">{t('chooseOnExport')}</option>{(CREATIVE_OUTPUTS[kind] || []).map((format) => <option key={format} value={format}>{format}</option>)}</select></label>
-        <section className={styles.taskPrdSummary} aria-label={t('nativeCreativeCapability')}><div><span>{t('creativeCapability')}</span><small>{typeof node.data.provider === 'string' ? node.data.provider : 'native'}</small></div><strong>{typeof node.data.capabilityId === 'string' ? node.data.capabilityId : `creative.${kind}`}</strong><p>{t('creativeCapabilityHint')}</p></section>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button type="button" className={styles.fullButton} onClick={() => onRunCreativeAction(kind === 'template' ? 'apply' : 'generate')}>{kind === 'template' ? t('applyTemplate') : t('generateLabel', { label: creationObjectDefinition(kind).label })}</button>{typeof node.data.outputUrl === 'string' && <><button type="button" onClick={() => onRunCreativeAction('preview')}>{t('preview')}</button><button type="button" onClick={() => onRunCreativeAction('export')}>{t('download')}</button></>}{/* A game is the one creative artifact that can be played somewhere other
-              than here — the phone, an app store, Roblox. The panel behind this
-              is where that happens; it stays out of the inspector because it is
-              a flow with its own state, not another action button. */}
-          {kind === 'game' && typeof node.data.outputUrl === 'string' && <button type="button" onClick={onShipGame}>{t('game.shipAction')}</button>}</div>
-      </>}
-      {kind === 'frame' && <><label>{t('purpose')}<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : t('arrangeObjectsHere')} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>{t('fillColor')}<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : AUTHORED_FRAME_FILL} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>{t('borderColor')}<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : AUTHORED_FRAME_BORDER} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>{t('saveReusableFrame')}</button></>}
-      {/* The pen is chosen BEFORE the stroke now (see the drawing toolbar), so
-          what is left for the inspector is the thing that can only be done
-          afterwards: restyling marks that already exist. These used to write
-          `stroke` / `strokeWidth` on the OBJECT, which each stroke now carries
-          for itself — leaving two controls that changed a field nothing read. */}
-      {kind === 'drawing' && <>
-        <label>{t('strokeColor')}<input
-          type="color"
-          value={canvasStrokes(node.data)[0]?.stroke.startsWith('#') ? canvasStrokes(node.data)[0]!.stroke : AUTHORED_DRAWING_STROKE}
-          onChange={(event) => onChange(restyleDrawing(node.data, { stroke: event.target.value }))}
-        /></label>
-        <label>{t('strokeWidth')}<input
-          type="range" min="1" max="12"
-          value={canvasStrokes(node.data)[0]?.strokeWidth ?? 3}
-          onChange={(event) => onChange(restyleDrawing(node.data, { strokeWidth: Number(event.target.value) }))}
-        /></label>
-        <p className={styles.inspectorHint}>{t('drawingHint')}</p>
-      </>}
-      {DOCUMENT_EDITOR_KINDS.has(kind) && <label>{kind === 'slides' ? t('deckOutline') : t('documentBody')}<textarea
-        rows={12}
-        aria-label={kind === 'slides' ? t('deckOutline') : t('documentBody')}
-        value={typeof node.data.markdown === 'string' ? node.data.markdown : typeof node.data.content === 'string' ? node.data.content : ''}
-        placeholder={kind === 'slides' ? t('deckOutlinePlaceholder') : t('documentBodyPlaceholder')}
-        onChange={(event) => onChange({ markdown: event.target.value, content: event.target.value })}
-      /></label>}
-      {kind === 'diagram' && <>
-        {/* Options come from the notation registry, so a notation that gains a
-            writer is selectable here without a second list. Names are the
-            formats' own — brands, not translated copy — and each <option> keeps
-            its own opaque colours so it stays legible in both themes. */}
-        <label>{t('diagramFormat')}<select className={styles.notationSelect} value={typeof node.data.diagramFormat === 'string' ? node.data.diagramFormat : 'drawio'} onChange={(event) => onChange({ diagramFormat: event.target.value })}>
-          {DIAGRAM_TARGETS.map((notation) => <option key={notation.id} value={notation.id}>{notation.name}</option>)}
-        </select></label>
-        <label>{t('diagramSource')}<textarea
-          rows={12}
-          aria-label={t('diagramSource')}
-          value={typeof node.data.diagram === 'string' ? node.data.diagram : typeof node.data.content === 'string' ? node.data.content : ''}
-          placeholder={t('diagramSourcePlaceholder')}
-          onChange={(event) => onChange({ diagram: event.target.value, content: event.target.value })}
-        /></label>
-      </>}
-      {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'guidedTour', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing', 'diagram'].includes(kind) && !DOCUMENT_EDITOR_KINDS.has(kind) && !CREATIVE_GENERATOR_KINDS.has(kind) && <p className={styles.inspectorHint}>{t('objectLiveHint')}</p>}
+      <KindDetailsActions kind={kind} data={node.data} editable={editable} handlers={detailsActionHandlers} />
+      {!kindSettingsManifest(kind) && !isSpecObjectKind(kind) && kind !== 'chat' && <p className={styles.inspectorHint}>{t('objectLiveHint')}</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} data={node.data} persistence={persistence} role={role} members={members} />}
       {/* Where the evidence behind THIS object is shown — for every kind that
           carries it, not the two that happened to mount the list. `sources` is an
@@ -11168,11 +11105,16 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       {tab === 'details' && <SourceList sources={node.data.sources} />}
       {/* The step that used to be missing: an object that runs on this board and
           nowhere else becomes something a stranger can find, buy and play. The
-          button decides for itself whether this kind is sellable. */}
+          button decides its own visibility from the KIND — and, separately, whether
+          THIS INSTANCE may be sold: a managed seat like a board's CMO is the same
+          `agent` kind a hand-authored one is, but `kindSettingsSellable` reads the
+          instance's own origin, which is the fix for a built-in collaborator showing
+          "Sell this as a Agent" beside a card that says it is managed by BuilderForce. */}
       {tab === 'details' && (
         <SellInMarketplace
           kind={kind}
           disabled={!editable}
+          sellable={kindSettingsSellable(kind, node.data)}
           onPublish={onPublishListing}
           onReleases={onOpenReleases}
         />
@@ -11186,6 +11128,355 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     </div>
     <footer><span>{t('resourceRole', { role })}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => kind === 'task' ? setActionStatus(t('taskDetailsSaved')) : onChange({ status: 'Saved' })}>{kind === 'task' ? t('saveTaskDetails') : t('saveChanges')}</button></footer>
   </aside>;
+}
+
+/**
+ * Everything a kind's FULL-inspector `custom.component` section might need. One shape
+ * for all eleven, because the alternative — eleven different call signatures — is what
+ * the dispatch table in `KIND_DETAIL_SECTIONS` exists to avoid: `Inspector` already
+ * computes every one of these once, so handing the whole bag to whichever section is
+ * about to mount costs nothing a per-kind prop list would have saved.
+ */
+interface KindSectionProps {
+  node: CreationFlowNode;
+  nodes: CreationFlowNode[];
+  data: CreationNodeData;
+  editable: boolean;
+  persistence: 'local' | 'server';
+  onChange: (patch: Partial<CreationNodeData>) => void;
+  isBuiltinAgent: boolean;
+  isBuiltinManager: boolean;
+  isExistingAgent: boolean;
+  connectedAgentKnowledge: CreationFlowNode[];
+  agentTools: string[];
+  availableAgentTools: string[];
+  knowledgeDraft: string;
+  setKnowledgeDraft: (value: string) => void;
+  onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void;
+  onAddAgentKnowledge: (content: string) => void;
+  onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>;
+  onSaveAgent: () => void;
+  deliveryAgent: CreationFlowNode | undefined;
+  deliveryKnowledgeCount: number;
+  websiteHero: { heading: string; body: string; cta: string };
+  websiteTheme: { accent?: string };
+  onWebsiteChange: (patch: Partial<CreationNodeData>) => void;
+  onPublishWebsite: () => void;
+  onBuildWebsiteWithCode: () => void;
+  onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void;
+  onGenerateVideo: () => void;
+  onImportDataset: (file: File) => void | Promise<void>;
+  onProfileDataset: (nodeId: string) => void;
+  onVisualizeDataset: () => void;
+  onPlotDataset: () => void;
+  taskId: number | null;
+  taskAgents: CreationFlowNode[];
+  taskAgentValue: string;
+  statusGuidance: Record<string, string>;
+  normalizedTaskStatus: string;
+  prdStatus: string | undefined;
+  prdTitle: string;
+  prdSummary: string | undefined;
+  actionStatus: string;
+  setActionStatus: (value: string) => void;
+  persistTaskPatch: (apiPatch: Parameters<typeof tasksApi.update>[1], canvasPatch: Partial<CreationNodeData>) => Promise<void>;
+  mockupProjects: CreationFlowNode[];
+  mockupProjectValue: string;
+  mockupAgents: CreationFlowNode[];
+  mockupAgentValue: string;
+  onDeliverMockup: () => void;
+  onRunCreativeAction: (action: string) => void;
+  onShipGame: () => void;
+  // `build` and `evermind` dispatch straight to their existing components, which take
+  // a few props no other section needs — carried here rather than given their own
+  // narrower call shape, per this interface's own rationale above.
+  creatingBuild: boolean;
+  onOpenBuild: () => void;
+  onAttachBuild: (ide: IdeProject) => void;
+  onDeleteBuildWorkspace: () => void;
+  onAttachEvermindProject: () => void;
+  onExpandEvermindPipeline: () => void;
+  onTrainEvermind: () => void;
+}
+
+/** The custom-authoring workbench for `agent` — extracted verbatim from the old
+ *  `kind === 'agent'` branch. A built-in seat gets Execute (+ diagnostics for the
+ *  delivery Manager); everything else gets the personality/tools/knowledge/test-bench
+ *  authoring flow. Nothing about either branch changed — only that reaching this is now
+ *  a manifest lookup instead of one link in a 700-line conditional chain. */
+function AgentInspectorSection({
+  data, onChange, isBuiltinAgent, isBuiltinManager, isExistingAgent, connectedAgentKnowledge,
+  agentTools, availableAgentTools, knowledgeDraft, setKnowledgeDraft, onOpenBuiltinAgent,
+  onAddAgentKnowledge, onRunAgentTest, onSaveAgent,
+}: KindSectionProps) {
+  const t = useTranslations('creationCanvas');
+  if (isBuiltinAgent) {
+    return <>
+      <section className={styles.agentSetupGuide} data-existing="true" aria-label={t('agentSetupProgress')}>
+        <strong>{t('agentBuiltin')}</strong>
+        <p>{t('agentBuiltinHint', { seat: String(data.agentSeat) })}</p>
+      </section>
+      <div className={styles.agentWorkbench}>
+        <button type="button" className={styles.fullButton} onClick={() => onOpenBuiltinAgent('execute')}>{t('node.executeBuiltin')}</button>
+        {isBuiltinManager && <button type="button" className={styles.secondaryFullButton} onClick={() => onOpenBuiltinAgent('diagnostics')}>{t('node.builtinDiagnostics')}</button>}
+      </div>
+    </>;
+  }
+  return <>
+    <section className={styles.agentSetupGuide} data-existing={isExistingAgent} aria-label={t('agentSetupProgress')}>
+      <strong>{isExistingAgent ? t('agentExisting') : t('agentPrepareNew')}</strong>
+      <p>{isExistingAgent ? t('agentExistingHint') : t('agentPrepareHint')}</p>
+      {!isExistingAgent && <div className={styles.agentSetupSteps}><span data-done={!!String(data.personality || '').trim()}>{t('agentStepPersonality')}</span><span data-done={connectedAgentKnowledge.length > 0}>{connectedAgentKnowledge.length ? t('agentStepTrainingAdded') : t('agentStepTrainingNeeded')}</span><span data-done={!!String(data.instructions || '').trim()}>{t('agentStepDirection')}</span><span data-done={!!data.testResponse}>{data.testResponse ? t('agentStepTestRun') : t('agentStepTestNeeded')}</span></div>}
+    </section>
+    {!isExistingAgent && <label>{t('personality')}<textarea aria-label={t('personality')} value={typeof data.personality === 'string' ? data.personality : ''} onChange={(event) => onChange({ personality: event.target.value })} rows={3} placeholder={t('personalityPlaceholder')} /></label>}
+    <label>{t('model')}<select value={String(data.model || 'auto')} onChange={(event) => onChange({ model: event.target.value })}><option value="auto">{t('modelAuto')}</option><option value="gpt-4o">gpt-4o</option><option value="claude-3.5-sonnet">claude-3.5-sonnet</option><option value="Evermind">Evermind</option></select></label>
+    <label>{isExistingAgent ? t('instructions') : t('agentDirection')}<textarea aria-label={t('instructions')} value={typeof data.instructions === 'string' ? data.instructions : String(data.subtitle || '')} onChange={(event) => onChange({ instructions: event.target.value, subtitle: event.target.value })} rows={5} placeholder={isExistingAgent ? undefined : t('agentDirectionPlaceholder')} /></label>
+    <label>{t('tools')}<div className={styles.inspectorPills}>{agentTools.map((tool) => <button type="button" key={tool} aria-label={t('removeTool', { tool })} onClick={() => onChange({ tools: agentTools.filter((candidate) => candidate !== tool) })}>{tool} ×</button>)}<button type="button" disabled={availableAgentTools.every((tool) => agentTools.includes(tool))} onClick={() => { const next = availableAgentTools.find((tool) => !agentTools.includes(tool)); if (next) onChange({ tools: [...agentTools, next] }); }}>{t('addTool')}</button></div></label>
+    <label>{t('autonomy')}<select value={typeof data.autonomy === 'string' ? data.autonomy : 'medium'} onChange={(event) => onChange({ autonomy: event.target.value })}><option value="medium">{t('autonomyMedium')}</option><option value="low">{t('autonomyLow')}</option><option value="high">{t('autonomyHigh')}</option></select></label>
+    <section className={styles.agentWorkbench} aria-label={t('agentKnowledge')} data-inspector-section="knowledge">
+      <div className={styles.workbenchHeading}><strong>{t('knowledge')}</strong><span>{t('connectedCount', { count: connectedAgentKnowledge.length })}</span></div>
+      {connectedAgentKnowledge.length > 0 && <div className={styles.knowledgeList}>{connectedAgentKnowledge.map((item) => <span key={item.id}>{item.data.kind} · {item.data.title}</span>)}</div>}
+      <label>{t('addKnowledge')}<textarea rows={4} value={knowledgeDraft} onChange={(event) => setKnowledgeDraft(event.target.value)} placeholder={t('addKnowledgePlaceholder')} /></label>
+      <button type="button" className={styles.fullButton} disabled={!knowledgeDraft.trim()} onClick={() => { onAddAgentKnowledge(knowledgeDraft); setKnowledgeDraft(''); }}>{t('addAndConnectKnowledge')}</button>
+    </section>
+    <section className={styles.agentWorkbench} aria-label={t('agentTestBench')} data-inspector-section="test">
+      <div className={styles.workbenchHeading}><strong>{t('testBench')}</strong><span>{String(data.testStatus || t('notRun'))}</span></div>
+      <label>{t('customerMessage')}<textarea rows={3} value={typeof data.testPrompt === 'string' ? data.testPrompt : ''} onChange={(event) => onChange({ testPrompt: event.target.value })} placeholder={t('customerMessagePlaceholder')} /></label>
+      <label>{t('expectedSignals')}<textarea rows={2} value={typeof data.testExpected === 'string' ? data.testExpected : ''} onChange={(event) => onChange({ testExpected: event.target.value })} placeholder={t('expectedSignalsPlaceholder')} /></label>
+      <button type="button" className={styles.fullButton} disabled={!String(data.testPrompt || '').trim() || data.testStatus === 'Running'} onClick={() => void onRunAgentTest(String(data.testPrompt || ''), String(data.testExpected || ''))}>{data.testStatus === 'Running' ? t('runningTest') : t('runAgentTest')}</button>
+      {typeof data.testResponse === 'string' && data.testResponse && <div className={styles.testResponse}><strong>{t('agentResponse')}</strong><p>{data.testResponse}</p></div>}
+    </section>
+    <button type="button" className={styles.fullButton} onClick={onSaveAgent}>{isExistingAgent ? t('saveAgentEverywhere') : t('createInviteAgent')}</button>
+  </>;
+}
+
+function EvaluationInspectorSection({ data, onChange }: KindSectionProps) {
+  const t = useTranslations('creationCanvas');
+  return <section data-inspector-section="evaluation">
+    <div className={styles.evaluationSummary}><strong>{String(data.verdict || t('notRun'))}</strong><span>{typeof data.passRate === 'number' ? t('passRate', { rate: data.passRate }) : t('runTestForResult')}</span></div>
+    <label>{t('evaluationCriteria')}<textarea rows={5} value={typeof data.criteria === 'string' ? data.criteria : typeof data.content === 'string' ? data.content : ''} onChange={(event) => onChange({ criteria: event.target.value })} placeholder={t('evaluationCriteriaPlaceholder')} /></label>
+    <p className={styles.inspectorHint}>{t('evaluationHint')}</p>
+    {Array.isArray(data.testResults) && data.testResults.length > 0 && <div className={styles.testResults}>{data.testResults.slice(0, 10).map((value, index) => { const result = value as Record<string, unknown>; return <div key={String(result.id || index)}><b>{String(result.status || t('completed'))}</b><span>{String(result.prompt || t('testCase'))}</span><small>{String(result.runAt || '')}</small></div>; })}</div>}
+  </section>;
+}
+
+function ReleaseInspectorSection({ deliveryAgent, deliveryKnowledgeCount }: KindSectionProps) {
+  const t = useTranslations('creationCanvas');
+  return <section className={styles.deliveryChecklist} data-inspector-section="delivery" aria-label={t('agentDeliveryChecklist')}>
+    <strong>{t('deliveryChecklist')}</strong>
+    <span>{`${deliveryAgent ? '✓' : '○'} ${t('agentSelected')} ${deliveryAgent ? `· ${deliveryAgent.data.title}` : `· ${t('connectAgentCard')}`}`}</span>
+    <span>{`${deliveryKnowledgeCount > 0 ? '✓' : '○'} ${t('knowledgeConnected')} ${deliveryKnowledgeCount ? `· ${t('sourceCount', { count: deliveryKnowledgeCount })}` : ''}`}</span>
+    <span>{`${deliveryAgent?.data.testResponse ? '✓' : '○'} ${t('testResponseRecorded')}`}</span>
+    <span>{`${deliveryAgent?.data.resourceId ? '✓' : '○'} ${t('workforceAgentSaved')}`}</span>
+    <p className={styles.inspectorHint}>{deliveryAgent?.data.resourceId ? t('deliveryConnectedHint') : t('deliveryPendingHint')}</p>
+  </section>;
+}
+
+function WebsiteInspectorSection({
+  data, onChange, websiteHero, websiteTheme, onWebsiteChange, onPublishWebsite, onBuildWebsiteWithCode, onWebsiteViewportChange,
+}: KindSectionProps) {
+  const t = useTranslations('creationCanvas');
+  const kind = data.kind;
+  return <>
+    <label>{t('headline')}<input value={websiteHero.heading} onChange={(event) => onWebsiteChange({ websiteHeadline: event.target.value })} /></label>
+    <label>{t('supportingCopy')}<textarea rows={3} value={websiteHero.body} onChange={(event) => onWebsiteChange({ websiteBody: event.target.value })} /></label>
+    <label>{t('callToAction')}<input value={websiteHero.cta} onChange={(event) => onWebsiteChange({ websiteCta: event.target.value })} /></label>
+    <label>{t('accentColor')}<input type="color" value={websiteTheme.accent && /^#[0-9a-f]{6}$/i.test(websiteTheme.accent) ? websiteTheme.accent : AUTHORED_WEBSITE_ACCENT} onChange={(event) => onChange({ websiteAccent: event.target.value, websiteTheme: { ...(typeof data.websiteTheme === 'object' && data.websiteTheme ? data.websiteTheme as Record<string, unknown> : {}), accent: event.target.value } })} /></label>
+    <label>{t('viewport')}<select value={typeof data.viewport === 'string' ? data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">{t('viewportDesktop')}</option><option value="tablet">{t('viewportTablet')}</option><option value="mobile">{t('viewportMobile')}</option></select></label>
+    {kind === 'website' && <>
+      <label>{t('subdomain')}<input value={typeof data.subdomain === 'string' ? data.subdomain : ''} placeholder={t('subdomainPlaceholder')} onChange={(event) => onChange({ subdomain: event.target.value })} /></label>
+      <button type="button" className={styles.fullButton} onClick={onPublishWebsite}>{t('publishWebsite')}</button>
+      {typeof data.siteUrl === 'string' && <a href={data.siteUrl} target="_blank" rel="noreferrer">{t('openPublishedSite')}</a>}
+      <button type="button" className={styles.secondaryFullButton} onClick={onBuildWebsiteWithCode}>{t('build.websiteWithCode')}</button>
+      <p className={styles.inspectorHint}>{t('build.websiteWithCodeHint')}</p>
+    </>}
+    <p className={styles.inspectorHint}>{t('websiteLiveHint')}</p>
+  </>;
+}
+
+function VideoInspectorSection({ data, onChange, onGenerateVideo }: KindSectionProps) {
+  const t = useTranslations('creationCanvas');
+  return <>
+    <label>{t('prompt')}<textarea rows={5} value={typeof data.prompt === 'string' ? data.prompt : ''} onChange={(event) => onChange({ prompt: event.target.value })} placeholder={t('videoPromptPlaceholder')} /></label>
+    <label>{t('publishedEvermindModel')}<input value={typeof data.modelSlug === 'string' ? data.modelSlug : ''} onChange={(event) => onChange({ modelSlug: event.target.value })} placeholder={t('mediaModelPlaceholder')} /></label>
+    <label>{t('frames')}<input type="number" min="1" max="64" value={typeof data.maxFrames === 'number' ? data.maxFrames : 16} onChange={(event) => onChange({ maxFrames: Math.max(1, Math.min(64, Number(event.target.value) || 16)) })} /></label>
+    <button type="button" className={styles.fullButton} onClick={onGenerateVideo}>{t('generateVideo')}</button>
+    {typeof data.videoUrl === 'string' && <img src={data.videoUrl} alt={t('videoFirstFrame')} style={{ width: '100%', borderRadius: 'var(--radius-lg)' }} />}
+  </>;
+}
+
+function DatasetInspectorSection({ node, data, onImportDataset, onProfileDataset, onVisualizeDataset, onPlotDataset }: KindSectionProps) {
+  const t = useTranslations('creationCanvas');
+  return <>
+    <label>{t('datasetImportLabel')}<input type="file" accept=".csv,.tsv,.tab,.json,.jsonl,.xlsx,.xlsm,text/csv,text/tab-separated-values,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label>
+    <p className={styles.inspectorHint}>{t('datasetImportHint')}</p>
+    <DatasetProfileSummary data={data} />
+    <button type="button" className={styles.fullButton} onClick={() => onProfileDataset(node.id)}>{t('datasetProfileAction')}</button>
+    <button type="button" className={styles.fullButton} onClick={onVisualizeDataset}>{t('datasetVisualizeAction')}</button>
+    <DatasetPlotAction data={data} onPlot={onPlotDataset} />
+  </>;
+}
+
+function WebPageInspectorSection({ data, onChange }: KindSectionProps) {
+  const t = useTranslations('creationCanvas');
+  return <>
+    <label>{t('webPage.addressLabel')}<input
+      type="url"
+      inputMode="url"
+      spellCheck={false}
+      value={typeof data.url === 'string' ? data.url : ''}
+      placeholder={t('webPage.addressPlaceholder')}
+      onChange={(event) => onChange({ url: event.target.value })}
+      onBlur={(event) => { const next = normalizeWebPageUrl(event.target.value); if (next) onChange({ url: next, frameCheckedUrl: '', frameable: true, frameBlockedBy: null }); }}
+    /></label>
+    <label>{t('viewport')}<select value={webPageViewport(data.viewport)} onChange={(event) => onChange({ viewport: event.target.value })}>
+      <option value="desktop">{t('viewportDesktop')}</option>
+      <option value="tablet">{t('viewportTablet')}</option>
+      <option value="mobile">{t('viewportMobile')}</option>
+    </select></label>
+    <button type="button" className={styles.fullButton} disabled={!canvasWebPageUrl(data)} onClick={() => onChange({ frameCheckedUrl: '' })}>{t('webPage.reread')}</button>
+    <p className={styles.inspectorHint}>{t('webPage.inspectorHint')}</p>
+    {data.frameable === false && <p className={styles.inspectorHint}>{t('webPage.blockedHint')}</p>}
+  </>;
+}
+
+function TaskInspectorSection({
+  data, onChange, taskId, taskAgents, taskAgentValue, statusGuidance, normalizedTaskStatus,
+  prdStatus, prdTitle, prdSummary, actionStatus, setActionStatus, persistTaskPatch, persistence,
+}: KindSectionProps) {
+  const t = useTranslations('creationCanvas');
+  return <>
+    <div className={styles.taskInspectorGrid}>
+      <label>{t('status')}<select value={String(data.status || 'ready')} onChange={(event) => void persistTaskPatch({ status: event.target.value }, { status: event.target.value })}>
+        {!['backlog', 'todo', 'ready', 'assigned', 'in_progress', 'in_review', 'blocked', 'done'].includes(String(data.status || 'ready')) && <option value={String(data.status)}>{String(data.status)}</option>}
+        <option value="backlog">{t('statusBacklog')}</option><option value="todo">{t('statusTodo')}</option><option value="ready">{t('statusReady')}</option><option value="assigned">{t('statusAssigned')}</option><option value="in_progress">{t('statusInProgress')}</option><option value="in_review">{t('statusInReview')}</option><option value="blocked">{t('statusBlocked')}</option><option value="done">{t('statusDone')}</option>
+      </select></label>
+      <label>{t('priority')}<select value={typeof data.priority === 'string' ? data.priority : 'medium'} onChange={(event) => void persistTaskPatch({ priority: event.target.value as 'low' | 'medium' | 'high' | 'urgent' }, { priority: event.target.value })}><option value="low">{t('priorityLow')}</option><option value="medium">{t('priorityMedium')}</option><option value="high">{t('priorityHigh')}</option><option value="urgent">{t('priorityUrgent')}</option></select></label>
+    </div>
+    <div className={styles.statusGuidance}><b>{t('howToMoveForward')}</b><p>{statusGuidance[normalizedTaskStatus] || t('taskGuidanceFallback')}</p></div>
+    <label>{t('assignedAgent')}<select value={taskAgentValue} onChange={(event) => {
+      const selected = taskAgents.find((agent) => (agent.data.resourceId?.replace(/^agent:/, '') || agent.id) === event.target.value);
+      const agentRef = selected?.data.resourceId?.startsWith('agent:') ? selected.data.resourceId.slice(6) : null;
+      if (taskId != null && persistence === 'server' && selected && !agentRef) { setActionStatus(t('saveAgentBeforeAssign')); return; }
+      void persistTaskPatch({ assignedAgentRef: agentRef, assignedAgentHostId: null, assignedUserId: null }, { agentRef: event.target.value || undefined, assignee: selected?.data.title || undefined, role: selected?.data.title || undefined });
+    }}><option value="">{t('unassigned')}</option>{taskAgents.map((agent) => { const value = agent.data.resourceId?.replace(/^agent:/, '') || agent.id; return <option key={agent.id} value={value}>{agent.data.title}{agent.data.model ? ` · ${String(agent.data.model)}` : ''}</option>; })}</select></label>
+    <label>{t('description')}<textarea rows={5} value={typeof data.content === 'string' ? data.content : typeof data.subtitle === 'string' ? data.subtitle : ''} onChange={(event) => onChange({ content: event.target.value })} onBlur={(event) => { if (taskId != null && persistence === 'server') void persistTaskPatch({ description: event.target.value || null }, { content: event.target.value }); }} /></label>
+    <label>{t('acceptanceCriteria')}<textarea rows={4} value={typeof data.acceptanceCriteria === 'string' ? data.acceptanceCriteria : ''} placeholder={t('acceptanceCriteriaPlaceholder')} onChange={(event) => onChange({ acceptanceCriteria: event.target.value })} /></label>
+    <section className={styles.taskPrdSummary} aria-label={t('taskPrd')}>
+      <div><span>{t('prd')}</span>{prdStatus && <small>{prdStatus}</small>}</div>
+      {prdTitle ? <><strong>{prdTitle}</strong>{prdSummary && <p>{prdSummary.replace(/[#*_`>\[\]]/g, '').trim().slice(0, 360)}</p>}</> : <><strong>{t('noPrdLinked')}</strong><p>{t('noPrdLinkedHint')}</p></>}
+    </section>
+    {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
+  </>;
+}
+
+function MockupInspectorSection({ data, onChange, mockupProjects, mockupProjectValue, mockupAgents, mockupAgentValue, onDeliverMockup }: KindSectionProps) {
+  const t = useTranslations('creationCanvas');
+  return <>
+    <label>{t('deliveryProject')}<select value={mockupProjectValue} onChange={(event) => { const project = mockupProjects.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ deliveryProjectRef: event.target.value, deliveryProjectName: project?.data.title || (event.target.value === 'draft:builderforce-launch' ? 'BuilderForce launch' : t('noProject')) }); }}><option value="draft:builderforce-launch">BuilderForce launch</option>{mockupProjects.filter((project) => (project.data.resourceId || project.id) !== 'draft:builderforce-launch').map((project) => <option key={project.id} value={project.data.resourceId || project.id}>{project.data.title}</option>)}<option value="">{t('noProject')}</option></select></label>
+    <label>{t('assignAgent')}<select value={mockupAgentValue} onChange={(event) => { const agent = mockupAgents.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ mockupAgentRef: event.target.value, mockupAgentName: agent?.data.title || (event.target.value === 'web-analyst' ? 'Web Analyst' : t('unassigned')) }); }}><option value="campaign-strategist">Campaign Strategist</option>{mockupAgents.filter((agent) => (agent.data.resourceId || agent.id) !== 'campaign-strategist').map((agent) => <option key={agent.id} value={agent.data.resourceId || agent.id}>{agent.data.title}</option>)}<option value="web-analyst">Web Analyst</option><option value="">{t('unassigned')}</option></select></label>
+    <button className={styles.fullButton} onClick={onDeliverMockup}>{t('addToProjectAssign')}</button>
+  </>;
+}
+
+function DrawingInspectorSection({ data, onChange }: KindSectionProps) {
+  const t = useTranslations('creationCanvas');
+  return <>
+    <label>{t('strokeColor')}<input
+      type="color"
+      value={canvasStrokes(data)[0]?.stroke.startsWith('#') ? canvasStrokes(data)[0]!.stroke : AUTHORED_DRAWING_STROKE}
+      onChange={(event) => onChange(restyleDrawing(data, { stroke: event.target.value }))}
+    /></label>
+    <label>{t('strokeWidth')}<input
+      type="range" min="1" max="12"
+      value={canvasStrokes(data)[0]?.strokeWidth ?? 3}
+      onChange={(event) => onChange(restyleDrawing(data, { strokeWidth: Number(event.target.value) }))}
+    /></label>
+    <p className={styles.inspectorHint}>{t('drawingHint')}</p>
+  </>;
+}
+
+function CreativeGeneratorSection({ data, onChange, onRunCreativeAction, onShipGame }: KindSectionProps) {
+  const t = useTranslations('creationCanvas');
+  const kind = data.kind;
+  return <>
+    <label>{t('creativeBrief')}<textarea rows={5} value={typeof data.prompt === 'string' ? data.prompt : typeof data.content === 'string' ? data.content : ''} onChange={(event) => onChange({ prompt: event.target.value, content: event.target.value })} placeholder={t('creativeBriefPlaceholder', { label: creationObjectDefinition(kind).label.toLowerCase() })} /></label>
+    <label>{t('templateId')}<input value={typeof data.templateId === 'string' ? data.templateId : ''} onChange={(event) => onChange({ templateId: event.target.value })} placeholder={kind === 'template' ? t('browseWithBrain') : t('optionalTemplate')} /></label>
+    <label>{t('outputFormat')}<select value={typeof data.outputFormat === 'string' ? data.outputFormat : ''} onChange={(event) => onChange({ outputFormat: event.target.value })}><option value="">{t('chooseOnExport')}</option>{(CREATIVE_OUTPUTS[kind] || []).map((format) => <option key={format} value={format}>{format}</option>)}</select></label>
+    <section className={styles.taskPrdSummary} aria-label={t('nativeCreativeCapability')}><div><span>{t('creativeCapability')}</span><small>{typeof data.provider === 'string' ? data.provider : 'native'}</small></div><strong>{typeof data.capabilityId === 'string' ? data.capabilityId : `creative.${kind}`}</strong><p>{t('creativeCapabilityHint')}</p></section>
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <button type="button" className={styles.fullButton} onClick={() => onRunCreativeAction(kind === 'template' ? 'apply' : 'generate')}>{kind === 'template' ? t('applyTemplate') : t('generateLabel', { label: creationObjectDefinition(kind).label })}</button>
+      {typeof data.outputUrl === 'string' && <><button type="button" onClick={() => onRunCreativeAction('preview')}>{t('preview')}</button><button type="button" onClick={() => onRunCreativeAction('export')}>{t('download')}</button></>}
+      {/* A game is the one creative artifact that can be played somewhere other than here — the
+          phone, an app store, Roblox. The panel behind this is where that happens; it stays out
+          of the inspector because it is a flow with its own state, not another action button. */}
+      {kind === 'game' && typeof data.outputUrl === 'string' && <button type="button" onClick={onShipGame}>{t('game.shipAction')}</button>}
+    </div>
+  </>;
+}
+
+/** Dispatch table for `custom.component` — DATA, not a `kind === 'x'` chain: adding a
+ *  kind here is a row plus a section, never a new branch at the call site. The six
+ *  entries that were already components (`guidedTour`… `pitch`) are adapted to the
+ *  shared `KindSectionProps` shape so every entry in this table has the same call. */
+const KIND_DETAIL_SECTIONS: Record<string, (props: KindSectionProps) => JSX.Element | null> = {
+  agent: AgentInspectorSection,
+  evaluation: EvaluationInspectorSection,
+  release: ReleaseInspectorSection,
+  website: WebsiteInspectorSection,
+  video: VideoInspectorSection,
+  dataset: DatasetInspectorSection,
+  webPage: WebPageInspectorSection,
+  task: TaskInspectorSection,
+  mockup: MockupInspectorSection,
+  drawing: DrawingInspectorSection,
+  creative: CreativeGeneratorSection,
+  guidedTour: ({ node, nodes, onChange }) => <GuidedTourInspector node={node} nodes={nodes} onChange={onChange} />,
+  build: ({ node, editable, creatingBuild, persistence, onChange, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace }) => (
+    <BuildInspectorSection node={node} editable={editable} creating={creatingBuild} persistence={persistence} onChange={onChange} onOpenBuild={onOpenBuild} onAttachBuild={onAttachBuild} onDeleteBuildWorkspace={onDeleteBuildWorkspace} />
+  ),
+  voice: ({ node, persistence, onChange }) => <CanvasVoiceInspector node={node} persistence={persistence} onChange={onChange} />,
+  email: ({ data, editable, persistence, onChange }) => <CanvasEmailComposer data={data} editable={editable} persistence={persistence} onChange={onChange} />,
+  evermind: ({ node, persistence, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind }) => (
+    <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} onTrain={onTrainEvermind} />
+  ),
+  pitch: ({ node, editable, onChange }) => <PitchInspector node={node} editable={editable} onChange={onChange} />,
+};
+
+/** The full-surface fields a kind's manifest declares, plus its one hint paragraph.
+ *  Declaration order is the render order — see `SettingsFieldControl`. */
+function KindDetailsFields({ kind, data, editable, onChange }: {
+  kind: string; data: CreationNodeData; editable: boolean; onChange: (patch: Partial<CreationNodeData>) => void;
+}) {
+  const t = useTranslations('creationCanvas');
+  const manifest = kindSettingsManifest(kind);
+  const fields = kindSettingsFields(kind, data, 'full');
+  return <>
+    {fields.map((field) => <SettingsFieldControl key={field.name} field={field} data={data} editable={editable} variant="full" translate={(key) => t(key as never)} onChange={onChange} />)}
+    {manifest?.hintKey && <p className={styles.inspectorHint}>{t(manifest.hintKey as never)}</p>}
+  </>;
+}
+
+/** A kind's declared actions, rendered as buttons wired through the ONE handler map the
+ *  inspector builds from the functions it already receives as props — the manifest says
+ *  which actions exist and when; the function each one calls stays exactly what it was. */
+function KindDetailsActions({ kind, data, editable, handlers }: {
+  kind: string; data: CreationNodeData; editable: boolean; handlers: Record<string, () => void>;
+}) {
+  const t = useTranslations('creationCanvas');
+  const actions = kindSettingsActions(kind, data);
+  if (!actions.length) return null;
+  return <>{actions.map((action) => {
+    const handler = handlers[action.handler];
+    if (!handler) return null;
+    return <button
+      key={action.name}
+      type="button"
+      className={action.style === 'primary' ? styles.fullButton : styles.secondaryFullButton}
+      disabled={!editable || (action.disabled ? action.disabled(data) : false)}
+      onClick={handler}
+    >{t(action.labelKey as never)}</button>;
+  })}</>;
 }
 
 /**

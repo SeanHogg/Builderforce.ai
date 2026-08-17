@@ -696,7 +696,18 @@ export const signatureRequests = pgTable('signature_requests', {
    *  auditor needs is what THIS person saw on THAT day, and a live reference to a
    *  document somebody edited afterwards is not that. */
   documentTitle: varchar('document_title', { length: 200 }).notNull(),
-  documentBody:  text('document_body').notNull(),
+  /** Required UNLESS `documentArtifactId` is set — a request binds to rendered
+   *  text OR to a binary file, never neither (enforced by a CHECK constraint). */
+  documentBody:  text('document_body'),
+  /** A binary file (this row's OWN table, `artifacts`) the signer reviews and
+   *  signs instead of — or alongside — rendered text, e.g. an uploaded PDF/DOCX
+   *  formation certificate or executed IP assignment. */
+  documentArtifactId: uuid('document_artifact_id').references(() => artifacts.id, { onDelete: 'set null' }),
+  /** SHA-256 of the artifact's plaintext bytes, frozen at send time — required
+   *  together with `documentArtifactId`, for the same reason `documentBody` is
+   *  copied rather than referenced: a re-upload must not retroactively change
+   *  what was signed. */
+  documentChecksum: varchar('document_checksum', { length: 64 }),
   /** The artifact or canvas object the body was rendered from, for provenance. */
   documentRef:   varchar('document_ref', { length: 64 }),
   /** 'draft' | 'sent' | 'completed' | 'declined' | 'cancelled' | 'expired'. */

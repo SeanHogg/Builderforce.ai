@@ -101,7 +101,7 @@ export interface CanvasCommandBarProps {
    * is not this file's to know: a surface contributes Run, its readings and a width
    * switcher, the roster and the team band come and go, and the shell was carrying a
    * literal `66px` guess that the App surface's contribution overran by enough to draw
-   * the bar straight over the prompt. See `useBottomChromeSpace`.
+   * the bar straight over the prompt. See `useChromeSpace`.
    */
   hostRef?: (node: HTMLDivElement | null) => void;
 }

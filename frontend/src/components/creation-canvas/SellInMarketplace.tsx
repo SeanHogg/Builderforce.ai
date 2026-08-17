@@ -8,6 +8,11 @@
  * site that re-derived it would be a place the answer could drift from the server's.
  * A kind with no listing spec renders nothing at all.
  *
+ * That gate is per-KIND, and a second one is per-INSTANCE: `sellable` (from
+ * `kindSettingsSellable`) is what stops a managed board seat — the same `agent` kind
+ * a hand-authored one is — from offering to sell itself. The kind gate answers "can an
+ * `agent` ever be sold"; the instance gate answers "can THIS one".
+ *
  * ── WHY TWO BUTTONS AND NOT ONE ──────────────────────────────────────────────────
  * They answer two different questions. "What is this and what does it cost" is a
  * form. "Which version is on sale, is the next one fit to sell, and can I go back to
@@ -45,12 +50,17 @@ import styles from './CreationCanvas.module.css';
 export function SellInMarketplace({
   kind,
   disabled,
+  /** Instance-level: may THIS object be sold, on top of the kind-level gate below.
+   *  Defaults to true — a kind with no settings manifest (every spec-object vocabulary)
+   *  keeps exactly the kind-only gate this component always had. */
+  sellable = true,
   onPublish,
   onReleases,
 }: {
   kind: string;
   /** True when the session role (or an editing lock) forbids changes. */
   disabled?: boolean;
+  sellable?: boolean;
   onPublish: () => void;
   /** Opens Build → Stage → Live for this card. */
   onReleases: () => void;
@@ -58,7 +68,7 @@ export function SellInMarketplace({
   const t = useTranslations('creationCanvas.publish');
   const tr = useTranslations('creationCanvas.releases');
   const ts = useTranslations('commerce.stage');
-  if (!isPublishableObjectKind(kind)) return null;
+  if (!isPublishableObjectKind(kind) || !sellable) return null;
   const first = listingKindsForObjectKind(kind)[0];
   // The delivery the server would pick if the seller changed nothing — one
   // derivation, so this hint and the harness that actually runs agree.

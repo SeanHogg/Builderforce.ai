@@ -103,7 +103,7 @@ export const DOMAIN_MANIFEST: Readonly<Record<Domain, DomainManifest>> = {
    * needs it. A seat is always listed — progressive disclosure gates state, never
    * capability.
    */
-  legal:        { domain: 'legal',        seat: 'Counsel',    rootKind: 'legal_entity',     kinds: ['legal_entity', 'ip_asset', 'matter'],                          metrics: ['legal.open_matters', 'legal.renewals_due'], rung: 1 },
+  legal:        { domain: 'legal',        seat: 'Counsel',    rootKind: 'legal_entity',     kinds: ['legal_entity', 'ip_asset', 'matter', 'legal_document_file'],   metrics: ['legal.open_matters', 'legal.renewals_due'], rung: 1 },
 };
 
 /**

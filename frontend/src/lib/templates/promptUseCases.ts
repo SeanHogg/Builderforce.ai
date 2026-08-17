@@ -185,3 +185,63 @@ export const C_SUITE_CANVAS_USE_CASES: readonly PromptUseCase[] = [
   { id: 'scratchpad.set_title', category: 'executiveResearch', categoryLabel: 'Research & notes', label: 'Rename working notes', prompt: 'Update the title of the selected working-notes document without changing its pages or content.' },
   { id: 'scratchpad.create_deck', category: 'executiveResearch', categoryLabel: 'Research & notes', label: 'Create executive deck', prompt: 'Create a polished slides object from the supplied deck title and slide content, preserving the requested slide order and authoring a clear executive narrative.' },
 ];
+
+/** Every executive use-case id, as a set — the closed value space the tool's
+ *  `useCaseId` enum advertises. */
+export const C_SUITE_USE_CASE_IDS: ReadonlySet<string> = new Set(
+  C_SUITE_CANVAS_USE_CASES.map((item) => item.id!),
+);
+
+/** The marker `executiveCanvasPrompt` writes into a prompt, and the only place
+ *  its shape is stated — so the writer and the reader cannot drift. */
+export const EXECUTION_CONTRACT_MARKER = 'Execution contract ';
+
+/**
+ * The use case a REQUEST is running, read from the prompt itself.
+ *
+ * The prompt carries `Execution contract <id>:` because `executiveCanvasPrompt`
+ * put it there when the entry was selected. That makes the canvas — not the
+ * model — the authority on which contract is in flight, which is the property
+ * the recovery below depends on.
+ */
+export function executiveUseCaseFromPrompt(text: string): PromptUseCase | null {
+  return C_SUITE_CANVAS_USE_CASES.find(
+    (candidate) => text.includes(`${EXECUTION_CONTRACT_MARKER}${candidate.id}:`),
+  ) ?? null;
+}
+
+/**
+ * The use-case id a TOOL CALL meant, resolved tolerantly.
+ *
+ * ── WHY THIS IS NOT JUST `args.useCaseId` ───────────────────────────────────
+ * It was, and a real run died on it: the model emitted `{"useCas1eId":
+ * "scratchpad.create_deck"}` — one transposed character in the KEY, the value
+ * perfectly correct — so the lookup missed, the tool answered "Unknown
+ * executive Canvas use case", and the whole turn ended having created nothing.
+ * The contract was never in doubt; a typo in a parameter name was.
+ *
+ * Recovery is safe here for a reason that does not generalise: this tool takes
+ * ONE meaningful argument and its value space is a CLOSED ENUM of 48 dotted
+ * ids. So a value that IS one of those ids can only have been meant as the use
+ * case, whatever key it arrived under — there is no second argument it could
+ * have been intended for and no ambiguity to resolve wrongly. A tool with two
+ * free-text arguments must never do this.
+ *
+ * `inFlightId` is the last line: when the args carry nothing recognisable at
+ * all, the contract the PROMPT declared is used, because the canvas put it
+ * there and knows it independently of anything the model typed.
+ */
+export function resolveExecutiveUseCaseId(
+  args: unknown,
+  inFlightId?: string | null,
+): string | null {
+  if (args && typeof args === 'object' && !Array.isArray(args)) {
+    const record = args as Record<string, unknown>;
+    const exact = record.useCaseId;
+    if (typeof exact === 'string' && C_SUITE_USE_CASE_IDS.has(exact)) return exact;
+    for (const value of Object.values(record)) {
+      if (typeof value === 'string' && C_SUITE_USE_CASE_IDS.has(value)) return value;
+    }
+  }
+  return inFlightId && C_SUITE_USE_CASE_IDS.has(inFlightId) ? inFlightId : null;
+}

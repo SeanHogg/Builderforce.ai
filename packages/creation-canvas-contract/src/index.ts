@@ -264,6 +264,37 @@ export function isHiringObjectKind(value: unknown): value is HiringObjectKind {
 }
 
 /**
+ * The LEGAL objects — secure files held against the legal seat's own record tables
+ * (`legal_entities`, `legal_matters`, `intellectual_property`), rather than described
+ * in a hand-authored `document` or `file` object with nowhere to keep a checksum, a
+ * category, or the fact that a signature was ever requested for it.
+ *
+ * ── WHY ONE KIND, AND WHY IT IS NOT `contract` ───────────────────────────────────
+ * `contract` (`founderObjects.ts`) is AUTHORED prose the model writes and reasons
+ * over — a counterparty, obligations, a renewal date. `legalDocument` is the opposite
+ * shape: a real uploaded FILE, sealed with per-tenant encryption before it reaches R2,
+ * whose card is written entirely by the upload/share/sign flow and never by a human or
+ * a model typing into it. Collapsing the two would make an authored deal memo and an
+ * encrypted, checksummed NDA scan the same object, and a board could no longer tell
+ * "what we agreed" from "the file that proves it".
+ *
+ * Only one kind today because the legal seat has one FILE shape — formation
+ * certificates, NDAs, IP assignments and registrations all travel through the same
+ * `legal_document_files` table, distinguished by `category`, not by a second kind per
+ * document type.
+ */
+export const LEGAL_OBJECT_KINDS = ['legalDocument'] as const;
+
+export type LegalObjectKind = typeof LEGAL_OBJECT_KINDS[number];
+
+const LEGAL_KIND_SET: ReadonlySet<string> = new Set<string>(LEGAL_OBJECT_KINDS);
+
+/** True for the legal objects declared above — the set `legalObjects.ts` specs. */
+export function isLegalObjectKind(value: unknown): value is LegalObjectKind {
+  return typeof value === 'string' && LEGAL_KIND_SET.has(value);
+}
+
+/**
  * Kinds that belong to NO single vocabulary.
  *
  * Two canvas reviews on the same day asked for the same object from opposite ends of the
@@ -426,6 +457,10 @@ export const CREATION_OBJECT_KINDS = [
   // a company runs ITSELF; this is the first that models what it does for a customer.
   // See `operations.ts` for why it is one vocabulary and not one pack per industry.
   ...OPERATIONS_OBJECT_KINDS,
+  // The secure legal FILE — an uploaded, encrypted document with a checksum, a
+  // signature history and a share history, distinct from the AUTHORED `contract` in
+  // `FOUNDER_OBJECT_KINDS`. See the kind's own comment above for why they are two kinds.
+  ...LEGAL_OBJECT_KINDS,
 ] as const;
 
 export type CreationObjectKind = typeof CREATION_OBJECT_KINDS[number];
