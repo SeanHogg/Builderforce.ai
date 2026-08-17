@@ -21,6 +21,12 @@ import type { AgentExecParams } from '@builderforce/agent-tools';
 export type VendorId =
   // ── Bespoke wire-format vendors (hand-rolled modules)
   | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic' | 'openai-codex' | 'xai-oauth'
+  // ── ONE operator-configured Azure resource/deployment (OpenAI-wire-compatible
+  //    body, but a per-resource URL + `api-key` header — see azureOpenai.ts).
+  | 'azure-openai'
+  // ── ONE operator-configured AWS credential/region — AWS SigV4 auth, Converse
+  //    API wire format (not OpenAI-compatible) — see amazonBedrock.ts.
+  | 'amazon-bedrock'
   // ── Our OWN model: serves a published `.evermind` artifact from R2 via the
   //    builderforce-memory runtime (on-CPU, in-Worker). Reached only via an
   //    explicit `evermind/<ref>` pin (autoRoute:false). See vendors/evermind.ts.
@@ -34,7 +40,7 @@ export type VendorId =
   | 'deepinfra' | 'xai' | 'perplexity' | 'moonshot' | 'kimi-code' | 'hyperbolic' | 'novita'
   | 'sambanova' | 'lepton' | 'anyscale' | 'octoai' | 'featherless' | 'inferencenet'
   | 'targon' | 'avian' | 'nebius' | 'baseten' | 'lambda' | 'klusterai'
-  | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax'
+  | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax' | 'cohere'
   // ── BYO-only vendor: no operator pool key; only reachable when a tenant
   //    connects their own Meta AI account from the provider-keys settings page.
   | 'meta';
@@ -161,6 +167,21 @@ export interface VendorEnv {
   SILICONFLOW_API_KEY?: string | null;
   /** MiniMax — api.minimax.io/v1. */
   MINIMAX_API_KEY?: string | null;
+  /** Cohere — api.cohere.com/compatibility/v1 (Command R/R+/A, OpenAI-compatible). */
+  COHERE_API_KEY?: string | null;
+  /** Azure OpenAI resource key — paired with `AZURE_OPENAI_ENDPOINT` below,
+   *  composed into one sentinel by `azureOpenai.ts`'s `apiKeyFrom`. */
+  AZURE_OPENAI_API_KEY?: string | null;
+  /** Azure OpenAI's FULL chat-completions URL for the configured deployment,
+   *  including `?api-version=…` — this is per-resource, not a fixed host, so it
+   *  cannot be a static `baseUrl` like the OpenAI-compatible factory vendors. */
+  AZURE_OPENAI_ENDPOINT?: string | null;
+  /** Amazon Bedrock — paired with SECRET_ACCESS_KEY + REGION below, composed
+   *  into one sentinel by `amazonBedrock.ts`'s `apiKeyFrom`. */
+  AWS_BEDROCK_ACCESS_KEY_ID?: string | null;
+  AWS_BEDROCK_SECRET_ACCESS_KEY?: string | null;
+  /** e.g. `us-east-1` — embedded in the Bedrock host and the SigV4 credential scope. */
+  AWS_BEDROCK_REGION?: string | null;
   /** Meta AI (MUSE) — api.meta.ai/v1. BYO-only: populated exclusively from a
    *  tenant's connected Meta AI provider key (settings → Bring your own models).
    *  No operator-level key exists; when unset the `meta` vendor is skipped by the

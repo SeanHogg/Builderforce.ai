@@ -10,6 +10,7 @@
  * device gets, and how a game is read back off a canvas object.
  */
 
+import { robloxScriptsFrom, robloxWorldReading, type RobloxScriptSource, type RobloxWorldReading } from '@builderforce/creation-canvas-contract';
 import { apiRequest } from './apiClient';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 import { creativeBrief } from './creationDeliverables';
@@ -113,11 +114,24 @@ export const gameApi = {
  * every caller treats as "generate it first".
  */
 export function gameDocumentFrom(data: CreationNodeData): string {
-  const url = typeof data.outputUrl === 'string' ? data.outputUrl : '';
+  return gameDocumentFromUrl(data.outputUrl);
+}
+
+/**
+ * The artifact behind a `data:` URL, when its media type is one the caller can
+ * use. One decoder, because a game now has TWO artifact shapes — a document and
+ * a place — and two decoders is two places for the base64 branch to be wrong.
+ *
+ * Takes the URL rather than the object so consumers that hold a loose record
+ * (the app runtime reads `{ kind, ...unknown }` nodes) share this decode
+ * instead of writing a second one against the same field.
+ */
+function decodeArtifact(value: unknown, accepts: (mime: string) => boolean): string {
+  const url = typeof value === 'string' ? value : '';
   const match = /^data:([^,]*),/.exec(url);
   if (!match) return '';
   const parameters = match[1]!.split(';');
-  if (!parameters[0]?.startsWith('text/html')) return '';
+  if (!accepts(parameters[0] ?? '')) return '';
   const payload = url.slice(match[0].length);
   try {
     return parameters.includes('base64')
@@ -126,6 +140,66 @@ export function gameDocumentFrom(data: CreationNodeData): string {
   } catch {
     return '';
   }
+}
+
+/** The HTML behind an object's artifact URL, or `''`. */
+export function gameDocumentFromUrl(url: unknown): string {
+  return decodeArtifact(url, (mime) => mime.startsWith('text/html'));
+}
+
+/**
+ * The `.rbxlx` behind an artifact URL, or `''`.
+ *
+ * Gated on the media type alone, deliberately: `gamePlatform` is a field a card
+ * carries and a place is a place whether or not the object remembered to say
+ * so. The reader that produces a world out of this rejects anything that is not
+ * actually a Roblox document.
+ */
+export function robloxPlaceFromUrl(url: unknown): string {
+  return decodeArtifact(url, (mime) => mime.includes('xml'));
+}
+
+/** The `.rbxlx` an object is holding, or `''`. */
+export function robloxPlaceFrom(data: CreationNodeData): string {
+  return robloxPlaceFromUrl(data.outputUrl);
+}
+
+/**
+ * The world a game is played in, when the game is a place.
+ *
+ * A `.rbxlx` cannot run in a browser and never will — but the WORLD in it is
+ * exactly what this canvas's own 3D runtime already walks, so a place is
+ * playable here as the level it is. What it is NOT is the Luau: the rules live
+ * in a server-authoritative engine we are not running, which is why the surface
+ * that mounts this says so rather than implying the scripts are live.
+ */
+export function gameWorldFrom(data: CreationNodeData): RobloxWorldReading | null {
+  const place = robloxPlaceFrom(data);
+  return place ? robloxWorldReading(place) : null;
+}
+
+/** The Luau a place carries, for the surfaces that read source. */
+export function gameScriptsFrom(data: CreationNodeData): RobloxScriptSource[] {
+  const place = robloxPlaceFrom(data);
+  return place ? robloxScriptsFrom(place) : [];
+}
+
+/**
+ * WHICH runtime plays this game — the single answer every play surface, node
+ * body and empty state reads.
+ *
+ * This is the fix for the bug that shipped: `gameDocumentFrom` returning `''`
+ * was treated as "there is no game", which is true for a web game with nothing
+ * generated and false for a Roblox place, so a real artifact reported itself
+ * missing. Runtime and emptiness are two questions, and they are asked
+ * separately now.
+ */
+export type GameRuntime = 'frame' | 'world';
+
+export function gameRuntimeFor(data: CreationNodeData): GameRuntime | null {
+  if (gameDocumentFrom(data)) return 'frame';
+  if (gameWorldFrom(data)) return 'world';
+  return null;
 }
 
 /** Everything a target call needs, read off the object the user is looking at. */

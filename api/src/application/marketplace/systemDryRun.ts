@@ -46,8 +46,9 @@ import type { StageCheck } from '@builderforce/creation-canvas-contract';
  *  (`healthcheck`) — none of which this stubbed harness provides — they're
  *  skipped exactly like `memory`/`knowledge`/`train`/`agent` above. */
 const EXECUTABLE_KINDS: ReadonlySet<string> = new Set([
-  'trigger', 'llm', 'mcp', 'connector', 'gmail', 'web-search', 'transform', 'filter', 'branch', 'output',
-  'router', 'switch', 'assert', 'regex-match', 'html-to-text', 'html-table', 'html-elements',
+  'trigger', 'llm', 'mcp', 'connector', 'gmail', 'google-drive', 'web-search', 'web-fetch',
+  'analyze-image', 'extract-document-data', 'transcribe-audio', 'transform', 'filter', 'branch', 'output',
+  'router', 'switch', 'iterator', 'assert', 'regex-match', 'html-to-text', 'html-table', 'html-elements',
   'match-elements', 'match-pattern-advanced', 'replace', 'chunk-text', 'compose-string', 'convert-encoding',
 ]);
 

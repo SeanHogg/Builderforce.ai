@@ -182,6 +182,43 @@ describe('the app a canvas session is', () => {
   });
 });
 
+describe('a game in the app modality', () => {
+  const html = '<!doctype html><html><head><title>Runner</title></head><body><canvas></canvas></body></html>';
+  const place = `<roblox version="4"><Item class="ServerScriptService" referent="RBX0">
+<Properties><string name="Name">ServerScriptService</string></Properties>
+<Item class="Script" referent="RBX1"><Properties>
+<string name="Name">GameServer</string>
+<ProtectedString name="Source"><![CDATA[print("rules")]]></ProtectedString>
+</Properties></Item></Item></roblox>`;
+
+  const gameNode = (id: string, title: string, mime: string, body: string) => ({
+    id,
+    data: { kind: 'game', title, outputUrl: `data:${mime};charset=utf-8,${encodeURIComponent(body)}` } as CreationNodeData,
+  });
+
+  it('runs a web game as the app, because a web game IS an HTML document', () => {
+    // Left out, a board whose only object was a game reported "nothing to run"
+    // while holding a complete, runnable page.
+    const app = canvasApp([gameNode('g1', 'Star Run', 'text/html', html)]);
+    expect(app.entry?.path).toBe('star-run.html');
+    expect(app.document).toContain('<canvas>');
+  });
+
+  it('offers a Roblox place as SOURCE, since its rules are the part you edit', () => {
+    const files = canvasAppFiles([gameNode('g2', 'Skybound Citadels', 'application/xml', place)]);
+    expect(files.map((file) => file.path)).toEqual(['skybound-citadels/GameServer.luau']);
+    expect(files[0]!.source).toBe('print("rules")');
+  });
+
+  it('never makes a place the thing the preview tries to run', () => {
+    // Luau is not a page. Claiming it as one would put a `.luau` file in a frame.
+    const app = canvasApp([gameNode('g3', 'Skybound Citadels', 'application/xml', place)]);
+    expect(app.files).toHaveLength(1);
+    expect(app.entry).toBeNull();
+    expect(app.document).toBeNull();
+  });
+});
+
 describe('the app surface', () => {
   /**
    * THE ONE THAT KEEPS THE CANVAS AT ONE BAR. These controls used to be a second toolbar

@@ -19,11 +19,26 @@ const GAME_HTML = '<!doctype html><html><head><meta charset="utf-8"><title>Runne
 
 const asDataUrl = (html: string) => `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 
-function renderGame(data: Partial<CreationNodeData> = {}) {
+/** A place with a world in it — one part is what makes it playable rather than
+ *  an empty baseplate, which `robloxWorldReading` deliberately refuses. */
+const ROBLOX_PLACE = `<roblox version="4">
+<Item class="Workspace" referent="RBX0"><Properties><string name="Name">Workspace</string></Properties>
+<Item class="Part" referent="RBX1"><Properties>
+<bool name="Anchored">true</bool>
+<Color3uint8 name="Color3uint8">${(0xff000000 + 0x22c55e) >>> 0}</Color3uint8>
+<CoordinateFrame name="CFrame"><X>0</X><Y>6</Y><Z>0</Z></CoordinateFrame>
+<string name="Name">Ledge</string>
+<Vector3 name="size"><X>12</X><Y>1</Y><Z>6</Z></Vector3>
+</Properties>
+<Item class="StringValue" referent="RBX2"><Properties><string name="Name">bf_role</string><string name="Value">platform</string></Properties></Item>
+</Item></Item></roblox>`;
+
+function renderGame(data: Partial<CreationNodeData> = {}, onOpenSurface?: (nodeId: string, surface: string) => void) {
   const nodeData = { kind: 'game', title: 'Space Blaster', ...data } as CreationNodeData;
   return render(
     <ReactFlowProvider>
       <CreationNode
+        {...(onOpenSurface ? { onOpenSurface: onOpenSurface as never } : {})}
         id="game-1"
         type="creation"
         data={nodeData}
@@ -106,17 +121,36 @@ describe('the game node', () => {
   });
 });
 
+describe('the card leads with the one thing a game is for', () => {
+  it('shows a labelled PLAY control, not a badge with a hidden name', () => {
+    // It used to be a 52px circle whose only label was screen-reader-only, which
+    // reads as decoration on a thumbnail rather than as the thing to press.
+    renderGame({ outputUrl: asDataUrl(GAME_HTML) });
+    const play = screen.getByRole('button', { name: /play the game/i });
+    expect(play.textContent).toMatch(/play the game/i);
+  });
+
+  it('keeps the description behind the button rather than in front of it', () => {
+    renderGame({ outputUrl: asDataUrl(GAME_HTML), content: 'A timed star-tapping run.' });
+    expect(screen.queryByText(/timed star-tapping run/i)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^details$/i }));
+    expect(screen.getByText(/timed star-tapping run/i)).toBeTruthy();
+  });
+});
+
 describe('a Roblox place on the board', () => {
-  const PLACE = '<roblox version="4"><Item class="Workspace"/></roblox>';
+  const PLACE = ROBLOX_PLACE;
   const placeUrl = `data:application/xml;charset=utf-8,${encodeURIComponent(PLACE)}`;
 
-  it('says where it opens instead of offering a play button that cannot work', () => {
-    // `.rbxlx` runs in Roblox Studio, a desktop application. A play frame here
-    // would be a control that silently does nothing.
-    renderGame({ gamePlatform: 'roblox', outputUrl: placeUrl, status: 'Generated' });
-    expect(screen.getByText(/opens in roblox studio/i)).toBeTruthy();
+  it('offers to PLAY the place, because the canvas can walk one', () => {
+    // The place is a world of positioned parts, and this canvas owns a Rapier
+    // runtime that walks one. What it cannot do is run the Luau — so the control
+    // opens the 3D play surface rather than mounting an engine in a 340px tile.
+    const onOpenSurface = vi.fn();
+    renderGame({ gamePlatform: 'roblox', outputUrl: placeUrl, status: 'Generated' }, onOpenSurface);
+    fireEvent.click(screen.getByRole('button', { name: /play in 3d/i }));
+    expect(onOpenSurface).toHaveBeenCalledWith('game-1', 'play');
     expect(document.querySelector('iframe')).toBeNull();
-    expect(screen.queryByRole('button', { name: /play the game/i })).toBeNull();
   });
 
   it('does not claim the place is missing just because it is not HTML', () => {
@@ -125,6 +159,14 @@ describe('a Roblox place on the board', () => {
     renderGame({ gamePlatform: 'roblox', outputUrl: placeUrl, status: 'Generated' });
     expect(screen.queryByText(/no game yet/i)).toBeNull();
     expect(screen.getByText(/\.rbxlx place/i)).toBeTruthy();
+  });
+
+  it('still says where the place opens for real, behind the details', () => {
+    // Playing it here is the level; Roblox is where the scripts run. Both are
+    // true and the card says both — one in front, one behind.
+    renderGame({ gamePlatform: 'roblox', outputUrl: placeUrl, status: 'Generated' });
+    fireEvent.click(screen.getByRole('button', { name: /^details$/i }));
+    expect(screen.getByText(/opens in roblox studio/i)).toBeTruthy();
   });
 
   it('still asks for generation when the place has not been built yet', () => {

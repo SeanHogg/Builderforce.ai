@@ -23,5 +23,8 @@ export function sandboxOutboundPort(): OutboundPort {
     mcp: (config) => stub('mcp', config),
     llm: (config) => stub('llm', config),
     webSearch: (config) => stub('webSearch', config),
+    webFetch: (config) => stub('webFetch', config),
+    googleDrive: (config) => stub('googleDrive', config),
+    transcribeAudio: (config) => stub('transcribeAudio', config),
   };
 }

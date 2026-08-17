@@ -236,6 +236,16 @@ const COLOUR_EXEMPT = [
   /^components\/blog\/BlogCover\.tsx$/,
   // Physical devices: a phone's bezel and its dead screen are the phone's.
   /^components\/builder\/DevicePreview\.tsx$/,
+  // A 3D SCENE, painted by WebGL. Every hex in here is a `meshStandardMaterial`
+  // colour, an emissive, a sky or a walker — values Three.js reads as numbers
+  // and puts in a shader, where no stylesheet has ever been. `var(--accent)`
+  // handed to a material is not a colour at all: three.js parses it as a failed
+  // colour string and the prop renders black, which is the first class of
+  // mistake this list exists to record (a consumer that never reads our CSS).
+  // The palette a SPACE is authored in is also the author's own data, carried on
+  // each prop — see `PROP_KIND_DEFAULTS` in the contract — so these are its
+  // defaults, not the shell's theme.
+  /^components\/creation-canvas\/world3d\/[^/]+\.tsx$/,
 
   // ---- Colour the AUTHOR picks, persisted as data -----------------------
   // The value is written into the object and rendered back as-is, and the

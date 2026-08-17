@@ -10753,6 +10753,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               // Shipping opens OVER the surfacerather than replacing it: distribution is
               // a panel about a build you are still looking at.
               onShip={() => openGamePanel(surfaceNode.id)}
+              // Who is on this canvas, and the canvas's OWN invite door — not a second
+              // sharing model for games. Playing is when a person wants both.
+              players={rosterMembers}
+              onInvite={() => setShareOpen(true)}
             /> : null,
             site: surfaceNode ? <CanvasSiteSurface
               data={surfaceNode.data}

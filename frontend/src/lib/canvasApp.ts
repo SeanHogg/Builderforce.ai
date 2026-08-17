@@ -27,7 +27,8 @@
  * conclude their Twilio credentials were wrong.
  */
 
-import { renderWebsiteDocument, websitePagesFrom, websiteThemeFrom } from '@builderforce/creation-canvas-contract';
+import { renderWebsiteDocument, robloxScriptsFrom, websitePagesFrom, websiteThemeFrom } from '@builderforce/creation-canvas-contract';
+import { gameDocumentFromUrl, robloxPlaceFromUrl } from './gameTargets';
 
 export type CanvasAppFileRole = 'page' | 'style' | 'script' | 'server' | 'config' | 'other';
 
@@ -154,6 +155,13 @@ function slugFile(value: string, fallback: string): string {
  * is what lets a `website` card holding a form and a `code` card holding the handler it
  * posts to open as ONE application instead of a static preview beside an orphan file.
  * A plain `document` stays out: it is prose with no runnable shape.
+ *
+ * A `game` is in for the same reason a website is, and for one more. A web game IS an
+ * HTML document, so the preview runs it and the Code reading shows its source — which is
+ * the whole of "play it and code it in the app modality". A Roblox game is not runnable
+ * here, but the half of it a person actually edits IS source: the Luau lifted back out of
+ * the place. Leaving those out left the app surface reporting "nothing to run" on a board
+ * whose only object was a game.
  */
 export function canvasAppFiles(
   nodes: ReadonlyArray<{ id: string; data: { [key: string]: unknown; kind: string } }>,
@@ -181,6 +189,28 @@ export function canvasAppFiles(
       if (seen.has(path)) continue;
       seen.add(path);
       files.push({ nodeId: node.id, path, language, source, role: roleFor(path, source) });
+      continue;
+    }
+    if (node.data.kind === 'game') {
+      const title = typeof node.data.title === 'string' ? node.data.title.trim() : '';
+      const html = gameDocumentFromUrl(node.data.outputUrl);
+      if (html) {
+        const path = slugFile(title, node.id);
+        if (seen.has(path)) continue;
+        seen.add(path);
+        files.push({ nodeId: node.id, path, language: 'html', source: html, role: 'page' });
+        continue;
+      }
+      // A place: not runnable in a frame, but its rules are readable and are the
+      // thing a person edits. `role: 'other'` keeps it out of the entry search —
+      // Luau is not a page, and claiming it as one would break the preview.
+      const place = robloxPlaceFromUrl(node.data.outputUrl);
+      for (const script of robloxScriptsFrom(place)) {
+        const path = `${(title || node.id).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || node.id}/${script.name}.luau`;
+        if (seen.has(path)) continue;
+        seen.add(path);
+        files.push({ nodeId: node.id, path, language: 'luau', source: script.source, role: 'other' });
+      }
       continue;
     }
     if (node.data.kind === 'website' || node.data.kind === 'prototype') {

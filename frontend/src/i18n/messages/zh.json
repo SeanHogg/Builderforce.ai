@@ -12883,6 +12883,15 @@
     "statusRunStarted": "运行 {id} 已开始",
     "historyTitle": "此工作流的执行历史和使用情况",
     "historyLabel": "历史记录",
+    "errorHandling": {
+      "label": "发生错误时",
+      "failTask": "使任务失败（默认）",
+      "ignore": "忽略——以空输出继续",
+      "resume": "恢复——以默认值继续",
+      "stopBranch": "仅停止此分支",
+      "defaultValue": "默认值",
+      "defaultValuePlaceholder": "该节点出错时用作其输出"
+    },
     "nodeGroup": {
       "trigger": "触发器",
       "llmLogic": "LLM 逻辑",
@@ -12968,7 +12977,7 @@
       },
       "composeString": {
         "label": "组合字符串",
-        "blurb": "根据 {{input}} 模板构建一个字符串。"
+        "blurb": "根据 '{{input}}' 模板构建一个字符串。"
       },
       "convertEncoding": {
         "label": "转换编码",
@@ -12997,6 +13006,30 @@
       "chunkText": {
         "label": "文本分块",
         "blurb": "将输入拆分为固定大小、可选重叠的多个片段——便于逐块输入下游的 LLM / 嵌入节点。"
+      },
+      "webFetch": {
+        "label": "网页抓取",
+        "blurb": "抓取一个公开 URL 并返回其可读文本（已去除 HTML）——具备 SSRF 防护，无需凭证。"
+      },
+      "googleDrive": {
+        "label": "Google 云端硬盘",
+        "blurb": "在你已连接的 Google 云端硬盘中搜索或以文本形式读取文件。"
+      },
+      "iterator": {
+        "label": "迭代器",
+        "blurb": "将它后面紧邻的那一个节点复制为每个数组元素一份（输入必须是一个 JSON 数组，或 '{\"items\":[...]}'）——在该节点之后接一个合并/聚合节点来收集结果。只会复制单个处理步骤；如需更多步骤，请在聚合节点之后继续连接。"
+      },
+      "analyzeImage": {
+        "label": "分析图像",
+        "blurb": "对图像 URL 进行视觉分析——自动路由到支持视觉能力的模型。"
+      },
+      "extractDocumentData": {
+        "label": "提取文档数据",
+        "blurb": "从文档、发票或收据图像中提取结构化字段——使用带结构化提取提示的视觉分析，输出 JSON。"
+      },
+      "transcribeAudio": {
+        "label": "转录音频",
+        "blurb": "转录一个音频文件，或将其直接翻译为英语——真实的 Whisper API 调用（由运营方配置，目前尚无租户自带密钥选项）。"
       }
     }
   },
@@ -16204,7 +16237,10 @@
       "websiteMarkupFrameTitle": "嵌入内容",
       "gameRobloxReady": "Roblox 地图已生成。下载后在 Roblox Studio 中打开即可游玩。",
       "gameRobloxOpenIn": "在 Roblox Studio 中打开",
-      "gameRobloxFormat": ".rbxlx 地图文件"
+      "gameRobloxFormat": ".rbxlx 地图文件",
+      "gamePlayIn3d": "以 3D 游玩",
+      "gameDetails": "详情",
+      "gameHideDetails": "隐藏详情"
     },
     "editor": {
       "toolbar": "格式",
@@ -19424,7 +19460,12 @@
         "label": "试玩",
         "open": "全屏试玩",
         "ship": "发布",
-        "controls": "操作方式"
+        "controls": "操作方式",
+        "worldRuntime": "可行走的 3D 场景",
+        "worldParts": "{count} 个部件",
+        "robloxScriptsNote": "Luau 规则在 Roblox 中运行",
+        "playersLabel": "本画布上有 {count} 人",
+        "invite": "邀请一起玩"
       },
       "site": {
         "label": "网站",
@@ -19512,11 +19553,18 @@
         "switchToFirst": "切换到第一人称视角（V）",
         "editHint": "从左侧拖入部件 · 点击道具在右侧编辑",
         "viewOnlyHint": "按“行走”探索此空间",
-        "walkHint": "点击锁定指针 · WASD 移动 · 空格跳跃 · V 切换视角 · Esc 释放"
+        "walkHint": "点击锁定指针 · WASD 移动 · 空格跳跃 · V 切换视角 · Esc 释放",
+        "play": {
+          "score": "已收集 {collected}/{total}",
+          "hits": "受击 {count} 次",
+          "won": "已到达目标！"
+        }
       },
       "backToBoard": "返回画板",
       "objectLabel": "{title}（全屏）",
-      "switcher": "画布视图"
+      "switcher": "画布视图",
+      "enterFullscreen": "全屏",
+      "exitFullscreen": "退出全屏"
     },
     "miro": {
       "title": "Miro 白板",

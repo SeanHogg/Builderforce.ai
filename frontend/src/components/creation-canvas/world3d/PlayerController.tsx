@@ -136,7 +136,10 @@ export default function PlayerController({
 
   return (
     <>
-      <RigidBody ref={bodyRef} type="dynamic" position={spawn.position} colliders={false} enabledRotations={[false, false, false]} ccd canSleep={false}>
+      {/* `walker: true` is how a sensor prop tells the player apart from a
+          rolling sphere that happened to drop through it — see `PropMesh`. A
+          collectible that any dynamic body could bank is not a collectible. */}
+      <RigidBody ref={bodyRef} type="dynamic" position={spawn.position} colliders={false} enabledRotations={[false, false, false]} ccd canSleep={false} userData={{ walker: true }}>
         <CapsuleCollider args={[0.6, 0.4]} />
       </RigidBody>
       {/* Local avatar — only visible in third-person (you'd see the inside

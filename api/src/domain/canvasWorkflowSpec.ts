@@ -111,12 +111,13 @@ function inferKind(step: CanvasWorkflowStep): WorkflowNodeKind | null {
     // inference heuristic exists for these (unlike `filter`'s condition/predicate
     // fields below), so an authored step only resolves to one of them via an
     // EXPLICIT `kind`; `configForKind`'s default branch passes its fields through.
-    'router', 'switch', 'merge', 'numeric-aggregator', 'table-aggregator', 'text-aggregator',
+    'router', 'switch', 'iterator', 'merge', 'numeric-aggregator', 'table-aggregator', 'text-aggregator',
     'set-variable', 'get-variable', 'set-variables', 'get-variables', 'increment', 'sleep',
     'compose-string', 'convert-encoding',
     'regex-match', 'html-to-text', 'html-table', 'html-elements', 'match-elements',
     'match-pattern-advanced', 'replace', 'chunk-text',
-    'assert', 'healthcheck', 'web-search',
+    'assert', 'healthcheck', 'web-search', 'web-fetch', 'google-drive',
+    'analyze-image', 'extract-document-data', 'transcribe-audio',
   ];
   if (explicit && (KNOWN as string[]).includes(explicit)) return explicit as WorkflowNodeKind;
   // `sms`, `whatsapp`, `email`, `call` are how a person names the step — all of

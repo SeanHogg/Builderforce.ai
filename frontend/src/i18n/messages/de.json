@@ -12883,6 +12883,15 @@
     "statusRunStarted": "Ausführung {id} gestartet",
     "historyTitle": "Ausführungsverlauf und Nutzung dieses Workflows",
     "historyLabel": "Verlauf",
+    "errorHandling": {
+      "label": "Bei Fehler",
+      "failTask": "Aufgabe fehlschlagen lassen (Standard)",
+      "ignore": "Ignorieren — mit leerer Ausgabe fortfahren",
+      "resume": "Fortsetzen — mit einem Standardwert fortfahren",
+      "stopBranch": "Nur diesen Zweig stoppen",
+      "defaultValue": "Standardwert",
+      "defaultValuePlaceholder": "Wird als Ausgabe dieses Knotens verwendet, wenn ein Fehler auftritt"
+    },
     "nodeGroup": {
       "trigger": "Auslöser",
       "llmLogic": "LLM-Logik",
@@ -12968,7 +12977,7 @@
       },
       "composeString": {
         "label": "Zeichenkette zusammensetzen",
-        "blurb": "Erstellt eine Zeichenkette aus einer {{input}}-Vorlage."
+        "blurb": "Erstellt eine Zeichenkette aus einer '{{input}}'-Vorlage."
       },
       "convertEncoding": {
         "label": "Kodierung konvertieren",
@@ -12997,6 +13006,30 @@
       "chunkText": {
         "label": "Text in Abschnitte teilen",
         "blurb": "Teilt die Eingabe in gleich große, optional überlappende Abschnitte — um einen LLM-/Embedding-Knoten Stück für Stück zu versorgen."
+      },
+      "webFetch": {
+        "label": "Web-Abruf",
+        "blurb": "Ruft eine öffentliche URL ab und liefert deren lesbaren Text (HTML entfernt) — SSRF-geschützt, keine Anmeldedaten nötig."
+      },
+      "googleDrive": {
+        "label": "Google Drive",
+        "blurb": "Durchsucht oder liest eine Datei (als Text) aus deinem verbundenen Google Drive."
+      },
+      "iterator": {
+        "label": "Iterator",
+        "blurb": "Vervielfältigt den EINEN Knoten direkt danach zu einer Kopie pro Array-Element (die Eingabe muss ein JSON-Array oder '{\"items\":[...]}' sein) — verbinde nach diesem Knoten einen Merge-/Aggregator-Knoten, um die Ergebnisse zu sammeln. Es wird nur EIN Verarbeitungsschritt vervielfältigt; weitere Schritte nach dem Aggregator anhängen."
+      },
+      "analyzeImage": {
+        "label": "Bild analysieren",
+        "blurb": "Visuelle Analyse einer Bild-URL — automatisch an ein bildfähiges Modell weitergeleitet."
+      },
+      "extractDocumentData": {
+        "label": "Dokumentdaten extrahieren",
+        "blurb": "Extrahiert strukturierte Felder aus einem Dokument-, Rechnungs- oder Belegbild — visuelle Analyse mit einem strukturierten Extraktions-Prompt, gibt JSON aus."
+      },
+      "transcribeAudio": {
+        "label": "Audio transkribieren",
+        "blurb": "Transkribiert eine Audiodatei oder übersetzt sie direkt ins Englische — echter Whisper-API-Aufruf (vom Betreiber konfiguriert, noch kein mandantenspezifischer eigener Schlüssel)."
       }
     }
   },
@@ -16204,7 +16237,10 @@
       "websiteMarkupFrameTitle": "Eingebetteter Inhalt",
       "gameRobloxReady": "Roblox-Place erstellt. Lade ihn herunter und öffne ihn in Roblox Studio zum Spielen.",
       "gameRobloxOpenIn": "Öffnet in Roblox Studio",
-      "gameRobloxFormat": ".rbxlx-Place"
+      "gameRobloxFormat": ".rbxlx-Place",
+      "gamePlayIn3d": "In 3D spielen",
+      "gameDetails": "Details",
+      "gameHideDetails": "Details ausblenden"
     },
     "editor": {
       "toolbar": "Formatierung",
@@ -19424,7 +19460,12 @@
         "label": "Spielen",
         "open": "In voller Größe spielen",
         "ship": "Veröffentlichen",
-        "controls": "Steuerung"
+        "controls": "Steuerung",
+        "worldRuntime": "Begehbarer 3D-Ort",
+        "worldParts": "{count} Teile",
+        "robloxScriptsNote": "Luau-Regeln laufen in Roblox",
+        "playersLabel": "{count} auf dieser Leinwand",
+        "invite": "Zum Spielen einladen"
       },
       "site": {
         "label": "Website",
@@ -19512,11 +19553,18 @@
         "switchToFirst": "Zur Ich-Perspektive wechseln (V)",
         "editHint": "Bauteile von links ziehen · Objekt anklicken, um es rechts zu bearbeiten",
         "viewOnlyHint": "„Laufen“ drücken, um diesen Raum zu erkunden",
-        "walkHint": "Klicken, um den Zeiger zu sperren · WASD zum Bewegen · Leertaste zum Springen · V zum Ansicht wechseln · Esc zum Freigeben"
+        "walkHint": "Klicken, um den Zeiger zu sperren · WASD zum Bewegen · Leertaste zum Springen · V zum Ansicht wechseln · Esc zum Freigeben",
+        "play": {
+          "score": "{collected}/{total} eingesammelt",
+          "hits": "{count} Treffer",
+          "won": "Ziel erreicht!"
+        }
       },
       "backToBoard": "Zurück zum Board",
       "objectLabel": "{title}, in voller Größe",
-      "switcher": "Canvas-Ansicht"
+      "switcher": "Canvas-Ansicht",
+      "enterFullscreen": "Vollbild",
+      "exitFullscreen": "Vollbild beenden"
     },
     "miro": {
       "title": "Miro-Boards",

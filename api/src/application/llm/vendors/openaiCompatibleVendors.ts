@@ -238,6 +238,16 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     models: ['MiniMax-M1', 'MiniMax-Text-01'],
   },
   {
+    // Cohere ships an OpenAI-compatible endpoint (`/compatibility/v1`) alongside
+    // its native Chat API — this rides that, so no bespoke request/response
+    // mapping is needed. Added 2026-08-16: the workflow builder's "Cohere" LLM
+    // Platform preset previously pinned no model at all (see DONE.md), and this
+    // was the missing vendor.
+    id: 'cohere', brand: 'Cohere', apiKeyEnv: 'COHERE_API_KEY',
+    baseUrl: 'https://api.cohere.com/compatibility/v1/chat/completions',
+    models: ['command-a-03-2025', 'command-r-plus-08-2024', 'command-r-08-2024'],
+  },
+  {
     // Meta MUSE — OpenAI-compatible endpoint at api.meta.ai/v1.
     // Tenant BYO key stored as LlmProvider 'meta'; maps to this vendor so that
     // the gateway dispatches MUSE models on the tenant's own Meta AI account.

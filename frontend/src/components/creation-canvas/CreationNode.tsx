@@ -33,7 +33,7 @@ import { columnLetters } from '@/lib/canvasFormula';
 import { maskCell, maskPlan, normalizeClassifications } from '@/lib/canvasDataGovernance';
 import { outlinePaths, projectMap, sanitizeGeoBounds, sanitizeMapPoints } from '@/lib/canvasGeo';
 import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
-import { GAME_FRAME_SANDBOX, gameDocumentFrom } from '@/lib/gameTargets';
+import { GAME_FRAME_SANDBOX, gameDocumentFrom, gameRuntimeFor } from '@/lib/gameTargets';
 import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { CanvasObjectSurfaceButton } from './CanvasObjectSurfaceButton';
 import { controlLabels, readGameControls } from '@/lib/gamePoster';
@@ -2092,41 +2092,20 @@ function BrainObjectBody({ nodeId, data }: { nodeId: string; data: CreationNodeD
  * canvas for frames; `nodrag`/`nowheel` keep the pointer inside the game instead
  * of panning the board underneath it.
  */
-function GameBody({ data }: { data: CreationNodeData }) {
+function GameBody({ data, onPlayFull }: { data: CreationNodeData; onPlayFull?: () => void }) {
   const t = useTranslations('creationCanvas.node');
   const [playing, setPlaying] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const document = useMemo(() => gameDocumentFrom(data), [data]);
+  const runtime = useMemo(() => gameRuntimeFor(data), [data]);
   const poster = creativePreviewImageUrl(data);
   const controls = useMemo(() => (document ? controlLabels(readGameControls(document)) : []), [document]);
 
-  // Regenerating replaces the document; the running frame must be torn down or
+  // Regenerating replaces the artifact; the running frame must be torn down or
   // the board keeps playing the previous game under the new title.
-  useEffect(() => setPlaying(false), [document]);
+  useEffect(() => { setPlaying(false); setShowDetails(false); }, [runtime, document]);
 
-  /**
-   * A Roblox place is a real artifact that this browser cannot run.
-   *
-   * There is no honest "play" here: `.rbxlx` opens in Roblox Studio, a desktop
-   * application. Showing the play frame and having it do nothing would be worse
-   * than showing none, and showing the "no game yet" empty state would be false —
-   * the place exists and is downloadable. So it gets its own card that says what
-   * it is and where it opens.
-   */
-  if (data.gamePlatform === 'roblox') {
-    const built = typeof data.outputUrl === 'string' && data.outputUrl.length > 0;
-    return <div className={styles.creativeStudioBody}>
-      {poster
-        ? <img src={poster} alt={t('previewAlt', { title: data.title })} />
-        : <div className={styles.creativeStudioPreview} aria-hidden="true"><span><Icon source={creationObjectDefinition(data.kind).icon} size={24} /></span><i /><i /><i /></div>}
-      <AuthoredContent data={data} fallback={built ? t('gameRobloxReady') : t('gameNotGenerated')} />
-      <div className={styles.pills}>
-        <span>{built ? t('gameRobloxOpenIn') : t('gameGenerateFirst')}</span>
-        {built && <span>{t('gameRobloxFormat')}</span>}
-      </div>
-    </div>;
-  }
-
-  if (!document) {
+  if (!runtime) {
     return <div className={styles.creativeStudioBody}>
       {poster
         ? <img src={poster} alt={t('previewAlt', { title: data.title })} />
@@ -2136,9 +2115,25 @@ function GameBody({ data }: { data: CreationNodeData }) {
     </div>;
   }
 
+  /**
+   * A place is played in the 3D runtime, and that does not fit in a card.
+   *
+   * A `.rbxlx` is a world of positioned parts. The canvas can walk one — but not
+   * in 340px through a WebGL context per board object, so the big control here
+   * OPENS the play surface rather than mounting an engine in a tile. It is still
+   * the same gesture and the same button; only where it lands differs.
+   */
+  const opensSurface = runtime === 'world';
+  const playLabel = opensSurface ? t('gamePlayIn3d') : t('gamePlay');
+
+  const play = () => {
+    if (opensSurface) { onPlayFull?.(); return; }
+    setPlaying(true);
+  };
+
   return <div className={`${styles.creativeStudioBody} ${styles.gameBody ?? ''}`}>
     <div className={styles.gameStage}>
-      {playing
+      {playing && document
         ? <iframe
           className={styles.gameFrame}
           title={t('gamePlayingAlt', { title: String(data.title ?? '') })}
@@ -2148,22 +2143,36 @@ function GameBody({ data }: { data: CreationNodeData }) {
           sandbox={GAME_FRAME_SANDBOX}
           loading="lazy"
         />
+        // THE control on the card, not a badge in the corner of one. A game is a
+        // thing you press play on; everything else about it is a detail behind
+        // the button, which is why the description moved under a toggle.
         : <button
           type="button"
           className={styles.gamePoster}
-          onClick={(event) => { event.stopPropagation(); setPlaying(true); }}
+          disabled={opensSurface && !onPlayFull}
+          onClick={(event) => { event.stopPropagation(); play(); }}
           style={poster ? { backgroundImage: `url("${poster}")` } : undefined}
         >
           <span className={styles.gamePlayBadge} aria-hidden="true"><Icon source="▶" size="1em" /></span>
-          <span className={styles.srOnly}>{t('gamePlay')}</span>
+          <span className={styles.gamePlayLabel}>{playLabel}</span>
         </button>}
     </div>
     <div className={styles.pills}>
       {playing
         ? <button type="button" onClick={(event) => { event.stopPropagation(); setPlaying(false); }}>{t('gameStop')}</button>
-        : <span>{t('gameReady')}</span>}
-      {controls.map((control) => <span key={control}>{t(control === 'keys' ? 'gameControlKeys' : 'gameControlTouch')}</span>)}
+        : <button
+          type="button"
+          aria-expanded={showDetails}
+          onClick={(event) => { event.stopPropagation(); setShowDetails((value) => !value); }}
+        >{showDetails ? t('gameHideDetails') : t('gameDetails')}</button>}
+      {opensSurface
+        ? <span>{t('gameRobloxFormat')}</span>
+        : controls.map((control) => <span key={control}>{t(control === 'keys' ? 'gameControlKeys' : 'gameControlTouch')}</span>)}
     </div>
+    {showDetails && <div className={styles.gameDetails}>
+      <AuthoredContent data={data} fallback={opensSurface ? t('gameRobloxReady') : t('gameReady')} />
+      {opensSurface && <div className={styles.pills}><span>{t('gameRobloxOpenIn')}</span></div>}
+    </div>}
   </div>;
 }
 
@@ -2601,7 +2610,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'video' && <CanvasVideoEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} />}
         {data.kind === 'resume' && <CanvasResumeEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} {...(onResumeTailor ? { onTailor: (prompt) => onResumeTailor(id, prompt) } : {})} {...(onResumeDetach ? { onDetach: (patch) => onResumeDetach(id, patch) } : {})} {...(onResumeShare && onResumeSharesList && onResumeShareRevoke ? { shareActions: { create: (kind: 'view' | 'embed') => onResumeShare(id, kind), list: () => onResumeSharesList(id), revoke: (shareId: string) => onResumeShareRevoke(id, shareId) } } : {})} />}
         {CREATIVE_STUDIO_KINDS.has(data.kind) && <CreativeStudioBody data={data} />}
-        {data.kind === 'game' && <GameBody data={data} />}
+        {data.kind === 'game' && <GameBody data={data} {...(onOpenSurface ? { onPlayFull: () => onOpenSurface(id, 'play') } : {})} />}
         {data.kind === 'note' && <AuthoredContent data={data} fallback={t('noteFallback')} />}
         {data.kind === 'sticky' && <StickyBody data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} />}
         {data.kind === 'project' && <ProjectBody data={data} />}

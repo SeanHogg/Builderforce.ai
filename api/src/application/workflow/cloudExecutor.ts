@@ -36,6 +36,26 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *     vendor backing the cloud agent's own `web_search` tool uses (tenant
  *     Tavily/Exa/Linkup key → operator SearXNG → keyless Wikipedia), so it
  *     never refuses for lack of a connected integration.
+ *   - web-fetch → executed natively (Tools). Reuses the Brain's own
+ *     SSRF-guarded, cached `fetchWebDocumentCached` — no credential needed.
+ *     Replaces the old "Fetch" palette entry, which was `kind: 'trigger'`
+ *     (inert when chained mid-flow — see DONE.md 2026-08-16).
+ *   - google-drive → executed natively. Same tenant-credential path as `gmail`
+ *     (provider='google_drive'); search or read-as-text. Replaces the old
+ *     "Google Drive" palette entry (same `kind: 'trigger'` defect as Fetch).
+ *   - analyze-image / extract-document-data → executed natively (AI Agents).
+ *     Both are a vision-capable `proxy.complete()` turn (see
+ *     `completeVisionPrompt`) — an image URL + a prompt, auto-routed to a
+ *     vision-capable model by the SAME `poolRouting.ts` shape detection the
+ *     Brain's own image turns use. `extract-document-data` differs only in
+ *     its system prompt (structured JSON extraction) — Make's document/
+ *     invoice/receipt "Content Extractor" modules are this same capability,
+ *     not a distinct one.
+ *   - transcribe-audio → executed natively (AI Agents). A real Whisper
+ *     `/v1/audio/transcriptions` or `/translations` multipart call (operator-
+ *     funded `OPENAI_API_KEY`, no per-tenant BYO path yet) — genuinely
+ *     different transport from every chat-completion kind above, so it does
+ *     NOT go through `proxy.complete()`.
  *   - router / switch / merge / numeric-aggregator / table-aggregator /
  *     text-aggregator / set-variable / get-variable / set-variables /
  *     get-variables / increment / sleep / compose-string / convert-encoding /
@@ -60,7 +80,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import { workflows, workflowTasks } from '../../infrastructure/database/schema';
 import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
 import { loadGoogleCredential } from '../integrations/googleCredential';
-import { sendGmail } from '../integrations/googleOAuth';
+import { sendGmail, searchGoogleDrive, readGoogleDriveFileText } from '../integrations/googleOAuth';
 import { tenantProxyForPlan, byoAwareModel } from '../llm/tenantProxy';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { contextFromInput, evaluateBool, renderTransform } from '../../domain/workflowExpr';
@@ -76,6 +96,7 @@ import { assertSafeUrl, resolveAndAssertPublic, BlockedUrlError } from '../../in
 import { resolveWebSearchBacking, platformWebSearchBacking } from '../runtime/webSearchCredential';
 import { searchWeb } from '../runtime/cloudWeb';
 import type { CloudWebSearchBacking } from '../runtime/cloudWeb';
+import { fetchWebDocumentCached } from '../web/webFetch';
 import type { ProxyEnv } from '../llm/LlmProxyService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -116,6 +137,53 @@ export function renderTemplate(template: string, input: string): string {
   return template.replace(/\{\{\s*input\s*\}\}/g, input);
 }
 
+/**
+ * One vision-capable turn — an image URL plus a text prompt, on whichever
+ * model the tenant's BYO/operator pool routes a vision request to.
+ * `poolRouting.ts`'s `hasVision` detection already promotes a vision-capable
+ * model whenever it sees this EXACT `{type:'image_url'}` content shape, so no
+ * vendor/model pin is needed here — same auto-routing the `llm` case's plain
+ * text turns get, just with image-aware detection doing the picking. Shared by
+ * `analyze-image` and `extract-document-data`, which differ only in prompt.
+ */
+async function completeVisionPrompt(
+  env: CloudExecutorEnv,
+  usageCtx: UsageContext | undefined,
+  systemPrompt: string,
+  userText: string,
+  imageUrl: string,
+  useCase: string,
+): Promise<string> {
+  const messages = [
+    ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+    {
+      role: 'user' as const,
+      content: [
+        { type: 'text', text: userText },
+        { type: 'image_url', image_url: { url: imageUrl } },
+      ],
+    },
+  ];
+  const { proxy, byoVendors, registeredModels } = usageCtx
+    ? await tenantProxyForPlan(env as unknown as Env, usageCtx.tenantId)
+    : { proxy: ideProxy(env), byoVendors: new Set<string>(), registeredModels: [] as readonly string[] };
+  const result = await proxy.complete({
+    model: byoAwareModel(undefined, byoVendors, registeredModels),
+    // The proxy's public `ChatMessage.content` type is `string` (its documented
+    // surface for `llmRoutes`/`ideAiRoutes`); the actual dispatch is content-shape
+    // agnostic (`poolRouting.ts` inspects it for `image_url` blocks at runtime —
+    // see the module comment above), so a vision turn's multipart content is
+    // asserted through rather than widening that public, "kept stable" type for
+    // every caller over one workflow-node need.
+    messages: messages as unknown as Parameters<typeof proxy.complete>[0]['messages'],
+  });
+  if (usageCtx) {
+    void recordProxyUsage(usageCtx.db, env as unknown as Env, { tenantId: usageCtx.tenantId, useCase, result });
+  }
+  if (!result.response.ok) throw new Error(`vision call failed (${result.response.status})`);
+  return (await readProxyChoice(result)).content;
+}
+
 function parseInput(raw: string | null): NodeInput {
   if (!raw) return { kind: 'unknown', config: {} };
   try {
@@ -150,6 +218,9 @@ export interface OutboundPort {
   mcp?(config: Record<string, unknown>, inputText: string): Promise<string>;
   llm?(config: Record<string, unknown>, inputText: string): Promise<string>;
   webSearch?(config: Record<string, unknown>, inputText: string): Promise<string>;
+  webFetch?(config: Record<string, unknown>, inputText: string): Promise<string>;
+  googleDrive?(config: Record<string, unknown>, inputText: string): Promise<string>;
+  transcribeAudio?(config: Record<string, unknown>, inputText: string): Promise<string>;
 }
 
 /** Run one cloud-native node; returns its output (and a drop flag) or throws on failure.
@@ -229,6 +300,23 @@ export async function executeCloudNode(
       return {
         output: JSON.stringify({
           query, results: result.results ?? [], source: resolved.source, attribution: result.attribution,
+        }),
+      };
+    }
+
+    case 'web-fetch': {
+      if (outbound?.webFetch) return { output: await outbound.webFetch(node.config, inputText) };
+      // Reuses the SAME SSRF-guarded, redirect-revalidating, cached fetch the
+      // Brain's own "read this URL" tool uses — see application/web/webFetch.ts.
+      // No credential needed (any public URL), so this runs with or without a
+      // tenant context, same as web-search's keyless floor.
+      const url = renderTemplate(typeof node.config.url === 'string' ? node.config.url : '', inputText).trim();
+      if (!url) throw new Error('Web Fetch needs a URL');
+      const doc = await fetchWebDocumentCached(env as unknown as Env, url);
+      return {
+        output: JSON.stringify({
+          url: doc.url, status: doc.status, contentType: doc.contentType,
+          title: doc.title, text: doc.text, truncated: doc.truncated,
         }),
       };
     }
@@ -342,6 +430,26 @@ export async function executeCloudNode(
         reportCaughtError(error, { source: 'application/workflow/cloudExecutor.ts', operation: 'executeCloudNode' });
       }
       return { output: inputText };
+    }
+    case 'iterator': {
+      // Validates the shape and hands the array back unchanged — the actual
+      // per-item fan-out happens in `advanceCloudWorkflow` the moment THIS
+      // task is recorded `completed`, via `planIteratorExpansion` (see its
+      // docstring for the exact mechanism and its bounded scope).
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(inputText);
+      } catch (error) {
+        reportCaughtError(error, { source: 'application/workflow/cloudExecutor.ts', operation: 'iterator.parseInput', level: 'warning' });
+        parsed = null;
+      }
+      const items = Array.isArray(parsed)
+        ? parsed
+        : (parsed && typeof parsed === 'object' && Array.isArray((parsed as { items?: unknown }).items))
+          ? (parsed as { items: unknown[] }).items
+          : null;
+      if (!items) throw new Error('Iterator needs an array (or {"items":[...]}) as its input');
+      return { output: JSON.stringify(items) };
     }
     case 'merge': {
       // Reads the RAW per-dependency outputs (advanceCloudWorkflow populates
@@ -558,6 +666,93 @@ export async function executeCloudNode(
       return { output: JSON.stringify({ sent: true, id: sent.id, to }) };
     }
 
+    case 'analyze-image': {
+      if (outbound?.llm) return { output: await outbound.llm(node.config, inputText) };
+      const cfg = node.config;
+      const url = renderTemplate(typeof cfg.url === 'string' && cfg.url ? cfg.url : '{{input}}', inputText).trim();
+      if (!url) throw new Error('Analyze Image needs an image URL');
+      const prompt = typeof cfg.prompt === 'string' && cfg.prompt ? cfg.prompt : 'Describe this image in detail.';
+      const content = await completeVisionPrompt(env, usageCtx, '', prompt, url, 'workflow_analyze_image');
+      return { output: content };
+    }
+
+    case 'extract-document-data': {
+      if (outbound?.llm) return { output: await outbound.llm(node.config, inputText) };
+      // Make's "Content Extractor" (document/invoice/receipt) is a vision call
+      // with a structured-extraction prompt, not a different capability — the
+      // same `completeVisionPrompt` `analyze-image` uses, above.
+      const cfg = node.config;
+      const url = renderTemplate(typeof cfg.url === 'string' && cfg.url ? cfg.url : '{{input}}', inputText).trim();
+      if (!url) throw new Error('Extract Document Data needs a document/image URL');
+      const fields = typeof cfg.fields === 'string' ? cfg.fields.trim() : '';
+      const system = 'You are a document data extraction assistant. Extract exactly the requested fields from the document image. Reply with only a single valid JSON object mapping each requested field to its extracted value (or null if not found) — no markdown, no explanation.';
+      const prompt = fields
+        ? `Extract these fields: ${fields}`
+        : 'Extract every key field visible (e.g. date, total amount, vendor/sender name, line items) as JSON.';
+      const content = await completeVisionPrompt(env, usageCtx, system, prompt, url, 'workflow_extract_document');
+      return { output: content };
+    }
+
+    case 'transcribe-audio': {
+      if (outbound?.transcribeAudio) return { output: await outbound.transcribeAudio(node.config, inputText) };
+      // Whisper is a multipart REST call, not a chat completion — genuinely a
+      // different transport from every other AI Agents kind here, so it is not
+      // routed through `proxy.complete()`. Operator-funded only (no per-tenant
+      // BYO path exists for Whisper today, same tradeoff as TAVILY_API_KEY —
+      // see `env.ts`'s `OPENAI_API_KEY` doc).
+      const cfg = node.config;
+      const url = renderTemplate(typeof cfg.url === 'string' && cfg.url ? cfg.url : '{{input}}', inputText).trim();
+      if (!url) throw new Error('Transcribe Audio needs an audio file URL');
+      const mode = cfg.mode === 'translate' ? 'translate' : 'transcribe';
+      const apiKey = (env as unknown as Env).OPENAI_API_KEY;
+      if (!apiKey) throw new Error('Transcribe Audio needs an operator-configured OPENAI_API_KEY');
+
+      const parsed = assertSafeUrl(url, { allowHttp: true });
+      await resolveAndAssertPublic(parsed.hostname);
+      const audioRes = await fetch(parsed.toString(), { method: 'GET', signal: AbortSignal.timeout(20_000) });
+      if (!audioRes.ok) throw new Error(`Could not fetch the audio file (${audioRes.status})`);
+      const audioBlob = await audioRes.blob();
+
+      const form = new FormData();
+      form.append('file', audioBlob, 'audio');
+      form.append('model', 'whisper-1');
+      if (mode === 'transcribe' && typeof cfg.language === 'string' && cfg.language) {
+        form.append('language', cfg.language);
+      }
+      const endpoint = mode === 'translate'
+        ? 'https://api.openai.com/v1/audio/translations'
+        : 'https://api.openai.com/v1/audio/transcriptions';
+      const res = await fetch(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${apiKey}` }, body: form });
+      const body = (await res.json().catch(() => ({}))) as { text?: string; error?: { message?: string } };
+      if (!res.ok) throw new Error(body.error?.message || `Whisper ${mode} failed (${res.status})`);
+      return { output: JSON.stringify({ text: body.text ?? '', mode }) };
+    }
+
+    case 'google-drive': {
+      if (outbound?.googleDrive) return { output: await outbound.googleDrive(node.config, inputText) };
+      // Same tenant-credential path as `gmail` above (`integration_credentials`,
+      // provider='google_drive') — replaces the old "Google Drive" palette entry,
+      // which was `kind: 'trigger'` (inert when chained mid-flow — see DONE.md
+      // 2026-08-16). NOT the separate per-USER `DriveProvider`/`driveService.ts`
+      // system the canvas import picker uses (that needs an interactive
+      // `userId`+`connectionId` this node has no session to supply).
+      if (!usageCtx) throw new Error('The Google Drive node needs a tenant context to load your connected account');
+      const driveCreds = await loadGoogleCredential(env as unknown as Env, usageCtx.db, usageCtx.tenantId, 'google_drive');
+      if (!driveCreds) throw new Error('Connect a Google Drive integration under Settings ▸ Integrations to use the Google Drive node');
+      const driveCfg = node.config;
+      const operation = typeof driveCfg.operation === 'string' ? driveCfg.operation : 'search';
+      if (operation === 'read') {
+        const fileId = renderTemplate(typeof driveCfg.fileId === 'string' ? driveCfg.fileId : '', inputText).trim();
+        if (!fileId) throw new Error('Google Drive read needs a file id');
+        const file = await readGoogleDriveFileText(driveCreds, fileId);
+        return { output: JSON.stringify(file) };
+      }
+      const query = renderTemplate(typeof driveCfg.query === 'string' && driveCfg.query ? driveCfg.query : '{{input}}', inputText).trim();
+      if (!query) throw new Error('Google Drive search needs a query');
+      const hits = await searchGoogleDrive(driveCreds, query);
+      return { output: JSON.stringify({ query, files: hits }) };
+    }
+
     case 'connector': {
       if (outbound?.connector) return { output: await outbound.connector(node.config, inputText) };
       // EVERY connector action — Twilio SMS/voice/WhatsApp, SendGrid, Slack,
@@ -617,6 +812,187 @@ export function dispositionFromDeps(depStatuses: string[]): DepDisposition {
   if (depStatuses.some((s) => s === 'cancelled')) return 'cancel';
   if (depStatuses.every((s) => s === 'completed')) return 'run';
   return 'wait';
+}
+
+/**
+ * A node's configured error-handling policy — Make's five Flow Control error
+ * handlers (Skip/Resume/Break/Commit/Rollback), adapted to what this engine can
+ * actually do. `config.onError` is a plain string field on ANY node kind
+ * (rendered generically by `NodeConfigPanel.tsx`, not per-kind), read here
+ * rather than in `executeCloudNode` because the decision belongs to the
+ * CALLER — the node itself doesn't know it failed until after it threw.
+ *
+ * What maps and what doesn't, honestly:
+ *   - Ignore  → `ignore`: the task COMPLETES with empty output; downstream runs
+ *     normally, exactly like Make's own semantics.
+ *   - Resume  → `resume`: same, but with `config.onErrorValue` as the output —
+ *     also a faithful match.
+ *   - Break   → `stop-branch`: the task is `cancelled` (not `failed`), which
+ *     `dispositionFromDeps` prunes only THIS node's downstream cone — sibling
+ *     branches and the rest of the run are unaffected. Make's own Break ALSO
+ *     re-queues the run for an automatic retry later (exponential backoff);
+ *     there is no such retry-later scheduler here, so this is Break minus the
+ *     retry.
+ *   - Commit / Rollback → NOT implemented. Both require per-node compensating
+ *     "undo" actions (Rollback) or a notion of a still-open transaction to
+ *     close early (Commit) — neither exists for `mcp`/`connector`/`gmail`/etc.
+ *     here (each node calls its target directly, no compensating action is
+ *     recorded). Faking either would silently claim a guarantee the engine
+ *     cannot back up. `fail-task` (the default, unchanged prior behavior)
+ *     covers "stop and report failure," which is the closest honest fallback.
+ */
+export type NodeErrorPolicy = 'fail-task' | 'ignore' | 'resume' | 'stop-branch';
+
+export interface ErrorHandlingOutcome {
+  status: 'failed' | 'completed' | 'cancelled';
+  output: string;
+  error: string;
+}
+
+function errorPolicyOf(config: Record<string, unknown>): NodeErrorPolicy {
+  const raw = config.onError;
+  return raw === 'ignore' || raw === 'resume' || raw === 'stop-branch' ? raw : 'fail-task';
+}
+
+/** Pure — no DB — so it's unit-testable independent of `advanceCloudWorkflow`'s
+ *  DB orchestration. Decides a failed task's terminal state per its policy. */
+export function applyErrorHandler(config: Record<string, unknown>, error: unknown): ErrorHandlingOutcome {
+  const message = error instanceof Error ? error.message : 'execution failed';
+  const policy = errorPolicyOf(config);
+  if (policy === 'ignore') {
+    return { status: 'completed', output: '', error: `error handled (ignore): ${message}` };
+  }
+  if (policy === 'resume') {
+    const output = typeof config.onErrorValue === 'string' ? config.onErrorValue : '';
+    return { status: 'completed', output, error: `error handled (resume): ${message}` };
+  }
+  if (policy === 'stop-branch') {
+    return { status: 'cancelled', output: '', error: `error handled (stop-branch): ${message}` };
+  }
+  return { status: 'failed', output: '', error: message };
+}
+
+export interface IteratorTaskRef {
+  id: string;
+  input: string | null;
+  agentRole: string;
+  description: string;
+  dependsOn: string | null;
+}
+
+export interface IteratorNewTask {
+  id: string;
+  agentRole: string;
+  description: string;
+  input: string;
+  dependsOn: string;
+}
+
+export interface IteratorExpansionPlan {
+  newTasks: IteratorNewTask[];
+  /** Existing task id → its rewritten `dependsOn` (JSON string). */
+  rewire: Record<string, string>;
+}
+
+function parseDependsOn(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return Array.isArray(v) ? v.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Make's Iterator, adapted to a task graph that is normally COMPILED once and
+ * fixed: fork the processor node(s) directly downstream of an Iterator task
+ * into one clone per array item, each fed its own item via a synthetic
+ * "carrier" task (`kind: 'trigger'`, `payload: item` — the existing trigger
+ * passthrough already does exactly "output this fixed value", reused rather
+ * than inventing a second mechanism). Any EXISTING task that already fanned in
+ * from a (now-cloned) processor — `merge` or a `*-aggregator` kind, which read
+ * `depOutputs` off ALL of `dependsOn` — has its `dependsOn` widened to every
+ * clone. That widening is Make's Aggregator, similarly adapted: no new
+ * aggregator kind is needed, the existing fan-in kinds already do the
+ * collecting once they see every clone.
+ *
+ * Bounded scope, stated honestly: only nodes whose `dependsOn` is EXACTLY
+ * `[iteratorTaskId]` are treated as processors — a multi-node chain between
+ * Iterator and its aggregator is not walked or cloned. This is what keeps the
+ * expansion a single, static, idempotent operation (triggered exactly once,
+ * at the moment the Iterator task itself completes — see
+ * `advanceCloudWorkflow`) instead of a general graph-rewriting engine. Chain
+ * more than one step per item by putting a `merge`/`*-aggregator` node
+ * directly after the one processor and continuing from there.
+ *
+ * Pure — no DB — so the graph-mutation logic is unit-testable independent of
+ * `advanceCloudWorkflow`'s DB orchestration, which only applies whatever this
+ * returns (insert `newTasks`, then `UPDATE ... SET depends_on` per `rewire`).
+ */
+export function planIteratorExpansion(
+  iteratorTaskId: string,
+  items: readonly unknown[],
+  tasks: readonly IteratorTaskRef[],
+  newId: () => string,
+): IteratorExpansionPlan | null {
+  const processors = tasks.filter((t) => {
+    const deps = parseDependsOn(t.dependsOn);
+    return deps.length === 1 && deps[0] === iteratorTaskId;
+  });
+  if (processors.length === 0 || items.length === 0) return null;
+
+  const newTasks: IteratorNewTask[] = [];
+  const rewire: Record<string, string> = {};
+  // One clone-id list per processor, collected across all items — a processor
+  // may feed more than one downstream fan-in node, and each needs the SAME
+  // full list.
+  const cloneIdsByProcessor = new Map<string, string[]>();
+
+  for (const processor of processors) {
+    const cloneIds: string[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const carrierId = newId();
+      newTasks.push({
+        id: carrierId,
+        agentRole: 'node:trigger',
+        description: `Iterator item ${i + 1}/${items.length}`,
+        input: JSON.stringify({ kind: 'trigger', config: {}, payload: items[i] }),
+        dependsOn: JSON.stringify([]),
+      });
+      if (i === 0) {
+        // Reuse the ALREADY-COMPILED processor task for item 0 — just rewire
+        // it off the iterator and onto item 0's carrier.
+        cloneIds.push(processor.id);
+        rewire[processor.id] = JSON.stringify([carrierId]);
+      } else {
+        const cloneId = newId();
+        cloneIds.push(cloneId);
+        newTasks.push({
+          id: cloneId,
+          agentRole: processor.agentRole,
+          description: processor.description,
+          input: processor.input ?? '',
+          dependsOn: JSON.stringify([carrierId]),
+        });
+      }
+    }
+    cloneIdsByProcessor.set(processor.id, cloneIds);
+  }
+
+  for (const t of tasks) {
+    const deps = parseDependsOn(t.dependsOn);
+    let changed = false;
+    const widened = deps.flatMap((depId) => {
+      const clones = cloneIdsByProcessor.get(depId);
+      if (!clones) return [depId];
+      changed = true;
+      return clones;
+    });
+    if (changed) rewire[t.id] = JSON.stringify(widened);
+  }
+
+  return { newTasks, rewire };
 }
 
 /** All dependency task ids parsed from a task's stored dependsOn JSON. */
@@ -713,14 +1089,67 @@ async function advanceCloudWorkflow(env: CloudExecutorEnv, db: Db, workflowId: s
             .update(workflowTasks)
             .set({ status: 'completed', output, completedAt: new Date(), updatedAt: new Date() })
             .where(eq(workflowTasks.id, task.id));
+
+          // Iterator fan-out — triggered exactly once, right here, at the
+          // moment the Iterator task itself completes (see
+          // `planIteratorExpansion`'s docstring for the mechanism + its
+          // bounded scope). A no-op for every other node kind.
+          if (node.kind === 'iterator') {
+            let items: unknown[] = [];
+            try {
+              const parsed = JSON.parse(output) as unknown;
+              if (Array.isArray(parsed)) items = parsed;
+            } catch (error) {
+              reportCaughtError(error, { source: 'application/workflow/cloudExecutor.ts', operation: 'iterator.expand.parseOutput', level: 'warning' });
+            }
+            const plan = items.length > 0 ? planIteratorExpansion(task.id, items, tasks, () => crypto.randomUUID()) : null;
+            if (plan) {
+              const mutatedAt = new Date();
+              if (plan.newTasks.length > 0) {
+                await db.insert(workflowTasks).values(plan.newTasks.map((nt) => ({
+                  id: nt.id, workflowId, agentRole: nt.agentRole, description: nt.description,
+                  input: nt.input, dependsOn: nt.dependsOn, status: 'pending' as const,
+                  createdAt: mutatedAt, updatedAt: mutatedAt,
+                })));
+              }
+              for (const [id, dependsOn] of Object.entries(plan.rewire)) {
+                await db.update(workflowTasks).set({ dependsOn, updatedAt: mutatedAt }).where(eq(workflowTasks.id, id));
+              }
+              // Reflect the mutation in THIS tick's in-memory view so the loop
+              // below sees the new/rewired tasks without a fresh SELECT.
+              for (const nt of plan.newTasks) {
+                const row: TaskRow = {
+                  id: nt.id, workflowId, agentRole: nt.agentRole, description: nt.description,
+                  status: 'pending', input: nt.input, output: null, error: null,
+                  dependsOn: nt.dependsOn, notBefore: null, startedAt: null, completedAt: null,
+                  createdAt: mutatedAt, updatedAt: mutatedAt,
+                };
+                tasks.push(row);
+                byId.set(nt.id, row);
+              }
+              for (const [id, dependsOn] of Object.entries(plan.rewire)) {
+                const existing = byId.get(id);
+                if (existing) existing.dependsOn = dependsOn;
+              }
+              madeProgress = true;
+            }
+          }
         }
       } catch (e) {
-        task.status = 'failed';
-        task.error = e instanceof Error ? e.message : 'execution failed';
-        await db
-          .update(workflowTasks)
-          .set({ status: 'failed', error: task.error, completedAt: new Date(), updatedAt: new Date() })
-          .where(eq(workflowTasks.id, task.id));
+        // Per-node `config.onError` policy (Ignore/Resume/Break, adapted — see
+        // `applyErrorHandler`'s docstring) decides the task's terminal state,
+        // not always `failed` the way it used to be unconditionally.
+        const outcome = applyErrorHandler(node.config, e);
+        task.status = outcome.status;
+        task.error = outcome.error;
+        const patch: Record<string, unknown> = {
+          status: outcome.status, error: outcome.error, completedAt: new Date(), updatedAt: new Date(),
+        };
+        if (outcome.status === 'completed') {
+          outputs.set(task.id, outcome.output);
+          patch.output = outcome.output;
+        }
+        await db.update(workflowTasks).set(patch).where(eq(workflowTasks.id, task.id));
       }
       processed++;
       madeProgress = true;

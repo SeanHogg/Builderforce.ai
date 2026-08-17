@@ -44,6 +44,31 @@ describe('executeCloudNode — outbound port', () => {
     expect(JSON.parse(result.output)).toMatchObject({ stubbed: true, kind: 'webSearch' });
   });
 
+  it('a stubbed web-fetch node makes no real network call', async () => {
+    const result = await executeCloudNode(env, { kind: 'web-fetch', config: { url: 'https://example.com' } }, '', undefined, sandboxOutboundPort());
+    expect(JSON.parse(result.output)).toMatchObject({ stubbed: true, kind: 'webFetch' });
+  });
+
+  it('a stubbed google-drive node needs no usageCtx', async () => {
+    const result = await executeCloudNode(env, { kind: 'google-drive', config: {} }, '', undefined, sandboxOutboundPort());
+    expect(JSON.parse(result.output)).toMatchObject({ stubbed: true, kind: 'googleDrive' });
+  });
+
+  it('a stubbed analyze-image node makes no real vision call', async () => {
+    const result = await executeCloudNode(env, { kind: 'analyze-image', config: { url: 'https://example.com/x.png' } }, '', undefined, sandboxOutboundPort());
+    expect(JSON.parse(result.output)).toMatchObject({ stubbed: true, kind: 'llm' });
+  });
+
+  it('a stubbed extract-document-data node makes no real vision call', async () => {
+    const result = await executeCloudNode(env, { kind: 'extract-document-data', config: { url: 'https://example.com/invoice.png' } }, '', undefined, sandboxOutboundPort());
+    expect(JSON.parse(result.output)).toMatchObject({ stubbed: true, kind: 'llm' });
+  });
+
+  it('a stubbed transcribe-audio node makes no real Whisper call', async () => {
+    const result = await executeCloudNode(env, { kind: 'transcribe-audio', config: { url: 'https://example.com/a.mp3' } }, '', undefined, sandboxOutboundPort());
+    expect(JSON.parse(result.output)).toMatchObject({ stubbed: true, kind: 'transcribeAudio' });
+  });
+
   it('without a real usageCtx, an UNSTUBBED gmail node still refuses exactly as before', async () => {
     await expect(executeCloudNode(env, { kind: 'gmail', config: {} }, ''))
       .rejects.toThrow(/tenant context/);

@@ -1,3 +1,72 @@
+## ✅ RESOLVED 2026-08-17 — Pressing Play on a generated game showed "No game yet"
+
+Reported with two screenshots: a Roblox game named *Skybound Citadels* sitting on the board,
+generated, downloadable and titled — and the play surface behind its Play button reading
+**"No game yet. Describe the game you want, then generate it."**
+
+Root cause, and it is one line of reasoning rather than one line of code. `gameDocumentFrom`
+returns `''` for any artifact whose media type is not `text/html`, and every surface that
+holds a game treated that empty string as *there is no game*. A `.rbxlx` place is XML. So
+"which runtime does this game use" and "does this game exist" were the same question, and a
+real artifact answered the wrong one. `gameRuntimeFor` now answers the first and nothing
+conflates them.
+
+**A Roblox place is now playable in the browser.** Not by pretending to run Luau — it is a
+server-authoritative engine this page is not — but by reading the world back out of the file
+and walking it in the Three.js + Rapier runtime this canvas already owns. New
+`packages/creation-canvas-contract/src/robloxWorld.ts` decodes a place into a
+`CanvasWorldScene`: parts become props at 0.4 units per stud (a Roblox character is ~5 studs,
+the walker capsule is 2.0 units, so a jump stays a jump), `bf_role` markers become the prop
+kinds that mean something (`collectible`/`goal`/`hazard` stay sensors), the packed
+`Color3uint8` is unpacked, the baseplate becomes the ground rather than a 205-unit box
+standing on it, and the spawn pad puts the walker above itself rather than inside it. No
+DOMParser, so it runs in the browser, the VSIX and a Worker alike. `game.test.ts` round-trips
+a real `rbxlxFromSpec` output through it — the writer and the reader are asserted against
+each other, not each against its own fixture.
+
+**Walking became playing.** `useWorldPlay` runs the level's own rules — collect what is
+collectable, a hazard respawns you, the goal is a win once nothing is left to collect — with
+a settled ref so one pickup is worth one point however many frames Rapier reports the
+overlap, and `PlayerController` now stamps the walker so a rolling sphere cannot bank a
+collectible. It runs in the 3D space surface too: walking your own level is exactly when you
+want to know whether the goal is reachable, and leaving walk mode gives the builder their
+pickups back.
+
+**The rest of what was asked for:**
+- **A large PLAY button on the card.** It was a 52px badge whose only label was
+  screen-reader-only, with the description in front of it. The button is now the card, with
+  a visible label, and the description moved behind a Details toggle. For a place the button
+  opens the 3D play surface rather than mounting a WebGL context in a 340px tile.
+- **Full screen.** `useFullscreen` + `CanvasFullscreenAction`, in the header of both the play
+  surface and the 3D space. It survives Escape (which fires no click and used to leave the
+  label lying) and stands down entirely where the browser will not offer it.
+- **The APP modality.** `canvasApp` now reads games: a web game IS an HTML document, so the
+  preview runs it and the Code reading shows its source; a place contributes its Luau as
+  source, kept out of the entry search because Luau is not a page. A board whose only object
+  was a game used to report "nothing to run".
+- **Playing together.** The play surface names everyone on the canvas and opens the canvas's
+  own invite door — no second sharing model. Peer avatars inside one world are logged in the
+  Gap Register, blocked on the undeployed `CollaborationRoom` DO.
+
+Also fixed on the way past, because it made five catalog tests red and would have
+rendered as raw message keys in the UI: `evermindBuild.nodeKind.composeString.blurb`
+and `.iterator.blurb` had unescaped braces in all five catalogs — `{{input}}` and a
+literal `{"items":[...]}` in prose. ICU reads `{` as the start of an argument, so
+next-intl failed to parse both and fell back to the key. Both are now ICU-quoted
+(`'{{input}}'`, `'{"items":[...]}'`), which renders the literal text and leaves the
+French and German apostrophes elsewhere in the same strings alone.
+
+DRY on the way through: the R3F canvas, the walk chrome and the V-key were lifted out of
+`CanvasWorldView` into `world3d/WorldViewport`, shared with the play surface, so there is one
+answer to "press V" and one place to fix a walker spawning in the floor; the roster shape the
+chat surface declared became `CanvasRosterMember` in `types.ts` and both surfaces read it;
+`.srOnly` was deleted from the canvas stylesheet once its last user went.
+
+New tests: `robloxWorld.test.ts` (11), `canvasPlaySurface.test.tsx` (9 — including the
+reported bug, asserted directly), `worldPlay.test.tsx` (8), plus the round-trip in
+`game.test.ts` and three app-modality cases. `gameNode.test.tsx`'s Roblox block was rewritten:
+it used to assert that a place offers no play button, which is no longer true.
+
 ## ✅ RESOLVED 2026-08-17 — `claim` permanently rejected a draft with a legacy malformed connection id
 
 Second support ticket for the SAME `Invalid connection id: e756ab15-…-413a7c0c-…` error

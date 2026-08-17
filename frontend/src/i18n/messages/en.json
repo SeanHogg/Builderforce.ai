@@ -12883,6 +12883,15 @@
     "statusRunStarted": "Run {id} started",
     "historyTitle": "Execution history and usage for this workflow",
     "historyLabel": "History",
+    "errorHandling": {
+      "label": "On error",
+      "failTask": "Fail the task (default)",
+      "ignore": "Ignore — continue with empty output",
+      "resume": "Resume — continue with a default value",
+      "stopBranch": "Stop this branch only",
+      "defaultValue": "Default value",
+      "defaultValuePlaceholder": "Used as this node's output when it errors"
+    },
     "nodeGroup": {
       "trigger": "Trigger",
       "llmLogic": "LLM logic",
@@ -12968,7 +12977,7 @@
       },
       "composeString": {
         "label": "Compose a String",
-        "blurb": "Build a string from a {{input}} template."
+        "blurb": "Build a string from a '{{input}}' template."
       },
       "convertEncoding": {
         "label": "Convert Encoding",
@@ -12997,6 +13006,30 @@
       "chunkText": {
         "label": "Chunk Text",
         "blurb": "Split the input into fixed-size, optionally overlapping chunks — for feeding an LLM/embedding node piece by piece."
+      },
+      "webFetch": {
+        "label": "Web Fetch",
+        "blurb": "Fetch a public URL and return its readable text (HTML stripped) — SSRF-guarded, no credential needed."
+      },
+      "googleDrive": {
+        "label": "Google Drive",
+        "blurb": "Search or read a file (as text) from your connected Google Drive."
+      },
+      "iterator": {
+        "label": "Iterator",
+        "blurb": "Forks the ONE node directly after it into a copy per array item (the input must be a JSON array, or '{\"items\":[...]}') — connect a Merge/Aggregator after that node to collect the results. Only a single processor step is forked; chain more after the aggregator."
+      },
+      "analyzeImage": {
+        "label": "Analyze Image",
+        "blurb": "Vision analysis of an image URL — auto-routed to a vision-capable model."
+      },
+      "extractDocumentData": {
+        "label": "Extract Document Data",
+        "blurb": "Pull structured fields out of a document, invoice, or receipt image — vision analysis with a structured-extraction prompt, outputs JSON."
+      },
+      "transcribeAudio": {
+        "label": "Transcribe Audio",
+        "blurb": "Transcribe an audio file, or translate it directly to English — real Whisper API call (operator-configured, no per-tenant BYO key yet)."
       }
     }
   },
@@ -16204,7 +16237,10 @@
       "websiteMarkupFrameTitle": "Embedded content",
       "gameRobloxReady": "Roblox place built. Download it and open it in Roblox Studio to play.",
       "gameRobloxOpenIn": "Opens in Roblox Studio",
-      "gameRobloxFormat": ".rbxlx place"
+      "gameRobloxFormat": ".rbxlx place",
+      "gamePlayIn3d": "Play in 3D",
+      "gameDetails": "Details",
+      "gameHideDetails": "Hide details"
     },
     "editor": {
       "toolbar": "Formatting",
@@ -19424,7 +19460,12 @@
         "label": "Play",
         "open": "Play at full size",
         "ship": "Ship it",
-        "controls": "Controls"
+        "controls": "Controls",
+        "worldRuntime": "Walkable 3D place",
+        "worldParts": "{count} parts",
+        "robloxScriptsNote": "Luau rules run in Roblox",
+        "playersLabel": "{count} on this canvas",
+        "invite": "Invite to play"
       },
       "site": {
         "label": "Site",
@@ -19512,11 +19553,18 @@
         "switchToFirst": "Switch to first-person view (V)",
         "editHint": "Drag pieces from the left · click a prop to edit it on the right",
         "viewOnlyHint": "Press Walk to explore this space",
-        "walkHint": "Click to lock the pointer · WASD to move · Space to jump · V to switch view · Esc to release"
+        "walkHint": "Click to lock the pointer · WASD to move · Space to jump · V to switch view · Esc to release",
+        "play": {
+          "score": "{collected}/{total} collected",
+          "hits": "{count} hits",
+          "won": "Goal reached!"
+        }
       },
       "backToBoard": "Back to the board",
       "objectLabel": "{title}, at full size",
-      "switcher": "Canvas view"
+      "switcher": "Canvas view",
+      "enterFullscreen": "Full screen",
+      "exitFullscreen": "Exit full screen"
     },
     "miro": {
       "title": "Miro boards",

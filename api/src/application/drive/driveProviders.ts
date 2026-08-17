@@ -133,8 +133,11 @@ interface GoogleFile {
   id: string; name: string; mimeType: string; size?: string; modifiedTime?: string;
 }
 
-/** Escape a value for Drive's query language, where `'` delimits strings. */
-function googleQueryValue(value: string): string {
+/** Escape a value for Drive's query language, where `'` delimits strings.
+ *  Exported so other Google Drive callers (e.g. the workflow builder's
+ *  `google-drive` node, `workflow/googleDriveRead.ts`) build a `q` filter the
+ *  same safe way rather than re-deriving the escaping rules. */
+export function googleQueryValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 

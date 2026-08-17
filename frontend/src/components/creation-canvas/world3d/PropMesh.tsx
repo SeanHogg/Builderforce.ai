@@ -4,7 +4,7 @@
  * boundary here would mark an entry point that does not exist.
  */
 import { useMemo } from 'react';
-import { BallCollider, CuboidCollider, RigidBody } from '@react-three/rapier';
+import { BallCollider, CuboidCollider, RigidBody, type IntersectionEnterPayload } from '@react-three/rapier';
 import type { ThreeEvent } from '@react-three/fiber';
 import type { CanvasWorldPhysicsKind, CanvasWorldProp, CanvasWorldPropKind } from '@builderforce/creation-canvas-contract';
 
@@ -27,6 +27,21 @@ interface PropMeshProps {
   mode: 'edit' | 'walk';
   selected: boolean;
   onSelect?: (id: string) => void;
+  /** The WALKER touched this sensor. Absent when nothing is keeping score, so
+   *  an authoring session pays for no collision callbacks it will not read. */
+  onPlayerEnter?: (prop: CanvasWorldProp) => void;
+}
+
+/**
+ * Whether the thing that entered this sensor was the player.
+ *
+ * A level has other dynamic bodies in it — a sphere prop rolls, an unanchored
+ * crate falls — and any of them dropping through a goal would otherwise win the
+ * game for you. `PlayerController` stamps the walker; this is the only reader.
+ */
+function isWalker(payload: IntersectionEnterPayload): boolean {
+  const data = payload.other.rigidBodyObject?.userData as { walker?: unknown } | undefined;
+  return data?.walker === true;
 }
 
 function physicsToRapierType(kind: CanvasWorldPhysicsKind): 'fixed' | 'dynamic' | 'kinematicPosition' {
@@ -40,7 +55,7 @@ function physicsToRapierType(kind: CanvasWorldPhysicsKind): 'fixed' | 'dynamic' 
   }
 }
 
-export default function PropMesh({ prop, mode, selected, onSelect }: PropMeshProps) {
+export default function PropMesh({ prop, mode, selected, onSelect, onPlayerEnter }: PropMeshProps) {
   const handleClick = (event: ThreeEvent<MouseEvent>) => {
     if (mode !== 'edit' || !onSelect) return;
     // Stop the click bubbling to the ground's deselect handler.
@@ -57,8 +72,11 @@ export default function PropMesh({ prop, mode, selected, onSelect }: PropMeshPro
   }
 
   const isSensor = prop.physics === 'sensor';
+  const scoring = isSensor && onPlayerEnter
+    ? { onIntersectionEnter: (payload: IntersectionEnterPayload) => { if (isWalker(payload)) onPlayerEnter(prop); } }
+    : {};
   return (
-    <RigidBody type={physicsToRapierType(prop.physics)} position={prop.position} rotation={prop.rotation} colliders={false} sensor={isSensor}>
+    <RigidBody type={physicsToRapierType(prop.physics)} position={prop.position} rotation={prop.rotation} colliders={false} sensor={isSensor} {...scoring}>
       <KindCollider kind={prop.kind} scale={prop.scale} sensor={isSensor} />
       <group scale={prop.scale}>
         <KindMesh kind={prop.kind} color={prop.color} selected={selected} onClick={handleClick} />

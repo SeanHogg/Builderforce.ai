@@ -1325,12 +1325,20 @@
 .gameStage { position:relative; width:100%; aspect-ratio:16/10; min-height:150px; border-radius:var(--radius-md); overflow:hidden; border:1px solid var(--canvas-line); background:#0b0e1a; }
 .gameFrame { position:absolute; inset:0; width:100%; height:100%; border:0; display:block; background:#0b0e1a; }
 .gamePoster { position:absolute; inset:0; width:100%; height:100%; padding:0; border:0; cursor:pointer; display:grid; place-items:center; background-color:#0b0e1a; background-size:cover; background-position:center; }
-.gamePlayBadge { width:52px; height:52px; border-radius:50%; display:grid; place-items:center; font-size:20px; color:var(--text-on-accent); background:rgba(11,14,26,.62); border:2px solid rgba(255,255,255,.85); backdrop-filter:blur(4px); transition:transform .12s ease, background .12s ease; }
+/* THE control on a game card. It was a 52px badge with a screen-reader-only label,
+   which reads as a decoration on a thumbnail rather than as the thing to press —
+   the one action a game has should look like the one action a game has. */
+.gamePoster { grid-auto-flow:row; gap:8px; align-content:center; }
+.gamePlayBadge { width:66px; height:66px; border-radius:50%; display:grid; place-items:center; font-size:26px; color:var(--text-on-accent); background:rgba(11,14,26,.62); border:2px solid rgba(255,255,255,.85); backdrop-filter:blur(4px); transition:transform .12s ease, background .12s ease; }
+.gamePlayLabel { padding:4px 12px; border-radius:var(--radius-full); background:rgba(11,14,26,.62); color:#fff; font:650 11px var(--font-sans); }
 .gamePoster:hover .gamePlayBadge,.gamePoster:focus-visible .gamePlayBadge { transform:scale(1.08); background:rgba(11,14,26,.8); }
+.gamePoster:disabled { cursor:default; opacity:.72; }
+.gamePoster:disabled .gamePlayBadge { transform:none; }
+/* Everything that is not the game, behind the button that is. */
+.gameDetails { display:grid; gap:6px; }
 /* The stop control sits in the same pill row as the state chips, so it inherits
    their theming rather than declaring a second one. */
 .creativeStudioBody .pills button { padding:4px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm); background:var(--canvas-panel-muted,#fafcff); color:var(--canvas-ink); font-size:8px; cursor:pointer; }
-.srOnly { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 @media (prefers-reduced-motion:reduce) { .gamePlayBadge { transition:none; } }
 
 .creativeStudioBody .widgetSettings { grid-template-columns:repeat(3,minmax(0,1fr)); }
@@ -2003,6 +2011,21 @@
 .playStopped { display:grid; place-items:center; min-height:180px; flex:1; margin:0; color:var(--canvas-muted); font-size:12px; }
 .playControls { display:flex; flex:none; flex-wrap:wrap; gap:6px; margin:0; padding:0; list-style:none; }
 .playControls li { padding:4px 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-muted); font-size:10px; }
+/* A place is walked, not framed, so the 3D runtime takes the stage the frame would
+   have. It carries its own dark sky, hence the border and radius rather than a
+   background of its own. */
+.playWorld { position:relative; min-height:0; flex:1; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); overflow:hidden; }
+.playWorld > div { position:absolute; inset:0; }
+/* Full screen puts the stage on a black page with none of the canvas's own padding
+   around it — the point of the mode is that the game IS the screen. */
+.playStage:fullscreen { padding:0; gap:0; background:var(--canvas-board-background); }
+.playStage:fullscreen .playControls,.playStage:fullscreen .playPlayers { display:none; }
+.playStage:fullscreen .playFrame,.playStage:fullscreen .playWorld { border:0; border-radius:0; }
+.playPlayers { display:flex; flex:none; flex-wrap:wrap; align-items:center; gap:6px; }
+.playPlayers span { display:flex; flex-wrap:wrap; gap:6px; }
+.playPlayers b { padding:4px 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-ink); font:600 10px var(--font-sans); }
+.playPlayers button { min-height:28px; padding:4px 12px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-brain-accent); font:650 10px var(--font-sans); cursor:pointer; }
+.playPlayers button:hover,.playPlayers button:focus-visible { border-color:var(--canvas-brain-accent); background:var(--canvas-hover); outline:none; }
 
 /* A site is drawn at a WIDTH, so the stage is a backdrop and the frame is the artefact.
    The three widths are the real device measures the site was authored against, capped at
@@ -2105,6 +2128,19 @@
 }
 .worldRespawnAction { left:10px; }
 .worldCameraAction { right:10px; }
+/* The scoreboard. Top-centre because in first-person the player is looking at the
+   middle of the screen, and a number in a corner is a number nobody reads. */
+.worldScore {
+  position:absolute; z-index:2; top:34px; left:50%; transform:translateX(-50%);
+  display:flex; align-items:center; gap:8px; padding:5px 12px;
+  border-radius:var(--radius-full); background:var(--canvas-shadow); color:var(--text-on-accent);
+  font:650 12px var(--font-sans); pointer-events:none; white-space:nowrap;
+}
+.worldScore strong { color:var(--text-on-accent); }
+/* The stage fills the screen, so the palette and the properties rail come with it —
+   see `CanvasFullscreenAction`. Without this the rails keep their outer padding and
+   the viewport renders inside a letterbox. */
+.worldStage:fullscreen { background:var(--canvas-board-background); }
 .worldRespawnAction:hover,.worldCameraAction:hover,.worldRespawnAction:focus-visible,.worldCameraAction:focus-visible { filter:brightness(1.08); outline:none; }
 .worldProperties { flex:none; width:220px; overflow-y:auto; border-left:1px solid var(--canvas-line); background:var(--canvas-panel); padding:4px 0; }
 .worldPropertiesSection { padding:8px 10px; border-bottom:1px solid var(--canvas-line); }

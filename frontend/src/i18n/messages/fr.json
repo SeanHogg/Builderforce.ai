@@ -12883,6 +12883,15 @@
     "statusRunStarted": "Exécution {id} démarrée",
     "historyTitle": "Historique d’exécution et utilisation de ce workflow",
     "historyLabel": "Historique",
+    "errorHandling": {
+      "label": "En cas d'erreur",
+      "failTask": "Faire échouer la tâche (par défaut)",
+      "ignore": "Ignorer — continuer avec une sortie vide",
+      "resume": "Reprendre — continuer avec une valeur par défaut",
+      "stopBranch": "Arrêter uniquement cette branche",
+      "defaultValue": "Valeur par défaut",
+      "defaultValuePlaceholder": "Utilisée comme sortie de ce nœud en cas d'erreur"
+    },
     "nodeGroup": {
       "trigger": "Déclencheur",
       "llmLogic": "Logique LLM",
@@ -12968,7 +12977,7 @@
       },
       "composeString": {
         "label": "Composer une chaîne",
-        "blurb": "Construit une chaîne à partir d’un modèle {{input}}."
+        "blurb": "Construit une chaîne à partir d’un modèle '{{input}}'."
       },
       "convertEncoding": {
         "label": "Convertir l’encodage",
@@ -12997,6 +13006,30 @@
       "chunkText": {
         "label": "Découper le texte",
         "blurb": "Découpe l’entrée en fragments de taille fixe, avec chevauchement optionnel — pour alimenter un nœud LLM/embedding morceau par morceau."
+      },
+      "webFetch": {
+        "label": "Récupération web",
+        "blurb": "Récupère une URL publique et renvoie son texte lisible (HTML supprimé) — protégé contre le SSRF, sans identifiants nécessaires."
+      },
+      "googleDrive": {
+        "label": "Google Drive",
+        "blurb": "Recherche ou lit un fichier (en texte) depuis votre Google Drive connecté."
+      },
+      "iterator": {
+        "label": "Itérateur",
+        "blurb": "Duplique le SEUL nœud placé juste après lui en une copie par élément du tableau (l'entrée doit être un tableau JSON, ou '{\"items\":[...]}') — connectez un nœud Merge/Aggregator après ce nœud pour rassembler les résultats. Seule une étape de traitement unique est dupliquée ; enchaînez d'autres étapes après l'agrégateur."
+      },
+      "analyzeImage": {
+        "label": "Analyser une image",
+        "blurb": "Analyse visuelle d'une URL d'image — acheminée automatiquement vers un modèle capable de vision."
+      },
+      "extractDocumentData": {
+        "label": "Extraire les données d'un document",
+        "blurb": "Extrait des champs structurés d'un document, d'une facture ou d'un reçu en image — analyse visuelle avec un prompt d'extraction structurée, produit du JSON."
+      },
+      "transcribeAudio": {
+        "label": "Transcrire l'audio",
+        "blurb": "Transcrit un fichier audio, ou le traduit directement en anglais — véritable appel à l'API Whisper (configuré par l'opérateur, pas encore de clé propre par locataire)."
       }
     }
   },
@@ -16204,7 +16237,10 @@
       "websiteMarkupFrameTitle": "Contenu intégré",
       "gameRobloxReady": "Place Roblox créée. Téléchargez-la et ouvrez-la dans Roblox Studio pour jouer.",
       "gameRobloxOpenIn": "S'ouvre dans Roblox Studio",
-      "gameRobloxFormat": "place .rbxlx"
+      "gameRobloxFormat": "place .rbxlx",
+      "gamePlayIn3d": "Jouer en 3D",
+      "gameDetails": "Détails",
+      "gameHideDetails": "Masquer les détails"
     },
     "editor": {
       "toolbar": "Mise en forme",
@@ -19424,7 +19460,12 @@
         "label": "Jouer",
         "open": "Jouer en grand",
         "ship": "Publier",
-        "controls": "Commandes"
+        "controls": "Commandes",
+        "worldRuntime": "Lieu 3D praticable",
+        "worldParts": "{count} pièces",
+        "robloxScriptsNote": "Les règles Luau s’exécutent dans Roblox",
+        "playersLabel": "{count} sur ce canevas",
+        "invite": "Inviter à jouer"
       },
       "site": {
         "label": "Site",
@@ -19512,11 +19553,18 @@
         "switchToFirst": "Passer à la vue à la première personne (V)",
         "editHint": "Glissez des pièces depuis la gauche · cliquez sur un objet pour l’éditer à droite",
         "viewOnlyHint": "Appuyez sur Marcher pour explorer cet espace",
-        "walkHint": "Cliquez pour verrouiller le pointeur · WASD pour se déplacer · Espace pour sauter · V pour changer de vue · Échap pour libérer"
+        "walkHint": "Cliquez pour verrouiller le pointeur · WASD pour se déplacer · Espace pour sauter · V pour changer de vue · Échap pour libérer",
+        "play": {
+          "score": "{collected}/{total} collectés",
+          "hits": "{count} coups",
+          "won": "Objectif atteint !"
+        }
       },
       "backToBoard": "Retour au tableau",
       "objectLabel": "{title}, en grand",
-      "switcher": "Vue du canevas"
+      "switcher": "Vue du canevas",
+      "enterFullscreen": "Plein écran",
+      "exitFullscreen": "Quitter le plein écran"
     },
     "miro": {
       "title": "Tableaux Miro",

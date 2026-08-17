@@ -6,15 +6,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Canvas } from '@react-three/fiber';
 import { addProp, canvasWorldSceneFrom, deleteProp, type CanvasWorldPropKind, type CanvasWorldScene } from '@builderforce/creation-canvas-contract';
 import styles from './CreationCanvas.module.css';
+import { CanvasFullscreenAction } from './CanvasFullscreenAction';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
-import Scene3D from './world3d/Scene3D';
 import DropPlacer, { type DropPlacerHandler } from './world3d/DropPlacer';
 import PropPalette, { PROP_DRAG_MIME } from './world3d/PropPalette';
 import WorldPropertiesPanel from './world3d/WorldPropertiesPanel';
-import { DEFAULT_WALKER_COLOR } from './world3d/PlayerController';
+import { WorldViewport } from './world3d/WorldViewport';
 import type { CreationNodeData } from './types';
 
 /**
@@ -50,9 +49,8 @@ export function CanvasWorldView({ data, onExit, onEdit }: CanvasWorldViewProps) 
 
   const [mode, setMode] = useState<'edit' | 'walk'>('edit');
   const [selectedPropId, setSelectedPropId] = useState<string | null>(null);
-  const [respawnNonce, setRespawnNonce] = useState(0);
-  const [cameraView, setCameraView] = useState<'first' | 'third'>('first');
   const dropHandlerRef = useRef<DropPlacerHandler | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
 
   // A read-only viewer has no palette or properties rail to select from — a
   // stale selection from a previous editable session would otherwise show
@@ -83,19 +81,6 @@ export function CanvasWorldView({ data, onExit, onEdit }: CanvasWorldViewProps) 
     return () => window.removeEventListener('keydown', onKey);
   }, [mode, editable, selectedPropId, scene, changeScene]);
 
-  // `V` flips first/third person while walking, same as the on-canvas button.
-  useEffect(() => {
-    if (mode !== 'walk') return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.code !== 'KeyV') return;
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
-      setCameraView((view) => (view === 'first' ? 'third' : 'first'));
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [mode]);
-
   const actions = (
     <>
       {editable && (
@@ -103,15 +88,26 @@ export function CanvasWorldView({ data, onExit, onEdit }: CanvasWorldViewProps) 
           {mode === 'edit' ? t('mode.walk') : t('mode.edit')}
         </button>
       )}
+      {/* The whole stage, palette included — see `CanvasFullscreenAction`. */}
+      <CanvasFullscreenAction target={stageRef} />
     </>
   );
 
   return (
     <CanvasObjectSurface surface="world" data={data} onExit={onExit} actions={actions}>
-      <div className={styles.worldStage}>
+      <div className={styles.worldStage} ref={stageRef}>
         {editable && mode === 'edit' && <PropPalette />}
-        <div
-          className={styles.worldViewport}
+        {/* The runtime is `WorldViewport`, shared with the play surface. What is
+            genuinely this surface's own — placing a prop by drag, and the
+            builder's banner — is contributed to it rather than reimplemented
+            around a second `<Canvas>`. */}
+        <WorldViewport
+          scene={scene}
+          mode={mode}
+          selectedPropId={selectedPropId}
+          onSelectProp={setSelectedPropId}
+          banner={t(editable ? 'editHint' : 'viewOnlyHint')}
+          sceneExtras={editable ? <DropPlacer handlerRef={dropHandlerRef} /> : null}
           onDragOver={(event) => {
             if (mode !== 'edit' || !editable) return;
             if (!event.dataTransfer.types.includes(PROP_DRAG_MIME)) return;
@@ -127,41 +123,7 @@ export function CanvasWorldView({ data, onExit, onEdit }: CanvasWorldViewProps) 
             event.preventDefault();
             placeProp(kind, position);
           }}
-        >
-          <Canvas shadows camera={{ position: [12, 10, 12], fov: 60, near: 0.1, far: 500 }} tabIndex={mode === 'walk' ? 0 : -1}>
-            <Scene3D
-              scene={scene}
-              mode={mode}
-              selectedPropId={selectedPropId}
-              onSelectProp={setSelectedPropId}
-              respawnNonce={respawnNonce}
-              cameraView={cameraView}
-              walkerColor={DEFAULT_WALKER_COLOR}
-            />
-            {mode === 'edit' && editable && <DropPlacer handlerRef={dropHandlerRef} />}
-          </Canvas>
-
-          {mode === 'edit' && (
-            <div className={styles.worldBanner}>{t(editable ? 'editHint' : 'viewOnlyHint')}</div>
-          )}
-
-          {mode === 'walk' && (
-            <>
-              <div className={styles.worldBannerTop}>{t('walkHint')}</div>
-              <button type="button" className={styles.worldRespawnAction} onClick={() => setRespawnNonce((n) => n + 1)} title={t('respawn')}>
-                {t('respawn')}
-              </button>
-              <button
-                type="button"
-                className={styles.worldCameraAction}
-                onClick={() => setCameraView((view) => (view === 'first' ? 'third' : 'first'))}
-                title={cameraView === 'first' ? t('switchToThird') : t('switchToFirst')}
-              >
-                {cameraView === 'first' ? t('cameraThird') : t('cameraFirst')}
-              </button>
-            </>
-          )}
-        </div>
+        />
         {editable && mode === 'edit' && (
           <WorldPropertiesPanel scene={scene} onChange={changeScene} selectedPropId={selectedPropId} onSelectProp={setSelectedPropId} />
         )}

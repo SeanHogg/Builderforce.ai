@@ -12883,6 +12883,15 @@
     "statusRunStarted": "Ejecución {id} iniciada",
     "historyTitle": "Historial de ejecución y uso de este flujo de trabajo",
     "historyLabel": "Historial",
+    "errorHandling": {
+      "label": "En caso de error",
+      "failTask": "Fallar la tarea (predeterminado)",
+      "ignore": "Ignorar — continuar con salida vacía",
+      "resume": "Reanudar — continuar con un valor predeterminado",
+      "stopBranch": "Detener solo esta rama",
+      "defaultValue": "Valor predeterminado",
+      "defaultValuePlaceholder": "Se usa como salida de este nodo cuando falla"
+    },
     "nodeGroup": {
       "trigger": "Disparador",
       "llmLogic": "Lógica LLM",
@@ -12968,7 +12977,7 @@
       },
       "composeString": {
         "label": "Componer una cadena",
-        "blurb": "Construye una cadena a partir de una plantilla con {{input}}."
+        "blurb": "Construye una cadena a partir de una plantilla con '{{input}}'."
       },
       "convertEncoding": {
         "label": "Convertir codificación",
@@ -12997,6 +13006,30 @@
       "chunkText": {
         "label": "Fragmentar texto",
         "blurb": "Divide la entrada en fragmentos de tamaño fijo, con solapamiento opcional — para alimentar un nodo LLM/embedding pieza por pieza."
+      },
+      "webFetch": {
+        "label": "Obtener página web",
+        "blurb": "Obtiene una URL pública y devuelve su texto legible (HTML eliminado) — protegido contra SSRF, sin necesidad de credenciales."
+      },
+      "googleDrive": {
+        "label": "Google Drive",
+        "blurb": "Busca o lee un archivo (como texto) desde tu Google Drive conectado."
+      },
+      "iterator": {
+        "label": "Iterador",
+        "blurb": "Bifurca el ÚNICO nodo justo después de él en una copia por cada elemento del array (la entrada debe ser un array JSON, o '{\"items\":[...]}') — conecta un nodo Merge/Aggregator después de ese nodo para recopilar los resultados. Solo se bifurca un único paso procesador; encadena más pasos después del agregador."
+      },
+      "analyzeImage": {
+        "label": "Analizar imagen",
+        "blurb": "Análisis visual de una URL de imagen — enrutado automáticamente a un modelo con capacidad de visión."
+      },
+      "extractDocumentData": {
+        "label": "Extraer datos de documento",
+        "blurb": "Extrae campos estructurados de un documento, factura o recibo en imagen — análisis visual con un prompt de extracción estructurada, genera JSON."
+      },
+      "transcribeAudio": {
+        "label": "Transcribir audio",
+        "blurb": "Transcribe un archivo de audio, o tradúcelo directamente al inglés — llamada real a la API de Whisper (configurada por el operador, sin clave propia por inquilino todavía)."
       }
     }
   },
@@ -16204,7 +16237,10 @@
       "websiteMarkupFrameTitle": "Contenido incrustado",
       "gameRobloxReady": "Lugar de Roblox creado. Descárgalo y ábrelo en Roblox Studio para jugar.",
       "gameRobloxOpenIn": "Se abre en Roblox Studio",
-      "gameRobloxFormat": "lugar .rbxlx"
+      "gameRobloxFormat": "lugar .rbxlx",
+      "gamePlayIn3d": "Jugar en 3D",
+      "gameDetails": "Detalles",
+      "gameHideDetails": "Ocultar detalles"
     },
     "editor": {
       "toolbar": "Formato",
@@ -19424,7 +19460,12 @@
         "label": "Jugar",
         "open": "Jugar a tamaño completo",
         "ship": "Publicar",
-        "controls": "Controles"
+        "controls": "Controles",
+        "worldRuntime": "Lugar 3D transitable",
+        "worldParts": "{count} piezas",
+        "robloxScriptsNote": "Las reglas Luau se ejecutan en Roblox",
+        "playersLabel": "{count} en este lienzo",
+        "invite": "Invitar a jugar"
       },
       "site": {
         "label": "Sitio",
@@ -19512,11 +19553,18 @@
         "switchToFirst": "Cambiar a vista en primera persona (V)",
         "editHint": "Arrastra piezas desde la izquierda · haz clic en un objeto para editarlo a la derecha",
         "viewOnlyHint": "Pulsa Caminar para explorar este espacio",
-        "walkHint": "Haz clic para bloquear el puntero · WASD para moverte · Espacio para saltar · V para cambiar de vista · Esc para liberar"
+        "walkHint": "Haz clic para bloquear el puntero · WASD para moverte · Espacio para saltar · V para cambiar de vista · Esc para liberar",
+        "play": {
+          "score": "{collected}/{total} recogidos",
+          "hits": "{count} impactos",
+          "won": "¡Meta alcanzada!"
+        }
       },
       "backToBoard": "Volver al tablero",
       "objectLabel": "{title}, a tamaño completo",
-      "switcher": "Vista del lienzo"
+      "switcher": "Vista del lienzo",
+      "enterFullscreen": "Pantalla completa",
+      "exitFullscreen": "Salir de pantalla completa"
     },
     "miro": {
       "title": "Tableros de Miro",

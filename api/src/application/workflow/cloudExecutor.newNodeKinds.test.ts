@@ -13,7 +13,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { executeCloudNode, dispositionFromDeps, type CloudExecutorEnv } from './cloudExecutor';
+import {
+  executeCloudNode, dispositionFromDeps, applyErrorHandler, planIteratorExpansion,
+  type CloudExecutorEnv, type IteratorTaskRef,
+} from './cloudExecutor';
 
 const env = {} as CloudExecutorEnv;
 
@@ -99,6 +102,113 @@ describe('text-aggregator', () => {
   it('joins dependency outputs with the configured separator', async () => {
     const result = await executeCloudNode(env, { kind: 'text-aggregator', config: { separator: ', ' }, depOutputs: ['a', 'b', 'c'] }, '');
     expect(result.output).toBe('a, b, c');
+  });
+});
+
+describe('iterator', () => {
+  it('passes an array input through unchanged', async () => {
+    const result = await executeCloudNode(env, { kind: 'iterator', config: {} }, JSON.stringify([1, 2, 3]));
+    expect(JSON.parse(result.output)).toEqual([1, 2, 3]);
+  });
+
+  it('unwraps a {"items":[...]} envelope', async () => {
+    const result = await executeCloudNode(env, { kind: 'iterator', config: {} }, JSON.stringify({ items: ['a', 'b'] }));
+    expect(JSON.parse(result.output)).toEqual(['a', 'b']);
+  });
+
+  it('rejects a non-array input', async () => {
+    await expect(executeCloudNode(env, { kind: 'iterator', config: {} }, JSON.stringify({ x: 1 })))
+      .rejects.toThrow(/array/);
+    await expect(executeCloudNode(env, { kind: 'iterator', config: {} }, 'not json at all'))
+      .rejects.toThrow(/array/);
+  });
+});
+
+describe('planIteratorExpansion', () => {
+  const ITER = 'iter-task';
+  let counter = 0;
+  const newId = () => `new-${counter++}`;
+  const ref = (partial: Partial<IteratorTaskRef> & { id: string }): IteratorTaskRef => ({
+    input: '{"kind":"llm","config":{}}', agentRole: 'node:llm', description: 'process item', dependsOn: null, ...partial,
+  });
+
+  it('returns null when no task depends solely on the iterator', () => {
+    counter = 0;
+    expect(planIteratorExpansion(ITER, [1, 2], [ref({ id: 'p1', dependsOn: JSON.stringify(['someone-else']) })], newId)).toBeNull();
+  });
+
+  it('returns null for an empty item array', () => {
+    counter = 0;
+    expect(planIteratorExpansion(ITER, [], [ref({ id: 'p1', dependsOn: JSON.stringify([ITER]) })], newId)).toBeNull();
+  });
+
+  it('reuses the existing processor task for item 0 and clones for the rest', () => {
+    counter = 0;
+    const tasks = [ref({ id: 'p1', dependsOn: JSON.stringify([ITER]) })];
+    const plan = planIteratorExpansion(ITER, ['a', 'b', 'c'], tasks, newId);
+    expect(plan).not.toBeNull();
+    // 3 carriers + 2 NEW processor clones (item 0 reuses 'p1') = 5 new tasks.
+    expect(plan!.newTasks).toHaveLength(5);
+    const carriers = plan!.newTasks.filter((t) => t.agentRole === 'node:trigger');
+    expect(carriers).toHaveLength(3);
+    expect(carriers.map((c) => JSON.parse(c.input).payload)).toEqual(['a', 'b', 'c']);
+    const clones = plan!.newTasks.filter((t) => t.agentRole !== 'node:trigger');
+    expect(clones).toHaveLength(2);
+    // Each clone carries the SAME kind/config as the original processor.
+    for (const clone of clones) expect(clone.input).toBe(tasks[0]!.input);
+    // Item 0's carrier is what 'p1' gets rewired onto.
+    const item0Carrier = carriers[0]!.id;
+    expect(JSON.parse(plan!.rewire.p1!)).toEqual([item0Carrier]);
+  });
+
+  it('widens a downstream aggregator that depended on the processor to every clone', () => {
+    counter = 0;
+    const tasks = [
+      ref({ id: 'p1', dependsOn: JSON.stringify([ITER]) }),
+      ref({ id: 'agg', dependsOn: JSON.stringify(['p1']), agentRole: 'node:table-aggregator' }),
+    ];
+    const plan = planIteratorExpansion(ITER, ['a', 'b'], tasks, newId);
+    expect(plan).not.toBeNull();
+    const cloneIds = plan!.newTasks.filter((t) => t.agentRole !== 'node:trigger').map((t) => t.id);
+    // item 0 reuses 'p1', item 1 is the one clone.
+    expect(cloneIds).toHaveLength(1);
+    expect(JSON.parse(plan!.rewire.agg!).sort()).toEqual(['p1', ...cloneIds].sort());
+  });
+
+  it('widens a downstream task with mixed dependencies (not solely the processor)', () => {
+    counter = 0;
+    const tasks = [
+      ref({ id: 'p1', dependsOn: JSON.stringify([ITER]) }),
+      ref({ id: 'other', dependsOn: null }),
+      ref({ id: 'join', dependsOn: JSON.stringify(['p1', 'other']) }),
+    ];
+    const plan = planIteratorExpansion(ITER, ['a', 'b'], tasks, newId);
+    const cloneIds = plan!.newTasks.filter((t) => t.agentRole !== 'node:trigger').map((t) => t.id);
+    expect(JSON.parse(plan!.rewire.join!).sort()).toEqual(['other', 'p1', ...cloneIds].sort());
+  });
+
+  it('expands two independent processors of the same iterator separately', () => {
+    counter = 0;
+    const tasks = [
+      ref({ id: 'p1', dependsOn: JSON.stringify([ITER]) }),
+      ref({ id: 'p2', dependsOn: JSON.stringify([ITER]), agentRole: 'node:transform' }),
+    ];
+    const plan = planIteratorExpansion(ITER, ['a', 'b'], tasks, newId);
+    expect(plan).not.toBeNull();
+    // 2 items × (1 carrier + 1 clone for the 2nd item) × 2 processors = 2 carriers*2 + 2 clones = 6.
+    // Concretely: per processor: 2 carriers + 1 clone (item 0 reuses the original) = 3 new tasks; ×2 processors = 6.
+    expect(plan!.newTasks).toHaveLength(6);
+    expect(plan!.rewire.p1).toBeDefined();
+    expect(plan!.rewire.p2).toBeDefined();
+    expect(plan!.rewire.p1).not.toBe(plan!.rewire.p2);
+  });
+
+  it('every generated id is unique (no collision between carriers and clones)', () => {
+    counter = 0;
+    const tasks = [ref({ id: 'p1', dependsOn: JSON.stringify([ITER]) })];
+    const plan = planIteratorExpansion(ITER, ['a', 'b', 'c', 'd'], tasks, newId);
+    const ids = plan!.newTasks.map((t) => t.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
 
@@ -252,6 +362,81 @@ describe('web-search', () => {
   it('requires a query (no {{input}} and no upstream text to fall back to)', async () => {
     await expect(executeCloudNode(env, { kind: 'web-search', config: {} }, ''))
       .rejects.toThrow(/query/);
+  });
+});
+
+describe('web-fetch', () => {
+  it('requires a URL', async () => {
+    await expect(executeCloudNode(env, { kind: 'web-fetch', config: {} }, ''))
+      .rejects.toThrow(/URL/);
+  });
+});
+
+describe('analyze-image / extract-document-data / transcribe-audio validate their required fields', () => {
+  it('analyze-image needs a URL', async () => {
+    await expect(executeCloudNode(env, { kind: 'analyze-image', config: {} }, ''))
+      .rejects.toThrow(/URL/);
+  });
+  it('extract-document-data needs a URL', async () => {
+    await expect(executeCloudNode(env, { kind: 'extract-document-data', config: {} }, ''))
+      .rejects.toThrow(/URL/);
+  });
+  it('transcribe-audio needs a URL', async () => {
+    await expect(executeCloudNode(env, { kind: 'transcribe-audio', config: {} }, ''))
+      .rejects.toThrow(/URL/);
+  });
+  it('transcribe-audio needs an operator-configured OPENAI_API_KEY', async () => {
+    await expect(executeCloudNode(env, { kind: 'transcribe-audio', config: { url: 'https://example.com/a.mp3' } }, ''))
+      .rejects.toThrow(/OPENAI_API_KEY/);
+  });
+});
+
+describe('google-drive refuses without a tenant context', () => {
+  it('search', async () => {
+    await expect(executeCloudNode(env, { kind: 'google-drive', config: { operation: 'search', query: 'x' } }, ''))
+      .rejects.toThrow(/tenant context/);
+  });
+  it('read', async () => {
+    await expect(executeCloudNode(env, { kind: 'google-drive', config: { operation: 'read', fileId: 'f1' } }, ''))
+      .rejects.toThrow(/tenant context/);
+  });
+});
+
+describe('applyErrorHandler', () => {
+  const err = new Error('boom');
+
+  it('defaults to fail-task when no policy is configured', () => {
+    expect(applyErrorHandler({}, err)).toEqual({ status: 'failed', output: '', error: 'boom' });
+  });
+
+  it('ignore completes the task with empty output', () => {
+    const outcome = applyErrorHandler({ onError: 'ignore' }, err);
+    expect(outcome.status).toBe('completed');
+    expect(outcome.output).toBe('');
+    expect(outcome.error).toContain('boom');
+  });
+
+  it('resume completes the task with the configured default value', () => {
+    const outcome = applyErrorHandler({ onError: 'resume', onErrorValue: 'fallback' }, err);
+    expect(outcome).toMatchObject({ status: 'completed', output: 'fallback' });
+  });
+
+  it('resume with no configured value behaves like ignore (empty output)', () => {
+    expect(applyErrorHandler({ onError: 'resume' }, err).output).toBe('');
+  });
+
+  it('stop-branch cancels the task rather than failing or completing it', () => {
+    const outcome = applyErrorHandler({ onError: 'stop-branch' }, err);
+    expect(outcome.status).toBe('cancelled');
+    expect(outcome.output).toBe('');
+  });
+
+  it('an unrecognized onError value falls back to fail-task', () => {
+    expect(applyErrorHandler({ onError: 'rollback' }, err).status).toBe('failed');
+  });
+
+  it('handles a non-Error throw without crashing', () => {
+    expect(applyErrorHandler({}, 'a string throw').error).toBe('execution failed');
   });
 });
 

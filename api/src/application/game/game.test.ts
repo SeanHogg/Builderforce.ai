@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { robloxScriptsFrom, robloxWorldReading, STUDS_TO_UNITS } from '@builderforce/creation-canvas-contract';
 import {
   CANVAS_GAME_ACCOUNT_GATE,
   CANVAS_GAME_TOOL,
@@ -338,6 +339,37 @@ describe('emitting a .rbxlx place', () => {
     const ledge = parts.find((part) => part.includes('>Ledge<'))!;
     expect(coin).toContain('<bool name="CanCollide">false</bool>');
     expect(ledge).toContain('<bool name="CanCollide">true</bool>');
+  });
+
+  /**
+   * The place is the ONLY record of the world — the spec is thrown away once the
+   * file exists. So the browser plays a place by reading it back, and this is
+   * the round trip that has to hold: what the writer emits is what the reader
+   * gets. Both halves are asserted separately in their own suites; this is the
+   * one test that puts them together, and it is here rather than in the frontend
+   * because this is where the WRITER lives.
+   */
+  it('reads back as the same world it was written from', () => {
+    const reading = robloxWorldReading(place)!;
+    expect(reading.partCount).toBe(spec.parts.length);
+    expect(reading.collectibles).toBe(1);
+
+    const ledge = reading.scene.props.find((prop) => prop.kind === 'platform')!;
+    expect(ledge.position).toEqual([1 * STUDS_TO_UNITS, 6 * STUDS_TO_UNITS, 10 * STUDS_TO_UNITS]);
+    expect(ledge.scale).toEqual([12 * STUDS_TO_UNITS, 1 * STUDS_TO_UNITS, 6 * STUDS_TO_UNITS]);
+    expect(ledge.color).toBe('#ff0000');
+    expect(ledge.physics).toBe('static');
+
+    // The baseplate is the ground, and its top face is the floor the parts'
+    // y coordinates are measured from — so it must not come back as a prop.
+    expect(reading.scene.props.some((prop) => prop.color === '#4f7942')).toBe(false);
+    expect(reading.scene.ground.color).toBe('#4f7942');
+
+    // And the rules come back as source, bootstrap included.
+    const scripts = robloxScriptsFrom(place);
+    expect(scripts.map((script) => script.name)).toEqual(['GameServer', 'GameClient']);
+    expect(scripts[0]!.source).toContain('print("rules")');
+    expect(scripts[0]!.source).toContain('CollectionService:AddTag');
   });
 });
 

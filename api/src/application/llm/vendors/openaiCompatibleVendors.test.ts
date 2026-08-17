@@ -72,6 +72,27 @@ describe('explicit direct/<vendor>/<id> prefix routing reaches the new vendors',
     expect(vendorForModel('direct/openai/gpt-4o')).toBe('openai');
   });
 
+  it('routes a cohere pin to Cohere\'s OpenAI-compatible endpoint', async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    (globalThis as { fetch: typeof fetch }).fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      calls.push({ url: typeof input === 'string' ? input : input.toString(), init: init ?? {} });
+      return new Response(
+        JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    expect(vendorForModel('direct/cohere/command-a-03-2025')).toBe('cohere');
+    const result = await dispatchVendor({
+      env: { COHERE_API_KEY: 'cohere-secret' } as VendorEnv,
+      modelChain: ['direct/cohere/command-a-03-2025'],
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(result.vendorUsed).toBe('cohere');
+    expect(calls[0]!.url).toBe('https://api.cohere.com/compatibility/v1/chat/completions');
+    expect((calls[0]!.init.headers as Record<string, string>).Authorization).toBe('Bearer cohere-secret');
+  });
+
   it('does NOT hijack OpenRouter <org>/<slug> ids (no bare-prefix collision)', () => {
     // These are OpenRouter model ids that share an org name with a direct vendor —
     // they must still resolve to OpenRouter, never the direct vendor.

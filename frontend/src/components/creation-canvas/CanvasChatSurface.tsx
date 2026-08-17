@@ -5,6 +5,7 @@ import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';
 import { BrainSurfaceActions, BrainSurfaceBody, type BrainSurfaceBodyProps } from './BrainDock';
 import { memberAvatarClass, memberInitials } from './rosterAvatar';
+import type { CanvasRosterMember } from './types';
 
 /**
  * The conversation as the whole canvas — the zero-object case of the board.
@@ -46,11 +47,8 @@ import { memberAvatarClass, memberInitials } from './rosterAvatar';
  * sits in every placement and where every chat product people know puts it.
  */
 
-export interface CanvasChatSurfaceMember {
-  userId: string;
-  displayName: string | null;
-  role: string;
-}
+/** The roster shape is shared with the play surface — see `CanvasRosterMember`. */
+export type CanvasChatSurfaceMember = CanvasRosterMember;
 
 export interface CanvasChatSurfaceProps extends BrainSurfaceBodyProps {
   onExecutionDetailChange: (show: boolean) => void;

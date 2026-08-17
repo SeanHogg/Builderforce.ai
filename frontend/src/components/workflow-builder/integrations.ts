@@ -40,6 +40,17 @@ export interface Integration {
    * second node kind: same execution path, a curated starting prompt.
    */
   systemPrompt?: string;
+  /**
+   * Preset `config.model` for a `kind: 'llm'` integration — the vendor-pinned
+   * model id `cloudExecutor.ts`'s `llm` case's `byoAwareModel(...)` actually
+   * dispatches to (see `api/src/application/llm/vendors/registry.ts`'s
+   * `VENDOR_PREFIXES` for the `direct/<vendor>/<id>` / bare-catalog-id forms).
+   * Set ONLY on the LLM Platforms category (dragging "OpenAI" vs "Perplexity"
+   * must actually call OpenAI vs Perplexity) — the AI Agents category's task
+   * presets leave this unset on purpose, so they ride whatever vendor the
+   * tenant's BYO/operator-pool default already resolves to.
+   */
+  defaultModel?: string;
 }
 
 export interface IntegrationCategory {
@@ -96,25 +107,27 @@ export const INTEGRATIONS: Integration[] = [
   { id: 'ai-extract-info', label: 'Extract Info from Text', category: 'ai-agents', kind: 'llm', auth: 'none', icon: '🧾', description: 'Pull structured fields (named in your prompt) out of unstructured text as JSON.', operations: [{ id: 'chat-completion', label: 'Generate response' }], systemPrompt: 'Extract the fields named in the user\'s prompt from the input text. Reply with only a single valid JSON object mapping each requested field to its extracted value (or null if not found) — no markdown, no explanation.' },
 
   // ── LLM platforms ────────────────────────────────────────────────────────
-  { id: 'openai', label: 'OpenAI', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🤖', description: 'GPT models for chat, embeddings, image generation, and transcription.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'image-generation', label: 'Generate image' }, { id: 'transcription', label: 'Transcribe audio' }] },
-  { id: 'anthropic', label: 'Anthropic Claude', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🧠', description: 'Claude models for messages, tool use, and vision.', operations: [{ id: 'chat-completion', label: 'Create message' }, { id: 'tool-use', label: 'Tool use / function calling' }, { id: 'vision', label: 'Analyze image' }] },
-  { id: 'google-gemini', label: 'Google Gemini', category: 'llm', kind: 'llm', auth: 'api-key', icon: '♊', description: 'Gemini models for chat, long-context, embeddings, and vision.', operations: [{ id: 'chat-completion', label: 'Generate content' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'vision', label: 'Multimodal / vision' }, { id: 'image-generation', label: 'Generate image' }] },
-  { id: 'mistral', label: 'Mistral AI', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🌬️', description: 'Chat, code, and embedding models with EU data residency.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'code-completion', label: 'Codestral completion' }] },
-  { id: 'cohere', label: 'Cohere', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🔗', description: 'Command, Embed, and Rerank models for RAG pipelines.', operations: [{ id: 'chat-completion', label: 'Chat' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'rerank', label: 'Rerank documents' }] },
-  { id: 'perplexity', label: 'Perplexity', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🔮', description: 'Sonar models for web-grounded answers with citations.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'web-search', label: 'Grounded search answer' }] },
-  { id: 'groq', label: 'Groq', category: 'llm', kind: 'llm', auth: 'api-key', icon: '⚡', description: 'Open models at high speed on Groq LPU inference.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'transcription', label: 'Transcribe audio (Whisper)' }] },
-  { id: 'openrouter', label: 'OpenRouter', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🛣️', description: 'Unified gateway routing to 500+ models across providers.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'list-models', label: 'List models' }] },
-  { id: 'together', label: 'Together AI', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🤝', description: 'Open-source LLMs, embeddings, and image models (OpenAI-compatible).', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'image-generation', label: 'Generate image' }] },
-  { id: 'deepseek', label: 'DeepSeek', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🐳', description: 'Chat and reasoning models (OpenAI-compatible).', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'reasoning', label: 'Reasoning completion' }] },
-  { id: 'xai-grok', label: 'xAI Grok', category: 'llm', kind: 'llm', auth: 'api-key', icon: '✖️', description: 'Grok models for chat, reasoning, and agentic tool calling.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'tool-use', label: 'Agentic tool calling' }, { id: 'vision', label: 'Image understanding' }] },
-  { id: 'ollama', label: 'Ollama', category: 'llm', kind: 'llm', auth: 'none', icon: '🦙', description: 'Local open-weight models for chat and embeddings on your host.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'list-models', label: 'List local models' }] },
-  { id: 'azure-openai', label: 'Azure OpenAI', category: 'llm', kind: 'llm', auth: 'api-key', icon: '☁️', description: 'OpenAI models hosted on Azure with enterprise compliance.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'image-generation', label: 'Generate image (DALL-E)' }] },
-  { id: 'amazon-bedrock', label: 'Amazon Bedrock', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🪨', description: 'Foundation models (Claude, Llama, Titan…) via AWS Bedrock.', operations: [{ id: 'chat-completion', label: 'Invoke / Converse' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'image-generation', label: 'Generate image' }] },
+  { id: 'openai', label: 'OpenAI', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🤖', description: 'GPT models for chat, embeddings, image generation, and transcription.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'image-generation', label: 'Generate image' }, { id: 'transcription', label: 'Transcribe audio' }], defaultModel: 'direct/openai/gpt-4o' },
+  { id: 'anthropic', label: 'Anthropic Claude', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🧠', description: 'Claude models for messages, tool use, and vision.', operations: [{ id: 'chat-completion', label: 'Create message' }, { id: 'tool-use', label: 'Tool use / function calling' }, { id: 'vision', label: 'Analyze image' }], defaultModel: 'claude-sonnet-5' },
+  { id: 'google-gemini', label: 'Google Gemini', category: 'llm', kind: 'llm', auth: 'api-key', icon: '♊', description: 'Gemini models for chat, long-context, embeddings, and vision.', operations: [{ id: 'chat-completion', label: 'Generate content' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'vision', label: 'Multimodal / vision' }, { id: 'image-generation', label: 'Generate image' }], defaultModel: 'googleai/gemini-2.5-pro' },
+  { id: 'mistral', label: 'Mistral AI', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🌬️', description: 'Chat, code, and embedding models with EU data residency.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'code-completion', label: 'Codestral completion' }], defaultModel: 'direct/mistral/mistral-large-latest' },
+  { id: 'cohere', label: 'Cohere', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🔗', description: 'Command, Embed, and Rerank models for RAG pipelines.', operations: [{ id: 'chat-completion', label: 'Chat' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'rerank', label: 'Rerank documents' }], defaultModel: 'direct/cohere/command-a-03-2025' },
+  { id: 'perplexity', label: 'Perplexity', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🔮', description: 'Sonar models for web-grounded answers with citations.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'web-search', label: 'Grounded search answer' }], defaultModel: 'direct/perplexity/sonar-pro' },
+  { id: 'groq', label: 'Groq', category: 'llm', kind: 'llm', auth: 'api-key', icon: '⚡', description: 'Open models at high speed on Groq LPU inference.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'transcription', label: 'Transcribe audio (Whisper)' }], defaultModel: 'direct/groq/llama-3.3-70b-versatile' },
+  { id: 'openrouter', label: 'OpenRouter', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🛣️', description: 'Unified gateway routing to 500+ models across providers.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'list-models', label: 'List models' }], defaultModel: 'openrouter/openai/gpt-4o-mini' },
+  { id: 'together', label: 'Together AI', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🤝', description: 'Open-source LLMs, embeddings, and image models (OpenAI-compatible).', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'image-generation', label: 'Generate image' }], defaultModel: 'direct/together/meta-llama/Llama-3.3-70B-Instruct-Turbo' },
+  { id: 'deepseek', label: 'DeepSeek', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🐳', description: 'Chat and reasoning models (OpenAI-compatible).', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'reasoning', label: 'Reasoning completion' }], defaultModel: 'direct/deepseek/deepseek-chat' },
+  { id: 'xai-grok', label: 'xAI Grok', category: 'llm', kind: 'llm', auth: 'api-key', icon: '✖️', description: 'Grok models for chat, reasoning, and agentic tool calling.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'tool-use', label: 'Agentic tool calling' }, { id: 'vision', label: 'Image understanding' }], defaultModel: 'direct/xai/grok-4.5' },
+  { id: 'ollama', label: 'Ollama Cloud', category: 'llm', kind: 'llm', auth: 'none', icon: '🦙', description: 'Open-weight models run on Ollama Cloud (not a local instance — this runtime has no path to your own machine).', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'list-models', label: 'List local models' }], defaultModel: 'ollama/gpt-oss:120b' },
+  { id: 'azure-openai', label: 'Azure OpenAI', category: 'llm', kind: 'llm', auth: 'api-key', icon: '☁️', description: 'OpenAI models hosted on your Azure resource (operator-configured — see Settings ▸ Integrations).', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'image-generation', label: 'Generate image (DALL-E)' }], defaultModel: 'direct/azure-openai/default' },
+  { id: 'amazon-bedrock', label: 'Amazon Bedrock', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🪨', description: 'Foundation models (Claude, Llama, Titan…) via your operator-configured AWS Bedrock credential (see Settings ▸ Integrations).', operations: [{ id: 'chat-completion', label: 'Invoke / Converse' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'image-generation', label: 'Generate image' }], defaultModel: 'direct/amazon-bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0' },
 
   // ── Core MCP servers ─────────────────────────────────────────────────────
   { id: 'filesystem', label: 'Filesystem', category: 'official', kind: 'mcp', auth: 'none', icon: '📁', description: 'Secure local file operations with configurable access controls.', operations: [{ id: 'read-file', label: 'Read file' }, { id: 'write-file', label: 'Write file' }, { id: 'list-directory', label: 'List directory' }, { id: 'search-files', label: 'Search files' }] },
   { id: 'git', label: 'Git', category: 'official', kind: 'mcp', auth: 'none', icon: '🔧', description: 'Read, search, and manipulate local Git repositories.', operations: [{ id: 'git-status', label: 'Get status' }, { id: 'git-diff', label: 'Show diff' }, { id: 'git-commit', label: 'Create commit' }, { id: 'git-log', label: 'View log' }] },
-  { id: 'fetch', label: 'Fetch', category: 'official', kind: 'trigger', auth: 'none', icon: '🌐', description: 'Fetch web content and convert HTML to markdown.', operations: [{ id: 'fetch-url', label: 'Fetch URL' }, { id: 'fetch-markdown', label: 'Fetch as markdown' }] },
+  // Fetching a URL mid-flow lives at the `web-fetch` node kind (Tools group) —
+  // a real, SSRF-guarded executor. This entry was `kind: 'trigger'`, inert
+  // when chained (same defect as Tavily above) — removed rather than left broken.
   { id: 'memory', label: 'Memory (KG)', category: 'official', kind: 'mcp', auth: 'none', icon: '🗃️', description: 'Knowledge-graph persistent memory for entities and relations.', operations: [{ id: 'create-entities', label: 'Create entities' }, { id: 'create-relations', label: 'Create relations' }, { id: 'search-nodes', label: 'Search nodes' }, { id: 'read-graph', label: 'Read graph' }] },
   { id: 'sequential-thinking', label: 'Sequential Thinking', category: 'official', kind: 'mcp', auth: 'none', icon: '🧮', description: 'Structured, reflective step-by-step reasoning.', operations: [{ id: 'add-thought', label: 'Add thought' }, { id: 'revise-thought', label: 'Revise thought' }, { id: 'branch-thought', label: 'Branch thought' }] },
   { id: 'time', label: 'Time', category: 'official', kind: 'mcp', auth: 'none', icon: '⏰', description: 'Current time lookup and timezone conversion.', operations: [{ id: 'get-current-time', label: 'Get current time' }, { id: 'convert-time', label: 'Convert timezone' }] },
@@ -127,7 +140,11 @@ export const INTEGRATIONS: Integration[] = [
   // (see cloudExecutor's passthrough `case 'trigger':`), so an on-demand
   // search chained mid-flow through THIS catalog's `trigger` kind would have
   // been inert — removed rather than left broken.
-  { id: 'google-drive', label: 'Google Drive', category: 'official', kind: 'trigger', auth: 'oauth', icon: '📂', description: 'File access and search across Google Drive.', operations: [{ id: 'search-files', label: 'Search files' }, { id: 'read-file', label: 'Read file' }, { id: 'list-files', label: 'List files' }] },
+  //
+  // Google Drive search/read now lives at the `google-drive` node kind (Tools
+  // group) — a real executor against the tenant's connected credential
+  // (`integration_credentials`, provider='google_drive'), same fix as Tavily
+  // and Fetch above.
   { id: 'sqlite', label: 'SQLite', category: 'official', kind: 'mcp', auth: 'connection-string', icon: '🪶', description: 'SQLite database interaction with query execution.', operations: [{ id: 'read-query', label: 'Read query' }, { id: 'write-query', label: 'Write query' }, { id: 'list-tables', label: 'List tables' }, { id: 'create-table', label: 'Create table' }] },
 
   // ── Data & databases ─────────────────────────────────────────────────────
@@ -215,7 +232,7 @@ export function presetConfig(integ: Integration): Record<string, unknown> {
   const firstOp = integ.operations[0]?.id ?? '';
   switch (integ.kind) {
     case 'llm':
-      return { provider: integ.id, operation: firstOp, model: '', system: integ.systemPrompt ?? '', prompt: '', temperature: 0.7 };
+      return { provider: integ.id, operation: firstOp, model: integ.defaultModel ?? '', system: integ.systemPrompt ?? '', prompt: '', temperature: 0.7 };
     case 'trigger':
       return { triggerType: 'integration', source: integ.id, operation: firstOp };
     case 'mcp':

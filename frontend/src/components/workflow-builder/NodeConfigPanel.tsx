@@ -141,6 +141,41 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
         </label>
       ))}
 
+      {/* Generic error-handling policy — applies to ANY node kind (not a
+          per-kind field, so it lives here rather than in `nodeKinds.ts`'s
+          per-kind `fields` list). Meaningless for `trigger` (never throws) and
+          `output` (terminal), but harmless to show — hiding it there would need
+          a kind-allowlist that drifts as kinds are added. */}
+      {node.data.kind !== 'trigger' && node.data.kind !== 'output' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, color: 'var(--text-secondary)' }}>
+            {t('errorHandling.label')}
+            <Select
+              style={inputStyle}
+              value={String(config.onError ?? 'fail-task')}
+              onChange={(e) => setConfig('onError', e.target.value)}
+            >
+              <option value="fail-task">{t('errorHandling.failTask')}</option>
+              <option value="ignore">{t('errorHandling.ignore')}</option>
+              <option value="resume">{t('errorHandling.resume')}</option>
+              <option value="stop-branch">{t('errorHandling.stopBranch')}</option>
+            </Select>
+          </label>
+          {config.onError === 'resume' && (
+            <label style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, color: 'var(--text-secondary)' }}>
+              {t('errorHandling.defaultValue')}
+              <input
+                type="text"
+                style={inputStyle}
+                value={String(config.onErrorValue ?? '')}
+                placeholder={t('errorHandling.defaultValuePlaceholder')}
+                onChange={(e) => setConfig('onErrorValue', e.target.value)}
+              />
+            </label>
+          )}
+        </div>
+      )}
+
       {/* Trigger activation — how this trigger actually fires once saved. */}
       {node.data.kind === 'trigger' && triggerInfo && (
         <div

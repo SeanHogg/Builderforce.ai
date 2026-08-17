@@ -41,3 +41,19 @@ export type CreationNodeData = {
 export type CreationObjectGroup =
   | 'Build' | 'Data' | 'Knowledge' | 'Insights' | 'Work' | 'Quality' | 'Teaching' | 'Research'
   | 'Pitch' | 'People' | 'Hiring' | 'Operations' | 'Agents' | 'Models' | 'Collaborate' | 'Integrations';
+
+/**
+ * Someone on this canvas right now.
+ *
+ * ONE roster shape, because two surfaces name the same people for two reasons: the
+ * conversation shows who is in it, and the play runtime shows who you are playing with
+ * and offers the door to invite another. `displayName` is nullable because presence
+ * carries an id long before it carries a name, and every consumer has to decide what to
+ * draw for an anonymous guest rather than being handed an empty string that looks like
+ * one.
+ */
+export interface CanvasRosterMember {
+  userId: string;
+  displayName: string | null;
+  role: string;
+}

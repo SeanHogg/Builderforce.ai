@@ -1,7 +1,7 @@
 import { OrbitControls } from '@react-three/drei';
 import { CuboidCollider, Physics, RigidBody } from '@react-three/rapier';
 import type { ThreeEvent } from '@react-three/fiber';
-import type { CanvasWorldScene } from '@builderforce/creation-canvas-contract';
+import type { CanvasWorldProp, CanvasWorldScene } from '@builderforce/creation-canvas-contract';
 import PropMesh from './PropMesh';
 import PlayerController from './PlayerController';
 
@@ -23,9 +23,12 @@ interface Scene3DProps {
   respawnNonce?: number;
   cameraView?: 'first' | 'third';
   walkerColor?: string;
+  /** Scoring, when this space is being PLAYED rather than authored. Passed
+   *  straight to the sensor props — see `useWorldPlay`. */
+  onPlayerEnter?: (prop: CanvasWorldProp) => void;
 }
 
-export default function Scene3D({ scene, mode, selectedPropId, onSelectProp, respawnNonce = 0, cameraView = 'first', walkerColor }: Scene3DProps) {
+export default function Scene3D({ scene, mode, selectedPropId, onSelectProp, respawnNonce = 0, cameraView = 'first', walkerColor, onPlayerEnter }: Scene3DProps) {
   const sunPosition: [number, number, number] = [
     -scene.lighting.sun.direction[0] * 30,
     -scene.lighting.sun.direction[1] * 30,
@@ -66,7 +69,14 @@ export default function Scene3D({ scene, mode, selectedPropId, onSelectProp, res
         </RigidBody>
 
         {scene.props.map((prop) => (
-          <PropMesh key={prop.id} prop={prop} mode={mode} selected={mode === 'edit' && prop.id === selectedPropId} onSelect={onSelectProp} />
+          <PropMesh
+            key={prop.id}
+            prop={prop}
+            mode={mode}
+            selected={mode === 'edit' && prop.id === selectedPropId}
+            onSelect={onSelectProp}
+            {...(mode === 'walk' && onPlayerEnter ? { onPlayerEnter } : {})}
+          />
         ))}
 
         {mode === 'edit' && (

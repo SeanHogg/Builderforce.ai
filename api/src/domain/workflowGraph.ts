@@ -30,6 +30,7 @@ export type WorkflowNodeKind =
   | 'branch'     // Flow Control: conditional fan-out, tags $branch
   | 'router'     // Flow Control: N-way conditional fan-out, tags $route
   | 'switch'     // Flow Control: N-way fan-out by literal value match, tags $route
+  | 'iterator'   // Flow Control: fork the downstream processor once per array item (dynamic)
   | 'merge'      // Flow Control: join multiple upstream branches into one payload
   | 'numeric-aggregator' // Tools: reduce multiple upstream branches to one number
   | 'table-aggregator'   // Tools: collect multiple upstream branches into one row array
@@ -53,6 +54,11 @@ export type WorkflowNodeKind =
   | 'assert'       // Diagnostics: fail (or warn) the run unless an expression holds
   | 'healthcheck'  // Diagnostics: probe a URL for reachability / expected status
   | 'web-search'   // AI Agents: search the open web (tenant key → operator SearXNG → keyless)
+  | 'web-fetch'    // Tools: fetch a public URL (SSRF-guarded, no credential needed)
+  | 'google-drive' // integration: search / read-as-text the tenant's connected Google Drive
+  | 'analyze-image'         // AI Agents: vision-capable image analysis
+  | 'extract-document-data' // AI Agents: vision + structured extraction (document/invoice/receipt)
+  | 'transcribe-audio'      // AI Agents: Whisper transcription or translation
   | 'output'     // terminal: write artifact / notify / push to board
   | 'gmail';     // integration: send an email via the tenant's connected Gmail
 
@@ -72,6 +78,7 @@ export const NODE_HANDLER_ROLES: Record<Exclude<WorkflowNodeKind, 'agent'>, stri
   branch:    'node:branch',
   router:    'node:router',
   switch:    'node:switch',
+  iterator:  'node:iterator',
   merge:     'node:merge',
   'numeric-aggregator': 'node:numeric-aggregator',
   'table-aggregator':   'node:table-aggregator',
@@ -95,6 +102,11 @@ export const NODE_HANDLER_ROLES: Record<Exclude<WorkflowNodeKind, 'agent'>, stri
   assert:         'node:assert',
   healthcheck:    'node:healthcheck',
   'web-search':   'node:web-search',
+  'web-fetch':    'node:web-fetch',
+  'google-drive': 'node:google-drive',
+  'analyze-image':         'node:analyze-image',
+  'extract-document-data': 'node:extract-document-data',
+  'transcribe-audio':      'node:transcribe-audio',
   output:    'node:output',
   gmail:     'node:gmail',
 };
@@ -241,6 +253,8 @@ export function taskTextForNode(node: WorkflowDefNode): string {
       return `Route on: ${String(c.fallback ?? node.label ?? 'first matching condition')}`;
     case 'switch':
       return `Switch on: ${String(c.field ?? '(input)')}`;
+    case 'iterator':
+      return 'Iterator (forks per array item)';
     case 'merge':
       return `Merge (${String(c.strategy ?? 'array')})`;
     case 'numeric-aggregator':
@@ -287,6 +301,16 @@ export function taskTextForNode(node: WorkflowDefNode): string {
       return `Healthcheck: ${String(c.url ?? node.label)}`;
     case 'web-search':
       return `Web search: ${String(c.query ?? '{{input}}')}`;
+    case 'web-fetch':
+      return `Web fetch: ${String(c.url ?? node.label)}`;
+    case 'google-drive':
+      return `Google Drive ${String(c.operation ?? 'search')}`;
+    case 'analyze-image':
+      return `Analyze image: ${String(c.url ?? node.label)}`;
+    case 'extract-document-data':
+      return `Extract document data: ${String(c.fields ?? 'all fields')}`;
+    case 'transcribe-audio':
+      return `${c.mode === 'translate' ? 'Translate' : 'Transcribe'} audio: ${String(c.url ?? node.label)}`;
     case 'trigger':
       return `Trigger (${String(c.triggerType ?? 'manual')})`;
     case 'output':

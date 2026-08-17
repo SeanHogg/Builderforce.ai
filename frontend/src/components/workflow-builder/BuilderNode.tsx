@@ -45,6 +45,8 @@ export function configSummary(kind: WorkflowNodeKind, config: Record<string, unk
       return String(config.fallback ? `→ ${config.fallback}` : 'routes');
     case 'switch':
       return String(config.field ? `on ${config.field}` : 'switch');
+    case 'iterator':
+      return 'per array item';
     case 'merge':
       return String(config.strategy ?? 'array');
     case 'numeric-aggregator':
@@ -83,6 +85,16 @@ export function configSummary(kind: WorkflowNodeKind, config: Record<string, unk
       return String(config.url ?? '');
     case 'web-search':
       return String(config.query ?? '{{input}}');
+    case 'web-fetch':
+      return String(config.url ?? '');
+    case 'google-drive':
+      return String(config.operation ?? 'search');
+    case 'analyze-image':
+      return String(config.url ?? '{{input}}');
+    case 'extract-document-data':
+      return String(config.fields ?? 'all fields');
+    case 'transcribe-audio':
+      return `${config.mode === 'translate' ? 'translate' : 'transcribe'}`;
     default:
       return '';
   }

@@ -83,7 +83,11 @@ export interface Env {
   // gateway dispatch/fallback/cooldown machinery. Unbound → the vendor is simply
   // skipped. Set via `wrangler secret put <NAME>` (or api/.env + secrets:from-env).
   // ---------------------------------------------------------------------------
-  /** OpenAI — api.openai.com/v1. */
+  /** OpenAI — api.openai.com/v1. Also powers the workflow builder's
+   *  `transcribe-audio` node (Whisper's `/v1/audio/transcriptions`
+   *  `/translations`) — a plain multipart REST call, not a chat-completion
+   *  vendor dispatch, so it reads this key directly rather than through the
+   *  gateway. Operator-funded only; no per-tenant BYO path for Whisper today. */
   OPENAI_API_KEY?: string;
   /** Groq — api.groq.com/openai/v1. */
   GROQ_API_KEY?: string;
@@ -145,6 +149,22 @@ export interface Env {
   SILICONFLOW_API_KEY?: string;
   /** MiniMax — api.minimax.io/v1. */
   MINIMAX_API_KEY?: string;
+  /** Cohere — api.cohere.com/compatibility/v1 (Command R/R+/A). */
+  COHERE_API_KEY?: string;
+  /** Azure OpenAI resource key — see `AZURE_OPENAI_ENDPOINT` below. */
+  AZURE_OPENAI_API_KEY?: string;
+  /** Azure OpenAI's FULL chat-completions URL for the configured deployment,
+   *  including `?api-version=…`, e.g. `https://my-resource.openai.azure.com/
+   *  openai/deployments/gpt-4o/chat/completions?api-version=2024-08-01-preview`.
+   *  ONE operator-configured deployment, not a per-tenant multi-resource system —
+   *  see `application/llm/vendors/azureOpenai.ts`. */
+  AZURE_OPENAI_ENDPOINT?: string;
+  /** Amazon Bedrock — ONE operator-configured AWS credential/region, SigV4-signed
+   *  (see `application/llm/vendors/amazonBedrock.ts` + `awsSigV4.ts`). */
+  AWS_BEDROCK_ACCESS_KEY_ID?: string;
+  AWS_BEDROCK_SECRET_ACCESS_KEY?: string;
+  /** e.g. `us-east-1`. */
+  AWS_BEDROCK_REGION?: string;
 
   // ---------------------------------------------------------------------------
   // Image generation (`POST /v1/images/generations`)
