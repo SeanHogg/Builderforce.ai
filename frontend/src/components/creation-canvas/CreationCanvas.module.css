@@ -2263,10 +2263,10 @@
 }
 
 /* Copyright + version + Terms/Privacy (`LegalStrip`), as the dock's own last row —
-   this is where that strip lives on a stage route at all (see `LegalCorner`'s doc).
-   Same one-line-with-overflow-scroll shape as `.legal-corner` in the shell footer,
-   restyled onto the dock's own `--canvas-brain-*` tokens so it reads as part of this
-   panel rather than a mismatched global chrome color dropped into it. `flex:none` and
+   this is where that strip lives on a stage route at all (see `BrainDock`'s doc).
+   Same one-line-with-overflow-scroll shape the shell used to give this row, restyled
+   onto the dock's own `--canvas-brain-*` tokens so it reads as part of this panel
+   rather than a mismatched global chrome color dropped into it. `flex:none` and
    `border-top`, like `.brainActivity` right above it, so it never eats the transcript's
    scroll space and never floats over the board. */
 .brainDockLegal { flex:none; display:flex; flex-wrap:nowrap; align-items:center; gap:0 8px; overflow-x:auto; scrollbar-width:none; white-space:nowrap; padding:6px 11px; border-top:1px solid var(--canvas-brain-border); background:var(--canvas-brain-header); color:var(--canvas-muted); font-size:9px; line-height:1.5; }
@@ -2275,9 +2275,9 @@
 .brainDockLegal > * { flex:0 0 auto; }
 .brainDockLegal > * + *::before { content:'·'; margin-right:8px; color:var(--canvas-brain-border); }
 /* The version/Terms/Privacy links carry the shell's `.legal-corner-link` global class
-   (shared with `LegalCorner`) for their click/keyboard behaviour; only the color is
-   retinted onto this panel's own tokens so the hover accent matches the rest of the
-   dock instead of the shell's unrelated `--accent`. */
+   (shared with the sidebar's `.nav-legal` row) for their click/keyboard behaviour; only
+   the color is retinted onto this panel's own tokens so the hover accent matches the
+   rest of the dock instead of the shell's unrelated `--accent`. */
 .brainDockLegal :global(.legal-corner-link) { color:var(--canvas-muted); }
 .brainDockLegal :global(.legal-corner-link):hover,
 .brainDockLegal :global(.legal-corner-link):focus-visible { color:var(--canvas-brain-accent); }

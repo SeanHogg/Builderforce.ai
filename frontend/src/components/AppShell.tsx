@@ -18,7 +18,6 @@ import { NavCountsProvider } from '@/lib/navCounts';
 import { ShellIndex } from './shell/ShellIndex';
 import { ShellPanel } from './shell/ShellPanel';
 import { TeamBar } from './team/TeamBar';
-import LegalCorner from './legal/LegalCorner';
 import CanvasUsageCorner from './legal/CanvasUsageCorner';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 // A reference page whose title is DATA (a diagnostic, named by the API catalog)
@@ -152,12 +151,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </div>
       {/* The team, always on the footer — §3.3. It decides its own visibility. */}
       <TeamBar />
-      {/* Version + Terms/Privacy, in the frame's bottom-right corner. In flow as
-          the last row, so it never covers the board or the roster above it.
-          Stands down on a stage route, where the docked Brain panel (`BrainDock`)
-          carries the same row as its own footer instead — never floated over the
-          board, where it would compete with the canvas's own chrome. */}
-      <LegalCorner />
+      {/* Version + Terms/Privacy live in the sidebar (`Sidebar`'s own footer row)
+          rather than a full-width strip here — see its own doc. */}
       <CanvasUsageCorner />
       <MobileBottomNav />
     </div>

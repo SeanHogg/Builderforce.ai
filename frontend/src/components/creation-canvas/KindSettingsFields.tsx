@@ -12,7 +12,7 @@
  */
 
 import { useTranslations } from 'next-intl';
-import { kindSettingsFields, kindSettingsManifest } from '@/lib/canvasKindSettings';
+import { kindSettingsFields, kindSettingsHasMoreInFullInspector } from '@/lib/canvasKindSettings';
 import { canvasPersonOrigin, isCanvasPersonKind } from '@/lib/canvasNodeAffordances';
 import { SettingsFieldControl } from './SettingsFieldControl';
 import { TimingFields } from './TimingFields';
@@ -33,7 +33,6 @@ export function KindSettingsFields({
   onOpenFull: () => void;
 }) {
   const t = useTranslations('creationCanvas.nodePanel');
-  const manifest = kindSettingsManifest(data.kind);
   const fields = kindSettingsFields(data.kind, data, 'compact');
   const basic = fields.filter((field) => field.section !== 'advanced');
   const advanced = fields.filter((field) => field.section === 'advanced');
@@ -64,7 +63,7 @@ export function KindSettingsFields({
             somebody who opens Advanced looking for their object's OWN settings — a
             dashboard's date range, a dataset's import — is told where those live and
             left to find the door themselves. The sentence IS the door. */}
-        {(!manifest || manifest.fields.some((field) => field.surface !== 'compact')) && (
+        {kindSettingsHasMoreInFullInspector(data.kind) && (
           <button type="button" className={styles.anchoredHintAction} onClick={onOpenFull}>{t('configAdvancedHint')}</button>
         )}
       </>}

@@ -11,13 +11,11 @@ import { ConsumptionMeterCard } from '@/components/UsageMeter';
  * floating canvas chrome is (the command bar, the anchored panel, the prompt),
  * never as a row the board has to reserve height for.
  *
- * It does NOT carry the copyright/version/Terms/Privacy row `LegalCorner`
- * renders elsewhere — that row floating loose over the board, spanning from
- * this corner toward the canvas's own toolbar, read as one strip of clutter
- * competing with the board's chrome rather than two purposeful pieces. On a
- * stage route it now lives instead as the docked Brain panel's own footer
- * (`BrainDock`), in normal flow the way `LegalCorner` sits in the shell —
- * chrome belonging to a real panel, never floating over the board itself.
+ * It does NOT carry the copyright/version/Terms/Privacy row — that lives in
+ * the sidebar (`Sidebar`'s own footer row) off the board entirely, and on a
+ * stage route as the docked Brain panel's own footer (`BrainDock`) instead;
+ * floating it loose over the board here would read as clutter competing with
+ * the board's chrome rather than two purposeful pieces.
  */
 export default function CanvasUsageCorner() {
   const pathname = usePathname() || '';

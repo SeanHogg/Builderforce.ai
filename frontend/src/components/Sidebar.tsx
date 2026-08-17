@@ -21,6 +21,7 @@ import SessionList from './SessionList';
 import { NavIcon } from './navigation/NavIcon';
 import { isStageRoute } from '@/lib/workbenchPolicy';
 import { useNavGroups } from '@/lib/destinations/useDestinations';
+import { LegalStrip } from './legal/LegalStrip';
 
 /**
  * The left panel — the ARC (PRD 21 §3.2, §11.4.1).
@@ -259,9 +260,7 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
 
         {/* The one thing a signed-out visitor's rail is missing: the way to keep
             what they are making. Their board is real and local-first, so this is
-            an offer rather than a wall. The version + legal strip that used to
-            sit under it now lives in the frame's bottom-right corner
-            (`LegalCorner`), so the footer renders only when it has this to say.
+            an offer rather than a wall.
             NOT on a stage route: the canvas already makes the same offer, in the
             same colour the "keep your work" state uses, from the top-right CTA
             (`MarketingHeader`) — a second copy of it down here would be the same
@@ -273,6 +272,16 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
             </ButtonLink>
           </div>
         )}
+
+        {/* Copyright + version + Terms/Privacy, back in the rail rather than
+            floating a full-width strip under the whole frame — the far-left menu
+            is where an operator already looks for the shell's own chrome, and
+            keeping it here means it never competes with the board for the
+            frame's bottom edge. Collapsed to the icon rail there is no room for
+            it, same rule as the session list above. NOT on a stage route: the
+            docked Brain panel (`BrainDock`) carries the same row as its own
+            footer there instead. */}
+        {!collapsed && !onStage && <LegalStrip className="nav-legal" />}
       </nav>
     </>
   );

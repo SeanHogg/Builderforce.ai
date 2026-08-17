@@ -2925,7 +2925,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // between them are all legible without an immediate re-layout.
     const node = newNode(kind, { x: source.position.x + (canvasNodeDimensions(source).width || 300) + 90, y: source.position.y });
     setNodes((current) => [...current, node]);
-    setEdges((current) => addEdge({ id: `${fromNodeId}-${node.id}`, source: fromNodeId, target: node.id, type: connectionKind }, current));
+    setEdges((current) => addEdge({ id: crypto.randomUUID(), source: fromNodeId, target: node.id, type: connectionKind }, current));
     setSelectedId(node.id); setSelectedIds([node.id]);
     if (node.data.kind !== 'chat') setInspectorNodeId(node.id);
     setNotice(t('objectAdded', { title: node.data.title }));

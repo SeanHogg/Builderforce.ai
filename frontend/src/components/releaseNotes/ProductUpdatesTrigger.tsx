@@ -6,7 +6,7 @@ import styles from './ProductUpdatesTrigger.module.css';
 /**
  * The version chip that opens the Product Updates panel — ONE component, both
  * places it appears (the marketing/auth footer strip and the operator shell's
- * legal corner).
+ * `LegalStrip`, shared by the sidebar and the docked Brain panel).
  *
  * It was two hand-written buttons rendering the same string, with the same
  * handler and the same tooltip, which is two places for the unread badge to be
@@ -18,7 +18,7 @@ import styles from './ProductUpdatesTrigger.module.css';
  * their own stylesheets; everything the chip is ABOUT belongs to the chip.
  *
  * No `'use client'`, deliberately: its only two importers — `AppFooter` and
- * `LegalCorner` — already declare the boundary, so the directive would buy them
+ * `LegalStrip` — already declare the boundary, so the directive would buy them
  * nothing and cost the architecture ratchet a point. It runs as client code
  * either way, which is what its hooks need.
  */

@@ -3,9 +3,13 @@
  * side effects that a plain `onChange(patch)` field can't express — `evaluation`'s
  * read-only test-result history, `task`'s PRD/agent-assignment joins, `dataset`'s file
  * import, `website`'s hero+theme mirroring. Each gets a `custom.component` pointing at
- * a section extracted VERBATIM out of the old `kind === 'x'` chain in `CreationCanvas`
- * (see `KindDetailsSections.tsx`) — the manifest only declares that the kind exists and
- * what may be done to it; the rendering stays exactly what it was.
+ * a section extracted VERBATIM out of the old `kind === 'x'` chain — the section
+ * components and the `KIND_DETAIL_SECTIONS` dispatch table they register into live in
+ * `CreationCanvas.tsx` itself, beside the `Inspector` that used to hand-write all of
+ * this, because they close over the same derived state (`connectedAgentKnowledge`,
+ * `deliveryAgent`, `taskAgents`…) that component already computes. This manifest only
+ * declares that the kind exists and what may be done to it; the rendering stays exactly
+ * what it was.
  */
 
 import { registerKindSettings } from './canvasKindSettings';

@@ -19004,6 +19004,52 @@
         "dueAt": "Échéance"
       }
     },
+    "legal": {
+      "empty": "Ce {label} ne contient encore rien.",
+      "emptyHint": "Téléversez un fichier avec le contrôle de la carte, ou demandez à Brain de le partager ou de l’envoyer à signer.",
+      "meterLabel": "{label} : {score} sur 100",
+      "freshJustNow": "à l’instant",
+      "freshMinutes": "il y a {count} min",
+      "freshHours": "il y a {count} h",
+      "freshDays": "il y a {count} j",
+      "label": {
+        "legalDocument": "Document juridique"
+      },
+      "field": {
+        "category": "Catégorie",
+        "entityId": "Entité",
+        "matterId": "Dossier",
+        "ipId": "Enregistrement PI",
+        "documentId": "ID du document",
+        "artifactId": "ID du fichier",
+        "checksum": "Somme de contrôle",
+        "mime": "Type de fichier",
+        "byteSize": "Taille du fichier",
+        "documentStatus": "Statut",
+        "signatureRequestId": "Demande de signature",
+        "signedAt": "Signé le",
+        "activeShares": "Partages actifs",
+        "summary": "Résumé"
+      }
+    },
+    "legalUpload": {
+      "category": "Catégorie",
+      "category_nda": "Accord de confidentialité (NDA)",
+      "category_msa": "Contrat-cadre (MSA)",
+      "category_sow": "Cahier des charges (SOW)",
+      "category_offer_letter": "Lettre d’offre",
+      "category_ip_assignment": "Cession de propriété intellectuelle",
+      "category_formation": "Document de constitution",
+      "category_registration": "Enregistrement",
+      "category_other": "Autre",
+      "upload": "Téléverser un fichier",
+      "replaceFile": "Téléverser une nouvelle version",
+      "uploading": "Téléversement…",
+      "currentFile": "Fichier actuel : {kb} Ko",
+      "tooLarge": "Ce fichier dépasse la limite de 25 Mo pour les documents juridiques.",
+      "uploadFailed": "Le téléversement a échoué. Réessayez.",
+      "statusDraft": "Brouillon"
+    },
     "notice": {
       "addedToCanvas": "J’ai ajouté le contenu demandé au canevas.",
       "noAnswer": "Je n’ai pas pu préparer de modification du canevas à partir de cette demande.",

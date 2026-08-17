@@ -1639,53 +1639,36 @@ html[data-theme='light'] .nebula {
   outline: none;
 }
 
-/* Copyright + version + Terms/Privacy strip, bottom-RIGHT corner of the frame
-   (moved out of the sidebar footer, which put it at the widest edge of the
-   board). Last row of `.app-frame`, in normal flow under the team roster, so it
-   can never cover the canvas. Separators drawn by CSS.
-
-   ONE line on every viewport — phone included. It used to wrap, which put a
-   second row of chrome under the canvas on exactly the screens with the least
-   vertical space to give. Nothing here wraps now; at narrow widths the strip
-   sheds DETAIL instead (see the media queries below). Measured: one row, no
-   scroll, from 320px to 1440px. `overflow-x` is the safety valve for the case
-   the tape cannot predict — a longer version string, a wider translation — so
-   the strip scrolls itself rather than widening the frame.
-   `margin-inline-start: auto` on the first item does the right-alignment
-   rather than `justify-content`, which would make the overflowing start of the
-   strip unreachable when it does scroll. */
-.legal-corner {
+/* Copyright + version + Terms/Privacy strip — the last row of the sidebar rail
+   (`Sidebar`), below its own footer. Wraps across lines rather than scrolling:
+   the rail has height to spare where a full-width frame strip did not, so
+   DETAIL never has to be shed at narrow viewports the way it once did.
+   Separators drawn by CSS. Hidden entirely on the collapsed icon rail — see
+   the caller. */
+.nav-legal {
   flex-shrink: 0;
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
-  white-space: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-  gap: 0 10px;
-  padding: 4px var(--space-4);
-  background: var(--surface-sunken);
-  border-top: 1px solid var(--border-subtle);
+  gap: 4px 8px;
+  padding: 10px 10px 2px;
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: var(--font-size-eyebrow);
   line-height: 1.5;
 }
 
-.legal-corner::-webkit-scrollbar {
-  display: none;
-}
-
-.legal-corner > *:first-child {
-  margin-inline-start: auto;
-}
-
-.legal-corner > * {
-  flex: 0 0 auto;
+.nav-legal > * + *::before {
+  content: '·';
+  margin-right: 8px;
+  color: var(--border);
 }
 
 /* A button, not a label: the version opens the Product Updates panel and the two
-   documents open the legal reader. Styled back down to plain text so the corner
-   stays chrome. */
+   documents open the legal reader. Styled back down to plain text so the strip
+   stays chrome. Shared with the docked Brain panel's own footer
+   (`.brainDockLegal`), which retints only the color onto its own tokens. */
 .legal-corner-link {
   color: var(--muted);
   background: none;
@@ -1693,14 +1676,6 @@ html[data-theme='light'] .nebula {
   padding: 0;
   font: inherit;
   cursor: pointer;
-}
-
-/* Separator between EVERY pair of items, not just two links — the copyright
-   opens the strip and is not a link. */
-.legal-corner > * + *::before {
-  content: '·';
-  margin-right: 10px;
-  color: var(--border);
 }
 
 .legal-corner-link:hover {
@@ -1714,46 +1689,12 @@ html[data-theme='light'] .nebula {
   border-radius: var(--radius-sm);
 }
 
-/* Narrow screens keep the single line by dropping DETAIL, in the order it can
-   be spared: first the tablet step tightens the spacing, then the phone step
-   drops the `(v2.1.0)` suffixes (the reader states the version in its own
-   title) and the brand word from the copyright (the shell says the brand in the
-   header). What survives at 360px is the copyright, both version numbers and
-   both document names — on one row. */
-@media (max-width: 900px) {
-  .legal-corner {
-    gap: 0 8px;
-    padding: 4px var(--space-3);
-  }
-
-  .legal-corner > * + *::before {
-    margin-right: 8px;
-  }
-}
-
-@media (max-width: 620px) {
-  .legal-corner {
-    gap: 0 5px;
-    padding: 4px var(--space-2);
-    font-size: 0.6rem;
-  }
-
-  .legal-corner > * + *::before {
-    margin-right: 5px;
-  }
-
-  .legal-corner .legal-doc-version,
-  .legal-corner-brand {
-    display: none;
-  }
-}
-
 /* The canvas's own bottom-right corner (`CanvasUsageCorner`) — usage meters
  * only, floating over the board the way every other piece of canvas chrome
  * does rather than sitting in flow. The copyright/version/legal row does NOT
- * live here: it's clutter on a creation surface, so a stage route simply has
- * none (see `LegalCorner`). Right-aligned and narrow on purpose so it never
- * fights the board for width. */
+ * live here: on a stage route it's the docked Brain panel's own footer
+ * instead (`BrainDock`); the sidebar carries it everywhere else. Right-aligned
+ * and narrow on purpose so it never fights the board for width. */
 .canvas-usage-corner {
   position: fixed;
   right: 14px;
@@ -3479,6 +3420,7 @@ select.input option {
   /* Drawer shows full labels regardless of the desktop collapse preference */
   .nav-main { padding: 12px; }
   .nav-footer { padding: 8px 12px; }
+  .nav-legal { padding: 10px 12px 4px; }
   .nav-section-label {
     opacity: 1;
     pointer-events: auto;

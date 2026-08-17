@@ -1,3 +1,42 @@
+## ✅ RESOLVED 2026-08-17 — Deploy API type-check red on `strict` regex capture indexing
+
+`packages/creation-canvas-contract/src/world.ts:152` (`nextPropId`) called
+`Number.parseInt(m[1], 10)` on a regex capture group; under strict indexing `m[1]` types as
+`string | undefined`, so `tsgo` and `tsc` both failed the Deploy API CI job with TS2345
+before any deploy could run. Guarded with `m[1] ?? '0'` (unreachable in practice — the read
+only happens inside `if (m)` — but the type checker can't see that invariant). Verified: `cd
+api && npm run type-check` → `✅ 2/2 guards passed`.
+
+## ✅ RESOLVED 2026-08-17 — "Insert, connected" gave the new edge an unclaimable id
+
+Support ticket: `POST /api/creation-sessions/claim` 400'd with `Invalid connection id:
+e756ab15-…-413a7c0c-…` — two UUIDs joined by a dash, not a UUID. Root cause in
+`frontend/src/components/creation-canvas/CreationCanvas.tsx`'s `pickObject` (the centre `+`
+on a node — "insert the next step, connected to this one"): the new edge's `id` was built as
+`` `${fromNodeId}-${node.id}` `` instead of minted, so it always failed the server's
+`UUID_RE` check in `creationSessionRouteService.ts`'s `validCreationGraph`. The sibling path
+(dragging a connection between two existing nodes, line 2711) already used
+`crypto.randomUUID()` correctly — `pickObject` alone had the bug, so every session built via
+"insert, connected" could be drafted but never claimed after signup. Fixed by minting a UUID
+the same way. Added a regression test (`CreationCanvas.test.tsx` › "gives an inserted,
+connected object its own UUID connection id") that adds a node, inserts a connected sibling
+via the centre `+`, and asserts the new edge id is a real UUID and doesn't contain either
+node's id — confirmed it fails against the old concatenation before the fix and passes after.
+
+## ✅ RESOLVED 2026-08-16 — `CreationCanvas.test.tsx` node-panel field extraction test
+
+The gap logged earlier the same session — `CreationCanvas.test.tsx` › "renders live
+workflow, website, dashboard, collaborators, and agent controls" red after
+`CanvasNodePanel.tsx` was split into `KindSettingsFields`/`TimingFields` — had already been
+closed by the concurrent session that was mid-refactor when it was logged (no edit needed
+from this pass; the entry's own blocker was that a second session held those exact files).
+`canvasKindSettings.people.ts` declares a `title` field (`section: 'identity'`, `surface:
+'compact'`) for both `agent` and `staff`; `KindSettingsFields.tsx`'s `basic` filter
+(`section !== 'advanced'`) includes it, so `SettingsFieldControl` renders the `data.title`
+text input the test's `getByDisplayValue('Campaign Strategist')` looks for. Verified with a
+full run of `src/components/creation-canvas`: 34 files, 416/416 passing, including this one
+(961ms).
+
 ## ✅ RESOLVED 2026-08-16 — Canvas chat header, and the second toolbar in the corner
 
 Three defects reported from the conversation surface, fixed in one pass (frontend 2026.8.49):

@@ -3,7 +3,7 @@ import type { LegalModalType } from './LegalDocModal';
 
 /**
  * ONE legal-document link — the document's title AND its published version —
- * for every strip that opens the reader (the operator shell's `LegalCorner`
+ * for every strip that opens the reader (the operator shell's `LegalStrip`
  * and the marketing/auth `AppFooter`).
  *
  * It was written twice, which is two places for the `(v2.1.0)` suffix to be

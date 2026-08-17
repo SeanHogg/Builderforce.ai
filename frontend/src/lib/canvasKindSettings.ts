@@ -179,6 +179,19 @@ export function kindSettingsSellable(kind: string, data: CreationNodeData): bool
   return kindSettingsManifest(kind)?.marketplace.sellable(data) ?? true;
 }
 
+/**
+ * Whether the full inspector holds something for this kind the compact panel does not
+ * — a custom section, an action button, or a field not already offered on `compact`.
+ * What the Advanced "open the full inspector" link reads to decide whether it has
+ * anything to send someone TO: a kind with no manifest at all (every spec-object kind)
+ * always does, since that hint predates this registry and nothing here narrows it.
+ */
+export function kindSettingsHasMoreInFullInspector(kind: string): boolean {
+  const manifest = kindSettingsManifest(kind);
+  if (!manifest) return true;
+  return !!manifest.custom || manifest.actions.length > 0 || manifest.fields.some((field) => field.surface !== 'compact');
+}
+
 /** Every registered manifest, for the completeness guard. */
 export function allKindSettingsManifests(): readonly KindSettingsManifest[] {
   return MANIFESTS;

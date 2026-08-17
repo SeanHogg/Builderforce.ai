@@ -56,12 +56,12 @@ import {
  * makes the docked placement what it says it is.
  *
  * The docked placement alone also carries the copyright/version/Terms/Privacy row
- * (`LegalStrip`) as its own footer, in normal flow below the transcript — the shell's
- * `LegalCorner` stands down on a stage route (see its own doc) because that row would
- * otherwise have nowhere in flow to sit; this panel is that "nowhere", and a real docked
- * panel is where it belongs rather than floating over the board as chrome of its own.
- * The inline placement (the Brain Object on the graph) does not carry it — there is no
- * panel there for it to be the footer of.
+ * (`LegalStrip`) as its own footer, in normal flow below the transcript — the sidebar's
+ * own copy of that row (`Sidebar`) stands down on a stage route (see its own doc) because
+ * that row would otherwise have nowhere in flow to sit; this panel is that "nowhere", and
+ * a real docked panel is where it belongs rather than floating over the board as chrome of
+ * its own. The inline placement (the Brain Object on the graph) does not carry it — there
+ * is no panel there for it to be the footer of.
  */
 
 /** How far one arrow-key press resizes the surface. */

@@ -49,7 +49,7 @@ vi.mock('@xyflow/react', async () => {
   const inert = () => null;
   return {
     ReactFlowProvider: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
-    ReactFlow: ({ nodes, edges = [], nodeTypes, onNodeClick, children }: { nodes: Array<{ id: string; type?: string; data: unknown; style?: { width?: number; height?: number } }>; edges?: Array<{ source: string; target: string }>; nodeTypes: Record<string, React.ComponentType<Record<string, unknown>>>; onNodeClick?: (event: unknown, node: unknown) => void; children?: React.ReactNode }) => React.createElement('div', { 'data-testid': 'flow', 'data-edge-pairs': edges.map((edge) => `${edge.source}:${edge.target}`).join(',') }, children, nodes.map((node) => {
+    ReactFlow: ({ nodes, edges = [], nodeTypes, onNodeClick, children }: { nodes: Array<{ id: string; type?: string; data: unknown; style?: { width?: number; height?: number } }>; edges?: Array<{ id: string; source: string; target: string }>; nodeTypes: Record<string, React.ComponentType<Record<string, unknown>>>; onNodeClick?: (event: unknown, node: unknown) => void; children?: React.ReactNode }) => React.createElement('div', { 'data-testid': 'flow', 'data-edge-pairs': edges.map((edge) => `${edge.source}:${edge.target}`).join(','), 'data-edge-ids': edges.map((edge) => edge.id).join(',') }, children, nodes.map((node) => {
       nodeLookup.set(node.id, node);
       const Component = nodeTypes[node.type || 'creation'];
       return Component ? React.createElement('div', { key: node.id, onClick: (event: React.MouseEvent<HTMLDivElement>) => onNodeClick?.(event, node) }, React.createElement(Component, { id: node.id, data: node.data, selected: false, width: node.style?.width, height: node.style?.height })) : null;
@@ -101,6 +101,32 @@ describe('CreationCanvas', () => {
     fireEvent.click(minimapAction);
     expect(minimapAction).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Close mini map' })).toBeInTheDocument();
+  });
+
+  /**
+   * Regression for a claim-blocking bug: the centre `+` on a node used to build the new
+   * connection's id by concatenating the two node ids (`${fromNodeId}-${node.id}`) instead
+   * of minting one. That string fails the server's UUID check on claim (`Invalid connection
+   * id: …`), so every session built via "insert, connected" — the picker's whole reason to
+   * take a `fromNodeId` — could be drafted but never claimed.
+   */
+  it('gives an inserted, connected object its own UUID connection id', () => {
+    render(<CreationCanvas sessionId="insert-connected-id-test" persistence="local" />);
+
+    const edgeIdsBefore = screen.getByTestId('flow').getAttribute('data-edge-ids')?.split(',').filter(Boolean) ?? [];
+
+    fireEvent.click(screen.getByTestId('canvas-palette-task'));
+    const sourceId = screen.getByTestId('canvas-node-task').getAttribute('data-node-id');
+    expect(sourceId).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId(`canvas-node-insert-${sourceId}`));
+    fireEvent.click(screen.getByTestId('canvas-picker-task'));
+
+    const edgeIdsAfter = screen.getByTestId('flow').getAttribute('data-edge-ids')?.split(',').filter(Boolean) ?? [];
+    const newEdgeId = edgeIdsAfter.find((id) => !edgeIdsBefore.includes(id));
+    expect(edgeIdsAfter).toHaveLength(edgeIdsBefore.length + 1);
+    expect(newEdgeId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    expect(newEdgeId).not.toContain(sourceId);
   });
 
   it('publishes the docked Brain footprint on whichever edge it claims', () => {

@@ -133,11 +133,11 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
 | 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 39 |
-| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 143 |
+| 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 144 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
-| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 42 |
+| 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 43 |
 | 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 31 |
 Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
 
@@ -153,11 +153,11 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 7 | 25 |
 | 8 | 3 |
 | 9 | 39 |
-| 10 | 143 |
+| 10 | 144 |
 | 11 | 9 |
 | 12 | 10 |
 | 13 | 11 |
-| 14 | 42 |
+| 14 | 43 |
 | 15 | 31 |
 ---
 
@@ -920,6 +920,33 @@ sequenced into waves because nothing in them gates the sell motion.
   so adding a surface is *a new file plus a row* and the hub is edited by nobody. **Not blocked.**
   Unblocks: the eight entries above dispatching concurrently instead of queueing, and Wave 1 scaling
   past five lanes without an integration step. **(W0)**
+  *(2026-08-16 — the INSPECTOR half of this is now done: `CreationCanvas.tsx`'s ~700-line
+  `kind === 'x'` Details-panel chain and the anchored panel's hardcoded `PersonaBody`/`ConfigBody` are
+  replaced by `lib/canvasKindSettings.*.ts` manifests + one generic renderer per surface
+  (`KindDetailsFields`/`KindDetailsInspector` dispatch, `KindSettingsFields` for the anchored panel) —
+  see `lib/canvasKindSettingsCompleteness.test.ts`. The eight OTHER hand-written branches this item
+  names — the `blocks` edge, the manager seed path, the PMO `delivery` object, the task
+  estimate/schedule controls, the human assignee picker, the board-highlight search, the per-object cost
+  card — are untouched; this note only narrows what "the last mile" still covers.)*
+
+- **`canvasKindSettingsCompleteness.test.ts` found 42 canvas kinds with NO configuration at all** — not
+  even the hand-written `kind === 'x'` branch the settings-manifest migration above just replaced: no
+  spec-object declaration, no kind-settings manifest, nothing but the generic "this object lives on the
+  board" hint in the full inspector. `table`, `spreadsheet`, `chart`, `map`, `kpi`, `code`, `llm`,
+  `world`, `comment`, `timer`, `sticky`, `roadmap`, `featureSummary`, `team`, `role`, `mcp`, `repository`,
+  `selection`, `diagnostics`, `terminal`; the sales set (`salesPipeline`, `salesContact`,
+  `salesCampaign`, `targetMarket`, `salesGoal`, `salesMeeting`); the outreach set (`inbox`,
+  `emailCampaign`, `emailTemplate`, `socialFeed`, `socialPost`, `socialCampaign`); the data set
+  (`datasource`, `erd`, `dataContract`, `dataQuality`, `metric`, `lineage`); `course`, `practice`; the QA
+  set (`testPlan`, `testCase`, `testRun`, `defect`). Pre-existing — the test surfaced it, it did not
+  cause it. Fix, per kind, is a product decision before it is code: does this kind need settings beyond
+  its data at all (a `chart` may need none), and if so are they a plain field list
+  (`canvasKindSettings.*.ts`) or a real custom section (rich cross-node state, the way `agent`/`task`
+  turned out to need). The test ratchets this list so it cannot silently grow — closing an entry means
+  removing it from `PENDING_KIND_SETTINGS` in the test alongside the manifest that closes it. **Not
+  blocked** on anything but that per-kind design pass; tracked here rather than done blind because
+  guessing a `salesPipeline`'s settings without the product's actual requirement is worse than the
+  honest gap.
 
 ### Embedded apps — "idea to sell" (R8–R11 outstanding; R1–R7, R12–R15e RESOLVED, see DONE.md)
 
@@ -1590,7 +1617,6 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
 
 ## 14 · 🖥️ Frontend, i18n, Theme & Marketing/SEO
 
-- **`CreationCanvas.test.tsx` › "renders live workflow, website, dashboard, collaborators, and agent controls" is red after the node-panel field extraction** *(observed 2026-08-16 while merging the canvas rail into the command bar)*. `CanvasNodePanel.tsx` was refactored to render `KindSettingsFields` / `TimingFields` in place of its own `ConfigBody` / `PersonaBody` / `ScheduleBody`; the test clicks an agent card and expects `getByDisplayValue('Campaign Strategist')`, and no name input is found after the click. `KindSettingsFields` does render a `data.title` input, so this is a wiring or open-state gap in the new split rather than a missing field. **Blocker: a second session was actively rewriting those exact files** (`CanvasNodePanel.tsx`, `KindSettingsFields.tsx`, `TimingFields.tsx` all written minutes before this was logged), so editing them in parallel would collide with an unfinished refactor. Fix belongs to whoever lands that split. Unblocks: a green `src/components/creation-canvas` suite — every other one of its 416 tests passes.
 - **`/companies` and `/reviews` are the last two ported calls to action still 404ing** *(hired.video article port; narrowed 2026-08-16 when /salary, /references and /interview landed)*. Three posts link to them — `how-to-leave-a-company-review-that-helps`, `hired-video-vs-glassdoor-…` and `research-employers-with-reviews-and-salary-data` — and they describe a multi-axis employer review (culture / leadership / work-life balance / compensation / career growth / diversity & inclusion) on a browsable company directory. Nothing here models either: `companies` in `investor.ts` is a PORTFOLIO company, `employer_branding_pages` is a tenant's own page, and `freelancer_reviews` rates a marketplace worker. So it needs two tables (`employer_companies`, `employer_reviews` with the six axes as smallint columns — six stable named axes are attributes, not a repeating group), a public browse + aggregate read, and an authenticated submit. **Blocker: an explicit operator decision on moderation posture, which is not an engineering call.** This surface publishes user-written claims about NAMED third-party employers, so someone has to choose the default (recommended: rows land `pending` and stay invisible until approved, making exposure opt-in), who approves, and what the takedown path is. Everything else is about a day once that is answered. Unblocks: the last three ported articles and the Glassdoor-comparison positioning they were written for.
 - **`AgentExecutionControl.test.tsx` fails under full-suite load and passes in isolation** *(observed 2026-08-16)*. `npx vitest run src/components/settings/AgentExecutionControl.test.tsx` is green; the same test inside a full `vitest run` (269 files, ~470s, heavy parallel contention) times out on `waitFor(() => expect(save).toHaveBeenCalledWith(false))`. It is the only red test in the frontend suite and it is a TIMING failure, not an assertion failure — the component runs real timers under `useConfirm`, so its `waitFor` budget is eaten by scheduler contention rather than by a defect. Fix = an explicit timeout on that assertion or fake timers, not a retry. Unblocks: a frontend suite whose one red result means something instead of one everybody learns to re-run.
 - **14 ported articles lost their inline preview embeds** *(hired.video article port 2026-08-15)*. hired's `BlogPost` carried `previewTemplateIds` (10 posts), `studioTemplateFiles` (2), `previewPersonIds` (1) and `previewVideoIds` (1), which rendered scaled résumé-template cards, Studio deep-links, `PeopleCard`s and video iframes inline in the article body. Builderforce's markdown pipeline has no equivalent — `BlogFigure` only speaks flow/matrix/stack/bars/compare — so those embeds were dropped and the surrounding prose kept. **Not blocked — the blocker first logged here was wrong.** `RESUME_TEMPLATES` in `frontend/src/lib/canvasResume.ts` already carries the twelve template ids those posts reference (`payroll-iron-gray`, `executive-taupe`, `software-engineer-graphite`, …), so the registry the embeds resolve against exists today; only the fence is missing. Sample-people and platform-video fixtures genuinely do not exist, so two of the fourteen posts stay text-only. Fix once they land = a `bf-figure` kind (or dedicated fence) resolving a template id through the same registry the tool pages use. Unblocks: template-focused posts showing the layout they recommend instead of describing it.
