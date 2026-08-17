@@ -43,6 +43,8 @@ import {
   stlFromSolids,
 } from '../../application/creative/geometryService';
 import { normalizeGameDocument, validateGameDocument } from '../../application/game/gameDocument';
+import { composeStructured } from '../../application/game';
+import { ROBLOX_RESPONSE_SCHEMA, ROBLOX_SYSTEM_PROMPT, rbxlxFromSpec, readRobloxSpec } from '../../application/game/robloxPlace';
 import { findStockImages } from '../../application/creative/stockImageSearch';
 
 /** Every kind this route can generate, and what it produces. */
@@ -289,7 +291,7 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
    * → { artifactKind, fileName, mimeType, outputFormat, content, provider, model, validationDetail, summary? }
    */
   router.post('/generate', async (c) => {
-    type GenerateBody = { kind?: unknown; title?: unknown; brief?: unknown; templateId?: unknown };
+    type GenerateBody = { kind?: unknown; title?: unknown; brief?: unknown; templateId?: unknown; platform?: unknown };
     const body: GenerateBody = await c.req.json<GenerateBody>().catch(() => ({} as GenerateBody));
     const kind = String(body.kind ?? '') as CreativeKind;
     const target = KINDS[kind];
@@ -300,6 +302,53 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
     if (!brief) return c.json({ error: 'A brief is required to generate this deliverable' }, 400);
     const templateId = typeof body.templateId === 'string' ? body.templateId.trim().slice(0, 120) : '';
     const stem = fileSafe(title);
+
+    /**
+     * A Roblox game is a different MACHINE, not a different format.
+     *
+     * Roblox has no DOM, so the HTML branch below cannot serve it — the brief is
+     * re-authored against Luau instead. It lives here, beside the other creative
+     * kinds, rather than behind the project-scoped game-target routes, because
+     * AUTHORING a place needs nothing but a brief; only PUBLISHING one needs a
+     * project, a workspace and an API key. Binding the two together is what made
+     * "create a Roblox game" unreachable from the canvas at all.
+     *
+     * Same discipline as the geometry kinds: the model authors a bounded spec and
+     * code emits the file, because `.rbxlx` property serialisation is unforgiving
+     * and a hand-written one opens to an error or to silently defaulted parts.
+     */
+    if (kind === 'game' && body.platform === 'roblox') {
+      let spec;
+      try {
+        spec = readRobloxSpec(
+          await composeStructured(c.env)({
+            system: ROBLOX_SYSTEM_PROMPT,
+            user: `Title: ${title}\nBrief: ${brief}`,
+            schema: ROBLOX_RESPONSE_SCHEMA,
+            maxTokens: 8000,
+            useCase: 'creative_game_roblox',
+          }),
+        );
+      } catch (err) {
+        return c.json({ error: 'Roblox place generation failed', detail: err instanceof Error ? err.message : String(err) }, 502);
+      }
+      if (!spec) {
+        return c.json({ error: 'The generated Roblox place had no buildable parts or no server script, so it would open empty' }, 502);
+      }
+      return c.json({
+        artifactKind: 'roblox-place',
+        fileName: `${stem}.rbxlx`,
+        mimeType: 'application/xml',
+        outputFormat: 'Roblox place',
+        provider: 'builderforce-roblox',
+        model: '',
+        content: rbxlxFromSpec(spec),
+        validationDetail:
+          `Roblox place with ${spec.parts.length} built part${spec.parts.length === 1 ? '' : 's'}, `
+          + 'a server ruleset and a client HUD — open it in Roblox Studio and press Play',
+        summary: spec.summary || null,
+      });
+    }
 
     const geometry = kind === 'cad' || kind === 'model3d';
     const userPrompt = `Title: ${title}\n${templateId ? `Template: ${templateId}\n` : ''}Brief: ${brief}`;

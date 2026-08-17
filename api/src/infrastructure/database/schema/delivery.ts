@@ -644,6 +644,10 @@ export const workflowTasks = pgTable('workflow_tasks', {
   output:      text('output'),
   error:       text('error'),
   dependsOn:   text('depends_on'),   // JSON array of task UUIDs stored as text
+  // Set by the Tools `sleep` node kind on its first visit (now + delaySeconds);
+  // the cloud dispatcher's readiness gate holds a `pending` task with deps
+  // satisfied until this passes. Null for every other kind — see cloudExecutor.ts.
+  notBefore:   timestamp('not_before'),
   startedAt:   timestamp('started_at'),
   completedAt: timestamp('completed_at'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),

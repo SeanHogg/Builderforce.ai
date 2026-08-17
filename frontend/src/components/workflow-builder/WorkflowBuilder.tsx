@@ -34,7 +34,7 @@ import type { Project } from '@/lib/types';
 import { BuilderNode, configSummary, type BuilderNodeData } from './BuilderNode';
 import { NodeConfigPanel } from './NodeConfigPanel';
 import { EvermindBuildPanel } from './EvermindBuildPanel';
-import { NODE_GROUPS, NODE_GROUP_KEYS, NODE_KINDS, NODE_KIND_MAP, type NodeGroup } from './nodeKinds';
+import { NODE_GROUPS, NODE_GROUP_KEYS, NODE_KINDS, NODE_KIND_MAP, nodeKindLabel, nodeKindBlurb, type NodeGroup } from './nodeKinds';
 import { hasBuildNodes, loadTemplateGraph, EVERMIND_BUILD_TEMPLATES } from '@/lib/evermindBuild';
 import {
   INTEGRATIONS, INTEGRATION_CATEGORIES, integrationAccent, integrationIcon, presetConfig,
@@ -566,10 +566,10 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
                     draggable
                     onDragStart={(e) => onPaletteDragStart(e, { kind: m.kind })}
                     onClick={() => addNode(m.kind)}
-                    title={m.blurb}
+                    title={nodeKindBlurb(m, t)}
                     style={paletteItemStyle(m.accent)}
                   >
-                    <Icon source={m.icon} size={18} /> {m.label}
+                    <Icon source={m.icon} size={18} /> {nodeKindLabel(m, t)}
                   </button>
                 ))}
               </div>

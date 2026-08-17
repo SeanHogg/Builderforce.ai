@@ -110,7 +110,7 @@ export interface MeterLimits {
 }
 
 /**
- * Resolve all five allowances from the SAME inputs the enforcement gates use.
+ * Resolve all six allowances from the SAME inputs the enforcement gates use.
  * Pure, so the "what does this tenant actually get?" rule is testable without a
  * database — and `isSuperadmin` cannot be dropped again without a test failing.
  */

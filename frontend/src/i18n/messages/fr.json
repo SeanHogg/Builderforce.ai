@@ -15006,9 +15006,9 @@
     "sqlDialect": "Dialecte",
     "notes": "Notes",
     "targetUrl": "URL cible",
-    "priorityLow": "Faible",
+    "priorityLow": "Basse",
     "priorityNormal": "Normal",
-    "priorityHigh": "Élevée",
+    "priorityHigh": "Haute",
     "priorityCritical": "Critique",
     "testSpec": "Spécification",
     "severity": "Gravité",
@@ -15483,6 +15483,7 @@
       "prd": "PRD",
       "linkedRequirements": "Exigences liées",
       "noPrdLinked": "Aucun PRD lié",
+      "blockedByDependency": "Bloquée par une autre tâche",
       "doneWhen": "Terminé quand",
       "status": "Statut",
       "openWork": "Travail en cours",
@@ -16049,7 +16050,10 @@
       "messageCount": "{count} messages sur cet objet",
       "insertAfter": "Ajouter une etape apres {title}",
       "openSettings": "Reglages de {title}",
-      "websiteMarkupFrameTitle": "Contenu intégré"
+      "websiteMarkupFrameTitle": "Contenu intégré",
+      "gameRobloxReady": "Place Roblox créée. Téléchargez-la et ouvrez-la dans Roblox Studio pour jouer.",
+      "gameRobloxOpenIn": "S'ouvre dans Roblox Studio",
+      "gameRobloxFormat": "place .rbxlx"
     },
     "editor": {
       "toolbar": "Mise en forme",
@@ -16149,7 +16153,7 @@
     "run": "Exécuter",
     "saveCollaborate": "Enregistrer et collaborer",
     "addToCanvas": "Ajouter au Canevas",
-    "searchEverything": "Tout rechercher…",
+    "searchEverything": "Rechercher des types d'objets…",
     "askBrain": "Interroger Brain sur ce canevas",
     "sendBrain": "Envoyer à Brain",
     "resizePrompt": "Redimensionner la zone de saisie",
@@ -16819,9 +16823,7 @@
     "statusInReview": "En revue",
     "statusBlocked": "Bloquée",
     "statusDone": "Terminée",
-    "priorityLow": "Basse",
     "priorityMedium": "Moyenne",
-    "priorityHigh": "Haute",
     "priorityUrgent": "Urgente",
     "howToMoveForward": "Comment avancer",
     "taskGuidanceFallback": "Gardez le responsable, le PRD, les critères d’acceptation et l’état à jour pour que l’action suivante soit claire.",
@@ -17503,7 +17505,10 @@
       "placeId": "ID de place Roblox",
       "robloxIdsHint": "Les deux nombres figurent dans l'URL du Creator Dashboard d'une expérience déjà publiée depuis Studio.",
       "publishRoblox": "Publier sur Roblox",
-      "robloxPublished": "Publié sur Roblox en version {version}"
+      "robloxPublished": "Publié sur Roblox en version {version}",
+      "gateTitle": "Créez un compte pour construire une place Roblox",
+      "gateBody": "Le Luau et le .rbxlx sont écrits sur le serveur. Un jeu web jouable ne demande aucun compte — demandez-le et il est construit sur ce canevas immédiatement.",
+      "proposal": "Jeu jouable créé : {title}"
     },
     "teammateSeated": "Sur ce tableau",
     "launcherEyebrow": "Créer",
@@ -21906,6 +21911,17 @@
     "expired": "Cette demande a expiré et ne peut plus être traitée.",
     "noLongerOpen": "Cette demande est {status} et n’est plus ouverte.",
     "waitingOnOthers": "Une partie précédente n’a pas encore terminé. Vous pourrez {verb} ensuite."
+  },
+  "legalDocumentShare": {
+    "eyebrow": "Partagé avec vous",
+    "loading": "Chargement…",
+    "invalid": "Ce lien n'est pas valide. Vérifiez le lien qui vous a été envoyé.",
+    "permissionDownload": "Vous pouvez télécharger ce document.",
+    "permissionView": "Vous pouvez consulter ce document.",
+    "downloadButton": "Télécharger le document",
+    "openButton": "Ouvrir le document",
+    "downloadHelp": "Télécharge la version actuelle sur votre appareil.",
+    "viewHelp": "S'ouvre dans un nouvel onglet. Ce lien ne permet pas d'en enregistrer une copie."
   },
   "cofounder": {
     "title": "Trouver un cofondateur",

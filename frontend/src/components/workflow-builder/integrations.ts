@@ -33,6 +33,13 @@ export interface Integration {
   operations: IntegrationOperation[];
   /** Optional emoji override; falls back to the category icon. */
   icon?: string;
+  /**
+   * Preset `config.system` for a `kind: 'llm'` integration — how the AI Agents
+   * category's presets (Summarize/Categorize/Sentiment/…) differ from the LLM
+   * Platforms category's presets (which pick a vendor, not a task) without a
+   * second node kind: same execution path, a curated starting prompt.
+   */
+  systemPrompt?: string;
 }
 
 export interface IntegrationCategory {
@@ -44,6 +51,7 @@ export interface IntegrationCategory {
 }
 
 export const INTEGRATION_CATEGORIES: IntegrationCategory[] = [
+  { id: 'ai-agents', label: 'AI Agents', icon: '🤖', accent: 'var(--teal-bright)', order: 0 },
   { id: 'llm', label: 'LLM Platforms', icon: '✨', accent: 'var(--purple-bright)', order: 1 },
   { id: 'official', label: 'Core MCP Servers', icon: '🧩', accent: 'var(--sky-bright)', order: 2 },
   { id: 'data-db', label: 'Data & Databases', icon: '🗄️', accent: 'var(--emerald-bright)', order: 3 },
@@ -71,6 +79,16 @@ export function integrationIcon(integ: Integration): string {
 // Catalog compiled from the `mcp-integration-research` workflow (73 entries).
 // Icons are display-only; the category icon is the fallback.
 export const INTEGRATIONS: Integration[] = [
+  // ── AI Agents — curated task presets over the generic `llm` kind (same
+  // execution path as an LLM Platform node; only the starting `system` prompt
+  // differs). A web-search-grounded agent (Make's "Generate a response") needs
+  // no dedicated preset: chain a Tavily/Perplexity node (below, official/llm
+  // categories) into one of these — its output becomes this node's {{input}}.
+  { id: 'ai-simple-prompt', label: 'Simple Prompt', category: 'ai-agents', kind: 'llm', auth: 'none', icon: '💬', description: 'Send a custom prompt to the AI and get a text response. For web-grounded answers, chain a Tavily/Perplexity node first.', operations: [{ id: 'chat-completion', label: 'Generate response' }], systemPrompt: '' },
+  { id: 'ai-summarize', label: 'Summarize Text', category: 'ai-agents', kind: 'llm', auth: 'none', icon: '📝', description: 'Condense longer text into a shorter summary.', operations: [{ id: 'chat-completion', label: 'Generate response' }], systemPrompt: 'Summarize the input text concisely, preserving the key facts and any numbers or names. Reply with only the summary.' },
+  { id: 'ai-categorize', label: 'Categorize Text', category: 'ai-agents', kind: 'llm', auth: 'none', icon: '🏷️', description: 'Classify text into one of your own categories.', operations: [{ id: 'chat-completion', label: 'Generate response' }], systemPrompt: 'Classify the input text into exactly one category from the list the user provides in the prompt. Reply with only the category name.' },
+  { id: 'ai-sentiment', label: 'Analyze Sentiment', category: 'ai-agents', kind: 'llm', auth: 'none', icon: '📈', description: 'Determine whether text reads positive, neutral, or negative.', operations: [{ id: 'chat-completion', label: 'Generate response' }], systemPrompt: 'Analyze the sentiment of the input text. Reply with only one word: positive, neutral, or negative.' },
+
   // ── LLM platforms ────────────────────────────────────────────────────────
   { id: 'openai', label: 'OpenAI', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🤖', description: 'GPT models for chat, embeddings, image generation, and transcription.', operations: [{ id: 'chat-completion', label: 'Chat completion' }, { id: 'embeddings', label: 'Create embeddings' }, { id: 'image-generation', label: 'Generate image' }, { id: 'transcription', label: 'Transcribe audio' }] },
   { id: 'anthropic', label: 'Anthropic Claude', category: 'llm', kind: 'llm', auth: 'api-key', icon: '🧠', description: 'Claude models for messages, tool use, and vision.', operations: [{ id: 'chat-completion', label: 'Create message' }, { id: 'tool-use', label: 'Tool use / function calling' }, { id: 'vision', label: 'Analyze image' }] },
@@ -185,7 +203,7 @@ export function presetConfig(integ: Integration): Record<string, unknown> {
   const firstOp = integ.operations[0]?.id ?? '';
   switch (integ.kind) {
     case 'llm':
-      return { provider: integ.id, operation: firstOp, model: '', system: '', prompt: '', temperature: 0.7 };
+      return { provider: integ.id, operation: firstOp, model: '', system: integ.systemPrompt ?? '', prompt: '', temperature: 0.7 };
     case 'trigger':
       return { triggerType: 'integration', source: integ.id, operation: firstOp };
     case 'mcp':

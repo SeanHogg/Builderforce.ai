@@ -15483,6 +15483,7 @@
       "prd": "PRD",
       "linkedRequirements": "Verknüpfte Anforderungen",
       "noPrdLinked": "Kein PRD verknüpft",
+      "blockedByDependency": "Durch eine andere Aufgabe blockiert",
       "doneWhen": "Fertig, wenn",
       "status": "Status",
       "openWork": "Offene Arbeit",
@@ -16049,7 +16050,10 @@
       "messageCount": "{count} Meldungen an diesem Objekt",
       "insertAfter": "Einen Schritt nach {title} hinzufuegen",
       "openSettings": "Einstellungen fuer {title}",
-      "websiteMarkupFrameTitle": "Eingebetteter Inhalt"
+      "websiteMarkupFrameTitle": "Eingebetteter Inhalt",
+      "gameRobloxReady": "Roblox-Place erstellt. Lade ihn herunter und öffne ihn in Roblox Studio zum Spielen.",
+      "gameRobloxOpenIn": "Öffnet in Roblox Studio",
+      "gameRobloxFormat": ".rbxlx-Place"
     },
     "editor": {
       "toolbar": "Formatierung",
@@ -16149,7 +16153,7 @@
     "run": "Ausführen",
     "saveCollaborate": "Speichern und zusammenarbeiten",
     "addToCanvas": "Zum Canvas hinzufügen",
-    "searchEverything": "Alles durchsuchen…",
+    "searchEverything": "Objekttypen durchsuchen…",
     "askBrain": "Brain zu diesem Canvas fragen",
     "sendBrain": "An Brain senden",
     "resizePrompt": "Größe des Prompt-Bereichs ändern",
@@ -16409,8 +16413,7 @@
       "incident": "Vorfall",
       "book": "Buch",
       "account": "Kundenkonto",
-      "sticky": "Haftnotiz",
-      "legalDocument": "Rechtsdokument"
+      "sticky": "Haftnotiz"
     },
     "twilioSetup": {
       "title": "Twilio-Integration",
@@ -16820,9 +16823,7 @@
     "statusInReview": "In Prüfung",
     "statusBlocked": "Blockiert",
     "statusDone": "Erledigt",
-    "priorityLow": "Niedrig",
     "priorityMedium": "Mittel",
-    "priorityHigh": "Hoch",
     "priorityUrgent": "Dringend",
     "howToMoveForward": "So geht es weiter",
     "taskGuidanceFallback": "Halten Sie Verantwortliche, PRD, Abnahmekriterien und Status aktuell, damit die nächste Aktion klar ist.",
@@ -17504,7 +17505,10 @@
       "placeId": "Roblox-Place-ID",
       "robloxIdsHint": "Beide Zahlen stehen in der Creator-Dashboard-URL einer Experience, die du bereits aus Studio veröffentlicht hast.",
       "publishRoblox": "Auf Roblox veröffentlichen",
-      "robloxPublished": "Auf Roblox als Version {version} veröffentlicht"
+      "robloxPublished": "Auf Roblox als Version {version} veröffentlicht",
+      "gateTitle": "Konto erstellen, um einen Roblox-Place zu bauen",
+      "gateBody": "Das Luau und die .rbxlx werden auf dem Server geschrieben. Ein spielbares Web-Spiel braucht kein Konto — frag danach und es wird sofort auf dieser Leinwand gebaut.",
+      "proposal": "Spielbares Spiel gebaut: {title}"
     },
     "teammateSeated": "Auf diesem Board",
     "launcherEyebrow": "Erstellen",
@@ -21907,6 +21911,17 @@
     "expired": "Diese Anfrage ist abgelaufen und kann nicht mehr beantwortet werden.",
     "noLongerOpen": "Diese Anfrage ist {status} und nicht mehr offen.",
     "waitingOnOthers": "Eine vorherige Partei ist noch nicht fertig. Danach können Sie {verb}."
+  },
+  "legalDocumentShare": {
+    "eyebrow": "Mit Ihnen geteilt",
+    "loading": "Wird geladen…",
+    "invalid": "Dieser Link ist ungültig. Prüfen Sie den Ihnen zugesandten Link.",
+    "permissionDownload": "Sie können dieses Dokument herunterladen.",
+    "permissionView": "Sie können dieses Dokument ansehen.",
+    "downloadButton": "Dokument herunterladen",
+    "openButton": "Dokument öffnen",
+    "downloadHelp": "Lädt die aktuelle Version auf Ihr Gerät herunter.",
+    "viewHelp": "Öffnet in einem neuen Tab. Über diesen Link können Sie keine Kopie speichern."
   },
   "cofounder": {
     "title": "Mitgründer:in finden",

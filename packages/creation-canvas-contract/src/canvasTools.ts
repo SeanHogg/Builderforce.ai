@@ -201,6 +201,13 @@ export const GUEST_GATED_CANVAS_TOOLS = [
   // Server-side stock search / image generation. The ONLY route to real pixels, so its
   // absence rewrote every "draw me…" turn into a drawing-tool failure.
   'canvas_add_image',
+  // The ONLY route to a playable game. Deliberately here rather than in the safe set
+  // even though HALF of it is guest-safe: a web game is authored in the visitor's own
+  // browser and needs no account, while a Roblox place is written on the server. The
+  // tool self-gates on that split. It is classified by the failure its ABSENCE causes,
+  // which is the reason this set exists — without it a guest asking for a game gets
+  // `canvas_add_object`, and that produces a design document nobody can play.
+  'canvas_add_game',
   // Writes the board's cases into the tenant's QA library (`/api/qa/flows` +
   // `/api/qa/generate`) and reads its runs back. Gated rather than absent for the
   // reason the whole set exists: a visitor who has just watched the canvas write their
@@ -480,6 +487,53 @@ export const CANVAS_IMAGE_TOOL = 'canvas_add_image';
 export function canvasImageToolRedirect(kind: string): string {
   return `A "${kind}" object cannot hold a photograph or a rendered picture, so this would land as an empty card. This is an IMAGE request: call ${CANVAS_IMAGE_TOOL} with mode "generate" to create the picture, or mode "find" to search real photography. Use kind "drawing" only for vector {x,y} points you author yourself, and kind "chart" only for plotted values — never as a stand-in for a picture, and never offer one to the user as if it were one.`;
 }
+
+/**
+ * The ONE tool that puts a PLAYABLE game on the canvas.
+ *
+ * Exactly the same problem, and the same answer, as {@link CANVAS_IMAGE_TOOL}. A
+ * `game` object created through `canvas_add_object` is a brief with no artifact
+ * behind it — generation is a separate step the model does not know to take. So
+ * "create a Roblox game" produced an object whose `content` held a four-thousand
+ * word design document and whose `outputUrl` was empty: a essay where a game was
+ * asked for (operator report 2026-08-17, ui 2026.8.49).
+ *
+ * This tool generates the artifact and attaches it in the SAME call, so a game
+ * object never exists in the unplayable state.
+ */
+export const CANVAS_GAME_TOOL = 'canvas_add_game';
+
+/** What a generated game is authored FOR. The artifact genuinely differs. */
+export const GAME_PLATFORMS = ['web', 'roblox'] as const;
+export type GamePlatform = (typeof GAME_PLATFORMS)[number];
+
+export function isGamePlatform(value: unknown): value is GamePlatform {
+  return typeof value === 'string' && (GAME_PLATFORMS as readonly string[]).includes(value);
+}
+
+/**
+ * Returned to the MODEL when it reaches for `canvas_add_object` to satisfy a
+ * request for a game.
+ *
+ * The refusal this replaces was `emptyShellProblem`, which said "send the authored
+ * content in fields: content, prompt, mediaKind, …". That is true for most kinds
+ * and actively harmful for this one: it names `content` first, so the model wrote
+ * PROSE into it and produced a design document that satisfied the gate and played
+ * nothing. A refusal has to name the tool that would actually work.
+ */
+export function canvasGameToolRedirect(): string {
+  return `A "game" object created this way is a brief with no game behind it — generating the playable artifact is a separate step, so this lands as an unplayable card and a design document is NOT a game. Call ${CANVAS_GAME_TOOL} instead: it writes the game and attaches it in one call, so it is playable immediately. Use platform "roblox" when the user names Roblox, and platform "web" otherwise — a web game is one self-contained document that also installs on a phone and wraps into an Android or iOS app, so never refuse a phone or app request or route it to a design doc. Do not describe the game in prose instead of building it.`;
+}
+
+/**
+ * Returned to the MODEL when a game is requested on a canvas with no account.
+ *
+ * Same rule as the image gate: name the ONE real reason, say what the board still
+ * has, and forbid the invented limitation. A guest CAN get a playable web game
+ * (it is authored in their own browser), so the gate is Roblox-only — and saying
+ * otherwise would be false.
+ */
+export const CANVAS_GAME_ACCOUNT_GATE = `Authoring a Roblox place needs a free Builderforce account: the Luau and the .rbxlx are written on the server, not in this browser. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the Roblox build needs a free account, and then offer to build a playable WEB game right now with ${CANVAS_GAME_TOOL} at platform "web" — that works on this board with no account, plays immediately, and installs on a phone. Do NOT say that you cannot make games, and do NOT describe this as a technical limitation: it is the account, and it is one click away.`;
 
 /**
  * Returned to the MODEL when a picture is requested on a canvas with no account behind

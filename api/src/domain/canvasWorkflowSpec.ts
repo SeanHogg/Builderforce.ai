@@ -107,6 +107,12 @@ function inferKind(step: CanvasWorkflowStep): WorkflowNodeKind | null {
   const KNOWN: WorkflowNodeKind[] = [
     'trigger', 'agent', 'llm', 'mcp', 'connector', 'memory',
     'knowledge', 'train', 'transform', 'filter', 'branch', 'output', 'gmail',
+    // Flow Control / Tools / Text Parser / Diagnostics — no natural-language
+    // inference heuristic exists for these (unlike `filter`'s condition/predicate
+    // fields below), so an authored step only resolves to one of them via an
+    // EXPLICIT `kind`; `configForKind`'s default branch passes its fields through.
+    'router', 'merge', 'set-variable', 'get-variable', 'increment', 'sleep',
+    'regex-match', 'html-to-text', 'assert', 'healthcheck',
   ];
   if (explicit && (KNOWN as string[]).includes(explicit)) return explicit as WorkflowNodeKind;
   // `sms`, `whatsapp`, `email`, `call` are how a person names the step — all of

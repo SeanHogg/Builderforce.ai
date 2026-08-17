@@ -670,6 +670,7 @@ function TaskBody({ data }: { data: CreationNodeData }) {
   const prdSummary = textValue(data.prdSummary);
   const acceptance = textValue(data.acceptanceCriteria);
   return <div className={styles.taskBody}>
+    {data.isBlocked === true && <p role="status" style={{ margin: 0, padding: '3px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--tone-warning-bg)', color: 'var(--tone-warning-ink)', fontSize: 10, fontWeight: 600 }}>{t('blockedByDependency')}</p>}
     <div className={styles.taskFacts}>
       <span><small>{t('agent')}</small><b>{agent}</b></span>
       <span><small>{t('priority')}</small><b>{priority}</b></span>
@@ -2101,6 +2102,29 @@ function GameBody({ data }: { data: CreationNodeData }) {
   // Regenerating replaces the document; the running frame must be torn down or
   // the board keeps playing the previous game under the new title.
   useEffect(() => setPlaying(false), [document]);
+
+  /**
+   * A Roblox place is a real artifact that this browser cannot run.
+   *
+   * There is no honest "play" here: `.rbxlx` opens in Roblox Studio, a desktop
+   * application. Showing the play frame and having it do nothing would be worse
+   * than showing none, and showing the "no game yet" empty state would be false —
+   * the place exists and is downloadable. So it gets its own card that says what
+   * it is and where it opens.
+   */
+  if (data.gamePlatform === 'roblox') {
+    const built = typeof data.outputUrl === 'string' && data.outputUrl.length > 0;
+    return <div className={styles.creativeStudioBody}>
+      {poster
+        ? <img src={poster} alt={t('previewAlt', { title: data.title })} />
+        : <div className={styles.creativeStudioPreview} aria-hidden="true"><span><Icon source={creationObjectDefinition(data.kind).icon} size={24} /></span><i /><i /><i /></div>}
+      <AuthoredContent data={data} fallback={built ? t('gameRobloxReady') : t('gameNotGenerated')} />
+      <div className={styles.pills}>
+        <span>{built ? t('gameRobloxOpenIn') : t('gameGenerateFirst')}</span>
+        {built && <span>{t('gameRobloxFormat')}</span>}
+      </div>
+    </div>;
+  }
 
   if (!document) {
     return <div className={styles.creativeStudioBody}>

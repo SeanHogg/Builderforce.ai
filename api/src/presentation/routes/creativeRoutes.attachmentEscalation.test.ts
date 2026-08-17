@@ -24,7 +24,14 @@ vi.mock('../../application/llm/tenantProxy', () => ({
   })),
 }));
 
-vi.mock('../../application/llm/LlmProxyService', () => ({
+vi.mock('../../application/llm/LlmProxyService', async (importOriginal) => ({
+  // A full-replacement mock silently drops every OTHER export — including
+  // `RECOGNIZED_CODER_MODELS`, which `cloudAgentEngine.ts` reads at module load
+  // (via `createCreativeRoutes`'s own import chain), not lazily, so the module
+  // throws before this file's tests can even run. Spreading the real module
+  // keeps every export this file does not care about genuine, and overrides
+  // only the two this test actually stubs.
+  ...(await importOriginal<typeof import('../../application/llm/LlmProxyService')>()),
   ideProxy: vi.fn(),
   readProxyChoice: vi.fn(async () => ({ content: JSON.stringify({ basics: { name: 'Ada Lovelace' } }) })),
 }));

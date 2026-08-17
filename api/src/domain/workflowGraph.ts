@@ -26,8 +26,18 @@ export type WorkflowNodeKind =
   | 'knowledge'  // ingest into / query a knowledge base
   | 'train'      // train an Evermind model (builderforce-memory engine) → hippocampus model
   | 'transform'  // ETL: map/shape the payload
-  | 'filter'     // ETL: drop the payload unless a predicate holds
-  | 'branch'     // ETL: conditional fan-out
+  | 'filter'     // Flow Control: drop the payload unless a predicate holds
+  | 'branch'     // Flow Control: conditional fan-out, tags $branch
+  | 'router'     // Flow Control: N-way conditional fan-out, tags $route
+  | 'merge'      // Flow Control: join multiple upstream branches into one payload
+  | 'set-variable' // Tools: write a run-scoped variable
+  | 'get-variable' // Tools: read a run-scoped variable
+  | 'increment'    // Tools: a definition-scoped, cross-run persistent counter
+  | 'sleep'        // Tools: delay this path by N seconds
+  | 'regex-match'  // Text Parser: match a regular expression against the input
+  | 'html-to-text' // Text Parser: strip HTML tags from the input
+  | 'assert'       // Diagnostics: fail (or warn) the run unless an expression holds
+  | 'healthcheck'  // Diagnostics: probe a URL for reachability / expected status
   | 'output'     // terminal: write artifact / notify / push to board
   | 'gmail';     // integration: send an email via the tenant's connected Gmail
 
@@ -45,6 +55,16 @@ export const NODE_HANDLER_ROLES: Record<Exclude<WorkflowNodeKind, 'agent'>, stri
   transform: 'node:transform',
   filter:    'node:filter',
   branch:    'node:branch',
+  router:    'node:router',
+  merge:     'node:merge',
+  'set-variable': 'node:set-variable',
+  'get-variable': 'node:get-variable',
+  increment:      'node:increment',
+  sleep:          'node:sleep',
+  'regex-match':  'node:regex-match',
+  'html-to-text': 'node:html-to-text',
+  assert:         'node:assert',
+  healthcheck:    'node:healthcheck',
   output:    'node:output',
   gmail:     'node:gmail',
 };
@@ -187,6 +207,26 @@ export function taskTextForNode(node: WorkflowDefNode): string {
       return `Filter: ${String(c.predicate ?? node.label)}`;
     case 'branch':
       return `Branch on: ${String(c.condition ?? node.label)}`;
+    case 'router':
+      return `Route on: ${String(c.fallback ?? node.label ?? 'first matching condition')}`;
+    case 'merge':
+      return `Merge (${String(c.strategy ?? 'array')})`;
+    case 'set-variable':
+      return `Set variable "${String(c.key ?? node.label)}"`;
+    case 'get-variable':
+      return `Get variable "${String(c.key ?? node.label)}"`;
+    case 'increment':
+      return `Increment "${String(c.key ?? node.label)}"`;
+    case 'sleep':
+      return `Sleep ${String(c.seconds ?? 0)}s`;
+    case 'regex-match':
+      return `Match /${String(c.pattern ?? node.label)}/`;
+    case 'html-to-text':
+      return 'HTML to text';
+    case 'assert':
+      return `Assert: ${String(c.expression ?? node.label)}`;
+    case 'healthcheck':
+      return `Healthcheck: ${String(c.url ?? node.label)}`;
     case 'trigger':
       return `Trigger (${String(c.triggerType ?? 'manual')})`;
     case 'output':

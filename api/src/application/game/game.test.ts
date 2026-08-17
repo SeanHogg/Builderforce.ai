@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CANVAS_GAME_ACCOUNT_GATE,
+  CANVAS_GAME_TOOL,
+  CREATION_CANVAS_TOOLS,
+  GAME_PLATFORMS,
+  GUEST_GATED_CANVAS_TOOLS,
+  canvasGameToolRedirect,
+  isGamePlatform,
+} from '@builderforce/creation-canvas-contract';
+import {
   accentFromTitle,
   escapeHtml,
   gameSlug,
@@ -583,6 +592,59 @@ describe('buildGame', () => {
   it('falls back to the title when the brief is empty, so a target never has no context', () => {
     const built = buildGame({ title: 'Space Blaster', brief: '   ', html: PLAYABLE });
     expect(built.ok && built.game.brief).toBe('Space Blaster');
+  });
+});
+
+/**
+ * The routing contract, which is where this feature actually broke.
+ *
+ * Everything else in this file tested the machinery that ships a game. None of it
+ * tested the path a person takes to ASK for one — so "create a Roblox game"
+ * reached `canvas_add_object`, satisfied the empty-shell gate with a four-
+ * thousand-word design document, and produced an object with no artifact behind
+ * it (operator report 2026-08-17, ui 2026.8.49). These are the assertions that
+ * would have caught it.
+ */
+describe('asking for a game routes to the tool that builds one', () => {
+  it('advertises exactly one tool that produces a playable game', () => {
+    expect(CANVAS_GAME_TOOL).toBe('canvas_add_game');
+    expect(CREATION_CANVAS_TOOLS).toContain(CANVAS_GAME_TOOL);
+  });
+
+  it('offers it to guests, because an absent tool is answered with an invented refusal', () => {
+    // A guest asking for a game otherwise falls through to `canvas_add_object`,
+    // which is the exact route that produced a design document.
+    expect(GUEST_GATED_CANVAS_TOOLS).toContain(CANVAS_GAME_TOOL);
+  });
+
+  it('names the tool that works, instead of describing the schema that does not', () => {
+    const redirect = canvasGameToolRedirect();
+    expect(redirect).toContain(CANVAS_GAME_TOOL);
+    // The refusal this replaces listed `content` first, which is precisely how a
+    // model was taught to write prose into a game.
+    expect(redirect).toMatch(/design document is NOT a game/i);
+  });
+
+  it('tells the model a phone or app request is still a web game, not a refusal', () => {
+    // "a game that ports to android" must not become a Roblox place, a design
+    // document, or "I cannot do that" — it is one web document that installs.
+    const redirect = canvasGameToolRedirect();
+    expect(redirect).toMatch(/phone/i);
+    expect(redirect).toMatch(/platform "web"/);
+  });
+
+  it('gates only the half that genuinely needs a server, and says what still works', () => {
+    // A web game is authored in the visitor's own browser. Claiming otherwise
+    // would be a false limitation — the failure mode the image gate exists for.
+    expect(CANVAS_GAME_ACCOUNT_GATE).toMatch(/roblox/i);
+    expect(CANVAS_GAME_ACCOUNT_GATE).toContain(CANVAS_GAME_TOOL);
+    expect(CANVAS_GAME_ACCOUNT_GATE).toMatch(/cannot make games/i);
+  });
+
+  it('knows the two platforms that produce genuinely different artifacts', () => {
+    expect([...GAME_PLATFORMS]).toEqual(['web', 'roblox']);
+    expect(isGamePlatform('roblox')).toBe(true);
+    expect(isGamePlatform('android')).toBe(false);
   });
 });
 

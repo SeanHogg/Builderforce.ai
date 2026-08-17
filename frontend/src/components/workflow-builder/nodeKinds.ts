@@ -33,7 +33,9 @@ export function isFieldVisible(field: ConfigField, config: Record<string, unknow
   return Array.isArray(equals) ? equals.includes(current) : current === equals;
 }
 
-export type NodeGroup = 'Trigger' | 'LLM Logic' | 'Evermind Build' | 'Integrations' | 'ETL' | 'Agent' | 'Output';
+export type NodeGroup =
+  | 'Trigger' | 'LLM Logic' | 'Evermind Build' | 'Integrations' | 'ETL' | 'Agent' | 'Output'
+  | 'Flow Control' | 'Tools' | 'Text Parser' | 'Diagnostics';
 
 export interface NodeKindMeta {
   kind: WorkflowNodeKind;
@@ -382,21 +384,142 @@ export const NODE_KINDS: NodeKindMeta[] = [
     kind: 'filter',
     label: 'Filter',
     icon: '🚦',
-    group: 'ETL',
-    accent: 'var(--yellow-bright)',
-    blurb: 'Drop the payload unless a predicate holds.',
+    group: 'Flow Control',
+    accent: 'var(--emerald-bright)',
+    blurb: 'Drop the payload unless a predicate holds. Pair with Router/Branch: filter on $route == "Name" to gate one path.',
     defaultConfig: { predicate: '' },
-    fields: [{ key: 'predicate', label: 'Predicate', type: 'text', placeholder: 'e.g. status == "ready"' }],
+    fields: [{ key: 'predicate', label: 'Predicate', type: 'text', placeholder: 'e.g. status == "ready", or $route == "Then"' }],
   },
   {
     kind: 'branch',
     label: 'Branch',
     icon: '🔱',
-    group: 'ETL',
-    accent: 'var(--yellow-bright)',
-    blurb: 'Conditional fan-out to downstream nodes.',
+    group: 'Flow Control',
+    accent: 'var(--emerald-bright)',
+    blurb: 'Tags the payload with $branch (true/false) from a condition — pair with a Filter reading $branch to gate one side.',
     defaultConfig: { condition: '' },
     fields: [{ key: 'condition', label: 'Condition', type: 'text', placeholder: 'Branch condition' }],
+  },
+  {
+    kind: 'router',
+    label: 'Router / If-Else',
+    icon: '🔀',
+    group: 'Flow Control',
+    accent: 'var(--emerald-bright)',
+    blurb: 'N-way conditional fan-out — tags the payload with $route (the first matching route\'s name, or the fallback). Pair with a Filter reading $route == "Name" on each downstream path, the same way as Branch/$branch.',
+    defaultConfig: { routes: [{ name: 'Then', condition: '' }], fallback: 'Else' },
+    fields: [
+      { key: 'routes', label: 'Routes (JSON: [{"name","condition"}])', type: 'textarea', placeholder: '[{"name":"Then","condition":"status == \\"ready\\""}]' },
+      { key: 'fallback', label: 'Fallback route name', type: 'text', placeholder: 'e.g. Else' },
+    ],
+  },
+  {
+    kind: 'merge',
+    label: 'Merge',
+    icon: '🔗',
+    group: 'Flow Control',
+    accent: 'var(--emerald-bright)',
+    blurb: 'Join multiple upstream branches back into one payload.',
+    defaultConfig: { strategy: 'array', keys: '' },
+    fields: [
+      { key: 'strategy', label: 'Strategy', type: 'select', options: ['array', 'object-keys', 'first'] },
+      { key: 'keys', label: 'Keys (for object-keys, comma-separated)', type: 'text', placeholder: 'e.g. a,b,c', visibleWhen: { field: 'strategy', equals: 'object-keys' } },
+    ],
+  },
+  {
+    kind: 'set-variable',
+    label: 'Set Variable',
+    icon: '📌',
+    group: 'Tools',
+    accent: 'var(--indigo-bright)',
+    blurb: 'Write a variable for the rest of THIS run to read (not shared across runs).',
+    defaultConfig: { key: '', value: '{{input}}' },
+    fields: [
+      { key: 'key', label: 'Key', type: 'text', placeholder: 'e.g. leadScore' },
+      { key: 'value', label: 'Value', type: 'text', placeholder: 'Supports {{input}}' },
+    ],
+  },
+  {
+    kind: 'get-variable',
+    label: 'Get Variable',
+    icon: '📎',
+    group: 'Tools',
+    accent: 'var(--indigo-bright)',
+    blurb: 'Read a variable set earlier in THIS run.',
+    defaultConfig: { key: '' },
+    fields: [{ key: 'key', label: 'Key', type: 'text', placeholder: 'e.g. leadScore' }],
+  },
+  {
+    kind: 'increment',
+    label: 'Increment',
+    icon: '🔢',
+    group: 'Tools',
+    accent: 'var(--indigo-bright)',
+    blurb: 'A counter that PERSISTS ACROSS RUNS of this workflow (unlike Set/Get Variable) — returns the new value.',
+    defaultConfig: { key: 'counter', step: 1 },
+    fields: [
+      { key: 'key', label: 'Counter key', type: 'text', placeholder: 'e.g. counter' },
+      { key: 'step', label: 'Step', type: 'number' },
+    ],
+  },
+  {
+    kind: 'sleep',
+    label: 'Sleep',
+    icon: '⏱️',
+    group: 'Tools',
+    accent: 'var(--indigo-bright)',
+    blurb: 'Delay this path by N seconds before continuing.',
+    defaultConfig: { seconds: 5 },
+    fields: [{ key: 'seconds', label: 'Seconds', type: 'number' }],
+  },
+  {
+    kind: 'regex-match',
+    label: 'Match Pattern',
+    icon: '🔎',
+    group: 'Text Parser',
+    accent: 'var(--amber-bright)',
+    blurb: 'Match a regular expression against the input; outputs matches + capture groups.',
+    defaultConfig: { pattern: '', flags: '' },
+    fields: [
+      { key: 'pattern', label: 'Pattern (regex)', type: 'text', placeholder: 'e.g. \\d{3}-\\d{4}' },
+      { key: 'flags', label: 'Flags', type: 'text', placeholder: 'e.g. gi' },
+    ],
+  },
+  {
+    kind: 'html-to-text',
+    label: 'HTML to Text',
+    icon: '📄',
+    group: 'Text Parser',
+    accent: 'var(--amber-bright)',
+    blurb: 'Strip HTML tags from the input, leaving plain text.',
+    defaultConfig: {},
+    fields: [],
+  },
+  {
+    kind: 'assert',
+    label: 'Assert',
+    icon: '✅',
+    group: 'Diagnostics',
+    accent: 'var(--pink-bright)',
+    blurb: 'Fail (or just warn) the run unless an expression holds — makes a bad upstream state visible in run history instead of silently continuing.',
+    defaultConfig: { expression: '', onFail: 'fail-task' },
+    fields: [
+      { key: 'expression', label: 'Expression', type: 'text', placeholder: 'e.g. status == "ready"' },
+      { key: 'onFail', label: 'On fail', type: 'select', options: ['fail-task', 'warn-only'] },
+    ],
+  },
+  {
+    kind: 'healthcheck',
+    label: 'Healthcheck',
+    icon: '🩺',
+    group: 'Diagnostics',
+    accent: 'var(--pink-bright)',
+    blurb: 'Probe a URL and report whether it returned the expected status.',
+    defaultConfig: { url: '', expectedStatus: 200 },
+    fields: [
+      { key: 'url', label: 'URL', type: 'text', placeholder: 'https://example.com/health — supports {{input}}' },
+      { key: 'expectedStatus', label: 'Expected status', type: 'number' },
+    ],
   },
   {
     kind: 'output',
@@ -421,7 +544,10 @@ export const NODE_KIND_MAP: Record<WorkflowNodeKind, NodeKindMeta> = NODE_KINDS.
   {} as Record<WorkflowNodeKind, NodeKindMeta>,
 );
 
-export const NODE_GROUPS: NodeGroup[] = ['Trigger', 'LLM Logic', 'Evermind Build', 'Integrations', 'Agent', 'ETL', 'Output'];
+export const NODE_GROUPS: NodeGroup[] = [
+  'Trigger', 'Flow Control', 'Tools', 'Text Parser', 'Diagnostics',
+  'LLM Logic', 'Evermind Build', 'Integrations', 'Agent', 'ETL', 'Output',
+];
 
 /**
  * The translation key each family is named by.
@@ -438,4 +564,48 @@ export const NODE_GROUP_KEYS: Record<NodeGroup, string> = {
   'Agent': 'agent',
   'ETL': 'etl',
   'Output': 'output',
+  'Flow Control': 'flowControl',
+  'Tools': 'tools',
+  'Text Parser': 'textParser',
+  'Diagnostics': 'diagnostics',
 };
+
+/**
+ * i18n slug for each node kind ADDED alongside Flow Control / Tools / Text
+ * Parser / Diagnostics — deliberately NOT a full retrofit of the ~30
+ * pre-existing kinds above (their `label`/`blurb`/field labels predate i18n
+ * entirely; see ROADMAP.md's tracked gap). Only kinds present here have a
+ * `evermindBuild.nodeKind.<slug>.{label,blurb}` translation; every other kind
+ * keeps rendering its catalog literal, unchanged, via the `??` fallback in
+ * {@link nodeKindLabel} / {@link nodeKindBlurb}.
+ */
+export const I18N_NODE_KIND_SLUG: Partial<Record<WorkflowNodeKind, string>> = {
+  router: 'router',
+  merge: 'merge',
+  'set-variable': 'setVariable',
+  'get-variable': 'getVariable',
+  increment: 'increment',
+  sleep: 'sleep',
+  'regex-match': 'regexMatch',
+  'html-to-text': 'htmlToText',
+  assert: 'assert',
+  healthcheck: 'healthcheck',
+};
+
+/** A translator over the `evermindBuild` namespace — `useTranslations('evermindBuild')`'s
+ *  return type, accepting an arbitrary key (the catalog builds keys dynamically). */
+type EvermindBuildTranslator = (key: string) => string;
+
+/** The label to show for a node kind — translated for newly-added kinds, the
+ *  catalog literal for every kind that predates i18n. */
+export function nodeKindLabel(meta: NodeKindMeta, t: EvermindBuildTranslator): string {
+  const slug = I18N_NODE_KIND_SLUG[meta.kind];
+  return slug ? t(`nodeKind.${slug}.label`) : meta.label;
+}
+
+/** The blurb (tooltip / inspector subtitle) to show for a node kind — same
+ *  translated-if-new, literal-otherwise rule as {@link nodeKindLabel}. */
+export function nodeKindBlurb(meta: NodeKindMeta, t: EvermindBuildTranslator): string {
+  const slug = I18N_NODE_KIND_SLUG[meta.kind];
+  return slug ? t(`nodeKind.${slug}.blurb`) : meta.blurb;
+}

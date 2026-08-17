@@ -14950,6 +14950,9 @@
     "unavailable": "This résumé link is unavailable."
   },
   "creationCanvas": {
+    "costToBuild": "Cost to build",
+    "costUnderOneCent": "<$0.01",
+    "costRunsAndTokens": "{requests} runs · {tokens} tokens",
     "storyPoints": "Story points",
     "startDate": "Start date",
     "dueDate": "Due date",
@@ -15483,6 +15486,7 @@
       "prd": "PRD",
       "linkedRequirements": "Linked requirements",
       "noPrdLinked": "No PRD linked",
+      "blockedByDependency": "Blocked by another task",
       "doneWhen": "Done when",
       "status": "Status",
       "openWork": "Open work",
@@ -16049,7 +16053,10 @@
       "messageCount": "{count} messages on this object",
       "insertAfter": "Add a step after {title}",
       "openSettings": "Settings for {title}",
-      "websiteMarkupFrameTitle": "Embedded content"
+      "websiteMarkupFrameTitle": "Embedded content",
+      "gameRobloxReady": "Roblox place built. Download it and open it in Roblox Studio to play.",
+      "gameRobloxOpenIn": "Opens in Roblox Studio",
+      "gameRobloxFormat": ".rbxlx place"
     },
     "editor": {
       "toolbar": "Formatting",
@@ -16149,7 +16156,7 @@
     "run": "Run",
     "saveCollaborate": "Save & collaborate",
     "addToCanvas": "Add to canvas",
-    "searchEverything": "Search everything…",
+    "searchEverything": "Search object types…",
     "askBrain": "Ask Brain about this canvas",
     "sendBrain": "Send to Brain",
     "resizePrompt": "Resize prompt area",
@@ -16819,9 +16826,7 @@
     "statusInReview": "In review",
     "statusBlocked": "Blocked",
     "statusDone": "Done",
-    "priorityLow": "Low",
     "priorityMedium": "Medium",
-    "priorityHigh": "High",
     "priorityUrgent": "Urgent",
     "howToMoveForward": "How to move this forward",
     "taskGuidanceFallback": "Keep the owner, PRD, acceptance criteria, and current state accurate so the next action is clear.",
@@ -17503,7 +17508,10 @@
       "placeId": "Roblox Place ID",
       "robloxIdsHint": "Both numbers are in the Creator Dashboard URL for an experience you have already published from Studio.",
       "publishRoblox": "Publish to Roblox",
-      "robloxPublished": "Published to Roblox as version {version}"
+      "robloxPublished": "Published to Roblox as version {version}",
+      "gateTitle": "Create an account to build a Roblox place",
+      "gateBody": "The Luau and the .rbxlx are written on the server. A playable web game needs no account — ask for one and it is built on this board right now.",
+      "proposal": "Built a playable game: {title}"
     },
     "teammateSeated": "On this board",
     "launcherEyebrow": "Create",
@@ -21906,6 +21914,17 @@
     "expired": "This request has expired and can no longer be answered.",
     "noLongerOpen": "This request is {status} and is no longer open.",
     "waitingOnOthers": "An earlier party has not finished yet. You will be able to {verb} once they have."
+  },
+  "legalDocumentShare": {
+    "eyebrow": "Shared with you",
+    "loading": "Loading…",
+    "invalid": "That link is not valid. Check the link you were sent.",
+    "permissionDownload": "You can download this document.",
+    "permissionView": "You can view this document.",
+    "downloadButton": "Download document",
+    "openButton": "Open document",
+    "downloadHelp": "Downloads the current version to your device.",
+    "viewHelp": "Opens in a new tab. This link does not let you save a copy."
   },
   "cofounder": {
     "title": "Find a co-founder",

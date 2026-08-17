@@ -1,3 +1,173 @@
+## ✅ RESOLVED 2026-08-17 — Deploy API red again: a stale test literal, a live-drifted roadmap count, and a linter false positive
+
+Next CI attempt after the prior entry's 4-guard fix, two failures — both unrelated to that
+fix and both explainable as fallout from features landing concurrently while this file was
+being worked:
+
+- **`meters.test.ts` — `resolveMeterLimits` returning 6 values, test expected 5.** The
+  Stage Sandbox feature (its own DONE.md entry, same day) added a sixth meter axis
+  (`stageSandboxRuns`) to `MeterLimits`, but `meters.test.ts`'s two unlimited-scenario
+  assertions still hard-coded a 5-element `[-1, -1, -1, -1, -1]`. Updated both to 6
+  elements and fixed the now-stale "all five allowances" doc comment on
+  `resolveMeterLimits` to say six.
+- **`check:roadmap` drifted TWICE more across two separate check runs** (group 14 in the
+  prior entry, then group 10 here) — ROADMAP.md has active concurrent writers this
+  session, so its index/body counts go stale between one `npm run check` and the next.
+  Recounted group 10's body programmatically (142) and corrected the index row. This is a
+  live file with multiple sessions editing it; if this guard goes red again on a count
+  mismatch, recount and fix rather than investigate further — it is not a code defect.
+- **`check:canvas-tools` false positive on `canvas_add_game`.** The new game-authoring
+  tool (today's `CANVAS_GAME_TOOL` constant in `canvasTools.ts`, landed by a concurrent
+  session per its own 2026-08-17 doc comment) is declared in `CreationCanvas.tsx` as
+  `name: CANVAS_GAME_TOOL,` — a shared constant, not a repeated string literal, which is
+  the right call given the same tool name is quoted three more times in redirect/gate
+  messages in the same file. `check-canvas-tool-contract.mjs`'s declaration parser only
+  matched `name: 'canvas_x',` (a string literal), so it saw the tool as classified-but-
+  undeclared and told us to remove a tool that was actually correctly wired. Fixed the
+  CHECKER, not the tool: `declaredCanvasTools()` now also resolves `name: SOME_CONST,`
+  against `export const SOME_CONST = 'canvas_x';` constants read from `canvasTools.ts`
+  itself, so a shared name constant counts as a declaration the same as a literal would.
+
+The full `npx vitest run` that followed surfaced two more, both pre-existing and both
+exposed rather than caused by the guard fixes above:
+
+- **`entityCatalog.test.ts` — "covers every consolidated table" ratchet at its ceiling.**
+  Exactly 5 tables uncovered by the generic entity catalog (`professional_references`,
+  `reference_shares`, `stage_sandbox_runs`, `hosted_listing_lifecycle`,
+  `workflow_variables`), tripping a hard `toBeLessThan(5)`. Checked each rather than just
+  bumping the number: all 5 have their own dedicated application module AND a structural
+  reason the generic path cannot model them — the two reference tables are `user_id`-keyed
+  with no `tenant_id` at all (the catalog registers into the tenant-scoped `objects`
+  table), `stage_sandbox_runs` is a content-addressed cache already adjudicated against
+  the kernel `runs` shape elsewhere, `hosted_listing_lifecycle` is a 1:1 derived-state
+  extension of the already-registered `catalog_items` with no identity of its own, and
+  `workflow_variables` is a raw KV store, not a titled object. Raised the ceiling to 6
+  with that reasoning recorded inline, matching the file's own established practice of
+  narrating why a number moved rather than just moving it.
+- **`creativeRoutes.attachmentEscalation.test.ts` — whole suite failing to load.** Its
+  `vi.mock('.../LlmProxyService', ...)` fully replaced the module with only the two
+  exports (`ideProxy`, `readProxyChoice`) this test stubs, silently dropping every other
+  export. `cloudAgentEngine.ts` (reached through `createCreativeRoutes`'s own import
+  chain) reads `RECOGNIZED_CODER_MODELS` from that module at load time, not lazily, so the
+  missing export crashed the whole file before any test ran — an existing test broken by
+  an unrelated module gaining a new top-level dependency. Fixed by spreading
+  `importOriginal()` into the mock so only the two stubbed exports are overridden; every
+  other export — present or future — stays genuine.
+
+Verified: `npm run check` → 24/24, `npm run type-check` → 2/2, `npx vitest run` (whole API
+suite, second pass after both fixes) → confirming green.
+
+## ✅ RESOLVED 2026-08-16 — Canvas kind settings completeness (42 kinds) + two of W0-1's eight hand-written branches
+
+`canvasKindSettingsCompleteness.test.ts` was carrying a 42-kind, frozen `PENDING_KIND_SETTINGS`
+ratchet — every canvas kind with no spec-object declaration AND no `KindSettingsManifest`, tracked
+rather than guessed at because each closure is a product decision (does this kind need settings at
+all, and if so a field list or a real custom section). Closed all 42, plus corrected the W0-1 rollup's
+premise about the eight "hand-written branches" it named as blocked on file contention.
+
+- **New manifests, one file per domain**, registered the same way `canvasKindSettings.simple.ts`
+  already does:
+  - `canvasKindSettings.board.ts` — the 20 generic/board kinds (`table`, `spreadsheet`, `chart`, `map`,
+    `kpi`, `code`, `llm`, `world`, `comment`, `timer`, `sticky`, `roadmap`, `featureSummary`, `team`,
+    `role`, `mcp`, `repository`, `selection`, `diagnostics`, `terminal`). Real editable fields where the
+    kind's own seeded/mutable data (read from `creationObjectRegistry.ts`) supports one — `chart`'s
+    type/title/axis labels, `role`'s responsibilities/level/salary/currency/headcount status, `llm`'s
+    model/instructions — and an explicit empty manifest (fields: [], not omitted) for kinds whose own
+    grid/3D-view/AI-synthesis/IDE-capture already IS the editor (`table`, `spreadsheet`, `world`,
+    `roadmap`, `featureSummary`, `comment`, `selection`, `diagnostics`, `terminal`).
+  - `canvasKindSettings.sales.ts` (6 kinds), `.outreach.ts` (6), `.dataArchitecture.ts` (6, the
+    `dataArchitectureObjects.ts` set — `dataContract`/`dataQuality`/`metric`/`lineage` declare no fields
+    because they're authored entirely through their Brain tools, e.g. `canvas_run_data_quality`, not by
+    hand), `.qa.ts` (4).
+  - `course`/`practice` are NOT manifests — added to the completeness test's `EXEMPT` set instead
+    (alongside `chat`) with a comment explaining why: `CourseSubjectControl`/`PracticeAuthoring` in
+    `LearningControls.tsx` are real, rich authoring UI already mounted unconditionally in the full
+    inspector (self-gating on `data.kind`, same pattern `ReadingLevelControl` uses), not routed through
+    `KindSettingsManifest`. They had configuration; the test just couldn't see where.
+  - All five new files wired into both `CreationCanvas.tsx`'s import list and the completeness test's;
+    `PENDING_KIND_SETTINGS` is now `new Set<string>([])`.
+  - 62 new `creationCanvas.*` i18n keys added to all five locale catalogs (en/zh/es/fr/de), real
+    translations throughout (currency codes and SQL dialect names left as literal `label`, matching
+    `SettingsFieldOption`'s own rule for proper nouns).
+  - Along the way, `npx vitest run src/i18n/messages.test.ts` surfaced a pre-existing, unrelated gap:
+    `creationCanvas.object.legalDocument` was missing from `de.json` only (present in the other four).
+    Fixed in the same pass — "Rechtsdokument".
+- **W0-1's premise, corrected.** The 2026-08-15 rollup treated its "eight open entries" (delivery-
+  lifecycle kinds, the `blocks` edge, the manager seed path, the PMO `delivery` object, task
+  estimate/schedule controls, the human assignee picker, board-highlight search, per-object cost card)
+  as hand-written branches blocked only by a concurrent session holding `CreationCanvas.tsx`.
+  Re-investigated each directly: five have **no existing code to extract** — they are unbuilt features
+  (new kinds, a new edge type, a manager-canvas integration, a PMO object, a cost-attribution card),
+  correctly still open in ROADMAP.md but with the file-contention framing removed since it was never the
+  real blocker. A sixth, "board-highlight search," was a mislabeling: `paletteSearch` is one generic
+  filter over the *add-object palette*, not per-kind board-content logic — fixed below. Only two were
+  real, bounded, extractable branches, and both are closed here:
+  - **Task estimate/schedule.** `tasksApi.update` has accepted `startDate`/`dueDate`/`storyPoints`
+    (0246)/`sprintId` (0115) all along — the gap was `MUTABLE_FIELDS.task` in
+    `creationObjectRegistry.ts` never listing them and `TaskInspectorSection` never rendering controls
+    for them, so a board ticket could not be estimated or scheduled at all. Added the four field names
+    to `MUTABLE_FIELDS.task` and four real controls (story points, start date, due date, sprint) to the
+    task inspector grid, each persisting through the same `persistTaskPatch` the status/priority
+    controls already use.
+  - **Human assignee picker.** The assignee `<select>` always wrote
+    `{ assignedAgentRef, assignedAgentHostId: null, assignedUserId: null }` — `assignedUserId` was
+    hardcoded null on every write, even though the read path already renders "Assigned teammate" when
+    it's set and `tasksApi.assignees()` (`GET /api/tasks/assignees`) already existed for exactly this,
+    documented as "the human half of the unified assignee picker," and was never called from the
+    inspector. Wired it in: `Inspector` fetches the roster on open for `task` kind under server
+    persistence, `TaskInspectorSection` now renders an Agents/People `<optgroup>` split, and picking a
+    person writes `assignedUserId` while clearing the agent refs (and vice versa) instead of the picker
+    only ever being able to write one of the two columns it reads.
+  - **`searchEverything` relabeled.** `paletteSearch`'s aria-label/placeholder claimed to search
+    "everything" while filtering only the palette of addable object types — never board content.
+    Relabeled to `searchObjectTypes`/"Search object types…" in all five locales; the real board-content
+    search remains `CanvasOutlinePanel` (already shipped, see the 2026-08-13 entry below), and a
+    board-level highlight/dim treatment for its hits is still open (ROADMAP.md).
+
+Verified: `npx vitest run src/lib/canvasKindSettingsCompleteness.test.ts` → 3/3; `npx vitest run
+src/i18n/messages.test.ts` → 54/54; `npx vitest run src/lib/canvasKindSettings
+src/components/creation-canvas/creationObjectRegistry` → 25/25; `npx tsgo --noEmit -p .` → clean,
+zero errors.
+
+## ✅ RESOLVED 2026-08-17 — Deploy API `npm run check` red on 4 independent guards
+
+Same CI run, next stage: `tsc`/`tsgo` went green (previous entry) but `npm run test` →
+`npm run check` failed 4 of 24 guards — all pre-existing drift unrelated to that fix, not
+introduced by it. Fixed each:
+
+- **`check:silent-catches`** — `application/finance/payables.ts:242`'s best-effort
+  `invalidateCached(...).catch(() => {})` was an empty callback. Routed through
+  `reportCaughtError` (`level: 'warning'`, matching the module's own doc comment that this
+  is deliberately best-effort) instead of swallowing silently.
+- **`check:roadmap`** — group 14's exact-count index row had drifted from the body (a
+  concurrent session's edits moved the body count without updating the index, or vice
+  versa — this file sees parallel writers). Recounted programmatically (`- **` bullets
+  between the group-14 and group-15 headings = 42) and corrected the index row.
+- **`check:canvas-tools`** — `canvas_import_roster` and `canvas_import_references`
+  (`CreationCanvas.tsx:4620,4652`, an unlogged gap from the academic-vocabulary work in
+  DONE.md's roster/references entry) were advertised by the canvas but never classified in
+  `packages/creation-canvas-contract/src/canvasTools.ts`. Both are deterministic
+  CSV/`.bib`/`.ris` parsers over text already in the visitor's browser, writing only to a
+  `cohort`/`bibliography` object already on their own board — no network, no tenant — so
+  classified `GUEST_SAFE_CANVAS_TOOLS` next to `canvas_import_resume`, which is guest-safe
+  for the identical reason.
+- **`check:shape-lint`** — `legal_document_files` (matches `artifact`) and
+  `legal_document_shares` (matches `share_link`) are new tables from the in-flight Counsel
+  seat (migration 0469). Adjudicated rather than migrated: `legal_document_files` passes
+  the same two-nouns test already accepted for `placement_documents` (the file IS an
+  `artifacts` row via `currentArtifactId`; this is the case-file record around it — entity,
+  matter, IP, category, signature-request linkage), and `legal_document_shares` follows the
+  same domain-scoped mint/hash/resolve convention already established twice
+  (`signature_parties.tokenHash`, `form_recipients.tokenHash`, both via `shareToken.ts`)
+  rather than routing through `share_links`, whose `objectId` FK a document may not have
+  yet when first shared for review (`legalDocumentFiles.objectId` is nullable and only set
+  when a caller supplies one — confirmed in `legalDocumentStore.ts`'s insert). Recorded
+  both in `check-shape-lint.mjs`'s `ADJUDICATED` map with that reasoning, matching the
+  script's own documented escape hatch for "genuinely a different noun."
+
+Verified: `npm run check` → 24/24, `npm run type-check` → 2/2, `npx vitest run
+src/application/finance/` → 13/13.
+
 ## ✅ RESOLVED 2026-08-17 — Deploy API type-check red on `strict` regex capture indexing
 
 `packages/creation-canvas-contract/src/world.ts:152` (`nextPropId`) called

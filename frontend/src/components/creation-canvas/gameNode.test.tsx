@@ -106,6 +106,33 @@ describe('the game node', () => {
   });
 });
 
+describe('a Roblox place on the board', () => {
+  const PLACE = '<roblox version="4"><Item class="Workspace"/></roblox>';
+  const placeUrl = `data:application/xml;charset=utf-8,${encodeURIComponent(PLACE)}`;
+
+  it('says where it opens instead of offering a play button that cannot work', () => {
+    // `.rbxlx` runs in Roblox Studio, a desktop application. A play frame here
+    // would be a control that silently does nothing.
+    renderGame({ gamePlatform: 'roblox', outputUrl: placeUrl, status: 'Generated' });
+    expect(screen.getByText(/opens in roblox studio/i)).toBeTruthy();
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(screen.queryByRole('button', { name: /play the game/i })).toBeNull();
+  });
+
+  it('does not claim the place is missing just because it is not HTML', () => {
+    // The play surface reads `text/html`; a place is XML, so the naive path
+    // reported "no game yet" for an artifact that demonstrably exists.
+    renderGame({ gamePlatform: 'roblox', outputUrl: placeUrl, status: 'Generated' });
+    expect(screen.queryByText(/no game yet/i)).toBeNull();
+    expect(screen.getByText(/\.rbxlx place/i)).toBeTruthy();
+  });
+
+  it('still asks for generation when the place has not been built yet', () => {
+    renderGame({ gamePlatform: 'roblox' });
+    expect(screen.getByText(/generate to play/i)).toBeTruthy();
+  });
+});
+
 describe('reading a game off a canvas object', () => {
   it('decodes the document the object is holding', () => {
     expect(gameDocumentFrom({ kind: 'game', title: 'Runner', outputUrl: asDataUrl(GAME_HTML) } as CreationNodeData))

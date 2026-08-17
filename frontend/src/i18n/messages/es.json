@@ -15483,6 +15483,7 @@
       "prd": "PRD",
       "linkedRequirements": "Requisitos vinculados",
       "noPrdLinked": "Sin PRD vinculado",
+      "blockedByDependency": "Bloqueada por otra tarea",
       "doneWhen": "Listo cuando",
       "status": "Estado",
       "openWork": "Trabajo abierto",
@@ -16049,7 +16050,10 @@
       "messageCount": "{count} mensajes en este objeto",
       "insertAfter": "Anadir un paso despues de {title}",
       "openSettings": "Ajustes de {title}",
-      "websiteMarkupFrameTitle": "Contenido incrustado"
+      "websiteMarkupFrameTitle": "Contenido incrustado",
+      "gameRobloxReady": "Lugar de Roblox creado. Descárgalo y ábrelo en Roblox Studio para jugar.",
+      "gameRobloxOpenIn": "Se abre en Roblox Studio",
+      "gameRobloxFormat": "lugar .rbxlx"
     },
     "editor": {
       "toolbar": "Formato",
@@ -16149,7 +16153,7 @@
     "run": "Ejecutar",
     "saveCollaborate": "Guardar y colaborar",
     "addToCanvas": "Añadir al Lienzo",
-    "searchEverything": "Buscar en todo…",
+    "searchEverything": "Buscar tipos de objeto…",
     "askBrain": "Pregunta a Brain sobre este lienzo",
     "sendBrain": "Enviar a Brain",
     "resizePrompt": "Cambiar el tamaño del área de indicaciones",
@@ -16819,9 +16823,7 @@
     "statusInReview": "En revisión",
     "statusBlocked": "Bloqueada",
     "statusDone": "Hecha",
-    "priorityLow": "Baja",
     "priorityMedium": "Media",
-    "priorityHigh": "Alta",
     "priorityUrgent": "Urgente",
     "howToMoveForward": "Cómo avanzar",
     "taskGuidanceFallback": "Mantén actualizados el responsable, el PRD, los criterios de aceptación y el estado para que la siguiente acción sea clara.",
@@ -17503,7 +17505,10 @@
       "placeId": "ID de lugar de Roblox",
       "robloxIdsHint": "Ambos números están en la URL del Creator Dashboard de una experiencia que ya publicaste desde Studio.",
       "publishRoblox": "Publicar en Roblox",
-      "robloxPublished": "Publicado en Roblox como versión {version}"
+      "robloxPublished": "Publicado en Roblox como versión {version}",
+      "gateTitle": "Crea una cuenta para crear un lugar de Roblox",
+      "gateBody": "El Luau y el .rbxlx se escriben en el servidor. Un juego web jugable no necesita cuenta: pídelo y se crea en este lienzo ahora mismo.",
+      "proposal": "Juego jugable creado: {title}"
     },
     "teammateSeated": "En este lienzo",
     "launcherEyebrow": "Crear",
@@ -21906,6 +21911,17 @@
     "expired": "Esta solicitud ha caducado y ya no puede responderse.",
     "noLongerOpen": "Esta solicitud está {status} y ya no está abierta.",
     "waitingOnOthers": "Una parte anterior aún no ha terminado. Podrás {verb} cuando lo haga."
+  },
+  "legalDocumentShare": {
+    "eyebrow": "Compartido contigo",
+    "loading": "Cargando…",
+    "invalid": "Ese enlace no es válido. Comprueba el enlace que te enviaron.",
+    "permissionDownload": "Puedes descargar este documento.",
+    "permissionView": "Puedes ver este documento.",
+    "downloadButton": "Descargar documento",
+    "openButton": "Abrir documento",
+    "downloadHelp": "Descarga la versión actual en tu dispositivo.",
+    "viewHelp": "Se abre en una pestaña nueva. Este enlace no permite guardar una copia."
   },
   "cofounder": {
     "title": "Encuentra un cofundador",

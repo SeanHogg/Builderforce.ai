@@ -12,7 +12,7 @@
  * canvas's other multipart upload.
  */
 
-import { apiRequest } from '@/lib/apiClient';
+import { apiRequest, getApiBaseUrl } from '@/lib/apiClient';
 import { LEGAL_DOCUMENT_CATEGORIES, type LegalDocumentCategory } from '@/lib/legalObjects';
 
 export { LEGAL_DOCUMENT_CATEGORIES, type LegalDocumentCategory };
@@ -113,6 +113,35 @@ export interface UploadedLegalDocument {
   documentId: string;
   artifactId: string;
   checksum: string;
+}
+
+// ---------------------------------------------------------------------------
+// The recipient's read — no session, the token in the path is the credential
+// ---------------------------------------------------------------------------
+
+export interface PublicLegalDocumentShare {
+  title: string;
+  permission: 'view' | 'download';
+  mime: string | null;
+  filename: string;
+}
+
+/** What `/legal-documents/shared/:token` reads before rendering anything —
+ *  same "resolve the token first" shape as `publicForm`/`signerView`. */
+export const publicLegalDocumentShare = (token: string) =>
+  apiRequest<{ document: PublicLegalDocumentShare }>(`/api/public/legal-documents/${encodeURIComponent(token)}`)
+    .then((r) => r.document);
+
+/**
+ * The direct file URL for a share token — 'view' renders inline (a PDF opens
+ * in-tab), 'download' forces a save dialog; the SERVER decides which via
+ * `Content-Disposition`, so this is just the address, not a fetch. A plain
+ * `<a href>`/`<iframe src>` is deliberately preferred over a JS fetch+blob
+ * dance: the browser already knows how to stream, preview and save a file, and
+ * re-implementing that for an unauthenticated visitor buys nothing.
+ */
+export function legalDocumentShareFileUrl(token: string): string {
+  return `${getApiBaseUrl()}/api/public/legal-documents/${encodeURIComponent(token)}/download`;
 }
 
 /** Real `multipart/form-data`, direct to `/api/legal-documents` — never through

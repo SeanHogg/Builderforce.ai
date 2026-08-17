@@ -14950,6 +14950,9 @@
     "unavailable": "此简历链接不可用。"
   },
   "creationCanvas": {
+    "costToBuild": "构建成本",
+    "costUnderOneCent": "<$0.01",
+    "costRunsAndTokens": "{requests} 次运行 · {tokens} 个 token",
     "storyPoints": "故事点数",
     "startDate": "开始日期",
     "dueDate": "截止日期",
@@ -15483,6 +15486,7 @@
       "prd": "PRD",
       "linkedRequirements": "关联需求",
       "noPrdLinked": "未关联 PRD",
+      "blockedByDependency": "被另一任务阻塞",
       "doneWhen": "完成条件",
       "status": "状态",
       "openWork": "未完成工作",
@@ -16049,7 +16053,10 @@
       "messageCount": "此对象上有 {count} 条消息",
       "insertAfter": "在“{title}”之后添加步骤",
       "openSettings": "“{title}”的设置",
-      "websiteMarkupFrameTitle": "嵌入内容"
+      "websiteMarkupFrameTitle": "嵌入内容",
+      "gameRobloxReady": "Roblox 地图已生成。下载后在 Roblox Studio 中打开即可游玩。",
+      "gameRobloxOpenIn": "在 Roblox Studio 中打开",
+      "gameRobloxFormat": ".rbxlx 地图文件"
     },
     "editor": {
       "toolbar": "格式",
@@ -16149,7 +16156,7 @@
     "run": "运行",
     "saveCollaborate": "保存并协作",
     "addToCanvas": "添加到画布",
-    "searchEverything": "搜索全部内容…",
+    "searchEverything": "搜索对象类型…",
     "askBrain": "就此画布询问 Brain",
     "sendBrain": "发送给 Brain",
     "resizePrompt": "调整提示词区域大小",
@@ -16819,9 +16826,7 @@
     "statusInReview": "审核中",
     "statusBlocked": "受阻",
     "statusDone": "已完成",
-    "priorityLow": "低",
     "priorityMedium": "中",
-    "priorityHigh": "高",
     "priorityUrgent": "紧急",
     "howToMoveForward": "如何推进",
     "taskGuidanceFallback": "保持负责人、PRD、验收标准和当前状态准确，下一步行动才会清晰。",
@@ -17503,7 +17508,10 @@
       "placeId": "Roblox Place ID",
       "robloxIdsHint": "这两个数字都在你已从 Studio 发布的体验的 Creator Dashboard 网址中。",
       "publishRoblox": "发布到 Roblox",
-      "robloxPublished": "已发布到 Roblox，版本 {version}"
+      "robloxPublished": "已发布到 Roblox，版本 {version}",
+      "gateTitle": "创建账户以构建 Roblox 地图",
+      "gateBody": "Luau 和 .rbxlx 在服务器上生成。可游玩的网页游戏无需账户 — 现在就可以在此画布上构建。",
+      "proposal": "已构建可游玩的游戏：{title}"
     },
     "teammateSeated": "已加入此画布",
     "launcherEyebrow": "创建",
@@ -21907,6 +21915,17 @@
     "noLongerOpen": "此请求状态为 {status}，已不再开放。",
     "waitingOnOthers": "前一位签署方尚未完成，待其完成后您即可{verb}。"
   },
+  "legalDocumentShare": {
+    "eyebrow": "已与您共享",
+    "loading": "加载中…",
+    "invalid": "该链接无效，请核对您收到的链接。",
+    "permissionDownload": "您可以下载此文档。",
+    "permissionView": "您可以查看此文档。",
+    "downloadButton": "下载文档",
+    "openButton": "打开文档",
+    "downloadHelp": "将当前版本下载到您的设备。",
+    "viewHelp": "将在新标签页中打开。此链接不支持保存副本。"
+  },
   "cofounder": {
     "title": "寻找联合创始人",
     "lede": "按双方能力互补程度排序，并列出全部理由（包括不利因素）。",
@@ -22169,11 +22188,4 @@
       "engineering": "工程",
       "messaging": "消息通讯",
       "analytics": "数据分析",
-      "other": "其他"
-    },
-    "outputKind": {
-      "workflow": "一套自动化流程",
-      "tasks": "看板上的待办事项"
-    }
-  }
-}
+      "other"

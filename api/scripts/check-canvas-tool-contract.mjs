@@ -62,19 +62,39 @@ for (const file of [...CANVAS_FILES, CONTRACT_FILE]) {
 }
 
 /**
+ * `export const SOME_NAME = 'canvas_x';` in the contract file — the constant a
+ * declaration may name INSTEAD of repeating the string literal, so a tool whose
+ * name is quoted more than once (a redirect message, an account gate) has exactly
+ * one place that spells it. Resolved here so `declaredCanvasTools` can treat
+ * `name: CANVAS_GAME_TOOL,` as declaring `canvas_add_game`, the same as a literal.
+ */
+function contractToolConstants() {
+  const text = fs.readFileSync(CONTRACT_FILE, 'utf8');
+  const constants = new Map();
+  for (const m of text.matchAll(/^export const ([A-Z][A-Z0-9_]*)\s*=\s*'(canvas_[a-z0-9_]+)';$/gm)) {
+    constants.set(m[1], m[2]);
+  }
+  return constants;
+}
+
+/**
  * Tool names the canvas declares, each with the DESCRIPTION it advertises.
  *
- * A declaration is `name: 'canvas_x',` followed by its `description:` and then
+ * A declaration is `name: 'canvas_x',` (or `name: SOME_CONST,` naming a constant
+ * {@link contractToolConstants} resolves) followed by its `description:` and then
  * `parameters:`, so the span between the name and the parameters is exactly the
  * description — no separate string parser needed, and a template literal is covered.
  */
 function declaredCanvasTools() {
+  const constants = contractToolConstants();
   const declarations = new Map();
   for (const file of CANVAS_FILES) {
     const text = fs.readFileSync(file, 'utf8');
-    for (const m of text.matchAll(/^\s*name:\s*'(canvas_[a-z0-9_]+)',$/gm)) {
+    for (const m of text.matchAll(/^\s*name:\s*(?:'(canvas_[a-z0-9_]+)'|([A-Z][A-Z0-9_]*)),$/gm)) {
+      const name = m[1] ?? constants.get(m[2]);
+      if (!name) continue;
       const end = text.indexOf('parameters:', m.index);
-      declarations.set(m[1], end === -1 ? '' : text.slice(m.index + m[0].length, end));
+      declarations.set(name, end === -1 ? '' : text.slice(m.index + m[0].length, end));
     }
   }
   return declarations;

@@ -87,7 +87,28 @@ describe('the entity catalog', () => {
     // A table created by 0418+ with no entry here has no generic code path. It
     // may still have a bespoke one — `marketing_session_prompts` does — so this
     // reports what is uncovered rather than failing on a number.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(5);
+    //
+    // Ceiling moved 5 → 6 (2026-08-17) after checking each of the 5 currently
+    // uncovered tables rather than just the count: all 5 have a bespoke path
+    // (`career/references.ts`, `marketplace/creationListings.hosted.ts`,
+    // `workflow/workflowVariables.ts`, `marketplace/stageSandboxRuns.ts`) AND a
+    // structural reason the GENERIC path cannot model them, not merely a reason
+    // nobody wrote the entry yet:
+    //  - `professional_references` / `reference_shares` (migration 0476) are
+    //    keyed by `user_id` with no `tenant_id` at all — "a reference is part of
+    //    a person's career, not a workspace's HR record" — and the catalog
+    //    registers into the TENANT-scoped `objects` table, the same structural
+    //    reason `freelancer_profiles` beside them has never been entered
+    //    (excluded from `created` only because it predates the 0418 series).
+    //  - `stage_sandbox_runs` is a content-addressed cache, not an object with
+    //    identity — separately adjudicated against the kernel `runs` shape in
+    //    check-shape-lint.mjs on the same reasoning.
+    //  - `hosted_listing_lifecycle` is a 1:1 derived-state extension of the
+    //    already-registered `catalog_items`, PK'd by the parent's own id, with
+    //    no identity of its own to register.
+    //  - `workflow_variables` is a raw scope/key/value store backing a workflow
+    //    node, not a titled object.
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(6);
   });
 
   it('declares nothing that no migration creates', () => {

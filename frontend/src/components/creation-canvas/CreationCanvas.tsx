@@ -131,7 +131,7 @@ import { canvasMediaSource, isCanvasMediaKind, resolvePublicMediaUrls } from '@/
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { appendCanvasVideoSource, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, checkDataUse, findingFingerprint, normalizeQaSteps, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CANVAS_SOCIAL_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
+import { analyzeDependencies, appendCanvasVideoSource, canvasGameToolRedirect, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, checkDataUse, findingFingerprint, normalizeQaSteps, CANVAS_GAME_ACCOUNT_GATE, CANVAS_GAME_TOOL, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CANVAS_SOCIAL_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, GAME_PLATFORMS, isGamePlatform, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type DependencyAnalysis, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
 import { getStoredTenantToken } from '@/lib/auth';
 import { claimLocalDraft } from '@/lib/pendingWork';
 import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
@@ -7072,6 +7072,86 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }
     },
   }, {
+    name: CANVAS_GAME_TOOL,
+    description: 'Write a PLAYABLE game and put it on the Canvas, finished. ALWAYS use this instead of canvas_add_object for any request to make, build, create or design a game — including "a Roblox game", "a game for my phone", "an Android game" or "an iPhone game". It authors the game AND attaches the playable artifact in one call, so the user can press play immediately. A game design document is NOT a game: never write the concept into a `game` object as prose and never present a design as if it were playable. Use platform "roblox" when the user names Roblox, Studio, or an experience; otherwise use platform "web" — one self-contained document that plays on the canvas, installs on an Android or iPhone home screen, and wraps into a real app, so a phone or app-store request is still platform "web".',
+    parameters: {
+      type: 'object', required: ['brief', 'platform'], additionalProperties: false,
+      properties: {
+        brief: { type: 'string', description: 'What the game IS: the goal, the rules, how it is controlled, how you win or lose. Concrete and specific — this is the only description the generator gets.' },
+        platform: { type: 'string', enum: [...GAME_PLATFORMS] },
+        title: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { brief?: string; platform?: string; title?: string; x?: number; y?: number };
+      const brief = typeof args.brief === 'string' ? args.brief.trim().slice(0, 4_000) : '';
+      const platform = isGamePlatform(args.platform) ? args.platform : null;
+      if (!brief || !platform) return { error: `Pass a brief and a platform (${GAME_PLATFORMS.join(' or ')})` };
+
+      // Gated on CREDENTIALS and only for Roblox, read at call time so a sign-in
+      // mid-session counts on the very next turn — the same rule as the image
+      // tool. A WEB game is authored in this browser and needs no account, so
+      // gating the whole tool would be a false limitation.
+      if (platform === 'roblox' && !getStoredTenantToken()) {
+        requireAccount('game', t('game.gateTitle'), t('game.gateBody'));
+        return accountGateResult(CANVAS_GAME_TOOL, CANVAS_GAME_ACCOUNT_GATE);
+      }
+
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const node = newNode('game', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, typeof window !== 'undefined' && window.innerWidth <= 760, 'game'));
+      const gameTitle = typeof args.title === 'string' && args.title.trim() ? args.title.trim().slice(0, 160) : brief.slice(0, 60);
+      const seed: CreationNodeData = { ...node.data, kind: 'game', title: gameTitle, prompt: brief, gamePlatform: platform };
+
+      // The whole point of this tool: GENERATE, then attach. A game object that
+      // reaches the board without an artifact is the bug this replaces.
+      let artifact: CreativeArtifact;
+      try {
+        artifact = getStoredTenantToken()
+          ? await generateServerCreativeArtifact(seed)
+          : { ...buildBrowserCreativeArtifact(seed), provider: 'builderforce-browser' };
+      } catch (error) {
+        // Roblox has no browser baseline — a place cannot be authored without a
+        // model — so its failure is reported rather than quietly downgraded into
+        // an HTML game the user did not ask for.
+        if (platform === 'roblox') {
+          return { error: error instanceof Error ? error.message : 'The Roblox place could not be generated' };
+        }
+        artifact = { ...buildBrowserCreativeArtifact(seed), provider: 'builderforce-browser' };
+      }
+
+      const delivered: CreationDeliverable = {
+        id: crypto.randomUUID(), action: 'generate', artifactKind: artifact.artifactKind,
+        status: 'delivered', createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+        url: artifact.url, mimeType: artifact.mimeType, fileName: artifact.fileName, provider: artifact.provider,
+        validation: { status: 'passed', detail: artifact.validationDetail },
+        metadata: { outputFormat: artifact.outputFormat, platform, ...(artifact.model ? { model: artifact.model } : {}) },
+      };
+      node.data = {
+        ...seed,
+        status: t('creativeGeneratedStatus'),
+        ...(artifact.summary ? { subtitle: artifact.summary } : { subtitle: brief.slice(0, 160) }),
+        outputUrl: artifact.url,
+        outputFormat: artifact.outputFormat,
+        outputFileName: artifact.fileName,
+        outputMimeType: artifact.mimeType,
+        provider: artifact.provider,
+        thumbnailUrl: artifact.previewImageUrl ?? '',
+        deliverables: withCreationDeliverable(node.data, delivered),
+      };
+      node.style = { width: 520, height: 470 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t('game.proposal', { title: gameTitle }), node });
+      return {
+        ok: true, proposed: true, playable: true,
+        object: { id: node.id, kind: 'game', title: gameTitle }, platform,
+        provider: artifact.provider, outputFormat: artifact.outputFormat,
+        instruction: platform === 'roblox'
+          ? 'The place is on the board and downloadable as a .rbxlx — say it opens in Roblox Studio and plays there. Do NOT restate the design as prose.'
+          : 'The game is on the board and plays immediately — say so in one line. Do NOT restate the design as prose.',
+      };
+    },
+  }, {
     name: 'canvas_add_object',
     description: `Create a fully authored visual object. For an actual image, NEVER use this tool; use canvas_add_image so pixels are found or generated and attached immediately. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot. Never send placeholder or schema-probe fields. For kind="course", author the curriculum in the FIRST call as fields.course = ${COURSE_AUTHORING_CONTRACT}. Never author rows or chart values by hand from an imported dataset — use canvas_query_dataset so the artifact holds real computed values. For kind="spreadsheet", a derived column is a FORMULA and never a column of typed numbers: ${sheetFormulaGuidance(FORMULA_FUNCTIONS)} ${approvalGuidance()}`,
     parameters: {
@@ -7109,6 +7189,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const wantsPixels = args.kind === 'image' && !authored.outputUrl;
       const emptyDrawing = args.kind === 'drawing' && (!Array.isArray(authored.points) || authored.points.length < 2);
       if (wantsPixels || emptyDrawing) return { error: canvasImageToolRedirect(args.kind) };
+      // THE SAME MISROUTE, ONE KIND OVER, AND THE MOST EXPENSIVE ONE. A `game`
+      // authored here is a brief with no artifact: generating the playable thing
+      // is a separate step the model does not know to take. It reached the board
+      // holding a four-thousand-word design document in `content` — which
+      // satisfied the empty-shell gate (that gate NAMES `content` first, so it
+      // actively teaches this mistake) and played nothing. Name the tool that
+      // actually produces a game. See `canvasGameToolRedirect`.
+      if (args.kind === 'game' && !authored.outputUrl) return { error: canvasGameToolRedirect() };
       // THE SAME MISROUTE, ONE DOMAIN OVER. A social feed, a pinned post and a campaign
       // are READ from connected accounts and from the server's publish ledger, so this
       // tool can only ever produce a convincing fake of one. Name the tool that reads
@@ -9411,6 +9499,25 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return colors[node.data.kind] ?? 'var(--canvas-obj-unknown)';
   }, []);
   const cleanLayout = useCanvasCleanLayout({ boardRef: flowWrapRef, instanceRef: flowRef, setNodes, edges, padding: .16, maxZoom: .9 });
+  /**
+   * The board-level half of the `blocks` edge (see its doc comment in
+   * `CREATION_CONNECTION_KINDS`): the same `analyzeDependencies` primitive the PMO
+   * initiative layer runs (`portfolioRollup.ts#computeDependencyAnalysis`), applied to
+   * this board's own `task` nodes joined by `blocks` edges. `done` is the only closed
+   * status in the task vocabulary (`TaskInspectorSection`'s own status list) — nothing
+   * else in that list is ever treated as terminal elsewhere in the product. Weight is
+   * `storyPoints` when a task carries one, so the critical path ranks by estimated
+   * effort rather than by card count, same reasoning the PMO layer's own weight has.
+   */
+  const taskDependencyAnalysis = useMemo<DependencyAnalysis>(() => analyzeDependencies(
+    nodes.filter((node) => node.data.kind === 'task').map((node) => ({
+      id: node.id, status: typeof node.data.status === 'string' ? node.data.status : null,
+      weight: typeof node.data.storyPoints === 'number' && node.data.storyPoints > 0 ? node.data.storyPoints : 1,
+    })),
+    edges.filter((edge) => edge.data?.connectionKind === 'blocks').map((edge) => ({ fromId: edge.source, toId: edge.target })),
+    (status) => status !== 'done',
+  ), [nodes, edges]);
+  const criticalPathTaskIds = useMemo(() => new Set(taskDependencyAnalysis.criticalPath), [taskDependencyAnalysis]);
   const renderedNodes = useMemo(() => nodes.map((node) => {
     const attachedEvermind = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string' && /^evermind:\d+$/.test(node.data.resourceId);
     const live = evermindLiveByNodeId[node.id];
@@ -9430,14 +9537,27 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const withLiveData = hasDatasetConnection && /connect a dataset/i.test(String(withCollaboration.data.status || ''))
       ? { ...withCollaboration, data: { ...withCollaboration.data, status: 'Dataset connected' } }
       : withCollaboration;
-    return withLiveData.data.placementHidden === true ? { ...withLiveData, hidden: !showHidden, style: showHidden ? { ...withLiveData.style, opacity: .42 } : withLiveData.style } : withLiveData;
-  }), [activeAgentIds, edges, evermindLiveByNodeId, nodes, showHidden, timeline]);
+    // `taskDependencyAnalysis`'s board-wide read, folded onto the one task it is
+    // about — the card's own render never recomputes the graph, it just reads the
+    // verdict already computed once above, same as `activeAgentIds`/`hasDatasetConnection`.
+    const withBlockedFlag = withLiveData.data.kind === 'task' && taskDependencyAnalysis.isBlocked[withLiveData.id]
+      ? { ...withLiveData, data: { ...withLiveData.data, isBlocked: true } }
+      : withLiveData;
+    return withBlockedFlag.data.placementHidden === true ? { ...withBlockedFlag, hidden: !showHidden, style: showHidden ? { ...withBlockedFlag.style, opacity: .42 } : withBlockedFlag.style } : withBlockedFlag;
+  }), [activeAgentIds, edges, evermindLiveByNodeId, nodes, showHidden, taskDependencyAnalysis, timeline]);
   /**
    * The 3D view reads the SAME nodes the board renders, minus the ones the board
    * is currently hiding — a mode that quietly resurrects hidden objects would
    * report a different canvas than the one the user is working on.
    */
   const threeDNodes = useMemo(() => renderedNodes.filter((node) => node.hidden !== true), [renderedNodes]);
+  /** Paints `taskDependencyAnalysis`'s critical path onto the board: the `blocks`
+   *  edges connecting two critical-path tasks get a heavier, accented stroke instead
+   *  of the shared default — the first per-edge styling this board does, so it is
+   *  additive over `defaultEdgeOptions` rather than replacing it. */
+  const renderedEdges = useMemo(() => edges.map((edge) => edge.data?.connectionKind === 'blocks' && criticalPathTaskIds.has(edge.source) && criticalPathTaskIds.has(edge.target)
+    ? { ...edge, animated: true, style: { ...edge.style, stroke: 'var(--error-text)', strokeWidth: 3 } }
+    : edge), [edges, criticalPathTaskIds]);
   const describeThreeD = useCallback((node: CreationFlowNode): Canvas3DDescriptor => {
     const definition = creationObjectDefinition(node.data.kind);
     const comparisonModel = typeof node.data.comparisonModel === 'string' ? node.data.comparisonModel : '';
@@ -10468,7 +10588,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         <BrainSurfaceProvider value={brainSurface}>
         <ReactFlow<CreationFlowNode, Edge>
           nodes={renderedNodes}
-          edges={edges}
+          edges={renderedEdges}
           nodeTypes={canvasNodeTypes}
           onNodesChange={onCanvasNodesChange}
           onEdgesChange={onEdgesChange}
@@ -10937,6 +11057,18 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     void tasksApi.assignees().then((result) => { if (active) setTaskAssignees(result); }).catch(() => { if (active) setTaskAssignees([]); });
     return () => { active = false; };
   }, [node.data.kind, persistence]);
+  /** What this ticket cost to build. `runtimeApi.taskCost` (`GET
+   *  /api/runtime/tasks/:taskId/cost`, read-through cached) already sums
+   *  `llm_usage_log` by `task_id` — this was never called from the board, so a task
+   *  assigned to an agent could never show what its runs cost. */
+  const [taskCost, setTaskCost] = useState<{ estimatedCostUsd: number; totalTokens: number; requests: number } | null>(null);
+  useEffect(() => {
+    const match = node.data.kind === 'task' ? /^task:(\d+)$/.exec(node.data.resourceId || '') : null;
+    if (!match || persistence !== 'server') { setTaskCost(null); return; }
+    let active = true;
+    void runtimeApi.taskCost(Number(match[1])).then((result) => { if (active) setTaskCost(result); }).catch(() => { if (active) setTaskCost(null); });
+    return () => { active = false; };
+  }, [node.data.kind, node.data.resourceId, persistence]);
   useEffect(() => {
     if (!focus) return;
     const frame = window.requestAnimationFrame(() => inspectorRef.current?.querySelector<HTMLElement>(`[data-inspector-section="${focus}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
@@ -11036,7 +11168,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     websiteHero, websiteTheme, onWebsiteChange, onPublishWebsite, onBuildWebsiteWithCode, onWebsiteViewportChange,
     onGenerateVideo,
     onImportDataset, onProfileDataset, onVisualizeDataset, onPlotDataset,
-    taskId, taskAgents, taskAgentValue, taskAssignees, statusGuidance, normalizedTaskStatus,
+    taskId, taskAgents, taskAgentValue, taskAssignees, taskCost, statusGuidance, normalizedTaskStatus,
     prdStatus, prdTitle, prdSummary, actionStatus, setActionStatus, persistTaskPatch,
     mockupProjects, mockupProjectValue, mockupAgents, mockupAgentValue, onDeliverMockup,
     onRunCreativeAction, onShipGame,
@@ -11206,6 +11338,7 @@ interface KindSectionProps {
   taskAgents: CreationFlowNode[];
   taskAgentValue: string;
   taskAssignees: { id: string; name: string }[];
+  taskCost: { estimatedCostUsd: number; totalTokens: number; requests: number } | null;
   statusGuidance: Record<string, string>;
   normalizedTaskStatus: string;
   prdStatus: string | undefined;
@@ -11375,7 +11508,7 @@ function WebPageInspectorSection({ data, onChange }: KindSectionProps) {
 }
 
 function TaskInspectorSection({
-  data, onChange, taskId, taskAgents, taskAgentValue, taskAssignees, statusGuidance, normalizedTaskStatus,
+  data, onChange, taskId, taskAgents, taskAgentValue, taskAssignees, taskCost, statusGuidance, normalizedTaskStatus,
   prdStatus, prdTitle, prdSummary, actionStatus, setActionStatus, persistTaskPatch, persistence,
 }: KindSectionProps) {
   const t = useTranslations('creationCanvas');
@@ -11425,6 +11558,11 @@ function TaskInspectorSection({
       <div><span>{t('prd')}</span>{prdStatus && <small>{prdStatus}</small>}</div>
       {prdTitle ? <><strong>{prdTitle}</strong>{prdSummary && <p>{prdSummary.replace(/[#*_`>\[\]]/g, '').trim().slice(0, 360)}</p>}</> : <><strong>{t('noPrdLinked')}</strong><p>{t('noPrdLinkedHint')}</p></>}
     </section>
+    {taskCost && taskCost.requests > 0 && <section className={styles.taskPrdSummary} aria-label={t('costToBuild')}>
+      <div><span>{t('costToBuild')}</span></div>
+      <strong>{taskCost.estimatedCostUsd < 0.01 ? t('costUnderOneCent') : `$${taskCost.estimatedCostUsd.toFixed(2)}`}</strong>
+      <p>{t('costRunsAndTokens', { requests: taskCost.requests, tokens: taskCost.totalTokens.toLocaleString() })}</p>
+    </section>}
     {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
   </>;
 }

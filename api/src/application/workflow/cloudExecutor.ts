@@ -32,6 +32,15 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *     agentHost agent/tool/SSM runtime that has no cloud equivalent here, so the
  *     task fails with a clear, recorded message (see Gap Register). Run those
  *     workflows on a self-hosted agentHost.
+ *   - router / merge / set-variable / get-variable / increment / sleep /
+ *     regex-match / html-to-text / assert / healthcheck → executed natively
+ *     (Flow Control / Tools / Text Parser / Diagnostics). `router` generalizes
+ *     `branch`'s `$branch`-tag mechanism to N named routes (`$route`); `merge`
+ *     reads the raw per-dependency outputs off `node.depOutputs`, populated by
+ *     the drain loop below rather than the pre-joined `inputText`. `set-variable`
+ *     / `get-variable` / `increment` read/write `workflowVariables.ts`'s KV
+ *     store. `sleep` is gated in `advanceCloudWorkflow` via `workflow_tasks
+ *     .not_before` — by the time its `case` runs, the delay has already elapsed.
  *
  * A per-tick task budget bounds how much work one cron invocation does; a
  * multi-stage cloud workflow advances across successive ticks.
@@ -46,9 +55,12 @@ import { sendGmail } from '../integrations/googleOAuth';
 import { tenantProxyForPlan, byoAwareModel } from '../llm/tenantProxy';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { contextFromInput, evaluateBool, renderTransform } from '../../domain/workflowExpr';
+import { regexMatch, htmlToText } from '../../domain/workflowTextTools';
 import { credentialSecret } from '../integrations/credentialCrypto';
 import { executeMcpNode, type McpNodeConfig } from './mcpNode';
 import { executeConnectorNode, type ConnectorNodeConfig } from './connectorNode';
+import { getWorkflowVariable, setWorkflowVariable, incrementWorkflowVariable } from './workflowVariables';
+import { assertSafeUrl, resolveAndAssertPublic, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
 import type { ProxyEnv } from '../llm/LlmProxyService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -66,6 +78,22 @@ export interface NodeInput {
   config: Record<string, unknown>;
   payload?: unknown;
   triggerSource?: string;
+  /** `merge` only — the raw output of each dependency, in `dependsOn` order
+   *  (NOT the newline-joined `inputText` every other kind reads). Populated by
+   *  `advanceCloudWorkflow`, never persisted on the task's own stored input. */
+  depOutputs?: string[];
+}
+
+/** Tenant + run context a node needs to touch state beyond its own payload —
+ *  the LLM usage ledger, and (new) the run/definition-scoped variable store. */
+export interface UsageContext {
+  db: Db;
+  tenantId: number;
+  /** This execution's `workflows.id` — the scope for `set-variable`/`get-variable`. */
+  workflowId: string;
+  /** The source `workflow_definitions.id`, when this run came from one — the
+   *  cross-run scope for `increment`. Falls back to `workflowId` for ad-hoc runs. */
+  workflowDefinitionId: string | null;
 }
 
 /** Substitute `{{input}}` (and `{{ input }}`) in a template with the upstream text. */
@@ -117,7 +145,7 @@ export async function executeCloudNode(
   env: CloudExecutorEnv,
   node: NodeInput,
   inputText: string,
-  usageCtx?: { db: Db; tenantId: number },
+  usageCtx?: UsageContext,
   outbound?: OutboundPort,
 ): Promise<NodeResult> {
   switch (node.kind) {
@@ -192,6 +220,131 @@ export async function executeCloudNode(
         reportCaughtError(error, { source: "application/workflow/cloudExecutor.ts", operation: "executeCloudNode" });
       }
       return { output: inputText };
+    }
+    case 'router': {
+      // Same JSON-tag mechanism as `branch`, generalized to N named routes:
+      // the first route (in declared order) whose condition holds (or which
+      // has no condition) wins; an unmatched payload takes `fallback`. Reading
+      // `$route` back downstream (via a `filter` node) is how a routed path
+      // self-gates — see the module docstring's note on router/branch.
+      const ctx = contextFromInput(inputText);
+      const routes = Array.isArray(node.config.routes) ? node.config.routes as Array<{ name?: unknown; condition?: unknown }> : [];
+      let taken: string | null = null;
+      for (const r of routes) {
+        const name = typeof r?.name === 'string' ? r.name.trim() : '';
+        if (!name) continue;
+        const condition = typeof r?.condition === 'string' ? r.condition : '';
+        if (!condition || evaluateBool(condition, ctx)) { taken = name; break; }
+      }
+      const route = taken ?? (typeof node.config.fallback === 'string' && node.config.fallback.trim() ? node.config.fallback.trim() : 'none');
+      try {
+        const parsed = JSON.parse(inputText || '{}') as Record<string, unknown>;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return { output: JSON.stringify({ ...parsed, $route: route }) };
+        }
+      } catch (error) {
+        /* non-JSON payload — fall through to passthrough */
+        reportCaughtError(error, { source: "application/workflow/cloudExecutor.ts", operation: "executeCloudNode" });
+      }
+      return { output: inputText };
+    }
+    case 'merge': {
+      // Reads the RAW per-dependency outputs (advanceCloudWorkflow populates
+      // `node.depOutputs`), not the newline-joined `inputText` — a fan-in needs
+      // to know where one branch's output ends and the next begins.
+      const strategy = typeof node.config.strategy === 'string' ? node.config.strategy : 'array';
+      const parts = node.depOutputs ?? (inputText ? [inputText] : []);
+      const parseOrRaw = (s: string): unknown => { try { return JSON.parse(s); } catch { return s; } };
+      if (strategy === 'first') return { output: parts[0] ?? '' };
+      if (strategy === 'object-keys') {
+        const keys = typeof node.config.keys === 'string'
+          ? node.config.keys.split(',').map((k) => k.trim()).filter(Boolean)
+          : [];
+        const obj: Record<string, unknown> = {};
+        parts.forEach((p, i) => { obj[keys[i] ?? `output${i + 1}`] = parseOrRaw(p); });
+        return { output: JSON.stringify(obj) };
+      }
+      return { output: JSON.stringify(parts.map(parseOrRaw)) };
+    }
+    case 'set-variable': {
+      if (!usageCtx) throw new Error('The Set Variable node needs a tenant context to store state');
+      const key = typeof node.config.key === 'string' ? node.config.key.trim() : '';
+      if (!key) throw new Error('Set Variable needs a key');
+      const value = renderTemplate(typeof node.config.value === 'string' ? node.config.value : '{{input}}', inputText);
+      await setWorkflowVariable(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId, key, value);
+      return { output: value };
+    }
+    case 'get-variable': {
+      if (!usageCtx) throw new Error('The Get Variable node needs a tenant context to read state');
+      const key = typeof node.config.key === 'string' ? node.config.key.trim() : '';
+      if (!key) throw new Error('Get Variable needs a key');
+      const value = await getWorkflowVariable(usageCtx.db, usageCtx.tenantId, 'run', usageCtx.workflowId, key);
+      return { output: value };
+    }
+    case 'increment': {
+      if (!usageCtx) throw new Error('The Increment node needs a tenant context to store state');
+      const key = typeof node.config.key === 'string' ? node.config.key.trim() : '';
+      if (!key) throw new Error('Increment needs a key');
+      const step = typeof node.config.step === 'number' ? node.config.step : Number(node.config.step) || 1;
+      // Definition-scoped (not run-scoped): the counter persists across runs of
+      // the SAME workflow, matching Make's Increment function. An ad-hoc run
+      // with no source definition falls back to its own workflowId so the node
+      // still works (just without cross-run persistence, which nothing needs).
+      const scopeId = usageCtx.workflowDefinitionId ?? usageCtx.workflowId;
+      const value = await incrementWorkflowVariable(usageCtx.db, usageCtx.tenantId, scopeId, key, step);
+      return { output: String(value) };
+    }
+    case 'sleep':
+      // The delay itself is enforced by advanceCloudWorkflow's `not_before`
+      // gate before this case ever runs — by the time we get here, it's due.
+      return { output: inputText };
+    case 'regex-match': {
+      const pattern = typeof node.config.pattern === 'string' ? node.config.pattern : '';
+      const flags = typeof node.config.flags === 'string' ? node.config.flags : '';
+      return { output: JSON.stringify(regexMatch(pattern, flags, inputText)) };
+    }
+    case 'html-to-text':
+      return { output: htmlToText(inputText) };
+    case 'assert': {
+      const ctx = contextFromInput(inputText);
+      const expression = typeof node.config.expression === 'string' ? node.config.expression : '';
+      const onFail = node.config.onFail === 'warn-only' ? 'warn-only' : 'fail-task';
+      const holds = evaluateBool(expression, ctx);
+      if (!holds && onFail === 'fail-task') throw new Error(`Assertion failed: ${expression || '(empty expression)'}`);
+      try {
+        const parsed = JSON.parse(inputText || '{}') as Record<string, unknown>;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return { output: JSON.stringify({ ...parsed, $assert: holds }) };
+        }
+      } catch (error) {
+        reportCaughtError(error, { source: "application/workflow/cloudExecutor.ts", operation: "executeCloudNode" });
+      }
+      return { output: inputText };
+    }
+    case 'healthcheck': {
+      const url = renderTemplate(typeof node.config.url === 'string' ? node.config.url : '', inputText).trim();
+      if (!url) throw new Error('Healthcheck needs a URL');
+      const expectedStatus = typeof node.config.expectedStatus === 'number'
+        ? node.config.expectedStatus
+        : Number(node.config.expectedStatus) || 200;
+      let status = 0;
+      let up = false;
+      let errorMsg: string | null = null;
+      try {
+        // Same SSRF guard `webFetch.ts` applies: reject internal/loopback/metadata
+        // hosts up front, then a best-effort DNS-rebinding check. `redirect:
+        // 'manual'` deliberately does NOT follow redirects (a 3xx is itself a
+        // reportable status) rather than re-implementing per-hop re-validation
+        // for a node whose whole job is "what status did this URL return".
+        const parsed = assertSafeUrl(url, { allowHttp: true });
+        await resolveAndAssertPublic(parsed.hostname);
+        const res = await fetch(parsed.toString(), { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(8000) });
+        status = res.status;
+        up = status === expectedStatus;
+      } catch (e) {
+        errorMsg = e instanceof BlockedUrlError ? e.message : e instanceof Error ? e.message : 'fetch failed';
+      }
+      return { output: JSON.stringify({ url, status, expectedStatus, up, error: errorMsg }) };
     }
     case 'output':
       return { output: inputText };
@@ -286,9 +439,16 @@ function depIds(task: TaskRow): string[] {
 
 /** Drain ready tasks for one cloud workflow; returns how many tasks it executed. */
 async function advanceCloudWorkflow(env: CloudExecutorEnv, db: Db, workflowId: string, budget: number): Promise<number> {
-  // The workflow's tenant — lets each `llm` node record its spend in the ledger [1310].
-  const [wf] = await db.select({ tenantId: workflows.tenantId }).from(workflows).where(eq(workflows.id, workflowId)).limit(1);
-  const usageCtx = wf?.tenantId != null ? { db, tenantId: wf.tenantId } : undefined;
+  // The workflow's tenant — lets each `llm` node record its spend in the ledger
+  // [1310], and (new) lets set-variable/get-variable/increment scope their state.
+  const [wf] = await db
+    .select({ tenantId: workflows.tenantId, workflowDefinitionId: workflows.workflowDefinitionId })
+    .from(workflows)
+    .where(eq(workflows.id, workflowId))
+    .limit(1);
+  const usageCtx: UsageContext | undefined = wf?.tenantId != null
+    ? { db, tenantId: wf.tenantId, workflowId, workflowDefinitionId: wf.workflowDefinitionId ?? null }
+    : undefined;
   const tasks = await db.select().from(workflowTasks).where(eq(workflowTasks.workflowId, workflowId));
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const outputs = new Map<string, string>(tasks.filter((t) => t.status === 'completed').map((t) => [t.id, t.output ?? '']));
@@ -321,12 +481,30 @@ async function advanceCloudWorkflow(env: CloudExecutorEnv, db: Db, workflowId: s
       }
 
       const node = parseInput(task.input);
-      const inputText = deps.map((id) => outputs.get(id) ?? '').filter(Boolean).join('\n\n');
+
+      // `sleep` gate: deps are satisfied, but the node itself holds this task
+      // pending until its delay elapses. First visit (no `notBefore` armed yet)
+      // arms the timer and defers without executing or counting as progress —
+      // ONLY this task's own timer is checked; downstream tasks wait on `sleep`'s
+      // `status` the normal way, so nothing else needs to know about `not_before`.
+      if (node.kind === 'sleep') {
+        if (!task.notBefore) {
+          const seconds = Math.max(0, Number(node.config.seconds) || 0);
+          const notBefore = new Date(Date.now() + seconds * 1000);
+          task.notBefore = notBefore;
+          await db.update(workflowTasks).set({ notBefore, updatedAt: new Date() }).where(eq(workflowTasks.id, task.id));
+          continue;
+        }
+        if (task.notBefore.getTime() > Date.now()) continue;
+      }
+
+      const depOutputsArr = deps.map((id) => outputs.get(id) ?? '');
+      const inputText = depOutputsArr.filter(Boolean).join('\n\n');
       const now = new Date();
       await db.update(workflowTasks).set({ status: 'running', startedAt: now, updatedAt: now }).where(eq(workflowTasks.id, task.id));
 
       try {
-        const { output, drop } = await executeCloudNode(env, node, inputText, usageCtx);
+        const { output, drop } = await executeCloudNode(env, { ...node, depOutputs: depOutputsArr }, inputText, usageCtx);
         if (drop) {
           // Filter predicate rejected the payload → mark this node `cancelled` so
           // its downstream cone is pruned (cascades via `dispositionFromDeps`).

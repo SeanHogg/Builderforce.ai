@@ -46,11 +46,11 @@ const handle = async (run: () => Promise<Response>): Promise<Response> => {
   }
 };
 
-function fileResponse(bytes: Uint8Array, filename: string, mime: string | null): Response {
+function fileResponse(bytes: Uint8Array, filename: string, mime: string | null, disposition: 'attachment' | 'inline' = 'attachment'): Response {
   return new Response(bytes, {
     headers: {
       'content-type': mime || 'application/octet-stream',
-      'content-disposition': `attachment; filename="${filename.replace(/"/g, '')}"`,
+      'content-disposition': `${disposition}; filename="${filename.replace(/"/g, '')}"`,
       'cache-control': 'no-store',
     },
   });
@@ -179,10 +179,11 @@ export function createPublicLegalDocumentRoutes(db: Db): Hono<HonoEnv> {
     const env = c.env as Env;
     const resolved = await resolveLegalDocumentShare(db, env, c.req.param('token'));
     if (!resolved) return Response.json({ error: 'That share link is not valid.' }, { status: 404 });
-    if (resolved.permission !== 'download') {
-      return Response.json({ error: 'This link is view-only and cannot be downloaded.' }, { status: 403 });
-    }
-    return fileResponse(resolved.bytes, resolved.filename, resolved.mime);
+    // 'view' renders inline (a PDF opens in-tab, no save dialog) and 'download'
+    // forces one — both permissions serve the SAME bytes, standard browser
+    // Content-Disposition behavior is what actually enforces the distinction a
+    // recipient experiences; a 403 for 'view' would make the link do nothing.
+    return fileResponse(resolved.bytes, resolved.filename, resolved.mime, resolved.permission === 'download' ? 'attachment' : 'inline');
   }));
 
   return router;

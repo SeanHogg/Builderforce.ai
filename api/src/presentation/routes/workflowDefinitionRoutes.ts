@@ -17,7 +17,8 @@ import { Hono } from 'hono';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { workflowDefinitions, workflowTriggers, agentHosts, projects, workflows } from '../../infrastructure/database/schema';
+import { workflowDefinitions, workflowTriggers, agentHosts, projects, workflows, telemetrySpans } from '../../infrastructure/database/schema';
+import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import {
   definitionToYaml,
   parseDefinition,
@@ -177,6 +178,75 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       .orderBy(desc(workflows.createdAt))
       .limit(100);
     return c.json({ runs });
+  });
+
+  // GET /:id/usage — daily run-count + estimated cost for the History panel's
+  // usage chart (mirrors Make's "credits / data transfer" sidebar). Rolling
+  // historical stat with no write path to invalidate from, so — like
+  // `run-targets` above — it's read-through cached on a short TTL rather than
+  // invalidated on write; a few minutes of staleness is fine for a trend chart.
+  router.get('/:id/usage', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const daysParam = Number(c.req.query('days'));
+    const days = Number.isFinite(daysParam) && daysParam > 0 ? Math.min(Math.floor(daysParam), 90) : 7;
+
+    const [defRow] = await db
+      .select({ id: workflowDefinitions.id })
+      .from(workflowDefinitions)
+      .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
+    if (!defRow) return c.json({ error: 'Workflow definition not found' }, 404);
+
+    const usage = await getOrSetCached(c.env as Env, `wfdef:usage:${tenantId}:${id}:${days}`, async () => {
+      const runRows = (await db.execute(sql`
+        SELECT date_trunc('day', created_at)::date::text AS day, status, count(*)::int AS n
+        FROM workflows
+        WHERE workflow_definition_id = ${id} AND tenant_id = ${tenantId}
+          AND created_at >= now() - (${days} || ' days')::interval
+        GROUP BY 1, 2
+      `)).rows as Array<{ day: string; status: string; n: number }>;
+
+      // Cost joins telemetry_spans the SAME way GET /api/workflows/:id/graph does
+      // (estimatedCostUsd, millicents) — the only place a workflow's spend is recorded.
+      const costRows = (await db.execute(sql`
+        SELECT date_trunc('day', ts.ts)::date::text AS day, COALESCE(sum(ts.estimated_cost_usd), 0)::bigint AS millicents
+        FROM telemetry_spans ts
+        WHERE ts.tenant_id = ${tenantId}
+          AND ts.workflow_id IN (SELECT id FROM workflows WHERE workflow_definition_id = ${id} AND tenant_id = ${tenantId})
+          AND ts.ts >= now() - (${days} || ' days')::interval
+        GROUP BY 1
+      `)).rows as Array<{ day: string; millicents: number }>;
+
+      const byDay = new Map<string, { runCount: number; completedCount: number; failedCount: number; costUsd: number }>();
+      const entry = (day: string) => {
+        const e = byDay.get(day) ?? { runCount: 0, completedCount: 0, failedCount: 0, costUsd: 0 };
+        byDay.set(day, e);
+        return e;
+      };
+      for (const row of runRows) {
+        const e = entry(row.day);
+        e.runCount += Number(row.n);
+        if (row.status === 'completed') e.completedCount += Number(row.n);
+        if (row.status === 'failed') e.failedCount += Number(row.n);
+      }
+      for (const row of costRows) {
+        entry(row.day).costUsd += Number(row.millicents) / MILLICENTS_PER_USD;
+      }
+
+      const daysOut = Array.from({ length: days }, (_, i) => {
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() - (days - 1 - i));
+        const date = d.toISOString().slice(0, 10);
+        return { date, ...(byDay.get(date) ?? { runCount: 0, completedCount: 0, failedCount: 0, costUsd: 0 }) };
+      });
+      return {
+        days: daysOut,
+        totalRuns: daysOut.reduce((s, d) => s + d.runCount, 0),
+        totalCostUsd: daysOut.reduce((s, d) => s + d.costUsd, 0),
+      };
+    }, { kvTtlSeconds: 300 });
+
+    return c.json(usage);
   });
 
   // GET /run-targets — the targets a workflow can run on: self-hosted agentHosts

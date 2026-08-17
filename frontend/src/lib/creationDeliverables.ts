@@ -322,6 +322,11 @@ export async function generateServerCreativeArtifact(data: CreationNodeData): Pr
       title: String(data.title ?? data.kind),
       brief: creativeBrief(data),
       ...(typeof data.templateId === 'string' && data.templateId ? { templateId: data.templateId } : {}),
+      // A game's PLATFORM changes the machine it is authored for, not just the
+      // file extension — Roblox is Luau on a server-authoritative engine, not a
+      // document in a browser. Carried on the object so regenerating a Roblox
+      // game does not silently produce an HTML one.
+      ...(data.kind === 'game' && typeof data.gamePlatform === 'string' ? { platform: data.gamePlatform } : {}),
     }),
   });
   // Geometry is not an image, so the file is drawn back rather than pointed at —
@@ -333,11 +338,13 @@ export async function generateServerCreativeArtifact(data: CreationNodeData): Pr
   // pixels genuinely cannot be read from here. The poster is built from what the
   // document declares about itself instead — including which inputs it actually
   // binds, which is the thing worth knowing before shipping it to a phone.
-  const poster = generated.artifactKind === 'game'
+  const poster = generated.artifactKind === 'game' || generated.artifactKind === 'roblox-place'
     ? gamePosterDataUrl({
       title: String(data.title ?? 'Game'),
       brief: creativeBrief(data),
-      html: generated.content,
+      // A place file has no input handlers to read, so the poster omits the
+      // control badges rather than guessing at them.
+      ...(generated.artifactKind === 'game' ? { html: generated.content } : {}),
     })
     : null;
   return {

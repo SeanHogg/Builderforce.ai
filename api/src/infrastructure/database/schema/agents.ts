@@ -872,6 +872,29 @@ export const workflowDefinitions = pgTable('workflow_definitions', {
 
 
 // ---------------------------------------------------------------------------
+// Workflow variables — the KV store backing the Tools node kinds `set-variable`
+// / `get-variable` (scope='run', scopeId=a `workflows.id`) and `increment`
+// (scope='definition', scopeId=a `workflow_definitions.id`, so the counter
+// persists across runs the way Make's Increment function does). One fact per
+// row (3NF): a single generic `scope`/`scopeId` pair rather than two nullable
+// FK columns, since a row belongs to exactly one scope kind and the two never
+// mix. See application/workflow/cloudExecutor.ts + workflowVariablesRepo.ts.
+// ---------------------------------------------------------------------------
+
+export const workflowVariables = pgTable('workflow_variables', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  scope:     varchar('scope', { length: 16 }).notNull(),    // 'run' | 'definition'
+  scopeId:   varchar('scope_id', { length: 64 }).notNull(), // a workflows.id or workflow_definitions.id
+  key:       varchar('key', { length: 255 }).notNull(),
+  value:     text('value').notNull().default(''),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_workflow_variables_scope_key').on(t.scope, t.scopeId, t.key),
+]);
+
+
+// ---------------------------------------------------------------------------
 // Workflow triggers — the materialized, activatable triggers (schedule /
 // webhook / rss / inbound-email) extracted from a definition's trigger nodes on
 // every save. The scheduler cron reads schedule+rss rows by `nextRunAt`; the

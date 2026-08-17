@@ -970,6 +970,12 @@ export type WorkflowNodeKind =
   | 'transform' | 'filter' | 'branch' | 'output' | 'gmail'
   /** The ONE node through which every connector action is reachable. */
   | 'connector'
+  // Flow Control (0), Tools, Text Parser, AI Agents (reuses 'llm'), Diagnostics —
+  // see api/src/domain/workflowGraph.ts, kept in sync manually (no shared package).
+  | 'router' | 'merge'
+  | 'set-variable' | 'get-variable' | 'increment' | 'sleep'
+  | 'regex-match' | 'html-to-text'
+  | 'assert' | 'healthcheck'
   | EvermindBuildKind;
 
 export interface WorkflowDefNode {
@@ -1057,6 +1063,21 @@ export interface WorkflowDefinitionDetail extends WorkflowDefinitionSummary, Par
   definition: WorkflowDefinitionGraph;
 }
 
+/** One day's rollup for the History panel's usage chart. */
+export interface WorkflowUsageDay {
+  date: string;       // YYYY-MM-DD
+  runCount: number;
+  completedCount: number;
+  failedCount: number;
+  costUsd: number;
+}
+
+export interface WorkflowUsageSummary {
+  days: WorkflowUsageDay[];
+  totalRuns: number;
+  totalCostUsd: number;
+}
+
 /** Project binding accepted on create/update (null = tenant-wide). */
 type WorkflowProjectBinding = { projectId?: number | null };
 
@@ -1067,6 +1088,10 @@ export const workflowDefinitions = {
   /** Execution history (runs) for one definition, newest first. */
   runs: (id: string) =>
     request<{ runs: Workflow[] }>(`/api/workflow-definitions/${id}/runs`).then((r) => r.runs),
+  /** Daily run-count + estimated cost for the last `days` days (default 7) —
+   *  powers the History panel's usage chart. Cached server-side. */
+  usage: (id: string, days = 7) =>
+    request<WorkflowUsageSummary>(`/api/workflow-definitions/${id}/usage?days=${days}`),
   /** The targets a workflow can run on: self-hosted agentHosts + cloud agents. */
   runTargets: () => request<WorkflowRunTargets>('/api/workflow-definitions/run-targets'),
   /** Activatable triggers + their activation state (webhook URL, next run, …). */

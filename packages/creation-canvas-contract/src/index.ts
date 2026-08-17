@@ -493,6 +493,16 @@ export type CreativeCapability = typeof CREATIVE_CAPABILITIES[number];
 export const CREATION_CONNECTION_KINDS = [
   'data', 'control', 'reference', 'presentation', 'delivery', 'membership',
   /**
+   * `fromId` BLOCKS `toId` — the arrow points the way work flows, same convention
+   * `dependencyGraph.ts#DependencyEdge` documents. It is what lets a board of tasks
+   * answer "what is in the way" the same way the PMO initiative layer already does
+   * (`portfolioRollup.ts#computeDependencyAnalysis`, which the shared primitive in
+   * `dependencyGraph.ts` was extracted FROM): `analyzeDependencies` takes this edge
+   * kind and a board's own task nodes and returns blocked-by, blocks, is-blocked and
+   * the weighted critical path — see `CreationCanvas.tsx`'s `taskDependencyAnalysis`.
+   */
+  'blocks',
+  /**
    * WHAT PROVES WHAT.
    *
    * The six kinds above all say how work FLOWS — a value moves, a step triggers, a

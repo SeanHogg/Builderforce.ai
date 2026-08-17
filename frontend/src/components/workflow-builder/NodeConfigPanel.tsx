@@ -1,9 +1,10 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import { useTranslations } from 'next-intl';
 
 import type { Node } from '@xyflow/react';
-import { NODE_KIND_MAP, isFieldVisible, type ConfigField } from './nodeKinds';
+import { NODE_KIND_MAP, isFieldVisible, nodeKindLabel, nodeKindBlurb, type ConfigField } from './nodeKinds';
 import type { BuilderNodeData } from './BuilderNode';
 import { integrationForConfig, integrationIcon } from './integrations';
 import { ConnectorNodeFields } from './ConnectorNodeFields';
@@ -33,6 +34,7 @@ interface Props {
 /** Right-hand inspector for the selected node — edits its label and the typed
  *  config fields declared in the node-kind catalog. */
 export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props) {
+  const t = useTranslations('evermindBuild');
   const meta = NODE_KIND_MAP[node.data.kind];
   const config = node.data.config ?? {};
   // When this node is backed by a catalog integration, surface its operation
@@ -90,8 +92,8 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span><Icon source={integ ? integrationIcon(integ) : meta?.icon} size={20} /></span>
         <div>
-          <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>{integ?.label ?? meta?.label}</div>
-          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{integ?.description ?? meta?.blurb}</div>
+          <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>{integ?.label ?? (meta ? nodeKindLabel(meta, t) : node.data.kind)}</div>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{integ?.description ?? (meta ? nodeKindBlurb(meta, t) : '')}</div>
         </div>
       </div>
 

@@ -14,7 +14,7 @@ describe('resolveMeterLimits', () => {
 
   it('reports every meter unlimited for a superadmin-member tenant', () => {
     const limits = resolveMeterLimits({ ...free, isSuperadmin: true });
-    expect(Object.values(limits)).toEqual([-1, -1, -1, -1, -1]);
+    expect(Object.values(limits)).toEqual([-1, -1, -1, -1, -1, -1]);
   });
 
   it('reports real free-plan caps when there is no superadmin', () => {
@@ -25,7 +25,7 @@ describe('resolveMeterLimits', () => {
 
   it('honours an explicit unlimited override without a superadmin', () => {
     const limits = resolveMeterLimits({ effectivePlan: TenantPlan.FREE, tokenDailyLimitOverride: -1, isSuperadmin: false });
-    expect(Object.values(limits)).toEqual([-1, -1, -1, -1, -1]);
+    expect(Object.values(limits)).toEqual([-1, -1, -1, -1, -1, -1]);
   });
 
   it('lifts only the token axis for a positive token override', () => {

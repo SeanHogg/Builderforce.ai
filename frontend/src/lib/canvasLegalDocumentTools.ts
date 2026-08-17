@@ -177,12 +177,17 @@ export function canvasLegalDocumentActions(ctx: CanvasFounderOpsContext): BrainA
           ...(args.expiresAt ? { expiresAt: args.expiresAt } : {}),
         });
         const detail = await syncFromServer(ctx, found.object, found.documentId, 'Shared legal document');
+        // `/legal-documents/shared/:token` is a real page (LegalDocumentShareViewer) —
+        // built alongside this tool, not a placeholder link.
+        const shareUrl = typeof window !== 'undefined'
+          ? `${window.location.origin}/legal-documents/shared/${share.token}`
+          : `/legal-documents/shared/${share.token}`;
 
         return {
           ok: true, proposed: true, objectId: found.object.id,
           shareId: share.shareId, token: share.token, permission: share.permission, expiresAt: share.expiresAt,
-          activeShares: detail.activeShares,
-          instruction: `Tell the user this link now — it will not be shown again: the recipient reads it at ${'{APP_ORIGIN}'}/legal-documents/shared/${share.token}. There is no in-app viewer for it yet, so describe it as a link they open in a browser.`,
+          shareUrl, activeShares: detail.activeShares,
+          instruction: `Tell the user this link now — it will not be shown again: ${shareUrl}`,
         };
       },
     },
