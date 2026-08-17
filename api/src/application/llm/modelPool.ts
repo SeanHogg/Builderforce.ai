@@ -134,14 +134,18 @@ export const CODING_MODEL_POOL: readonly string[] = [
   'qwen/qwen3.7-plus',                         // agentic coder + vision, $0.40/$1.60
   'deepseek/deepseek-v4-flash',               // fast cheap coder, $0.10/$0.20
   // FREE — strong agentic coders on the OpenRouter free key (the cloud default).
-  // Standardized lead: MiniMax M3 is the current free NVIDIA NIM agentic coder, so it
-  // sits first here and becomes CODING_DEFAULT_MODEL (the first FREE pool entry).
-  // Sourced from NVIDIA NIM (`minimaxai/minimax-m3`), where M3 has a FREE endpoint.
-  // This needs
-  // NVIDIA_API_KEY bound on the gateway; if it's unbound the NIM default no-key-
-  // skips at dispatch and the run fails over to the current OpenRouter `:free`
+  // Standardized lead: MiniMax M2.7 on NVIDIA NIM (`minimaxai/minimax-m2.7`).
+  // ROLLED BACK from M3 2026-08-17: M3 is the newer generation but its NIM endpoint
+  // is presently unreliable — it either 404s or accepts a request and then hangs mid-
+  // stream with no error, which the Canvas Brain agentic loop cannot route around
+  // (it soft-pins whichever model answers the FIRST tool call for the rest of the
+  // turn, so a stall on the pool leader exhausts both retries with no proven
+  // fallback and kills the turn — see `creationCanvasAi.ts`'s `switchToProvenModel`).
+  // M2.7 is confirmed live on NIM; swap back to M3 once NVIDIA's endpoint stabilizes.
+  // This needs NVIDIA_API_KEY bound on the gateway; if it's unbound the NIM default
+  // no-key-skips at dispatch and the run fails over to the current OpenRouter `:free`
   // frontier tail below.
-  'minimaxai/minimax-m3',                     // current free agentic coder (NVIDIA NIM) — standardized default
+  'minimaxai/minimax-m2.7',                   // current free agentic coder (NVIDIA NIM) — standardized default
   'nvidia/nemotron-3-ultra-550b-a55b:free',   // Programming #6, 1M context
   'poolside/laguna-s-2.1:free',               // current flagship coding-agent model
   'cohere/north-mini-code:free',              // code-specialized, 256K context
@@ -673,7 +677,7 @@ export const PREMIUM_FALLBACK_MODELS: readonly string[] = [
  * usage row resolved to one of these is "overflow spend" — metered against a
  * per-tenant daily $ cap so a Free tenant in a tight retry loop can't run up
  * arbitrary spend on our keys (the cap is enforced in the gateway route; see
- * `paid_overflow_daily_cap`).sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss
+ * `paid_overflow_daily_cap`).
  *
  * By-id detection is deliberately conservative here: the *stronger* coding-floor
  * coders (`xiaomi/mimo-v2.5`, `anthropic/claude-sonnet-5`) are Pro plan-pool

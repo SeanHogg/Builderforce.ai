@@ -25,7 +25,11 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'google/gemma-2-2b-it',                         tier: 'FREE', label: 'Gemma 2 2B (NIM)',               brand: 'Google'    },
   { id: 'google/gemma-3n-e4b-it',                       tier: 'FREE', label: 'Gemma 3n E4B (NIM)',             brand: 'Google'    },
   { id: 'microsoft/phi-4-multimodal-instruct',          tier: 'FREE', label: 'Phi-4 Multimodal (NIM)',         brand: 'Microsoft', capabilities: ['vision'] },
-  { id: 'minimaxai/minimax-m3',                         tier: 'FREE', label: 'MiniMax M3 (NIM)',               brand: 'MiniMax'   },
+  // M3 (not M2.7) is the one currently flaky on NIM: confirmed 404s / hangs for many
+  // callers as of 2026-08 (NVIDIA's own catalog + third-party reports), while M2.7 is
+  // confirmed live. See the CODING_MODEL_POOL comment in modelPool.ts for the routing
+  // side of this rollback.
+  { id: 'minimaxai/minimax-m2.7',                       tier: 'FREE', label: 'MiniMax M2.7 (NIM)',             brand: 'MiniMax'   },
   { id: 'stepfun-ai/step-3.5-flash',                    tier: 'FREE', label: 'Step 3.5 Flash (NIM)',           brand: 'StepFun'   },
   { id: 'bytedance/seed-oss-36b-instruct',              tier: 'FREE', label: 'Seed OSS 36B (NIM)',             brand: 'ByteDance' },
   { id: 'abacusai/dracarys-llama-3_1-70b-instruct',     tier: 'FREE', label: 'Dracarys Llama 3.1 70B (NIM)',   brand: 'AbacusAI'  },

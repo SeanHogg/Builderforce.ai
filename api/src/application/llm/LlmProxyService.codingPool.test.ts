@@ -47,11 +47,13 @@ describe('CODING_MODEL_POOL', () => {
     expect(CODING_MODEL_POOL).toContain(CODING_DEFAULT_MODEL);
   });
 
-  it('uses the current NVIDIA MiniMax generation and excludes retired M2.7', () => {
-    expect(CODING_DEFAULT_MODEL).toBe('minimaxai/minimax-m3');
-    expect(FREE_MODEL_POOL).toContain('minimaxai/minimax-m3');
-    expect(FREE_MODEL_POOL).not.toContain('minimaxai/minimax-m2.7');
-    expect(catalogEntry('minimaxai/minimax-m2.7')).toBeNull();
+  it('uses the confirmed-stable NVIDIA MiniMax generation, not the currently-flaky M3', () => {
+    // Rolled back 2026-08-17: M3's NIM endpoint 404s/hangs for many callers, M2.7 is
+    // confirmed live — see the CODING_MODEL_POOL comment in modelPool.ts.
+    expect(CODING_DEFAULT_MODEL).toBe('minimaxai/minimax-m2.7');
+    expect(FREE_MODEL_POOL).toContain('minimaxai/minimax-m2.7');
+    expect(FREE_MODEL_POOL).not.toContain('minimaxai/minimax-m3');
+    expect(catalogEntry('minimaxai/minimax-m3')).toBeNull();
   });
 
   it('isKnownModel accepts catalog ids and rejects garbage', () => {

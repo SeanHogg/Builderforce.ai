@@ -11,10 +11,10 @@ import { stripStandardFields } from './poolRouting';
  * while telling the visitor to pick a different one they had no way to pick.
  */
 describe('applyExcludedModels', () => {
-  const chain = ['minimaxai/minimax-m3', 'nvidia/nemotron-3-ultra-550b-a55b:free', 'openai/gpt-oss-20b:free'];
+  const chain = ['minimaxai/minimax-m2.7', 'nvidia/nemotron-3-ultra-550b-a55b:free', 'openai/gpt-oss-20b:free'];
 
   it('drops the excluded model and preserves the order of the rest', () => {
-    expect(applyExcludedModels(chain, ['minimaxai/minimax-m3'])).toEqual([
+    expect(applyExcludedModels(chain, ['minimaxai/minimax-m2.7'])).toEqual([
       'nvidia/nemotron-3-ultra-550b-a55b:free', 'openai/gpt-oss-20b:free',
     ]);
   });
@@ -27,7 +27,7 @@ describe('applyExcludedModels', () => {
   it('is a no-op without an exclusion, whatever shape the caller sent', () => {
     expect(applyExcludedModels(chain, undefined)).toBe(chain);
     expect(applyExcludedModels(chain, [])).toBe(chain);
-    expect(applyExcludedModels(chain, 'minimaxai/minimax-m3')).toBe(chain);
+    expect(applyExcludedModels(chain, 'minimaxai/minimax-m2.7')).toBe(chain);
     expect(applyExcludedModels(chain, [null, 42, '   '])).toBe(chain);
   });
 

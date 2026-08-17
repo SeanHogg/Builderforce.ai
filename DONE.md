@@ -1,3 +1,33 @@
+## ✅ RESOLVED 2026-08-17 — Canvas Brain turns dying with "provider stopped responding" — NVIDIA NIM's MiniMax M3 is currently flaky
+
+Reported via a captured diagnostic: every Brain canvas turn (56 canvas tools advertised,
+`routingMode: "auto"`) resolved to `minimaxai/minimax-m3` on the `nvidia` vendor, answered
+the FIRST tool call fine, then hung mid-stream on the continuation for the full 75s client
+watchdog — twice in a row — and gave up with "the model provider accepted this request and
+then stopped responding." Same failure, three different prompts, over half an hour.
+
+Root cause was upstream, not a code bug in the usual sense: `minimaxai/minimax-m3` is the
+hand-picked lead of `CODING_MODEL_POOL`'s free tail (`CODING_DEFAULT_MODEL`), but NVIDIA's
+NIM endpoint for M3 is presently unreliable — confirmed both by NVIDIA's own docs and a
+third-party bug report (404s and mid-stream hangs for other callers too), while the prior
+generation `minimaxai/minimax-m2.7` is confirmed live. That combined badly with
+`creationCanvasAi.ts`'s turn-coherence design: once a model answers the first tool call it is
+soft-pinned for the rest of the turn (`activeModel = result.resolvedModel`) so a long tool
+loop doesn't bounce across models mid-conversation. `switchToProvenModel` can only fall back
+to a model that ALREADY proved itself with a tool call earlier in the same turn — and since
+auto-routing deterministically resolves to the same pool leader every time, no second model
+ever got a chance to prove itself, so the stall recovery ladder had nothing to fall back to
+and the turn died.
+
+Fixed by rolling the NVIDIA NIM MiniMax catalog entry and `CODING_MODEL_POOL`'s free lead
+back from M3 to the confirmed-stable M2.7 (`api/src/application/llm/vendors/nvidia.ts`,
+`api/src/application/llm/modelPool.ts`), with the rollback and its cause documented inline so
+the next person doesn't re-discover this from scratch, and updated every test that hard-coded
+the old id (`LlmProxyService.codingPool.test.ts`, `.modelUnavailable.test.ts`,
+`.excludeModels.test.ts`, `vendors/openaiCompatibleVendors.test.ts`). 976/976 LLM
+application-layer tests pass, typecheck clean. Swap back to M3 once NVIDIA's endpoint
+stabilizes — the inline comments say so at both edit sites.
+
 ## ✅ RESOLVED 2026-08-17 — `check:roadmap` drift, again — gave the checker an `--update` mode instead of hand-fixing it again
 
 Sixth time this session `check:roadmap` failed on a count drift (groups 10 or 14, different
