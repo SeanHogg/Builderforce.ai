@@ -104,6 +104,13 @@ export const GUEST_SAFE_CANVAS_TOOLS = [
   // to make it a résumé, which is the exact dead end that had the model asking people
   // to paste a document the canvas was already holding.
   'canvas_import_resume',
+  // ── Academic imports ─────────────────────────────────────────────────────────
+  // Same reasoning as `canvas_import_resume`, for the two document formats the
+  // academic set documents but never wired: a deterministic CSV/`.bib`/`.ris` reader
+  // over text the visitor's own browser already extracted, writing only to a `cohort`
+  // or `bibliography` object already on their own board. No network, no tenant.
+  'canvas_import_roster',
+  'canvas_import_references',
   // The free diagnostics and calculators. `GET /api/tools`, `GET /api/tools/:id` and
   // `POST /api/tools/:id/compute` are unauthenticated by design (they power the
   // marketing surface), so a visitor asking "how mature is our delivery?" gets a real

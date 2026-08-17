@@ -36,6 +36,7 @@ import { bills, invoiceLineItems, invoices } from '../../infrastructure/database
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env } from '../../env';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 export class PayableError extends Error {
   constructor(message: string, readonly status: number) {
@@ -239,7 +240,9 @@ export async function recordBill(db: Db, env: Env, tenantId: number, input: Reco
 async function invalidateAccountHistory(env: Env, tenantId: number, ref: string | null | undefined): Promise<void> {
   const key = ref?.trim();
   if (!key) return;
-  await invalidateCached(env, accountHistoryCacheKey(tenantId, key)).catch(() => {});
+  await invalidateCached(env, accountHistoryCacheKey(tenantId, key)).catch((error) => {
+    reportCaughtError(error, { source: 'application/finance/payables.ts', operation: 'invalidateAccountHistory', level: 'warning' });
+  });
 }
 
 /**

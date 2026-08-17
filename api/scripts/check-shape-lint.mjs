@@ -140,6 +140,30 @@ const ADJUDICATED = new Map([
       "consumer inside an already-large change would be validating two unproven things at " +
       "once instead of one.",
   ],
+  [
+    'legal_document_files',
+    'the same two-nouns test as `placement_documents`: the FILE is an `artifacts` row — ' +
+      '`currentArtifactId` points at one, sealed at rest by `fileCrypto.ts` — and this is ' +
+      'the case-file record around it: which entity/matter/IP it belongs to, its category, ' +
+      'and the `signature_requests` row its signing flow created. Re-uploading points ' +
+      '`currentArtifactId` at a NEW `artifacts` row rather than overwriting, which only ' +
+      'works because the two are separate rows with separate identity. The kernel name ' +
+      '`legal_documents` is already taken (migration 0012, the platform\'s own Terms of Use ' +
+      '/ Privacy Policy versioning), hence `_files`.',
+  ],
+  [
+    'legal_document_shares',
+    'a revocable view/download link scoped to one `legal_document_files` row, following ' +
+      'the same mint/hash/resolve convention as `signature_parties.tokenHash` and ' +
+      '`form_recipients.tokenHash` (`shareToken.ts`) — both already kernel-adjacent domain ' +
+      'tables rather than rows in `share_links`, because `share_links` grants access to an ' +
+      'object-registry `objects.id` and a document may not be registered as an object yet ' +
+      'when it is first shared for review, before any signature flow exists. Recipient ' +
+      'gating (`recipientEmail`) and the view/download permission are read at the FK\'s own ' +
+      'granularity the same way the other two tables are; centralising through `share_links` ' +
+      'would require the kernel primitive to grow a legal-specific recipient column three ' +
+      'domains want and the other twenty-one do not.',
+  ],
 ]);
 
 const tables = parseDrizzleTables(srcDir);

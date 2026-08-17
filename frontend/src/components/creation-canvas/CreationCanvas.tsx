@@ -289,6 +289,11 @@ import '@/lib/canvasKindSettings.people';
 import '@/lib/canvasKindSettings.simple';
 import '@/lib/canvasKindSettings.dispatch';
 import '@/lib/canvasKindSettings.custom';
+import '@/lib/canvasKindSettings.board';
+import '@/lib/canvasKindSettings.sales';
+import '@/lib/canvasKindSettings.outreach';
+import '@/lib/canvasKindSettings.dataArchitecture';
+import '@/lib/canvasKindSettings.qa';
 import type { IdeProject } from '@/lib/types';
 import { CanvasBuildPanel } from './CanvasBuildPanel';
 import { gamePayloadFrom } from '@/lib/gameTargets';
@@ -10921,6 +10926,17 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
   const inspectorWidthRef = useRef(inspectorWidth);
   const restoreInspectorWidth = useRef(INSPECTOR_DEFAULT_WIDTH);
   const resizeStart = useRef({ pointerX: 0, width: INSPECTOR_DEFAULT_WIDTH });
+  // The human half of the unified assignee picker — `tasksApi.assignees()` already
+  // existed for this exact purpose (see its own doc comment) and was never called from
+  // here, so a task could only ever be assigned to an agent even though `assignedUserId`
+  // is a first-class column the read path already renders ("Assigned teammate").
+  const [taskAssignees, setTaskAssignees] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    if (node.data.kind !== 'task' || persistence !== 'server') { setTaskAssignees([]); return; }
+    let active = true;
+    void tasksApi.assignees().then((result) => { if (active) setTaskAssignees(result); }).catch(() => { if (active) setTaskAssignees([]); });
+    return () => { active = false; };
+  }, [node.data.kind, persistence]);
   useEffect(() => {
     if (!focus) return;
     const frame = window.requestAnimationFrame(() => inspectorRef.current?.querySelector<HTMLElement>(`[data-inspector-section="${focus}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
@@ -11020,7 +11036,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     websiteHero, websiteTheme, onWebsiteChange, onPublishWebsite, onBuildWebsiteWithCode, onWebsiteViewportChange,
     onGenerateVideo,
     onImportDataset, onProfileDataset, onVisualizeDataset, onPlotDataset,
-    taskId, taskAgents, taskAgentValue, statusGuidance, normalizedTaskStatus,
+    taskId, taskAgents, taskAgentValue, taskAssignees, statusGuidance, normalizedTaskStatus,
     prdStatus, prdTitle, prdSummary, actionStatus, setActionStatus, persistTaskPatch,
     mockupProjects, mockupProjectValue, mockupAgents, mockupAgentValue, onDeliverMockup,
     onRunCreativeAction, onShipGame,
@@ -11189,6 +11205,7 @@ interface KindSectionProps {
   taskId: number | null;
   taskAgents: CreationFlowNode[];
   taskAgentValue: string;
+  taskAssignees: { id: string; name: string }[];
   statusGuidance: Record<string, string>;
   normalizedTaskStatus: string;
   prdStatus: string | undefined;
@@ -11358,7 +11375,7 @@ function WebPageInspectorSection({ data, onChange }: KindSectionProps) {
 }
 
 function TaskInspectorSection({
-  data, onChange, taskId, taskAgents, taskAgentValue, statusGuidance, normalizedTaskStatus,
+  data, onChange, taskId, taskAgents, taskAgentValue, taskAssignees, statusGuidance, normalizedTaskStatus,
   prdStatus, prdTitle, prdSummary, actionStatus, setActionStatus, persistTaskPatch, persistence,
 }: KindSectionProps) {
   const t = useTranslations('creationCanvas');
@@ -11369,14 +11386,39 @@ function TaskInspectorSection({
         <option value="backlog">{t('statusBacklog')}</option><option value="todo">{t('statusTodo')}</option><option value="ready">{t('statusReady')}</option><option value="assigned">{t('statusAssigned')}</option><option value="in_progress">{t('statusInProgress')}</option><option value="in_review">{t('statusInReview')}</option><option value="blocked">{t('statusBlocked')}</option><option value="done">{t('statusDone')}</option>
       </select></label>
       <label>{t('priority')}<select value={typeof data.priority === 'string' ? data.priority : 'medium'} onChange={(event) => void persistTaskPatch({ priority: event.target.value as 'low' | 'medium' | 'high' | 'urgent' }, { priority: event.target.value })}><option value="low">{t('priorityLow')}</option><option value="medium">{t('priorityMedium')}</option><option value="high">{t('priorityHigh')}</option><option value="urgent">{t('priorityUrgent')}</option></select></label>
+      {/* The scheduling triple `tasksApi.update` has always accepted — see its own note —
+          plus sprint assignment. Writable through the board sync and Brain since the
+          fields were added to `MUTABLE_FIELDS.task`; this is the first surface that lets
+          a person set them directly. */}
+      <label>{t('storyPoints')}<input type="number" min={0} step={1} value={typeof data.storyPoints === 'number' ? data.storyPoints : ''} onChange={(event) => { const value = event.target.value === '' ? null : Number(event.target.value); void persistTaskPatch({ storyPoints: value }, { storyPoints: value ?? undefined }); }} /></label>
+      <label>{t('startDate')}<input type="date" value={typeof data.startDate === 'string' ? data.startDate.slice(0, 10) : ''} onChange={(event) => { const value = event.target.value || null; void persistTaskPatch({ startDate: value }, { startDate: value ?? undefined }); }} /></label>
+      <label>{t('dueDate')}<input type="date" value={typeof data.dueDate === 'string' ? data.dueDate.slice(0, 10) : ''} onChange={(event) => { const value = event.target.value || null; void persistTaskPatch({ dueDate: value }, { dueDate: value ?? undefined }); }} /></label>
+      <label>{t('sprintId')}<input value={typeof data.sprintId === 'string' ? data.sprintId : ''} onChange={(event) => onChange({ sprintId: event.target.value || undefined })} onBlur={(event) => void persistTaskPatch({ sprintId: event.target.value || null }, { sprintId: event.target.value || undefined })} /></label>
     </div>
     <div className={styles.statusGuidance}><b>{t('howToMoveForward')}</b><p>{statusGuidance[normalizedTaskStatus] || t('taskGuidanceFallback')}</p></div>
-    <label>{t('assignedAgent')}<select value={taskAgentValue} onChange={(event) => {
-      const selected = taskAgents.find((agent) => (agent.data.resourceId?.replace(/^agent:/, '') || agent.id) === event.target.value);
-      const agentRef = selected?.data.resourceId?.startsWith('agent:') ? selected.data.resourceId.slice(6) : null;
-      if (taskId != null && persistence === 'server' && selected && !agentRef) { setActionStatus(t('saveAgentBeforeAssign')); return; }
-      void persistTaskPatch({ assignedAgentRef: agentRef, assignedAgentHostId: null, assignedUserId: null }, { agentRef: event.target.value || undefined, assignee: selected?.data.title || undefined, role: selected?.data.title || undefined });
-    }}><option value="">{t('unassigned')}</option>{taskAgents.map((agent) => { const value = agent.data.resourceId?.replace(/^agent:/, '') || agent.id; return <option key={agent.id} value={value}>{agent.data.title}{agent.data.model ? ` · ${String(agent.data.model)}` : ''}</option>; })}</select></label>
+    <label>{t('assignedAgent')}<select
+      value={typeof data.assignedUserId === 'string' && data.assignedUserId ? `user:${data.assignedUserId}` : taskAgentValue}
+      onChange={(event) => {
+        const raw = event.target.value;
+        if (raw.startsWith('user:')) {
+          const userId = raw.slice(5);
+          const human = taskAssignees.find((member) => member.id === userId);
+          void persistTaskPatch(
+            { assignedUserId: userId, assignedAgentRef: null, assignedAgentHostId: null },
+            { agentRef: undefined, assignee: human?.name, role: undefined },
+          );
+          return;
+        }
+        const selected = taskAgents.find((agent) => (agent.data.resourceId?.replace(/^agent:/, '') || agent.id) === raw);
+        const agentRef = selected?.data.resourceId?.startsWith('agent:') ? selected.data.resourceId.slice(6) : null;
+        if (taskId != null && persistence === 'server' && selected && !agentRef) { setActionStatus(t('saveAgentBeforeAssign')); return; }
+        void persistTaskPatch({ assignedAgentRef: agentRef, assignedAgentHostId: null, assignedUserId: null }, { agentRef: raw || undefined, assignee: selected?.data.title || undefined, role: selected?.data.title || undefined });
+      }}
+    >
+      <option value="">{t('unassigned')}</option>
+      {taskAgents.length > 0 && <optgroup label={t('assigneeGroupAgents')}>{taskAgents.map((agent) => { const value = agent.data.resourceId?.replace(/^agent:/, '') || agent.id; return <option key={agent.id} value={value}>{agent.data.title}{agent.data.model ? ` · ${String(agent.data.model)}` : ''}</option>; })}</optgroup>}
+      {taskAssignees.length > 0 && <optgroup label={t('assigneeGroupPeople')}>{taskAssignees.map((member) => <option key={member.id} value={`user:${member.id}`}>{member.name}</option>)}</optgroup>}
+    </select></label>
     <label>{t('description')}<textarea rows={5} value={typeof data.content === 'string' ? data.content : typeof data.subtitle === 'string' ? data.subtitle : ''} onChange={(event) => onChange({ content: event.target.value })} onBlur={(event) => { if (taskId != null && persistence === 'server') void persistTaskPatch({ description: event.target.value || null }, { content: event.target.value }); }} /></label>
     <label>{t('acceptanceCriteria')}<textarea rows={4} value={typeof data.acceptanceCriteria === 'string' ? data.acceptanceCriteria : ''} placeholder={t('acceptanceCriteriaPlaceholder')} onChange={(event) => onChange({ acceptanceCriteria: event.target.value })} /></label>
     <section className={styles.taskPrdSummary} aria-label={t('taskPrd')}>

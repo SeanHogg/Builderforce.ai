@@ -10,6 +10,11 @@ import './canvasKindSettings.people';
 import './canvasKindSettings.simple';
 import './canvasKindSettings.dispatch';
 import './canvasKindSettings.custom';
+import './canvasKindSettings.board';
+import './canvasKindSettings.sales';
+import './canvasKindSettings.outreach';
+import './canvasKindSettings.dataArchitecture';
+import './canvasKindSettings.qa';
 
 /**
  * Every canvas kind resolves to a declared configuration — a `SpecObjectSpec` (edited
@@ -37,22 +42,23 @@ describe('canvas kind settings completeness', () => {
   // `chat` is a genuine third bucket, not debt: a dedicated conversation surface
   // (`BrainObjectBody`, mounted by `CreationNode`), not a settings/inspector panel —
   // there is no configuration to declare because there is no form to draw.
-  const EXEMPT = new Set(['chat']);
+  //
+  // `course`/`practice` are the same bucket for a different reason: they already have
+  // real, rich authoring UI — `CourseSubjectControl`/`PracticeAuthoring` in
+  // `LearningControls.tsx` — mounted unconditionally in the full inspector (each
+  // self-gates on `data.kind`, the way `ReadingLevelControl` does) rather than through
+  // `KindSettingsManifest`'s `custom.component` dispatch. Routing them through the
+  // manifest too would either duplicate that mount or force a second, indirect path to
+  // the same component for no behavioural change — this test's job is to catch a kind
+  // with NO configuration, and both of these have configuration, just declared beside
+  // the inspector rather than inside this registry.
+  const EXEMPT = new Set(['chat', 'course', 'practice']);
 
-  // Frozen at the count this test found on its first run. See `ROADMAP.md` —
-  // "Canvas kind settings completeness" — for the per-kind design work each entry
-  // needs before it can move to `canvasKindSettings.*.ts` (or gain its own exemption).
-  const PENDING_KIND_SETTINGS = new Set([
-    'table', 'spreadsheet', 'chart', 'map', 'kpi', 'code', 'llm', 'world', 'comment',
-    'timer', 'sticky', 'roadmap', 'featureSummary', 'team', 'role', 'mcp', 'repository',
-    'selection', 'diagnostics', 'terminal',
-    'salesPipeline', 'salesContact', 'salesCampaign', 'targetMarket', 'salesGoal', 'salesMeeting',
-    'inbox', 'emailCampaign', 'emailTemplate',
-    'socialFeed', 'socialPost', 'socialCampaign',
-    'datasource', 'erd', 'dataContract', 'dataQuality', 'metric', 'lineage',
-    'course', 'practice',
-    'testPlan', 'testCase', 'testRun', 'defect',
-  ]);
+  // Every kind that had no declaration when this test was first written has one now —
+  // see `canvasKindSettings.board.ts`, `.sales.ts`, `.outreach.ts`,
+  // `.dataArchitecture.ts` and `.qa.ts`. Empty on purpose: the ratchet stays live for
+  // whatever a newly registered kind might skip next.
+  const PENDING_KIND_SETTINGS = new Set<string>([]);
 
   it('never grows the pending list beyond today\'s baseline', () => {
     const undeclared = CREATION_OBJECT_KINDS.filter(

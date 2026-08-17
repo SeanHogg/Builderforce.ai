@@ -403,7 +403,11 @@ const BASE_MUTABLE_FIELDS = {
   socialFeed: ['content', 'filter', 'posts', 'accounts', 'networks', 'engagement', 'topPost', 'postCount', 'fetchedAt', 'summary'],
   socialPost: ['content', 'postId', 'connectionId', 'network', 'accountName', 'authorName', 'text', 'permalink', 'publishedAt', 'metrics', 'mediaUrls', 'thumbnailUrl', 'summary'],
   socialCampaign: ['content', 'campaignId', 'body', 'linkUrl', 'mediaUrls', 'variants', 'targets', 'posts', 'scheduledAt', 'publishedCount', 'failedCount', 'blockers'],
-  task: ['content', 'role', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey', 'prdTitle', 'prdStatus', 'prdSummary', 'prdCount'],
+  // `startDate`/`dueDate`/`storyPoints`/`sprintId` mirror `tasksApi.update`'s scheduling
+  // triple plus sprint assignment (see its own note on why the client type used to omit
+  // them) — without these here a task's estimate/schedule was writable through the API
+  // but invisible to both Brain and the inspector that edits everything else about it.
+  task: ['content', 'role', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey', 'prdTitle', 'prdStatus', 'prdSummary', 'prdCount', 'startDate', 'dueDate', 'storyPoints', 'sprintId'],
   prd: ['content', 'markdown', 'requirements', 'userStories'],
   release: ['content', 'items', 'milestones', 'releaseDate'],
   mockup: ['content', 'items', 'viewport', 'sources', 'deliveryProjectRef', 'deliveryProjectName', 'mockupAgentRef', 'mockupAgentName'],
