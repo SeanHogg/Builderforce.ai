@@ -52,6 +52,56 @@ describe('router', () => {
   });
 });
 
+describe('switch', () => {
+  it('tags $route with the case matching a named field', async () => {
+    const config = { field: 'status', cases: [{ match: 'ready', name: 'Ready' }, { match: 'pending', name: 'Pending' }] };
+    const result = await executeCloudNode(env, { kind: 'switch', config }, JSON.stringify({ status: 'ready' }));
+    expect(JSON.parse(result.output)).toMatchObject({ status: 'ready', $route: 'Ready' });
+  });
+
+  it('falls back when no case matches', async () => {
+    const config = { field: 'status', cases: [{ match: 'ready', name: 'Ready' }], fallback: 'Nope' };
+    const result = await executeCloudNode(env, { kind: 'switch', config }, JSON.stringify({ status: 'other' }));
+    expect(JSON.parse(result.output)).toMatchObject({ $route: 'Nope' });
+  });
+
+  it('matches against the whole (trimmed) input text when no field is set', async () => {
+    const payload = JSON.stringify({ a: 1 });
+    const config = { cases: `[{"match":${JSON.stringify(payload)},"name":"Match"}]` };
+    const result = await executeCloudNode(env, { kind: 'switch', config }, payload);
+    expect(JSON.parse(result.output)).toMatchObject({ $route: 'Match' });
+  });
+});
+
+describe('numeric-aggregator', () => {
+  it('sums numeric dependency outputs, dropping non-numeric ones', async () => {
+    const result = await executeCloudNode(env, { kind: 'numeric-aggregator', config: { op: 'sum' }, depOutputs: ['1', '2', 'not-a-number', '3'] }, '');
+    expect(result.output).toBe('6');
+  });
+
+  it('supports avg/min/max/count', async () => {
+    const depOutputs = ['2', '4', '6'];
+    expect((await executeCloudNode(env, { kind: 'numeric-aggregator', config: { op: 'avg' }, depOutputs }, '')).output).toBe('4');
+    expect((await executeCloudNode(env, { kind: 'numeric-aggregator', config: { op: 'min' }, depOutputs }, '')).output).toBe('2');
+    expect((await executeCloudNode(env, { kind: 'numeric-aggregator', config: { op: 'max' }, depOutputs }, '')).output).toBe('6');
+    expect((await executeCloudNode(env, { kind: 'numeric-aggregator', config: { op: 'count' }, depOutputs }, '')).output).toBe('3');
+  });
+});
+
+describe('table-aggregator', () => {
+  it('keeps only dependency outputs that parsed as an object', async () => {
+    const result = await executeCloudNode(env, { kind: 'table-aggregator', config: {}, depOutputs: ['{"a":1}', 'not json', '"a string"', '{"b":2}'] }, '');
+    expect(JSON.parse(result.output)).toEqual([{ a: 1 }, { b: 2 }]);
+  });
+});
+
+describe('text-aggregator', () => {
+  it('joins dependency outputs with the configured separator', async () => {
+    const result = await executeCloudNode(env, { kind: 'text-aggregator', config: { separator: ', ' }, depOutputs: ['a', 'b', 'c'] }, '');
+    expect(result.output).toBe('a, b, c');
+  });
+});
+
 describe('merge', () => {
   it('array strategy JSON-parses each dependency output', async () => {
     const result = await executeCloudNode(
@@ -115,6 +165,73 @@ describe('usageCtx-gated Tools kinds refuse without a tenant context', () => {
   });
   it('increment', async () => {
     await expect(executeCloudNode(env, { kind: 'increment', config: { key: 'k' } }, '')).rejects.toThrow(/tenant context/);
+  });
+  it('set-variables', async () => {
+    await expect(executeCloudNode(env, { kind: 'set-variables', config: { values: '{"k":"v"}' } }, '')).rejects.toThrow(/tenant context/);
+  });
+  it('get-variables', async () => {
+    await expect(executeCloudNode(env, { kind: 'get-variables', config: { keys: 'k' } }, '')).rejects.toThrow(/tenant context/);
+  });
+});
+
+describe('compose-string', () => {
+  it('renders the {{input}} template', async () => {
+    const result = await executeCloudNode(env, { kind: 'compose-string', config: { template: 'Hello {{input}}!' } }, 'world');
+    expect(result.output).toBe('Hello world!');
+  });
+
+  it('defaults to {{input}} when no template is set', async () => {
+    const result = await executeCloudNode(env, { kind: 'compose-string', config: {} }, 'raw');
+    expect(result.output).toBe('raw');
+  });
+});
+
+describe('convert-encoding', () => {
+  it('base64-encodes the input', async () => {
+    const result = await executeCloudNode(env, { kind: 'convert-encoding', config: { mode: 'base64-encode' } }, 'hello');
+    expect(result.output).toBe(Buffer.from('hello').toString('base64'));
+  });
+
+  it('url-decodes the input', async () => {
+    const result = await executeCloudNode(env, { kind: 'convert-encoding', config: { mode: 'url-decode' } }, 'a%20b');
+    expect(result.output).toBe('a b');
+  });
+});
+
+describe('Text Parser additions wire the pure helpers', () => {
+  it('html-table', async () => {
+    const html = '<table><tr><td>a</td><td>b</td></tr></table>';
+    const result = await executeCloudNode(env, { kind: 'html-table', config: {} }, html);
+    expect(JSON.parse(result.output)).toEqual([['a', 'b']]);
+  });
+
+  it('html-elements', async () => {
+    const result = await executeCloudNode(env, { kind: 'html-elements', config: { tag: 'a' } }, '<a href="/x">hi</a>');
+    expect(JSON.parse(result.output)).toEqual([{ text: 'hi', attrs: { href: '/x' } }]);
+  });
+
+  it('match-elements', async () => {
+    const html = '<li>keep</li><li>drop</li>';
+    const result = await executeCloudNode(env, { kind: 'match-elements', config: { tag: 'li', pattern: '^keep$' } }, html);
+    expect(JSON.parse(result.output)).toEqual([{ text: 'keep', attrs: {} }]);
+  });
+
+  it('match-pattern-advanced', async () => {
+    const result = await executeCloudNode(env, { kind: 'match-pattern-advanced', config: { pattern: '(?<n>\\d+)' } }, 'x1 y22');
+    expect(JSON.parse(result.output)).toEqual([
+      { match: '1', groups: { n: '1' }, index: 1 },
+      { match: '22', groups: { n: '22' }, index: 4 },
+    ]);
+  });
+
+  it('replace', async () => {
+    const result = await executeCloudNode(env, { kind: 'replace', config: { pattern: '-', replacement: '_', literal: true } }, 'a-b-c');
+    expect(result.output).toBe('a_b_c');
+  });
+
+  it('chunk-text', async () => {
+    const result = await executeCloudNode(env, { kind: 'chunk-text', config: { chunkSize: 4, overlap: 0 } }, 'abcdefgh');
+    expect(JSON.parse(result.output)).toEqual(['abcd', 'efgh']);
   });
 });
 

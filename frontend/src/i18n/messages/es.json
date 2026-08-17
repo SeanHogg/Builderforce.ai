@@ -12941,6 +12941,62 @@
       "webSearch": {
         "label": "Búsqueda web",
         "blurb": "Busca en la web abierta y devuelve resultados con el contenido de la página — usa tu clave conectada de Tavily/Exa/Linkup, luego una instancia SearXNG del operador y por último una fuente enciclopédica sin clave, para que siempre devuelva algo."
+      },
+      "switch": {
+        "label": "Switch",
+        "blurb": "Ramifica haciendo coincidir un valor con casos literales — etiqueta la carga útil con $route. Combínalo con un nodo Filter que lea $route == \"Nombre\" en cada ruta descendente."
+      },
+      "numericAggregator": {
+        "label": "Agregador numérico",
+        "blurb": "Reduce varias ramas anteriores a un solo número — suma, promedio, mínimo, máximo o conteo."
+      },
+      "tableAggregator": {
+        "label": "Agregador de tabla",
+        "blurb": "Recopila las salidas de objetos JSON de varias ramas anteriores en un array de filas."
+      },
+      "textAggregator": {
+        "label": "Agregador de texto",
+        "blurb": "Une las salidas de texto de varias ramas anteriores en una sola cadena."
+      },
+      "setVariables": {
+        "label": "Establecer varias variables",
+        "blurb": "Escribe varias variables del ámbito de esta ejecución a la vez."
+      },
+      "getVariables": {
+        "label": "Obtener varias variables",
+        "blurb": "Lee varias variables establecidas antes en ESTA ejecución — genera un único objeto JSON."
+      },
+      "composeString": {
+        "label": "Componer una cadena",
+        "blurb": "Construye una cadena a partir de una plantilla con {{input}}."
+      },
+      "convertEncoding": {
+        "label": "Convertir codificación",
+        "blurb": "Codifica o decodifica la entrada en Base64 / URL / hexadecimal."
+      },
+      "htmlTable": {
+        "label": "Obtener contenido de una tabla HTML",
+        "blurb": "Busca una tabla en el HTML de entrada y devuelve sus filas y columnas como texto."
+      },
+      "htmlElements": {
+        "label": "Obtener elementos de HTML",
+        "blurb": "Extrae cada etiqueta coincidente del HTML de entrada, con su texto y atributos."
+      },
+      "matchElements": {
+        "label": "Coincidir elementos",
+        "blurb": "Obtener elementos de HTML, filtrados a los que su texto coincide con un patrón."
+      },
+      "matchPatternAdvanced": {
+        "label": "Coincidir patrón (avanzado)",
+        "blurb": "Cada coincidencia de una expresión regular, con sus grupos de captura con nombre como objeto estructurado."
+      },
+      "replace": {
+        "label": "Reemplazar",
+        "blurb": "Buscar y reemplazar — subcadena literal o expresión regular (admite referencias $1)."
+      },
+      "chunkText": {
+        "label": "Fragmentar texto",
+        "blurb": "Divide la entrada en fragmentos de tamaño fijo, con solapamiento opcional — para alimentar un nodo LLM/embedding pieza por pieza."
       }
     }
   },

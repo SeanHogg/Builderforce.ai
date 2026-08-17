@@ -12941,6 +12941,62 @@
       "webSearch": {
         "label": "Web Search",
         "blurb": "Search the open web and return results with page content — resolves your connected Tavily/Exa/Linkup key, then an operator SearXNG instance, then a keyless encyclopedic fallback, so it always returns something."
+      },
+      "switch": {
+        "label": "Switch",
+        "blurb": "Fan-out by matching a value against literal cases — tags the payload with $route. Pair with a Filter reading $route == \"Name\" on each downstream path."
+      },
+      "numericAggregator": {
+        "label": "Numeric Aggregator",
+        "blurb": "Reduce multiple upstream branches to one number — sum, average, min, max, or count."
+      },
+      "tableAggregator": {
+        "label": "Table Aggregator",
+        "blurb": "Collect multiple upstream branches' JSON-object outputs into one array of rows."
+      },
+      "textAggregator": {
+        "label": "Text Aggregator",
+        "blurb": "Join multiple upstream branches' text outputs into one string."
+      },
+      "setVariables": {
+        "label": "Set Multiple Variables",
+        "blurb": "Write several run-scoped variables at once."
+      },
+      "getVariables": {
+        "label": "Get Multiple Variables",
+        "blurb": "Read several variables set earlier in THIS run — outputs one JSON object."
+      },
+      "composeString": {
+        "label": "Compose a String",
+        "blurb": "Build a string from a {{input}} template."
+      },
+      "convertEncoding": {
+        "label": "Convert Encoding",
+        "blurb": "Base64 / URL / hex encode or decode the input."
+      },
+      "htmlTable": {
+        "label": "Get Content from HTML Table",
+        "blurb": "Search the input HTML for a table and return its rows and columns as text."
+      },
+      "htmlElements": {
+        "label": "Get Elements from HTML",
+        "blurb": "Extract every matching tag from the input HTML, with its text and attributes."
+      },
+      "matchElements": {
+        "label": "Match Elements",
+        "blurb": "Get Elements from HTML, filtered to those whose text matches a pattern."
+      },
+      "matchPatternAdvanced": {
+        "label": "Match Pattern (Advanced)",
+        "blurb": "Every match of a regular expression, each with its named capture groups as a structured object."
+      },
+      "replace": {
+        "label": "Replace",
+        "blurb": "Find and replace — literal substring or regular expression (supports $1 backreferences)."
+      },
+      "chunkText": {
+        "label": "Chunk Text",
+        "blurb": "Split the input into fixed-size, optionally overlapping chunks — for feeding an LLM/embedding node piece by piece."
       }
     }
   },

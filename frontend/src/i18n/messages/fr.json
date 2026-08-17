@@ -12941,6 +12941,62 @@
       "webSearch": {
         "label": "Recherche web",
         "blurb": "Recherche sur le web ouvert et renvoie des résultats avec le contenu des pages — utilise votre clé Tavily/Exa/Linkup connectée, puis une instance SearXNG de l’opérateur, puis une source encyclopédique sans clé en dernier recours, afin de toujours renvoyer un résultat."
+      },
+      "switch": {
+        "label": "Switch",
+        "blurb": "Bifurque en faisant correspondre une valeur à des cas littéraux — étiquette la charge utile avec $route. À associer à un nœud Filter lisant $route == \"Nom\" sur chaque chemin en aval."
+      },
+      "numericAggregator": {
+        "label": "Agrégateur numérique",
+        "blurb": "Réduit plusieurs branches en amont à un seul nombre — somme, moyenne, minimum, maximum ou décompte."
+      },
+      "tableAggregator": {
+        "label": "Agrégateur de tableau",
+        "blurb": "Rassemble les sorties d’objets JSON de plusieurs branches en amont en un tableau de lignes."
+      },
+      "textAggregator": {
+        "label": "Agrégateur de texte",
+        "blurb": "Joint les sorties texte de plusieurs branches en amont en une seule chaîne."
+      },
+      "setVariables": {
+        "label": "Définir plusieurs variables",
+        "blurb": "Écrit plusieurs variables limitées à cette exécution en une seule fois."
+      },
+      "getVariables": {
+        "label": "Obtenir plusieurs variables",
+        "blurb": "Lit plusieurs variables définies plus tôt dans CETTE exécution — produit un seul objet JSON."
+      },
+      "composeString": {
+        "label": "Composer une chaîne",
+        "blurb": "Construit une chaîne à partir d’un modèle {{input}}."
+      },
+      "convertEncoding": {
+        "label": "Convertir l’encodage",
+        "blurb": "Encode ou décode l’entrée en Base64 / URL / hexadécimal."
+      },
+      "htmlTable": {
+        "label": "Obtenir le contenu d’un tableau HTML",
+        "blurb": "Recherche un tableau dans le HTML fourni et renvoie ses lignes et colonnes sous forme de texte."
+      },
+      "htmlElements": {
+        "label": "Obtenir des éléments HTML",
+        "blurb": "Extrait chaque balise correspondante du HTML fourni, avec son texte et ses attributs."
+      },
+      "matchElements": {
+        "label": "Faire correspondre des éléments",
+        "blurb": "Obtenir des éléments HTML, filtrés à ceux dont le texte correspond à un motif."
+      },
+      "matchPatternAdvanced": {
+        "label": "Faire correspondre un motif (avancé)",
+        "blurb": "Chaque correspondance d’une expression régulière, avec ses groupes de capture nommés sous forme d’objet structuré."
+      },
+      "replace": {
+        "label": "Remplacer",
+        "blurb": "Rechercher et remplacer — sous-chaîne littérale ou expression régulière (prend en charge les rétroréférences $1)."
+      },
+      "chunkText": {
+        "label": "Découper le texte",
+        "blurb": "Découpe l’entrée en fragments de taille fixe, avec chevauchement optionnel — pour alimenter un nœud LLM/embedding morceau par morceau."
       }
     }
   },

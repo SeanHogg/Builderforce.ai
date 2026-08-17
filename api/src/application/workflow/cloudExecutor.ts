@@ -318,7 +318,9 @@ export async function executeCloudNode(
       const field = typeof node.config.field === 'string' ? node.config.field.trim() : '';
       const actual = field ? String((ctx as Record<string, unknown>)[field] ?? '') : inputText.trim();
       let cases: Array<{ match?: unknown; name?: unknown }> = [];
-      if (typeof node.config.cases === 'string') {
+      if (Array.isArray(node.config.cases)) {
+        cases = node.config.cases as Array<{ match?: unknown; name?: unknown }>;
+      } else if (typeof node.config.cases === 'string') {
         try {
           const parsedCases = JSON.parse(node.config.cases) as unknown;
           if (Array.isArray(parsedCases)) cases = parsedCases as Array<{ match?: unknown; name?: unknown }>;

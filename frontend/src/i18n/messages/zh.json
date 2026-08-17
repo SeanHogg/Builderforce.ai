@@ -12941,6 +12941,62 @@
       "webSearch": {
         "label": "网页搜索",
         "blurb": "搜索开放网络并返回带有页面内容的结果——依次尝试你已连接的 Tavily/Exa/Linkup 密钥、运营方的 SearXNG 实例，最后回退到无需密钥的百科来源，确保始终有结果返回。"
+      },
+      "switch": {
+        "label": "切换",
+        "blurb": "通过将一个值与字面量分支进行匹配来实现多路分流——为负载打上 $route 标记。可与读取 $route == \"名称\" 的过滤器节点搭配，在每条下游路径上使用。"
+      },
+      "numericAggregator": {
+        "label": "数值聚合器",
+        "blurb": "将多个上游分支归约为一个数字——求和、平均值、最小值、最大值或计数。"
+      },
+      "tableAggregator": {
+        "label": "表格聚合器",
+        "blurb": "将多个上游分支的 JSON 对象输出收集为一个行数组。"
+      },
+      "textAggregator": {
+        "label": "文本聚合器",
+        "blurb": "将多个上游分支的文本输出拼接为一个字符串。"
+      },
+      "setVariables": {
+        "label": "设置多个变量",
+        "blurb": "一次性写入多个仅限本次运行的变量。"
+      },
+      "getVariables": {
+        "label": "获取多个变量",
+        "blurb": "读取本次运行中先前设置的多个变量——输出为一个 JSON 对象。"
+      },
+      "composeString": {
+        "label": "组合字符串",
+        "blurb": "根据 {{input}} 模板构建一个字符串。"
+      },
+      "convertEncoding": {
+        "label": "转换编码",
+        "blurb": "对输入进行 Base64 / URL / 十六进制编码或解码。"
+      },
+      "htmlTable": {
+        "label": "从 HTML 表格获取内容",
+        "blurb": "在输入的 HTML 中查找表格，并以文本形式返回其行和列。"
+      },
+      "htmlElements": {
+        "label": "从 HTML 获取元素",
+        "blurb": "提取输入 HTML 中每个匹配的标签及其文本和属性。"
+      },
+      "matchElements": {
+        "label": "匹配元素",
+        "blurb": "对“从 HTML 获取元素”的结果进行筛选，只保留文本匹配某个模式的元素。"
+      },
+      "matchPatternAdvanced": {
+        "label": "匹配模式（高级）",
+        "blurb": "返回正则表达式的每一处匹配，并将其命名捕获组作为结构化对象一并返回。"
+      },
+      "replace": {
+        "label": "替换",
+        "blurb": "查找并替换——支持字面量子字符串或正则表达式（支持 $1 反向引用）。"
+      },
+      "chunkText": {
+        "label": "文本分块",
+        "blurb": "将输入拆分为固定大小、可选重叠的多个片段——便于逐块输入下游的 LLM / 嵌入节点。"
       }
     }
   },

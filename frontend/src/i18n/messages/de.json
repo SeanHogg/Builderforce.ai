@@ -12941,6 +12941,62 @@
       "webSearch": {
         "label": "Websuche",
         "blurb": "Durchsucht das offene Web und liefert Ergebnisse mit Seiteninhalt — nutzt zuerst deinen verbundenen Tavily-/Exa-/Linkup-Schlüssel, dann eine SearXNG-Instanz des Betreibers und zuletzt eine schlüssellose Enzyklopädie-Quelle, damit immer ein Ergebnis zurückkommt."
+      },
+      "switch": {
+        "label": "Switch",
+        "blurb": "Verzweigt, indem ein Wert mit literalen Fällen abgeglichen wird — markiert die Nutzlast mit $route. In Kombination mit einem Filter-Knoten verwenden, der $route == \"Name\" auf jedem nachgelagerten Pfad liest."
+      },
+      "numericAggregator": {
+        "label": "Numerischer Aggregator",
+        "blurb": "Reduziert mehrere vorgelagerte Zweige auf eine Zahl — Summe, Durchschnitt, Minimum, Maximum oder Anzahl."
+      },
+      "tableAggregator": {
+        "label": "Tabellen-Aggregator",
+        "blurb": "Sammelt die JSON-Objekt-Ausgaben mehrerer vorgelagerter Zweige in einem Array von Zeilen."
+      },
+      "textAggregator": {
+        "label": "Text-Aggregator",
+        "blurb": "Verbindet die Textausgaben mehrerer vorgelagerter Zweige zu einer einzigen Zeichenkette."
+      },
+      "setVariables": {
+        "label": "Mehrere Variablen setzen",
+        "blurb": "Schreibt mehrere auf diesen Lauf begrenzte Variablen auf einmal."
+      },
+      "getVariables": {
+        "label": "Mehrere Variablen lesen",
+        "blurb": "Liest mehrere zuvor in DIESEM Lauf gesetzte Variablen — gibt ein einziges JSON-Objekt aus."
+      },
+      "composeString": {
+        "label": "Zeichenkette zusammensetzen",
+        "blurb": "Erstellt eine Zeichenkette aus einer {{input}}-Vorlage."
+      },
+      "convertEncoding": {
+        "label": "Kodierung konvertieren",
+        "blurb": "Kodiert oder dekodiert die Eingabe als Base64 / URL / Hex."
+      },
+      "htmlTable": {
+        "label": "Inhalt aus HTML-Tabelle abrufen",
+        "blurb": "Durchsucht das Eingabe-HTML nach einer Tabelle und gibt deren Zeilen und Spalten als Text zurück."
+      },
+      "htmlElements": {
+        "label": "Elemente aus HTML abrufen",
+        "blurb": "Extrahiert jedes passende Tag aus dem Eingabe-HTML, mit Text und Attributen."
+      },
+      "matchElements": {
+        "label": "Elemente abgleichen",
+        "blurb": "Elemente aus HTML abrufen, gefiltert auf jene, deren Text einem Muster entspricht."
+      },
+      "matchPatternAdvanced": {
+        "label": "Muster abgleichen (erweitert)",
+        "blurb": "Jeder Treffer eines regulären Ausdrucks, jeweils mit seinen benannten Erfassungsgruppen als strukturiertes Objekt."
+      },
+      "replace": {
+        "label": "Ersetzen",
+        "blurb": "Suchen und Ersetzen — literale Teilzeichenkette oder regulärer Ausdruck (unterstützt $1-Rückverweise)."
+      },
+      "chunkText": {
+        "label": "Text in Abschnitte teilen",
+        "blurb": "Teilt die Eingabe in gleich große, optional überlappende Abschnitte — um einen LLM-/Embedding-Knoten Stück für Stück zu versorgen."
       }
     }
   },
