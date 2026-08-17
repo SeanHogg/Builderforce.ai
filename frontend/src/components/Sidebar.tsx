@@ -273,15 +273,14 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
           </div>
         )}
 
-        {/* Copyright + version + Terms/Privacy, back in the rail rather than
-            floating a full-width strip under the whole frame — the far-left menu
-            is where an operator already looks for the shell's own chrome, and
-            keeping it here means it never competes with the board for the
-            frame's bottom edge. Collapsed to the icon rail there is no room for
-            it, same rule as the session list above. NOT on a stage route: the
-            docked Brain panel (`BrainDock`) carries the same row as its own
-            footer there instead. */}
-        {!collapsed && !onStage && <LegalStrip className="nav-legal" />}
+        {/* Copyright + version + Terms/Privacy, always in the rail rather than
+            floating a full-width strip under the whole frame or riding the
+            docked Brain panel's footer — the far-left menu is where an operator
+            already looks for the shell's own chrome, and keeping it here means
+            it never competes with the board for the frame's bottom edge, on a
+            stage route or otherwise. Collapsed to the icon rail there is no
+            room for it, same rule as the session list above. */}
+        {!collapsed && <LegalStrip className="nav-legal" />}
       </nav>
     </>
   );

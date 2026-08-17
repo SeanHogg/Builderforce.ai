@@ -1,3 +1,17 @@
+## ✅ RESOLVED 2026-08-17 — `check:roadmap` drift, again — gave the checker an `--update` mode instead of hand-fixing it again
+
+Sixth time this session `check:roadmap` failed on a count drift (groups 10 or 14, different
+each time) — ROADMAP.md has active concurrent writers, so a bullet landing from one change
+and its group's index row landing from another is expected, not a defect to keep tracking
+down by hand. Fixed the immediate drift (group 10: 136 → 137) but this time also gave
+`api/scripts/check-roadmap.mjs` an `--update` mode, matching the `check-shape-lint.mjs
+--update` convention already established in this repo: it recounts every group's body and
+rewrites only the index rows that actually drifted, reporting each `from → to`. Verified
+against the live file (already-consistent → "nothing to update") and against a simulated
+drift (`| 10 | 999 |` → detected, `--update` corrected it to the real count, re-check green).
+`npm run check` → 24/24. Next time this drifts, `node scripts/check-roadmap.mjs --update` is
+the fix, not a manual recount.
+
 ## ✅ RESOLVED 2026-08-17 — Pressing Play on a generated game showed "No game yet"
 
 Reported with two screenshots: a Roblox game named *Skybound Citadels* sitting on the board,

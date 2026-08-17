@@ -6,7 +6,7 @@ import styles from './ProductUpdatesTrigger.module.css';
 /**
  * The version chip that opens the Product Updates panel — ONE component, both
  * places it appears (the marketing/auth footer strip and the operator shell's
- * `LegalStrip`, shared by the sidebar and the docked Brain panel).
+ * `LegalStrip`, mounted by the sidebar rail).
  *
  * It was two hand-written buttons rendering the same string, with the same
  * handler and the same tooltip, which is two places for the unread badge to be

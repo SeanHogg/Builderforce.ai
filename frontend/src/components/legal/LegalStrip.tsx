@@ -12,12 +12,10 @@ import { BRAND } from '@/lib/content';
  * Copyright + version + Terms/Privacy — the row itself, with nowhere it decides
  * to render.
  *
- * Shared so the SAME row can sit in different layout contexts without
- * duplicating the fetch, the modal state and the markup: the sidebar rail
- * (`Sidebar`, as the last row of the nav, off the board entirely) and the
- * canvas's docked Brain panel (`BrainDock`, in normal flow as that panel's
- * own footer — never a floating overlay competing with the board's chrome).
- * Each caller owns ONLY where it sits and whether it renders at all.
+ * Lives as the last row of the sidebar rail (`Sidebar`), off the board entirely,
+ * on every route including a stage route — kept as its own component so the
+ * fetch, the modal state and the markup have one home even though only one
+ * caller mounts it today.
  */
 export function LegalStrip({ className }: { className: string }) {
   const { appVersion, apiVersion, legal, termsVersion, privacyVersion } = useLegalDocs();

@@ -1667,8 +1667,7 @@ html[data-theme='light'] .nebula {
 
 /* A button, not a label: the version opens the Product Updates panel and the two
    documents open the legal reader. Styled back down to plain text so the strip
-   stays chrome. Shared with the docked Brain panel's own footer
-   (`.brainDockLegal`), which retints only the color onto its own tokens. */
+   stays chrome. */
 .legal-corner-link {
   color: var(--muted);
   background: none;

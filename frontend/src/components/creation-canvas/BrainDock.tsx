@@ -9,7 +9,6 @@ import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
 import { useModelIdentity } from '@/lib/useLlmModels';
 import { Icon } from '@/components/ui/Icon';
-import { LegalStrip } from '@/components/legal/LegalStrip';
 import type { Edge } from '@xyflow/react';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition, creationObjectName } from './creationObjectRegistry';
@@ -55,13 +54,10 @@ import {
  * the activity line the panel was already showing. Passing the node in costs one prop and
  * makes the docked placement what it says it is.
  *
- * The docked placement alone also carries the copyright/version/Terms/Privacy row
- * (`LegalStrip`) as its own footer, in normal flow below the transcript — the sidebar's
- * own copy of that row (`Sidebar`) stands down on a stage route (see its own doc) because
- * that row would otherwise have nowhere in flow to sit; this panel is that "nowhere", and
- * a real docked panel is where it belongs rather than floating over the board as chrome of
- * its own. The inline placement (the Brain Object on the graph) does not carry it — there
- * is no panel there for it to be the footer of.
+ * The copyright/version/Terms/Privacy row (`LegalStrip`) lives ONLY in the sidebar rail
+ * (`Sidebar`) now, on every route including a stage route — this panel used to carry its
+ * own copy as a footer here, which put the same row in two places depending on whether the
+ * reader was on a stage route. One row, one home.
  */
 
 /** How far one arrow-key press resizes the surface. */
@@ -404,7 +400,6 @@ export function BrainDock({
           Nothing is positioned: it is in normal flow, so the transcript above it flexes
           to whatever is left and the panel can never paint over the box you type in. */}
       {composer}
-      <LegalStrip className={styles.brainDockLegal} />
     </aside>
   );
 }
