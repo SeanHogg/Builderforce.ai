@@ -26,7 +26,7 @@ import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
  */
 
 export interface HomeScrollerState {
-  railRef: RefObject<HTMLDivElement>;
+  railRef: RefObject<HTMLDivElement | null>;
   atStart: boolean;
   atEnd: boolean;
   /** 0–1 through the rail's travel; 1 when there is nothing to scroll. */
@@ -35,8 +35,8 @@ export interface HomeScrollerState {
 }
 
 export function useHomeScroller(): HomeScrollerState {
-  // `useRef<T>(null)` (not `<T | null>`) so the result is a RefObject the JSX
-  // `ref` prop accepts; `.current` stays nullable at the read sites.
+  // React 19 types `useRef<T>(null)` as `RefObject<T | null>`, which is what the
+  // JSX `ref` prop accepts; `.current` stays nullable at the read sites.
   const railRef = useRef<HTMLDivElement>(null);
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(true);

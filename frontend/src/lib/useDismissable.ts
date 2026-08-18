@@ -14,11 +14,13 @@ export function useDismissable<T extends HTMLElement = HTMLDivElement>(): {
   open: boolean;
   toggle: () => void;
   close: () => void;
-  ref: React.RefObject<T>;
+  ref: React.RefObject<T | null>;
 } {
   const [open, setOpen] = useState(false);
-  // `useRef<T>(null)` (not `<T | null>`) so the result is a RefObject the JSX
-  // `ref` prop accepts; `.current` is still nullable at the read sites below.
+  // React 19 types `useRef<T>(null)` as `RefObject<T | null>` — the null the ref
+  // genuinely holds before mount is now in the type rather than asserted away,
+  // and that is exactly what the JSX `ref` prop accepts. `.current` is still
+  // nullable at the read sites below, as it always was.
   const ref = useRef<T>(null);
 
   useEffect(() => {

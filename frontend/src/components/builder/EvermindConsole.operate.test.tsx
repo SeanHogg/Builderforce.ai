@@ -224,8 +224,12 @@ describe('EvermindConsole — knowledge analyzer', () => {
     await openTab(/Check/);
     fireEvent.click(await screen.findByRole('button', { name: /Check knowledge/i }));
     await screen.findByText(/retry limit is three/i);
-    // Findings default to selected — the common intent is "fix it all".
-    fireEvent.click(screen.getByRole('button', { name: /Fix 1 selected/i }));
+    // Findings default to selected — the common intent is "fix it all". The
+    // default is applied by an effect, so the CTA settles on its count a tick
+    // after the findings paint: await the label rather than assuming the two
+    // land in the same flush (React 18 happened to batch them together; 19
+    // does not, and the sync query read "Fix 0 selected").
+    fireEvent.click(await screen.findByRole('button', { name: /Fix 1 selected/i }));
 
     await waitFor(() => expect(applyFindings).toHaveBeenCalledWith([expect.objectContaining({ id: 11 })]));
     expect(await screen.findByText(/1 corrected, 1 forgotten/i)).toBeInTheDocument();

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { CanvasResumeEditor } from './CanvasResumeEditor';
 import { activeResumeRevision, createResumeFamily, deriveResume, resumeNodePatch, type CanvasResumeFamily } from '@/lib/canvasResume';
@@ -9,6 +10,23 @@ vi.mock('@/lib/resumeImportApi', () => ({ importResumeSource: vi.fn() }));
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations')).realCatalogIntlMock(
   (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
 ));
+
+/**
+ * Render, then open the section the control under test lives in.
+ *
+ * The editor splits into Document / Details / Tools tabs and `variant: 'full'`
+ * opens on Document — the card behind an inspector already IS the document, so
+ * version, privacy, template and the Edit/Preview/Compare tabs moved under
+ * Details, and the writing/tailoring tools under Tools. Every control these
+ * tests drive is one tab click away, and a person reaches it the same way.
+ *
+ * `getAllBy(…).at(-1)` because two tests mount a second editor beside the first.
+ */
+function renderSection(section: 'Details' | 'Tools', ui: ReactElement) {
+  const result = render(ui);
+  fireEvent.click(screen.getAllByRole('tab', { name: section }).at(-1)!);
+  return result;
+}
 
 describe('CanvasResumeEditor', () => {
   it('reviews file metadata before structuring and preserves the protected source reference', async () => {
@@ -41,7 +59,7 @@ describe('CanvasResumeEditor', () => {
     });
     const family = deriveResume(original, 'Product version', { idFactory: () => 'derived' });
     const onEdit = vi.fn();
-    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
+    renderSection('Details', <CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Edit' }));
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Ada Lovelace' } });
@@ -53,7 +71,7 @@ describe('CanvasResumeEditor', () => {
 
   it('keeps the protected original edit tab disabled', () => {
     const family = createResumeFamily({ title: 'Uploaded', markdown: '# Original', idFactory: () => 'original' });
-    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={vi.fn()} />);
+    renderSection('Details', <CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={vi.fn()} />);
     expect(screen.getByRole('tab', { name: 'Edit' })).toBeDisabled();
     expect(screen.getByText('Protected original')).toBeTruthy();
   });
@@ -61,7 +79,7 @@ describe('CanvasResumeEditor', () => {
   it('previews every template and persists default, page, orientation, and zoom settings', () => {
     const family = createResumeFamily({ title: 'Uploaded', markdown: '# Original', idFactory: () => 'original' });
     const onEdit = vi.fn();
-    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
+    renderSection('Details', <CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
     fireEvent.click(screen.getByRole('button', { name: 'Browse templates' }));
     expect(screen.getByRole('region', { name: 'Résumé template gallery' }).querySelectorAll('button')).toHaveLength(12);
     fireEvent.click(screen.getByRole('button', { name: /Executive · Taupe/ }));
@@ -70,7 +88,7 @@ describe('CanvasResumeEditor', () => {
 
     onEdit.mockClear();
     const selected = patch.resumeFamily;
-    const { unmount } = render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(selected) }} onEdit={onEdit} />);
+    const { unmount } = renderSection('Details', <CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(selected) }} onEdit={onEdit} />);
     fireEvent.click(screen.getAllByRole('button', { name: 'Set as default' }).at(-1)!);
     patch = onEdit.mock.calls.at(-1)?.[0] as { resumeFamily: CanvasResumeFamily };
     expect(patch.resumeFamily.defaultTemplateId).toBe('executive-taupe');
@@ -81,7 +99,7 @@ describe('CanvasResumeEditor', () => {
     const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', document: { basics: { name: 'Ada' }, customExtension: { retained: true } }, idFactory: () => 'original' });
     const family = deriveResume(original, 'Portfolio', { idFactory: () => 'derived' });
     const onEdit = vi.fn();
-    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
+    renderSection('Details', <CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Edit' }));
     fireEvent.click(screen.getAllByText('Projects').find((element) => element.tagName === 'SUMMARY')!);
     fireEvent.click(screen.getByRole('button', { name: 'Add project' }));
@@ -94,7 +112,7 @@ describe('CanvasResumeEditor', () => {
     const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', document: { basics: { name: 'Ada' }, work: [{ id: 'work-1', name: 'Engine Co', position: 'Engineer', highlights: ['Built it'] }] }, idFactory: () => 'original' });
     const family = deriveResume(original, 'Editable', { idFactory: () => 'derived' });
     const onEdit = vi.fn();
-    const { rerender } = render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
+    const { rerender } = renderSection('Details', <CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Edit' }));
     fireEvent.click(screen.getByRole('button', { name: 'Remove entry' }));
     const removed = onEdit.mock.calls.at(-1)?.[0]?.resumeFamily as CanvasResumeFamily;
@@ -109,7 +127,7 @@ describe('CanvasResumeEditor', () => {
     const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', document: { basics: { name: 'Ada' } }, idFactory: () => 'original' });
     const family = deriveResume(original, 'Portfolio', { idFactory: () => 'derived' });
     const onDetach = vi.fn();
-    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={vi.fn()} onDetach={onDetach} />);
+    renderSection('Details', <CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={vi.fn()} onDetach={onDetach} />);
     fireEvent.click(screen.getByRole('button', { name: 'Detach as résumé' }));
     const detached = onDetach.mock.calls[0]?.[0]?.resumeFamily as CanvasResumeFamily;
     expect(detached.revisions).toHaveLength(1);
@@ -120,7 +138,7 @@ describe('CanvasResumeEditor', () => {
     const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', idFactory: () => 'original' });
     const family = deriveResume(original, 'Portfolio', { idFactory: () => 'derived' });
     const onEdit = vi.fn();
-    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
+    renderSection('Details', <CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
     const input = screen.getByLabelText('Current version name');
     fireEvent.change(input, { target: { value: 'Leadership résumé' } });
     fireEvent.blur(input);
@@ -132,7 +150,7 @@ describe('CanvasResumeEditor', () => {
     const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', document: { basics: { name: 'Ada' }, skills: [{ name: 'Algorithms' }] }, idFactory: () => 'original' });
     const family = deriveResume(original, 'Layout', { idFactory: () => 'derived' });
     const onEdit = vi.fn();
-    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
+    renderSection('Details', <CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Edit' }));
     fireEvent.click(screen.getByText('Section order and visibility'));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Skills' }));
@@ -151,7 +169,7 @@ describe('CanvasResumeEditor', () => {
     });
     const family = deriveResume(original, 'Product version', { idFactory: () => 'derived' });
     const onTailor = vi.fn();
-    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={vi.fn()} onTailor={onTailor} />);
+    renderSection('Tools', <CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={vi.fn()} onTailor={onTailor} />);
 
     fireEvent.click(screen.getByText('Tailor for a job'));
     fireEvent.change(screen.getByLabelText('Job description'), { target: { value: 'Seeking a TypeScript software engineer with React, Kubernetes, mentoring, and distributed systems experience.' } });
@@ -171,7 +189,7 @@ describe('CanvasResumeEditor', () => {
     });
     const family = deriveResume(original, 'Product version', { idFactory: () => 'derived' });
     const onTailor = vi.fn();
-    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={vi.fn()} onTailor={onTailor} />);
+    renderSection('Tools', <CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={vi.fn()} onTailor={onTailor} />);
     fireEvent.click(screen.getByText('AI writing tools'));
     fireEvent.change(screen.getByLabelText('Direction'), { target: { value: 'Make it more direct.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Rewrite summary' }));
@@ -189,7 +207,7 @@ describe('CanvasResumeEditor', () => {
     const original = createResumeFamily({ title: 'Uploaded', markdown: '# Ada', idFactory: () => 'original' });
     const family = deriveResume(original, 'Editable', { idFactory: () => 'derived' });
     const onEdit = vi.fn();
-    render(<CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
+    renderSection('Details', <CanvasResumeEditor data={{ kind: 'resume', title: 'Uploaded', ...resumeNodePatch(family) }} onEdit={onEdit} />);
     fireEvent.click(screen.getByRole('button', { name: 'Paged' }));
     expect((onEdit.mock.calls.at(-1)?.[0]?.resumeFamily as CanvasResumeFamily).previewMode).toBe('paged');
     fireEvent.keyDown(window, { key: 'Escape' });
