@@ -308,7 +308,23 @@ Replace `{provider}` with the lowercase provider name: `google`, `github`, `link
    wrangler secret put GOOGLE_CLIENT_SECRET
    ```
 
-> **Publishing:** While in "Testing" mode only test users can sign in. Click **Publish App** on the consent screen when ready for production — `email/profile/openid` are standard scopes and are typically approved immediately with no manual review.
+5. **OAuth consent screen → App domain** — fill in the **Application privacy policy link** and
+   **Application terms of service link**. Google will not verify an app without them, and until they
+   are set the consent screen tells the user it cannot show links to your policies:
+   ```
+   https://builderforce.ai/legal/privacy
+   https://builderforce.ai/legal/terms
+   ```
+   Both are public, server-rendered pages of the CURRENT published document version (see
+   `frontend/src/lib/legalDocs.ts` — one route table, shared by the pages, the footer link, the
+   trust-centre nav and the sitemap). Also add `builderforce.ai` under **Authorized domains**.
+
+> **Publishing:** While in "Testing" mode only test users can sign in — and only test users can
+> complete a connector consent, however many redirect URIs are registered. Click **Publish App** on
+> the consent screen when ready for production — `email/profile/openid` are standard scopes and are
+> typically approved immediately with no manual review, but the Gmail/Calendar/Drive/YouTube scopes
+> above are sensitive or restricted and go to Google's verification review, which requires the
+> privacy-policy and terms links from step 5 plus a demo video of the consent flow.
 
 ---
 

@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useLegalDocs } from './useLegalDocs';
-import LegalDocModal, { type LegalModalType } from './LegalDocModal';
+import LegalDocModal, { type LegalDocType } from './LegalDocModal';
 import LegalDocLink from './LegalDocLink';
 import ProductUpdatesTrigger from '../releaseNotes/ProductUpdatesTrigger';
 import { BRAND } from '@/lib/content';
@@ -19,7 +19,7 @@ import { BRAND } from '@/lib/content';
 export function LegalStrip({ className }: { className: string }) {
   const { appVersion, apiVersion, legal, termsVersion, privacyVersion } = useLegalDocs();
   const t = useTranslations('legal');
-  const [modalType, setModalType] = useState<LegalModalType | null>(null);
+  const [modalType, setModalType] = useState<LegalDocType | null>(null);
 
   return (
     <>

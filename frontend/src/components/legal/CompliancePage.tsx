@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { surfaceClassName } from '@/components/ui/Surface';
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
+import { legalDocHref } from '@/lib/legalDocs';
 import styles from './CompliancePage.module.css';
 
 type CompliancePageProps = {
@@ -15,15 +16,25 @@ type CompliancePageProps = {
   children: React.ReactNode;
 };
 
-/** Route → catalog key. The LABEL is translated; the path never is. */
+/**
+ * Route → catalog key (within the `legal` namespace). The LABEL is translated;
+ * the path never is.
+ *
+ * The two published instruments lead, because they are what a visitor is
+ * actually bound by — the notices below them explain and supplement those two.
+ * They reuse `termsTitle`/`privacyTitle`, the same keys the footer link and the
+ * reader panel use, rather than a second copy of the words.
+ */
 const legalNavigation = [
-  { href: '/legal/compliance', key: 'overview' },
-  { href: '/legal/privacy-rights', key: 'privacyRights' },
-  { href: '/legal/cookies', key: 'cookies' },
-  { href: '/legal/subprocessors', key: 'subprocessors' },
-  { href: '/legal/dpa', key: 'dpa' },
-  { href: '/legal/ai-transparency', key: 'aiTransparency' },
-  { href: '/legal/accessibility', key: 'accessibility' },
+  { href: legalDocHref('terms'), key: 'termsTitle' },
+  { href: legalDocHref('privacy'), key: 'privacyTitle' },
+  { href: '/legal/compliance', key: 'nav.overview' },
+  { href: '/legal/privacy-rights', key: 'nav.privacyRights' },
+  { href: '/legal/cookies', key: 'nav.cookies' },
+  { href: '/legal/subprocessors', key: 'nav.subprocessors' },
+  { href: '/legal/dpa', key: 'nav.dpa' },
+  { href: '/legal/ai-transparency', key: 'nav.aiTransparency' },
+  { href: '/legal/accessibility', key: 'nav.accessibility' },
 ] as const;
 
 /**
@@ -78,7 +89,7 @@ export async function CompliancePage({
                 className={currentHref === item.href ? styles.activeNavLink : undefined}
                 aria-current={currentHref === item.href ? 'page' : undefined}
               >
-                {t(`nav.${item.key}`)}
+                {t(item.key)}
                 <span aria-hidden="true">→</span>
               </Link>
             ))}

@@ -3,13 +3,13 @@
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
-import type { LegalCurrent } from './useLegalDocs';
+import type { LegalCurrent, LegalDocType } from '@/lib/legalDocs';
 
-export type LegalModalType = 'terms' | 'privacy';
+export type { LegalDocType } from '@/lib/legalDocs';
 
 interface LegalDocModalProps {
   /** Which document to show, or null to render nothing. */
-  type: LegalModalType | null;
+  type: LegalDocType | null;
   legal: LegalCurrent | null;
   onClose: () => void;
   /** Raise the reader above a panel that opened it — the beta join flow shows

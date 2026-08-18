@@ -1,5 +1,6 @@
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import type { LegalModalType } from './LegalDocModal';
+import { legalDocHref, legalDocTitleKey, type LegalDocType } from '@/lib/legalDocs';
 
 /**
  * ONE legal-document link — the document's title AND its published version —
@@ -12,6 +13,15 @@ import type { LegalModalType } from './LegalDocModal';
  * the strip has to stay on one line. The suffix now carries its own class
  * (`legal-doc-version`) so a host stylesheet can hide it at narrow widths
  * without either host having to know about the other.
+ *
+ * It is an ANCHOR, not a button, and that is load-bearing. In-app a plain click
+ * still opens the reader panel — that is the better reading experience and the
+ * hosts' whole reason for existing. But a legal instrument also has to be
+ * addressable: linkable, openable in a new tab, followable by a crawler, and
+ * quotable to an OAuth provider's verification reviewer, who asks for a Privacy
+ * Policy URL and will not accept "it is behind a button". So the href is real
+ * and only an UNMODIFIED primary click is intercepted; ⌘/ctrl/shift-click and
+ * middle-click navigate to the page like any other link.
  *
  * `className` is the host's own link class: the two strips are styled by their
  * own stylesheets, but everything the link is ABOUT belongs to the link.
@@ -26,18 +36,27 @@ export default function LegalDocLink({
   className,
   onOpen,
 }: {
-  type: LegalModalType;
+  type: LegalDocType;
   /** Published version of the document, undefined until the docs load. */
   docVersion?: string;
   className: string;
-  onOpen: (type: LegalModalType) => void;
+  onOpen: (type: LegalDocType) => void;
 }) {
   const t = useTranslations('legal');
 
   return (
-    <button type="button" className={className} onClick={() => onOpen(type)}>
-      {t(type === 'terms' ? 'termsTitle' : 'privacyTitle')}
+    <Link
+      href={legalDocHref(type)}
+      className={className}
+      onClick={(event) => {
+        // Let the browser own every click that means "somewhere else, please".
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+        event.preventDefault();
+        onOpen(type);
+      }}
+    >
+      {t(legalDocTitleKey(type))}
       {docVersion ? <span className="legal-doc-version"> (v{docVersion})</span> : null}
-    </button>
+    </Link>
   );
 }

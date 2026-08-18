@@ -1,4 +1,6 @@
+import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
+import { legalDocHref } from '@/lib/legalDocs';
 import { CompliancePage, LegalCallout, LegalChecklist, LegalSection } from '@/components/legal/CompliancePage';
 
 export default async function Page() {
@@ -6,7 +8,7 @@ export default async function Page() {
   return (
     <CompliancePage title={t('privacyRights')} currentHref="/legal/privacy-rights">
       <LegalCallout label="How to make a request">
-        Email privacy@builderforce.ai or use the privacy request form in the Privacy Policy. We verify requests proportionately and respond within the applicable statutory period.
+        Email privacy@builderforce.ai or use the privacy request form in the <Link href={legalDocHref('privacy')}>Privacy Policy</Link>. We verify requests proportionately and respond within the applicable statutory period.
       </LegalCallout>
 
       <LegalSection title="Your privacy choices">

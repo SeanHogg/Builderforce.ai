@@ -16,7 +16,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import LegalDocModal, { type LegalModalType } from '@/components/legal/LegalDocModal';
+import LegalDocModal, { type LegalDocType } from '@/components/legal/LegalDocModal';
 import { useLegalDocs } from '@/components/legal/useLegalDocs';
 import {
   ReleaseNoteBody,
@@ -60,7 +60,7 @@ export default function BetaJoinPanel({
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
-  const [legalDoc, setLegalDoc] = useState<LegalModalType | null>(null);
+  const [legalDoc, setLegalDoc] = useState<LegalDocType | null>(null);
 
   // Consent is per opening: reopening the panel — or opening it for a different
   // beta — must never arrive with the box already ticked.

@@ -28,6 +28,7 @@ import {
   growthApi,
   type Audience,
   type Campaign,
+  type CampaignBlocker,
   type CampaignTransport,
   type EmailTemplate,
   type MarketingAsset,
@@ -225,7 +226,7 @@ export function GrowthClient() {
    * so a user is never left with a dead button and no explanation.
    */
   const draftBlockers = useMemo(() => {
-    const blockers: string[] = [];
+    const blockers: CampaignBlocker[] = [];
     if (!draft.name.trim()) blockers.push('name');
     if (!draft.subject.trim()) blockers.push('subject');
     if (draft.audienceId == null) blockers.push('audience');

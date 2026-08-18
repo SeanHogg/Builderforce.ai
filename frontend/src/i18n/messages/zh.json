@@ -1607,6 +1607,8 @@
       "assuranceLead": "控制措施持续接受审查。",
       "assuranceBody": "安全、隐私、AI、未成年人保护、违规响应、影响评估、数据留存和无障碍访问等控制措施，均由我们的合规审计智能体对照源代码仓库进行测试。",
       "details": {
+        "terms": "规范您使用 BuilderForce.ai 的协议",
+        "privacy": "我们收集哪些信息、原因，以及如何保护它们",
         "privacyRights": "请求、删除、申诉与人工复核",
         "cookies": "同意、可选分析与全球隐私控制",
         "subprocessors": "服务提供商、数据用途与传输保障",
@@ -1614,7 +1616,9 @@
         "aiTransparency": "智能体行为、用户控制与重大决策",
         "accessibility": "我们的 WCAG 承诺、反馈与便利措施"
       }
-    }
+    },
+    "unavailable": "此文件目前无法加载。请刷新页面，或发邮件至 privacy@builderforce.ai，我们会向您发送副本。",
+    "metaDescription": "阅读 BuilderForce.ai {document} 当前发布的版本。"
   },
   "llmUsage": {
     "byUser": "按用户 · 最近 7 天",
@@ -20281,6 +20285,7 @@
         "cancelled": "已取消"
       },
       "blocker": {
+        "name": "请填写广告系列名称",
         "status": "已发送",
         "subject": "请填写主题",
         "sender": "请验证发件地址",

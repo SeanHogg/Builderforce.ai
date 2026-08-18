@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
 import { CompliancePage } from '@/components/legal/CompliancePage';
+import { legalDocHref } from '@/lib/legalDocs';
 import styles from './page.module.css';
 import { Icon } from '@/components/ui/Icon';
 import { surfaceClassName } from '@/components/ui/Surface';
@@ -8,18 +9,21 @@ import { surfaceClassName } from '@/components/ui/Surface';
 /**
  * Route, glyph, and the catalog key its label comes from.
  *
- * The label reuses `legal.nav.*` — the same seven names the shared chrome's
- * sidebar renders — rather than a second copy of the words. Two lists of the
- * same page names is how "Cookie choices" and "Cookie policy" end up naming one
- * page in two places.
+ * The label reuses the SAME catalog key the shared chrome's sidebar renders —
+ * `legal.nav.*` for the notices, `legal.termsTitle`/`legal.privacyTitle` for the
+ * two published instruments — rather than a second copy of the words. Two lists
+ * of the same page names is how "Cookie choices" and "Cookie policy" end up
+ * naming one page in two places.
  */
 const resources = [
-  { href: '/legal/privacy-rights', icon: '↗', key: 'privacyRights' },
-  { href: '/legal/cookies', icon: '◌', key: 'cookies' },
-  { href: '/legal/subprocessors', icon: '◇', key: 'subprocessors' },
-  { href: '/legal/dpa', icon: '✓', key: 'dpa' },
-  { href: '/legal/ai-transparency', icon: '✦', key: 'aiTransparency' },
-  { href: '/legal/accessibility', icon: '◎', key: 'accessibility' },
+  { href: legalDocHref('terms'), icon: '§', key: 'termsTitle', detail: 'terms' },
+  { href: legalDocHref('privacy'), icon: '⚖', key: 'privacyTitle', detail: 'privacy' },
+  { href: '/legal/privacy-rights', icon: '↗', key: 'nav.privacyRights', detail: 'privacyRights' },
+  { href: '/legal/cookies', icon: '◌', key: 'nav.cookies', detail: 'cookies' },
+  { href: '/legal/subprocessors', icon: '◇', key: 'nav.subprocessors', detail: 'subprocessors' },
+  { href: '/legal/dpa', icon: '✓', key: 'nav.dpa', detail: 'dpa' },
+  { href: '/legal/ai-transparency', icon: '✦', key: 'nav.aiTransparency', detail: 'aiTransparency' },
+  { href: '/legal/accessibility', icon: '◎', key: 'nav.accessibility', detail: 'accessibility' },
 ] as const;
 
 export default async function ComplianceCenter() {
@@ -44,8 +48,8 @@ export default async function ComplianceCenter() {
           >
             <span className={styles.icon} aria-hidden="true"><Icon source={resource.icon} size={22} /></span>
             <span className={styles.cardCopy}>
-              <strong>{t(`nav.${resource.key}`)}</strong>
-              <span>{t(`center.details.${resource.key}`)}</span>
+              <strong>{t(resource.key)}</strong>
+              <span>{t(`center.details.${resource.detail}`)}</span>
             </span>
             <span className={styles.arrow} aria-hidden="true">→</span>
           </Link>

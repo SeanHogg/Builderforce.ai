@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useLegalDocs } from './legal/useLegalDocs';
-import LegalDocModal, { type LegalModalType } from './legal/LegalDocModal';
+import LegalDocModal, { type LegalDocType } from './legal/LegalDocModal';
 import LegalDocLink from './legal/LegalDocLink';
 import ProductUpdatesTrigger from './releaseNotes/ProductUpdatesTrigger';
 import { BRAND, STATS } from '@/lib/content';
@@ -32,7 +32,7 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
   // Column titles are the footer's own copy; the LINK labels are the
   // destination's, wherever the registry keeps it. Same rule as the header.
   const tRoot = useTranslations();
-  const [modalType, setModalType] = useState<LegalModalType | null>(null);
+  const [modalType, setModalType] = useState<LegalDocType | null>(null);
 
   // Version + legal strip. Rendered under the copyright credit in the marketing
   // (`full`) footer; rendered as its own bottom row in the slim (`legal`) footer.

@@ -1607,6 +1607,8 @@
       "assuranceLead": "Controls are continuously reviewed.",
       "assuranceBody": "Security, privacy, AI, minor-safety, breach-response, impact-assessment, retention, and accessibility controls are tested by our Compliance Audit Agent against the source repository.",
       "details": {
+        "terms": "The agreement governing your use of BuilderForce.ai",
+        "privacy": "What we collect, why, and how it is protected",
         "privacyRights": "Requests, deletion, appeals, and human review",
         "cookies": "Consent, optional analytics, and Global Privacy Control",
         "subprocessors": "Service providers, data use, and transfer safeguards",
@@ -1614,7 +1616,9 @@
         "aiTransparency": "Agent behavior, user control, and consequential decisions",
         "accessibility": "Our WCAG commitment, feedback, and accommodations"
       }
-    }
+    },
+    "unavailable": "This document could not be loaded right now. Please refresh, or email privacy@builderforce.ai and we will send you a copy.",
+    "metaDescription": "Read the current published version of the BuilderForce.ai {document}."
   },
   "llmUsage": {
     "byUser": "By user · last 7 days",
@@ -20281,6 +20285,7 @@
         "cancelled": "Cancelled"
       },
       "blocker": {
+        "name": "Add a campaign name",
         "status": "Already sent",
         "subject": "Add a subject",
         "sender": "Verify a From address",

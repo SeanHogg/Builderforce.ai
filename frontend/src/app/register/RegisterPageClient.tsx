@@ -20,7 +20,7 @@ import EmailVerificationStep from '@/components/account/EmailVerificationStep';
 import { safeRedirectPath } from '@/lib/safeRedirect';
 import { getRetainedDiscountCode, retainDiscountCode } from '@/lib/discountCode';
 import { useLegalDocs } from '@/components/legal/useLegalDocs';
-import LegalDocModal, { type LegalModalType } from '@/components/legal/LegalDocModal';
+import LegalDocModal, { type LegalDocType } from '@/components/legal/LegalDocModal';
 
 export default function RegisterPageClient() {
   const router = useRouter();
@@ -28,7 +28,7 @@ export default function RegisterPageClient() {
   const tr = useTranslations('register');
   const { register, isAuthenticated } = useAuth();
   const { legal } = useLegalDocs();
-  const [legalModalType, setLegalModalType] = useState<LegalModalType | null>(null);
+  const [legalModalType, setLegalDocType] = useState<LegalDocType | null>(null);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -283,7 +283,7 @@ export default function RegisterPageClient() {
                         onClick={event => {
                           event.preventDefault();
                           event.stopPropagation();
-                          setLegalModalType('terms');
+                          setLegalDocType('terms');
                         }}
                         style={{ color: 'inherit', textDecoration: 'underline' }}
                       >
@@ -296,7 +296,7 @@ export default function RegisterPageClient() {
                         onClick={event => {
                           event.preventDefault();
                           event.stopPropagation();
-                          setLegalModalType('privacy');
+                          setLegalDocType('privacy');
                         }}
                         style={{ color: 'inherit', textDecoration: 'underline' }}
                       >
@@ -351,7 +351,7 @@ export default function RegisterPageClient() {
         </div>
         </div>
 
-        <LegalDocModal type={legalModalType} legal={legal} onClose={() => setLegalModalType(null)} />
+        <LegalDocModal type={legalModalType} legal={legal} onClose={() => setLegalDocType(null)} />
 
         {/* RIGHT PANEL — marketing banner (hidden on mobile via CSS) */}
         <aside className="auth-marketing-panel" style={{

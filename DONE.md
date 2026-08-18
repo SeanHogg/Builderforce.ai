@@ -1,3 +1,45 @@
+## ✅ RESOLVED 2026-08-18 — Gmail connect died at Google, and the Terms/Privacy documents had no URL to give it
+
+Reported from a live "Connect inbox" attempt: `Error 400: redirect_uri_mismatch` for
+`redirect_uri=https://api.builderforce.ai/api/mailbox/callback/google`, while Google sign-in on the
+same client worked fine.
+
+**Root cause (the 400).** Not a code defect. `GOOGLE_CLIENT_ID` is shared by five Google flows and
+each route builds its own callback from the request origin — `/api/auth/oauth/google/callback`
+(sign-in), `/api/mailbox/callback/google`, `/api/calendar/callback/google`,
+`/api/drive/callback/google`, `/api/youtube/callback`. Only the sign-in path had ever been
+registered in the Cloud Console, and sign-in working proves nothing about the other four.
+`MICROSOFT_CLIENT_ID` had the identical exposure. The README documented one redirect URI for each
+provider, which is what produced the gap; it now lists every flow's URI for both, with the
+one-client-many-flows warning and the sensitive/restricted scope reality spelled out.
+
+**What the fixed consent screen then revealed.** With the URIs registered the screen rendered — and
+said it could not show links to builderforce.ai's Privacy Policy or Terms of Service. It was right.
+The two documents were real, versioned, published content served by `GET /api/auth/legal/current`,
+but reachable ONLY inside a slide-out panel; `LegalDocModal`'s own comment said "no external URL".
+The binding instruments a visitor agrees to had no address — nothing could link them, cite a
+version, hand them to a procurement reviewer, or give Google's verification the Privacy Policy URL
+it asks for. `/legal/privacy-rights` even referenced "the Privacy Policy" as a dangling phrase.
+
+**Fix.** `frontend/src/lib/legalDocs.ts` is now the ONE source for the document types, the canonical
+route per type (`legalDocHref`), the title key per type, and the read — the latter through the
+existing `publicApiGet` cache rather than a sixth hand-rolled fetch. Public server-rendered pages at
+`/legal/terms` and `/legal/privacy` render the current published version through the same
+`LegalDocPreview` the panel and the admin editor use, so the panel and the page can never show
+different versions of one instrument. `LegalDocLink` became an anchor carrying the real href — a
+plain click still opens the reader panel, but ⌘/ctrl/shift/middle-click and any crawler get the
+page. The compliance-centre nav and card grid, the sitemap and the privacy-rights reference all
+resolve through `legalDocHref` instead of a literal path. `LegalModalType` was a second spelling of
+`'terms' | 'privacy'` and is gone; all six consumers moved to the canonical `LegalDocType`.
+
+Five-catalog i18n for the new strings. 10/10 frontend guards, tsgo clean, eslint clean, 58 tests
+green. Frontend 2026.8.55.
+
+**Still open:** Google's verification review for the restricted/sensitive connector scopes — an
+operator submission, tracked in ROADMAP group 9.
+
+---
+
 ## ✅ RESOLVED 2026-08-18 — Every workspace file read/write asked for the EMPTY path: `c.req.param('*')` is always undefined in Hono
 
 Reported from a live Creation Canvas session (`/create/e8c9fb0b…`, api 2026.8.24, ui 2026.8.52).

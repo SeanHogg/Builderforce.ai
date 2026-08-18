@@ -4,6 +4,7 @@ import { COMPETITOR_SEO, SEO_INTEGRATIONS } from '@/lib/content';
 import { listPublishedSkillSlugs } from '@/lib/marketplaceSeo';
 import { indexableTeaserRoutes } from '@/lib/routeMarketing';
 import { getSalaryDirectory } from '@/lib/salary';
+import { legalDocHref } from '@/lib/legalDocs';
 
 const BASE = 'https://builderforce.ai';
 
@@ -61,9 +62,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/agents/shoutouts`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
     { url: `${BASE}/agents/acknowledgements`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
     { url: `${BASE}/agents/contact`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
-    // Trust surface. /soc2 and the seven /legal pages are the pages a buyer's
-    // security reviewer looks for by name; they were indexable but unlisted.
+    // Trust surface. /soc2 and the /legal pages are the pages a buyer's security
+    // reviewer looks for by name; they were indexable but unlisted. The two
+    // published instruments outrank the notices: they are what a visitor is
+    // bound by, and the URL an OAuth provider's verification asks for.
     { url: `${BASE}/soc2`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${BASE}${legalDocHref('privacy')}`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${BASE}${legalDocHref('terms')}`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE}/legal/compliance`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${BASE}/legal/privacy-rights`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
     { url: `${BASE}/legal/cookies`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },

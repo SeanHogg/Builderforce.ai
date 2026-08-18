@@ -105,6 +105,34 @@ for (const file of collect(srcDir)) {
       const shown = [...bound].map((ns) => (ns ? `${ns}.${key}` : key)).join(' | ');
       missing.push(`${rel}:${line}  ${shown}`);
     }
+
+    /**
+     * A key finished at RUNTIME — t(`campaigns.blocker.${b}`). The suffix is
+     * unknowable here, but the prefix is not: it has to name an object in the
+     * catalog, and when it does not, every value of the suffix renders a raw
+     * key. Checking the prefix costs nothing and cannot cry wolf. Checking the
+     * suffixes belongs to `messages.test.ts`, which enumerates the registry
+     * that supplies them — the growth page shipped `campaigns.blocker.name`
+     * with no such enumeration and rendered the dotted path to readers.
+     */
+    const dynamic = new RegExp(
+      '\\b' + name + '(?:\\.rich|\\.raw|\\.markup)?\\(\\s*`([^`$]*)\\$\\{',
+      'g',
+    );
+    for (const match of text.matchAll(dynamic)) {
+      // t(`${x}.label`) has no static prefix to resolve.
+      if (!match[1].includes('.')) continue;
+      const path = match[1].slice(0, match[1].lastIndexOf('.'));
+      const resolved = [...bound].some((ns) => {
+        const node = lookup(ns ? `${ns}.${path}` : path);
+        return typeof node === 'object' && node !== null;
+      });
+      if (resolved) continue;
+
+      const line = text.slice(0, match.index).split('\n').length;
+      const shown = [...bound].map((ns) => (ns ? `${ns}.${path}` : path)).join(' | ');
+      missing.push(`${rel}:${line}  ${shown}.<runtime suffix> — namespace missing`);
+    }
   }
 }
 

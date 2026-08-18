@@ -7,6 +7,7 @@ import fr from './messages/fr.json';
 import de from './messages/de.json';
 import { LOCALES, DEFAULT_LOCALE, type Locale } from './config';
 import { STALL_CAUSES } from '@/lib/builderforceApi';
+import { CAMPAIGN_BLOCKERS } from '@/lib/growthApi';
 import { CREATION_OBJECT_REGISTRY } from '@/components/creation-canvas/creationObjectRegistry';
 import { CREATION_TEMPLATES } from '@/components/creation-canvas/creationTemplates';
 import {
@@ -132,6 +133,15 @@ describe('message catalogs', () => {
     const t = createTranslator({ locale, messages: CATALOGS[locale] });
     const missing = STALL_CAUSES.filter((cause) => {
       const key = `manager.stalls.cause.${cause}`;
+      return t(key as never) === key;
+    });
+    expect(missing).toEqual([]);
+  });
+
+  it.each(LOCALES)('%s labels every campaign blocker', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale] });
+    const missing = CAMPAIGN_BLOCKERS.filter((blocker) => {
+      const key = `growth.campaigns.blocker.${blocker}`;
       return t(key as never) === key;
     });
     expect(missing).toEqual([]);

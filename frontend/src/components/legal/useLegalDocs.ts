@@ -2,20 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { APP_VERSION, fetchApiVersion } from '@/lib/appVersions';
+import { fetchLegalCurrent, type LegalCurrent } from '@/lib/legalDocs';
 
-const AUTH_API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
-
-export interface LegalDocument {
-  version: string;
-  title: string;
-  content: string;
-  publishedAt: string;
-}
-
-export interface LegalCurrent {
-  terms: LegalDocument;
-  privacy: LegalDocument;
-}
+export type { LegalCurrent, LegalDocument } from '@/lib/legalDocs';
 
 export interface LegalDocsState {
   /** Build-time UI version (NEXT_PUBLIC_APP_VERSION). */
@@ -33,6 +22,10 @@ export interface LegalDocsState {
  * build-time UI version, the live API version, and the current Terms/Privacy
  * docs. Both the auth-screen footer and the sidebar menu read from here so the
  * fetch + shapes live in exactly one place.
+ *
+ * The document read itself lives in `lib/legalDocs`, shared with the public
+ * `/legal/terms` and `/legal/privacy` pages — the panel and the page must never
+ * be able to show different versions of the same instrument.
  */
 export function useLegalDocs(): LegalDocsState {
   const [legal, setLegal] = useState<LegalCurrent | null>(null);
@@ -40,12 +33,9 @@ export function useLegalDocs(): LegalDocsState {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${AUTH_API_URL}/api/auth/legal/current`, { credentials: 'omit' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: LegalCurrent | null) => {
-        if (!cancelled && data?.terms && data?.privacy) setLegal(data);
-      })
-      .catch(() => {});
+    void fetchLegalCurrent().then((data) => {
+      if (!cancelled && data) setLegal(data);
+    });
     // Shared cache — the footer, the sidebar menu and a Brain diagnostics capture
     // all read the same session-cached value instead of each hitting /health.
     void fetchApiVersion().then((v) => { if (!cancelled && v) setApiVersion(v); });

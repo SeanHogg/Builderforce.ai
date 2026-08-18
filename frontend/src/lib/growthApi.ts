@@ -352,7 +352,17 @@ export const growthApi = {
     apiRequest(`${GROWTH}/assets/${assetId}`, { method: 'DELETE' }),
 };
 
-export type CampaignBlocker = 'status' | 'subject' | 'sender' | 'audience' | 'mailbox' | 'connection';
+/**
+ * Every reason a campaign cannot be sent — the ONE list, because the labels are
+ * looked up as `growth.campaigns.blocker.<blocker>` at runtime. A value added
+ * here without its five catalog entries fails `messages.test.ts`, which is the
+ * only guard that can see a key assembled from a suffix.
+ */
+export const CAMPAIGN_BLOCKERS = [
+  'status', 'name', 'subject', 'sender', 'audience', 'mailbox', 'connection',
+] as const;
+
+export type CampaignBlocker = (typeof CAMPAIGN_BLOCKERS)[number];
 
 /**
  * Why a campaign cannot send yet.

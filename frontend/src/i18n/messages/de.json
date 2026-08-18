@@ -1607,6 +1607,8 @@
       "assuranceLead": "Die Kontrollen werden fortlaufend überprüft.",
       "assuranceBody": "Unser Compliance-Audit-Agent prüft die Kontrollen für Sicherheit, Datenschutz, KI, Minderjährigenschutz, Reaktion auf Datenschutzverletzungen, Folgenabschätzung, Aufbewahrung und Barrierefreiheit gegen das Quellcode-Repository.",
       "details": {
+        "terms": "Die Vereinbarung, die Ihre Nutzung von BuilderForce.ai regelt",
+        "privacy": "Welche Daten wir erheben, warum und wie sie geschützt werden",
         "privacyRights": "Anfragen, Löschung, Beschwerden und menschliche Überprüfung",
         "cookies": "Einwilligung, optionale Analyse und Global Privacy Control",
         "subprocessors": "Dienstleister, Datennutzung und Übermittlungsgarantien",
@@ -1614,7 +1616,9 @@
         "aiTransparency": "Agentenverhalten, Nutzerkontrolle und wesentliche Entscheidungen",
         "accessibility": "Unser WCAG-Bekenntnis, Feedback und Vorkehrungen"
       }
-    }
+    },
+    "unavailable": "Dieses Dokument konnte derzeit nicht geladen werden. Bitte aktualisieren Sie die Seite oder schreiben Sie an privacy@builderforce.ai — wir senden Ihnen eine Kopie.",
+    "metaDescription": "Lesen Sie die aktuell veröffentlichte Fassung des Dokuments {document} von BuilderForce.ai."
   },
   "llmUsage": {
     "byUser": "Nach Benutzer · letzte 7 Tage",
@@ -20281,6 +20285,7 @@
         "cancelled": "Abgebrochen"
       },
       "blocker": {
+        "name": "Kampagnenname hinzufügen",
         "status": "Bereits gesendet",
         "subject": "Betreff hinzufügen",
         "sender": "Absenderadresse verifizieren",
