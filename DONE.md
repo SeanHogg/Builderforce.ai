@@ -1,3 +1,58 @@
+## ✅ RESOLVED 2026-08-18 — The homepage threw a hydration error on half the planet, and every unknown URL 500'd
+
+Two defects reported from the live site once the server actually started rendering: React #418 in the
+console on `/`, and `GET /favicon.ico 500`.
+
+**#418 — a calendar date formatted in the reader's timezone.** `args[]=text` says a TEXT node
+disagreed between the server render and the client. Diffing the deployed HTML against a freshly
+rendered one found it in three words: the build printed "August 15, 2026" on the blog cards where a
+browser printed "August 14, 2026". `new Date('2026-08-15')` parses a date-ONLY string as UTC
+midnight per spec, and `toLocaleDateString` then renders that instant in whatever zone the runtime is
+in — so everywhere west of UTC landed on the previous evening. That was TWO bugs, not one: every
+article card and article page showed the wrong day to roughly half the world, and because the
+homepage is statically prerendered in UTC and hydrated in the visitor's zone, React discarded and
+re-rendered the whole tree on every load west of UTC.
+
+The fix is `lib/calendarDate.ts`, one `formatCalendarDate` pinned to `timeZone: 'UTC'`, so the render
+depends only on the string — which is the only thing a calendar date carries. It is deliberately NOT
+applied to the other 48 `toLocaleDateString` call sites: `receivedAt`, `acknowledgedAt`, `expiresAt`
+and friends are real instants, and showing those in the reader's own zone is correct. `ArticleCard`'s
+`useArticleDate` now delegates to it — and so does `BlogPostClient`, which had hand-rolled its own
+copy of the same formatting, directly contradicting the comment on the hook it duplicated ("shared
+date formatting, so a card and a row can never disagree on the date"). `calendarDate.test.ts` pins
+the contract against the day named in the string rather than against the same `Date` maths under
+test; with the `timeZone` line removed it fails four ways, including New Year's Day printing as
+"December 31, 2025".
+
+**The 500 — a browser-only module evaluated on the edge.** `/favicon.ico` was not special: EVERY
+unmatched URL answered 500, because they all land on the `[burnrateDomain]` catch-all, which is
+`runtime = 'edge'`. Its import graph reaches `rehype-katex` through our one `markdownPipeline`, and
+`rehype-katex` imports `hast-util-from-html-isomorphic`, whose `browser` build runs
+`const parser = new DOMParser()` at MODULE SCOPE. Next's edge build activates the `browser`
+condition but not `worker`, so the DOM build was evaluated in a runtime with no `DOMParser` and threw
+before a line of React ran. `next.config.js` now aliases the package's default (pure-JS) entry for
+server AND edge builds only — the client bundle keeps the small browser build, which is the one place
+it is correct — resolved through `require.resolve` from `rehype-katex`'s real directory rather than a
+hardcoded `.pnpm/<name>@<version>/` path that a version bump would silently break.
+
+**And a real favicon.** The site shipped `icon.png` and `apple-touch-icon.png` but no `favicon.ico`,
+which is the file browsers request whether or not the metadata names it — so every visit fell through
+to the catch-all above. `public/favicon.ico` is now a real ICO (a 32×32 PNG payload in an ICO
+container, generated from the brand mark) and serves as `image/x-icon`.
+
+**What was checked and found innocent.** The Suspense boundary added earlier that day was the obvious
+suspect for both, and was neither: 404s still return 404 with it in place (`/foo/bar-unknown` → 404),
+and the DOMParser crash happens at module evaluation, before any rendering, on a route this session
+never touched. A first pass also mis-read the production bundle and concluded dev and prod had
+different causes; the webpack dev server proved the chain is identical in both.
+
+**Files.** `lib/calendarDate.ts` + test (new), `components/blog/ArticleCard.tsx`,
+`app/blog/[slug]/BlogPostClient.tsx`, `next.config.js`, `public/favicon.ico` (new).
+
+**Left open, logged, not blocked.** The same catch-all answers unknown URLs with a soft 404 — the 404
+page with a 200 status. Recorded in the Gap Register with the reason it is its own pass: the fix runs
+in front of every root-level path, so getting it wrong swallows real routes.
+
 ## ✅ RESOLVED 2026-08-18 — Every server-rendered page was an empty document, so the home page read as "behind a login"
 
 Google's OAuth branding verification returned three findings against `builderforce.ai`: the home

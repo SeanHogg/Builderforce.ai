@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import type { BlogPost } from '@/lib/blogData';
+import { formatCalendarDate } from '@/lib/calendarDate';
 
 /**
  * Reusable blog article card + grid + list rows.
@@ -21,14 +22,16 @@ import type { BlogPost } from '@/lib/blogData';
  * other string was translated.
  */
 
-/** Shared date formatting, so a card and a row can never disagree on the date. */
+/**
+ * Shared date formatting, so a card and a row can never disagree on the date.
+ *
+ * The formatting itself lives in `formatCalendarDate` because the article PAGE
+ * needs the identical answer and had hand-rolled its own copy — which is exactly
+ * the disagreement this hook's name promises to prevent, one level up.
+ */
 function useArticleDate(): (iso: string) => string {
   const locale = useLocale();
-  return (iso: string) => {
-    const parsed = new Date(iso);
-    if (Number.isNaN(parsed.getTime())) return iso;
-    return parsed.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
-  };
+  return (iso: string) => formatCalendarDate(iso, locale);
 }
 
 export interface ArticleCardProps {

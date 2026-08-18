@@ -3,6 +3,29 @@ const createNextIntlPlugin = require('next-intl/plugin');
 const path = require('path');
 const { version } = require('./package.json');
 
+/**
+ * The Node-safe entry of `hast-util-from-html-isomorphic`, resolved once here.
+ *
+ * That package ships two builds behind export conditions: `browser` uses the
+ * DOM (`const parser = new DOMParser()` at MODULE SCOPE), and the default entry
+ * uses a pure-JS parser. Next's edge build activates `browser` but NOT `worker`,
+ * so every edge route whose graph reaches `rehype-katex` — via our one
+ * `markdownPipeline`, and mathematics can appear in markdown anywhere — imported
+ * the DOM build into a runtime with no `DOMParser` and threw
+ * `ReferenceError: DOMParser is not defined` while EVALUATING the module, before
+ * a line of React ran. `/[burnrateDomain]` is the catch-all, so the visible
+ * symptom was that every unmatched URL on the site answered 500 instead of the
+ * 404 page — `/favicon.ico` included.
+ *
+ * Resolved from `rehype-katex`'s real directory because pnpm does not hoist it,
+ * and by `require.resolve` (whose conditions pick `default`) rather than a
+ * hardcoded `.pnpm/<name>@<version>/` path that a bump would silently break.
+ */
+const nodeSafeFromHtmlIsomorphic = require.resolve(
+  'hast-util-from-html-isomorphic',
+  { paths: [require('fs').realpathSync(path.join(__dirname, 'node_modules/rehype-katex'))] },
+);
+
 // next-intl: points the plugin at the per-request locale/message resolver.
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 /**
@@ -58,12 +81,17 @@ const nextConfig = {
       'mp4-muxer': './node_modules/mp4-muxer/build/mp4-muxer.mjs',
       'onnxruntime-node': './src/lib/turbopackEmptyModule.ts',
       'onnxruntime-web': './node_modules/onnxruntime-web/dist/ort.bundle.min.mjs',
+      // Same DOM-build problem as the webpack alias below; dev runs turbopack, and
+      // turbopack aliases are global rather than per-runtime. The default entry
+      // works in every runtime, so the only cost is a slightly larger dev client
+      // bundle — and dev SSR now behaves like production.
+      'hast-util-from-html-isomorphic': nodeSafeFromHtmlIsomorphic,
       'react-markdown': './node_modules/react-markdown/index.js',
       'remark-gfm': './node_modules/remark-gfm/index.js',
       sharp: './src/lib/turbopackEmptyModule.ts',
     },
   },
-  webpack(config) {
+  webpack(config, { isServer }) {
     config.module.rules.push({
       test: /\.md$/,
       type: 'asset/source',
@@ -93,6 +121,11 @@ const nextConfig = {
       // bundle, matching the Turbopack alias above.
       'onnxruntime-web$': path.resolve(__dirname, 'node_modules/onnxruntime-web/dist/ort.bundle.min.mjs'),
       sharp$: false,
+      // Server AND edge only: the browser build of this package touches the DOM
+      // at module scope and cannot be evaluated in either. The client bundle is
+      // deliberately left alone — the browser build exists to keep that bundle
+      // small, and the browser is the one place it is correct.
+      ...(isServer ? { 'hast-util-from-html-isomorphic$': nodeSafeFromHtmlIsomorphic } : {}),
     };
     // Silence unactionable "Critical dependency" warnings emitted from inside
     // third-party deps we don't control: @huggingface/transformers uses a

@@ -5,6 +5,7 @@ import { use } from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import ReactMarkdown from 'react-markdown';
+import { formatCalendarDate } from '@/lib/calendarDate';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
 import { getPostBySlug } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
@@ -265,11 +266,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
             <>
               <div className="bpost-meta">
                 <span className="bpost-date">
-                  {new Date(post.date).toLocaleDateString(locale, {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
+                  {formatCalendarDate(post.date, locale)}
                 </span>
                 {post.tags.slice(0, 3).map((tag) => (
                   <span key={tag} className="bpost-tag">{tag}</span>
