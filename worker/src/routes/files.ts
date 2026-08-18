@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { validateWorkspacePath } from '../lib/workspacePath';
+import { wildcardPath } from '../lib/wildcardPath';
 import { requireAuth, type WorkerAuthBindings } from '../lib/auth';
 
 interface Env extends WorkerAuthBindings {
@@ -32,7 +33,7 @@ files.get('/', async (c) => {
 files.get('/*', async (c) => {
   try {
     const projectId = c.req.param('projectId');
-    const filePath = c.req.param('*') || '';
+    const filePath = wildcardPath(c);
     const valid = validateWorkspacePath(filePath);
     if (!valid.ok) return c.json({ error: valid.reason }, 400);
     const key = `${projectId}/${filePath}`;
@@ -50,7 +51,7 @@ files.get('/*', async (c) => {
 files.put('/*', async (c) => {
   try {
     const projectId = c.req.param('projectId');
-    const filePath = c.req.param('*') || '';
+    const filePath = wildcardPath(c);
     const valid = validateWorkspacePath(filePath);
     if (!valid.ok) return c.json({ error: valid.reason }, 400);
     const key = `${projectId}/${filePath}`;
@@ -65,7 +66,7 @@ files.put('/*', async (c) => {
 files.delete('/*', async (c) => {
   try {
     const projectId = c.req.param('projectId');
-    const filePath = c.req.param('*') || '';
+    const filePath = wildcardPath(c);
     const valid = validateWorkspacePath(filePath);
     if (!valid.ok) return c.json({ error: valid.reason }, 400);
     const key = `${projectId}/${filePath}`;

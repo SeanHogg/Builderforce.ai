@@ -64,6 +64,7 @@ import { listSiteReleases, restoreSiteRelease } from '../../application/ide/site
 import { APP_PACKAGE_TARGETS, isAppPackageTarget, packageAppTarget } from '../../application/ide/packageApp';
 import { publishStaticSite, assetsFromFormData } from '../../application/ide/publishStaticSite';
 import { validateLoRASafetensors } from '../../domain/training/loraArtifact';
+import { wildcardPath } from './wildcardPath';
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -315,7 +316,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
-    const path = c.req.param('*') || '';
+    const path = wildcardPath(c);
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
@@ -331,7 +332,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
-    const path = c.req.param('*') || '';
+    const path = wildcardPath(c);
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
@@ -355,7 +356,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const projectId = await resolveProjectId(db, tenantId, c.req.param('projectId'));
-    const path = c.req.param('*') || '';
+    const path = wildcardPath(c);
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);

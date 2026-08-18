@@ -30,6 +30,7 @@ import {
   type ProjectBackend,
 } from '../../application/backend';
 import { dispatchIngressRequest } from '../../application/backend/ingress';
+import { wildcardPath } from './wildcardPath';
 
 export function createHooksRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -44,12 +45,11 @@ export function createHooksRoutes(db: Db): Hono<HonoEnv> {
     if (!backend) return c.text('Not found', 404);
 
     // Everything after `/hooks/<token>` is the handler route.
-    const prefix = `/hooks/${token}`;
     const result = await dispatchIngressRequest({
       env,
       db,
       request: c.req.raw,
-      route: new URL(c.req.url).pathname.slice(prefix.length),
+      route: `/${wildcardPath(c)}`,
       target: {
         projectId: backend.projectId,
         tenantId: backend.tenantId,

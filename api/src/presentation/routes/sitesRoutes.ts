@@ -14,6 +14,7 @@
 import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import { serveHostedSite } from '../../application/ide/siteServer';
+import { wildcardPath } from './wildcardPath';
 
 export { tryServeHostedSite } from '../../application/ide/siteServer';
 
@@ -22,11 +23,8 @@ export function createSitesRoutes(): Hono<HonoEnv> {
 
   router.get('/:subdomain', (c) => serveHostedSite(c.env, c.req.param('subdomain'), ''));
 
-  router.get('/:subdomain/*', (c) => {
-    const sub = c.req.param('subdomain');
-    const asset = c.req.path.replace(new RegExp(`^/api/sites/${sub}/`), '');
-    return serveHostedSite(c.env, sub, asset);
-  });
+  router.get('/:subdomain/*', (c) =>
+    serveHostedSite(c.env, c.req.param('subdomain'), wildcardPath(c)));
 
   return router;
 }

@@ -5,6 +5,7 @@ import {
   resolveCanvasBuild,
   searchFileLines,
   summarizeWorkspace,
+  workspacePathArg,
   CANVAS_BUILD_TOOL_NAMES,
   type BoundCanvasBuild,
 } from './canvasBuildTools';
@@ -130,5 +131,33 @@ describe('the guest boundary', () => {
     for (const name of CANVAS_BUILD_TOOL_NAMES) {
       expect(ACCOUNT_REQUIRED_CANVAS_TOOLS).toContain(name);
     }
+  });
+});
+
+describe('workspacePathArg', () => {
+  it('keeps a workspace-relative path as it came', () => {
+    expect(workspacePathArg('src/App.jsx')).toBe('src/App.jsx');
+  });
+
+  it('accepts the leading-slash form a model retries with', () => {
+    // The exact second attempt after a failed write: same file, not a new one.
+    expect(workspacePathArg('/src/App.jsx')).toBe('src/App.jsx');
+    expect(workspacePathArg('./src/App.jsx')).toBe('src/App.jsx');
+    expect(workspacePathArg('  src/App.jsx  ')).toBe('src/App.jsx');
+  });
+
+  it('normalises a Windows-style path and a doubled separator', () => {
+    expect(workspacePathArg('src\\components\\Header.jsx')).toBe('src/components/Header.jsx');
+    expect(workspacePathArg('src//App.jsx')).toBe('src/App.jsx');
+  });
+
+  it('leaves traversal for the server validator to refuse', () => {
+    expect(workspacePathArg('../secret.env')).toBe('../secret.env');
+  });
+
+  it('treats a missing or non-string path as absent', () => {
+    expect(workspacePathArg(undefined)).toBe('');
+    expect(workspacePathArg(42)).toBe('');
+    expect(workspacePathArg('   ')).toBe('');
   });
 });

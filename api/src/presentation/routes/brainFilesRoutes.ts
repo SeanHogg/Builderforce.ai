@@ -10,6 +10,7 @@
 import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import { verifyUpload } from '../../infrastructure/auth/uploadSign';
+import { wildcardPath } from './wildcardPath';
 
 export function createBrainFilesRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -19,7 +20,7 @@ export function createBrainFilesRoutes(): Hono<HonoEnv> {
     const env = c.env as { UPLOADS?: R2Bucket; JWT_SECRET?: string };
     if (!env.UPLOADS || !env.JWT_SECRET) return c.json({ error: 'Not found' }, 404);
 
-    const key = c.req.path.replace('/api/brain-files/', '');
+    const key = wildcardPath(c);
     const exp = Number(c.req.query('exp'));
     const sig = c.req.query('sig') ?? '';
     if (!key || !(await verifyUpload(key, exp, sig, env.JWT_SECRET))) {

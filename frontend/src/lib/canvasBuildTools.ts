@@ -92,6 +92,29 @@ export const MAX_READ_CHARS = 100_000;
 /** Match cap for one `canvas_search_build_files` call. */
 export const MAX_SEARCH_MATCHES = 100;
 
+/**
+ * The one reading of a model-supplied `path` argument.
+ *
+ * Models write a workspace path the way they would write it in an editor —
+ * `/src/App.jsx`, `./src/App.jsx`, occasionally `src\App.jsx`. The workspace
+ * addresses files relative to its root, so those are the SAME file, and a turn
+ * that retries a failed write with a leading slash (as one did) must not fail
+ * twice for a reason the model cannot see. Normalising here, once, is what makes
+ * every build tool agree on what a path is.
+ *
+ * `..` is deliberately left alone: escaping the workspace is the server
+ * validator's call to refuse, not something to quietly rewrite into a real path.
+ */
+export function workspacePathArg(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value
+    .trim()
+    .replace(/\\/g, '/')        // a Windows-style path names the same file
+    .replace(/\/{2,}/g, '/')    // `src//App.jsx` is `src/App.jsx`
+    .replace(/^(?:\.\/)+/, '')  // `./src/App.jsx` is relative already
+    .replace(/^\/+/, '');       // `/src/App.jsx` is workspace-relative, not absolute
+}
+
 function isSkipped(path: string): boolean {
   return SKIP_DIRECTORIES.some((prefix) => path === prefix.slice(0, -1) || path.startsWith(prefix) || path.includes(`/${prefix}`));
 }
@@ -311,7 +334,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
       },
       run: async (raw: unknown) => {
         const args = raw as { path?: unknown; objectId?: unknown };
-        const path = typeof args.path === 'string' ? args.path.trim() : '';
+        const path = workspacePathArg(args.path);
         if (!path) return { error: 'A path is required.' };
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
         if ('error' in resolved) return resolved;
@@ -378,7 +401,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
       },
       run: async (raw: unknown) => {
         const args = raw as { path?: unknown; content?: unknown; objectId?: unknown };
-        const path = typeof args.path === 'string' ? args.path.trim() : '';
+        const path = workspacePathArg(args.path);
         if (!path) return { error: 'A path is required.' };
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
         if ('error' in resolved) return resolved;
@@ -411,7 +434,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
       },
       run: async (raw: unknown) => {
         const args = raw as { path?: unknown; find?: unknown; replace?: unknown; replaceAll?: unknown; objectId?: unknown };
-        const path = typeof args.path === 'string' ? args.path.trim() : '';
+        const path = workspacePathArg(args.path);
         if (!path) return { error: 'A path is required.' };
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);
         if ('error' in resolved) return resolved;
@@ -479,7 +502,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
         try {
           const versions = await fetchFileHistory(
             resolved.build.binding.storageProjectId,
-            typeof args.path === 'string' && args.path.trim() ? args.path.trim() : undefined,
+            workspacePathArg(args.path) || undefined,
           );
           return {
             ok: true,
@@ -509,7 +532,7 @@ export function canvasBuildActions(ctx: CanvasBuildToolsContext): BrainAction[] 
       },
       run: async (raw: unknown) => {
         const args = raw as { path?: unknown; at?: unknown; objectId?: unknown };
-        const path = typeof args.path === 'string' ? args.path.trim() : '';
+        const path = workspacePathArg(args.path);
         const at = Number(args.at);
         if (!path || !Number.isFinite(at)) return { error: 'path and at are both required. Call canvas_list_build_file_history first.' };
         const resolved = resolveCanvasBuild(ctx.builds(), args.objectId);

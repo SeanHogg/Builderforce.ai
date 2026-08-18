@@ -23,6 +23,7 @@ import { notify } from '../../application/notifications/notify';
 import { sendChatInviteEmail } from '../../infrastructure/email/EmailService';
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
 import { headerHints } from '../../application/email/emailLocaleResolver';
+import { wildcardPath } from './wildcardPath';
 import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService, BrainTraceEventInput } from '../../application/brain/BrainService';
@@ -795,7 +796,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     if (!env.UPLOADS) return c.json({ error: 'File storage not configured' }, 503);
 
     const tenantId = c.get('tenantId') as number;
-    const key = c.req.path.replace('/uploads/', '');
+    const key = wildcardPath(c);
 
     // Scope: files must belong to this tenant
     if (!isKeyOwnedByTenant(key, tenantId)) {

@@ -198,6 +198,18 @@ function filesBase(projectId: number | string): string {
     : `${IDE}/projects/${projectId}/files`;
 }
 
+/**
+ * The URL for ONE file in a project's workspace.
+ *
+ * Encoded per segment, never as a whole: the slashes ARE the path — the server
+ * reads them back as the file's location under the project prefix — while a
+ * space or `#` inside a segment must not survive as itself. The server decodes
+ * segment by segment to match (`presentation/routes/wildcardPath.ts`).
+ */
+function fileUrl(projectId: number | string, filePath: string): string {
+  return `${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`;
+}
+
 export async function fetchFiles(projectId: number | string): Promise<FileEntry[]> {
   return projectsRequest<FileEntry[]>(filesBase(projectId));
 }
@@ -206,7 +218,7 @@ export async function fetchFileContent(
   projectId: number | string,
   filePath: string
 ): Promise<string> {
-  const path = `${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`;
+  const path = fileUrl(projectId, filePath);
   // 404 = the object was never written (the API distinguishes missing from
   // empty). Surface it as its own error so callers don't cache '' for a file
   // that doesn't exist — the silent-empty that used to propagate into saves.
@@ -223,7 +235,7 @@ export async function saveFile(
   filePath: string,
   content: string
 ): Promise<void> {
-  await projectsRequest(`${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`, {
+  await projectsRequest(fileUrl(projectId, filePath), {
     method: 'PUT',
     headers: { 'Content-Type': 'text/plain' },
     body: content,
@@ -234,7 +246,7 @@ export async function deleteFile(
   projectId: number | string,
   filePath: string
 ): Promise<void> {
-  await projectsRequest(`${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`, {
+  await projectsRequest(fileUrl(projectId, filePath), {
     method: 'DELETE',
   });
 }
@@ -676,7 +688,7 @@ export async function saveBinaryFile(
   filePath: string,
   content: Blob,
 ): Promise<void> {
-  await projectsRequest(`${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`, {
+  await projectsRequest(fileUrl(projectId, filePath), {
     method: 'PUT',
     headers: { 'Content-Type': content.type || 'application/octet-stream' },
     body: content,

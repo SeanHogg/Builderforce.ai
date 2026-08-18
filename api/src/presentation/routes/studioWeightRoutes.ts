@@ -19,6 +19,7 @@
 import { Hono } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { HonoEnv } from '../../env';
+import { wildcardPath } from './wildcardPath';
 
 export function createStudioRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -32,8 +33,7 @@ export function createStudioRoutes(): Hono<HonoEnv> {
 
     // path looks like `/weights/lcm-dreamshaper-v7/unet/model.onnx`
     // → R2 key  `studio-weights/lcm-dreamshaper-v7/unet/model.onnx`
-    const url = new URL(c.req.url);
-    const subPath = url.pathname.replace(/^.*\/weights\//, '');
+    const subPath = wildcardPath(c);
     if (!subPath || subPath.includes('..')) {
       return c.json({ error: 'Invalid weight path' }, 400);
     }

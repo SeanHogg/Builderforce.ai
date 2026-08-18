@@ -1,3 +1,100 @@
+## ✅ RESOLVED 2026-08-18 — Every workspace file read/write asked for the EMPTY path: `c.req.param('*')` is always undefined in Hono
+
+Reported from a live Creation Canvas session (`/create/e8c9fb0b…`, api 2026.8.24, ui 2026.8.52).
+Brain created a Builder object, listed its five seeded files, then could not touch one of them:
+`PUT /api/ide/projects/50/files/src/App.jsx` → **400 `Path is required`**, and
+`GET …/files/src/main.jsx` → 404 on a file `canvas_list_build_files` had returned seconds
+earlier. Four consecutive tool calls failed and the turn ended with "I couldn't prepare the
+requested canvas changes" — a canvas that can create a workspace but never write code into it.
+
+**Root cause.** The three file routes read their path with `c.req.param('*')`. Hono does not
+expose a wildcard as a named param — that call returns `undefined` for every request — so
+`c.req.param('*') || ''` handed `writeWorkspaceFile` the empty string on EVERY call, and
+`validateWorkspacePath('')` correctly answered "Path is required". The 404 on read is the same
+empty path. Nothing about the client, the R2 keys, or the seeded template was ever wrong; the
+routes simply could not see the path they had matched. `worker/src/routes/files.ts` had the
+identical three copies of the bug.
+
+**Fix.** One primitive, `presentation/routes/wildcardPath.ts`, derives the matched remainder
+from the route itself — count the literal segments the pattern spends before its `*`, and what
+follows them in the request path is what the wildcard matched. Mount-prefix independent,
+decoded per segment (the inverse of the client's per-segment `encodeURIComponent`), and empty
+segments preserved so `validateWorkspacePath` can still reject `a//b` instead of silently
+writing to a different key. `worker/src/lib/wildcardPath.ts` is its replica, the same
+convention `workspacePath.ts` already uses across those two packages.
+
+**The same bug in four more places, migrated in the pass.** Every other wildcard route
+hand-rolled its own extraction, and two were broken:
+- `brainRoutes` `GET /uploads/*` did `c.req.path.replace('/uploads/', '')` — but `c.req.path`
+  carries the mount prefix, so `/api/brain/uploads/x.png` became the key `/api/brainx.png` and
+  **every authenticated attachment fetch 404'd** (`builderforceApi.uploadUrl` is a live caller).
+- `studioWeightRoutes` used a greedy `replace(/^.*\/weights\//, '')`, which eats everything up
+  to the LAST occurrence — a weight key containing `weights/` resolved to the wrong object.
+- `brainFilesRoutes` and `sitesRoutes` were correct but mount-coupled (a literal prefix string
+  and a `RegExp` built from an interpolated subdomain); both now use the primitive.
+- `hooksRoutes` dropped its hand-computed `prefix` slice for the same call.
+
+**Client side.** `canvas_write_build_file` retried its failed write as `/src/App.jsx` — a
+second failure for a reason no model can see. `workspacePathArg` is now the ONE reading of a
+model-supplied path (trim, `\` → `/`, collapse `//`, strip leading `./` and `/`), migrated
+across all five build tools; `..` is deliberately left for the server validator to refuse.
+`frontend/src/lib/api.ts` had `filePath.split('/').map(encodeURIComponent).join('/')` inlined
+four times — extracted to `fileUrl()`.
+
+**Tests.** `wildcardPath.test.ts` pins the exact failing request plus mount-prefix
+independence, decoding, and empty-segment preservation; `worker/src/routes/files.test.ts`
+drives the worker's routes end-to-end over a fake R2 (write, read, delete, an encoded segment,
+and the validator still refusing what it should); `canvasBuildTools.test.ts` covers the
+leading-slash retry shape. api 2026.8.25 · frontend 2026.8.54 · worker 2025.3.10.
+
+## ✅ RESOLVED 2026-08-18 — Roblox place unplayable (walker pinned at spawn, arrows dead) and Brain shrunk to a bottom card on every full-screen surface
+
+Reported from a live play surface: "the up and down arrows and left/right for movement
+don't work. The Brain is not positioned correctly." The scoreboard in the same screenshot
+read **0/3 collected, 2076 hits**, which is the whole story of the first half.
+
+**Movement — a hazard respawn loop pinned the walker.** `useWorldPlay`'s `onPlayerEnter`
+listed `respawnNonce` in its dependencies, so every hazard touch rebuilt the callback. That
+callback is handed to each sensor prop as a Rapier collision handler, and a changed handler
+re-registers the collider it is attached to — which re-fires the overlap that changed it.
+The guard could not stop it either: `hazardLockRef.current === respawnNonce + 1` was derived
+from the same nonce, so it re-armed on the very bump it existed to suppress and only ever
+deduped within one render generation. With the nonce climbing every frame,
+`PlayerController`'s respawn effect teleported the walker to spawn and zeroed its velocity
+continuously — no key, WASD or arrow, could move a body that was being put back. Fixed by
+making `onPlayerEnter` a stable identity (every value it reads is now a ref) and replacing
+the nonce-derived lock with a wall-clock `HAZARD_COOLDOWN_MS` guard that holds whatever
+shape the level is. Two regression tests cover both halves.
+
+**Movement, second defect.** Arrow keys and Space kept their browser default action, so
+walking backwards scrolled the canvas out from under the game and jumping paged it down.
+`PlayerController` now claims `MOVEMENT_KEYS` with `preventDefault` while walking, and
+clears held keys on window blur (a key released in a background tab never reports its
+keyup, so the walker came back from a tab switch still running). The walk hint names the
+arrow keys in all five catalogues.
+
+**Brain — the compact card is deleted.** A full-screen surface shrank the panel to a short
+card pinned above the command bar showing only the latest reply. Two things broke on it:
+the dock control did nothing (the prompt fell back to `float` because a card is not a
+column), and the panel was not full height. Rather than patch the card, it is gone: the
+docked panel is ONE full-height column, top to bottom, on the board and on every surface —
+same edge, same width, same tabs, same scrolling history, same reserved clearance — so
+nothing about it moves when a surface opens and docking the prompt docks it. Removed
+`compact` from `BrainDock`/`BrainSurfaceBodyProps`, the `.brainDock[data-compact]` rule, and
+the `compact` branch in `brainDockReservedWidth`.
+
+**DRY.** The "stand down while someone is typing" gate existed three times with three
+different ideas of what a field is (tag-name `INPUT`/`TEXTAREA`; instance-of with `SELECT`;
+none checked `contenteditable`). Extracted to `lib/keyboardTarget.ts` and all call sites
+migrated — `CreationCanvas`, `CanvasWorldView`, `WorldViewport`, plus the new one in
+`PlayerController`.
+
+Files: `frontend/src/lib/keyboardTarget.ts` (new), `world3d/useWorldPlay.ts`,
+`world3d/PlayerController.tsx`, `world3d/WorldViewport.tsx`, `CanvasWorldView.tsx`,
+`BrainDock.tsx`, `brainDockPreferences.ts`, `CreationCanvas.tsx`,
+`CreationCanvas.module.css`, `i18n/messages/{en,zh,es,fr,de}.json`, `worldPlay.test.tsx`,
+`CreationCanvas.test.tsx`.
+
 ## ✅ RESOLVED 2026-08-17 — Canvas Brain turns dying with "provider stopped responding" — NVIDIA NIM's MiniMax M3 is currently flaky
 
 Reported via a captured diagnostic: every Brain canvas turn (56 canvas tools advertised,
