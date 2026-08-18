@@ -144,6 +144,12 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
   const family = useMemo(() => resumeFamilyFromNode(data), [data.resumeFamily]);
   const input = useRef<HTMLInputElement>(null);
   const [view, setView] = useState<ResumeView>('preview');
+  // The header used to be every control at once — version, privacy, template, page
+  // metadata, THEN the three AI accordions — stacked above the rendered document, so
+  // opening a résumé full-size showed everything except the résumé. Grouped into tabs,
+  // the default is the document itself; picking a view mode below jumps back to it so
+  // "Edit" or "Compare" is never a click that changes state you cannot see.
+  const [section, setSection] = useState<'document' | 'details' | 'tools'>('document');
   const [newTitle, setNewTitle] = useState('');
   const [error, setError] = useState('');
   const [mergeSections, setMergeSections] = useState<ResumeDiffSection[]>([]);
@@ -277,6 +283,10 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
   return <div className={`${styles.resumeStudio} nodrag nowheel`} onPointerDownCapture={(event) => event.stopPropagation()}>
     <ResumeDocumentStyles />
     <input ref={input} type="file" hidden accept=".pdf,.doc,.docx,.rtf,.txt,.md,.markdown,.json,.png,.jpg,.jpeg,.webp" onChange={chooseResume} />
+    <div className={styles.resumeSectionTabs} role="tablist" aria-label={t('resumeSections')}>
+      {(['document', 'details', 'tools'] as const).map((tab) => <button key={tab} type="button" role="tab" aria-selected={section === tab} onClick={() => setSection(tab)}>{t(`section_${tab}`)}</button>)}
+    </div>
+    {section === 'details' && <div className={styles.resumeSectionBody}>
     <div className={styles.resumeSourceBar}>
       <label><span>{t('version')}</span><select value={active.id} onChange={(event) => commit(selectResumeRevision(family, event.target.value))}>
         {family.revisions.map((revision) => <option key={revision.id} value={revision.id}>{revision.kind === 'original' ? t('originalPrefix', { title: revision.title }) : revision.title}{revision.id === family.masterRevisionId ? ` · ${t('master')}` : ''}</option>)}
@@ -333,7 +343,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
     })()}
     <div className={styles.resumeControls}>
       <div role="tablist" aria-label={t('viewMode')}>
-        {(['edit', 'preview', 'compare'] as const).map((mode) => <button key={mode} type="button" role="tab" aria-selected={view === mode} disabled={mode === 'edit' && active.kind === 'original'} onClick={() => setView(mode)}>{t(mode)}</button>)}
+        {(['edit', 'preview', 'compare'] as const).map((mode) => <button key={mode} type="button" role="tab" aria-selected={view === mode} disabled={mode === 'edit' && active.kind === 'original'} onClick={() => { setView(mode); setSection('document'); }}>{t(mode)}</button>)}
       </div>
       <label><span>{t('template')}</span><select value={active.templateId} disabled={!onEdit} onChange={(event) => changePresentation({ templateId: event.target.value as ResumeTemplateId })}>
         {RESUME_TEMPLATES.map((item) => <option key={item.id} value={item.id}>{t(item.labelKey)}</option>)}
@@ -360,6 +370,8 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
         </button>;
       })}
     </section>}
+    </div>}
+    {section === 'tools' && <div className={styles.resumeSectionBody}>
     <details className={styles.resumeAtsPanel}>
       <summary>{t('aiWritingTools')}</summary>
       <label><span>{t('aiTargetField')}</span><select value={aiField} onChange={(event) => setAiField(event.target.value as ResumeAiField)}>
@@ -393,6 +405,8 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
         setExcludedBulletSuggestions([]);
       }}>{t('applyConsolidation', { count: selectedBulletSuggestions.length })}</button>
     </details>
+    </div>}
+    {section === 'document' && <div className={styles.resumeSectionBody}>
     {view === 'edit' && active.kind === 'derived' && <div className={styles.resumeEditStack}>
       {active.document && <ResumeStructuredEditor document={active.document} onChange={(document) => commit(updateActiveResume(family, { document }))} />}
       <details className={styles.resumeRawEditor} open={!active.document}><summary>{t('rawTextEditor')}</summary><DocumentEditor markdown={active.markdown} label={t('editorLabel', { title: active.title })} onCommit={(markdown) => commit(updateActiveResume(family, { markdown, structuredStale: !!active.document }))} /></details>
@@ -418,6 +432,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
         <section><strong>{t('original')}</strong><div className={styles.resumeCompareViewport} dangerouslySetInnerHTML={{ __html: originalRendered.html }} /></section>
         <section><strong>{t('selectedVersion')}</strong><div className={styles.resumeCompareViewport} dangerouslySetInnerHTML={{ __html: rendered.html }} /></section>
       </div>
+    </div>}
     </div>}
   </div>;
 }

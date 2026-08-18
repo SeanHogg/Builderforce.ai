@@ -116,8 +116,8 @@ export function ProjectCard({
       onMouseEnter={onCardClick ? (e) => { e.currentTarget.style.borderColor = 'var(--accent)'; } : undefined}
       onMouseLeave={onCardClick ? (e) => { e.currentTarget.style.borderColor = ''; } : undefined}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-        <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ minWidth: 0, flex: '1 1 160px' }}>
           <h3 style={{ fontWeight: 600, marginBottom: 2, color: 'var(--text-primary)' }}>{project.name}</h3>
           {project.key != null && project.key !== '' && (
             <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginBottom: 2 }}>
@@ -143,7 +143,7 @@ export function ProjectCard({
             <ProjectOriginBadge origin={project.origin} />
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <button
             type="button"
             onClick={(e) => {

@@ -190,14 +190,14 @@
      panel widths arrived; `<SlideOutPanel width="sheet|wide|full">` resolves to
      these, so the scale is enforced by the primitive rather than by review. */
   --panel-width-sheet: 25%;
-  --panel-width-wide: 50%;
-  /* `full` is 70% of the viewport, not 94%. At 94% the board behind it was a
+  --panel-width-wide: 60%;
+  /* `full` is 84% of the viewport, not 94%. At 94% the board behind it was a
      30px sliver — technically still mounted, which is the letter of §0 and not
-     its point: the panel is meant to sit OVER work you can still see. 70% keeps
+     its point: the panel is meant to sit OVER work you can still see. 84% keeps
      a usable strip of canvas, so closing the panel is a decision rather than a
-     rescue. Narrow viewports override this below — 70vw on a phone is a column,
+     rescue. Narrow viewports override this below — 84vw on a phone is a column,
      not a panel. */
-  --panel-width-full: 70vw;
+  --panel-width-full: 84vw;
   --surface-page: var(--bg-deep);
   --surface-panel: var(--bg-surface);
   --surface-raised: var(--bg-elevated);

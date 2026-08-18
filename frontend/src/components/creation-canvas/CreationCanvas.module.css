@@ -1873,7 +1873,13 @@
    panel clears, and the top is the floating chrome's, from `--canvas-top-chrome-space` —
    without it this surface drew its own header underneath the session pill.
    All colour comes from the `--canvas-*` family the board declares for BOTH themes. */
-.objectSurface { position:absolute; z-index:7; inset:0; box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-block:var(--canvas-top-chrome-space) var(--composer-space); background:var(--canvas-board-background); color:var(--canvas-ink); }
+/* Both object-scoped surfaces share this exact box (position, layer, chrome bands,
+   colour) — written once so the two can never drift into two different definitions
+   of "full bleed". Left/right are NOT 0: a docked Brain paints at z-index 17, above
+   this surface's 7, so without the same --brain-dock-left/right clearance every other
+   floating panel already takes, the surface ran full width underneath it and its own
+   header — title included — sat invisibly under the dock rather than beside it. */
+.objectSurface,.appSurface { position:absolute; z-index:7; top:0; right:var(--brain-dock-right,0px); bottom:0; left:var(--brain-dock-left,0px); box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-block:var(--canvas-top-chrome-space) var(--composer-space); background:var(--canvas-board-background); color:var(--canvas-ink); }
 .objectSurfaceHeader { display:flex; flex:none; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 16px 10px 62px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
 .objectSurfaceMark { display:grid; place-items:center; width:26px; height:26px; flex:none; border-radius:var(--radius-sm); background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); }
 .objectSurfaceTitle { min-width:0; flex:1; display:flex; flex-direction:column; }
@@ -1895,7 +1901,6 @@
    must be the same control everywhere it appears. Every value is a canvas token, the
    header wraps rather than fixing a width, and the toolbar collapses to two rows before
    360px instead of overflowing. */
-.appSurface { position:absolute; z-index:7; inset:0; box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-block:var(--canvas-top-chrome-space) var(--composer-space); background:var(--canvas-board-background); color:var(--canvas-ink); }
 .appSurfaceBody { min-height:0; flex:1; display:flex; flex-direction:column; min-width:0; }
 /* The surface's own controls, INSIDE the session bar — ONE row of it.
    It used to wrap, which sounds accommodating and is not: the bar it lives in is
