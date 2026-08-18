@@ -89,13 +89,6 @@ export interface BrainSurfaceBodyProps {
   /** The guest wall this conversation ran into, when a turn was refused for want of
    *  an account. Null on every signed-in board, where the CTA renders nothing. */
   guestSignup?: GuestSignupPrompt | null;
-  /**
-   * A full-screen surface has taken the board, so this is a short card showing only
-   * the latest reply rather than the full-height panel with tabs and scrolling
-   * history. Never set by the inline placement — the Brain Object is already as small
-   * as a board session's transcript gets.
-   */
-  compact?: boolean;
 }
 
 export interface BrainDockProps extends BrainSurfaceBodyProps {
@@ -132,7 +125,6 @@ export function BrainSurfaceBody({
   node, nodes, edges, collaborators = [], joinedCollaborator = null, onReplayMessage,
   onRateMessage, ratings,
   guestSignup = null,
-  compact = false,
 }: BrainSurfaceBodyProps) {
   const t = useTranslations('creationCanvas');
   const [tab, setTab] = useState<'chat' | 'context'>('chat');
@@ -162,19 +154,11 @@ export function BrainSurfaceBody({
   const typingCollaborators = collaborators.filter((member) => member.typing);
   const showPresence = joinedCollaborator != null || typingCollaborators.length > 0;
 
-  // Compact shows the latest reply and nothing that lets a reader navigate away from
-  // it: no Chat/Context switch (there is only ever the one view), no scrolling history
-  // — a full-screen surface asked one question about the object on screen, not for the
-  // board's whole conversation. The tab state still defaults to 'chat' with no control
-  // left to move it off that, so the context view is simply unreachable here rather
-  // than needing its own guard.
-  const visibleMessages = compact ? messages.slice(-1) : messages;
-
   return <>
-    {!compact && <div className={styles.brainDockTabs} role="tablist" aria-label={t('brainDock')}>
+    <div className={styles.brainDockTabs} role="tablist" aria-label={t('brainDock')}>
       <button type="button" role="tab" aria-selected={tab === 'chat'} className={tab === 'chat' ? styles.activeTab : ''} onClick={() => setTab('chat')}>{t('chat')}</button>
       <button type="button" role="tab" aria-selected={tab === 'context'} className={tab === 'context' ? styles.activeTab : ''} onClick={() => setTab('context')}>{t('context')}</button>
-    </div>}
+    </div>
     {showPresence && <div className={styles.humanChatActivity} aria-live="polite">
       {joinedCollaborator && <span data-state="joined">
         <Avatar name={joinedCollaborator.displayName || t('collaborator')} kind="human" size={22} />
@@ -186,11 +170,11 @@ export function BrainSurfaceBody({
         <i aria-hidden>•••</i>
       </span>)}
     </div>}
-    {(compact || tab === 'chat')
+    {tab === 'chat'
       ? <>
         <div className={styles.brainDockTimeline} role="log" aria-label={t('brainChatHistory')} tabIndex={0}>
           <BrainTimeline
-            messages={visibleMessages}
+            messages={messages}
             trace={showExecutionDetail ? trace : []}
             streamingText=""
             isRunning={running}
@@ -322,7 +306,7 @@ export function BrainDock({
   mode, side, size, width, showExecutionDetail, composer, onUndockPrompt,
   onModeChange, onSideChange, onSizeChange, onWidthChange, onExecutionDetailChange, onClose,
   messages, trace, running, runStartedAt = null, node, nodes, edges, collaborators = [], joinedCollaborator = null,
-  onReplayMessage, onRateMessage, ratings, guestSignup = null, compact = false,
+  onReplayMessage, onRateMessage, ratings, guestSignup = null,
 }: BrainDockProps) {
   const t = useTranslations('creationCanvas');
 
@@ -361,7 +345,6 @@ export function BrainDock({
       data-mode={mode}
       data-side={side}
       data-size={size}
-      data-compact={compact || undefined}
       style={{ '--brain-dock-size': `${width}px` } as CSSProperties}
       aria-label={t('brainDock')}
     >
@@ -412,7 +395,6 @@ export function BrainDock({
         onRateMessage={onRateMessage}
         ratings={ratings}
         guestSignup={guestSignup}
-        compact={compact}
       />
       {/* Last row of the column, under the transcript — where a chat puts its prompt.
           Nothing is positioned: it is in normal flow, so the transcript above it flexes

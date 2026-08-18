@@ -132,7 +132,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 6 | [Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | 31 |
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | 25 |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | 3 |
-| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 39 |
+| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | 40 |
 | 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | 136 |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | 9 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | 10 |
@@ -152,7 +152,7 @@ Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; upd
 | 6 | 31 |
 | 7 | 25 |
 | 8 | 3 |
-| 9 | 39 |
+| 9 | 40 |
 | 10 | 137 |
 | 11 | 9 |
 | 12 | 10 |
@@ -892,6 +892,10 @@ sequenced into waves because nothing in them gates the sell motion.
 ### 🔀 Workflow triggers — internal-event coverage gap
 
 - **Board / marketing palette triggers are still non-activatable** — the builder's `board-event`, `form-submit`, `page-view`, `signup`, `purchase`, `email-open`/`email-click`, `integration` trigger types render in the palette (`nodeKinds.ts`) but are excluded from `ACTIVATABLE_TRIGGER_TYPES` (`api/src/domain/workflowTriggers.ts`), so no `workflow_triggers` row is created and nothing fires them. The event-trigger seam (`eventTriggers.ts` `fireEventTriggers`) is the template to close this: add the type to `EVENT_TRIGGER_TYPES` + emit the event from the owning board/task/marketing service. Fixing it makes "task moved → run a workflow" real.
+
+### 🔑 Google/Microsoft OAuth client — redirect URIs registered per flow
+
+- **Connecting a Gmail inbox 400s with `redirect_uri_mismatch` even though Google sign-in works** *(reported 2026-08-18)* — one OAuth client (`GOOGLE_CLIENT_ID`) is shared by five Google flows, and each route builds its own callback from the request origin: `/api/auth/oauth/google/callback` (sign-in), `/api/mailbox/callback/google` (`mailboxRoutes.ts`), `/api/calendar/callback/google`, `/api/drive/callback/google`, `/api/youtube/callback`. Only the sign-in path is registered in the Google Cloud Console, so every connector consent screen dies at Google before reaching us. `MICROSOFT_CLIENT_ID` has the same shape and the same exposure for Outlook mail/calendar and OneDrive. The code is correct and the README now lists all five URIs per provider; what remains is the console registration itself. **BLOCKED: requires Google Cloud Console + Azure app-registration access for the builderforce.ai project, which is an operator action — no code change can substitute.** Unblocks: Connect inbox, Google Calendar, Google Drive and YouTube publishing all reaching consent.
 
 ### 📶 Project connection status — read-time probe bounds
 

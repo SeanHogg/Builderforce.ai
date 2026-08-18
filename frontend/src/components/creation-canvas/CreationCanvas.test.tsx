@@ -972,6 +972,32 @@ describe('CreationCanvas', () => {
     expect(screen.queryByTestId('canvas-composer')).not.toBeInTheDocument();
   });
 
+  it('keeps Brain one full-height column when a full-screen surface takes the board', () => {
+    render(<CreationCanvas sessionId="brain-surface-column-test" persistence="local" />);
+
+    const surfaceTab = (name: string) => namedButtons(name)
+      .find((button) => button.hasAttribute('aria-pressed'))!;
+    const brainPanel = () => screen.getByRole('complementary', { name: 'Brain chat' });
+
+    // On the board the docked prompt IS the panel's last row — a real column: header,
+    // tabs, transcript, prompt.
+    fireEvent.click(screen.getByTestId('canvas-prompt-dock'));
+    expect(brainPanel()).toContainElement(screen.getByTestId('canvas-composer'));
+
+    // A full-screen surface used to shrink the panel to a short card pinned above the
+    // command bar, which is where the prompt ended up hanging off a 350px box with the
+    // conversation clipped to a line between them. The panel is the same column on every
+    // surface now: same edge, same tabs, same scrolling history, and still the prompt's
+    // home when the reader put it there.
+    fireEvent.click(surfaceTab('App'));
+    expect(brainPanel()).toContainElement(screen.getByTestId('canvas-composer'));
+    expect(screen.getByTestId('canvas-composer')).toHaveAttribute('data-placement', 'docked');
+    expect(within(brainPanel()).getByRole('tablist', { name: 'Brain chat' })).toBeInTheDocument();
+
+    fireEvent.click(surfaceTab('Board'));
+    expect(brainPanel()).toContainElement(screen.getByTestId('canvas-composer'));
+  });
+
   it('lets the user resize the canvas prompt from its handle', () => {
     render(<CreationCanvas sessionId="brain-prompt-resize-test" persistence="local" />);
 

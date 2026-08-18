@@ -48,6 +48,36 @@ describe('playing a level', () => {
     expect(result.current.respawnNonce).toBe(before + 1);
   });
 
+  it('cannot be pinned at spawn by a hazard it respawns back into', () => {
+    // The bug this closes, exactly: a respawn EXITS the hazard and drops the walker
+    // back in, which is a new overlap and so a new event. The old guard was derived
+    // from `respawnNonce`, so every bump re-armed it and each render generation was
+    // allowed one more hit — 2,076 of them on a real place, with `PlayerController`
+    // teleporting the walker to spawn on every one. Separate `act` calls are what a
+    // re-entry after a re-render looks like from in here.
+    const { scene, spike } = level();
+    const { result } = renderHook(() => useWorldPlay(scene, true));
+    const before = result.current.respawnNonce;
+    act(() => result.current.onPlayerEnter(spike));
+    act(() => result.current.onPlayerEnter(spike));
+    act(() => result.current.onPlayerEnter(spike));
+    expect(result.current.state.hits).toBe(1);
+    expect(result.current.respawnNonce).toBe(before + 1);
+  });
+
+  it('hands every sensor the same callback for the whole run', () => {
+    // The identity is load-bearing, not cosmetic: this callback is handed to each
+    // sensor prop as a Rapier collision handler, and a handler that changes
+    // re-registers the collider it is attached to — which re-fires the overlap that
+    // changed it. Listing `respawnNonce` as a dependency made that a closed loop.
+    const { scene, coin, spike } = level();
+    const { result } = renderHook(() => useWorldPlay(scene, true));
+    const first = result.current.onPlayerEnter;
+    act(() => result.current.onPlayerEnter(spike));
+    act(() => result.current.onPlayerEnter(coin));
+    expect(result.current.onPlayerEnter).toBe(first);
+  });
+
   it('does not hand the goal to a player who left a collectible behind', () => {
     const { scene, coin, goal } = level();
     const { result } = renderHook(() => useWorldPlay(scene, true));

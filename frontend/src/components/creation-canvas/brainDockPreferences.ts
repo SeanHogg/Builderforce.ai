@@ -70,6 +70,9 @@ export function brainDockWidth(preferences: Pick<BrainDockPreferences, 'size' | 
 /**
  * The width the board gives up. An inline Brain is an Object on the canvas and a
  * closed one is not there at all, so only a docked Brain pushes the board in.
+ *
+ * A full-screen surface reserves it too. The panel is the same full-height column there
+ * as it is on the board, so the surface owes it the same clearance — see `BrainDock`.
  */
 export function brainDockReservedWidth(preferences: BrainDockPreferences): number {
   return preferences.open && preferences.mode === 'docked' ? brainDockWidth(preferences) : 0;

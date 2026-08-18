@@ -180,6 +180,22 @@
   box-shadow:0 1px 2px var(--canvas-shadow), 0 14px 34px -14px var(--canvas-shadow);
 }
 
+/* ── ONE HEIGHT FOR THE TOP ROW ───────────────────────────────────────────────────
+   The three cards on the top line are read as one row, so they have to MEASURE as one
+   row. Left to themselves they did not: the pill came out at its 26px input plus 6px
+   padding (38px), the chips at a 28px tab plus 4px (36px) and the top-right card at its
+   34px controls plus 6px (46px) — three cards on one line at three heights, which is
+   exactly the "four visitors" the floating chrome exists to avoid.
+
+   The tallest content in the row is the 34px control the handoff buttons, More and Save
+   all share, so the row is that plus one card's worth of padding and its border. Stated
+   ONCE here and read by all three below rather than by each card guessing its own
+   padding; `min-height` rather than `height` so a card that genuinely wraps (a long
+   title, a surface that contributes an extra handoff button) still grows instead of
+   clipping — and `--canvas-top-chrome-space` is measured from the real box either way. */
+.canvasShell { --canvas-top-card-h:44px; }
+.sessionPill, .surfaceChips, .topRightCard { min-height:var(--canvas-top-card-h); }
+
 .sessionPill { top:14px; left:calc(14px + var(--brain-dock-left, 0px)); gap:7px; padding:6px 10px 6px 8px; min-width:0; }
 /* The title and the state read as one phrase, so they stack rather than sitting side by
    side — at 13px the connection light beside a 250px input pushed the pill past a third
@@ -205,7 +221,11 @@
   transform:translateX(-50%);
 }
 
-.topRightCard { top:14px; right:calc(14px + var(--brain-dock-right, 0px)); gap:6px; padding:6px; }
+/* Padding-block 4px, not 6px: this is the card whose content SETS the row height, so
+   its own box has to land ON `--canvas-top-card-h` (34 + 8 + 2 borders) rather than one
+   padding step past it, which would push it back to 46px and make the min-height above
+   a floor the other two met and this one cleared. */
+.topRightCard { top:14px; right:calc(14px + var(--brain-dock-right, 0px)); gap:6px; padding:4px 6px; }
 
 /* ── WHERE ANYTHING UNDER THE TOP CHROME STARTS ───────────────────────────────────
    The three cards on this line float at z-index 20. Everything that opens beneath them
@@ -223,7 +243,7 @@
    to `handoff`, and when the bar is collapsed. What stays here is the value used before
    the first measurement lands (server render, and any browser without `ResizeObserver`);
    the inline property wins the moment it does. */
-.canvasShell { --canvas-top-chrome-space:66px; }
+.canvasShell { --canvas-top-chrome-space:64px; }  /* 14px corner + the 44px row + 6px clearance */
 
 /* ── THE ONE COMMAND BAR ──────────────────────────────────────────────────────────
    Bottom centre, over the board rather than under it. It holds Run, whatever the
@@ -2266,19 +2286,17 @@
 .brainDock { position:absolute; z-index:17; top:0; bottom:0; box-sizing:border-box; display:flex; flex-direction:column; width:var(--brain-dock-size,330px); border:1px solid var(--canvas-brain-border); background:var(--canvas-brain-surface); color:var(--canvas-ink); box-shadow:0 0 44px var(--canvas-shadow); }
 .brainDock[data-side='left'] { left:0; border-left:0; border-radius:0 var(--radius-lg) var(--radius-lg) 0; }
 .brainDock[data-side='right'] { right:0; border-right:0; border-radius:var(--radius-lg) 0 0 var(--radius-lg); }
-/* There is no small floating PLACEMENT a reader chooses:a card hovering over a board
+/* There is no small floating PLACEMENT a reader chooses: a card hovering over a board
    that already carries a Brain Object showed the same conversation twice. Small is
    inline — see .brainObjectChat, which renders this surface inside the Object itself.
-   `[data-compact]` below is a different thing: the SAME docked placement, sized down
-   automatically while a full-screen surface has the board (see `compact` on
-   `BrainDock` in CreationCanvas.tsx) — not a placement the reader picked, and it
-   reverts the moment they leave that surface. */
-.brainDock[data-compact='true'] {
-  top:auto; bottom:calc(var(--canvas-command-bar-space, 66px) + 14px);
-  max-height:min(46%, 360px);
-  border-radius:var(--radius-lg);
-  box-shadow:0 14px 42px var(--canvas-shadow);
-}
+
+   Nor is there a small AUTOMATIC one. A full-screen surface used to shrink this panel
+   to a short card pinned above the command bar, on the theory that the surface wanted
+   the room. What it actually produced was a ~350px box carrying a header, a clipped
+   line of transcript and — when the reader had docked the prompt — a whole composer,
+   hanging off the bottom corner of a full-height side panel's slot. The panel is one
+   column, top to bottom, on the board and on every surface: the same edge, the same
+   width, the same reserved clearance, so nothing about it moves when a surface opens. */
 /* The drag edge always faces the board, so pulling inward always narrows Brain. */
 .brainDockResizer { position:absolute; top:0; bottom:0; z-index:2; width:9px; padding:0; border:0; background:transparent; cursor:ew-resize; touch-action:none; }
 .brainDockResizer[data-side='left'] { right:-4px; }
@@ -2358,8 +2376,13 @@
   .saved,.secondaryButton { display:none; }
   /* The header has already given up its save button and its collaborators by here, so
      the segmented switcher stands down too and the phone's own control column carries
-     the surface decision. Exactly ONE of the two is ever on screen. */
-  .surfaceTabs { display:none; }
+     the surface decision. Exactly ONE of the two is ever on screen.
+
+     The CARD stands down, not just the tabs inside it. `.surfaceTabs` is only ever drawn
+     inside `.surfaceChips`, so hiding the inner group left the phone with an empty float
+     card — invisible while it was 3px of padding, a 44px hole once the top row got one
+     shared height. Hiding the card is the same decision stated on the box that has it. */
+  .surfaceChips { display:none; }
   /* ── The phone's session actions ────────────────────────────────────────────────
      `display:none` on a class name is what used to take undo, redo, diagnostics, the
      outcome scorecard AND every way to invite anybody off a phone — silently, because
@@ -2394,12 +2417,14 @@
   .sessionPill { left:8px; top:8px; right:auto; max-width:calc(100% - 16px); gap:4px; padding:4px 7px 4px 6px; }
   .sessionPill input { width:min(150px, 40vw); font-size:12px; }
   .sessionPill .spark { display:none; }
-  .surfaceChips { top:54px; padding:3px; }
   .topRightCard { top:8px; right:8px; gap:3px; padding:4px; }
+  /* Same row, same rule: the phone keeps its 34px handoff buttons, so the row keeps the
+     desktop height and the pill beside it is padded up to match rather than sitting a
+     third of a card short of the buttons across from it. */
   /* The pre-measurement value tracks the 8px corner and the smaller controls. A phone
      needs the band MORE than a desktop, not less: the panels go full width here, so the
      card sits over the middle of each one's header rather than over one corner of it. */
-  .canvasShell { --canvas-top-chrome-space:50px; }
+  .canvasShell { --canvas-top-chrome-space:58px; }  /* 8px corner + the same 44px row + 6px */
   .commandBar { left:8px; right:8px; bottom:8px; transform:none; max-width:none; gap:4px; padding:5px; overflow-x:auto; scrollbar-width:none; }
   .commandBar::-webkit-scrollbar { display:none; }
   .commandBar > * { flex:none; }

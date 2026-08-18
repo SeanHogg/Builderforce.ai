@@ -269,10 +269,10 @@ Replace `{provider}` with the lowercase provider name: `google`, `github`, `link
 
 | Provider | Setup time | Manual review? | Key gotcha |
 |---|---|---|---|
-| Google | ~10 min | No (for `email profile openid`) | Must publish the consent screen before non-test users can sign in |
+| Google | ~10 min | No for sign-in; **yes** for Gmail/Calendar/Drive/YouTube scopes | One OAuth client serves every Google flow — register a redirect URI **per flow**, or the connector 400s with `redirect_uri_mismatch` even though sign-in works |
 | LinkedIn | ~10 min | No (auto-approved) | Must add the **"Sign In with LinkedIn using OpenID Connect"** product — without it the `/v2/userinfo` endpoint won't return the email address |
 | GitHub | ~5 min | No | Only one callback URL per app — create a second OAuth App for local dev |
-| Microsoft | ~10 min | No | Use "Accounts in any organizational directory and personal Microsoft accounts" for broadest coverage |
+| Microsoft | ~10 min | No | Same one-client-many-flows trap as Google — register the mailbox/calendar/drive redirect URIs alongside sign-in |
 
 ---
 
@@ -282,13 +282,25 @@ Replace `{provider}` with the lowercase provider name: `google`, `github`, `link
 2. **APIs & Services → OAuth consent screen**
    - User Type: **External**
    - App name, support email, add scopes: `email`, `profile`, `openid` (non-sensitive, no review required)
+   - Connectors need their scopes listed here too, and they are **not** free: Gmail
+     (`gmail.modify`, `gmail.send`) is a *restricted* scope, Calendar/Drive/YouTube are
+     *sensitive*. Both classes work for accounts listed as test users while the app is in
+     Testing, but going public with them requires Google's verification review.
    - Add your email as a test user while in development
 3. **APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID**
    - Application type: **Web application**
-   - Authorized redirect URIs — add both:
+   - Authorized redirect URIs — **one entry per flow, not just sign-in.** `GOOGLE_CLIENT_ID`
+     is shared by every Google-family connector, and each builds its own callback path from
+     the request origin. A path that is missing here fails with
+     `Error 400: redirect_uri_mismatch` at consent time — sign-in working proves nothing about
+     the others. Add the production entry for every flow you intend to use, plus the
+     `http://localhost:8787` twin of each one you develop against:
      ```
-     https://api.builderforce.ai/api/auth/oauth/google/callback
-     http://localhost:8787/api/auth/oauth/google/callback
+     https://api.builderforce.ai/api/auth/oauth/google/callback   # sign-in / create account
+     https://api.builderforce.ai/api/mailbox/callback/google      # Connect inbox (Gmail)
+     https://api.builderforce.ai/api/calendar/callback/google     # Google Calendar
+     https://api.builderforce.ai/api/drive/callback/google        # Google Drive
+     https://api.builderforce.ai/api/youtube/callback             # YouTube publishing
      ```
 4. Copy Client ID and Client Secret:
    ```bash
@@ -341,9 +353,13 @@ Replace `{provider}` with the lowercase provider name: `google`, `github`, `link
 
 1. [Azure Portal](https://portal.azure.com/) → **Microsoft Entra ID → App registrations → New registration**
    - Supported account types: **"Accounts in any organizational directory and personal Microsoft accounts"**
-   - Redirect URI (Web):
+   - Redirect URIs (Web) — `MICROSOFT_CLIENT_ID` is shared by every Microsoft flow, so
+     register one per flow you intend to use (add the `http://localhost:8787` twin for local dev):
      ```
-     https://api.builderforce.ai/api/auth/oauth/microsoft/callback
+     https://api.builderforce.ai/api/auth/oauth/microsoft/callback   # sign-in / create account
+     https://api.builderforce.ai/api/mailbox/callback/microsoft      # Connect inbox (Outlook)
+     https://api.builderforce.ai/api/calendar/callback/microsoft     # Outlook Calendar
+     https://api.builderforce.ai/api/drive/callback/microsoft        # OneDrive / SharePoint
      ```
 2. **Certificates & secrets → New client secret** — copy the value immediately (it's only shown once)
 3. Copy the **Application (client) ID** from the Overview page

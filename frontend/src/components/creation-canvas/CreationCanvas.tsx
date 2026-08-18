@@ -10079,18 +10079,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // the last row of — so the preference is untouched and the prompt floats until the panel
   // comes back, rather than being drawn into a panel that is not there.
   const brainDockDrawn = brainSurfaceOpen && brainPlacement === 'docked' && !surfaceDef.brainIsSurface;
-  // A full-screen surface shrinks the panel to a short card showing only the latest reply
-  // (see `compact` on `BrainDock` below). That card is not a column, so it cannot be a
-  // column's last row: docking the prompt into it left a ~350px card carrying a header, a
-  // full composer and its starting-point picker, with the conversation squeezed to a
-  // clipped line or two between them. The rule the compact card was written around —
-  // "leaves the actual prompt where it already lives: centred, bottom of the page" — is
-  // now enforced rather than only described.
-  const brainDockCompact = !surfaceDef.showsBoard;
-  const brainDockHostsPrompt = brainDockDrawn && !brainDockCompact;
   const effectivePromptPlacement: CanvasPromptPlacement = surfaceDef.brainIsSurface
     ? 'float'
-    : promptPlacement === 'docked' && !brainDockHostsPrompt ? 'float' : promptPlacement;
+    : promptPlacement === 'docked' && !brainDockDrawn ? 'float' : promptPlacement;
   const promptInBrainPanel = effectivePromptPlacement === 'docked';
   const composer = !presentMode && effectivePromptPlacement !== 'closed' && <div
     // Measured ONLY while it floats over the board. In the Brain panel it is that panel's
@@ -10946,15 +10937,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           // The prompt, when the reader has docked it — rendered as the panel's last row
           // rather than as a card parked under it. See `BrainDock`'s header.
           {...(promptInBrainPanel ? { composer, onUndockPrompt: () => setPromptPlacement('float') } : {})}
-          // A full-screen surface (a résumé's page, the running app…) already takes the
-          // whole shell for the object itself; a full-height edge panel beside it was
-          // the same width of chrome the board carries, competing with content that
-          // just got MORE room made for it (see the `--brain-dock-left/right` clearance
-          // `.objectSurface` reads). Compact drops the panel to a short card that shows
-          // only the latest reply — the tabs and the scrolling history are what a board
-          // session needs, not a one-shot question about the object on screen — and
-          // leaves the actual prompt where it already lives: centred, bottom of the page.
-          compact={brainDockCompact}
           mode={brainPlacement}
           side={brainDock.side}
           size={brainDock.size}
