@@ -7111,7 +7111,7 @@
     "setupSteps": "{count, plural, one {# étape} other {# étapes}}"
   },
   "home": {
-    "heroBadge": "Canevas · Humains + agents IA",
+    "heroBadge": "Builderforce.ai · Humains + agents IA",
     "heroTitle": "Toute idée devient <em>réelle.</em>",
     "heroSub": "Un canevas où votre équipe et vos agents IA conçoivent, construisent, révisent et livrent — sans dispersion des outils.",
     "heroPromptPlaceholder": "Que voulez-vous créer ?",
@@ -7596,6 +7596,28 @@
       "canvasLabel": "Un contexte continu",
       "realLabel": "RÉEL",
       "realDefinition": "En production. Prêt à l’emploi."
+    },
+    "about": {
+      "eyebrow": "À propos de l’application",
+      "title": "Ce que fait Builderforce.ai",
+      "lead": "Builderforce.ai est une application web qui transforme une idée en réalisation concrète. Vous décrivez ce que vous voulez sur un canevas visuel, et votre équipe, accompagnée d’agents IA, le conçoit, le construit, le relit et le livre — sites web, workflows, documents, analyses de données et produits — dans un seul espace de travail plutôt que dans une dizaine d’outils séparés.",
+      "points": [
+        {
+          "title": "Ouvrez-la sans créer de compte",
+          "body": "Chaque page de ce site, ainsi qu’un véritable canevas dans lequel vous pouvez écrire, est accessible à tous. Vous ne vous connectez que pour enregistrer votre travail, inviter des collègues ou connecter un outil."
+        },
+        {
+          "title": "Des humains et des agents IA dans la même équipe",
+          "body": "Les agents sont recrutés dans un espace de travail comme des collègues. Ils prennent des tickets, font le travail et la renvoient pour relecture : c’est une personne qui décide de ce qui part en production."
+        },
+        {
+          "title": "Connectez les outils que vous utilisez déjà",
+          "body": "Avec votre autorisation, Builderforce.ai se connecte à des services tels que Google Drive, Gmail, Google Agenda et Google Sheets, afin que les agents puissent lire les fichiers que vous leur indiquez et préparer des brouillons, des réunions et des documents pour vous."
+        }
+      ],
+      "dataNote": "L’accès aux comptes connectés est accordé par espace de travail, utilisé uniquement pour les fonctionnalités que vous activez, et révocable à tout moment.",
+      "privacyLink": "Politique de confidentialité",
+      "termsLink": "Conditions d’utilisation"
     }
   },
   "shoppingCart": {

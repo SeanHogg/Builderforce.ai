@@ -167,6 +167,21 @@
  *   so splitting them would fight the DRY reason they exist. Allowlisted in
  *   `oversizedProductionFiles` instead, beside the twenty other legitimate
  *   entries already there.
+ *
+ *   801 -> 802 (`useClientFiles`, 2026-08-18) -- `lib/useRequireAuth.ts`, the one
+ *   auth guard for pages that require a signed-in visitor. It is a hook over
+ *   `useRouter` + `useEffect` + the auth context, so it can only ever run on the
+ *   client, and it carries the directive for the same reason every other hook in
+ *   `lib/` does. It is +1 and not +2 because the band it shipped beside --
+ *   `components/home/AboutAppSection.tsx` -- deliberately does NOT take one: the
+ *   homepage is its only importer and is already a boundary, exactly the shape
+ *   the tightenings above kept finding. The hook exists because twelve surfaces
+ *   had each hand-rolled "redirect to /login when signed out", and all twelve
+ *   were about to become wrong at once: `AuthProvider` no longer blanks the tree
+ *   while it reads the stored session (that blanking is what made every
+ *   server-rendered page an empty document), so a guard that acts before
+ *   `authReady` now bounces signed-in users to the login screen. One place owns
+ *   that rule.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';

@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { Select } from '@/components/Select';
-import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useAuth } from '@/lib/AuthContext';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import type { Capability } from '@/lib/rbac';
@@ -41,15 +40,9 @@ export function LensPage({
   gate?: boolean;
 }) {
   const t = useTranslations('insights');
-  const router = useRouter();
-  const { isAuthenticated, hasTenant } = useAuth();
+  const allowed = useRequireAuth();
 
-  useEffect(() => {
-    if (!isAuthenticated) router.replace('/login');
-    else if (!hasTenant) router.replace('/tenants');
-  }, [isAuthenticated, hasTenant, router]);
-
-  if (!isAuthenticated || !hasTenant) return null;
+  if (!allowed) return null;
 
   return (
     <PageContainer>

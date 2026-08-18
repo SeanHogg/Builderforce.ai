@@ -107,7 +107,7 @@ function FooterOnlyShell({ children }: { children: React.ReactNode }) {
 /** Pick the shell chrome for the current route (Brain is mounted globally below). */
 function useShellContent(children: React.ReactNode): React.ReactNode {
   const pathname = usePathname() || '';
-  const { isAuthenticated } = useAuth();
+  const { authReady, isAuthenticated } = useAuth();
   const isFreelancer = useIsFreelancer();
   const isSales = useIsSalesAssociate();
   const guestRoomCode = useGuestInviteCode();
@@ -118,6 +118,19 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   const hasBoard = useOptionalActiveCanvas()?.active != null;
 
   const kind = classifyShell(pathname);
+
+  // Public, marketing and no-chrome routes render on the SERVER with their real
+  // content — that is what makes the home page readable by a crawler, a link
+  // unfurler and Google's OAuth branding review without an account.
+  //
+  // An authenticated app route cannot join them: the session lives in
+  // localStorage, so `isAuthenticated` is false until it has been read, and
+  // rendering now would flash the signed-out teaser at a signed-in user on every
+  // hard load. Only those routes wait, and only for the one frame `authReady`
+  // takes — guest-legitimate app routes (an anonymous board) are excluded, since
+  // for them the signed-out render is the correct one.
+  if (!authReady && kind === 'app' && !rendersAppShell(pathname, false)) return null;
+
   if (kind === 'none') return <>{children}</>;
   if (kind === 'footer') return <FooterOnlyShell>{children}</FooterOnlyShell>;
 

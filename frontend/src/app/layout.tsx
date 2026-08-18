@@ -215,7 +215,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                               <ConditionalAppShell
                                 qualityEndpoint={QUALITY_ENDPOINT}
                               >
-                                {children}
+                                {/*
+                                  ONE CSR-bailout boundary for the page slot.
+
+                                  51 client components call `useSearchParams()`,
+                                  and a statically prerendered page that reads it
+                                  without a Suspense boundary above it fails the
+                                  build outright ("should be wrapped in a suspense
+                                  boundary"). Nothing had ever hit that, because
+                                  `AuthProvider` returned null on the server and
+                                  no page below it rendered far enough to read
+                                  anything — the blank server render was masking
+                                  the missing boundaries as well as emptying the
+                                  HTML. It goes HERE, around the page slot only:
+                                  the shell chrome still prerenders, and a page
+                                  that does not read search params is unaffected,
+                                  since Suspense costs nothing until something
+                                  below it actually bails. One boundary, not 51.
+                                */}
+                                <Suspense fallback={null}>{children}</Suspense>
                               </ConditionalAppShell>
                             </DemoModeProvider>
                           </ToastProvider>

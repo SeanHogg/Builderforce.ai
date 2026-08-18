@@ -236,6 +236,10 @@ vi.mock('@/lib/AuthContext', async (importOriginal) => {
     tenantToken: null,
     isAuthenticated: true,
     hasTenant: true,
+    // The stored session is "already read" for tests. Omitting this leaves it
+    // `undefined`, and anything that correctly waits for `authReady` before
+    // acting on a signed-out session would then wait forever under test.
+    authReady: true,
     login: async () => {},
     register: async () => {},
     selectTenant: async () => {},

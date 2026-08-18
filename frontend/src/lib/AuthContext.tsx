@@ -38,6 +38,17 @@ interface AuthContextValue {
   tenantToken: string | null;
   isAuthenticated: boolean;
   hasTenant: boolean;
+  /**
+   * Has the stored session been read off the device yet?
+   *
+   * `false` for the SERVER render and the first hydrated frame — localStorage
+   * does not exist on the server, so `isAuthenticated` is unavoidably `false`
+   * there for everyone, signed in or not. Anything that ACTS on being signed
+   * out (a redirect to /login, opening a guest board instead of a server one)
+   * must wait for this, or it fires against a signed-in user. Use the
+   * `useRequireAuth` hook rather than re-deriving that rule per page.
+   */
+  authReady: boolean;
   /** Resolves to `{ needsVerification: true, email }` when the account's email must
    *  be verified first — the caller flips to the code-entry step. Otherwise the
    *  session is set and it resolves to `{ needsVerification: false, ... }`. */
@@ -171,6 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenantToken,
       isAuthenticated: !!webToken,
       hasTenant: !!tenantToken,
+      authReady: initialized,
       login,
       register,
       verifyEmail,
@@ -185,6 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenant,
       webToken,
       tenantToken,
+      initialized,
       login,
       register,
       verifyEmail,
@@ -196,8 +209,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ]
   );
 
-  if (!initialized) return null;
-
+  // NEVER gate the tree on rehydration. Returning null until the localStorage
+  // read completed made the SERVER render of every route — the marketing home
+  // page included — an empty document: the only text in the delivered HTML was
+  // the skip link. Crawlers, link unfurlers and Google's OAuth branding review
+  // therefore saw a blank page with no product name and no description, which
+  // reads as "the home page is behind a login". Children render immediately and
+  // consumers that must not act on a not-yet-known session gate on `authReady`.
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

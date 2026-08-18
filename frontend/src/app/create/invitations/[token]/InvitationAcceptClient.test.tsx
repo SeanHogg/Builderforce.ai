@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/AuthContext', () => ({
   useAuth: () => ({
+    // The component waits for the stored session to have been read before it
+    // decides anything; a mock that omits this holds it on "please sign in".
+    authReady: true,
     isAuthenticated: mocks.authenticated,
     fetchTenants: mocks.fetchTenants,
     selectTenant: mocks.selectTenant,

@@ -7111,7 +7111,7 @@
     "setupSteps": "{count, plural, one {# Schritt} other {# Schritte}}"
   },
   "home": {
-    "heroBadge": "Leinwand · Menschen + KI-Agenten",
+    "heroBadge": "Builderforce.ai · Menschen + KI-Agenten",
     "heroTitle": "Jede Idee wird <em>real.</em>",
     "heroSub": "Eine Leinwand, auf der Ihr Team und KI-Agenten entwerfen, bauen, prüfen und ausliefern – ohne Tool-Wildwuchs.",
     "heroPromptPlaceholder": "Was möchten Sie erstellen?",
@@ -7596,6 +7596,28 @@
       "canvasLabel": "Ein durchgehender Kontext",
       "realLabel": "REAL",
       "realDefinition": "Live in Produktion. Sofort nutzbar."
+    },
+    "about": {
+      "eyebrow": "Über die App",
+      "title": "Was Builderforce.ai macht",
+      "lead": "Builderforce.ai ist eine Webanwendung, die aus einer Idee ein fertiges Ergebnis macht. Sie beschreiben auf einer visuellen Leinwand, was Sie wollen, und Ihr Team entwirft, baut, prüft und liefert es gemeinsam mit KI-Agenten — Websites, Workflows, Dokumente, Datenauswertungen und Produkte — in einem einzigen Arbeitsbereich statt in einem Dutzend getrennter Werkzeuge.",
+      "points": [
+        {
+          "title": "Ohne Konto nutzbar",
+          "body": "Jede Seite dieser Website und eine echte Leinwand, in die Sie schreiben können, steht allen offen. Sie melden sich erst an, wenn Sie Ihre Arbeit speichern, Teammitglieder einladen oder ein Werkzeug verbinden möchten."
+        },
+        {
+          "title": "Menschen und KI-Agenten in einem Team",
+          "body": "Agenten werden wie Teammitglieder in einen Arbeitsbereich eingestellt. Sie nehmen Tickets an, erledigen die Arbeit und geben sie zur Prüfung zurück — was veröffentlicht wird, entscheidet ein Mensch."
+        },
+        {
+          "title": "Verbinden Sie die Werkzeuge, die Sie bereits nutzen",
+          "body": "Mit Ihrer Erlaubnis verbindet sich Builderforce.ai mit Diensten wie Google Drive, Gmail, Google Kalender und Google Tabellen, damit Agenten die von Ihnen benannten Dateien lesen und Entwürfe, Termine und Dokumente für Sie vorbereiten können."
+        }
+      ],
+      "dataNote": "Der Zugriff auf verbundene Konten wird pro Arbeitsbereich erteilt, nur für die von Ihnen aktivierten Funktionen genutzt und kann jederzeit widerrufen werden.",
+      "privacyLink": "Datenschutzerklärung",
+      "termsLink": "Nutzungsbedingungen"
     }
   },
   "shoppingCart": {

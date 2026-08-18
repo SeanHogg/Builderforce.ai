@@ -7111,7 +7111,7 @@
     "setupSteps": "{count, plural, one {# paso} other {# pasos}}"
   },
   "home": {
-    "heroBadge": "Lienzo · Personas + agentes de IA",
+    "heroBadge": "Builderforce.ai · Personas + agentes de IA",
     "heroTitle": "Cualquier idea se hace <em>real.</em>",
     "heroSub": "Un lienzo donde tu equipo y los agentes de IA diseñan, construyen, revisan y entregan, sin dispersión de herramientas.",
     "heroPromptPlaceholder": "¿Qué quieres crear?",
@@ -7596,6 +7596,28 @@
       "canvasLabel": "Un contexto continuo",
       "realLabel": "REAL",
       "realDefinition": "En producción. Listo para usar."
+    },
+    "about": {
+      "eyebrow": "Acerca de la aplicación",
+      "title": "Qué hace Builderforce.ai",
+      "lead": "Builderforce.ai es una aplicación web para convertir una idea en algo terminado. Describes lo que quieres en un lienzo visual y tu equipo, junto con agentes de IA, lo diseña, construye, revisa y entrega — sitios web, flujos de trabajo, documentos, informes de datos y productos — en un solo espacio de trabajo en lugar de una docena de herramientas desconectadas.",
+      "points": [
+        {
+          "title": "Ábrelo sin crear una cuenta",
+          "body": "Todas las páginas de este sitio, y un lienzo real en el que puedes escribir, están disponibles para cualquiera. Solo inicias sesión cuando quieres guardar tu trabajo, invitar a compañeros o conectar una herramienta."
+        },
+        {
+          "title": "Personas y agentes de IA en un mismo equipo",
+          "body": "Los agentes se contratan en un espacio de trabajo como si fueran compañeros. Toman tickets, hacen el trabajo y lo devuelven para revisión, de modo que una persona decide qué se publica."
+        },
+        {
+          "title": "Conecta las herramientas que ya usas",
+          "body": "Con tu permiso, Builderforce.ai se conecta a servicios como Google Drive, Gmail, Google Calendar y Google Sheets para que los agentes puedan leer los archivos que les indiques y preparar borradores, reuniones y documentos por ti."
+        }
+      ],
+      "dataNote": "El acceso a las cuentas conectadas se concede por espacio de trabajo, se usa solo para las funciones que actives y puede revocarse en cualquier momento.",
+      "privacyLink": "Política de privacidad",
+      "termsLink": "Términos del servicio"
     }
   },
   "shoppingCart": {

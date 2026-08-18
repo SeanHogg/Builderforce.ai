@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import { useOptionalBrainContext } from '@/lib/brain';
 import { ProjectsContent } from '@/components/ProjectsContent';
 import PageContainer from '@/components/PageContainer';
@@ -18,7 +19,6 @@ import RfpContent from '@/components/rfp/RfpContent';
 import { RoleGate } from '@/components/RoleGate';
 import { usePublishNavCount } from '@/lib/navCounts';
 import { PROJECTS_COUNT_KEY } from '@/lib/navGroups';
-import { signInHref } from '@/lib/auth';
 
 type Tab = 'projects' | 'tasks' | 'manager' | 'pm' | 'portfolio' | 'ceremonies' | 'templates' | 'rfp';
 
@@ -48,13 +48,7 @@ export default function ProjectsTasksPage() {
   const [projectCount, setProjectCount] = useState<number | null>(null);
   usePublishNavCount(PROJECTS_COUNT_KEY, projectCount);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace(signInHref('/projects'));
-    } else if (!hasTenant) {
-      router.replace('/tenants?next=/projects');
-    }
-  }, [isAuthenticated, hasTenant, router]);
+  const allowed = useRequireAuth({ returnTo: '/projects' });
 
   const tabParam = searchParams.get('tab');
   const activeTab: Tab =
@@ -79,7 +73,7 @@ export default function ProjectsTasksPage() {
     return () => setBrainContext({ viewingProjectId: null });
   }, [setBrainContext, scopedProjectId]);
 
-  if (!isAuthenticated || !hasTenant) return null;
+  if (!allowed) return null;
 
   return (
     <PageContainer style={{ padding: '20px 16px' }}>

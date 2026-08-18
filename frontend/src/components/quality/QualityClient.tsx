@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useAuth } from '@/lib/AuthContext';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
@@ -25,16 +25,10 @@ import { QualityCollectorsManager } from './QualityCollectorsManager';
 export default function QualityClient() {
   const t = useTranslations('quality');
   const tFeedback = useTranslations('feedback');
-  const router = useRouter();
-  const { isAuthenticated, hasTenant } = useAuth();
+  const allowed = useRequireAuth();
   const tab = useSearchParams().get('tab') ?? '';
 
-  useEffect(() => {
-    if (!isAuthenticated) router.replace('/login');
-    else if (!hasTenant) router.replace('/tenants');
-  }, [isAuthenticated, hasTenant, router]);
-
-  if (!isAuthenticated || !hasTenant) return null;
+  if (!allowed) return null;
 
   const isSetup = tab === 'collectors';
   const isFeedback = tab === 'feedback';

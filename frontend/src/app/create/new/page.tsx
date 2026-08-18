@@ -25,7 +25,7 @@ export const runtime = 'edge';
 export default function NewCreationSessionPage() {
   const t = useTranslations('creationCanvas');
   const router = useRouter();
-  const { isAuthenticated, hasTenant } = useAuth();
+  const { authReady, isAuthenticated, hasTenant } = useAuth();
   const started = useRef(false);
   const [message, setMessage] = useState('');
   const [inviteCode, setInviteCode] = useState<string | null>(null);
@@ -56,7 +56,11 @@ export default function NewCreationSessionPage() {
   }, []);
 
   useEffect(() => {
-    if (!checkedInvite || inviteCode || started.current) return;
+    // `authReady` is load-bearing here, not defensive: until the stored session
+    // has been read off the device `isAuthenticated` is false for EVERYONE, and
+    // acting on it would hand a signed-in builder a throwaway local guest board
+    // instead of the server session their workspace expects.
+    if (!authReady || !checkedInvite || inviteCode || started.current) return;
     started.current = true;
     setMessage(t('creatingCanvas'));
     if (!isAuthenticated || !hasTenant) {
@@ -73,7 +77,7 @@ export default function NewCreationSessionPage() {
         const id = startGuestCreationSession(initialPrompt);
         router.replace(modelComparisonCanvasHref(id, modelComparisonIds));
       });
-  }, [checkedInvite, hasTenant, initialPrompt, inviteCode, isAuthenticated, modelComparisonIds, router, t]);
+  }, [authReady, checkedInvite, hasTenant, initialPrompt, inviteCode, isAuthenticated, modelComparisonIds, router, t]);
 
   if (inviteCode) {
     return (

@@ -709,11 +709,15 @@ describe('CreationCanvas', () => {
     expect(screen.getAllByText('Evermind').length).toBeGreaterThan(1);
     expect(screen.getAllByText('Investigate customer friction.').length).toBeGreaterThan(1);
     expect(screen.getByText('High autonomy')).toBeInTheDocument();
-    // Scoped to the agent card's own pill row. "Research" is ALSO a `CreationObjectGroup`,
-    // so once a spec vocabulary registered a kind into that group the object palette
-    // started rendering it as a heading too — and a bare `getByText` began matching both.
-    // The assertion is about the tool that was just added, so it says so.
-    expect(screen.getByText('Research', { selector: 'span' })).toBeInTheDocument();
+    // Scoped to the agent card's own pill row, by the pill sitting next to it.
+    // "Research" is ALSO a `CreationObjectGroup`, so the object palette renders it
+    // as a heading too — and BOTH are `<span>`, which is why the previous
+    // `{ selector: 'span' }` stopped disambiguating the moment the test resolver
+    // grew `t.raw` and the palette rendered the group copy it always renders in
+    // the app. The assertion is about the tool that was just added; the row that
+    // holds "High autonomy" is that tool's row, so it names it.
+    const pillRow = screen.getByText('High autonomy').parentElement!;
+    expect(within(pillRow).getByText('Research')).toBeInTheDocument();
   });
 
   it('visualizes an agent collaborator avatar, thinking state, and latest response', () => {
@@ -1453,7 +1457,14 @@ describe('CreationCanvas', () => {
     render(<CreationCanvas sessionId="template-test" persistence="local" />);
     fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
     fireEvent.click(screen.getByRole('button', { name: 'Templates' }));
-    fireEvent.click(screen.getByRole('button', { name: /Product discovery/i }));
+    // Two controls legitimately offer "Product discovery": the Business TEMPLATE
+    // and the Marketplace PACK. This test is about the pack, so it matches the
+    // pack's own subtitle rather than the shared title. (Both were always
+    // rendered by the app; only the degraded test resolver hid one of them.)
+    const pack = screen.getAllByText('Product discovery')
+      .map((title) => title.closest('button'))
+      .find((button) => button?.textContent?.includes('Marketplace template'));
+    fireEvent.click(pack!);
 
     expect(screen.getByText('Product discovery added from Marketplace')).toBeInTheDocument();
     expect(screen.getByText('Customer feedback')).toBeInTheDocument();

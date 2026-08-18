@@ -7111,7 +7111,7 @@
     "setupSteps": "{count} 个步骤"
   },
   "home": {
-    "heroBadge": "画布 · 人类 + AI 智能体",
+    "heroBadge": "Builderforce.ai · 人类 + AI 智能体",
     "heroTitle": "每个想法都变成<em>现实。</em>",
     "heroSub": "一块画布，让你的团队与 AI 智能体共同设计、构建、评审并交付——无需在多个工具之间来回切换。",
     "heroPromptPlaceholder": "你想创造什么？",
@@ -7596,6 +7596,28 @@
       "canvasLabel": "一个连续的上下文",
       "realLabel": "REAL",
       "realDefinition": "已上线。立即可用。"
+    },
+    "about": {
+      "eyebrow": "关于本应用",
+      "title": "Builderforce.ai 是做什么的",
+      "lead": "Builderforce.ai 是一款把想法变成成品的 Web 应用。您在可视化画布上描述需求，您的团队与 AI 智能体共同设计、构建、审阅并交付——网站、工作流、文档、数据故事与产品——全部在同一个工作空间完成，而不是分散在十几个工具里。",
+      "points": [
+        {
+          "title": "无需注册即可使用",
+          "body": "本站的每一个页面，以及一个可以直接输入的画布，任何人都能打开。只有当您想保存成果、邀请队友或连接工具时，才需要登录。"
+        },
+        {
+          "title": "人与 AI 智能体同在一个团队",
+          "body": "智能体像队友一样被“雇佣”进工作空间。它们领取工单、完成工作，再交回来审阅，最终上线的内容由人决定。"
+        },
+        {
+          "title": "连接您已在使用的工具",
+          "body": "在您授权后，Builderforce.ai 会连接 Google Drive、Gmail、Google 日历和 Google 表格等服务，使智能体能读取您指定的文件，并为您准备草稿、会议与文档。"
+        }
+      ],
+      "dataNote": "已连接账号的访问权限按工作空间授予，仅用于您启用的功能，并可随时撤销。",
+      "privacyLink": "隐私政策",
+      "termsLink": "服务条款"
     }
   },
   "shoppingCart": {

@@ -1,3 +1,107 @@
+## ✅ RESOLVED 2026-08-18 — Every server-rendered page was an empty document, so the home page read as "behind a login"
+
+Google's OAuth branding verification returned three findings against `builderforce.ai`: the home
+page is behind a login page, the home page does not explain the purpose of the app, and the app
+name on the home page does not match the "Builder Force" name on the consent screen. All three
+were one defect wearing three hats.
+
+**Root cause — one line.** `AuthProvider` ended with `if (!initialized) return null;`, and
+`initialized` was set in a `useEffect` that reads the stored session out of `localStorage`.
+`localStorage` does not exist on the server, so that effect can only run after hydration — which
+meant the provider returned `null` for the SERVER render of *every* route on the site, and the
+provider wraps the entire tree in `app/layout.tsx`. `curl https://builderforce.ai/` returned 200
+with 56 KB of markup whose complete visible text was five words: "Skip to main content". The page
+was never behind a login; it was behind JavaScript, which to a crawler, a link unfurler or a
+verification reviewer is indistinguishable from a wall. Nothing described the product because
+nothing was rendered, and the product never named itself for the same reason.
+
+**The fix.** `AuthProvider` renders its children immediately and publishes `authReady` — "has the
+stored session been read off the device yet?" — as part of the context. `authReady` is the
+distinction the old null-return was making implicitly and destructively: `isAuthenticated` is
+`false` on the server and on the first hydrated frame *for everyone*, so anything that ACTS on
+being signed out has to tell "signed out" apart from "not known yet".
+
+**The twelve guards that were about to become wrong at once.** Twelve surfaces had each hand-rolled
+the same three lines — redirect to `/login` when signed out, `/tenants` when there is no workspace,
+render `null` meanwhile. While the provider blanked the tree none of them could misfire; the moment
+it stopped, every one of them would have bounced signed-in users to the login screen on hard load.
+They now share one primitive, `lib/useRequireAuth.ts`, which owns the `authReady` rule so it cannot
+be half-applied: `/alerts`, `/growth`, `/insights/snapshots`, `/workforce/plan`, `LensShell`,
+`QualityClient`, `/dashboard`, `/projects`, `/admin`, `/tenants`, plus `authReady` guards on the two
+surfaces that branch rather than redirect — `/create/new` (which would have handed a signed-in
+builder a throwaway local guest board instead of a server session) and `InvitationAcceptClient`
+(which would have asked an already-signed-in invitee to sign in).
+
+**Chrome without a flash.** `ConditionalAppShell` holds *only* authenticated app routes for the one
+frame `authReady` takes, so a signed-in user still never sees the signed-out teaser on a hard load.
+Public, marketing and no-chrome routes render on the server with their real content — which is the
+entire point.
+
+**Saying what the application is.** The homepage argument is a demonstration: a board you can type
+into. A demonstration is not a description, so anyone who needed the product stated rather than
+shown had nothing to read. `components/home/AboutAppSection.tsx` is a new second band, built
+entirely from the existing home primitives (`HomeSection`/`HomeGrid`/`HomeCard` — it earns no
+styling of its own, so it gets none): it names the application, says what it is for, says it is
+usable without an account, and says which connected-service permissions it asks for and why —
+Drive, Gmail, Calendar and Sheets, granted per workspace, used only for enabled features, revocable
+at any time. The hero badge directly above the `<h1>` now reads **Builderforce.ai** rather than
+"Canvas", so the app names itself above the fold. All copy is in `home.about.*` across all five
+catalogs with real translations.
+
+**Regression guard.** `lib/AuthContext.test.tsx` renders the provider through
+`renderToStaticMarkup` and asserts both halves: children appear in the server markup, and
+`authReady` is `false` there. The global `useAuth` stub in `test/setup.ts` grew `authReady: true`
+for the same reason — a mock without it would leave every correct guard waiting forever.
+
+**What the blank render had been hiding.** Un-blanking the server render made the production
+build fail, which is the useful kind of failure: `/auth/magic-link` reads `useSearchParams()` with no
+Suspense boundary above it, and a statically prerendered page that does so fails the build outright.
+It had never fired because no page below `AuthProvider` had ever rendered far enough on the server
+to read anything — the empty HTML and the missing boundaries were the same silence. 51 client
+components call that hook, so the boundary goes in ONE place: around the page slot in
+`app/layout.tsx`. The shell chrome still prerenders, and a page that does not read search params is
+unaffected, because Suspense costs nothing until something below it actually bails. The homepage
+tree was checked for `useSearchParams` first — it is clean, so `/` keeps the server-rendered content
+this whole change exists to produce.
+
+**The resolver gap had been hiding real rendering.** Adding `t.raw` turned two
+`CreationCanvas` assertions red — and they were right to go red. Both had been passing against a
+resolver that returned LESS than the app does: with `t.raw` absent the object palette never
+rendered its group copy and the template list never rendered its entries, so `getByText('Research',
+{ selector: 'span' })` matched one element instead of the two the app really shows (the tool pill
+AND the `CreationObjectGroup` heading), and `getByRole('button', { name: /Product discovery/i })`
+matched one control instead of two (the Business TEMPLATE and the Marketplace PACK). The test file
+had already documented this exact collision class twice in its own comments; the third instance was
+simply invisible while the resolver was degraded. Both assertions are now scoped to what they
+actually mean — the pill row that holds "High autonomy", and the button carrying the pack's own
+"Marketplace template" subtitle — and the file is 86/86. No production code changed: the app always
+rendered both.
+
+**Two gaps closed in the test resolver.** `test/realCatalogTranslations.ts` — whose own header sets
+the standard "a translator the tests build cannot quietly be less capable than the one the app
+uses", having already failed it twice on `t.has` and on plural arms — carried neither `t.raw` nor
+`t.rich`. `t.raw` is what every catalog ARRAY is read through (the About band's points, the hero's
+seeded objects, the homepage FAQ), and `t.rich` is how the homepage `<h1>` is written, so no
+real-catalog test could assert either. Both are implemented and pinned by
+`test/realCatalogTranslations.test.tsx`, including tag-splitting asserted against rendered markup.
+
+**Return-to now carries the query string.** `/quality?tab=feedback` and `/quality` are different
+screens; the guard sends you back to the one you asked for. Read from `window.location` inside the
+effect rather than through `useSearchParams()`, which would have opted all twelve pages into a CSR
+bailout — the same trade `ProductUpdatesHost` and the shell's `useGuestInviteCode` already refuse,
+with the reason written at both.
+
+**Still open (console-side, not code).** The consent screen itself still says "Builder Force". That
+is a Google Cloud Console field, not a repository value — "Builder Force" appears nowhere in this
+codebase. Logged in the Gap Register with that single blocker.
+
+**Files.** `lib/AuthContext.tsx`, `lib/useRequireAuth.ts` (new), `lib/AuthContext.test.tsx` (new),
+`components/ConditionalAppShell.tsx`, `components/home/AboutAppSection.tsx` (new), `app/page.tsx`,
+the twelve migrated guards, `i18n/messages/{en,zh,es,fr,de}.json`, `test/setup.ts`,
+`scripts/check-frontend-architecture.mjs` + baseline (801 → 802, documented), `app/layout.tsx`,
+`test/realCatalogTranslations.ts` + its new test, `lib/useRequireAuth.test.tsx`,
+`components/home/AboutAppSection.test.tsx`.
+
 ## ✅ RESOLVED 2026-08-18 — The live session covered the app it was a session of, and "Live" meant two different things
 
 Reported from a live call on `/create/<id>`: going live printed the call bar over the canvas

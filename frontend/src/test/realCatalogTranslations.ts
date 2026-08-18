@@ -24,8 +24,32 @@
  * ```
  */
 
+import type { ReactNode } from 'react';
+
 type Messages = Record<string, unknown>;
 type Values = Record<string, unknown>;
+
+/**
+ * Split `copy` on the `<tag>…</tag>` spans the caller supplied a renderer for,
+ * handing each span's inner text to its callback and leaving the rest as text.
+ * Unknown tags are left verbatim, which is what next-intl does when a message
+ * carries a tag the call site did not name.
+ */
+function splitTags(copy: string, tags: Record<string, (chunks: ReactNode) => ReactNode>): ReactNode[] {
+  const names = Object.keys(tags);
+  if (names.length === 0) return [copy];
+  const pattern = new RegExp(`<(${names.join('|')})>([\\s\\S]*?)</\\1>`, 'gu');
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const match of copy.matchAll(pattern)) {
+    const at = match.index ?? 0;
+    if (at > cursor) parts.push(copy.slice(cursor, at));
+    parts.push(tags[match[1]!]!(match[2]!));
+    cursor = at + match[0].length;
+  }
+  if (cursor < copy.length) parts.push(copy.slice(cursor));
+  return parts;
+}
 
 /**
  * An ICU `plural` argument, with ALL of its arms rather than just `one`/`other`.
@@ -60,6 +84,23 @@ function lookup(messages: Messages, namespace: string | undefined, key: string):
 export interface RealCatalogTranslator {
   (key: string, values?: Values): string;
   has: (key: string) => boolean;
+  /**
+   * The message AS AUTHORED, with no ICU processing — the catalog value at `key`,
+   * whatever its type. Components use it for the arrays and object lists that a
+   * string return would destroy: `t.raw('points')` on the homepage's About band,
+   * `t.raw('canvas.objects')` on the hero, `t.raw('home.homepageFaq')`.
+   *
+   * Its absence was the same defect the header above describes twice: a resolver
+   * standing in for `useTranslations` that is less capable than the real one, so
+   * a component crashes under test while working perfectly in the app.
+   */
+  raw: (key: string) => unknown;
+  /**
+   * Rich text: the message with its `<tag>…</tag>` spans handed to the matching
+   * callback. Returns a node array, exactly as next-intl does, so a test can
+   * assert on copy the app renders through `t.rich` (the homepage `<h1>` does).
+   */
+  rich: (key: string, tags?: Record<string, (chunks: ReactNode) => ReactNode>) => ReactNode;
 }
 
 function build(messages: Messages, namespace: string | undefined): RealCatalogTranslator {
@@ -76,6 +117,12 @@ function build(messages: Messages, namespace: string | undefined): RealCatalogTr
     );
   };
   translate.has = (key: string) => typeof lookup(messages, namespace, key) === 'string';
+  translate.raw = (key: string) => lookup(messages, namespace, key);
+  translate.rich = (key: string, tags?: Record<string, (chunks: ReactNode) => ReactNode>): ReactNode => {
+    const value = lookup(messages, namespace, key);
+    if (typeof value !== 'string') return namespace ? `${namespace}.${key}` : key;
+    return splitTags(value, tags ?? {});
+  };
   return translate;
 }
 

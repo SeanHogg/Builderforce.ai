@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { useOnboardingPrompt } from '@/lib/onboarding';
 import { ChatInput } from '@/components/ChatInput';
@@ -29,7 +30,6 @@ import type { WorkspaceCanvasPanel } from '@/components/workspace-canvas/Workspa
 import { WorkspacePanelList } from '@/components/workspace-canvas/WorkspacePanelList';
 import { usePublishReferenceChrome, usePublishReferenceSelect, useReferenceRailActive } from '@/lib/referenceChrome';
 import styles from './Dashboard.module.css';
-import { signInHref } from '@/lib/auth';
 
 const DASHBOARD_TABS = ['create', 'projects', 'workforce', 'quality', 'knowledge'] as const;
 type DashboardTab = (typeof DASHBOARD_TABS)[number];
@@ -79,13 +79,9 @@ export default function DashboardPage() {
   } = useOnboardingPrompt();
 
   // Auth guard. A brand-new builder's named workspace is auto-provisioned by the
-  // onboarding gate before this page renders, so reaching here without a tenant means
-  // the picker is the right destination (multi-workspace, or provisioning fell back).
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace(signInHref('/dashboard'));
-    }
-  }, [isAuthenticated, router]);
+  // onboarding gate before this page renders, so the tenant requirement is left to
+  // that gate rather than bouncing to the picker from here.
+  const allowed = useRequireAuth({ returnTo: '/dashboard', requireTenant: false });
 
   useEffect(() => {
     if (!isAuthenticated || !hasTenant) return;
@@ -194,7 +190,7 @@ export default function DashboardPage() {
   // inline bar is the only way to change view, so it must stay.
   const railHasTabs = useReferenceRailActive();
 
-  if (!isAuthenticated) return null;
+  if (!allowed) return null;
 
   // No tenant → the picker (a brand-new builder's named workspace is provisioned
   // upstream by the onboarding gate, so this is the multi-workspace / fallback path).

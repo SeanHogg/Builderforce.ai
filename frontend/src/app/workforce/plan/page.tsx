@@ -7,25 +7,17 @@
  * Manager-gated (disabled, not hidden).
  */
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { useAuth } from '@/lib/AuthContext';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import { WorkforcePlanView } from '@/components/workforce/WorkforcePlanView';
 
 export default function WorkforcePlanPage() {
   const t = useTranslations('workforcePlan');
-  const router = useRouter();
-  const { isAuthenticated, hasTenant } = useAuth();
+  const allowed = useRequireAuth();
 
-  useEffect(() => {
-    if (!isAuthenticated) router.replace('/login');
-    else if (!hasTenant) router.replace('/tenants');
-  }, [isAuthenticated, hasTenant, router]);
-
-  if (!isAuthenticated || !hasTenant) return null;
+  if (!allowed) return null;
 
   return (
     <PageContainer>

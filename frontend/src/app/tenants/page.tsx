@@ -4,6 +4,7 @@ import { Icon } from '@/components/ui/Icon';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import { getDefaultTenantId, setDefaultTenantId, clearDefaultTenantId, createTenant as apiCreateTenant, renameTenant as apiRenameTenant } from '@/lib/auth';
 import type { Tenant } from '@/lib/types';
 
@@ -34,12 +35,9 @@ export default function TenantsPage() {
   const [isRenaming, setIsRenaming] = useState(false);
   const autoSelectAttempted = useRef(false);
 
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace('/login');
-    }
-  }, [isAuthenticated, router]);
+  // The workspace picker is the one authed page that must NOT require a tenant —
+  // choosing one is what it is for.
+  const allowed = useRequireAuth({ requireTenant: false });
 
   // Load tenants
   useEffect(() => {
@@ -174,7 +172,7 @@ export default function TenantsPage() {
   // (older token shapes), allow the attempt — the API enforces authorization.
   const canRename = (t: Tenant) => !t.role || t.role === 'owner' || t.role === 'manager';
 
-  if (!isAuthenticated) return null;
+  if (!allowed) return null;
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-deep)', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column' }}>

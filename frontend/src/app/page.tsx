@@ -6,6 +6,7 @@ import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
 import { DemoShowcase } from '@/components/demo/DemoShowcase';
 import { fetchPublicPricing, type PublicPricingPlan } from '@/lib/publicPricing';
+import { AboutAppSection } from '@/components/home/AboutAppSection';
 import { LandingCanvasHero } from '@/components/home/LandingCanvasHero';
 import { MeetCarousel } from '@/components/home/MeetCarousel';
 import { TensionBeat } from '@/components/home/TensionBeat';
@@ -33,9 +34,9 @@ type FaqItem = { question: string; answer: string };
  * announced a structure the content did not have, and eight identical grids gave
  * the reader no sense of moving through anything.
  *
- * The order below is a narrative: start on the canvas → name the problem and
- * resolve it into a workflow → see what it is → watch it work → price →
- * objections → act. Product discovery and comparison now live on the
+ * The order below is a narrative: start on the canvas → say plainly what the
+ * application is → name the problem and resolve it into a workflow → see what
+ * it is → watch it work → price → objections → act. Product discovery and comparison now live on the
  * dedicated product page, where visitors are asking for that depth.
  * Numbering survives in exactly one place, "How it works", because those three
  * steps genuinely are a sequence.
@@ -66,17 +67,23 @@ export default function LandingPage() {
             itself before a word of description. */}
         <LandingCanvasHero />
 
-        {/* 2 · PROBLEM → WORKFLOW — the fragmented-tool tension and the
+        {/* 2 · WHAT THIS IS, IN WORDS — the hero DEMONSTRATES the product; this
+            band states it. Someone who needs the application named and its
+            purpose spelled out (including which connected-service permissions it
+            asks for) should not have to infer either from a board. */}
+        <AboutAppSection />
+
+        {/* 3 · PROBLEM → WORKFLOW — the fragmented-tool tension and the
             three-step answer are one argument, not two disconnected sections. */}
         <TensionBeat />
 
-        {/* 3 · WHAT IT IS — the rotating Create → Evermind → governed-delivery story. */}
+        {/* 4 · WHAT IT IS — the rotating Create → Evermind → governed-delivery story. */}
         <MeetCarousel />
 
-        {/* 4 · SEE IT RUN */}
+        {/* 5 · SEE IT RUN */}
         <DemoShowcase />
 
-        {/* 5 · WHAT IT COSTS */}
+        {/* 6 · WHAT IT COSTS */}
         <HomeSection id="pricing">
           <HomeSectionHeader eyebrow={t('home.pricingHeading')} title={t('home.pricingTitle')} />
           <div className={styles.pricingPlans}>
@@ -99,14 +106,14 @@ export default function LandingPage() {
           </div>
         </HomeSection>
 
-        {/* 6 · OBJECTIONS — answered immediately before the ask, which is where
+        {/* 7 · OBJECTIONS — answered immediately before the ask, which is where
             they actually surface. */}
         <HomeSection>
           <HomeSectionHeader eyebrow={t('home.beat.questions')} title={t('home.faqHeading')} />
           <MarketingFaq items={t.raw('home.homepageFaq') as FaqItem[]} openFirst />
         </HomeSection>
 
-        {/* 7 · THE ASK */}
+        {/* 8 · THE ASK */}
         <CreationCtaSection />
 
         {/* Secondary. Below the ask on purpose — these used to sit between the

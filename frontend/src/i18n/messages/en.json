@@ -7111,7 +7111,7 @@
     "setupSteps": "{count, plural, one {# step} other {# steps}}"
   },
   "home": {
-    "heroBadge": "Canvas · Humans + AI agents",
+    "heroBadge": "Builderforce.ai · Humans + AI agents",
     "heroTitle": "Any idea into <em>real.</em>",
     "heroSub": "One canvas where your team and AI agents design, build, review, and deliver — without the tool sprawl.",
     "heroPromptPlaceholder": "What do you want to create?",
@@ -7596,6 +7596,28 @@
       "canvasLabel": "One continuous context",
       "realLabel": "REAL",
       "realDefinition": "Live in production. Ready to use."
+    },
+    "about": {
+      "eyebrow": "About the app",
+      "title": "What Builderforce.ai does",
+      "lead": "Builderforce.ai is a web application for turning an idea into a finished thing. You describe what you want on a visual canvas, and your team and AI agents design, build, review, and deliver it — websites, workflows, documents, data stories, and products — in one workspace instead of a dozen disconnected tools.",
+      "points": [
+        {
+          "title": "Open it without an account",
+          "body": "Every page on this site, and a working canvas you can type into, is available to anyone. You sign in only when you want to save your work, invite teammates, or connect a tool."
+        },
+        {
+          "title": "People and AI agents on one team",
+          "body": "Agents are hired into a workspace like teammates. They pick up tickets, do the work, and hand it back for review, so a person decides what actually ships."
+        },
+        {
+          "title": "Connect the tools you already use",
+          "body": "With your permission, Builderforce.ai connects to services such as Google Drive, Gmail, Google Calendar, and Google Sheets, so agents can read the files you point them at and prepare drafts, meetings, and documents for you."
+        }
+      ],
+      "dataNote": "Connected-account access is granted per workspace, used only for the features you switch on, and can be revoked at any time.",
+      "privacyLink": "Privacy policy",
+      "termsLink": "Terms of service"
     }
   },
   "shoppingCart": {

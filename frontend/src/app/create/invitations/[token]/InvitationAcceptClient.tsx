@@ -23,7 +23,7 @@ const replaceLocation = (path: string) => window.location.replace(path);
  */
 export default function InvitationAcceptClient({ token, navigate = replaceLocation }: { token: string; navigate?: (path: string) => void }) {
   const t = useTranslations('creationInvitation');
-  const { isAuthenticated, fetchTenants, selectTenant, logout } = useAuth();
+  const { authReady, isAuthenticated, fetchTenants, selectTenant, logout } = useAuth();
   const [status, setStatus] = useState(isAuthenticated ? t('joining') : t('signInPrompt'));
   const [failed, setFailed] = useState(false);
   const back = signInHref(`/create/invitations/${token}`);
@@ -33,6 +33,9 @@ export default function InvitationAcceptClient({ token, navigate = replaceLocati
       setStatus(t('invalidLink'));
       return;
     }
+    // Don't ask an already-signed-in invitee to sign in during the frame before
+    // the stored session has been read (see `authReady`).
+    if (!authReady) return;
     if (!isAuthenticated) {
       setStatus(t('signInPrompt'));
       return;
@@ -49,7 +52,7 @@ export default function InvitationAcceptClient({ token, navigate = replaceLocati
       setStatus(error instanceof Error ? error.message : t('notAccepted'));
       setFailed(true);
     });
-  }, [fetchTenants, isAuthenticated, navigate, selectTenant, t, token]);
+  }, [authReady, fetchTenants, isAuthenticated, navigate, selectTenant, t, token]);
 
   return <main style={{ minHeight: '100%', display: 'grid', placeItems: 'center', padding: 'var(--space-6)' }}>
     <Surface tone="raised" padding="lg" aria-live="polite" style={{ width: 'min(460px, 100%)', textAlign: 'center', display: 'grid', gap: 'var(--space-4)', justifyItems: 'center' }}>

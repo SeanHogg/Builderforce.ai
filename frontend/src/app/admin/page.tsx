@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import PageContainer from '@/components/PageContainer';
 import { EmulationLauncherProvider } from '@/components/admin/EmulationLauncher';
 import { DestinationIndex } from '@/components/shell/DestinationIndex';
@@ -40,7 +41,6 @@ import FeedbackPanel from '@/components/admin/panels/FeedbackPanel';
 import PricingPanel from '@/components/admin/panels/PricingPanel';
 import OutcomeMetricsPanel from '@/components/admin/panels/OutcomeMetricsPanel';
 import EmailDeliveriesPanel from '@/components/admin/panels/EmailDeliveriesPanel';
-import { signInHref } from '@/lib/auth';
 
 /**
  * Platform Admin shell — a THIN router.
@@ -96,17 +96,14 @@ export default function AdminPage() {
   const { user, isAuthenticated } = useAuth();
   const isSuperadmin = Boolean(user?.isSuperadmin);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace(signInHref('/admin'));
-      return;
-    }
-    if (isAuthenticated && !isSuperadmin) {
-      router.replace('/dashboard');
-    }
-  }, [isAuthenticated, isSuperadmin, router]);
+  const allowed = useRequireAuth({ returnTo: '/admin', requireTenant: false });
 
-  if (!isAuthenticated || !isSuperadmin) return null;
+  useEffect(() => {
+    if (!allowed || isSuperadmin) return;
+    router.replace('/dashboard');
+  }, [allowed, isSuperadmin, router]);
+
+  if (!allowed || !isSuperadmin) return null;
 
   const { group, sub } = resolveAdminRoute(searchParams?.get('tab') ?? '', searchParams?.get('sub') ?? '');
   const Panel = ADMIN_PANELS[sub.subKey] ?? HealthPanel;

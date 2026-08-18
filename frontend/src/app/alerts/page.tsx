@@ -1,8 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/AuthContext';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 import { AlertsClient } from './AlertsClient';
 
 /**
@@ -11,14 +9,8 @@ import { AlertsClient } from './AlertsClient';
  * inside AlertsClient via <RoleGate capability="alerts.manage">.
  */
 export default function AlertsPage() {
-  const router = useRouter();
-  const { isAuthenticated, hasTenant } = useAuth();
+  const allowed = useRequireAuth();
 
-  useEffect(() => {
-    if (!isAuthenticated) router.replace('/login');
-    else if (!hasTenant) router.replace('/tenants');
-  }, [isAuthenticated, hasTenant, router]);
-
-  if (!isAuthenticated || !hasTenant) return null;
+  if (!allowed) return null;
   return <AlertsClient />;
 }
