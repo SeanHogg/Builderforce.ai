@@ -19575,7 +19575,7 @@
         "switchToFirst": "Cambiar a vista en primera persona (V)",
         "editHint": "Arrastra piezas desde la izquierda · haz clic en un objeto para editarlo a la derecha",
         "viewOnlyHint": "Pulsa Caminar para explorar este espacio",
-        "walkHint": "Haz clic para bloquear el puntero · WASD para moverte · Espacio para saltar · V para cambiar de vista · Esc para liberar",
+        "walkHint": "Haz clic para bloquear el puntero · WASD o flechas para moverte · Espacio para saltar · V para cambiar de vista · Esc para liberar",
         "play": {
           "score": "{collected}/{total} recogidos",
           "hits": "{count} impactos",

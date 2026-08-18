@@ -25,6 +25,7 @@ import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canv
 import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type CanvasSurfaceId } from '@/lib/canvasSurfaces';
 import { canvasChromeShows, readCanvasBarCollapsed, writeCanvasBarCollapsed } from '@/lib/canvasChrome';
 import { canvasApp } from '@/lib/canvasApp';
+import { isTypingTarget } from '@/lib/keyboardTarget';
 import { canvasNodeMessages, canvasPersonOrigin, isCanvasPersonKind, type CanvasNodePanelId } from '@/lib/canvasNodeAffordances';
 import { memberAvatarClass, memberInitials } from './rosterAvatar';
 import {
@@ -2591,7 +2592,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) return;
+      if (isTypingTarget(event.target)) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); return; }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') { event.preventDefault(); redo(); return; }
       const ids = new Set(selectionIds());
@@ -10078,9 +10079,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // the last row of — so the preference is untouched and the prompt floats until the panel
   // comes back, rather than being drawn into a panel that is not there.
   const brainDockDrawn = brainSurfaceOpen && brainPlacement === 'docked' && !surfaceDef.brainIsSurface;
+  // A full-screen surface shrinks the panel to a short card showing only the latest reply
+  // (see `compact` on `BrainDock` below). That card is not a column, so it cannot be a
+  // column's last row: docking the prompt into it left a ~350px card carrying a header, a
+  // full composer and its starting-point picker, with the conversation squeezed to a
+  // clipped line or two between them. The rule the compact card was written around —
+  // "leaves the actual prompt where it already lives: centred, bottom of the page" — is
+  // now enforced rather than only described.
+  const brainDockCompact = !surfaceDef.showsBoard;
+  const brainDockHostsPrompt = brainDockDrawn && !brainDockCompact;
   const effectivePromptPlacement: CanvasPromptPlacement = surfaceDef.brainIsSurface
     ? 'float'
-    : promptPlacement === 'docked' && !brainDockDrawn ? 'float' : promptPlacement;
+    : promptPlacement === 'docked' && !brainDockHostsPrompt ? 'float' : promptPlacement;
   const promptInBrainPanel = effectivePromptPlacement === 'docked';
   const composer = !presentMode && effectivePromptPlacement !== 'closed' && <div
     // Measured ONLY while it floats over the board. In the Brain panel it is that panel's
@@ -10944,7 +10954,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           // only the latest reply — the tabs and the scrolling history are what a board
           // session needs, not a one-shot question about the object on screen — and
           // leaves the actual prompt where it already lives: centred, bottom of the page.
-          compact={!surfaceDef.showsBoard}
+          compact={brainDockCompact}
           mode={brainPlacement}
           side={brainDock.side}
           size={brainDock.size}

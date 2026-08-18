@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { addProp, canvasWorldSceneFrom, deleteProp, type CanvasWorldPropKind, type CanvasWorldScene } from '@builderforce/creation-canvas-contract';
+import { isTypingTarget } from '@/lib/keyboardTarget';
 import styles from './CreationCanvas.module.css';
 import { CanvasFullscreenAction } from './CanvasFullscreenAction';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
@@ -72,8 +73,7 @@ export function CanvasWorldView({ data, onExit, onEdit }: CanvasWorldViewProps) 
     const onKey = (event: KeyboardEvent) => {
       if (!selectedPropId) return;
       if (event.code !== 'Delete' && event.code !== 'Backspace') return;
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+      if (isTypingTarget(event.target)) return;
       changeScene(deleteProp(scene, selectedPropId));
       setSelectedPropId(null);
     };

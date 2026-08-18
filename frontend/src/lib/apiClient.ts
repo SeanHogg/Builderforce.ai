@@ -164,11 +164,50 @@ export class ApiRequestError extends Error {
   }
 }
 
+/**
+ * The OpenAI-style envelope the gateway emits when the model cascade is
+ * exhausted: `{ error: { message, code, type, details } }`. The flat gateway
+ * shape puts a plain STRING in `error` instead, so on the wire this field is
+ * genuinely a union — and typing it `string` is precisely how an object reached
+ * React as a child ("Objects are not valid as a React child (found: object with
+ * keys {message, code, type, details})") from whichever banner rendered the
+ * message. The SDK's `httpClient.toApiError` unwraps the same three shapes for
+ * the same reason; this is that unwrap for the browser client.
+ */
+interface ApiErrorEnvelope {
+  message?: string;
+  /** The gateway sends the HTTP status here as a NUMBER (`"code": 429`) while
+   *  the flat shape sends a string slug (`plan_token_limit_exceeded`). */
+  code?: string | number;
+  type?: string;
+  details?: unknown;
+}
+
 interface ApiErrorBody {
-  error?: string;
-  code?: string;
+  error?: string | ApiErrorEnvelope;
+  code?: string | number;
   message?: string;
   details?: unknown;
+}
+
+/**
+ * Flatten either envelope to the three fields the rest of this module reads, so
+ * no call site has to know which shape the gateway picked. One unwrap, used by
+ * every transport — the alternative is each reader re-deciding, and the one that
+ * forgets renders an object.
+ */
+function flattenErrorBody(body: ApiErrorBody): { message?: string; code?: string; details?: unknown } {
+  const nested = typeof body.error === 'object' && body.error !== null ? body.error : null;
+  const flatMessage = typeof body.error === 'string' ? body.error : undefined;
+  const message = body.message ?? nested?.message ?? flatMessage;
+  const code = body.code ?? nested?.code;
+  return {
+    // Never hand back a non-string: everything downstream of this renders or
+    // reports it, and the whole point of this unwrap is that none of them can.
+    ...(typeof message === 'string' ? { message } : {}),
+    ...(code === undefined ? {} : { code: String(code) }),
+    details: body.details ?? nested?.details,
+  };
 }
 
 /**
@@ -187,7 +226,8 @@ async function readErrorBody(res: Response): Promise<ApiErrorBody> {
  *  (for example the task Done gate). Prefer the explanation in the UI while
  *  retaining `code` for diagnostics. */
 function errorMessage(body: ApiErrorBody, res: Response): string {
-  return body.message || body.error || res.statusText || `Request failed (${res.status})`;
+  const { message } = flattenErrorBody(body);
+  return message || res.statusText || `Request failed (${res.status})`;
 }
 
 /**
@@ -230,19 +270,23 @@ async function reportApiFailure(
   hadToken: boolean,
 ): Promise<ApiErrorBody> {
   const body = await readErrorBody(res);
+  // Read through the same unwrap as the message: a cascade-exhausted 429 carries
+  // its code and details nested too, so reading them off the top level alone
+  // dropped the one code that explains the failure.
+  const { code, details } = flattenErrorBody(body);
   // A terms bump is a GATE, not a fault — it routes the user to the acceptance
   // screen rather than the support-ticket toast. Signalled before the
   // `expectedErrors` check so the gate heals whichever call happens to hit it
   // first, including one whose caller opted out of the error surface.
-  const gated = signalTermsGate(res.status, body.code);
+  const gated = signalTermsGate(res.status, code);
   if (!gated && !isAnonymousUnauthorized(res.status, hadToken) && !expectedErrors?.includes(res.status)) {
     dispatchApiError({
       method: method.toUpperCase(),
       url,
       status: res.status,
-      code: body.code,
+      code,
       message: errorMessage(body, res),
-      details: body.details,
+      details,
       requestId: res.headers.get('x-request-id') ?? undefined,
     });
   }
@@ -258,7 +302,10 @@ async function reportAndThrow(
   hadToken: boolean,
 ): Promise<never> {
   const body = await reportApiFailure(res, url, method, expectedErrors, hadToken);
-  throw new ApiRequestError(errorMessage(body, res), res.status, body.code, body.details);
+  // Through the same unwrap as the toast: a caller that catches this reads the
+  // nested code and details too, and never a raw numeric `code`.
+  const { code, details } = flattenErrorBody(body);
+  throw new ApiRequestError(errorMessage(body, res), res.status, code, details);
 }
 
 /**

@@ -169,3 +169,60 @@ describe('gate signals', () => {
     window.removeEventListener(API_ERROR_EVENT, onGlobalError);
   });
 });
+
+/**
+ * The gateway answers a cascade-exhausted 429 with OpenAI's envelope, nesting
+ * the real fields one level down: `{ error: { message, code, type, details } }`.
+ * Read as the flat shape, `error` is an OBJECT — and it was handed straight to
+ * the error toast, which rendered it as a React child and took the canvas down
+ * with "Objects are not valid as a React child (found: object with keys
+ * {message, code, type, details})".
+ */
+describe('apiRequest nested gateway error envelope', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  function cascadeExhaustedResponse(): Response {
+    return new Response(JSON.stringify({
+      error: {
+        message: 'Image vendor cascade exhausted. Retry shortly or simplify the prompt.',
+        code: 429,
+        type: 'rate_limit_error',
+        details: { failovers: [{ model: 'together/Lykon/DreamShaper', vendor: 'together', code: 0 }] },
+      },
+    }), { status: 429, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  it('throws the nested message as a string, never the envelope object', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(cascadeExhaustedResponse());
+
+    await expect(apiRequest('/llm/v1/images/generations', { method: 'POST' }))
+      .rejects.toThrow('Image vendor cascade exhausted. Retry shortly or simplify the prompt.');
+  });
+
+  it('reports a string message and the nested code, so the toast can render it', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(cascadeExhaustedResponse());
+    let detail: { message?: unknown; code?: unknown; details?: unknown } | undefined;
+    const onGlobalError = ((event: Event) => { detail = (event as CustomEvent).detail; }) as EventListener;
+    window.addEventListener(API_ERROR_EVENT, onGlobalError);
+
+    await expect(apiRequest('/llm/v1/images/generations', { method: 'POST' })).rejects.toThrow();
+
+    expect(typeof detail?.message).toBe('string');
+    expect(detail?.message).toContain('cascade exhausted');
+    // The numeric `code: 429` is normalised to a string for every consumer.
+    expect(detail?.code).toBe('429');
+    expect(detail?.details).toMatchObject({ failovers: expect.any(Array) });
+    window.removeEventListener(API_ERROR_EVENT, onGlobalError);
+  });
+
+  /** The flat envelope is still the common one and must not regress. */
+  it('still reads the flat string envelope', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ error: 'message is required' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } },
+    ));
+
+    await expect(apiRequest('/api/quality-ingest/product-report', { method: 'POST' }))
+      .rejects.toThrow('message is required');
+  });
+});

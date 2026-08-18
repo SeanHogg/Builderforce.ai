@@ -19575,7 +19575,7 @@
         "switchToFirst": "切换到第一人称视角（V）",
         "editHint": "从左侧拖入部件 · 点击道具在右侧编辑",
         "viewOnlyHint": "按“行走”探索此空间",
-        "walkHint": "点击锁定指针 · WASD 移动 · 空格跳跃 · V 切换视角 · Esc 释放",
+        "walkHint": "点击锁定指针 · WASD 或方向键移动 · 空格跳跃 · V 切换视角 · Esc 释放",
         "play": {
           "score": "已收集 {collected}/{total}",
           "hits": "受击 {count} 次",

@@ -44,6 +44,32 @@ export async function reportProductApiError(
   return sendProductError({ ...input, source: 'api-client' }, endpoint);
 }
 
+/**
+ * A report must survive a bad `message` rather than be rejected for one.
+ *
+ * A caller in a crash path is exactly where a non-string slips past the type:
+ * the gateway's nested 429 envelope (`{ error: { message, code, type, details } }`)
+ * did precisely that, and the ingest answered `400 {"error":"message is
+ * required"}` — so the one request whose entire job is to preserve the
+ * diagnostic threw it away, silently, at the moment it mattered most.
+ * `apiClient` no longer produces an object message; this is the floor
+ * underneath it, for every caller and every future envelope shape.
+ */
+function reportMessage(message: unknown): string {
+  if (typeof message === 'string' && message.trim()) return message;
+  if (message instanceof Error && message.message) return message.message;
+  // An object here is a bug upstream, but a readable report beats a lost one.
+  if (message !== null && message !== undefined) {
+    try {
+      const serialized = JSON.stringify(message);
+      if (serialized && serialized !== '{}') return serialized;
+    } catch {
+      /* circular — fall through to the constant below */
+    }
+  }
+  return 'Unknown error (no message supplied)';
+}
+
 async function sendProductError(
   input: ReportErrorInput & { source: 'manual' | 'api-client'; context?: Record<string, unknown> },
   endpoint: string,
@@ -52,7 +78,7 @@ async function sendProductError(
     method: 'POST',
     auth: 'none',
     baseUrl: endpoint.replace(/\/$/, ''),
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, message: reportMessage(input.message) }),
     // The panel renders ingest failures itself; do not create another global
     // API-error toast (and another automatic product report) for this request.
     expectedErrors: PRODUCT_REPORT_ERROR_STATUSES,

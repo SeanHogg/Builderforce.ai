@@ -4,6 +4,7 @@ import { CapsuleCollider, RigidBody, useRapier, type RapierRigidBody } from '@re
 import { PointerLockControls } from '@react-three/drei';
 import { Group, Vector3, type PerspectiveCamera as ThreePerspectiveCamera } from 'three';
 import type { CanvasWorldTransform } from '@builderforce/creation-canvas-contract';
+import { isTypingTarget } from '@/lib/keyboardTarget';
 import { AvatarFigure } from './PlayerAvatar';
 
 /**
@@ -28,6 +29,24 @@ const EYE_HEIGHT = 0.7;
 const THIRD_PERSON_DISTANCE = 5;
 const THIRD_PERSON_HEIGHT = 1.2;
 const CAMERA_WALL_PADDING = 0.4;
+
+/**
+ * The keys the walker owns while it is walking, and the reason it takes them.
+ *
+ * Every one of these has a default action in a browser: the arrows and Space scroll the
+ * document. The canvas that hosts this runtime scrolls, so walking backwards scrolled
+ * the page out from under the game and jumping paged it down — the walker moved, and the
+ * view it moved in did not stay put, which reads as arrow keys that "don't work". A key
+ * this controller reads is a key the browser does not get to act on as well.
+ *
+ * `isTypingTarget` is what keeps that from stealing the arrows out of the prompt sitting
+ * on the same page: a keystroke aimed at a field is never a movement key.
+ */
+const MOVEMENT_KEYS = new Set([
+  'KeyW', 'KeyA', 'KeyS', 'KeyD',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'Space', 'KeyJ',
+]);
 
 export const DEFAULT_WALKER_COLOR = '#38bdf8';
 
@@ -56,13 +75,24 @@ export default function PlayerController({
   const { rapier, world } = useRapier();
 
   useEffect(() => {
-    const down = (e: KeyboardEvent) => { keysRef.current.add(e.code); };
+    const down = (e: KeyboardEvent) => {
+      if (!MOVEMENT_KEYS.has(e.code) || isTypingTarget(e.target)) return;
+      e.preventDefault();
+      keysRef.current.add(e.code);
+    };
     const up = (e: KeyboardEvent) => { keysRef.current.delete(e.code); };
+    // A key released while this window is in the background never reports its keyup, so
+    // the walker would come back from a tab switch still running in the last direction
+    // it was pushed, with no key to press to stop it.
+    const clear = () => { keysRef.current.clear(); };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
+    window.addEventListener('blur', clear);
     return () => {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', clear);
+      keysRef.current.clear();
     };
   }, []);
 

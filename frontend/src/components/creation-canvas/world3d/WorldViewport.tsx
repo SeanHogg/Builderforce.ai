@@ -8,6 +8,7 @@ import { useEffect, useState, type DragEventHandler, type ReactNode } from 'reac
 import { useTranslations } from 'next-intl';
 import { Canvas } from '@react-three/fiber';
 import type { CanvasWorldScene } from '@builderforce/creation-canvas-contract';
+import { isTypingTarget } from '@/lib/keyboardTarget';
 import styles from '../CreationCanvas.module.css';
 import Scene3D from './Scene3D';
 import { DEFAULT_WALKER_COLOR } from './PlayerController';
@@ -75,8 +76,7 @@ export function WorldViewport({
     if (mode !== 'walk') return;
     const onKey = (event: KeyboardEvent) => {
       if (event.code !== 'KeyV') return;
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+      if (isTypingTarget(event.target)) return;
       setCameraView((view) => (view === 'first' ? 'third' : 'first'));
     };
     window.addEventListener('keydown', onKey);

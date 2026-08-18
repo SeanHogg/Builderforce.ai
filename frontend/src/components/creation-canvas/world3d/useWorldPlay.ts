@@ -53,6 +53,28 @@ export interface WorldPlay {
 
 const EMPTY: WorldPlayState = { collected: [], total: 0, hits: 0, won: false, playable: false };
 
+/**
+ * How long a hazard stays spent after it bites, in milliseconds.
+ *
+ * "One respawn per touch" is not enough on its own, because a respawn is itself a way
+ * back into the hazard: the walker leaves the sensor (a genuine exit), falls from a
+ * spawn that sits above or inside the same hazard, and enters it again — a new overlap,
+ * a new event, another respawn. That loop is not hypothetical. It counted 2,076 hits on
+ * a Roblox place while the player stood still, and because `PlayerController` teleports
+ * the walker to spawn and zeroes its velocity on every bump of `respawnNonce`, the
+ * player was pinned: no key, WASD or arrow, could move a body that was being put back
+ * every frame.
+ *
+ * A wall-clock cooldown is the guard that holds whatever shape the level is, because it
+ * does not depend on the level being well-built. The walker is teleported at most once
+ * per window, so it always has time to walk out of whatever bit it.
+ */
+const HAZARD_COOLDOWN_MS = 1200;
+
+function now(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
 export function useWorldPlay(scene: CanvasWorldScene, active: boolean): WorldPlay {
   const total = useMemo(() => scene.props.filter((prop) => prop.kind === 'collectible').length, [scene.props]);
   const hasGoal = useMemo(() => scene.props.some((prop) => prop.kind === 'goal'), [scene.props]);
@@ -71,20 +93,34 @@ export function useWorldPlay(scene: CanvasWorldScene, active: boolean): WorldPla
   // one inline would reset the run on every render, which is a loop rather than
   // a wrong score.
   useEffect(() => {
+    collectedRef.current = new Set();
+    hazardAtRef.current = Number.NEGATIVE_INFINITY;
     setCollected([]);
     setHits(0);
     setWon(false);
   }, [scene, active]);
 
-  // Rapier fires intersections continuously while the collider overlaps, and
-  // the state updates below are async — so a single hazard touch would count as
-  // a dozen without a ref that settles synchronously.
+  // Every value `onPlayerEnter` reads lives in a ref, because the callback's IDENTITY
+  // is load-bearing: it is handed to each sensor prop as a Rapier collision handler, and
+  // a handler that changes re-registers the collider it is attached to. The old callback
+  // listed `respawnNonce` in its dependencies, so bumping the nonce rebuilt the callback,
+  // which re-registered every sensor, which re-fired the overlap that bumped the nonce.
+  // The guard could not stop it either: it was derived from `respawnNonce` too, so it
+  // re-armed on the very bump it existed to suppress and only ever deduped within one
+  // render generation. One stable callback plus a wall-clock cooldown breaks both halves.
   const collectedRef = useRef<Set<string>>(new Set());
-  const hazardLockRef = useRef(0);
+  const hazardAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const activeRef = useRef(active);
+  const totalRef = useRef(total);
   useEffect(() => { collectedRef.current = new Set(collected); }, [collected]);
+  useEffect(() => { activeRef.current = active; }, [active]);
+  useEffect(() => { totalRef.current = total; }, [total]);
 
   const restart = useCallback(() => {
     collectedRef.current = new Set();
+    // A deliberate restart earns the same grace a hazard touch does: pressing Respawn
+    // while standing in the fire must not be answered by the fire immediately.
+    hazardAtRef.current = now();
     setCollected([]);
     setHits(0);
     setWon(false);
@@ -92,7 +128,7 @@ export function useWorldPlay(scene: CanvasWorldScene, active: boolean): WorldPla
   }, []);
 
   const onPlayerEnter = useCallback((prop: CanvasWorldProp) => {
-    if (!active) return;
+    if (!activeRef.current) return;
     if (prop.kind === 'collectible') {
       if (collectedRef.current.has(prop.id)) return;
       collectedRef.current.add(prop.id);
@@ -100,16 +136,17 @@ export function useWorldPlay(scene: CanvasWorldScene, active: boolean): WorldPla
       return;
     }
     if (prop.kind === 'hazard') {
-      // One respawn per touch, not one per frame of overlap.
-      const now = respawnNonce;
-      if (hazardLockRef.current === now + 1) return;
-      hazardLockRef.current = now + 1;
+      // One respawn per cooldown window — see HAZARD_COOLDOWN_MS for what happens
+      // without it on a level whose spawn point sits over its own hazard.
+      const at = now();
+      if (at - hazardAtRef.current < HAZARD_COOLDOWN_MS) return;
+      hazardAtRef.current = at;
       setHits((value) => value + 1);
       setRespawnNonce((value) => value + 1);
       return;
     }
-    if (prop.kind === 'goal' && collectedRef.current.size >= total) setWon(true);
-  }, [active, respawnNonce, total]);
+    if (prop.kind === 'goal' && collectedRef.current.size >= totalRef.current) setWon(true);
+  }, []);
 
   const playScene = useMemo<CanvasWorldScene>(
     () => (!active || collected.length === 0

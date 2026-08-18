@@ -19575,7 +19575,7 @@
         "switchToFirst": "Switch to first-person view (V)",
         "editHint": "Drag pieces from the left · click a prop to edit it on the right",
         "viewOnlyHint": "Press Walk to explore this space",
-        "walkHint": "Click to lock the pointer · WASD to move · Space to jump · V to switch view · Esc to release",
+        "walkHint": "Click to lock the pointer · WASD or arrow keys to move · Space to jump · V to switch view · Esc to release",
         "play": {
           "score": "{collected}/{total} collected",
           "hits": "{count} hits",

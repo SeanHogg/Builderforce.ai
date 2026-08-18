@@ -19575,7 +19575,7 @@
         "switchToFirst": "Zur Ich-Perspektive wechseln (V)",
         "editHint": "Bauteile von links ziehen · Objekt anklicken, um es rechts zu bearbeiten",
         "viewOnlyHint": "„Laufen“ drücken, um diesen Raum zu erkunden",
-        "walkHint": "Klicken, um den Zeiger zu sperren · WASD zum Bewegen · Leertaste zum Springen · V zum Ansicht wechseln · Esc zum Freigeben",
+        "walkHint": "Klicken, um den Zeiger zu sperren · WASD oder Pfeiltasten zum Bewegen · Leertaste zum Springen · V zum Ansicht wechseln · Esc zum Freigeben",
         "play": {
           "score": "{collected}/{total} eingesammelt",
           "hits": "{count} Treffer",
