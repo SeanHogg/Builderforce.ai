@@ -1164,7 +1164,7 @@ describe('CreationCanvas', () => {
     // as the price of sharing it. This assertion used to expect an account gate
     // here; guest rooms superseded that, and the gate would now break the very
     // flow the share panel exists for.
-    fireEvent.click(screen.getByRole('button', { name: /Share/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
     expect(screen.getByRole('dialog', { name: 'Invite collaborators' })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: /Create an account/ })).not.toBeInTheDocument();
   });

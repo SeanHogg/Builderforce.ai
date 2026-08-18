@@ -1,3 +1,53 @@
+## ✅ RESOLVED 2026-08-18 — The live session covered the app it was a session of, and "Live" meant two different things
+
+Reported from a live call on `/create/<id>`: going live printed the call bar over the canvas
+command bar, and switching a camera on dropped the self-view tile onto the Brain composer.
+
+**Root cause.** `CreationCanvas` measures every piece of floating chrome with `useChromeSpace` and
+publishes a reserved band for it — `--composer-space`, `--canvas-command-bar-space`,
+`--canvas-top-chrome-space`, `--brain-dock-left/right`. `LiveBar` is mounted in
+`ConditionalAppShell`, OUTSIDE that system: `position: fixed; bottom: 0; z-index: 60`, publishing
+nothing. The command bar sits at `bottom: 14px` and is ~40px tall, so a 46px bar at `bottom: 0`
+buried 32 of its 40 pixels; the filmstrip at `right: 12px; bottom: 58px` landed on the Brain
+panel's composer, which is pinned to the same edge. `useChromeSpace`'s own header already names
+this failure mode — the live bar was simply the one piece of chrome that never joined.
+
+**The fix (one producer, one consumer).** `LiveBar` is now a DOCK that measures itself and
+publishes `--live-dock-space` on the document root; `.app-frame` subtracts that band from the
+shell height. The shell gets shorter, so the canvas, its absolutely positioned chrome and the
+Brain panel clear the dock by construction rather than each learning its height. The floating
+filmstrip is gone — tiles are a row of the dock, so there is one live surface and its footprint
+is the number the shell reserves. Everyone on the call has a tile (video or initials), the
+speaking ring is drawn from `speaking` (member refs, not peer ids), and the dock collapses to a
+34px pill that still reserves exactly what it occupies.
+
+**The room moved out of the header.** `LiveSessionChip` lived in `TopBar` beside the workspace
+switcher, so a call was STARTED in the top-right corner and OPERATED in a band at the bottom — two
+homes for one control. The chip is deleted; its dormant "Start call" state is the idle form of the
+dock itself. The room-target logic it owned (room key `canvas:<sessionId>`, scope label, the
+"is there anything to anchor a room to" gate) is extracted to `lib/live/useCanvasLiveRoom.ts` so
+the second affordance did not have to import a button for its logic.
+
+**The lexicon.** Six controls used three overlapping words. Now: `Live` → **Synced** (the autosave
+socket, `creationCanvas.live`); `Start live session` / `Live · N here` → **Start call** / **N on
+call**; `Share` → **Invite** (a person, `creationCanvas.share`); `Present screen` → **Share
+screen** (a display); `Present` → **Follow me** / **Stop leading** (a viewport); `Publish`
+unchanged. The `liveChip` namespace is removed and `liveBar` rewritten across all five catalogs
+with real translations.
+
+**Files.** `components/live/LiveBar.tsx` + `.module.css` (rewritten), `lib/live/useCanvasLiveRoom.ts`
+(new), `components/TopBar.tsx` (chip removed), `components/live/LiveSessionChip.tsx` +
+`.module.css` (deleted), `app/globals.css` (`--live-dock-space` declared + `.app-frame` subtracts
+it), `i18n/messages/{en,zh,es,fr,de}.json`, `scripts/check-design-scale.mjs` (shrink-only baseline
+3779 → 3778 for the deleted stylesheet).
+
+**Verified.** `tsgo --noEmit` clean; all 10 frontend guards pass (design tokens, design scale,
+i18n keys, architecture ratchet, declared deps, edge runtime, route exports, api transport,
+destinations, methodology). Dock is token-only in both themes and reflows to two rows with 40px
+targets under 720px.
+
+Design canvas: https://claude.ai/code/artifact/05a9d1fa-b024-4469-a50a-f3fa0725be6a
+
 ## ✅ RESOLVED 2026-08-18 — Gmail connect died at Google, and the Terms/Privacy documents had no URL to give it
 
 Reported from a live "Connect inbox" attempt: `Error 400: redirect_uri_mismatch` for

@@ -1,10 +1,16 @@
 /*
  * Shell-themed chrome, driven entirely by design tokens so both themes are
- * covered by construction. The STAGE below declares its own palette; this bar
+ * covered by construction. The STAGE above declares its own palette; this dock
  * does not, and must never reach into the board's variables.
+ *
+ * The dock is `position: fixed` at the bottom, but it does NOT float over the
+ * app: it measures itself into `--live-dock-space` and `.app-frame` subtracts
+ * that band from the shell's height, so the strip it occupies is empty by
+ * construction. Fixed positioning here is only about surviving the scroll of
+ * whatever surface is on screen — never about drawing on top of it.
  */
 
-.bar {
+.dock {
   position: fixed;
   left: 0;
   right: 0;
@@ -12,15 +18,76 @@
   z-index: 60;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-height: 46px;
-  padding: 7px clamp(8px, 2vw, 14px);
+  gap: 10px;
+  box-sizing: border-box;
+  padding: 8px clamp(8px, 2vw, 14px);
   background: var(--surface-panel, var(--bg-elevated));
   border-top: 1px solid var(--border-subtle);
-  box-shadow: 0 -4px 18px var(--shadow-color);
+  box-shadow: 0 -6px 22px -12px var(--shadow-color, var(--shadow-coral-soft));
   font-size: var(--font-size-small);
   color: var(--text-secondary);
+}
+
+/* Dormant: the room does not exist yet, so the dock is a single control and a
+   line of explanation — the smallest thing that can still be its own home. */
+.dock[data-state='idle'] {
+  gap: 12px;
+  padding-block: 6px;
+}
+
+.dock[data-state='collapsed'] {
+  gap: 8px;
+  padding-block: 5px;
+}
+
+.start {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-full);
+  background: var(--accent-subtle);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--duration-fast, 0.14s), border-color var(--duration-fast, 0.14s);
+}
+
+.start:hover {
+  background: var(--surface-interactive-hover);
+  border-color: var(--border-accent);
+}
+
+.start:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: var(--font-size-eyebrow);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: none;
+  min-width: 0;
+}
+
+.identityLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .pulse {
@@ -37,47 +104,11 @@
   50% { opacity: 0.35; }
 }
 
-.who {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-full, 50%);
-  display: grid;
-  place-items: center;
-  font-size: var(--font-size-field-label);
-  font-weight: 700;
-  background: var(--surface-interactive);
-  color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
-}
-
-.avatarSelf {
-  background: var(--accent-subtle);
-  border-color: var(--border-accent);
-}
-
-/* A live camera is the one thing on this bar worth an unmissable ring. */
-.avatar[data-cam='1'] {
-  box-shadow: 0 0 0 2px var(--error);
-}
-
-.more {
-  font-size: var(--font-size-eyebrow);
-  color: var(--text-muted);
-  padding-left: 2px;
-}
-
 .anchor {
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: 700;
   text-decoration: none;
-  max-width: 22ch;
+  max-width: 20ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -87,100 +118,58 @@
   text-decoration: underline;
 }
 
-.ctl {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: var(--surface-interactive);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font: inherit;
+.count {
+  color: var(--text-muted);
   font-size: var(--font-size-eyebrow);
-  padding: 5px 9px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: border-color var(--duration-fast, 0.14s), color var(--duration-fast, 0.14s), background var(--duration-fast, 0.14s);
-}
-
-.ctl:hover {
-  color: var(--text-primary);
-  border-color: var(--border-accent);
-}
-
-.ctl:focus-visible {
-  outline: 2px solid var(--focus-color);
-  outline-offset: 2px;
-}
-
-/* "On" is a state you must be able to read at a glance from across the room —
-   colour alone would not survive a colour-vision difference, so the border and
-   the label text change with it. */
-.ctl[data-on='1'] {
-  background: var(--accent-subtle);
-  border-color: var(--border-accent);
-  color: var(--text-primary);
-}
-
-.leave {
-  border-color: var(--error-border);
-  color: var(--error-text);
-}
-
-.leave:hover {
-  background: var(--error-bg);
-  border-color: var(--error-border);
-  color: var(--error-text);
-}
-
-.grow {
-  flex: 1;
-  min-width: 0;
-}
-
-.followPill {
-  font-size: var(--font-size-eyebrow);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--violet-bright);
-  border: 1px solid var(--violet-bright);
-  border-radius: var(--radius-sm);
-  padding: 2px 7px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.error {
-  font-size: var(--font-size-eyebrow);
-  color: var(--error-text);
-  white-space: nowrap;
+.rule {
+  flex: none;
+  width: 1px;
+  align-self: stretch;
+  background: var(--border-subtle);
 }
 
-/* The filmstrip sits ABOVE the bar and over whatever surface is on screen. */
+/* The filmstrip is a ROW OF THE DOCK. It was a separate fixed element pinned to
+   the viewport's right edge, which is where the Brain panel keeps its composer —
+   so turning a camera on covered the box you type into. */
 .film {
-  position: fixed;
-  right: 12px;
-  bottom: 58px;
-  z-index: 59;
   display: flex;
-  gap: 7px;
-  max-width: calc(100vw - 24px);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .tile {
   position: relative;
-  width: 108px;
-  height: 74px;
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 48px;
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: var(--surface-sunken);
+  background: var(--surface-sunken, var(--surface-interactive));
   border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-lg);
   flex-shrink: 0;
 }
 
-.tileSelf {
+.tile[data-self='1'] {
   border-color: var(--border-accent);
+  box-shadow: 0 0 0 1px var(--border-accent);
+}
+
+/* Who is talking, readable at a glance — a ring rather than a colour swap, so
+   it survives a colour-vision difference and does not restyle the tile. */
+.tile[data-speaking='1'] {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.tile[data-avatar='1'] {
+  background: var(--surface-interactive);
 }
 
 .tileVideo {
@@ -188,6 +177,20 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.tileInitials {
+  font-size: var(--font-size-small);
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.tileMuted {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  font-size: var(--font-size-field-label);
+  color: var(--error-text);
 }
 
 .tileLabel {
@@ -204,20 +207,191 @@
   white-space: nowrap;
 }
 
-/* Phones: the bar is the only thing that must stay reachable, so the labels go
-   and the controls become tap targets rather than a wrapped paragraph. */
-@media (max-width: 640px) {
-  .bar {
-    gap: 6px;
-    padding: 6px 8px;
+/* A shared SCREEN is not a face — it is wider, and it says so. */
+.tileLabel[data-sharing='1'] {
+  background: var(--accent);
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+/* One trough per cluster, the same idiom the canvas command bar uses to say
+   "these belong together". */
+.trough {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--surface-interactive);
+}
+
+.ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-eyebrow);
+  font-weight: 600;
+  padding: 5px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--duration-fast, 0.14s), color var(--duration-fast, 0.14s), background var(--duration-fast, 0.14s);
+}
+
+.ctl:hover {
+  color: var(--text-primary);
+  background: var(--surface-interactive-hover);
+}
+
+.ctl:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+.ctl:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* "On" is a state you must be able to read at a glance from across the room —
+   colour alone would not survive a colour-vision difference, so the border and
+   the label text change with it. */
+.ctl[data-on='1'] {
+  background: var(--bg-elevated);
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+}
+
+.leave {
+  flex: none;
+  border-color: var(--error-border);
+  color: var(--error-text);
+  font-weight: 700;
+}
+
+.leave:hover {
+  background: var(--error-bg);
+  border-color: var(--error-border);
+  color: var(--error-text);
+}
+
+.fold {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.fold:hover {
+  background: var(--surface-interactive);
+  color: var(--text-primary);
+}
+
+.fold:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.leadPill {
+  flex: none;
+  font-size: var(--font-size-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.error {
+  flex: none;
+  font-size: var(--font-size-eyebrow);
+  color: var(--error-text);
+  white-space: nowrap;
+}
+
+/* ── Phones ──────────────────────────────────────────────────────────────────
+   Two rows rather than one wrapped paragraph of chips, and real tap targets:
+   the old bar took every label to `font-size: 0` and left five 9px glyphs. The
+   dock still measures itself, so the taller phone layout is reserved too. */
+@media (max-width: 720px) {
+  .dock {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 7px 8px;
   }
 
-  .anchor {
-    max-width: 12ch;
+  .identity {
+    order: 1;
+  }
+
+  .rule {
+    display: none;
+  }
+
+  .film {
+    order: 2;
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  .tile {
+    width: 58px;
+    height: 38px;
+  }
+
+  .grow {
+    display: none;
+  }
+
+  .trough,
+  .leave,
+  .fold {
+    order: 3;
+  }
+
+  .leadPill,
+  .error {
+    order: 4;
+    width: 100%;
   }
 
   .ctl {
-    padding: 7px 9px;
+    min-height: 40px;
+    min-width: 40px;
+    justify-content: center;
+    padding: 0 10px;
     font-size: 0;
     gap: 0;
   }
@@ -227,17 +401,13 @@
   }
 
   .leave {
+    min-width: 0;
+    padding: 0 14px;
     font-size: var(--font-size-eyebrow);
   }
 
-  .film {
-    bottom: 54px;
-    right: 8px;
-  }
-
-  .tile {
-    width: 84px;
-    height: 58px;
+  .hint {
+    display: none;
   }
 }
 

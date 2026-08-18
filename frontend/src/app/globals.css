@@ -74,6 +74,13 @@
 
   /* BuilderForceAgentsLink-style shell (same header, footer, slide-out nav) */
   --footer-height: 44px;
+  /* The band the live dock occupies at the bottom of the window. Theme-independent
+     geometry, not colour: it is REPUBLISHED at runtime by `components/live/LiveBar`
+     from the dock's measured height (0px here so a page with no call reserves
+     nothing), and `.app-frame` subtracts it so the shell — and therefore the
+     canvas and every piece of chrome inside it — clears the dock by construction
+     rather than each element learning its height. */
+  --live-dock-space: 0px;
   --shell-nav-width: 240px;
   --shell-nav-width-collapsed: 64px;
   --shell-topbar-height: 56px;
@@ -1097,8 +1104,13 @@ html[data-theme='light'] .nebula {
 .app-frame {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  height: 100dvh;
+  /* The live dock (components/live/LiveBar) is fixed to the bottom of the window
+     and publishes its real height here. Subtracting it from the frame is what
+     RESERVES the band: the shell gets shorter, so the canvas, its absolutely
+     positioned chrome and the Brain panel all clear the dock for free instead of
+     each learning its height. Absent dock, absent band — the var is 0px. */
+  height: calc(100vh - var(--live-dock-space, 0px));
+  height: calc(100dvh - var(--live-dock-space, 0px));
 }
 
 .shell {

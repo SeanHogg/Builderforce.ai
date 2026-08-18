@@ -127,12 +127,12 @@ describe('the collapsed session bar', () => {
 
     // Expanded: the switcher and Share are both reachable.
     expect(screen.getByRole('group', { name: 'Canvas view' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Invite' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('canvas-bar-collapse'));
 
     expect(screen.queryByRole('group', { name: 'Canvas view' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Share' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Invite' })).toBeNull();
 
     // …and the status survives. The roster is the reason the rule exists.
     expect(screen.getByTestId('canvas-session-title')).toBeInTheDocument();
@@ -157,6 +157,6 @@ describe('the collapsed session bar', () => {
     expect(toggle()).toHaveAccessibleName('Show the toolbar');
 
     fireEvent.click(toggle());
-    expect(screen.getByRole('button', { name: 'Share' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Invite' })).toBeInTheDocument();
   });
 });

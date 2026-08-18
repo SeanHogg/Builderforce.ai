@@ -19,7 +19,6 @@ import NotificationBell from './NotificationBell';
 import { ManagerStatusIndicator } from './ManagerStatusIndicator';
 import { TenantProjectSwitcher } from './TenantProjectSwitcher';
 import { CommandPalette } from './workspace/CommandPalette';
-import { LiveSessionChip } from './live/LiveSessionChip';
 import { OnboardingProgressPill } from './OnboardingProgressPill';
 
 const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
@@ -86,10 +85,11 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         {/* Workspace scope stays in the header. Canvas/session navigation lives in
             the sidebar, so it has one canonical home instead of two selectors. */}
         <TenantProjectSwitcher />
-        {/* …and who is here with you. The third thing that must survive every
-            navigation, so it is a peer of the other two rather than a control
-            that lives on whichever page happens to own the room. */}
-        <LiveSessionChip />
+        {/* The room is NOT here. Starting, reading and leaving a call all live in
+            the live dock at the bottom of the shell (`components/live/LiveBar`),
+            because the call's active state IS a band of chrome down there — and
+            a control whose "on" state appears in the opposite corner from its
+            "off" state has two homes. See that file's header. */}
         {/* Search-first navigation over the shared destination registry. Self-gates
             on a tenant, and hides its trigger on phones where the bottom nav leads. */}
         <CommandPalette />
