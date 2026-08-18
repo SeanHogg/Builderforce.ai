@@ -19,7 +19,7 @@ export const cardStyle: React.CSSProperties = {
 
 export const subtleBtn: React.CSSProperties = {
   padding: '6px 12px',
-  fontSize: 12,
+  fontSize: 'var(--font-size-small)',
   fontWeight: 600,
   color: 'var(--coral-bright)',
   background: 'var(--bg-base)',
@@ -40,7 +40,7 @@ export const STATUS_COLORS: Record<string, string> = {
 export function StatusPill({ status }: { status: string }) {
   const color = STATUS_COLORS[status] ?? 'var(--text-muted)';
   return (
-    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 'var(--radius-sm)', background: `${color}22`, color, whiteSpace: 'nowrap' }}>
+    <span style={{ fontSize: 'var(--font-size-field-label)', fontWeight: 700, textTransform: 'uppercase', padding: '2px 7px', borderRadius: 'var(--radius-sm)', background: `${color}22`, color, whiteSpace: 'nowrap' }}>
       {status}
     </span>
   );

@@ -1633,6 +1633,7 @@
     "meter": {
       "ai_tokens": "KI-Tokens",
       "cloud_runs": "Cloud-Ausführungen",
+      "stage_sandbox_runs": "Sandbox-Ausführungen",
       "ingestion": "Daten",
       "error_events": "Fehler",
       "outbound_fetches": "Ausgehende Abrufe"

@@ -1633,6 +1633,7 @@
     "meter": {
       "ai_tokens": "Tokens de IA",
       "cloud_runs": "Ejecuciones en la nube",
+      "stage_sandbox_runs": "Ejecuciones en zona de pruebas",
       "ingestion": "Datos",
       "error_events": "Errores",
       "outbound_fetches": "Solicitudes salientes"

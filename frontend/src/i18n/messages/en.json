@@ -1633,6 +1633,7 @@
     "meter": {
       "ai_tokens": "AI tokens",
       "cloud_runs": "Cloud runs",
+      "stage_sandbox_runs": "Sandbox runs",
       "ingestion": "Data",
       "error_events": "Errors",
       "outbound_fetches": "Outbound fetches"

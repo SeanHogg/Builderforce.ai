@@ -2974,8 +2974,11 @@ export const dashboardApi = {
 // powers the sidebar UsageMeter widget.
 // ---------------------------------------------------------------------------
 
-export type MeterKey = 'ai_tokens' | 'cloud_runs' | 'ingestion' | 'error_events' | 'outbound_fetches';
-export type MeterUnit = 'tokens' | 'runs' | 'bytes' | 'events' | 'fetches';
+// Mirrors `api/src/application/consumption/meters.ts` exactly. A key the server
+// emits and this union omits used to reach the UI as `undefined` everywhere the
+// meter was looked up by key — see `UsageMeter.tsx`, which no longer trusts it.
+export type MeterKey = 'ai_tokens' | 'cloud_runs' | 'stage_sandbox_runs' | 'ingestion' | 'error_events' | 'outbound_fetches';
+export type MeterUnit = 'tokens' | 'runs' | 'sandbox_runs' | 'bytes' | 'events' | 'fetches';
 
 export interface MeterSnapshot {
   key: MeterKey;

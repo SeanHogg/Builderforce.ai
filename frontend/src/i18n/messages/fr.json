@@ -1633,6 +1633,7 @@
     "meter": {
       "ai_tokens": "Jetons IA",
       "cloud_runs": "Exécutions cloud",
+      "stage_sandbox_runs": "Exécutions bac à sable",
       "ingestion": "Données",
       "error_events": "Erreurs",
       "outbound_fetches": "Requêtes sortantes"

@@ -1633,6 +1633,7 @@
     "meter": {
       "ai_tokens": "AI 令牌",
       "cloud_runs": "云端运行",
+      "stage_sandbox_runs": "沙盒运行",
       "ingestion": "数据",
       "error_events": "错误",
       "outbound_fetches": "出站请求"

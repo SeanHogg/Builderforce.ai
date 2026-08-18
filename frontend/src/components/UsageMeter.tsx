@@ -19,7 +19,7 @@ import { Sparkline } from '@/components/charts/Sparkline';
  * here with no new UI.
  *
  * Each card's TITLE deep-links to the configuration / key entry point that governs
- * that resource (see METER_CONFIG_HREF) — tokens → API keys, cloud runs → the IDE,
+ * that resource (see METER_PRESENTATION) — tokens → API keys, cloud runs → the IDE,
  * data → integrations, errors → the quality collectors, outbound fetches → the finance
  * report — while its trend chart drills into the matching Insights report and "See plans"
  * routes to billing. The whole section collapses via the header toggle, persisted so
@@ -51,41 +51,52 @@ function barColor(percent: number): string {
   return 'var(--coral-bright, var(--coral-bright))';
 }
 
-const METER_ICON: Record<MeterSnapshot['key'], string> = {
-  ai_tokens: '⚡',
-  cloud_runs: '☁️',
-  ingestion: '🗄',
-  error_events: '🐞',
-  outbound_fetches: '🌐',
+/**
+ * Everything presentation needs to know about ONE meter, in one place.
+ *
+ * This was three parallel `Record<MeterKey, …>`s — icon, config href, insight
+ * href — which meant adding a meter was three edits that nothing forced you to
+ * make together, and missing one produced `undefined` rather than a type error.
+ * That is exactly how `stage_sandbox_runs` (emitted by the API, absent from all
+ * three) reached `<Link href={undefined}>` and crashed the expanded panel.
+ *
+ * `configHref` is the configuration / key entry point that governs the resource;
+ * `insightHref` is the Insights report its trend chart drills into.
+ */
+interface MeterPresentation {
+  icon: string;
+  configHref: string;
+  insightHref: string;
+}
+
+const METER_PRESENTATION: Record<MeterSnapshot['key'], MeterPresentation> = {
+  ai_tokens: { icon: '⚡', configHref: '/settings/integrations', insightHref: '/insights/ai' },
+  cloud_runs: { icon: '☁️', configHref: '/create?filter=build', insightHref: '/insights/finance' },
+  stage_sandbox_runs: { icon: '🧪', configHref: '/marketplace', insightHref: '/insights/finance' },
+  ingestion: { icon: '🗄', configHref: '/settings/integrations', insightHref: '/insights/finance' },
+  error_events: { icon: '🐞', configHref: '/quality?tab=collectors', insightHref: '/quality' },
+  outbound_fetches: { icon: '🌐', configHref: '/insights/finance', insightHref: '/insights/finance' },
 };
 
 /**
- * Each meter's TITLE deep-links to the configuration / key entry point that
- * represents its functionality — AI tokens → provider API keys, cloud runs → the
- * IDE launcher where they run, data → the integrations/connectors that feed
- * ingestion, errors → the quality error collectors, outbound fetches (the Brain's
- * /fetch-url proxy) → the Finance hub where that metered activity is reported.
+ * The API and this app deploy separately, so the server can emit a meter this
+ * build has never heard of. That is a routine version skew, not an error state:
+ * the number is still true and still worth showing, so an unknown meter renders
+ * as a plain card — no icon, no deep links, its raw key as the name — instead of
+ * taking the whole panel down with it.
  */
-const METER_CONFIG_HREF: Record<MeterSnapshot['key'], string> = {
-  ai_tokens: '/settings/integrations',
-  cloud_runs: '/create?filter=build',
-  ingestion: '/settings/integrations',
-  error_events: '/quality?tab=collectors',
-  outbound_fetches: '/insights/finance',
-};
+function meterPresentation(key: MeterSnapshot['key']): MeterPresentation | undefined {
+  return METER_PRESENTATION[key] as MeterPresentation | undefined;
+}
 
-/**
- * Each meter's trend chart deep-links to the matching Insights report — AI tokens
- * → AI Insights, error events → the Quality (error observability) dashboard, data
- * ingestion and outbound web fetches → the Finance hub where metered/billed
- * consumption is reported.
- */
-const METER_INSIGHT_HREF: Record<MeterSnapshot['key'], string> = {
-  ai_tokens: '/insights/ai',
-  cloud_runs: '/insights/finance',
-  ingestion: '/insights/finance',
-  error_events: '/quality',
-  outbound_fetches: '/insights/finance',
+/** One card-title typography, whether or not the meter has somewhere to link. */
+const meterTitleStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  fontSize: 'var(--font-size-card-title)',
+  fontWeight: 600,
+  color: 'var(--text-primary, var(--fg))',
 };
 
 export function ConsumptionMeterCard({
@@ -109,7 +120,11 @@ export function ConsumptionMeterCard({
     : isFree
     ? t('freePerMo', { amount })
     : t('perMo', { amount });
-  const meterName = title ?? t(`meter.${meter.key}`);
+  const presentation = meterPresentation(meter.key);
+  // Same skew rule as the presentation lookup: an unnamed meter shows its raw
+  // key rather than throwing on a catalog miss.
+  const meterKeyLabel = t.has(`meter.${meter.key}` as never) ? t(`meter.${meter.key}` as never) : meter.key;
+  const meterName = title ?? meterKeyLabel;
 
   if (usageOnly) {
     return (
@@ -146,17 +161,23 @@ export function ConsumptionMeterCard({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-        {/* The title routes to the configuration / key entry point for this resource. */}
-        <Link
-          href={METER_CONFIG_HREF[meter.key]}
-          className="usage-meter-title-link"
-          aria-label={t('configure', { meter: meterName })}
-          title={t('configure', { meter: meterName })}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--text-primary, var(--fg))', textDecoration: 'none' }}
-        >
-          <span aria-hidden style={{ fontSize: '1rem' }}>{METER_ICON[meter.key]}</span>
-          {meterName}
-        </Link>
+        {/* The title routes to the configuration / key entry point for this
+            resource — as plain text for a meter this build doesn't know, since
+            there is no entry point to route to. */}
+        {presentation ? (
+          <Link
+            href={presentation.configHref}
+            className="usage-meter-title-link"
+            aria-label={t('configure', { meter: meterName })}
+            title={t('configure', { meter: meterName })}
+            style={{ ...meterTitleStyle, textDecoration: 'none' }}
+          >
+            <span aria-hidden style={{ fontSize: '1rem' }}>{presentation.icon}</span>
+            {meterName}
+          </Link>
+        ) : (
+          <span style={meterTitleStyle}>{meterName}</span>
+        )}
         <span style={{ fontSize: 12, color: 'var(--text-secondary, var(--muted))', textAlign: 'right' }}>
           {allowanceLabel}
         </span>
@@ -192,15 +213,22 @@ export function ConsumptionMeterCard({
       </div>
 
       {meter.trend && meter.trend.length > 1 && meter.trend.some((v) => v > 0) && (
-        <Link
-          href={METER_INSIGHT_HREF[meter.key]}
-          className="usage-meter-chart-link"
-          aria-label={t('openReport', { meter: meterName })}
-          title={t('openReport', { meter: meterName })}
-          style={{ display: 'block', marginTop: 8, cursor: 'pointer' }}
-        >
-          <Sparkline values={meter.trend} width={220} height={26} color={barColor(percentUsed)} ariaLabel={t('trendAria')} />
-        </Link>
+        presentation ? (
+          <Link
+            href={presentation.insightHref}
+            className="usage-meter-chart-link"
+            aria-label={t('openReport', { meter: meterName })}
+            title={t('openReport', { meter: meterName })}
+            style={{ display: 'block', marginTop: 8, cursor: 'pointer' }}
+          >
+            <Sparkline values={meter.trend} width={220} height={26} color={barColor(percentUsed)} ariaLabel={t('trendAria')} />
+          </Link>
+        ) : (
+          // The trend is still true without a report to open it in.
+          <div style={{ display: 'block', marginTop: 8 }}>
+            <Sparkline values={meter.trend} width={220} height={26} color={barColor(percentUsed)} ariaLabel={t('trendAria')} />
+          </div>
+        )
       )}
     </div>
   );

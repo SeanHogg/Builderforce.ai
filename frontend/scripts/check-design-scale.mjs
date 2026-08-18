@@ -113,8 +113,19 @@ const BASELINE = {
    * which names its roles in `globals.css`. Four of the six FAQ treatments in the
    * tree were carrying their own type ramp; that is the shape this ratchet exists
    * to find.
+   *
+   * 3,789 → 3,779: the workflow-run surfaces. The tally had drifted +15 above the
+   * baseline without anyone raising it, and the `-21 WorkflowsContent / +23
+   * WorkflowRunHistoryPanel` pair in the guard's own diff is what it was: the run
+   * list/detail was extracted into its own module and `workflowRunUi.tsx`, and the
+   * literals moved with it rather than being named on the way out. Both files now
+   * name their roles — `20` was section, `12`/`12.5`/`13` were small, `11` was
+   * eyebrow and the uppercase status pill's `10` was field-label — which is the
+   * same four-way mapping the 3,818 → 3,793 entry above describes finding. Net −10
+   * against a +15 drift, so the floor follows the work down instead of being
+   * raised to meet it.
    */
-  offScaleFontSizes: 3789,
+  offScaleFontSizes: 3779,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

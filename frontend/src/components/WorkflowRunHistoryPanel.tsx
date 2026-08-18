@@ -40,16 +40,16 @@ function WorkflowTaskRow({ task }: { task: WorkflowTask }) {
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
       <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0, marginTop: 5 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
+        <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)' }}>
           {task.agentRole}
           <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 8 }}>{task.description}</span>
         </div>
         {task.output && (
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, maxHeight: 60, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-secondary)', marginTop: 4, maxHeight: 60, overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {task.output}
           </div>
         )}
-        {task.error && <div style={{ fontSize: 11, color: 'var(--coral-bright)', marginTop: 4 }}>{task.error}</div>}
+        {task.error && <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--coral-bright)', marginTop: 4 }}>{task.error}</div>}
       </div>
       <StatusPill status={task.status} />
     </div>
@@ -60,18 +60,18 @@ function WorkflowTaskRow({ task }: { task: WorkflowTask }) {
  *  trend (Make's "0 credits / 0 B data transfer" + 7-day sparkline). */
 function UsageSummary({ usage, loading }: { usage: WorkflowUsageSummary | null; loading: boolean }) {
   const t = useTranslations('workflowsContent');
-  if (loading) return <div style={{ ...cardStyle, fontSize: 12, color: 'var(--text-muted)' }}>{t('loadingUsage')}</div>;
+  if (loading) return <div style={{ ...cardStyle, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('loadingUsage')}</div>;
   if (!usage) return null;
   return (
     <div style={cardStyle}>
       <div style={{ display: 'flex', gap: 24, marginBottom: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>{usage.totalRuns}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('usageRunsLast7', { days: usage.days.length })}</div>
+          <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)' }}>{usage.totalRuns}</div>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('usageRunsLast7', { days: usage.days.length })}</div>
         </div>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>${usage.totalCostUsd.toFixed(2)}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('usageCostLast7', { days: usage.days.length })}</div>
+          <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)' }}>${usage.totalCostUsd.toFixed(2)}</div>
+          <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('usageCostLast7', { days: usage.days.length })}</div>
         </div>
       </div>
       {usage.totalRuns > 0 && (
@@ -150,7 +150,7 @@ export function WorkflowRunHistoryPanel({ definitionId, definitionName, initialR
   }, []);
 
   const tabBtnStyle = (active: boolean): React.CSSProperties => ({
-    padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--radius-sm)',
+    padding: '5px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, borderRadius: 'var(--radius-sm)',
     border: '1px solid var(--border-subtle)',
     background: active ? 'var(--surface-interactive)' : 'transparent',
     color: active ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer',
@@ -163,10 +163,10 @@ export function WorkflowRunHistoryPanel({ definitionId, definitionName, initialR
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <button type="button" onClick={() => setSelectedDetail(null)} style={subtleBtn}>← {t('back')}</button>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+            <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>
               {selectedDetail.description ?? t('runLabel', { id: selectedDetail.id.slice(0, 8) })}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+            <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 1 }}>
               {selectedDetail.workflowType} · {selectedDetail.status}
             </div>
           </div>
@@ -185,24 +185,24 @@ export function WorkflowRunHistoryPanel({ definitionId, definitionName, initialR
         <div style={cardStyle}>
           {detailTab === 'tasks' ? (
             <>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>{t('tasksCount', { count: tasks.length })}</div>
+              <div style={{ fontWeight: 600, fontSize: 'var(--font-size-small)', marginBottom: 12 }}>{t('tasksCount', { count: tasks.length })}</div>
               {loadingDetail ? (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('loadingTasks')}</div>
+                <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('loadingTasks')}</div>
               ) : tasks.length === 0 ? (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noTasksYet')}</div>
+                <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('noTasksYet')}</div>
               ) : (
                 tasks.map((task) => <WorkflowTaskRow key={task.id} task={task} />)
               )}
             </>
           ) : (
             <>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>{t('dependencyGraph')}</div>
+              <div style={{ fontWeight: 600, fontSize: 'var(--font-size-small)', marginBottom: 12 }}>{t('dependencyGraph')}</div>
               {loadingGraph ? (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('loadingGraph')}</div>
+                <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('loadingGraph')}</div>
               ) : graph ? (
                 <WorkflowDagView nodes={graph.nodes} edges={graph.edges} />
               ) : (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noGraphData')}</div>
+                <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('noGraphData')}</div>
               )}
             </>
           )}
@@ -214,16 +214,16 @@ export function WorkflowRunHistoryPanel({ definitionId, definitionName, initialR
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{definitionName} · {t('runs')}</div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{t('executionHistory')}</div>
+        <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>{definitionName} · {t('runs')}</div>
+        <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 1 }}>{t('executionHistory')}</div>
       </div>
 
       <UsageSummary usage={usage} loading={loadingUsage} />
 
       {loadingRuns ? (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('loadingRuns')}</div>
+        <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('loadingRuns')}</div>
       ) : runs.length === 0 ? (
-        <div style={{ ...cardStyle, fontSize: 12, color: 'var(--text-muted)' }}>{t('noRunsPeriod')}</div>
+        <div style={{ ...cardStyle, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('noRunsPeriod')}</div>
       ) : (
         <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
           {runs.map((r) => (
@@ -233,11 +233,11 @@ export function WorkflowRunHistoryPanel({ definitionId, definitionName, initialR
               onClick={() => void openDetail(r)}
               style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)', background: 'none', cursor: 'pointer' }}
             >
-              <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ flex: 1, fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {r.description ?? t('runLabel', { id: r.id.slice(0, 8) })}
               </span>
               <StatusPill status={r.status} />
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(r.createdAt).toLocaleString()}</span>
+              <span style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(r.createdAt).toLocaleString()}</span>
             </button>
           ))}
         </div>
