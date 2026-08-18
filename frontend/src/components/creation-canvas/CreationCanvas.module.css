@@ -1085,6 +1085,17 @@
 
 .resumeEmpty,
 .resumeStudio { display:flex; flex-direction:column; gap:10px; }
+/* Document / Details / Tools — the three groups the résumé's controls collapse into.
+   Same shape as `.inspectorTabs` (equal-width, bottom-border-lit) so a person who has
+   already used the details panel recognises this as the same kind of control, but
+   scoped to the résumé's own purple rather than the canvas accent, matching every
+   other résumé-local accent in this file (`.resumeControls [role="tab"]`, the ATS
+   button, the template gallery's selected ring). */
+.resumeSectionTabs { display:flex; flex:none; gap:2px; border-bottom:1px solid var(--border); }
+.resumeSectionTabs button { flex:1; padding:8px 4px; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--text-muted); font:700 11px var(--font-sans); cursor:pointer; }
+.resumeSectionTabs button:hover { color:inherit; }
+.resumeSectionTabs button[aria-selected="true"] { border-bottom-color:#7c3aed; color:#6d28d9; }
+.resumeSectionBody { display:flex; flex-direction:column; gap:10px; }
 .resumeSharePanel { display:grid; gap:8px; padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); }
 .resumeSharePanel > p { margin:0; color:var(--text-muted); font-size:11px; }
 .resumeSharePanel > div { display:flex; flex-wrap:wrap; gap:7px; }
@@ -1879,7 +1890,16 @@
    this surface's 7, so without the same --brain-dock-left/right clearance every other
    floating panel already takes, the surface ran full width underneath it and its own
    header — title included — sat invisibly under the dock rather than beside it. */
-.objectSurface,.appSurface { position:absolute; z-index:7; top:0; right:var(--brain-dock-right,0px); bottom:0; left:var(--brain-dock-left,0px); box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-block:var(--canvas-top-chrome-space) var(--composer-space); background:var(--canvas-board-background); color:var(--canvas-ink); }
+/* The bottom band is the LARGER of the two things actually floating down there, not
+   just the composer. `--composer-space` is measured from the composer's own top edge,
+   so while the composer floats over the board it clears the command bar underneath it
+   for free — but the moment the reader docks the composer INTO the Brain panel instead
+   (a real, supported placement), the floating composer unmounts and `--composer-space`
+   collapses to `0px`. The command bar does not go anywhere when that happens: it is a
+   separate piece of chrome, always floating at its own `bottom:14px`. Without this
+   `max()` this surface's content ran the full height of the shell in that placement,
+   with the command bar painted straight across whatever sat at the bottom of it. */
+.objectSurface,.appSurface { position:absolute; z-index:7; top:0; right:var(--brain-dock-right,0px); bottom:0; left:var(--brain-dock-left,0px); box-sizing:border-box; display:flex; flex-direction:column; min-width:0; padding-block:var(--canvas-top-chrome-space) max(var(--composer-space, 0px), calc(var(--canvas-command-bar-space, 66px) + 14px)); background:var(--canvas-board-background); color:var(--canvas-ink); }
 .objectSurfaceHeader { display:flex; flex:none; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 16px 10px 62px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
 .objectSurfaceMark { display:grid; place-items:center; width:26px; height:26px; flex:none; border-radius:var(--radius-sm); background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); }
 .objectSurfaceTitle { min-width:0; flex:1; display:flex; flex-direction:column; }
@@ -2246,9 +2266,19 @@
 .brainDock { position:absolute; z-index:17; top:0; bottom:0; box-sizing:border-box; display:flex; flex-direction:column; width:var(--brain-dock-size,330px); border:1px solid var(--canvas-brain-border); background:var(--canvas-brain-surface); color:var(--canvas-ink); box-shadow:0 0 44px var(--canvas-shadow); }
 .brainDock[data-side='left'] { left:0; border-left:0; border-radius:0 var(--radius-lg) var(--radius-lg) 0; }
 .brainDock[data-side='right'] { right:0; border-right:0; border-radius:var(--radius-lg) 0 0 var(--radius-lg); }
-/* There is no small floating placement:a card hovering over a board that already
-   carries a Brain Object showed the same conversation twice. Small is now inline —
-   see .brainObjectChat, which renders this surface inside the Object itself. */
+/* There is no small floating PLACEMENT a reader chooses:a card hovering over a board
+   that already carries a Brain Object showed the same conversation twice. Small is
+   inline — see .brainObjectChat, which renders this surface inside the Object itself.
+   `[data-compact]` below is a different thing: the SAME docked placement, sized down
+   automatically while a full-screen surface has the board (see `compact` on
+   `BrainDock` in CreationCanvas.tsx) — not a placement the reader picked, and it
+   reverts the moment they leave that surface. */
+.brainDock[data-compact='true'] {
+  top:auto; bottom:calc(var(--canvas-command-bar-space, 66px) + 14px);
+  max-height:min(46%, 360px);
+  border-radius:var(--radius-lg);
+  box-shadow:0 14px 42px var(--canvas-shadow);
+}
 /* The drag edge always faces the board, so pulling inward always narrows Brain. */
 .brainDockResizer { position:absolute; top:0; bottom:0; z-index:2; width:9px; padding:0; border:0; background:transparent; cursor:ew-resize; touch-action:none; }
 .brainDockResizer[data-side='left'] { right:-4px; }

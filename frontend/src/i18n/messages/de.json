@@ -15220,6 +15220,10 @@
     "expected": "Erwartet",
     "actual": "Tatsächlich",
     "resumeEditor": {
+      "resumeSections": "Lebenslauf-Bereiche",
+      "section_document": "Dokument",
+      "section_details": "Details",
+      "section_tools": "Werkzeuge",
       "emptyTitle": "Lebenslauf in Canvas übernehmen",
       "emptyBody": "Laden Sie Ihren aktuellen Lebenslauf hoch. Canvas schützt ihn als Original, während Sie zugeschnittene Versionen erstellen und bearbeiten.",
       "upload": "Lebenslauf hochladen",

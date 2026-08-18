@@ -92,7 +92,7 @@ function ImportReview({ file, stage, onImport, onCancel }: { file: File; stage: 
   </section>;
 }
 
-function ResumePreview({ html, page, zoom, mode, onClose }: { html: string; page: { width: number; height: number }; zoom: number; mode: CanvasResumeFamily['previewMode']; onClose: () => void }) {
+function ResumePreview({ html, page, zoom, mode, onClose, closable = true }: { html: string; page: { width: number; height: number }; zoom: number; mode: CanvasResumeFamily['previewMode']; onClose: () => void; closable?: boolean }) {
   const t = useTranslations('creationCanvas.resumeEditor');
   const documentRef = useRef<HTMLDivElement>(null);
   const [pageCount, setPageCount] = useState(1);
@@ -105,7 +105,7 @@ function ResumePreview({ html, page, zoom, mode, onClose }: { html: string; page
     const observer = new ResizeObserver(calculate); observer.observe(element);
     return () => observer.disconnect();
   }, [html, page.height]);
-  return <div className={styles.resumePreviewShell}><button type="button" className={styles.resumePreviewClose} onClick={onClose} aria-label={t('closePreview')}>×</button><div className={styles.resumePreviewViewport} data-page-view={mode}><div className={styles.resumePreviewCanvas} style={{ width: `${page.width * zoom / 100}mm`, minHeight: `${page.height * pageCount * zoom / 100}mm`, '--resume-page-height': `${page.height * zoom / 100}mm` } as CSSProperties}><div ref={documentRef} style={{ width: `${page.width}mm`, minHeight: `${page.height}mm`, transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }} dangerouslySetInnerHTML={{ __html: html }} />{mode !== 'continuous' && Array.from({ length: pageCount }, (_, index) => <span key={index} className={styles.resumePageNumber} style={{ top: `calc(var(--resume-page-height) * ${index + 1} - 22px)` }}>{t('pageNumber', { page: index + 1, count: pageCount })}</span>)}</div></div></div>;
+  return <div className={styles.resumePreviewShell}>{closable && <button type="button" className={styles.resumePreviewClose} onClick={onClose} aria-label={t('closePreview')}>×</button>}<div className={styles.resumePreviewViewport} data-page-view={mode}><div className={styles.resumePreviewCanvas} style={{ width: `${page.width * zoom / 100}mm`, minHeight: `${page.height * pageCount * zoom / 100}mm`, '--resume-page-height': `${page.height * zoom / 100}mm` } as CSSProperties}><div ref={documentRef} style={{ width: `${page.width}mm`, minHeight: `${page.height}mm`, transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }} dangerouslySetInnerHTML={{ __html: html }} />{mode !== 'continuous' && Array.from({ length: pageCount }, (_, index) => <span key={index} className={styles.resumePageNumber} style={{ top: `calc(var(--resume-page-height) * ${index + 1} - 22px)` }}>{t('pageNumber', { page: index + 1, count: pageCount })}</span>)}</div></div></div>;
 }
 
 /** Exported because the page surface hands the same bundle through — one shape, so the
@@ -121,7 +121,21 @@ function localJsonResume(source: string): { document: unknown; sourceFileKey: st
   } catch { return null; }
 }
 
-export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActions }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void; onTailor?: (prompt: string) => void; onDetach?: (data: Partial<CreationNodeData>) => void; shareActions?: ResumeShareActions }) {
+/**
+ * `variant` is the one thing that differs between the three places this mounts:
+ *   - 'full'      the full-screen page (`CanvasPageSurface`) — the document plus every
+ *                 control, grouped into Document / Details / Tools tabs.
+ *   - 'card'      the board card (`CreationNode`) — the rendered document ONLY. Every
+ *                 control moved out to the inspector below; a card that still drew them
+ *                 was the board's résumé, its controls, AND the Brain dock competing for
+ *                 the same width, with the document itself the smallest of the three.
+ *   - 'inspector' the anchored inspector's résumé section (`ResumeInspectorSection`) —
+ *                 Details and Tools, no Document tab: the card behind this panel is
+ *                 already showing the document, so a second copy of it in here would be
+ *                 the same drift `brainDockPreferences.ts` retired the floating Brain
+ *                 card to avoid — two live views of the same thing, open at once.
+ */
+export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActions, variant = 'full' }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void; onTailor?: (prompt: string) => void; onDetach?: (data: Partial<CreationNodeData>) => void; shareActions?: ResumeShareActions; variant?: 'full' | 'card' | 'inspector' }) {
   const t = useTranslations('creationCanvas.resumeEditor');
   const tImport = useTranslations('creationCanvas.import');
   const translateImport = tImport as unknown as ImportTranslator;
@@ -149,7 +163,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
   // opening a résumé full-size showed everything except the résumé. Grouped into tabs,
   // the default is the document itself; picking a view mode below jumps back to it so
   // "Edit" or "Compare" is never a click that changes state you cannot see.
-  const [section, setSection] = useState<'document' | 'details' | 'tools'>('document');
+  const [section, setSection] = useState<'document' | 'details' | 'tools'>(variant === 'inspector' ? 'details' : 'document');
   const [newTitle, setNewTitle] = useState('');
   const [error, setError] = useState('');
   const [mergeSections, setMergeSections] = useState<ResumeDiffSection[]>([]);
@@ -270,6 +284,15 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
     {error && <p role="alert" className={styles.resumeError}>{error}</p>}
   </div>;
 
+  // The card shows the document and nothing else — no header, no tabs, no stopped
+  // pointer events, so a click on it reaches React Flow's own node-click handler and
+  // opens the inspector, exactly like every other kind's card. Version, privacy,
+  // template and the AI tools all moved to `ResumeInspectorSection`, reached from there.
+  if (variant === 'card') return <div className={`${styles.resumeStudio} nodrag nowheel`}>
+    <ResumeDocumentStyles />
+    <ResumePreview html={rendered.html} page={resumePageDimensions(active.pageSize, active.orientation)} zoom={family.viewZoom} mode={family.previewMode} closable={false} onClose={() => {}} />
+  </div>;
+
   const selectedBulletSuggestions = bulletSuggestions.filter((suggestion) => !excludedBulletSuggestions.includes(suggestion.id));
   const page = resumePageDimensions(active.pageSize, active.orientation);
   const changePresentation = (patch: Parameters<typeof updateActiveResumePresentation>[1]) => commit(updateActiveResumePresentation(family, patch));
@@ -284,7 +307,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
     <ResumeDocumentStyles />
     <input ref={input} type="file" hidden accept=".pdf,.doc,.docx,.rtf,.txt,.md,.markdown,.json,.png,.jpg,.jpeg,.webp" onChange={chooseResume} />
     <div className={styles.resumeSectionTabs} role="tablist" aria-label={t('resumeSections')}>
-      {(['document', 'details', 'tools'] as const).map((tab) => <button key={tab} type="button" role="tab" aria-selected={section === tab} onClick={() => setSection(tab)}>{t(`section_${tab}`)}</button>)}
+      {(['document', 'details', 'tools'] as const).filter((tab) => tab !== 'document' || variant !== 'inspector').map((tab) => <button key={tab} type="button" role="tab" aria-selected={section === tab} onClick={() => setSection(tab)}>{t(`section_${tab}`)}</button>)}
     </div>
     {section === 'details' && <div className={styles.resumeSectionBody}>
     <div className={styles.resumeSourceBar}>
@@ -343,7 +366,7 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
     })()}
     <div className={styles.resumeControls}>
       <div role="tablist" aria-label={t('viewMode')}>
-        {(['edit', 'preview', 'compare'] as const).map((mode) => <button key={mode} type="button" role="tab" aria-selected={view === mode} disabled={mode === 'edit' && active.kind === 'original'} onClick={() => { setView(mode); setSection('document'); }}>{t(mode)}</button>)}
+        {(['edit', 'preview', 'compare'] as const).map((mode) => <button key={mode} type="button" role="tab" aria-selected={view === mode} disabled={mode === 'edit' && active.kind === 'original'} onClick={() => { setView(mode); setSection(variant === 'inspector' ? 'details' : 'document'); }}>{t(mode)}</button>)}
       </div>
       <label><span>{t('template')}</span><select value={active.templateId} disabled={!onEdit} onChange={(event) => changePresentation({ templateId: event.target.value as ResumeTemplateId })}>
         {RESUME_TEMPLATES.map((item) => <option key={item.id} value={item.id}>{t(item.labelKey)}</option>)}
@@ -406,13 +429,19 @@ export function CanvasResumeEditor({ data, onEdit, onTailor, onDetach, shareActi
       }}>{t('applyConsolidation', { count: selectedBulletSuggestions.length })}</button>
     </details>
     </div>}
-    {section === 'document' && <div className={styles.resumeSectionBody}>
+    {/* In 'inspector' there is no Document tab — the card behind this panel already IS
+        the document. Edit and Compare still need somewhere to live (they change or
+        compare the underlying content, which nothing else here does), so they render
+        under Details instead; Preview does not, since re-showing the same render the
+        card is already showing would be the redundant second copy this split exists
+        to avoid. */}
+    {(section === 'document' || (variant === 'inspector' && section === 'details' && view !== 'preview')) && <div className={styles.resumeSectionBody}>
     {view === 'edit' && active.kind === 'derived' && <div className={styles.resumeEditStack}>
       {active.document && <ResumeStructuredEditor document={active.document} onChange={(document) => commit(updateActiveResume(family, { document }))} />}
       <details className={styles.resumeRawEditor} open={!active.document}><summary>{t('rawTextEditor')}</summary><DocumentEditor markdown={active.markdown} label={t('editorLabel', { title: active.title })} onCommit={(markdown) => commit(updateActiveResume(family, { markdown, structuredStale: !!active.document }))} /></details>
       {active.structuredStale && <p role="status" className={styles.resumeStaleWarning}>{t('structuredStale')}</p>}
     </div>}
-    {view === 'preview' && <ResumePreview html={rendered.html} page={page} zoom={family.viewZoom} mode={family.previewMode} onClose={() => setView(active.kind === 'derived' ? 'edit' : 'compare')} />}
+    {view === 'preview' && variant !== 'inspector' && <ResumePreview html={rendered.html} page={page} zoom={family.viewZoom} mode={family.previewMode} onClose={() => setView(active.kind === 'derived' ? 'edit' : 'compare')} />}
     {view === 'compare' && <div className={styles.resumeCompareShell}>
       {active.id !== original.id && <aside className={styles.resumeDiffSummary}>
         <strong>{t('changesFromOriginal', { count: differences.length })}</strong>

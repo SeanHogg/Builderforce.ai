@@ -21,6 +21,7 @@ registerKindSettings({ kinds: ['release'], marketplace: { sellable: () => true }
 registerKindSettings({ kinds: ['website', 'prototype'], marketplace: { sellable: () => true }, fields: [], actions: [], custom: { component: 'website' } });
 registerKindSettings({ kinds: ['video'], marketplace: { sellable: () => true }, fields: [], actions: [], custom: { component: 'video' } });
 registerKindSettings({ kinds: ['dataset'], marketplace: { sellable: () => true }, fields: [], actions: [], custom: { component: 'dataset' } });
+registerKindSettings({ kinds: ['resume'], marketplace: { sellable: () => false }, fields: [], actions: [], custom: { component: 'resume' } });
 registerKindSettings({ kinds: ['task'], marketplace: { sellable: () => true }, fields: [], actions: [], custom: { component: 'task' } });
 registerKindSettings({ kinds: ['mockup'], marketplace: { sellable: () => true }, fields: [], actions: [], custom: { component: 'mockup' } });
 registerKindSettings({ kinds: ['drawing'], marketplace: { sellable: () => true }, fields: [], actions: [], custom: { component: 'drawing' } });

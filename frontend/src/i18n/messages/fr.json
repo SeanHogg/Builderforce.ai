@@ -15220,6 +15220,10 @@
     "expected": "Attendu",
     "actual": "Réel",
     "resumeEditor": {
+      "resumeSections": "Sections du CV",
+      "section_document": "Document",
+      "section_details": "Détails",
+      "section_tools": "Outils",
       "emptyTitle": "Importez votre CV dans Canvas",
       "emptyBody": "Téléversez votre CV actuel. Canvas le protège comme original pendant que vous créez et modifiez des versions ciblées.",
       "upload": "Téléverser un CV",

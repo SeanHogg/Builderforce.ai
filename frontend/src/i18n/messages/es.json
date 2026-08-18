@@ -15220,6 +15220,10 @@
     "expected": "Esperado",
     "actual": "Real",
     "resumeEditor": {
+      "resumeSections": "Secciones del currículum",
+      "section_document": "Documento",
+      "section_details": "Detalles",
+      "section_tools": "Herramientas",
       "emptyTitle": "Lleva tu currículum a Canvas",
       "emptyBody": "Sube tu currículum actual. Canvas lo protege como original mientras creas y editas versiones adaptadas.",
       "upload": "Subir currículum",

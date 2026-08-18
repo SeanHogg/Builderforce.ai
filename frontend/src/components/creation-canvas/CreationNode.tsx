@@ -89,7 +89,6 @@ import { allSpecObjectSpecs } from '@/lib/specObjects';
 // kinds resolvable here — and in the palette, the AI contract and the empty-shell rule —
 // without a second list of them anywhere.
 import '@/lib/academicObjects';
-import type { CanvasResumeShare } from '@/lib/builderforceApi';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
 
@@ -2275,11 +2274,6 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
   onEditData?: (nodeId: string, patch: Partial<CreationNodeData>) => void;
   /** Take the object away as a file, from the card that holds it. */
   onExport?: (nodeId: string, action: CanvasExportAction) => void;
-  onResumeTailor?: (nodeId: string, prompt: string) => void;
-  onResumeDetach?: (nodeId: string, data: Partial<CreationNodeData>) => void;
-  onResumeShare?: (nodeId: string, kind: 'view' | 'embed') => Promise<void>;
-  onResumeSharesList?: (nodeId: string) => Promise<CanvasResumeShare[]>;
-  onResumeShareRevoke?: (nodeId: string, shareId: string) => Promise<void>;
   /**
    * Open one of the card's own panels BESIDE it. The anchor is a screen rect, not a
    * board coordinate: the panel is a fixed overlay, so it never has to be re-projected
@@ -2400,7 +2394,7 @@ function DensityIcon({ density }: { density: CanvasNodeDensity }) {
   </svg>;
 }
 
-export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke, onOpenPanel, onInsertFrom, onOpenSurface }: CreationNodeProps) {
+export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onOpenPanel, onInsertFrom, onOpenSurface }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const specBoard = useSpecDeriveBoard(data.kind);
   const isWide = ['workflow', 'website', 'prototype', 'guidedTour', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
@@ -2608,7 +2602,12 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'defect' && <DefectBody data={data} />}
         {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><AuthoredContent data={data} fallback={t('voiceFallback')} /></>}
         {data.kind === 'video' && <CanvasVideoEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} />}
-        {data.kind === 'resume' && <CanvasResumeEditor data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} {...(onResumeTailor ? { onTailor: (prompt) => onResumeTailor(id, prompt) } : {})} {...(onResumeDetach ? { onDetach: (patch) => onResumeDetach(id, patch) } : {})} {...(onResumeShare && onResumeSharesList && onResumeShareRevoke ? { shareActions: { create: (kind: 'view' | 'embed') => onResumeShare(id, kind), list: () => onResumeSharesList(id), revoke: (shareId: string) => onResumeShareRevoke(id, shareId) } } : {})} />}
+        {/* variant="card": the document only. Version, privacy, template, page setup and
+            the AI tools all moved to the inspector's résumé section (opened by clicking
+            this card — see `onNodeClick` and `ResumeInspectorSection` in
+            CreationCanvas.tsx), so this no longer needs the tailor/detach/share
+            callbacks that section uses instead. */}
+        {data.kind === 'resume' && <CanvasResumeEditor variant="card" data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} />}
         {CREATIVE_STUDIO_KINDS.has(data.kind) && <CreativeStudioBody data={data} />}
         {data.kind === 'game' && <GameBody data={data} {...(onOpenSurface ? { onPlayFull: () => onOpenSurface(id, 'play') } : {})} />}
         {data.kind === 'note' && <AuthoredContent data={data} fallback={t('noteFallback')} />}

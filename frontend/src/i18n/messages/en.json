@@ -15220,6 +15220,10 @@
     "expected": "Expected",
     "actual": "Actual",
     "resumeEditor": {
+      "resumeSections": "Résumé sections",
+      "section_document": "Document",
+      "section_details": "Details",
+      "section_tools": "Tools",
       "emptyTitle": "Bring your résumé into Canvas",
       "emptyBody": "Upload your current résumé. Canvas protects it as the original while you create and edit tailored versions.",
       "upload": "Upload résumé",

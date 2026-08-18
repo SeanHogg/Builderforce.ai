@@ -15220,6 +15220,10 @@
     "expected": "预期结果",
     "actual": "实际结果",
     "resumeEditor": {
+      "resumeSections": "简历分区",
+      "section_document": "文档",
+      "section_details": "详情",
+      "section_tools": "工具",
       "emptyTitle": "将简历导入 Canvas",
       "emptyBody": "上传当前简历。Canvas 会将其保护为原稿，同时让你创建和编辑定制版本。",
       "upload": "上传简历",
