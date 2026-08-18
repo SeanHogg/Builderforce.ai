@@ -1,5 +1,4 @@
-'use client';
-
+// No 'use client': rendered only inside `WorkflowBuilder.tsx`'s client boundary.
 import { useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import type { WorkflowNodeKind } from '@/lib/builderforceApi';

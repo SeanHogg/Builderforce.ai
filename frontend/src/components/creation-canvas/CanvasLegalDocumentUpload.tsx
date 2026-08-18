@@ -1,5 +1,4 @@
-'use client';
-
+// No 'use client': rendered only inside `CreationNode.tsx`'s client boundary.
 import { useRef, useState, type ChangeEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';

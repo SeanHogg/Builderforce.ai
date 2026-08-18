@@ -126,6 +126,47 @@
  *   `AppShell.tsx`, which is itself already a client boundary, but a component
  *   that reads a client-only hook declares its own rather than depending on
  *   whichever parent happens to render it today.
+ *
+ *   803 → 802 (`useClientFiles`, 2026-08-17) — a TIGHTENING. `CanvasUsageCorner.tsx`
+ *   was the wrong surface entirely: consumption meters floating over the board
+ *   in a fixed bottom-right overlay, when the intended placement (per the CSS
+ *   comment on `.usage-meter` — "sits above the legal menu" — and the
+ *   hired.video reference it was modelled on) was the left sidebar's own
+ *   "USAGE" section. `UsageMeter.tsx` already built exactly that and already
+ *   carried its own `'use client'`; it was simply never mounted in `Sidebar.tsx`.
+ *   Deleting the corner and wiring `<UsageMeter />` into the sidebar (above
+ *   `LegalStrip`) fixes the placement and removes a directive rather than
+ *   adding one.
+ *
+ *   802 → 801 (`useClientFiles`, 2026-08-17) — a second TIGHTENING, found while
+ *   fixing the ratchet's own drift: the live count (807) no longer matched the
+ *   803 recorded two entries up, five files having picked up `'use client'`
+ *   with no changelog entry to argue for them. Audited all five plus the two
+ *   pre-existing unlisted additions against every importer. Four were genuine
+ *   boundaries and stay exactly as they were — `ReferencesClient.tsx` and
+ *   `LegalDocumentShareViewer.tsx` are each the client entry point under a
+ *   Server Component route root; `CompareArenaTabs.tsx` and
+ *   `TemplateGallery.tsx` document the same shape themselves. Six were not:
+ *   `CanvasLegalDocumentUpload.tsx` (sole importer `CreationNode.tsx`, already
+ *   client), `LegalStrip.tsx` (sole importer `Sidebar.tsx`, already client),
+ *   `SearchPicker.tsx` (both importers already inside a client boundary —
+ *   `WorkflowNodePicker.tsx` directly, `CanvasObjectPicker.tsx` via
+ *   `CreationCanvas`), `WorkflowNodePicker.tsx` (sole importer
+ *   `WorkflowBuilder.tsx`, already client), `WorkflowRunHistoryPanel.tsx`
+ *   (both importers — `WorkflowsContent.tsx`, `WorkflowBuilder.tsx` — already
+ *   client) and `workflowRunUi.tsx` (no hooks at all: style constants plus one
+ *   presentational `StatusPill`). Every one is the exact shape the "800 → 798"
+ *   entry above already found twice — a directive that changes nothing except
+ *   this count, because the client boundary was already established upstream.
+ *   Directive removed in all six, with the reason written at the top of each.
+ *   The two oversized-file violations found in the same pass —
+ *   `creationObjectRegistry.ts` and `workflow-builder/nodeKinds.ts` — are not
+ *   this ratchet, but were the same kind of unreconciled drift: both are
+ *   self-documented single-source-of-truth registries ("the single source of
+ *   truth for the builder palette", "adding a node kind is a single edit"),
+ *   so splitting them would fight the DRY reason they exist. Allowlisted in
+ *   `oversizedProductionFiles` instead, beside the twenty other legitimate
+ *   entries already there.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';

@@ -22,6 +22,7 @@ import { NavIcon } from './navigation/NavIcon';
 import { isStageRoute } from '@/lib/workbenchPolicy';
 import { useNavGroups } from '@/lib/destinations/useDestinations';
 import { LegalStrip } from './legal/LegalStrip';
+import UsageMeter from './UsageMeter';
 
 /**
  * The left panel — the ARC (PRD 21 §3.2, §11.4.1).
@@ -272,6 +273,12 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
             </ButtonLink>
           </div>
         )}
+
+        {/* Usage/consumption meters — the left menu's own "USAGE" section
+            (per hired.video), sitting above the legal menu rather than
+            floating over the board. Collapsed to the icon rail there is no
+            room for it, same rule as the session list and legal strip. */}
+        {!collapsed && <UsageMeter />}
 
         {/* Copyright + version + Terms/Privacy, always in the rail rather than
             floating a full-width strip under the whole frame or riding the

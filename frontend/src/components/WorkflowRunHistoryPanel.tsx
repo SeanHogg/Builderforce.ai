@@ -1,5 +1,5 @@
-'use client';
-
+// No 'use client': rendered only inside `WorkflowsContent.tsx`'s and
+// `WorkflowBuilder.tsx`'s own client boundaries.
 /**
  * WorkflowRunHistoryPanel — the execution history + insights surface for ONE
  * workflow definition: a usage summary (runs/cost over the last N days, the

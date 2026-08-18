@@ -1,5 +1,5 @@
 {
-  "useClientFiles": 803,
+  "useClientFiles": 801,
   "useClientPages": 66,
   "presentationInfrastructureImports": [],
   "directEngineConstruction": [
@@ -9,6 +9,8 @@
   ],
   "oversizedProductionFiles": [
     "app/incidents/IncidentsPageClient.tsx",
+    "components/creation-canvas/creationObjectRegistry.ts",
+    "components/workflow-builder/nodeKinds.ts",
     "app/knowledge/[id]/KnowledgeDocClient.tsx",
     "app/marketplace/MarketplacePageClient.tsx",
     "components/agent/AgentExecutionPanel.tsx",

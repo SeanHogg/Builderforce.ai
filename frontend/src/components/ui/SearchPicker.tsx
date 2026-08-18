@@ -1,5 +1,5 @@
-'use client';
-
+// No 'use client': rendered only inside its callers' own client boundaries
+// (`CanvasObjectPicker.tsx`, itself inside `CreationCanvas`'s; `WorkflowNodePicker.tsx`).
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './Icon';
 

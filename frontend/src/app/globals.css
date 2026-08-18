@@ -1688,47 +1688,6 @@ html[data-theme='light'] .nebula {
   border-radius: var(--radius-sm);
 }
 
-/* The canvas's own bottom-right corner (`CanvasUsageCorner`) — usage meters
- * only, floating over the board the way every other piece of canvas chrome
- * does rather than sitting in flow. The copyright/version/legal row does NOT
- * live here: on a stage route it's the docked Brain panel's own footer
- * instead (`BrainDock`); the sidebar carries it everywhere else. Right-aligned
- * and narrow on purpose so it never fights the board for width. */
-.canvas-usage-corner {
-  position: fixed;
-  right: 14px;
-  bottom: 14px;
-  z-index: 8;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  max-width: min(60vw, 420px);
-  pointer-events: none;
-}
-.canvas-usage-corner > * {
-  pointer-events: auto;
-}
-.canvas-usage-corner-meters {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 6px;
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.canvas-usage-corner-meters::-webkit-scrollbar {
-  display: none;
-}
-
-@media (max-width: 620px) {
-  .canvas-usage-corner {
-    right: 8px;
-    bottom: 8px;
-    max-width: min(75vw, 300px);
-  }
-}
-
 /* Round chevron handle that collapses/expands the sidebar. Pinned to the top
    and straddling the right divider so it bridges the sidebar/content border. */
 .nav-collapse-toggle {

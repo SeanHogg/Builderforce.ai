@@ -1,5 +1,4 @@
-'use client';
-
+// No 'use client': rendered only inside `Sidebar.tsx`'s client boundary.
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useLegalDocs } from './useLegalDocs';

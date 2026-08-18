@@ -18,7 +18,6 @@ import { NavCountsProvider } from '@/lib/navCounts';
 import { ShellIndex } from './shell/ShellIndex';
 import { ShellPanel } from './shell/ShellPanel';
 import { TeamBar } from './team/TeamBar';
-import CanvasUsageCorner from './legal/CanvasUsageCorner';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 // A reference page whose title is DATA (a diagnostic, named by the API catalog)
 // tells the panel what to call it; the provider is the wire between them and has
@@ -151,9 +150,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </div>
       {/* The team, always on the footer — §3.3. It decides its own visibility. */}
       <TeamBar />
-      {/* Version + Terms/Privacy live in the sidebar (`Sidebar`'s own footer row)
-          rather than a full-width strip here — see its own doc. */}
-      <CanvasUsageCorner />
+      {/* Usage meters and version + Terms/Privacy live in the sidebar
+          (`Sidebar`'s own footer row) rather than floating over the board
+          here — see its own doc. */}
       <MobileBottomNav />
     </div>
     </ReferenceChromeProvider>
