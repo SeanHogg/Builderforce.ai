@@ -34,6 +34,8 @@ import { BLOG_TOPICS } from '@/lib/blogTopics';
 import { METHOD_STEPS, PROOF_FORMS, methodStepKey, proofFormKey } from '@/lib/methodology';
 import { destinationPitchKey, teaserDestinationIds } from '@/lib/routeMarketing';
 import { RESUME_TEMPLATES } from '@/lib/canvasResume';
+import { CANVAS_SESSION_ACTIONS } from '@/lib/canvasSessionActions';
+import { OUTCOME_METRIC_FAMILY_ORDER, OUTCOME_METRIC_MESSAGE_KEYS } from '@/lib/outcomeMetrics';
 
 import { listWidgets } from '@/lib/widgets/registry';
 import { AI_INSIGHT_PANELS } from '@/components/insights/aiInsightPanels';
@@ -161,6 +163,46 @@ describe('message catalogs', () => {
       const key = `creationCanvas.resumeEditor.${labelKey}`;
       return t(key as never) === key;
     });
+    expect(missing).toEqual([]);
+  });
+
+  /**
+   * The session bar renders from a registry, so its labels never appear as a
+   * literal at a `t(…)` call site and `check-i18n-keys.mjs` cannot see them.
+   * That is how `prove` shipped: the action was added to the registry, the
+   * board rendered `creationCanvas.proveThisIdea` as its button, and both
+   * guards stayed green.
+   */
+  it.each(LOCALES)('%s labels every canvas session action', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale], onError: () => {} });
+    const missing = CANVAS_SESSION_ACTIONS
+      .flatMap(({ labelKey, activeLabelKey, titleKey }) => [labelKey, activeLabelKey, titleKey])
+      .filter((key): key is string => Boolean(key))
+      .map((key) => `creationCanvas.${key}`)
+      .filter((key) => !t.has(key as never));
+    expect(missing).toEqual([]);
+  });
+
+  /**
+   * The outcome vocabulary is assembled inside `lib/outcomeMetrics.ts`, which
+   * falls back to the English on the wire when a key is absent — so a missing
+   * entry renders plausible English in every locale rather than a raw key, and
+   * no other guard notices. The metric keys themselves are the SERVER's, and a
+   * metric this build has not learned is expected; the fixed vocabulary and the
+   * families this build does know are not.
+   */
+  it.each(LOCALES)('%s carries the outcome-metric vocabulary', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale], onError: () => {} });
+    const missing = [
+      ...OUTCOME_METRIC_MESSAGE_KEYS,
+      ...[...OUTCOME_METRIC_FAMILY_ORDER, 'unfiled'].map((family) => `family.${family}`),
+    ]
+      .map((key) => `outcomeMetrics.${key}`)
+      // `has`, not a render: half this vocabulary takes an ICU argument, and
+      // formatting it argument-less would report a present key as missing. That
+      // the messages FORMAT is already proven, for every leaf, at the bottom of
+      // this file.
+      .filter((key) => !t.has(key as never));
     expect(missing).toEqual([]);
   });
 

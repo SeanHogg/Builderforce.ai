@@ -67,6 +67,36 @@ export const OUTCOME_METRIC_FAMILY_ORDER: readonly OutcomeMetricFamily[] = [
   'integrity',
 ];
 
+/**
+ * The fixed messages this module renders.
+ *
+ * Enumerated rather than left as loose literals because `translated` FALLS BACK
+ * on a missing key by design — a metric this build has not learned still shows
+ * its wire label instead of a blank cell. That same fallback hides a genuinely
+ * absent catalog entry: nothing renders a raw key, nothing throws, and every
+ * locale quietly serves the English fallback. `check-i18n-keys.mjs` cannot see
+ * these either, since the keys are assembled here rather than at a `t(…)` call
+ * site. So the list is the contract: `translated` accepts nothing outside it,
+ * and `messages.test.ts` proves all five catalogs carry every entry.
+ */
+export const OUTCOME_METRIC_MESSAGE_KEYS = [
+  'notMeasured',
+  'baselineGathering',
+  'noChange',
+  'unitSeconds',
+  'unitMinutes',
+  'unitAgent',
+  'unitAgents',
+  'unitPoints',
+  'vsBaseline',
+] as const;
+
+export type OutcomeMetricMessageKey = (typeof OUTCOME_METRIC_MESSAGE_KEYS)[number];
+
+/** The keys whose suffix the SERVER owns — a metric or family this build has
+ *  not learned is expected, and falls back to the label on the wire. */
+type OutcomeWireKey = `metric.${string}.label` | `metric.${string}.definition` | `family.${string}`;
+
 /** A translator that can be asked whether it knows a key — `useTranslations`
  *  and `getTranslations` both satisfy this. */
 export interface OutcomeTranslator {
@@ -84,7 +114,7 @@ export interface OutcomeTranslator {
  */
 function translated(
   t: OutcomeTranslator,
-  key: string,
+  key: OutcomeMetricMessageKey | OutcomeWireKey,
   fallback: string,
   values?: Record<string, string | number>,
 ): string {
