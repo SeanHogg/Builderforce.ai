@@ -73,6 +73,16 @@ const KERNEL_TABLES = new Set([
  */
 const ADJUDICATED = new Map([
   [
+    'pay_runs',
+    'the kernel `runs` primitive is an EXECUTION — it has an attempt number, a parent ' +
+      'run, a queued/running/succeeded status and jsonb input/output, because it models ' +
+      'work the platform performed and may retry. A pay run is none of those: the ' +
+      'platform did not perform it, cannot retry it, and the money has already left. ' +
+      'The two share a word and no invariant. Folding it in would put `total_cost` — ' +
+      'the number that IS burn, and that a forecast sums — inside an `output` blob, ' +
+      'which is exactly the un-summable shape the pay-run work exists to replace.',
+  ],
+  [
     'agent_definition_versions',
     'an executable identity boundary, not an edit-history entry. Releases, runs and ' +
       'rehearsals hold restrictive foreign keys to its content-addressed UUID; the generic ' +
@@ -163,6 +173,21 @@ const ADJUDICATED = new Map([
       'granularity the same way the other two tables are; centralising through `share_links` ' +
       'would require the kernel primitive to grow a legal-specific recipient column three ' +
       'domains want and the other twenty-one do not.',
+  ],
+  [
+    'data_room_shares',
+    'the same adjudication as `legal_document_shares`, and one noun further apart. A ' +
+      'legal-document share grants a recipient ONE sealed file; a data-room share grants ' +
+      'a NEGOTIATED RELATIONSHIP with a firm — it can require an NDA to be signed first ' +
+      '(`ndaSignatureRequestId`), it inherits the ROOM\'s own `expiresAt` on top of its ' +
+      'own, it names the firm as a `party_roles.party_ref` so "which fund read the cap ' +
+      'table" joins to the same investor object the raise pipeline uses, and it is the ' +
+      'grain view analytics are reported per. Folding it into `share_links` would trade a ' +
+      'real foreign key for a string discriminator and put three NDA columns on every ' +
+      'share in the platform that can never use them. What IS shared is the credential ' +
+      'mechanics, and those already live in exactly one place — `shareToken.ts`, whose ' +
+      '`shareGrantState()` is the single revoked/expired predicate this table and the ' +
+      'other three all resolve through.',
   ],
 ]);
 

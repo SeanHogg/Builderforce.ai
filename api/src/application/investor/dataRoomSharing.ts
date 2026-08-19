@@ -763,19 +763,23 @@ export interface DataRoomAnalytics {
  */
 export async function dataRoomAnalytics(db: Db, tenantId: number, dataRoomId: number): Promise<DataRoomAnalytics> {
   await loadRoom(db, tenantId, dataRoomId);
-  const scope = scopedToTenant(
+  // Built once and SPREAD into each of the three `where`s rather than retyped:
+  // three copies of an access predicate is three places to forget the tenant when
+  // one of them is later edited, which is the failure `scopedToTenant` exists to
+  // make impossible.
+  const scope = [scopedToTenant(
     activityLog,
     tenantId,
     eq(activityLog.targetType, TARGET_TYPE),
     eq(activityLog.targetId, String(dataRoomId)),
     inArray(activityLog.verb, [DATA_ROOM_VERBS.opened, DATA_ROOM_VERBS.document]),
-  );
+  )];
 
   const [totals, byRecipient, byDocument] = await Promise.all([
     db
       .select({ verb: activityLog.verb, count: sql<number>`count(*)::int` })
       .from(activityLog)
-      .where(scope)
+      .where(and(...scope))
       .groupBy(activityLog.verb),
     db
       .select({
@@ -785,7 +789,7 @@ export async function dataRoomAnalytics(db: Db, tenantId: number, dataRoomId: nu
         lastSeen: sql<string | null>`max(${activityLog.occurredAt})`,
       })
       .from(activityLog)
-      .where(scope)
+      .where(and(...scope))
       .groupBy(sql`coalesce(${activityLog.metadata} ->> 'recipientEmail', 'unknown')`, activityLog.verb),
     db
       .select({
@@ -795,7 +799,7 @@ export async function dataRoomAnalytics(db: Db, tenantId: number, dataRoomId: nu
         lastViewedAt: sql<string | null>`max(${activityLog.occurredAt})`,
       })
       .from(activityLog)
-      .where(and(scope, eq(activityLog.verb, DATA_ROOM_VERBS.document)))
+      .where(and(...scope, eq(activityLog.verb, DATA_ROOM_VERBS.document)))
       .groupBy(sql`${activityLog.metadata} ->> 'documentId'`)
       .orderBy(sql`count(*) desc`)
       .limit(100),

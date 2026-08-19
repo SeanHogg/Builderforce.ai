@@ -169,14 +169,21 @@ export function bytesToBase64(buffer: ArrayBuffer): string {
  */
 export async function readProviderError(response: Response): Promise<string> {
   const body = await response.text().catch(() => '');
+  // The raw body IS the answer when there is no structured one, so it is computed
+  // once and returned from both paths rather than fallen through to — a catch that
+  // only breaks out of the block reads as swallowed even when it is not.
+  const raw = body.trim().slice(0, 400) || `The page renderer returned HTTP ${response.status}`;
   try {
     const parsed = JSON.parse(body) as { errors?: Array<{ message?: unknown }> };
     const messages = (parsed.errors ?? [])
       .map((error) => (typeof error?.message === 'string' ? error.message.trim() : ''))
       .filter(Boolean);
-    if (messages.length) return messages.join('; ');
-  } catch { /* Not JSON — fall through to the raw body below. */ }
-  return body.trim().slice(0, 400) || `The page renderer returned HTTP ${response.status}`;
+    return messages.length ? messages.join('; ') : raw;
+  } catch {
+    // Not JSON. Renderers fail this way routinely — an HTML error page, a proxy
+    // banner — so the raw text is the most specific thing we have to relay.
+    return raw;
+  }
 }
 
 /**
