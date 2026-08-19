@@ -12,16 +12,27 @@
  *   PATCH  /requests/:id              edit a request                            [developer]
  *   POST   /requests/:id/generate     run the response generator                [developer]
  *   GET    /responses/:id             response detail (body)                    [viewer]
- *   GET    /responses/:id/document    branded self-contained HTML (print-to-PDF)[viewer]
+ *   GET    /responses/:id/document    branded doc — HTML, or `?format=pdf`      [viewer]
+ *   POST   /responses/:id/reground    poll the deep analysis, re-ground roster  [developer]
+ *   GET    /risks                     risk/dependency register + roll-up        [viewer]
+ *   PATCH  /risks/:id                 register lifecycle (status/owner/detail)  [developer]
+ *   GET    /brand                     the responder tenant's own palette        [viewer]
+ *   PUT    /brand                     set it                                    [admin]
+ *   POST   /brand/extract             derive a palette from a website URL       [developer]
  *   POST   /portfolio-match           rank similar projects for requirements    [viewer]
  */
 import { Hono } from 'hono';
 import { and, eq, desc } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { rfpRequests, rfpResponses } from '../../infrastructure/database/schema';
+import { rfpRequests, rfpResponses, tenants } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { generateRfpResponse, matchPortfolio, type RfpGenerateDeps } from '../../application/rfp/rfpService';
+import { generateRfpResponse, matchPortfolio, regroundRfpResponse, type RfpGenerateDeps } from '../../application/rfp/rfpService';
+import { readRiskRegister, updateRegisterEntry } from '../../application/rfp/rfpRegister';
+import { renderRfpDocPdf, normalizePalette, DEFAULT_TENANT_PALETTE } from '../../application/rfp/rfpBranding';
+import { extractSitePalette } from '../../application/rfp/brandExtraction';
+import type { RfpResponseBody } from '../../application/rfp/types';
+import type { TaskService } from '../../application/task/TaskService';
 import type { ToolService } from '../../application/tools/ToolService';
 import type { AuditRunner } from '../../application/tools/AuditRunner';
 import type { Env, HonoEnv } from '../../env';
@@ -75,7 +86,7 @@ async function listRfp(db: Db, tenantId: number) {
   };
 }
 
-export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: AuditRunner): Hono<HonoEnv> {
+export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: AuditRunner, taskService: TaskService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
@@ -148,19 +159,24 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
     return c.json(row);
   });
 
+  /** One dependency bundle for both the generator and the re-grounder, so a
+   *  deployment cannot end up firing the Architect from one and not the other. */
+  const generateDeps = (env: Env): RfpGenerateDeps => ({
+    env,
+    db,
+    toolService,
+    auditRunner,
+    taskService,
+    secret: env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '',
+  });
+
   // Generate a response.
   router.post('/requests/:id/generate', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
     const env = c.env as Env;
-    const deps: RfpGenerateDeps = {
-      env,
-      db,
-      toolService,
-      auditRunner,
-      secret: env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '',
-    };
+    const deps = generateDeps(env);
     const result = await generateRfpResponse(deps, { tenantId, requestId: id, userId });
     if (!result) return c.json({ error: 'Request not found' }, 404);
     await bumpCacheVersion(env, rfpVersionKey(tenantId));
@@ -176,13 +192,121 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
     return c.json(row);
   });
 
-  // Branded document (self-contained HTML → browser print-to-PDF).
+  // Branded document. `?format=pdf` renders real PDF bytes server-side - the
+  // attachment a proposal is actually sent as; anything else returns the
+  // self-contained HTML, which is the preview and the emailable single file.
+  // Both render the SAME body, so the two can never quote different numbers.
   router.get('/responses/:id/document', requireRole(TenantRole.VIEWER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    const [row] = await db.select({ docHtml: rfpResponses.docHtml }).from(rfpResponses).where(and(eq(rfpResponses.id, id), eq(rfpResponses.tenantId, tenantId))).limit(1);
-    if (!row?.docHtml) return c.json({ error: 'Document not found' }, 404);
-    return c.html(row.docHtml);
+    const wantsPdf = c.req.query('format') === 'pdf';
+
+    const [row] = await db
+      .select({ docHtml: rfpResponses.docHtml, body: rfpResponses.body, requestId: rfpResponses.requestId, createdAt: rfpResponses.createdAt })
+      .from(rfpResponses)
+      .where(and(eq(rfpResponses.id, id), eq(rfpResponses.tenantId, tenantId)))
+      .limit(1);
+    if (!row) return c.json({ error: 'Document not found' }, 404);
+
+    if (!wantsPdf) {
+      if (!row.docHtml) return c.json({ error: 'Document not found' }, 404);
+      return c.html(row.docHtml);
+    }
+
+    const body = row.body as RfpResponseBody | null;
+    if (!body) return c.json({ error: 'Document not found' }, 404);
+    const [request] = await db
+      .select({ title: rfpRequests.title, requesterOrgName: rfpRequests.requesterOrgName })
+      .from(rfpRequests).where(and(eq(rfpRequests.id, row.requestId), eq(rfpRequests.tenantId, tenantId))).limit(1);
+    const [tenant] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+
+    const bytes = renderRfpDocPdf({
+      title: request?.title ?? 'Proposal',
+      requesterOrgName: request?.requesterOrgName ?? '',
+      tenantName: tenant?.name ?? 'Our team',
+      body,
+      generatedAtIso: row.createdAt.toISOString().slice(0, 10),
+    });
+    const name = (request?.title ?? 'proposal').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'proposal';
+    return new Response(bytes as unknown as BodyInit, {
+      headers: {
+        'content-type': 'application/pdf',
+        'content-disposition': `attachment; filename="${name}-proposal.pdf"`,
+        'cache-control': 'no-store',
+      },
+    });
+  });
+
+  // Poll the deep `architecture-analysis` run the freshness gate fired, and
+  // re-ground the roster + document the moment it lands. Developer+ because it
+  // WRITES the response when the run has finished.
+  router.post('/responses/:id/reground', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const env = c.env as Env;
+    const result = await regroundRfpResponse(generateDeps(env), { tenantId, responseId: c.req.param('id') });
+    if (!result) return c.json({ error: 'Response not found' }, 404);
+    if (result.regrounded) await bumpCacheVersion(env, rfpVersionKey(tenantId));
+    return c.json(result);
+  });
+
+  // The risk / dependency register.
+  //
+  // Deliberately NOT served through the tenant version token like the list
+  // above: the register is written by the lifecycle PATCH as well as by
+  // generation, and the whole point of the surface is that someone closing a
+  // risk sees it closed. A 120s stale read would undo that.
+  router.get('/risks', requireRole(TenantRole.VIEWER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const q = c.req.query();
+    return c.json(await readRiskRegister(db, tenantId, {
+      ...(q.kind === 'risk' || q.kind === 'dependency' ? { kind: q.kind } : {}),
+      ...(q.status === 'open' || q.status === 'accepted' || q.status === 'mitigated' || q.status === 'closed' ? { status: q.status } : {}),
+      ...(q.severity === 'low' || q.severity === 'medium' || q.severity === 'high' ? { severity: q.severity } : {}),
+      ...(q.requestId ? { requestId: q.requestId } : {}),
+      ...(q.responseId ? { responseId: q.responseId } : {}),
+      ...(q.limit ? { limit: Number(q.limit) } : {}),
+    }));
+  });
+
+  router.patch('/risks/:id', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{ status?: string; ownerUserId?: string | null; detail?: string | null }>().catch(() => ({} as { status?: string; ownerUserId?: string | null; detail?: string | null }));
+    const row = await updateRegisterEntry(db, tenantId, c.req.param('id'), {
+      ...(body.status === 'open' || body.status === 'accepted' || body.status === 'mitigated' || body.status === 'closed' ? { status: body.status } : {}),
+      ...(body.ownerUserId !== undefined ? { ownerUserId: body.ownerUserId } : {}),
+      ...(body.detail !== undefined ? { detail: body.detail } : {}),
+    });
+    if (!row) return c.json({ error: 'Entry not found' }, 404);
+    return c.json(row);
+  });
+
+  // The responder tenant's OWN brand - the other half of the co-branding, which
+  // used to be a hard-coded default for every tenant on the platform.
+  router.get('/brand', requireRole(TenantRole.VIEWER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const [row] = await db.select({ brandPalette: tenants.brandPalette }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+    return c.json({ palette: normalizePalette(row?.brandPalette ?? null, DEFAULT_TENANT_PALETTE), isDefault: !row?.brandPalette });
+  });
+
+  router.put('/brand', requireRole(TenantRole.ADMIN), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{ palette?: unknown }>().catch(() => ({} as { palette?: unknown }));
+    // Normalised on the way in, so an invalid hex can never reach a rendered
+    // document - the same guarantee the requester palette already had.
+    const palette = normalizePalette(body.palette ?? null, DEFAULT_TENANT_PALETTE);
+    await db.update(tenants).set({ brandPalette: palette }).where(eq(tenants.id, tenantId));
+    await bumpCacheVersion(c.env as Env, rfpVersionKey(tenantId));
+    return c.json({ palette });
+  });
+
+  // Derive a palette from a public website, so the asking business's colours are
+  // READ rather than hand-entered off a screenshot. Server-side because a
+  // browser cannot fetch a third-party origin's stylesheet.
+  router.post('/brand/extract', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const body = await c.req.json<{ url?: string }>().catch(() => ({} as { url?: string }));
+    const result = await extractSitePalette(String(body.url ?? ''));
+    if ('error' in result) return c.json(result, 400);
+    return c.json(result);
   });
 
   // Rank similar portfolio projects for a free-text requirements blob.

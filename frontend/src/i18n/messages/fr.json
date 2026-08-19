@@ -13837,7 +13837,8 @@
       "risks": "Risques clés",
       "dependencies": "Dépendances",
       "portfolio": "Projets similaires",
-      "document": "Proposition brandée"
+      "document": "Proposition brandée",
+      "registerRollup": "Synthèse du registre des risques"
     },
     "capabilitiesGreenfield": "Nouveau projet — les capacités sont proposées à partir des exigences.",
     "col": {
@@ -13858,7 +13859,45 @@
       "external": "Externe",
       "third_party": "Tierce partie"
     },
-    "downloadDoc": "Télécharger"
+    "downloadDoc": "Télécharger",
+    "needAdmin": "Rôle Administrateur requis",
+    "downloadPdf": "Télécharger le PDF",
+    "preparingPdf": "Préparation du PDF…",
+    "registerStatusLabel": "Statut au registre",
+    "registerStatus": {
+      "open": "Ouvert",
+      "accepted": "Accepté",
+      "mitigated": "Atténué",
+      "closed": "Clôturé"
+    },
+    "deep": {
+      "fresh": "Analyse d’architecture approfondie à jour",
+      "refreshing": "Nouvelle analyse de l’architecture… {progress} %",
+      "unavailable": "Analyse approfondie vieille de {days} j — inventaire du dernier état connu"
+    },
+    "rollup": {
+      "openHigh": "Risques élevés ouverts",
+      "risks": "Risques",
+      "dependencies": "Dépendances",
+      "mitigated": "Atténués ou clôturés",
+      "recurringHint": "Soulevés dans plusieurs propositions :",
+      "acrossResponses": "{count} propositions"
+    },
+    "brand": {
+      "yours": "Votre marque",
+      "setYours": "Définir votre marque",
+      "yoursHint": "Votre propre palette, fusionnée à celle de l’organisation demandeuse sur chaque proposition.",
+      "save": "Enregistrer la marque",
+      "fromSite": "Lire depuis un site web",
+      "sitePlaceholder": "adresse du site de l’entreprise",
+      "read": "Lire",
+      "reading": "Lecture…",
+      "fromLogo": "Lire depuis un logo",
+      "readFromSiteDone": "Couleurs lues sur le site.",
+      "readFromLogoDone": "Couleurs lues sur le logo.",
+      "readFailed": "Ces couleurs n’ont pas pu être lues — saisissez-les à la main.",
+      "candidates": "Autres couleurs trouvées — cliquez pour en faire la couleur principale :"
+    }
   },
   "planBadge": {
     "tier": {

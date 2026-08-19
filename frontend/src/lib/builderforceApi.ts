@@ -6216,6 +6216,60 @@ export interface RfpScanFreshness {
   lastScanAt: string | null;
   ageDays: number | null;
   refreshed: boolean;
+  /** The DEEP architecture artifacts, which age on their own clock. Re-running
+   *  the deterministic audits refreshes the score, not the capability roster. */
+  deep?: RfpDeepFreshness;
+}
+
+export interface RfpDeepFreshness {
+  lastArtifactAt: string | null;
+  ageDays: number | null;
+  state: 'fresh' | 'refreshing' | 'unavailable';
+  runId?: string | null;
+  reason?: string | null;
+}
+
+/** One row of the risk / dependency register. */
+export interface RfpRegisterEntry {
+  id: string;
+  responseId: string;
+  requestId: string;
+  kind: 'risk' | 'dependency';
+  title: string;
+  severity: 'low' | 'medium' | 'high' | null;
+  dependencyType: 'internal' | 'external' | 'third_party' | null;
+  detail: string | null;
+  status: 'open' | 'accepted' | 'mitigated' | 'closed';
+  ownerUserId: string | null;
+  position: number;
+  createdAt: string;
+}
+
+export interface RfpRegisterRollup {
+  totalRisks: number;
+  totalDependencies: number;
+  openHighRisks: number;
+  bySeverity: Record<'low' | 'medium' | 'high', number>;
+  byStatus: Record<'open' | 'accepted' | 'mitigated' | 'closed', number>;
+  byDependencyType: Record<'internal' | 'external' | 'third_party', number>;
+  recurring: { title: string; kind: 'risk' | 'dependency'; responses: number; worstSeverity: 'low' | 'medium' | 'high' | null }[];
+}
+
+/** What a poll of the deep analysis reports back. */
+export interface RfpRegroundResult {
+  state: 'fresh' | 'refreshing' | 'unavailable';
+  runStatus: string | null;
+  progress: number | null;
+  stage: string | null;
+  regrounded: boolean;
+}
+
+/** A palette read off a public website, with where each colour came from. */
+export interface RfpExtractedPalette {
+  palette: BrandPalette;
+  sources: { primary: string; secondary: string; accent: string };
+  siteUrl: string;
+  candidates: string[];
 }
 
 export interface RfpResponseBody {
@@ -6260,6 +6314,8 @@ export interface RfpResponseRow {
   quotedPriceUsdCents: number | null;
   marginPct: number | null;
   scanRefreshed: boolean;
+  /** Set while a deep `architecture-analysis` run is re-grounding this response. */
+  deepAnalysisRunId?: string | null;
   generatedBy: { cto: string | null; productOwner: string | null } | null;
   createdAt: string;
   updatedAt: string;
@@ -6306,6 +6362,45 @@ export const rfpApi = {
     request<RfpResponseRow>(`/api/rfp/responses/${id}`),
   portfolioMatch: (requirements: string, excludeProjectId?: number | null): Promise<{ matches: RfpPortfolioMatch[] }> =>
     request<{ matches: RfpPortfolioMatch[] }>('/api/rfp/portfolio-match', { method: 'POST', body: JSON.stringify({ requirements, excludeProjectId }) }),
+
+  /**
+   * Poll the deep analysis the freshness gate fired. Returns `refreshing` while
+   * the run is in flight and `fresh` once the roster and the branded document
+   * have been rewritten from the new artifacts.
+   */
+  reground: (responseId: string): Promise<RfpRegroundResult> =>
+    request<RfpRegroundResult>(`/api/rfp/responses/${responseId}/reground`, { method: 'POST' }),
+
+  /** The risk / dependency register plus the roll-up over the same filtered set. */
+  risks: (query: { kind?: 'risk' | 'dependency'; status?: string; severity?: string; requestId?: string; responseId?: string } = {}): Promise<{ entries: RfpRegisterEntry[]; rollup: RfpRegisterRollup }> => {
+    const q = new URLSearchParams(Object.entries(query).filter(([, v]) => !!v) as [string, string][]);
+    const suffix = q.toString();
+    return request<{ entries: RfpRegisterEntry[]; rollup: RfpRegisterRollup }>(`/api/rfp/risks${suffix ? `?${suffix}` : ''}`);
+  },
+
+  updateRisk: (id: string, patch: { status?: string; ownerUserId?: string | null; detail?: string | null }): Promise<RfpRegisterEntry> =>
+    request<RfpRegisterEntry>(`/api/rfp/risks/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+
+  /** The responder tenant's OWN palette — the other half of the co-branding. */
+  getBrand: (): Promise<{ palette: BrandPalette; isDefault: boolean }> =>
+    request<{ palette: BrandPalette; isDefault: boolean }>('/api/rfp/brand'),
+
+  setBrand: (palette: BrandPalette): Promise<{ palette: BrandPalette }> =>
+    request<{ palette: BrandPalette }>('/api/rfp/brand', { method: 'PUT', body: JSON.stringify({ palette }) }),
+
+  /** Read a palette off a public website instead of eyedropping a screenshot. */
+  extractBrand: (url: string): Promise<RfpExtractedPalette> =>
+    request<RfpExtractedPalette>('/api/rfp/brand/extract', { method: 'POST', body: JSON.stringify({ url }) }),
+
+  /**
+   * Download the branded proposal as a real PDF. Rendered server-side, so the
+   * file is the same for everyone rather than whatever a print dialog produced.
+   */
+  async downloadPdf(responseId: string, filename = 'proposal.pdf'): Promise<void> {
+    const res = await apiRequestStream(`/api/rfp/responses/${responseId}/document?format=pdf`);
+    if (!res.ok) throw new Error(`Proposal download failed (${res.status})`);
+    downloadBlob(await res.blob(), filenameFromResponse(res, filename));
+  },
 };
 
 // ---------------------------------------------------------------------------

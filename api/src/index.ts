@@ -602,7 +602,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/references', createReferenceRoutes(db));
   // RFP / RFQ Response — pre-sales proposal generation (PRD 15). Reuses the diagnostics
   // scan (freshness gate) + audit runner (re-scan) grounded in the same toolService.
-  app.route('/api/rfp', createRfpRoutes(db, toolService, auditRunner));
+  app.route('/api/rfp', createRfpRoutes(db, toolService, auditRunner, taskService));
   app.route('/api/marketing', createMarketingRoutes(marketingService));
   // Sales-cycle demo accounts — public one-click persona demo sessions, funnel
   // telemetry, book-a-demo leads, and the (guarded) deploy-hook reseed.

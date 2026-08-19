@@ -13837,7 +13837,8 @@
       "risks": "Key risks",
       "dependencies": "Dependencies",
       "portfolio": "Similar projects",
-      "document": "Branded proposal"
+      "document": "Branded proposal",
+      "registerRollup": "Risk register roll-up"
     },
     "capabilitiesGreenfield": "Greenfield engagement — capabilities are proposed from the requirements.",
     "col": {
@@ -13858,7 +13859,45 @@
       "external": "External",
       "third_party": "Third-party"
     },
-    "downloadDoc": "Download"
+    "downloadDoc": "Download",
+    "needAdmin": "Requires Admin role",
+    "downloadPdf": "Download PDF",
+    "preparingPdf": "Preparing PDF…",
+    "registerStatusLabel": "Register status",
+    "registerStatus": {
+      "open": "Open",
+      "accepted": "Accepted",
+      "mitigated": "Mitigated",
+      "closed": "Closed"
+    },
+    "deep": {
+      "fresh": "Deep architecture analysis current",
+      "refreshing": "Re-analysing architecture… {progress}%",
+      "unavailable": "Deep analysis {days}d old — roster is last known"
+    },
+    "rollup": {
+      "openHigh": "Open high risks",
+      "risks": "Risks",
+      "dependencies": "Dependencies",
+      "mitigated": "Mitigated or closed",
+      "recurringHint": "Raised on more than one proposal:",
+      "acrossResponses": "{count} proposals"
+    },
+    "brand": {
+      "yours": "Your brand",
+      "setYours": "Set your brand",
+      "yoursHint": "Your own palette, blended with the requesting organisation’s on every proposal.",
+      "save": "Save brand",
+      "fromSite": "Read from a website",
+      "sitePlaceholder": "company website address",
+      "read": "Read",
+      "reading": "Reading…",
+      "fromLogo": "Read from a logo",
+      "readFromSiteDone": "Colours read from the site.",
+      "readFromLogoDone": "Colours read from the logo.",
+      "readFailed": "Those colours could not be read — enter them by hand.",
+      "candidates": "Other colours found — click one to make it the primary:"
+    }
   },
   "planBadge": {
     "tier": {

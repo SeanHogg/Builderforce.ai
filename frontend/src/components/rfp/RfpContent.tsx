@@ -7,6 +7,7 @@ import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { useRole, hasMinRole } from '@/lib/rbac';
 import { rfpApi, type RfpRequestListRow, type RfpRequestInput, type BrandPalette } from '@/lib/builderforceApi';
+import { BrandPaletteEditor } from './BrandPaletteEditor';
 import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 
@@ -15,7 +16,15 @@ import type { Project } from '@/lib/types';
  * (not a top-level menu item). Lists incoming requests with their latest generated
  * proposal summary, and creates a new request (co-brand colours, requirements,
  * greenfield-or-existing grounding, P&L knobs) via the canonical SlideOutPanel.
- * Writes are gated to developer+ (mirrors the server requireRole). Localized + themed.
+ *
+ * It also owns the RESPONDER side of the co-branding — the tenant's own palette,
+ * stored on the tenant row rather than defaulted per render, so two tenants no
+ * longer send identically-coloured proposals. Both palettes are edited through
+ * the same `BrandPaletteEditor`, which can read colours off a website or a logo
+ * instead of asking someone to eyedrop a screenshot.
+ *
+ * Writes are gated to developer+ (mirrors the server requireRole); the tenant
+ * palette is admin+. Localized + themed.
  */
 
 const card: React.CSSProperties = {
@@ -65,6 +74,12 @@ export default function RfpContent() {
   const [draft, setDraft] = useState<RfpRequestInput>(EMPTY);
   const [saving, setSaving] = useState(false);
 
+  const canBrand = hasMinRole(role, 'admin');
+  const [brandOpen, setBrandOpen] = useState(false);
+  const [brand, setBrand] = useState<BrandPalette | null>(null);
+  const [brandIsDefault, setBrandIsDefault] = useState(true);
+  const [savingBrand, setSavingBrand] = useState(false);
+
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -76,10 +91,31 @@ export default function RfpContent() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { fetchProjects().then(setProjects).catch(() => setProjects([])); }, []);
+  useEffect(() => {
+    rfpApi.getBrand()
+      .then((r) => { setBrand(r.palette); setBrandIsDefault(r.isDefault); })
+      .catch(() => setBrand(null));
+  }, []);
+
+  const saveBrand = async () => {
+    if (!brand) return;
+    setSavingBrand(true);
+    setError(null);
+    try {
+      const saved = await rfpApi.setBrand(brand);
+      setBrand(saved.palette);
+      setBrandIsDefault(false);
+      setBrandOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSavingBrand(false);
+    }
+  };
 
   const openCreate = () => { setDraft({ ...EMPTY, requesterBrand: { ...DEFAULT_BRAND } }); setPanelOpen(true); };
 
-  const setBrand = (patch: Partial<BrandPalette>) =>
+  const setRequesterBrand = (patch: Partial<BrandPalette>) =>
     setDraft((d) => ({ ...d, requesterBrand: { ...(d.requesterBrand ?? DEFAULT_BRAND), ...patch } }));
 
   const create = async () => {
@@ -106,9 +142,14 @@ export default function RfpContent() {
           <h1 style={{ fontSize: 'clamp(20px,3vw,26px)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>{t('title')}</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0, maxWidth: 640 }}>{t('subtitle')}</p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={openCreate} disabled={!canManage} title={canManage ? undefined : t('needDeveloper')}>
-          {t('newRequest')}
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-secondary" onClick={() => setBrandOpen(true)} disabled={!canBrand} title={canBrand ? undefined : t('needAdmin')}>
+            {brandIsDefault ? t('brand.setYours') : t('brand.yours')}
+          </button>
+          <button type="button" className="btn btn-primary" onClick={openCreate} disabled={!canManage} title={canManage ? undefined : t('needDeveloper')}>
+            {t('newRequest')}
+          </button>
+        </div>
       </div>
 
       {loading && <div style={card}>{t('loading')}</div>}
@@ -158,15 +199,11 @@ export default function RfpContent() {
 
           <div>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('field.requesterBrand')}</span>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 8px' }}>{t('field.requesterBrandHint')}</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 10 }}>
-              <ColorField label={t('field.primary')} value={draft.requesterBrand?.primary ?? DEFAULT_BRAND.primary} onChange={(v) => setBrand({ primary: v })} />
-              <ColorField label={t('field.secondary')} value={draft.requesterBrand?.secondary ?? DEFAULT_BRAND.secondary} onChange={(v) => setBrand({ secondary: v })} />
-              <ColorField label={t('field.accent')} value={draft.requesterBrand?.accent ?? DEFAULT_BRAND.accent} onChange={(v) => setBrand({ accent: v })} />
-            </div>
-            <Field label={t('field.logoUrl')}>
-              <input className="input" value={draft.requesterBrand?.logoUrl ?? ''} onChange={(e) => setBrand({ logoUrl: e.target.value })} placeholder="https://…/logo.png" />
-            </Field>
+            <BrandPaletteEditor
+              value={draft.requesterBrand ?? DEFAULT_BRAND}
+              onChange={setRequesterBrand}
+              hint={t('field.requesterBrandHint')}
+            />
           </div>
 
           <Field label={t('field.requirements')}>
@@ -207,6 +244,29 @@ export default function RfpContent() {
           </div>
         </div>
       </SlideOutPanel>
+
+      <SlideOutPanel open={brandOpen} onClose={() => setBrandOpen(false)} title={t('brand.yours')}>
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {brand ? (
+            <>
+              <BrandPaletteEditor
+                value={brand}
+                onChange={(patch) => setBrand((b) => (b ? { ...b, ...patch } : b))}
+                hint={t('brand.yoursHint')}
+                disabled={!canBrand}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <button type="button" className="btn btn-primary" onClick={saveBrand} disabled={savingBrand || !canBrand}>
+                  {savingBrand ? t('creating') : t('brand.save')}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => setBrandOpen(false)}>{t('cancel')}</button>
+              </div>
+            </>
+          ) : (
+            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('loading')}</p>
+          )}
+        </div>
+      </SlideOutPanel>
     </div>
   );
 }
@@ -216,18 +276,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{label}</span>
       {children}
-    </label>
-  );
-}
-
-function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{label}</span>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} style={{ width: 34, height: 34, padding: 0, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', background: 'transparent' }} aria-label={label} />
-        <input className="input" value={value} onChange={(e) => onChange(e.target.value)} style={{ minWidth: 0 }} />
-      </div>
     </label>
   );
 }

@@ -1,19 +1,29 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { Select } from '@/components/Select';
 import { useRole, hasMinRole } from '@/lib/rbac';
 import { downloadText } from '@/lib/download';
 import {
   rfpApi, type RfpRequestRow, type RfpResponseRow, type RfpResponseBody, type RfpCostModel, type RfpPhase,
+  type RfpRegisterEntry, type RfpRegisterRollup, type RfpDeepFreshness,
 } from '@/lib/builderforceApi';
 
 /**
  * RfpDetailClient — the response workspace for one RFP request. Generates a proposal
  * (developer+) and renders it: executive summary, a capability roster grounded in a
- * freshness-gated diagnostics scan, a P&L breakdown, a phase/milestone Gantt, risks,
- * dependencies, portfolio matches, and a co-branded document preview + download.
+ * freshness-gated diagnostics scan, a P&L breakdown, a phase/milestone Gantt, the risk
+ * and dependency REGISTER (with its own lifecycle, not just document JSON), portfolio
+ * matches, and a co-branded document — previewed as HTML, downloaded as a real PDF.
+ *
+ * The roster's grounding is shown on TWO clocks, because they age separately: the
+ * deterministic audit scan, and the deep `architecture-analysis` artifacts the roster
+ * actually comes from. When the deep run is in flight the page says so and polls it,
+ * then re-reads itself — otherwise a proposal would claim "scan refreshed" over a
+ * roster years older than the badge.
+ *
  * Fully localized + themed (light/dark) + responsive.
  */
 
@@ -44,6 +54,10 @@ export default function RfpDetailClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [register, setRegister] = useState<{ entries: RfpRegisterEntry[]; rollup: RfpRegisterRollup } | null>(null);
+  const [deepState, setDeepState] = useState<RfpDeepFreshness['state'] | null>(null);
+  const [deepProgress, setDeepProgress] = useState<number | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const load = useCallback(() => {
     if (!id) return;
@@ -72,6 +86,60 @@ export default function RfpDetailClient() {
 
   const latest = responses[0] ?? null;
   const body = latest?.body ?? null;
+  const latestId = latest?.id ?? null;
+
+  // The register is the queryable half of the risks/dependencies: the same facts
+  // as `body.risks`, plus the lifecycle a printed document has no room for.
+  const loadRegister = useCallback(() => {
+    if (!latestId) { setRegister(null); return; }
+    rfpApi.risks({ responseId: latestId }).then(setRegister).catch(() => setRegister(null));
+  }, [latestId]);
+  useEffect(() => { loadRegister(); }, [loadRegister]);
+
+  const declaredDeep = body?.grounding.scanFreshness?.deep?.state ?? null;
+  useEffect(() => { setDeepState(declaredDeep); }, [declaredDeep]);
+
+  // Poll the deep analysis while it is in flight. The server re-grounds the
+  // roster and re-renders the document the moment the run lands, so the page
+  // reloads itself rather than leaving a stale roster under a live badge.
+  const reloadRef = useRef(load);
+  reloadRef.current = load;
+  useEffect(() => {
+    if (deepState !== 'refreshing' || !latestId || !canManage) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const result = await rfpApi.reground(latestId);
+        if (cancelled) return;
+        setDeepProgress(result.progress);
+        setDeepState(result.state);
+        if (result.regrounded) reloadRef.current();
+      } catch {
+        if (!cancelled) setDeepState('unavailable');
+      }
+    };
+    void tick();
+    const timer = setInterval(tick, 20_000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [deepState, latestId, canManage]);
+
+  const setEntryStatus = async (id: string, status: RfpRegisterEntry['status']) => {
+    await rfpApi.updateRisk(id, { status }).catch(() => undefined);
+    loadRegister();
+  };
+
+  const downloadPdf = async () => {
+    if (!latestId) return;
+    setDownloading(true);
+    try {
+      const name = `${request?.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'rfp'}-proposal.pdf`;
+      await rfpApi.downloadPdf(latestId, name);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Download failed');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="page-inner">
@@ -121,6 +189,12 @@ export default function RfpDetailClient() {
                     {body.grounding.scanFreshness.ageDays != null && !latest.scanRefreshed
                       ? ` · ${t('scanAge', { days: body.grounding.scanFreshness.ageDays })}` : ''}
                   </span>
+                  <DeepGroundingBadge
+                    deep={body.grounding.scanFreshness.deep ?? null}
+                    state={deepState}
+                    progress={deepProgress}
+                    t={t}
+                  />
                 </div>
               )}
 
@@ -141,9 +215,13 @@ export default function RfpDetailClient() {
 
               {/* Risks + dependencies */}
               <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))' }}>
-                <RisksSection body={body} t={t} />
-                <DependenciesSection body={body} t={t} />
+                <RisksSection body={body} register={register?.entries ?? null} canManage={canManage} onStatus={setEntryStatus} t={t} />
+                <DependenciesSection body={body} register={register?.entries ?? null} canManage={canManage} onStatus={setEntryStatus} t={t} />
               </div>
+
+              {register && (register.rollup.recurring.length > 0 || register.rollup.openHighRisks > 0) && (
+                <RegisterRollupSection rollup={register.rollup} t={t} />
+              )}
 
               {/* Portfolio matches */}
               {body.portfolioMatches && body.portfolioMatches.length > 0 && (
@@ -162,7 +240,7 @@ export default function RfpDetailClient() {
               )}
 
               {/* Branded document */}
-              <DocumentSection docHtml={latest.docHtml} title={request.title} t={t} />
+              <DocumentSection docHtml={latest.docHtml} title={request.title} onDownloadPdf={downloadPdf} downloading={downloading} t={t} />
             </>
           )}
         </>
@@ -280,19 +358,97 @@ function GanttSection({ phases, timeline, t }: { phases: RfpPhase[]; timeline: R
   );
 }
 
-function RisksSection({ body, t }: { body: RfpResponseBody; t: T }) {
-  const sevColor: Record<string, string> = { high: 'var(--error)', medium: 'var(--warning)', low: 'var(--success)' };
+/**
+ * Where the roster's facts actually came from, and whether they are current.
+ *
+ * Separate from the audit badge above it because the two age independently: the
+ * audits are deterministic and re-run in-band, while the deep artifacts come
+ * from an LLM run that takes minutes. Saying so is the whole fix — the page used
+ * to show "scan refreshed" over a roster the refresh never touched.
+ */
+function DeepGroundingBadge({ deep, state, progress, t }: {
+  deep: RfpDeepFreshness | null;
+  state: RfpDeepFreshness['state'] | null;
+  progress: number | null;
+  t: T;
+}) {
+  const effective = state ?? deep?.state ?? null;
+  if (!effective) return null;
+  const tone = effective === 'fresh' ? 'var(--success)' : effective === 'refreshing' ? 'var(--info)' : 'var(--warning)';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: tone }}>
+      <span style={{ width: 7, height: 7, borderRadius: 'var(--radius-full)', background: tone }} />
+      {effective === 'refreshing'
+        ? t('deep.refreshing', { progress: progress ?? 0 })
+        : effective === 'fresh'
+          ? t('deep.fresh')
+          : t('deep.unavailable', { days: deep?.ageDays ?? 0 })}
+    </span>
+  );
+}
+
+/** The status control shared by both register columns — one component, so a risk
+ *  and a dependency can never grow two different lifecycle vocabularies. */
+function StatusControl({ entry, canManage, onStatus, t }: {
+  entry: RfpRegisterEntry;
+  canManage: boolean;
+  onStatus: (id: string, status: RfpRegisterEntry['status']) => void;
+  t: T;
+}) {
+  const STATUSES: RfpRegisterEntry['status'][] = ['open', 'accepted', 'mitigated', 'closed'];
+  if (!canManage) {
+    return <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-muted)' }}>{t(`registerStatus.${entry.status}`)}</span>;
+  }
+  return (
+    <Select
+      className="input"
+      value={entry.status}
+      onChange={(e) => onStatus(entry.id, e.target.value as RfpRegisterEntry['status'])}
+      style={{ fontSize: 11, padding: '2px 6px', height: 'auto', width: 'auto', minWidth: 96 }}
+      aria-label={t('registerStatusLabel')}
+    >
+      {STATUSES.map((value) => <option key={value} value={value}>{t(`registerStatus.${value}`)}</option>)}
+    </Select>
+  );
+}
+
+const SEVERITY_COLOR: Record<string, string> = { high: 'var(--error)', medium: 'var(--warning)', low: 'var(--success)' };
+
+function RisksSection({ body, register, canManage, onStatus, t }: {
+  body: RfpResponseBody;
+  register: RfpRegisterEntry[] | null;
+  canManage: boolean;
+  onStatus: (id: string, status: RfpRegisterEntry['status']) => void;
+  t: T;
+}) {
+  // The register is authoritative once it has loaded; the body's own array is
+  // the fallback for a proposal generated before the register existed.
+  const rows = register?.filter((e) => e.kind === 'risk') ?? null;
   return (
     <div style={card}>
       <h2 style={h2}>{t('sec.risks')}</h2>
-      {body.risks.length === 0 ? <p style={muted}>—</p> : (
+      {rows && rows.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {rows.map((r) => (
+            <div key={r.id} style={{ opacity: r.status === 'closed' ? 0.55 : 1 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: SEVERITY_COLOR[r.severity ?? ''] ?? 'var(--text-muted)' }} />
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>{r.title}</span>
+                {r.severity && <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 700, color: SEVERITY_COLOR[r.severity] }}>{t(`severity.${r.severity}`)}</span>}
+                <StatusControl entry={r} canManage={canManage} onStatus={onStatus} t={t} />
+              </div>
+              <p style={{ ...muted, margin: '2px 0 0 16px' }}>{r.detail}</p>
+            </div>
+          ))}
+        </div>
+      ) : body.risks.length === 0 ? <p style={muted}>—</p> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {body.risks.map((r, i) => (
             <div key={i}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: sevColor[r.severity] ?? 'var(--text-muted)' }} />
+                <span style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: SEVERITY_COLOR[r.severity] ?? 'var(--text-muted)' }} />
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>{r.title}</span>
-                <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 700, color: sevColor[r.severity] ?? 'var(--text-muted)' }}>{t(`severity.${r.severity}`)}</span>
+                <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 700, color: SEVERITY_COLOR[r.severity] ?? 'var(--text-muted)' }}>{t(`severity.${r.severity}`)}</span>
               </div>
               <p style={{ ...muted, margin: '2px 0 0 16px' }}>{r.mitigation}</p>
             </div>
@@ -303,11 +459,31 @@ function RisksSection({ body, t }: { body: RfpResponseBody; t: T }) {
   );
 }
 
-function DependenciesSection({ body, t }: { body: RfpResponseBody; t: T }) {
+function DependenciesSection({ body, register, canManage, onStatus, t }: {
+  body: RfpResponseBody;
+  register: RfpRegisterEntry[] | null;
+  canManage: boolean;
+  onStatus: (id: string, status: RfpRegisterEntry['status']) => void;
+  t: T;
+}) {
+  const rows = register?.filter((e) => e.kind === 'dependency') ?? null;
   return (
     <div style={card}>
       <h2 style={h2}>{t('sec.dependencies')}</h2>
-      {body.dependencies.length === 0 ? <p style={muted}>—</p> : (
+      {rows && rows.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {rows.map((d) => (
+            <div key={d.id} style={{ opacity: d.status === 'closed' ? 0.55 : 1 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>{d.title}</span>
+                {d.dependencyType && <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-muted)' }}>{t(`depType.${d.dependencyType}`)}</span>}
+                <StatusControl entry={d} canManage={canManage} onStatus={onStatus} t={t} />
+              </div>
+              <p style={{ ...muted, margin: '2px 0 0 0' }}>{d.detail}</p>
+            </div>
+          ))}
+        </div>
+      ) : body.dependencies.length === 0 ? <p style={muted}>—</p> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {body.dependencies.map((d, i) => (
             <div key={i}>
@@ -324,7 +500,52 @@ function DependenciesSection({ body, t }: { body: RfpResponseBody; t: T }) {
   );
 }
 
-function DocumentSection({ docHtml, title, t }: { docHtml: string | null; title: string; t: T }) {
+/**
+ * What the register makes possible and the document never could: exposure this
+ * proposal carries, and the risks we raise on more than one bid.
+ */
+function RegisterRollupSection({ rollup, t }: { rollup: RfpRegisterRollup; t: T }) {
+  return (
+    <div style={card}>
+      <h2 style={h2}>{t('sec.registerRollup')}</h2>
+      <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginBottom: rollup.recurring.length ? 12 : 0 }}>
+        <Stat label={t('rollup.openHigh')} value={rollup.openHighRisks} tone={rollup.openHighRisks > 0 ? 'var(--error)' : 'var(--success)'} />
+        <Stat label={t('rollup.risks')} value={rollup.totalRisks} tone="var(--text-primary)" />
+        <Stat label={t('rollup.dependencies')} value={rollup.totalDependencies} tone="var(--text-primary)" />
+        <Stat label={t('rollup.mitigated')} value={rollup.byStatus.mitigated + rollup.byStatus.closed} tone="var(--success)" />
+      </div>
+      {rollup.recurring.length > 0 && (
+        <>
+          <p style={{ ...muted, margin: '0 0 6px' }}>{t('rollup.recurringHint')}</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {rollup.recurring.map((r) => (
+              <span key={`${r.kind}-${r.title}`} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-full)', padding: '2px 10px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                {r.title} · {t('rollup.acrossResponses', { count: r.responses })}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: tone, lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
+    </div>
+  );
+}
+
+function DocumentSection({ docHtml, title, onDownloadPdf, downloading, t }: {
+  docHtml: string | null;
+  title: string;
+  onDownloadPdf: () => void;
+  downloading: boolean;
+  t: T;
+}) {
   const download = () => {
     if (!docHtml) return;
     downloadText(docHtml, `${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'rfp'}-proposal.html`, 'text/html');
@@ -334,7 +555,14 @@ function DocumentSection({ docHtml, title, t }: { docHtml: string | null; title:
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
         <h2 style={{ ...h2, margin: 0 }}>{t('sec.document')}</h2>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={download}>{t('downloadDoc')}</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {/* PDF first: it is the file a proposal is actually attached to, and it
+              is now rendered server-side rather than printed by the reader. */}
+          <button type="button" className="btn btn-primary btn-sm" onClick={onDownloadPdf} disabled={downloading}>
+            {downloading ? t('preparingPdf') : t('downloadPdf')}
+          </button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={download}>{t('downloadDoc')}</button>
+        </div>
       </div>
       <iframe title={t('sec.document')} srcDoc={docHtml} style={{ width: '100%', height: 520, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: '#fff' }} />
     </div>

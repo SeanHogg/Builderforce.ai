@@ -27,7 +27,7 @@ import type { Db } from '../../infrastructure/database/connection';
 export type ArchitectRefusal = 'not_enabled' | 'project_not_found' | 'no_repo' | 'run_not_created';
 
 export type ArchitectStart =
-  | { ok: true; runId: string; taskId: string; executionId: string | null }
+  | { ok: true; runId: string; taskId: number; executionId: number | null }
   | { ok: false; reason: ArchitectRefusal };
 
 export interface ArchitectStartArgs {
@@ -152,7 +152,7 @@ export async function startArchitectAnalysis(
   const lane = onTaskLandedInLane(env, db, {
     tenantId,
     projectId,
-    taskId: task.id as unknown as number,
+    taskId: task.id,
     status: TaskStatus.IN_PROGRESS,
     submittedBy: args.userId ?? 'system:repo-analysis',
   });

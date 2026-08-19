@@ -13837,7 +13837,8 @@
       "risks": "Riesgos clave",
       "dependencies": "Dependencias",
       "portfolio": "Proyectos similares",
-      "document": "Propuesta con marca"
+      "document": "Propuesta con marca",
+      "registerRollup": "Resumen del registro de riesgos"
     },
     "capabilitiesGreenfield": "Proyecto nuevo: las capacidades se proponen a partir de los requisitos.",
     "col": {
@@ -13858,7 +13859,45 @@
       "external": "Externa",
       "third_party": "Terceros"
     },
-    "downloadDoc": "Descargar"
+    "downloadDoc": "Descargar",
+    "needAdmin": "Requiere rol de administrador",
+    "downloadPdf": "Descargar PDF",
+    "preparingPdf": "Preparando el PDF…",
+    "registerStatusLabel": "Estado en el registro",
+    "registerStatus": {
+      "open": "Abierto",
+      "accepted": "Aceptado",
+      "mitigated": "Mitigado",
+      "closed": "Cerrado"
+    },
+    "deep": {
+      "fresh": "Análisis profundo de arquitectura al día",
+      "refreshing": "Reanalizando la arquitectura… {progress}%",
+      "unavailable": "Análisis profundo de hace {days} d — el inventario es el último conocido"
+    },
+    "rollup": {
+      "openHigh": "Riesgos altos abiertos",
+      "risks": "Riesgos",
+      "dependencies": "Dependencias",
+      "mitigated": "Mitigados o cerrados",
+      "recurringHint": "Planteados en más de una propuesta:",
+      "acrossResponses": "{count} propuestas"
+    },
+    "brand": {
+      "yours": "Tu marca",
+      "setYours": "Definir tu marca",
+      "yoursHint": "Tu propia paleta, combinada con la de la organización solicitante en cada propuesta.",
+      "save": "Guardar marca",
+      "fromSite": "Leer de un sitio web",
+      "sitePlaceholder": "dirección del sitio de la empresa",
+      "read": "Leer",
+      "reading": "Leyendo…",
+      "fromLogo": "Leer de un logotipo",
+      "readFromSiteDone": "Colores leídos del sitio.",
+      "readFromLogoDone": "Colores leídos del logotipo.",
+      "readFailed": "No se pudieron leer esos colores: introdúcelos a mano.",
+      "candidates": "Otros colores encontrados: haz clic en uno para usarlo como principal:"
+    }
   },
   "planBadge": {
     "tier": {

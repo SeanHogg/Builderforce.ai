@@ -13837,7 +13837,8 @@
       "risks": "Wesentliche Risiken",
       "dependencies": "Abhängigkeiten",
       "portfolio": "Ähnliche Projekte",
-      "document": "Gebrandetes Angebot"
+      "document": "Gebrandetes Angebot",
+      "registerRollup": "Zusammenfassung des Risikoregisters"
     },
     "capabilitiesGreenfield": "Neuentwicklung – Fähigkeiten werden aus den Anforderungen abgeleitet.",
     "col": {
@@ -13858,7 +13859,45 @@
       "external": "Extern",
       "third_party": "Drittanbieter"
     },
-    "downloadDoc": "Herunterladen"
+    "downloadDoc": "Herunterladen",
+    "needAdmin": "Erfordert Administratorrolle",
+    "downloadPdf": "PDF herunterladen",
+    "preparingPdf": "PDF wird erstellt…",
+    "registerStatusLabel": "Status im Register",
+    "registerStatus": {
+      "open": "Offen",
+      "accepted": "Akzeptiert",
+      "mitigated": "Entschärft",
+      "closed": "Geschlossen"
+    },
+    "deep": {
+      "fresh": "Tiefe Architekturanalyse aktuell",
+      "refreshing": "Architektur wird neu analysiert… {progress} %",
+      "unavailable": "Tiefe Analyse {days} T alt — Leistungsübersicht ist der letzte Stand"
+    },
+    "rollup": {
+      "openHigh": "Offene hohe Risiken",
+      "risks": "Risiken",
+      "dependencies": "Abhängigkeiten",
+      "mitigated": "Entschärft oder geschlossen",
+      "recurringHint": "In mehreren Angeboten genannt:",
+      "acrossResponses": "{count} Angebote"
+    },
+    "brand": {
+      "yours": "Ihre Marke",
+      "setYours": "Ihre Marke festlegen",
+      "yoursHint": "Ihre eigene Farbpalette, in jedem Angebot mit der der anfragenden Organisation kombiniert.",
+      "save": "Marke speichern",
+      "fromSite": "Von einer Website lesen",
+      "sitePlaceholder": "Website-Adresse des Unternehmens",
+      "read": "Lesen",
+      "reading": "Wird gelesen…",
+      "fromLogo": "Aus einem Logo lesen",
+      "readFromSiteDone": "Farben von der Website gelesen.",
+      "readFromLogoDone": "Farben aus dem Logo gelesen.",
+      "readFailed": "Diese Farben konnten nicht gelesen werden – bitte manuell eingeben.",
+      "candidates": "Weitere gefundene Farben – klicken Sie eine an, um sie als Primärfarbe zu setzen:"
+    }
   },
   "planBadge": {
     "tier": {

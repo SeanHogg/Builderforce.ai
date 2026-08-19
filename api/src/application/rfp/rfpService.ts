@@ -4,10 +4,14 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *
  * `generateRfpResponse` composes a co-branded pre-sales proposal from real platform
  * data — it does NOT free-hand the facts:
- *   1. Freshness gate (existing-project mode): if the project's newest diagnostics scan
- *      is missing or > 5 days old, re-run the deterministic system audits FIRST (a real
- *      repo code scan + feature mapping) so the capability roster is grounded, then read
- *      the roster from the architecture artifacts (rich) or the audit signals (fallback).
+ *   1. Freshness gate (existing-project mode), on TWO clocks that age independently:
+ *      the deterministic system audits (a real repo code scan + feature mapping, re-run
+ *      synchronously when > 5 days old), and the DEEP `architecture-analysis` artifacts
+ *      the capability roster actually comes from. When the deep artifacts are stale the
+ *      Architect run is FIRED — it is asynchronous, so the proposal renders the
+ *      last-known roster labelled `refreshing` and the detail view polls the run, then
+ *      re-grounds itself. Re-running the audits alone never rewrote the roster, which is
+ *      why a project could show a roster years older than its "scan refreshed" badge.
  *   2. Portfolio match: rank the tenant's other projects against the requirements so the
  *      response can lean on the closest existing build.
  *   3. P&L: build-out (effort × blended member rate) + agentic cost (forward estimate
@@ -27,17 +31,22 @@ import type { ToolService } from '../tools/ToolService';
 import type { AuditRunner } from '../tools/AuditRunner';
 import { listSystemAudits } from '../tools/systemAudits';
 import {
-  rfpRequests, rfpResponses, projects, tenants, llmUsageLog, memberProfiles, repoAnalysisArtifacts,
+  rfpRequests, rfpResponses, projects, tenants, llmUsageLog, memberProfiles,
+  repoAnalysisArtifacts, repoAnalysisRuns,
 } from '../../infrastructure/database/schema';
+import { startArchitectAnalysis } from '../repos/architectRunner';
+import type { TaskService } from '../task/TaskService';
 import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
 import { recordProxyUsage } from '../llm/usageLedger';
 import { findBuiltinAgentRef, personaDirectiveFor } from './rfpAgents';
 import { computeRfpCostModel, RFP_COST_DEFAULTS } from './rfpCost';
+import { projectRiskRegister } from './rfpRegister';
 import {
   blendPalettes, normalizePalette, renderRfpDocHtml, DEFAULT_TENANT_PALETTE, DEFAULT_REQUESTER_PALETTE,
 } from './rfpBranding';
 import type {
-  RfpResponseBody, RfpCapabilityRoster, RfpPhase, RfpNarrative, RfpPortfolioMatch, RfpScanFreshness, BrandPalette,
+  RfpResponseBody, RfpCapabilityRoster, RfpPhase, RfpNarrative, RfpPortfolioMatch,
+  RfpScanFreshness, RfpDeepFreshness, BrandPalette,
 } from './types';
 
 const FIVE_DAYS_MS = 5 * 24 * 60 * 60 * 1000;
@@ -49,6 +58,10 @@ export interface RfpGenerateDeps {
   toolService: ToolService;
   auditRunner: AuditRunner;
   secret: string;
+  /** Present so the freshness gate can FIRE the deep architecture analysis, not
+   *  just the deterministic audits. Optional: a deployment without the Architect
+   *  still generates proposals, it just cannot re-ground a stale roster. */
+  taskService?: TaskService;
 }
 
 // ── date helpers (server runtime — Date is available here) ────────────────────
@@ -65,7 +78,9 @@ function addDays(base: Date, days: number): Date {
 
 /** Read the richest available capability facts for a project from the architecture
  *  analysis artifacts (business + diagnostic). Null when none exist yet. */
-async function readArchitectureRoster(db: Db, tenantId: number, projectId: number): Promise<RfpCapabilityRoster | null> {
+async function readArchitectureRoster(
+  db: Db, tenantId: number, projectId: number,
+): Promise<{ roster: RfpCapabilityRoster; latestAt: Date | null } | null> {
   try {
     const rows = await db
       .select({ kind: repoAnalysisArtifacts.kind, dataJson: repoAnalysisArtifacts.dataJson, createdAt: repoAnalysisArtifacts.createdAt })
@@ -79,7 +94,9 @@ async function readArchitectureRoster(db: Db, tenantId: number, projectId: numbe
       .limit(20);
 
     const latest = new Map<string, Record<string, unknown>>();
+    let latestAt: Date | null = null;
     for (const r of rows) {
+      if (r.createdAt && (!latestAt || r.createdAt > latestAt)) latestAt = r.createdAt;
       if (latest.has(r.kind) || !r.dataJson) continue;
       try { latest.set(r.kind, JSON.parse(r.dataJson) as Record<string, unknown>); } catch (error) { /* skip */ 
         reportCaughtError(error, { source: "application/rfp/rfpService.ts", operation: "readArchitectureRoster" });
@@ -99,12 +116,15 @@ async function readArchitectureRoster(db: Db, tenantId: number, projectId: numbe
       : [];
 
     return {
-      capabilities: asStrings(business?.capabilities),
-      valueProps: asStrings(business?.valueProps),
-      keyComponents: components,
-      frameworks: asStrings(diagnostic?.frameworks),
-      primaryLanguages: asStrings(diagnostic?.primaryLanguages),
-      source: 'diagnostics',
+      roster: {
+        capabilities: asStrings(business?.capabilities),
+        valueProps: asStrings(business?.valueProps),
+        keyComponents: components,
+        frameworks: asStrings(diagnostic?.frameworks),
+        primaryLanguages: asStrings(diagnostic?.primaryLanguages),
+        source: 'diagnostics',
+      },
+      latestAt,
     };
   } catch {
     return null;
@@ -126,6 +146,70 @@ function rosterFromAuditMetrics(): RfpCapabilityRoster {
 }
 
 // ── freshness gate ────────────────────────────────────────────────────────────
+
+/**
+ * Fire (or find) the DEEP `architecture-analysis` run when the artifacts the
+ * capability roster comes from have gone stale.
+ *
+ * The deep run is asynchronous — it advances one stage per Durable Object alarm
+ * tick — so this never waits for it. It returns the state the proposal should
+ * declare: `fresh` (nothing to do), `refreshing` (a run is in flight and the
+ * roster below it is honestly last-known), or `unavailable` with the reason the
+ * run could not start, which is the only case where a stale roster is permanent.
+ *
+ * A run already in flight is REUSED rather than duplicated: two proposals
+ * generated a minute apart must not put two Architect tickets on the board.
+ */
+async function ensureDeepAnalysis(
+  deps: RfpGenerateDeps,
+  tenantId: number,
+  projectId: number,
+  userId: string,
+  latestArtifactAt: Date | null,
+): Promise<RfpDeepFreshness> {
+  const now = Date.now();
+  const ageMs = latestArtifactAt ? now - latestArtifactAt.getTime() : null;
+  const ageDays = ageMs == null ? null : Math.floor(ageMs / (24 * 60 * 60 * 1000));
+  const lastArtifactAt = latestArtifactAt ? isoDate(latestArtifactAt) : null;
+  if (ageMs != null && ageMs <= FIVE_DAYS_MS) {
+    return { lastArtifactAt, ageDays, state: 'fresh', runId: null };
+  }
+
+  // An Architect run already working on this project is the answer — starting a
+  // second would put a duplicate ticket on the board and double the token spend.
+  try {
+    const [live] = await deps.db
+      .select({ id: repoAnalysisRuns.id })
+      .from(repoAnalysisRuns)
+      .where(and(
+        eq(repoAnalysisRuns.tenantId, tenantId),
+        eq(repoAnalysisRuns.projectId, projectId),
+        inArray(repoAnalysisRuns.status, ['queued', 'fetching', 'analyzing', 'writing_back']),
+      ))
+      .orderBy(desc(repoAnalysisRuns.createdAt))
+      .limit(1);
+    if (live) return { lastArtifactAt, ageDays, state: 'refreshing', runId: live.id };
+  } catch (error) {
+    reportCaughtError(error, { source: "application/rfp/rfpService.ts", operation: "ensureDeepAnalysis" });
+  }
+
+  if (!deps.taskService) {
+    return { lastArtifactAt, ageDays, state: 'unavailable', runId: null, reason: 'architect_unavailable' };
+  }
+
+  try {
+    const started = await startArchitectAnalysis(deps.env, deps.db, deps.taskService, {
+      tenantId, projectId, userId,
+    });
+    return started.ok
+      ? { lastArtifactAt, ageDays, state: 'refreshing', runId: started.runId }
+      : { lastArtifactAt, ageDays, state: 'unavailable', runId: null, reason: started.reason };
+  } catch (error) {
+    // A proposal must never fail because the deep re-analysis could not start.
+    reportCaughtError(error, { source: "application/rfp/rfpService.ts", operation: "ensureDeepAnalysis" });
+    return { lastArtifactAt, ageDays, state: 'unavailable', runId: null, reason: 'start_failed' };
+  }
+}
 
 /**
  * Ensure a project's diagnostics are fresh (≤ 5 days). Reads the newest diagnostic
@@ -453,12 +537,16 @@ export async function generateRfpResponse(
     .limit(1);
   if (!request) return null;
 
-  const [tenant] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+  const [tenant] = await db
+    .select({ name: tenants.name, brandPalette: tenants.brandPalette })
+    .from(tenants).where(eq(tenants.id, tenantId)).limit(1);
   const tenantName = tenant?.name ?? 'Our team';
 
-  // Palettes: requester from the request, tenant from a stored default.
+  // Palettes: the requesting org's from the request, the responder's from the
+  // tenant's OWN stored brand (migration 0483) and only then from the platform
+  // default — so two tenants no longer send identically-coloured proposals.
   const requesterPalette: BrandPalette = normalizePalette(request.requesterBrand, DEFAULT_REQUESTER_PALETTE);
-  const tenantPalette: BrandPalette = normalizePalette(null, DEFAULT_TENANT_PALETTE);
+  const tenantPalette: BrandPalette = normalizePalette(tenant?.brandPalette ?? null, DEFAULT_TENANT_PALETTE);
   const blended = blendPalettes(requesterPalette, tenantPalette);
 
   const isExisting = request.sourceMode === 'existing_project' && request.basedOnProjectId != null;
@@ -468,16 +556,21 @@ export async function generateRfpResponse(
   let roster: RfpCapabilityRoster;
   let scanFreshness: RfpScanFreshness | undefined;
   let scanRefreshed = false;
+  let deepRunId: string | null = null;
   let projectName: string | undefined;
 
   if (isExisting && projectId != null) {
     const [proj] = await db.select({ name: projects.name, description: projects.description }).from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
     projectName = proj?.name;
     const gate = await ensureFreshScan(deps, tenantId, projectId, userId);
-    scanFreshness = gate.freshness;
     scanRefreshed = gate.refreshed;
-    roster = (await readArchitectureRoster(db, tenantId, projectId))
-      ?? rosterFromAuditMetrics();
+    const deepRead = await readArchitectureRoster(db, tenantId, projectId);
+    roster = deepRead?.roster ?? rosterFromAuditMetrics();
+    // The audits above refresh the SCORE. The roster comes from the deep
+    // artifacts, which age on their own clock — so they get their own gate.
+    const deep = await ensureDeepAnalysis(deps, tenantId, projectId, userId, deepRead?.latestAt ?? null);
+    deepRunId = deep.runId ?? null;
+    scanFreshness = { ...gate.freshness, deep };
   } else {
     roster = { capabilities: [], valueProps: [], keyComponents: [], frameworks: [], primaryLanguages: [], source: 'greenfield' };
   }
@@ -556,15 +649,28 @@ export async function generateRfpResponse(
     quotedPriceUsdCents,
     marginPct: costModel.marginPct,
     scanRefreshed,
+    deepAnalysisRunId: deepRunId,
     generatedBy,
     createdBy: userId,
   }).returning({ id: rfpResponses.id });
+  if (!row) return null;
+
+  // The risks and dependencies become REGISTER rows as well as document JSON, so
+  // they can be rolled up across every response the tenant has ever sent.
+  await projectRiskRegister(db, {
+    tenantId,
+    segmentId: request.segmentId ?? null,
+    responseId: row.id,
+    requestId,
+    risks: body.risks,
+    dependencies: body.dependencies,
+  });
 
   // Mark the request ready.
   await db.update(rfpRequests).set({ status: 'ready', updatedAt: new Date() }).where(and(eq(rfpRequests.id, requestId), eq(rfpRequests.tenantId, tenantId)));
 
   return {
-    responseId: row!.id,
+    responseId: row.id,
     body,
     quotedPriceUsdCents,
     marginPct: costModel.marginPct,
@@ -572,4 +678,117 @@ export async function generateRfpResponse(
     generatedBy,
     docHtml,
   };
+}
+
+
+// ── re-grounding after a deep run finishes ────────────────────────────────────
+
+export interface RegroundResult {
+  state: 'fresh' | 'refreshing' | 'unavailable';
+  runStatus: string | null;
+  progress: number | null;
+  stage: string | null;
+  /** True when THIS call rewrote the roster and the document. */
+  regrounded: boolean;
+}
+
+/**
+ * Bring a response's capability roster up to date once the deep analysis it
+ * fired has finished.
+ *
+ * This is the second half of the freshness gate. Firing the Architect from
+ * `generateRfpResponse` is not enough on its own: the run finishes minutes
+ * later, and without this the proposal would keep rendering the last-known
+ * roster forever while claiming to be refreshing. The detail view polls here;
+ * when the run reports `completed` the roster is re-read from the new artifacts,
+ * the branded document is re-rendered, and the response stops pointing at a run.
+ *
+ * Idempotent: a second call after re-grounding reports `fresh` and does nothing.
+ */
+export async function regroundRfpResponse(
+  deps: RfpGenerateDeps,
+  args: { tenantId: number; responseId: string },
+): Promise<RegroundResult | null> {
+  const { db } = deps;
+  const { tenantId, responseId } = args;
+
+  const [response] = await db
+    .select()
+    .from(rfpResponses)
+    .where(and(eq(rfpResponses.id, responseId), eq(rfpResponses.tenantId, tenantId)))
+    .limit(1);
+  if (!response) return null;
+
+  const body = (response.body ?? null) as RfpResponseBody | null;
+  const declared = body?.grounding.scanFreshness?.deep?.state ?? 'fresh';
+  if (!response.deepAnalysisRunId) {
+    return { state: declared === 'refreshing' ? 'unavailable' : declared, runStatus: null, progress: null, stage: null, regrounded: false };
+  }
+
+  const [run] = await db
+    .select({ status: repoAnalysisRuns.status, progress: repoAnalysisRuns.progress, stage: repoAnalysisRuns.stage })
+    .from(repoAnalysisRuns)
+    .where(and(eq(repoAnalysisRuns.id, response.deepAnalysisRunId), eq(repoAnalysisRuns.tenantId, tenantId)))
+    .limit(1);
+  if (!run) {
+    await db.update(rfpResponses).set({ deepAnalysisRunId: null, updatedAt: new Date() })
+      .where(and(eq(rfpResponses.id, responseId), eq(rfpResponses.tenantId, tenantId)));
+    return { state: 'unavailable', runStatus: null, progress: null, stage: null, regrounded: false };
+  }
+
+  // Still working — report progress and leave the last-known roster in place.
+  if (run.status !== 'completed' && run.status !== 'partial' && run.status !== 'failed') {
+    return { state: 'refreshing', runStatus: run.status, progress: run.progress, stage: run.stage, regrounded: false };
+  }
+
+  const failed = run.status === 'failed';
+  const projectId = response.projectId;
+  const fresh = failed || projectId == null ? null : await readArchitectureRoster(db, tenantId, projectId);
+
+  const nextState: RfpDeepFreshness['state'] = fresh ? 'fresh' : 'unavailable';
+  const deep: RfpDeepFreshness = {
+    lastArtifactAt: fresh?.latestAt ? isoDate(fresh.latestAt) : (body?.grounding.scanFreshness?.deep?.lastArtifactAt ?? null),
+    ageDays: fresh ? 0 : (body?.grounding.scanFreshness?.deep?.ageDays ?? null),
+    state: nextState,
+    runId: null,
+    ...(fresh ? {} : { reason: failed ? 'run_failed' : 'no_artifacts' }),
+  };
+
+  if (!body) {
+    await db.update(rfpResponses).set({ deepAnalysisRunId: null, updatedAt: new Date() })
+      .where(and(eq(rfpResponses.id, responseId), eq(rfpResponses.tenantId, tenantId)));
+    return { state: nextState, runStatus: run.status, progress: run.progress, stage: run.stage, regrounded: false };
+  }
+
+  const nextBody: RfpResponseBody = {
+    ...body,
+    capabilityRoster: fresh?.roster ?? body.capabilityRoster,
+    grounding: {
+      ...body.grounding,
+      scanFreshness: { ...(body.grounding.scanFreshness ?? { toolId: 'architecture-analysis', lastScanAt: null, ageDays: null, refreshed: false }), deep },
+    },
+  };
+
+  // The document is a rendering of the body, so a re-grounded roster means a
+  // re-rendered document — otherwise the page and the file would disagree.
+  const [request] = await db
+    .select({ title: rfpRequests.title, requesterOrgName: rfpRequests.requesterOrgName })
+    .from(rfpRequests)
+    .where(and(eq(rfpRequests.id, response.requestId), eq(rfpRequests.tenantId, tenantId)))
+    .limit(1);
+  const [tenant] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+
+  const docHtml = renderRfpDocHtml({
+    title: request?.title ?? 'Proposal',
+    requesterOrgName: request?.requesterOrgName ?? '',
+    tenantName: tenant?.name ?? 'Our team',
+    body: nextBody,
+    generatedAtIso: isoDate(new Date()),
+  });
+
+  await db.update(rfpResponses)
+    .set({ body: nextBody, docHtml, deepAnalysisRunId: null, updatedAt: new Date() })
+    .where(and(eq(rfpResponses.id, responseId), eq(rfpResponses.tenantId, tenantId)));
+
+  return { state: nextState, runStatus: run.status, progress: run.progress, stage: run.stage, regrounded: !!fresh };
 }

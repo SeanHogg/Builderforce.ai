@@ -179,7 +179,6 @@ ri_sequences
 roi_timeline_entries
 saved_calculations
 saved_contact_searches
-saved_searches
 scenario_assumptions
 scorecard_attributes
 scorm_cmi_states
@@ -190,7 +189,6 @@ service_assets
 session_discussions
 sessions
 sign_offs
-site_subscriptions
 sprint_financial_impact
 stage_lookup
 stock_media_assets

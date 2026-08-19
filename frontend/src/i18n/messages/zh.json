@@ -13837,7 +13837,8 @@
       "risks": "主要风险",
       "dependencies": "依赖项",
       "portfolio": "相似项目",
-      "document": "品牌方案"
+      "document": "品牌方案",
+      "registerRollup": "风险登记汇总"
     },
     "capabilitiesGreenfield": "全新项目——能力根据需求提出。",
     "col": {
@@ -13858,7 +13859,45 @@
       "external": "外部",
       "third_party": "第三方"
     },
-    "downloadDoc": "下载"
+    "downloadDoc": "下载",
+    "needAdmin": "需要管理员角色",
+    "downloadPdf": "下载 PDF",
+    "preparingPdf": "正在生成 PDF…",
+    "registerStatusLabel": "登记状态",
+    "registerStatus": {
+      "open": "未处理",
+      "accepted": "已接受",
+      "mitigated": "已缓解",
+      "closed": "已关闭"
+    },
+    "deep": {
+      "fresh": "深度架构分析为最新",
+      "refreshing": "正在重新分析架构… {progress}%",
+      "unavailable": "深度分析已有 {days} 天 — 能力清单为上次结果"
+    },
+    "rollup": {
+      "openHigh": "未处理的高风险",
+      "risks": "风险",
+      "dependencies": "依赖项",
+      "mitigated": "已缓解或关闭",
+      "recurringHint": "在多份提案中反复出现：",
+      "acrossResponses": "{count} 份提案"
+    },
+    "brand": {
+      "yours": "你的品牌",
+      "setYours": "设置你的品牌",
+      "yoursHint": "你自己的配色，在每份提案中与招标方的配色融合。",
+      "save": "保存品牌",
+      "fromSite": "从网站读取",
+      "sitePlaceholder": "公司网站地址",
+      "read": "读取",
+      "reading": "读取中…",
+      "fromLogo": "从徽标读取",
+      "readFromSiteDone": "已从网站读取配色。",
+      "readFromLogoDone": "已从徽标读取配色。",
+      "readFailed": "无法读取这些配色 — 请手动输入。",
+      "candidates": "找到的其他颜色 — 点击其一设为主色："
+    }
   },
   "planBadge": {
     "tier": {

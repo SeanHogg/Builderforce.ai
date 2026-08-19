@@ -1,3 +1,288 @@
+## ✅ RESOLVED 2026-08-18 — Roadmap re-validated against the running code: 27 register entries were describing a codebase that no longer exists
+
+**What was wrong.** ROADMAP.md had become a record of what was true when each entry was written
+rather than what is true now. A re-validation pass ran every machine-checkable claim against the
+actual repository — the 23 api guards, `tsc --noEmit`, the frontend guard chain, the canvas
+object-kind registries, the connector manifests and the ratchet baselines — and found that 27
+entries were closed, several headline numbers were wrong (one by more than 2×), and three
+different vocabularies were competing with the product's own declared method.
+
+**What the validation actually ran.** `npm run check` in `api` (23/23 green), `tsgo --noEmit`
+in `api` (clean), `npm run check` in `frontend` (8/10 — the two red ratchets are uncommitted
+work from a concurrent session and stay logged), and every baseline read directly out of
+`api/scripts/.<name>-baseline.txt` instead of out of the previous roadmap entry.
+
+**Numbers corrected in place** (each was re-measured, not re-read):
+
+| Claim as written | Measured 2026-08-18 |
+|---|---|
+| "258 known ratchet violations" | **216** — the cross-module figure alone was recorded as 82 against a real 38 |
+| "target schema 140/362 written" | **362 / 362 (100%)** — finished work still sitting in the roadmap |
+| "290 created · 68 feature-path · 222 registry-only" | **323 created · 110 feature-path · 213 registry-only** (baseline retrimmed: `saved_searches` and `site_subscriptions` had migrated onto feature paths and were still listed) |
+| "layering ratchet frozen at 144 files, not falling" | **126 and falling** — the claim was the opposite of the truth |
+| "522 unscoped tenant queries across 152 files" | **505 across 149** |
+| "101 application folders · 197 route files · 134 `page.tsx`" | **129 · 237 · 166** — moving the WRONG way, which is the actual finding |
+| "571 of 660 `.tsx` are `'use client'`" | **854 of 1,069** |
+| "68 of 137 pages are `'use client'`" | **66 of 166** |
+| "`next/dynamic` in 4 files" | **9 files**, still zero `React.lazy` |
+| "180 `toLocale*` call sites" | **314** |
+| "`MERGE_QUEUE_DEPTH = 3`" | **1** |
+
+**Vocabulary.** The file carried three competing names for one method — a North Star reading
+"idea to delivered outcome", a milestone block reading "Imagine → Create → Deliver", and the
+product's own **Idea to Real**, which is the one declared as spec data in
+`frontend/src/lib/methodology.ts` and `api/src/application/realization/` and ratcheted by
+`check-methodology.mjs`. The roadmap now uses the arc (`Idea → Make → Run → Measure`) and the
+loop (`Read → Prove → Build`) and nothing else, including in the metrics section, where the
+north-star metric is now a **graded proof** — a Build whose kill condition was measured — rather
+than a deliverable that was merely produced.
+
+One claim in the rewrite was itself caught and corrected before shipping: an early draft said
+Measure cannot grade a kill condition automatically. It can —
+`application/realization/realizationVerdict.ts` rolls a generated console's verdict back onto the
+realization row. What Measure lacks is the 40 domain metric keys, which is a different item.
+
+**Structural changes.**
+
+* **Wave 1 closed.** All five lanes (W1A–W1E) and their integration PR had shipped on 2026-08-16
+  and the whole wave table was still in the roadmap describing itself as work. The wave, its
+  acceptance test and its declared cross-lane seams moved here; only the deliberately parked Stage
+  sandbox stayed open.
+* **Group 0 is now the single home for data-model debt.** Two entries in group 10 — one of them a
+  ~1,400-word retelling of the 1,206 → 387 analysis — restated what
+  [PRD 20](./specs/builderforce/20-prd-consolidated-data-model.md) and
+  `source-to-target.tsv` already hold under a CI check. The roadmap now records the open operator
+  decision and points at the spec.
+* **Index counts re-derived** from the cleaned body rather than carried forward.
+
+**The 27 entries removed, and the code that closed each one:**
+
+1. **Two API design guards are red on `reference_shares`** — closed by: all 23 api guards pass.
+2. **Four founder-object canvas tools are classified but never declared** — closed by: check:canvas-tools passes.
+3. **`check:canvas-tools` fails: `canvas_import_roster`** — closed by: check:canvas-tools passes.
+4. **`check:silent-catches` fails: an empty promise** — closed by: check:silent-catches passes.
+5. **`siteSubscriptions.ts` does not compile** — closed by: api tsc --noEmit is clean.
+6. **The operations object vocabulary is landing without catalog labels** — closed by: all three named guards pass.
+7. **api typecheck drift in the in-flight web-search / geocode workstream** — closed by: api tsc --noEmit is clean.
+8. **P2 — API typecheck drift (frontend half now clean)** — closed by: api tsc --noEmit is clean.
+9. **No HRMS or ATS connector exists** — closed by: connectors/defaults/hiring.ts (Greenhouse, Lever, Ashby, Indeed, LinkedIn Jobs) + payroll.ts (Gusto, Rippling, Deel).
+10. **No native PDF export** — closed by: application/office/pdfWriter.ts, consumed by rfpBranding.ts + exportRoutes.ts.
+11. **`form` collects nothing yet** — closed by: application/collection/formPublishing.ts + presentation/routes/formRoutes.ts.
+12. **Nothing can be signed: `contract.sign` and `policy.acknowledge`** — closed by: application/signature/signatureEngine.ts.
+13. **A published `website` can never report whether anyone came** — closed by: connectors/defaults/analytics.ts — GA4 + Search Console.
+14. **Paid media cannot exist on the board — no spend object, no ad connector** — closed by: connectors/defaults/advertising.ts — google/meta/linkedin/tiktok/x ads (0470).
+15. **No funnel object** — closed by: `funnel` is in SHARED_OBJECT_KINDS.
+16. **115 object kinds and not one is a trained model** — closed by: DATA_SCIENCE_OBJECT_KINDS = notebook, model, runComparison, labelSet, prompt.
+17. **Nothing compares two runs** — closed by: the `runComparison` kind.
+18. **No labelling surface** — closed by: the `labelSet` kind.
+19. **Prompts are versioned server-side and unversioned on the canvas** — closed by: the `prompt` kind.
+20. **There is no `contract` object and no e-signature** — closed by: `contract` in FOUNDER_OBJECT_KINDS + signatureEngine.ts.
+21. **There is no `company`/account object** — closed by: `company` and `account` in FOUNDER_OBJECT_KINDS.
+22. **`/compare` is marketing-only — there is no battlecard** — closed by: `battlecard` in FOUNDER_OBJECT_KINDS.
+23. **`webdit` carries the vulnerable `sharp`** — closed by: webdit/package.json pins sharp 0.35.3.
+24. **`DEFAULT_TOOL_LIMIT` (64) is a judgement call** — closed by: the symbol no longer exists.
+25. **Realize and Challenges have no door** — closed by: deliberate — navGroups.ts records the rule; a decision, not a gap.
+26. **Six data-model ratchets are green but their baselines are not zero** — closed by: folded into group 0 and re-measured.
+27. **1,206 incoming tables encode roughly 25 shapes** — closed by: folded into group 0; the analysis lives in PRD 20.
+
+**Still open and re-confirmed**, so nobody re-litigates them: `cap_table` / `equity_grant` /
+`safe_note` / `409a` return nothing (FO-D is real), `rfp_risks` does not exist, Microsoft
+Advertising is genuinely absent from the connector catalog, there is still no `quote` /
+`proposal` / `call` canvas kind, `legalEntity` / `ipAsset` / `matter` still have no kind,
+`brand_kits` is still reached only by the generic entity layer, `marketing_sessions` is still
+mapped to `metric_fact` and still sits in `identity.ts`, and `CreationCanvas.tsx` is still a
+12,464-line hub.
+
+---
+
+## ✅ RESOLVED 2026-08-18 — Starting a call is a canvas action; the dock is the call's own chrome
+
+**What was wrong.** The room had a band of the window to itself in BOTH of its states. Idle, the
+live dock drew a "Start call" pill and a line of explanation across the bottom of the shell — a
+measured band (`--live-dock-space`) subtracted from every page, on every canvas, for a call almost
+nobody was about to make. And because that band was the room's own chrome, "start a call" was the
+one thing you can do to a canvas that did not live where the other things you can do to a canvas
+live. A second copy of the control sat inside the invite panel on a logged-out board, so one
+decision had two homes.
+
+**What shipped.**
+
+* **`call` is a session action** (`lib/canvasSessionActions.ts`, its own `live` cluster, order 5).
+  That is what makes it apply to every modality by construction: chat, board, 3D space and a
+  running app all draw the same bar from that list, it declares no surface requirement, and a
+  surface added later gets the call for free. `phone: 'menu'`, because the two-button phone bar
+  budget is already spent on undo and full screen — so a phone reaches it through ••• rather than
+  losing it.
+* **`CanvasSessionActionHandler.available`** — one new field, filtered in ONE helper inside
+  `CanvasSessionActions` that the bar, the ••• sheet and the top-right pair all ask. The registry
+  answers "does this mean anything on this surface" from what the surface declares; it cannot see
+  session state, and "a call is already running" is session state. `CreationCanvas` withdraws the
+  call action the moment `useCanvasLiveRoom().live` is true, so exactly one control is on screen at
+  a time: the bar's button, or the dock. Distinct from `disabled`, which is what a canvas with no
+  room to open (a local board nobody has shared) shows instead — inert, not absent.
+* **`LiveBar` renders only while a call is RUNNING.** The dormant branch, its `data-state="idle"`
+  chrome and its hint copy are gone, so an idle session reserves zero pixels.
+* **`components/live/StartCallButton.tsx` + `.module.css` DELETED** (zero references), and the
+  invite panel's copy of the control with them. Its `liveBar.startCall` / `startCallTitle` /
+  `startCallHint` keys moved to `creationCanvas.startCall` / `startCallTitle` in all five catalogs,
+  which now also carry `sessionActionCluster.live` — no string is in two namespaces.
+* `StartCallIcon` (a headset, not a telephone: the room is people talking about the thing on
+  screen, not a number being dialled) in `components/canvas/CanvasCommands.tsx`.
+
+**Guards:** `tsgo --noEmit` clean, `npm run check` 10/10 (including `check:i18n-keys` and
+`check:architecture`, the latter one client file lighter), and `canvasSessionActions.test.tsx` 12/12
+— two new assertions: the call survives on every surface the registry declares, and an idle local
+canvas offers it from the ••• sheet as a disabled control while rendering no live dock at all.
+
+## ✅ RESOLVED 2026-08-18 — `frontend` `npm run check` is green again
+
+The register entry below tracked two red ratchets (`check:architecture`'s `'use client'` tally and
+`check:design-scale`'s `offScaleFontSizes`) that belonged to other sessions' uncommitted work, and
+was blocked on those authors. Re-run 2026-08-18 while making the call a canvas action: **10/10
+guards pass**, and `check-frontend-architecture.mjs` reports 804 client files / 66 client pages / 23
+grandfathered large files / 0 import cycles against its recorded baseline. The stated failure no
+longer reproduces, so the entry is closed rather than carried. Archived verbatim:
+
+- **`frontend` `npm run check` is red on two ratchets, both from uncommitted work by other sessions.** *(found while shipping playable games, 2026-08-17)* `check:architecture` fails on three counts — `'use client'` files 806 vs baseline 803 (the ten that grew are `app/references/ReferencesClient.tsx`, four `components/legal/*`, `CompareArenaTabs`, `TemplateGallery`, `WorkflowRunHistoryPanel`, `workflowRunUi` and `canvasSurfaceActions`), plus `creationObjectRegistry.ts` and `workflow-builder/nodeKinds.ts` crossing the 800-line ceiling. `check:design-scale` fails on `offScaleFontSizes` 3802 vs 3789, from `WorkflowRunHistoryPanel.tsx` (+23), `app/realize/page.tsx` (+6), `SiteGrowthPanels.tsx` (+2) and `workflowRunUi.tsx` (+2). None of it belongs to the game work — the one delta in a file this pass touched (`CreationNode.tsx` +1) is the `fontSize: 10` on the `isBlocked` status pill, which is at HEAD and predates the recorded tally. **Blocked on the authors mid-edit:** re-recording the tally or raising the `'use client'` baseline would silently ratify ~33 new literal font sizes and ten new client boundaries in files nobody has reviewed, and splitting two 800-line files somebody is actively writing loses their work. (The hex-literal half of `check:design-scale` WAS closed this pass: the four `world3d/*` files are now in `COLOUR_EXEMPT` — every hex in them is a `meshStandardMaterial` colour that Three.js parses into a shader, where no stylesheet has ever been.) Unblocks: a green `npm run check`, which is the frontend deploy gate. **Still red 2026-08-18** (re-read while fixing the canvas team-overflow popover): `'use client'` files 803 vs baseline 802, and the eight that grew are again all untracked/modified files of the live-session and references work in the tree (`components/live/StartCallButton.tsx`, `lib/live/useCanvasLiveRoom.ts`, `app/references/ReferencesClient.tsx`, `CompareArenaTabs`, `TemplateGallery`, `canvasSurfaceActions`, `LegalDocumentShareViewer`, `lib/useRequireAuth.ts`) — nothing in the popover pass touches the tally, and `tsgo --noEmit`, `check:design-tokens`, `check:design-scale` (now back at baseline on all four counts — the `offScaleFontSizes` half of this entry is closed) and the canvas/Select suites are green with it. So `check:architecture`'s `'use client'` tally is the ONLY remaining red.
+
+## ✅ RESOLVED 2026-08-18 — An institution can now be connected, launched from, and answered
+
+Seven register entries, three of which were parked on a decision. The decisions are made and
+written where they are enforced, not in a comment on a ticket.
+
+### SAML is terminated at a gateway. Only OIDC runs here.
+
+The register offered two ways to clear the SSO blocker: pick a vetted xmldsig implementation that
+runs on Workers, or terminate SAML at an identity provider that already speaks it. **The second is
+taken**, and migration 0482 plus `application/auth/enterpriseSso.ts` carry the full argument.
+
+The short version: the hard half of SAML 2.0 is verifying the signed Response — exclusive
+canonicalisation, then reference-digest validation, then the RSA check, with the claims read from
+the subtree that was actually verified. A mistake anywhere in that sequence is an XML
+signature-wrapping authentication bypass whose defining property is that it looks exactly like a
+working login until somebody forges an assertion. Hand-rolling it means owning that surface forever;
+delegating it costs one vendor on a path that already has one at every other identity boundary.
+
+So a customer points their Shibboleth / InCommon / Entra IdP at an SSO gateway of their own choosing
+(WorkOS, Auth0, Okta, Entra — the choice is theirs, and nothing in the schema names one), the
+gateway speaks OIDC to us, and **every signature this codebase verifies stays an RS256 JWS**.
+`sso_connections.protocol` records the decision as data; the application accepts only `oidc` and the
+refusal explains itself rather than 404ing.
+
+What shipped: `sso_connections` + `sso_domains` (0482), the client secret sealed in the existing
+`credentialCrypto` envelope; `GET /api/auth/sso/discover|start|callback`; manager-gated CRUD on
+`/api/sso-connections`; JIT provisioning with a per-connection opt-out; and the login page replacing
+the password field with "Continue with &lt;institution&gt;" as the address is typed.
+
+**One domain routes to exactly one connection, and only a VERIFIED one routes at all.** An
+unverified claim on `physics.edu` would be a takeover of every sign-in from it. Proof runs through
+`dnsVerification.ts` — the platform's ONE domain-ownership verifier — as a third purpose beside
+`site` and `sender`, rather than a second token format nobody would notice diverging.
+
+**The identity is checked against the domain AFTER the provider answers, not only before.** The
+domain decided where to send the person; it must also decide whether the identity that came back is
+one this connection may assert, or a misconfigured multi-tenant gateway could return any address at
+all and be believed.
+
+### LTI registrations are a table with a screen, not a Cloudflare secret
+
+The objection to a table was real and is answered rather than argued with: a registration holds an
+RSA **private** key, and the generic entity reader redacts on column-name patterns, so a signing key
+should not ride on a regex. Migration 0480 puts the key in the `credentialCrypto` envelope — what
+the table stores is ciphertext plus an IV, useless without `CREDENTIAL_ENCRYPTION_SECRET` — and
+stores the PUBLIC half separately, in the clear, because `/api/lti/jwks` serves it to the world.
+
+That separation fixed a live defect on the way past: `loadRegistrations` is memoised through the
+platform read-through cache, whose second tier is KV, so the previous secret-backed version was
+**writing an RSA private key into a key-value store on every cold read**. The cached record now
+carries no key material at all; the private half is fetched and decrypted per client-assertion
+signing and never cached.
+
+`entityCatalog.test.ts` records why `lti_registrations` and `sso_connections` must NOT get a generic
+entity path: registering them would put back exactly the hazard the migration removed.
+
+Also shipped: `/api/lti-registrations` (manager+), key ROTATION — the point of moving off the secret
+— and a Settings → Security → Identity screen that generates the 2048-bit key itself. An
+administrator is never asked to paste a private key.
+
+### A launch now arrives somewhere
+
+`POST /api/lti/launch` verified an `id_token` correctly and returned JSON nothing consumed. Three
+product decisions, recorded in migration 0481 and `ltiLaunchBridge.ts`:
+
+1. **A launch RESUMES the board bound to its COURSE**, and creates one on first launch. Keyed on
+   `(issuer, deployment_id, context_id)` — not the resource link, because a course-navigation launch
+   and an assignment launch are two doors into the same module and a board per link would give one
+   cohort two rosters that drift. The resource link selects the `assignment` OBJECT on that board.
+2. **A launching user with no account is provisioned**, bound to the platform's `sub` (the only
+   stable identifier a platform promises) through `oauth_accounts`, not a new `lti_users` table. A
+   launch carrying no email is REFUSED with the reason — synthesising `lti-<hash>@invalid` to get
+   past a NOT NULL would put an unreachable address on a real account.
+3. **Only a staff launch opens the cohort board.** `teach` and `assist` land on it; `learn` does not,
+   and is told why. The cohort board carries the whole roster and every mark on it.
+
+The launch stamps `ltiIssuer` / `ltiMembershipsUrl` onto the cohort and `ltiLineItemUrl` onto the
+assignment — the fields `cohort.import` and `submission.mark` call the roster and grade services
+with, which previously only an admin pasting values out of an LMS screen could set. A re-launch
+MERGES the assignment rather than replacing it: the brief, rubric and deadline are an instructor's
+work and two LMS-known fields must not delete them.
+
+The session is established through the SAME single-use exchange envelope the OAuth callback mints,
+now extracted to `application/auth/sessionExchange.ts` and shared by all three federated paths. A
+24-hour session JWT in a URL is captured by analytics, leaks through `Referer`, and stays in history.
+
+### One JWS verifier instead of three
+
+LTI, GitHub Actions OIDC and the new SSO each verified an RS256 token against a publisher's JWKS,
+and the copies had already diverged: the GitHub one had a misplaced `break` that ended the retry
+loop after a cached key FAILED to verify, so a token signed with a rotated key whose id was still in
+cache was rejected outright. `infrastructure/auth/jws.ts` is now the one definition — `alg` pinned to
+RS256 there (algorithm confusion refused once, for every protocol), cached keys then one forced
+refresh — and all three call it.
+
+### The TALENT publish CTA is honest
+
+`talent:person` → `/freelancer/profile` (the `available_for_hire` opt-in — a freelancer is not
+"published", they opt in). `talent:gig` → `/marketplace/publish-gig`, **a board picker**, because
+`POST /api/marketplace/publish` derives a gig's title, description and requirements from an existing
+TICKET: there is no "post a gig" form to point at and never was, and one that re-collected a title
+would immediately disagree with the ticket's.
+
+### Named recipients are actually sent their links
+
+`publishForm` and `createSignatureRequest` each minted a credential per person, returned the
+plaintext exactly once, and had **nothing behind them** — so a named-recipient form and a
+countersignature request both worked only if a human relayed links out of an API response.
+`application/security/shareInvitationMailer.ts` is the one sender for both: one template, one
+transactional transport (never `campaignTransports`, where a marketing opt-out could silently stop a
+contract), and per-recipient failure isolation with the count reported to the caller.
+
+### A reminder now links to the signer's own page
+
+`runSignatureReminderSweep` pointed everybody at `/sign` and asked them to find the link they were
+sent, because only the token's HASH is stored. It now RE-ISSUES: `reissuePartyToken` mints a fresh
+credential on the party row at reminder time and the message carries it. Nothing plaintext is ever
+stored, so the one-way property is unchanged; the old link dies, which is the price of a link that
+opens, and it is charged only when a message carrying the replacement is about to go out. The
+re-issue is refused on a party who has already decided — a fourth call site for
+`isTerminalPartyStatus`, expressed as a SQL predicate so a concurrent decision cannot race it.
+
+**The form half got the chase pass too**, which the register had parked on FO-B3. That reasoning was
+wrong: for `audience: 'namedRecipients'`, `form_recipients.responded_at` IS the roster, so "who still
+owes an answer" was one predicate, not a feature waiting on a feature. Migration 0479 adds the two
+columns `signature_requests` already had (`remind_after_days`, `last_reminded_at`), defaulting to 0 —
+opt-in, because most published sets are `anyoneWithLink` surveys and a chasing default would turn
+every publish into a mail campaign.
+
+### The claim 500 can now be diagnosed from a trace instead of inferred
+
+`db.batch` on neon-http reports one Postgres message for a whole batch with no statement index, so
+`creation_session_objects_pkey` named the table and nothing else. The claim now builds a LABELLED
+inventory of what it is about to write and, on failure, reports the PG code, the constraint, the
+statement index that constraint maps to, that statement's row count, and BOTH the case-sensitive and
+case-INSENSITIVE distinct counts of the object and connection ids — the exact pair that confirms or
+rules out the one cause already found and fixed. Remaining: a live occurrence, logged in the register.
+
 ## ✅ RESOLVED 2026-08-18 — The app canvas previewed a website that was not the website, at a width that was not a width
 
 Three complaints about the `app` canvas, one root cause. The board was drawing its own second

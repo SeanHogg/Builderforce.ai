@@ -999,8 +999,9 @@ export async function ensureWorkforceAgentBridge(agentId: string): Promise<numbe
 // ---------------------------------------------------------------------------
 
 export interface RunArchitectureAnalysisResult {
-  task: { id: number; projectId: number; status: string };
+  taskId: number;
   executionId: number | null;
+  runId: string;
 }
 
 export async function runArchitectureAnalysis(projectId: number | string): Promise<RunArchitectureAnalysisResult> {

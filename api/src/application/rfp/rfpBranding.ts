@@ -1,14 +1,22 @@
 /**
  * RFP co-branding (PRD 15).
  *
- * There is no per-tenant brand-colour store in the platform, so an RFP request carries
- * the ASKING business's palette (`requester_brand`) and we derive the responder tenant's
- * palette from a sensible default (the Builderforce accent set) unless the caller
- * supplied one. `blendPalettes` co-brands the two — the requesting org leads the header
+ * An RFP request carries the ASKING business's palette (`requester_brand`); the responder
+ * tenant's comes from `tenants.brand_palette` (migration 0483), falling back to the
+ * Builderforce accent set for a tenant that has not set one. `blendPalettes` co-brands the two — the requesting org leads the header
  * (their colours make the buyer feel seen), the responder tenant owns the accent — and
  * `renderRfpDocHtml` emits a self-contained, inline-styled proposal document (no external
  * assets) that any browser prints to PDF cleanly, mirroring `tabularExport.toHtmlTable`.
+ *
+ * `renderRfpDocPdf` emits the SAME proposal as real PDF bytes. Both read one
+ * source — the `RfpResponseBody` — through `rfpDocSections`, so the file a buyer
+ * receives and the page a seller previews cannot describe different numbers. The
+ * HTML is still the on-screen preview and the emailable single file; the PDF is
+ * the attachment, and it exists because "print this page yourself" is not an
+ * export a proposal can be sent with.
  */
+import { renderPdf } from '../office/pdfWriter';
+import type { MdBlock } from '../office/markdownBlocks';
 import type { BrandPalette, RfpResponseBody } from './types';
 
 /** The responder tenant's default palette (Builderforce coral/cyan) when none stored. */
@@ -96,9 +104,6 @@ export function renderRfpDocHtml(opts: {
   const logo = b.logoUrl
     ? `<img src="${esc(b.logoUrl)}" alt="" style="height:44px;max-width:180px;object-fit:contain" />`
     : '';
-
-  const rosterList = (items: string[]) =>
-    items.length ? `<ul>${items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : '<p class="muted">—</p>';
 
   const components = body.capabilityRoster.keyComponents.length
     ? `<table class="grid"><thead><tr><th>Component</th><th>Responsibility</th></tr></thead><tbody>${body.capabilityRoster.keyComponents
@@ -199,4 +204,104 @@ export function renderRfpDocHtml(opts: {
 
   <div class="foot">Generated ${esc(opts.generatedAtIso)} · ${esc(opts.tenantName)} · Confidential pre-sales proposal.</div>
 </div></body></html>`;
+}
+
+
+// ── the one section model both renderers read ────────────────────────────────
+
+/**
+ * The proposal as ordered blocks.
+ *
+ * Extracted so the HTML document and the PDF are two RENDERINGS of one reading
+ * of the body, rather than two hand-written documents that drift apart the first
+ * time a section is added to one of them.
+ */
+export function rfpDocSections(body: RfpResponseBody): MdBlock[] {
+  const c = body.costModel;
+  const blocks: MdBlock[] = [];
+
+  blocks.push({ kind: 'heading', level: 1, text: 'Executive summary' });
+  blocks.push({ kind: 'paragraph', text: body.executiveSummary });
+
+  blocks.push({ kind: 'heading', level: 1, text: 'Capabilities & approach' });
+  if (body.capabilityRoster.valueProps.length) {
+    blocks.push({ kind: 'list', ordered: false, items: body.capabilityRoster.valueProps });
+  }
+  if (body.capabilityRoster.keyComponents.length) {
+    blocks.push({
+      kind: 'table',
+      head: ['Component', 'Responsibility'],
+      rows: body.capabilityRoster.keyComponents.map((k) => [k.name, k.responsibility]),
+    });
+  } else {
+    blocks.push({ kind: 'paragraph', text: 'Greenfield — capabilities proposed from the requirements.' });
+  }
+  if (body.capabilityRoster.frameworks.length) {
+    blocks.push({ kind: 'paragraph', text: `Stack: ${body.capabilityRoster.frameworks.join(', ')}` });
+  }
+
+  blocks.push({ kind: 'heading', level: 1, text: 'Investment & commercials' });
+  blocks.push({
+    kind: 'table',
+    head: ['Line item', 'Amount'],
+    rows: [...c.lineItems.map((li) => [li.label, money(li.amountUsd)]), ['Quoted price', money(c.quotedPriceUsd)]],
+  });
+
+  blocks.push({ kind: 'heading', level: 1, text: 'Delivery plan' });
+  blocks.push({
+    kind: 'table',
+    head: ['Phase', 'Timeline', 'Milestones'],
+    rows: body.plan.phases.length
+      ? body.plan.phases.map((p) => [
+        p.name,
+        `${p.startDate} - ${p.endDate}`,
+        p.milestones.length ? p.milestones.map((m) => `${m.name} (${m.date})`).join('; ') : '-',
+      ])
+      : [['-', '-', '-']],
+  });
+  blocks.push({
+    kind: 'paragraph',
+    text: `Estimated delivery: ${body.timeline.startDate} to ${body.timeline.endDate} (${body.timeline.weeks} weeks).`,
+  });
+
+  blocks.push({ kind: 'heading', level: 1, text: 'Key risks' });
+  blocks.push({
+    kind: 'table',
+    head: ['Risk', 'Severity', 'Mitigation'],
+    rows: body.risks.length ? body.risks.map((r) => [r.title, r.severity, r.mitigation]) : [['-', '-', '-']],
+  });
+
+  blocks.push({ kind: 'heading', level: 1, text: 'Dependencies' });
+  blocks.push({
+    kind: 'table',
+    head: ['Dependency', 'Type', 'Note'],
+    rows: body.dependencies.length ? body.dependencies.map((d) => [d.title, d.type, d.note]) : [['-', '-', '-']],
+  });
+
+  return blocks;
+}
+
+/**
+ * The branded proposal as real PDF bytes — the attachment, not a print dialog.
+ *
+ * Co-branding survives the format: the blended primary paints the cover band and
+ * the section rules, the blended secondary paints the table header bands, so the
+ * file a buyer opens is recognisably the same document as the preview.
+ */
+export function renderRfpDocPdf(opts: {
+  title: string;
+  requesterOrgName: string;
+  tenantName: string;
+  body: RfpResponseBody;
+  generatedAtIso: string;
+}): Uint8Array {
+  const b = opts.body.branding.blended;
+  return renderPdf({
+    blocks: rfpDocSections(opts.body),
+    title: opts.title,
+    subtitle: `Prepared for ${opts.requesterOrgName || 'the requesting organisation'} by ${opts.tenantName}`,
+    badge: { label: 'Quoted price', value: money(opts.body.costModel.quotedPriceUsd) },
+    footer: `Generated ${opts.generatedAtIso} - ${opts.tenantName} - Confidential pre-sales proposal`,
+    theme: { accent: b.primary, secondary: b.secondary },
+  });
 }
