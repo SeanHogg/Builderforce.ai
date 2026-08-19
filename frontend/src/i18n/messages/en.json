@@ -11592,7 +11592,7 @@
       "openai": {
         "blurb": "Connect your ChatGPT/Codex subscription or paste an OpenAI API key to run GPT models on your own account.",
         "subscription": "ChatGPT/Codex subscription",
-        "pastePrompt": "After signing in, your browser may show a localhost error. Copy the full <code>http://localhost:1455/auth/callback?code=…&state=…</code> URL from the address bar and paste it below.",
+        "pastePrompt": "After signing in, your browser may show a localhost error — that is expected. Copy the full <code>http://localhost:1455/auth/callback?code=…&state=…</code> URL from the address bar and paste it below. Quit any running <code>codex login</code> first: the CLI owns that port and will consume the code before you can paste it.",
         "pastePlaceholder": "Paste the full OpenAI redirect URL…"
       },
       "google": {
@@ -14048,7 +14048,19 @@
       "pro": "Pro",
       "teams": "Teams"
     },
-    "cycleLabel": "Billing cycle"
+    "cycleLabel": "Billing cycle",
+    "getPaidTab": "Get paid",
+    "merchantTitle": "Taking card payments",
+    "merchantIntro": "Where money comes IN. Connect a merchant account and every invoice you issue carries a payment link — the money settles to you, and Builderforce takes no cut of it.",
+    "receivablesTitle": "Outstanding invoices",
+    "noReceivables": "Nothing is outstanding. Issued invoices appear here until they are paid.",
+    "colInvoice": "Invoice",
+    "colCustomer": "Customer",
+    "colOutstanding": "Outstanding",
+    "colDue": "Due",
+    "colAge": "Age",
+    "daysOverdue": "{count, plural, one {# day over} other {# days over}}",
+    "current": "Current"
   },
   "policyPacks": {
     "title": "Policy packs",
@@ -18063,7 +18075,10 @@
         "liveMetric": "Live metric",
         "objective": "Objective",
         "pricing": "Pricing",
-        "trigger": "Trigger"
+        "trigger": "Trigger",
+        "equityGrant": "Equity grant",
+        "convertible": "SAFE / note",
+        "payRun": "Pay run"
       },
       "field": {
         "actualTotal": "actual total",
@@ -18136,7 +18151,6 @@
         "obligations": "Obligations",
         "offer": "Offer",
         "offerings": "Offerings",
-        "optionPool": "Option pool",
         "options": "Options",
         "owner": "Owner",
         "paidAmount": "paid",
@@ -18222,7 +18236,49 @@
         "watchesField": "Watched field",
         "weaknesses": "Weaknesses",
         "website": "Website",
-        "wedge": "Wedge"
+        "wedge": "Wedge",
+        "companyRef": "Company",
+        "asOf": "As of",
+        "issued": "Issued",
+        "poolAuthorized": "Pool authorised",
+        "poolUnallocated": "Pool unallocated",
+        "convertibles": "Convertibles",
+        "ownershipCheck": "Ownership check",
+        "holder": "Holder",
+        "shareClass": "Share class",
+        "instrument": "Instrument",
+        "quantity": "Quantity",
+        "vested": "Vested",
+        "vestingStartAt": "Vesting starts",
+        "vestingMonths": "Vesting months",
+        "cliffMonths": "Cliff months",
+        "vestingFrequency": "Vesting frequency",
+        "acceleration": "Acceleration",
+        "cliffAt": "Cliff date",
+        "unvested": "Unvested",
+        "vestedPercent": "Vested",
+        "pricePerShare": "Price per share",
+        "fmvPerShare": "FMV per share",
+        "instrumentKind": "Instrument",
+        "principal": "Principal",
+        "valuationCap": "Valuation cap",
+        "discountPercent": "Discount",
+        "interestRate": "Interest rate",
+        "maturesAt": "Matures",
+        "convertsInto": "Converts into",
+        "collectionMode": "chasing",
+        "issuedBy": "issued by",
+        "paymentLink": "payment link",
+        "customerEmail": "customer email",
+        "source": "provider",
+        "periodStart": "period from",
+        "periodEnd": "period to",
+        "paidAt": "paid",
+        "grossAmount": "gross",
+        "employerTaxes": "employer taxes",
+        "totalCost": "total cost",
+        "employeeCount": "people paid",
+        "syncedAt": "read"
       },
       "column": {
         "actual": "Actual",
@@ -18302,7 +18358,15 @@
         "value": "Value",
         "variance": "Variance",
         "variant": "Variant",
-        "verdict": "Verdict"
+        "verdict": "Verdict",
+        "shareClass": "Share class",
+        "vested": "Vested",
+        "principal": "Principal",
+        "cap": "Cap",
+        "discount": "Discount",
+        "employee": "Employee",
+        "hours": "Hours",
+        "rate": "Rate"
       }
     },
     "datasetImportedWithPii": "Imported {name} — {rows} rows, {columns} columns. {pii} columns hold personal data and are masked.",
@@ -19676,11 +19740,22 @@
         "readings": "Ways to read this site",
         "reading": {
           "preview": "Preview",
-          "edit": "Edit"
+          "edit": "Edit",
+          "compare": "Compare"
         },
         "scheme": "The site's own light and dark",
         "schemeLight": "Light",
-        "schemeDark": "Dark"
+        "schemeDark": "Dark",
+        "before": "Before",
+        "after": "After",
+        "beforeAlt": "Screenshot of the current site at {url}",
+        "compareEmpty": "Nothing to compare yet. Paste the address of the site this design replaces and capture it — the screenshot is kept with this design as its “before”.",
+        "captureLabel": "Before",
+        "capturePlaceholder": "https://your-current-site.com",
+        "capture": "Capture",
+        "recapture": "Recapture",
+        "capturing": "Capturing…",
+        "captureFailed": "The page could not be captured."
       },
       "timeline": {
         "label": "Timeline",
@@ -20199,7 +20274,26 @@
         "sellerOwner": "Our owner",
         "buyerOwner": "Their owner"
       }
-    }
+    },
+    "exportRestricted": "Restricted — this card cannot be exported",
+    "imageCapturedStatus": "Captured",
+    "imageCapturedValidation": "Live page rendered and captured from {url}",
+    "imageCapturedProposal": "Add screenshot “{title}”",
+    "screenshotDefaultTitle": "{host} — current site",
+    "screenshotComparisonProposal": "Attach the “before” screenshot to “{title}”",
+    "gateScreenshotTitle": "Create an account to capture live pages",
+    "gateScreenshotBody": "A real browser renders the page on Builderforce servers, so a screenshot needs an account. Create a free one and this canvas — objects, conversation and layout — comes with you.",
+    "noticeInvoiceNeedsAccount": "Issuing, recording a payment and chasing all write to a real ledger, so they need a saved workspace. Your invoice stays on this canvas.",
+    "noticeInvoiceIncomplete": "This invoice needs an invoice number, a customer and an amount before it can be issued.",
+    "noticeInvoiceIssued": "Invoice {reference} issued.",
+    "noticeInvoiceIssuedSent": "Invoice {reference} issued and sent to {to}.",
+    "noticeInvoiceNothingOutstanding": "Nothing is outstanding on this invoice.",
+    "noticeInvoicePaymentRecorded": "Payment recorded on {reference}. {outstanding} still outstanding.",
+    "noticeInvoicePaymentAlreadyRecorded": "That payment was already recorded on {reference}.",
+    "noticeInvoiceChased": "{reference} chased — sent to {to}.",
+    "noticeInvoiceChaseNoRecipient": "{reference} chase recorded, but there is no customer email on the card to send it to.",
+    "noticeInvoiceActionFailed": "That could not be done. Nothing was sent.",
+    "noticePayRunSync": "Ask Brain to sync pay runs — it reads them back from your connected payroll provider."
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -22982,5 +23076,55 @@
       "notApplicable": "Not applicable",
       "gap": "Known gap"
     }
+  },
+  "merchant": {
+    "loading": "Checking your merchant account…",
+    "loadFailed": "Your merchant account could not be read.",
+    "statusLabel": "Card payments",
+    "status": {
+      "absent": "Not set up",
+      "pending": "Waiting on you",
+      "restricted": "Restricted",
+      "connected": "Ready"
+    },
+    "readyBody": "Your customers can pay your invoices by card. Money settles to your own account — Builderforce takes no cut of it.",
+    "incompleteBody": "Your account exists but cannot take a payment yet. Finish what your processor is still asking for; until then, issued invoices carry no payment link.",
+    "absentBody": "Set up a merchant account and every invoice you issue gets a payment link. Money settles to your account, not ours, and Builderforce takes no cut of it.",
+    "outstandingTitle": "Still outstanding at your processor",
+    "country": "Country",
+    "currency": "Settlement currency",
+    "payoutsLabel": "Payouts enabled",
+    "unknown": "Not yet known",
+    "yes": "Yes",
+    "no": "Not yet",
+    "connect": "Set up card payments",
+    "resume": "Continue setting up",
+    "connectFailed": "Setting up card payments could not be started.",
+    "disconnect": "Disconnect",
+    "disconnectTitle": "Disconnect your merchant account?",
+    "disconnectBody": "New invoices will no longer carry a payment link. Nothing at your processor is deleted — your records, refunds and disputes stay exactly where they are — and reconnecting later creates a fresh account.",
+    "disconnectConfirm": "Disconnect",
+    "disconnectFailed": "The merchant account could not be disconnected."
+  },
+  "publicInvoice": {
+    "loading": "Loading your invoice…",
+    "loadFailed": "That invoice link is not valid. Ask whoever sent it for a fresh one.",
+    "missingToken": "That link is missing its access code. Use the link exactly as it was sent to you.",
+    "unavailableTitle": "This invoice is not available",
+    "title": "Invoice {reference}",
+    "billedTo": "Billed to {customer}",
+    "total": "Total",
+    "paid": "Paid so far",
+    "outstanding": "Outstanding",
+    "due": "Due",
+    "daysOverdue": "{count, plural, one {# day overdue} other {# days overdue}}",
+    "colDescription": "Description",
+    "colQuantity": "Qty",
+    "colUnit": "Unit price",
+    "colAmount": "Amount",
+    "payNow": "Pay {amount}",
+    "confirming": "Confirming your payment…",
+    "payByTransfer": "This invoice is paid by bank transfer. Reply to the message that sent you this link if you need the account details.",
+    "settled": "This invoice is settled. Thank you."
   }
 }

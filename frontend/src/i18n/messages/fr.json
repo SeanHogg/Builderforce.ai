@@ -11592,7 +11592,7 @@
       "openai": {
         "blurb": "Connectez votre abonnement ChatGPT/Codex ou collez une clé API OpenAI.",
         "subscription": "abonnement ChatGPT/Codex",
-        "pastePrompt": "Après connexion, copiez l’URL complète <code>http://localhost:1455/auth/callback?code=…&state=…</code> depuis la barre d’adresse et collez-la ici.",
+        "pastePrompt": "Après la connexion, votre navigateur peut afficher une erreur localhost — c'est normal. Copiez l'URL complète <code>http://localhost:1455/auth/callback?code=…&state=…</code> depuis la barre d'adresse et collez-la ci-dessous. Quittez d'abord tout <code>codex login</code> en cours : la CLI occupe ce port et consommera le code avant que vous puissiez le coller.",
         "pastePlaceholder": "Collez l’URL de redirection OpenAI…"
       },
       "google": {
@@ -14048,7 +14048,19 @@
       "pro": "Pro",
       "teams": "Équipes"
     },
-    "cycleLabel": "Cycle de facturation"
+    "cycleLabel": "Cycle de facturation",
+    "getPaidTab": "Encaisser",
+    "merchantTitle": "Accepter les paiements par carte",
+    "merchantIntro": "Par où l’argent ENTRE. Connectez un compte d’encaissement et chaque facture émise comportera un lien de paiement : l’argent vous est versé et Builderforce ne prélève aucune commission.",
+    "receivablesTitle": "Factures impayées",
+    "noReceivables": "Rien n’est en attente. Les factures émises apparaissent ici jusqu’à leur règlement.",
+    "colInvoice": "Facture",
+    "colCustomer": "Client",
+    "colOutstanding": "Restant dû",
+    "colDue": "Échéance",
+    "colAge": "Ancienneté",
+    "daysOverdue": "{count, plural, one {# jour} other {# jours}}",
+    "current": "À jour"
   },
   "policyPacks": {
     "title": "Packs de politiques",
@@ -18063,7 +18075,10 @@
         "liveMetric": "Métrique en direct",
         "objective": "Objectif",
         "pricing": "Tarification",
-        "trigger": "Déclencheur"
+        "trigger": "Déclencheur",
+        "equityGrant": "Attribution d'actions",
+        "convertible": "SAFE / billet convertible",
+        "payRun": "Paie"
       },
       "field": {
         "actualTotal": "total réel",
@@ -18136,7 +18151,6 @@
         "obligations": "Obligations",
         "offer": "Proposition d’entrée",
         "offerings": "Offre",
-        "optionPool": "Pool d’options",
         "options": "Options",
         "owner": "Responsable",
         "paidAmount": "réglé",
@@ -18222,7 +18236,49 @@
         "watchesField": "Champ surveillé",
         "weaknesses": "Faiblesses",
         "website": "Site web",
-        "wedge": "Angle d’attaque"
+        "wedge": "Angle d’attaque",
+        "companyRef": "Société",
+        "asOf": "Au",
+        "issued": "Émises",
+        "poolAuthorized": "Pool autorisé",
+        "poolUnallocated": "Pool non attribué",
+        "convertibles": "Convertibles",
+        "ownershipCheck": "Contrôle de répartition",
+        "holder": "Détenteur",
+        "shareClass": "Catégorie d'actions",
+        "instrument": "Instrument",
+        "quantity": "Quantité",
+        "vested": "Acquis",
+        "vestingStartAt": "Début d'acquisition",
+        "vestingMonths": "Durée d'acquisition (mois)",
+        "cliffMonths": "Cliff (mois)",
+        "vestingFrequency": "Fréquence d'acquisition",
+        "acceleration": "Accélération",
+        "cliffAt": "Date du cliff",
+        "unvested": "Non acquis",
+        "vestedPercent": "Acquis",
+        "pricePerShare": "Prix par action",
+        "fmvPerShare": "Juste valeur par action",
+        "instrumentKind": "Instrument",
+        "principal": "Principal",
+        "valuationCap": "Plafond de valorisation",
+        "discountPercent": "Décote",
+        "interestRate": "Taux d'intérêt",
+        "maturesAt": "Échéance",
+        "convertsInto": "Se convertit en",
+        "collectionMode": "relance",
+        "issuedBy": "émise par",
+        "paymentLink": "lien de paiement",
+        "customerEmail": "e-mail client",
+        "source": "prestataire",
+        "periodStart": "période du",
+        "periodEnd": "période au",
+        "paidAt": "payée",
+        "grossAmount": "brut",
+        "employerTaxes": "charges patronales",
+        "totalCost": "coût total",
+        "employeeCount": "personnes payées",
+        "syncedAt": "lue"
       },
       "column": {
         "actual": "Réel",
@@ -18302,7 +18358,15 @@
         "value": "Valeur",
         "variance": "Écart",
         "variant": "Variante",
-        "verdict": "Verdict"
+        "verdict": "Verdict",
+        "shareClass": "Catégorie d'actions",
+        "vested": "Acquis",
+        "principal": "Principal",
+        "cap": "Plafond",
+        "discount": "Décote",
+        "employee": "Personne",
+        "hours": "Heures",
+        "rate": "Taux"
       }
     },
     "datasetImportedWithPii": "{name} importé — {rows} lignes, {columns} colonnes. {pii} colonnes contiennent des données personnelles et sont masquées.",
@@ -19676,11 +19740,22 @@
         "readings": "Façons de consulter ce site",
         "reading": {
           "preview": "Aperçu",
-          "edit": "Modifier"
+          "edit": "Modifier",
+          "compare": "Comparer"
         },
         "scheme": "Mode clair et sombre propre au site",
         "schemeLight": "Clair",
-        "schemeDark": "Sombre"
+        "schemeDark": "Sombre",
+        "before": "Avant",
+        "after": "Après",
+        "beforeAlt": "Capture d’écran du site actuel à l’adresse {url}",
+        "compareEmpty": "Rien à comparer pour l’instant. Collez l’adresse du site que ce design remplace et capturez-la : la capture est conservée avec ce design comme son « avant ».",
+        "captureLabel": "Avant",
+        "capturePlaceholder": "https://votre-site-actuel.com",
+        "capture": "Capturer",
+        "recapture": "Recapturer",
+        "capturing": "Capture en cours…",
+        "captureFailed": "La page n’a pas pu être capturée."
       },
       "timeline": {
         "label": "Montage",
@@ -20199,7 +20274,26 @@
         "sellerOwner": "Notre responsable",
         "buyerOwner": "Leur responsable"
       }
-    }
+    },
+    "exportRestricted": "Restreint — cette carte ne peut pas être exportée",
+    "imageCapturedStatus": "Capturée",
+    "imageCapturedValidation": "Page en direct rendue et capturée depuis {url}",
+    "imageCapturedProposal": "Ajouter la capture d’écran « {title} »",
+    "screenshotDefaultTitle": "{host} — site actuel",
+    "screenshotComparisonProposal": "Joindre la capture « avant » à « {title} »",
+    "gateScreenshotTitle": "Créez un compte pour capturer des pages en direct",
+    "gateScreenshotBody": "Un vrai navigateur affiche la page sur les serveurs Builderforce : une capture nécessite donc un compte. Créez-en un gratuitement et ce canevas — objets, conversation et disposition — vous suit.",
+    "noticeInvoiceNeedsAccount": "Émettre, enregistrer un paiement et relancer écrivent dans un vrai registre : il faut donc un espace de travail enregistré. Votre facture reste sur ce canevas.",
+    "noticeInvoiceIncomplete": "Cette facture a besoin d’un numéro, d’un client et d’un montant avant de pouvoir être émise.",
+    "noticeInvoiceIssued": "Facture {reference} émise.",
+    "noticeInvoiceIssuedSent": "Facture {reference} émise et envoyée à {to}.",
+    "noticeInvoiceNothingOutstanding": "Il ne reste rien à régler sur cette facture.",
+    "noticeInvoicePaymentRecorded": "Paiement enregistré sur {reference}. Il reste {outstanding} à régler.",
+    "noticeInvoicePaymentAlreadyRecorded": "Ce paiement était déjà enregistré sur {reference}.",
+    "noticeInvoiceChased": "{reference} relancée — envoyée à {to}.",
+    "noticeInvoiceChaseNoRecipient": "Relance de {reference} enregistrée, mais la carte ne porte aucune adresse e-mail client à qui l’envoyer.",
+    "noticeInvoiceActionFailed": "Cela n’a pas pu être fait. Rien n’a été envoyé.",
+    "noticePayRunSync": "Demandez à Brain de synchroniser les paies : il les relit depuis votre prestataire de paie connecté."
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -22982,5 +23076,55 @@
       "notApplicable": "Sans objet",
       "gap": "Écart connu"
     }
+  },
+  "merchant": {
+    "loading": "Vérification de votre compte d’encaissement…",
+    "loadFailed": "Votre compte d’encaissement n’a pas pu être lu.",
+    "statusLabel": "Paiements par carte",
+    "status": {
+      "absent": "Non configuré",
+      "pending": "En attente de vous",
+      "restricted": "Restreint",
+      "connected": "Prêt"
+    },
+    "readyBody": "Vos clients peuvent régler vos factures par carte. L’argent est versé sur votre propre compte et Builderforce ne prélève aucune commission.",
+    "incompleteBody": "Votre compte existe mais ne peut pas encore encaisser. Terminez ce que votre prestataire de paiement demande ; d’ici là, les factures émises ne comportent aucun lien de paiement.",
+    "absentBody": "Configurez un compte d’encaissement et chaque facture émise comportera un lien de paiement. L’argent est versé sur votre compte, pas le nôtre, et Builderforce ne prélève aucune commission.",
+    "outstandingTitle": "Encore attendu par votre prestataire",
+    "country": "Pays",
+    "currency": "Devise de règlement",
+    "payoutsLabel": "Virements activés",
+    "unknown": "Pas encore connu",
+    "yes": "Oui",
+    "no": "Pas encore",
+    "connect": "Configurer les paiements par carte",
+    "resume": "Poursuivre la configuration",
+    "connectFailed": "La configuration des paiements par carte n’a pas pu démarrer.",
+    "disconnect": "Déconnecter",
+    "disconnectTitle": "Déconnecter votre compte d’encaissement ?",
+    "disconnectBody": "Les nouvelles factures ne comporteront plus de lien de paiement. Rien n’est supprimé chez votre prestataire — vos enregistrements, remboursements et litiges restent en place — et une reconnexion ultérieure créera un nouveau compte.",
+    "disconnectConfirm": "Déconnecter",
+    "disconnectFailed": "Le compte d’encaissement n’a pas pu être déconnecté."
+  },
+  "publicInvoice": {
+    "loading": "Chargement de votre facture…",
+    "loadFailed": "Ce lien de facture n’est pas valide. Demandez-en un nouveau à son expéditeur.",
+    "missingToken": "Il manque son code d’accès à ce lien. Utilisez le lien exactement tel qu’il vous a été envoyé.",
+    "unavailableTitle": "Cette facture n’est pas disponible",
+    "title": "Facture {reference}",
+    "billedTo": "Facturé à {customer}",
+    "total": "Total",
+    "paid": "Déjà réglé",
+    "outstanding": "Restant dû",
+    "due": "Échéance",
+    "daysOverdue": "{count, plural, one {# jour de retard} other {# jours de retard}}",
+    "colDescription": "Description",
+    "colQuantity": "Qté",
+    "colUnit": "Prix unitaire",
+    "colAmount": "Montant",
+    "payNow": "Payer {amount}",
+    "confirming": "Confirmation de votre paiement…",
+    "payByTransfer": "Cette facture se règle par virement bancaire. Répondez au message qui vous a envoyé ce lien si vous avez besoin des coordonnées bancaires.",
+    "settled": "Cette facture est réglée. Merci."
   }
 }

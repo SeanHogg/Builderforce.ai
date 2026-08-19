@@ -76,6 +76,12 @@ const CONTEXT_FIELDS = [
   'projects', 'sources', 'items', 'summary', 'participants', 'evermindVersion',
   'contributions', 'inferenceEnabled', 'teacherModel', 'viewport', 'content', 'markdown',
   'steps', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteTheme', 'activeWebsitePageId', 'pages', 'kpis', 'verdict',
+  // The BEFORE a redesign is compared against: which page was photographed, when, and
+  // at what width. `beforeImageUrl` is deliberately absent for the same reason
+  // `mapOutline` is — it is a base64 screenshot, and the snapshot is the model's context
+  // budget. Brain needs to know a comparison EXISTS and what it is of, not to re-read
+  // several hundred KB of pixels it cannot look at anyway.
+  'beforeUrl', 'beforeCapturedAt', 'beforeViewport',
   'modality', 'template', 'ideProjectId', 'storageProjectId', 'fileCount', 'previewUrl',
   'gaps', 'recommendations', 'milestones', 'code', 'language', 'path', 'url', 'branch',
   'diagnostics', 'findings', 'checks', 'results', 'result', 'nextSteps', 'actions', 'remediation',

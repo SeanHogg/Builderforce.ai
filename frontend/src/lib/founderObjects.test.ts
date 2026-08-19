@@ -57,7 +57,13 @@ describe('the registry is derived, so the lists cannot drift', () => {
         // somebody would chase a real company for. Asserting it authorable would
         // demand exactly the hole `derived` exists to close, so the readability half
         // below still runs for it and only the mutability half is skipped.
-        if (!field.derived) {
+        // A `derive`d field is skipped for the SAME reason one line up, arrived at
+        // from the other direction: it is computed from the fields beside it, so an
+        // authored value would be a total that disagrees with its own rows —
+        // `capTable.ownershipCheck` over the folded holdings, `equityGrant.unvested`
+        // over its own vested figure. `specMutableFields` already excludes both
+        // flags; this assertion simply had not caught up when the second one landed.
+        if (!field.derived && !field.derive) {
           expect(mutable, `${spec.kind}.${field.name} must be authorable`).toContain(field.name);
         }
         // Readability is checked through the adapter itself rather than the private

@@ -48,6 +48,17 @@ export interface ActivityInput {
   targetType?: string | null;
   targetId?: string | number | null;
   targetLabel?: string | null;
+  /**
+   * The `objects` row this event belongs to.
+   *
+   * `activity_log.object_id` has existed since PRD 20 §6.3 — "the registry
+   * reference, what makes `/api/objects/:id/activity` ONE endpoint instead of one
+   * per subsystem" — and no writer set it, so that endpoint answered empty for
+   * every event this function has ever appended. Passing it is optional because
+   * plenty of events (a login, a cron sweep) belong to no object; leaving it
+   * unsettable was the drift.
+   */
+  objectId?: string | null;
   summary?: string | null;
   metadata?: Record<string, unknown> | null;
   occurredAt?: Date;
@@ -146,6 +157,7 @@ export async function recordActivity(env: Env | undefined, db: Db, input: Activi
       targetType: input.targetType ?? null,
       targetId: input.targetId != null ? String(input.targetId).slice(0, 64) : null,
       targetLabel: input.targetLabel ? input.targetLabel.slice(0, 300) : null,
+      objectId: input.objectId ?? null,
       summary: input.summary ?? null,
       metadata: (input.metadata ?? null) as Record<string, unknown> | null,
       occurredAt: input.occurredAt ?? new Date(),

@@ -11592,7 +11592,7 @@
       "openai": {
         "blurb": "连接您的 ChatGPT/Codex 订阅，或粘贴 OpenAI API 密钥。",
         "subscription": "ChatGPT/Codex 订阅",
-        "pastePrompt": "登录后，从地址栏复制完整的 <code>http://localhost:1455/auth/callback?code=…&state=…</code> URL 并粘贴到这里。",
+        "pastePrompt": "登录后，浏览器可能会显示 localhost 错误——这是正常的。请从地址栏复制完整的 <code>http://localhost:1455/auth/callback?code=…&state=…</code> 网址并粘贴到下方。请先退出正在运行的 <code>codex login</code>：CLI 占用该端口，会在你粘贴之前消耗掉该授权码。",
         "pastePlaceholder": "粘贴 OpenAI 重定向 URL…"
       },
       "google": {
@@ -14048,7 +14048,19 @@
       "pro": "专业版",
       "teams": "团队版"
     },
-    "cycleLabel": "计费周期"
+    "cycleLabel": "计费周期",
+    "getPaidTab": "收款",
+    "merchantTitle": "接受刷卡付款",
+    "merchantIntro": "资金流入的地方。连接收款账户后，您开具的每张发票都会带有付款链接——款项结算给您，Builderforce 不从中抽成。",
+    "receivablesTitle": "未结发票",
+    "noReceivables": "没有未结款项。已开具的发票会显示在此处，直到付清为止。",
+    "colInvoice": "发票",
+    "colCustomer": "客户",
+    "colOutstanding": "未付",
+    "colDue": "到期日",
+    "colAge": "账龄",
+    "daysOverdue": "逾期 {count} 天",
+    "current": "未到期"
   },
   "policyPacks": {
     "title": "策略包",
@@ -18063,7 +18075,10 @@
         "liveMetric": "实时指标",
         "objective": "目标",
         "pricing": "定价",
-        "trigger": "触发器"
+        "trigger": "触发器",
+        "equityGrant": "股权授予",
+        "convertible": "SAFE / 可转换票据",
+        "payRun": "工资单"
       },
       "field": {
         "actualTotal": "实际总额",
@@ -18136,7 +18151,6 @@
         "obligations": "义务",
         "offer": "切入提案",
         "offerings": "产品与服务",
-        "optionPool": "期权池",
         "options": "备选方案",
         "owner": "负责人",
         "paidAmount": "已收金额",
@@ -18222,7 +18236,49 @@
         "watchesField": "监控字段",
         "weaknesses": "劣势",
         "website": "网站",
-        "wedge": "突破口"
+        "wedge": "突破口",
+        "companyRef": "公司",
+        "asOf": "截至",
+        "issued": "已发行",
+        "poolAuthorized": "期权池授权额",
+        "poolUnallocated": "期权池未分配",
+        "convertibles": "可转换工具",
+        "ownershipCheck": "股权核对",
+        "holder": "持有人",
+        "shareClass": "股份类别",
+        "instrument": "工具类型",
+        "quantity": "数量",
+        "vested": "已归属",
+        "vestingStartAt": "归属起始日",
+        "vestingMonths": "归属月数",
+        "cliffMonths": "悬崖期月数",
+        "vestingFrequency": "归属频率",
+        "acceleration": "加速归属",
+        "cliffAt": "悬崖期到期日",
+        "unvested": "未归属",
+        "vestedPercent": "已归属",
+        "pricePerShare": "每股价格",
+        "fmvPerShare": "每股公允价值",
+        "instrumentKind": "工具类型",
+        "principal": "本金",
+        "valuationCap": "估值上限",
+        "discountPercent": "折扣",
+        "interestRate": "利率",
+        "maturesAt": "到期日",
+        "convertsInto": "转换为",
+        "collectionMode": "催收方式",
+        "issuedBy": "开具人",
+        "paymentLink": "付款链接",
+        "customerEmail": "客户邮箱",
+        "source": "服务商",
+        "periodStart": "周期起",
+        "periodEnd": "周期止",
+        "paidAt": "支付日",
+        "grossAmount": "税前总额",
+        "employerTaxes": "雇主税费",
+        "totalCost": "总成本",
+        "employeeCount": "发薪人数",
+        "syncedAt": "读取于"
       },
       "column": {
         "actual": "实际",
@@ -18302,7 +18358,15 @@
         "value": "数值",
         "variance": "差异",
         "variant": "变体",
-        "verdict": "结论"
+        "verdict": "结论",
+        "shareClass": "股份类别",
+        "vested": "已归属",
+        "principal": "本金",
+        "cap": "上限",
+        "discount": "折扣",
+        "employee": "员工",
+        "hours": "工时",
+        "rate": "费率"
       }
     },
     "datasetImportedWithPii": "已导入 {name}——{rows} 行、{columns} 列。其中 {pii} 列包含个人数据并已脱敏显示。",
@@ -19676,11 +19740,22 @@
         "readings": "查看此网站的方式",
         "reading": {
           "preview": "预览",
-          "edit": "编辑"
+          "edit": "编辑",
+          "compare": "对比"
         },
         "scheme": "网站自身的浅色与深色",
         "schemeLight": "浅色",
-        "schemeDark": "深色"
+        "schemeDark": "深色",
+        "before": "之前",
+        "after": "之后",
+        "beforeAlt": "当前网站 {url} 的屏幕截图",
+        "compareEmpty": "暂无可对比内容。粘贴此设计所替换网站的地址并进行捕获——截图会作为“之前”与此设计一同保存。",
+        "captureLabel": "之前",
+        "capturePlaceholder": "https://your-current-site.com",
+        "capture": "捕获",
+        "recapture": "重新捕获",
+        "capturing": "捕获中…",
+        "captureFailed": "无法捕获该页面。"
       },
       "timeline": {
         "label": "时间轴",
@@ -20199,7 +20274,26 @@
         "sellerOwner": "我方负责人",
         "buyerOwner": "对方负责人"
       }
-    }
+    },
+    "exportRestricted": "受限 — 此卡片无法导出",
+    "imageCapturedStatus": "已捕获",
+    "imageCapturedValidation": "已渲染并捕获实时页面 {url}",
+    "imageCapturedProposal": "添加屏幕截图“{title}”",
+    "screenshotDefaultTitle": "{host} — 当前网站",
+    "screenshotComparisonProposal": "将“之前”截图附加到“{title}”",
+    "gateScreenshotTitle": "创建账户以捕获实时页面",
+    "gateScreenshotBody": "页面由 Builderforce 服务器上的真实浏览器渲染，因此截图需要账户。免费创建一个，此画布的对象、对话和布局都会一并保留。",
+    "noticeInvoiceNeedsAccount": "开具发票、记录付款和催款都会写入真实账本，因此需要已保存的工作区。您的发票会留在此画布上。",
+    "noticeInvoiceIncomplete": "此发票需要发票编号、客户和金额后才能开具。",
+    "noticeInvoiceIssued": "发票 {reference} 已开具。",
+    "noticeInvoiceIssuedSent": "发票 {reference} 已开具并发送至 {to}。",
+    "noticeInvoiceNothingOutstanding": "此发票没有未付金额。",
+    "noticeInvoicePaymentRecorded": "已在 {reference} 上记录付款。仍有 {outstanding} 未付。",
+    "noticeInvoicePaymentAlreadyRecorded": "该付款已在 {reference} 上记录过了。",
+    "noticeInvoiceChased": "已催收 {reference}——发送至 {to}。",
+    "noticeInvoiceChaseNoRecipient": "已记录 {reference} 的催收，但卡片上没有客户邮箱可发送。",
+    "noticeInvoiceActionFailed": "操作未能完成，未发送任何内容。",
+    "noticePayRunSync": "请让 Brain 同步工资单——它会从您连接的薪资服务商读取。"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -22982,5 +23076,55 @@
       "notApplicable": "不适用",
       "gap": "已知缺口"
     }
+  },
+  "merchant": {
+    "loading": "正在检查您的收款账户……",
+    "loadFailed": "无法读取您的收款账户。",
+    "statusLabel": "刷卡收款",
+    "status": {
+      "absent": "尚未设置",
+      "pending": "等待您完成",
+      "restricted": "受限",
+      "connected": "已就绪"
+    },
+    "readyBody": "您的客户可以用银行卡支付您的发票。款项直接结算到您自己的账户——Builderforce 不从中抽成。",
+    "incompleteBody": "账户已存在，但尚不能收款。请完成支付服务商仍在要求的事项；在此之前，已开具的发票不会带有付款链接。",
+    "absentBody": "设置收款账户后，您开具的每张发票都会带有付款链接。款项结算到您的账户而非我们的账户，Builderforce 不从中抽成。",
+    "outstandingTitle": "支付服务商仍在等待的事项",
+    "country": "国家/地区",
+    "currency": "结算币种",
+    "payoutsLabel": "已开通提现",
+    "unknown": "尚未知晓",
+    "yes": "是",
+    "no": "尚未",
+    "connect": "设置刷卡收款",
+    "resume": "继续设置",
+    "connectFailed": "无法开始设置刷卡收款。",
+    "disconnect": "断开连接",
+    "disconnectTitle": "要断开收款账户吗？",
+    "disconnectBody": "新发票将不再带有付款链接。支付服务商处的任何内容都不会被删除——您的记录、退款和争议均保持原样——日后重新连接会创建一个新账户。",
+    "disconnectConfirm": "断开连接",
+    "disconnectFailed": "无法断开收款账户。"
+  },
+  "publicInvoice": {
+    "loading": "正在加载您的发票……",
+    "loadFailed": "该发票链接无效。请向发送方索取新的链接。",
+    "missingToken": "该链接缺少访问代码。请完整使用发送给您的链接。",
+    "unavailableTitle": "此发票不可用",
+    "title": "发票 {reference}",
+    "billedTo": "开票给 {customer}",
+    "total": "合计",
+    "paid": "已付",
+    "outstanding": "未付",
+    "due": "到期日",
+    "daysOverdue": "逾期 {count} 天",
+    "colDescription": "说明",
+    "colQuantity": "数量",
+    "colUnit": "单价",
+    "colAmount": "金额",
+    "payNow": "支付 {amount}",
+    "confirming": "正在确认您的付款……",
+    "payByTransfer": "此发票通过银行转账支付。如需账户信息，请回复发送此链接的邮件。",
+    "settled": "此发票已结清，谢谢。"
   }
 }

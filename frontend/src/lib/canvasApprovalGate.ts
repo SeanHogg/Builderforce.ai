@@ -68,9 +68,28 @@ export const GATED_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   // one click with no reviewer and no record.
   budget: ['approve'],
   bill: ['approve', 'schedule-payment'],
-  invoice: ['issue'],
+  // All three of the receivable's acts, not only `issue`. `record-payment` is
+  // ATTESTED — somebody will later rely on "this was paid" as if a human stood
+  // behind it, and an invoice marked settled by nobody is the same defect as a
+  // budget approved by nobody. `chase` is OUTBOUND: it emails a real customer in
+  // the tenant's name, which is the same shape of act as `investorUpdate.send`.
+  // Only `issue` was listed, so two of the three could be fired by a model with
+  // no reviewer and no record.
+  invoice: ['issue', 'record-payment', 'chase'],
   headcountPlan: ['approve'],
-  capTable: ['review'],
+  // `capTable.sync` is deliberately NOT gated: folding the ledger onto the card
+  // asserts nothing new and refusing to let a person LOOK at their own ownership
+  // without an approval is not a control. `model` is gated because the same tool
+  // can be told to APPLY the round it modelled, which issues real shares.
+  capTable: ['model'],
+  // Issuing equity is the most irreversible act in the whole vocabulary — it
+  // changes who owns the company and cannot be undone by editing a card, only by
+  // a further event that everybody involved has to agree to. `sync` stays open
+  // for the same reason `capTable.sync` does.
+  equityGrant: ['issue'],
+  // Recording a convertible commits the company to future dilution on terms
+  // nobody else can see from the card; `model` is the round-modelling act again.
+  convertible: ['record', 'model'],
   fundingRound: ['track'],
   contract: ['sign'],
   // An offer letter leaving the building is the same shape of act as an investor
@@ -120,7 +139,16 @@ export const ATTRIBUTED_FIELDS: Readonly<Record<string, readonly string[]>> = {
   invoice: ['amount', 'paidAmount', 'dueAt', 'lineItems'],
   bill: ['amount', 'dueAt', 'approvedBy'],
   headcountPlan: ['annualCost', 'roles', 'loadingRate'],
-  capTable: ['postMoney', 'fullyDiluted', 'optionPool', 'holders'],
+  // The cap table's own figures are a PROJECTION as of 0927 and cannot be edited
+  // at all, so the only thing left worth attributing is the JOIN — which company
+  // this card claims to be the ownership of. Getting that wrong points a board at
+  // the wrong ledger, which is the one remaining way to make this card lie.
+  capTable: ['companyRef'],
+  // A grant's schedule IS the agreement. `vestingStartAt` moved by a month is a
+  // month of somebody's equity, and it is the field most plausibly changed by
+  // accident.
+  equityGrant: ['quantity', 'vestingStartAt', 'vestingMonths', 'cliffMonths', 'acceleration'],
+  convertible: ['principal', 'valuationCap', 'discountPercent', 'postMoney'],
   fundingRound: ['targetAmount', 'committed', 'valuation', 'useOfFunds'],
   pricing: ['tiers', 'grossMargin', 'unitEconomics'],
   contract: ['valueAmount', 'renewsAt', 'obligations'],

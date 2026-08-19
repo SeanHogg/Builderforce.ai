@@ -3,7 +3,7 @@ import {
   summarizeDevex, summarizeBenchmark, percentileOf, answerScore,
   type CampaignWithQuestions, type ResponseRow,
 } from './devexInsights';
-import type { SurveyQuestion } from '../devex/devexSurveys';
+import type { SurveyQuestion } from '../../domain/devex/surveys';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 const qFlow: SurveyQuestion = { id: 'q_flow', type: 'rating', prompt: 'Flow?', dimension: 'flow' };

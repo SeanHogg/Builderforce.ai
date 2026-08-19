@@ -19,7 +19,7 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { computeAllocationInsights } from '../insights/allocationInsights';
 import { allocationCategoryLabel, normalizeAllocationCategory } from '../llm/allocationCategories';
-import { rdTaxCreditConfig } from './finopsTables';
+import { rdTaxCreditConfig } from '../../infrastructure/database/schema';
 
 /** Built-in default QRE definition when a tenant has not configured one. */
 export const DEFAULT_QUALIFIED_CATEGORIES = ['innovation', 'tech_debt'];

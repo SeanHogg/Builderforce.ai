@@ -2200,6 +2200,42 @@
 .siteFrame .websitePreview { border:0; border-radius:0; overflow:visible; }
 .siteMeta { display:flex; flex:none; align-items:center; gap:10px; }
 .siteMeta small { color:var(--canvas-muted); font-size:10px; white-space:nowrap; }
+
+/* ── Before / after ──────────────────────────────────────────────────────────────
+   A redesign is a claim, and the claim is unreadable without what it replaces. The two
+   panes are EQUAL columns on purpose: a "before" drawn narrower than the "after" flatters
+   the new design for a reason that has nothing to do with the design. `auto-fit` with a
+   floor collapses them to one column on a phone, where side-by-side would make both
+   halves illegible — a stacked comparison still compares. */
+.siteCompare { flex:1; min-width:0; display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:16px; align-content:start; align-items:start; }
+.siteComparePane { display:flex; flex-direction:column; gap:8px; min-width:0; margin:0; }
+.siteComparePane figcaption { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px; min-width:0; }
+.siteComparePane figcaption strong { color:var(--canvas-ink); font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.siteComparePane figcaption a,.siteComparePane figcaption span,.siteComparePane figcaption time { color:var(--canvas-muted); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.siteComparePane figcaption a:hover { color:var(--canvas-ink); }
+/* The capture. `height:auto` because a full-page shot is arbitrarily tall and cropping it
+   to a device height would hide the half of the old site the redesign changed most. */
+.siteComparePane img { display:block; width:100%; height:auto; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); box-shadow:0 10px 34px var(--canvas-shadow); }
+/* The framed "after" inside a pane takes the COLUMN's width, not the device width — the
+   frame scales itself to whatever room it is given (see `CanvasDeviceFrame`), so the two
+   panes stay the same size and the comparison stays honest. */
+.siteCompare .siteFrame { width:100%; max-width:100%; }
+.siteStage[data-reading='compare'] { overflow:auto; overscroll-behavior:contain; align-items:flex-start; }
+.siteCompareEmpty { flex:1; align-self:center; max-width:44ch; margin:0; color:var(--canvas-muted); font-size:12px; line-height:1.6; text-align:center; }
+
+/* Taking the "before" by hand — an address and a button. A native <input> so a phone
+   keyboard offers the URL layout, and the field shrinks rather than pushing the width
+   switcher off the toolbar. */
+.siteCapture { display:flex; align-items:center; gap:6px; min-width:0; }
+.siteCapture label { color:var(--canvas-muted); font-size:10px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; white-space:nowrap; }
+.siteCapture input { flex:1 1 150px; min-width:0; max-width:260px; padding:4px 8px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; }
+.siteCapture input:focus-visible { border-color:var(--canvas-accent); outline:none; }
+.siteCapture button { flex:none; padding:4px 10px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); color:var(--canvas-ink); font-size:11px; font-weight:650; cursor:pointer; }
+.siteCapture button:hover:not(:disabled),.siteCapture button:focus-visible:not(:disabled) { background:var(--canvas-hover); outline:none; }
+.siteCapture button:disabled { opacity:.5; cursor:default; }
+/* The renderer's own words. It says WHY — a page that timed out, a deployment with no
+   capture configured — and saying it plainly is the point of the whole capability. */
+.siteCaptureError { position:sticky; bottom:0; align-self:flex-end; max-width:min(100%,52ch); margin:0; padding:8px 12px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel); color:var(--canvas-ink); font-size:11px; line-height:1.5; box-shadow:0 6px 20px var(--canvas-shadow); }
 /* Every "which one of these" control on this surface — the two readings, the light/dark
    switch and the shared width switcher — wears `.segmentedGroup`, declared once beside the
    app runtime's readings. This file used to carry a second, identical copy of that trough
@@ -3430,6 +3466,18 @@
 .pipelineCard b { font-size:8px; line-height:1.3; color:var(--canvas-ink); }
 .pipelineCard p { margin:0; font-size:7px; line-height:1.35; color:var(--canvas-muted); }
 .pipelineCard em { font-size:8px; font-style:normal; font-weight:700; color:var(--canvas-accent); }
+
+/* A deal you can actually drag (FO-F1's own title, finally true). Only a card with a
+   `dealId` gets the affordance — a hand-authored card has no row behind it to move,
+   and a grab cursor over one would promise a write that cannot happen. */
+.pipelineCard[data-draggable="true"] { cursor:grab; }
+.pipelineCard[data-draggable="true"]:active { cursor:grabbing; }
+.pipelineCard[data-dragging="true"] { opacity:.45; border-left-color:var(--canvas-muted); }
+/* The column under the pointer. Solid rather than dashed so the target reads as a
+   place the card will land, not as one more empty cell. */
+.pipelineCell[data-drop="true"] {
+  border-style:solid; border-color:var(--canvas-accent); background:#eef4ff;
+}
 
 /* The one line a pipeline is actually read for: weighted open value. Wraps rather than
    truncates, because on a narrow board the unpriced count is the part that matters most

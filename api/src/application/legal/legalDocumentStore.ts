@@ -38,7 +38,7 @@ import { artifacts, legalDocumentFiles, legalDocumentShares, signatureRequests }
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { credentialSecret } from '../integrations/credentialCrypto';
 import { sealBytes } from '../security/fileCrypto';
-import { hashShareToken, mintShareToken } from '../security/shareToken';
+import { hashShareToken, mintShareToken, shareGrantState } from '../security/shareToken';
 import { sha256HexBytes } from '../../domain/shared/hash';
 import { recordActivity, SYSTEM_ACTOR, type ActorIdentity } from '../activity/activityLog';
 import { createSignatureRequest, type CreatedSignatureRequest } from '../signature/signatureEngine';
@@ -427,8 +427,10 @@ export async function resolveLegalDocumentShare(db: Db, env: Env, token: string)
     .where(acrossTenants(legalDocumentShares, 'share_token', eq(legalDocumentShares.tokenHash, tokenHash)))
     .limit(1);
   if (!row) return null;
-  if (row.revokedAt) return null;
-  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
+  // Revoked-or-lapsed is the ONE predicate every share-bearing table now shares
+  // (`shareGrantState`) rather than four re-tests of the same two columns. An
+  // external caller is told neither which it was nor that the row existed.
+  if (shareGrantState(row) !== 'active') return null;
   if (!row.currentArtifactId) return null;
 
   const artifact = await loadAndDecryptArtifact(db, env, row.tenantId, row.currentArtifactId);

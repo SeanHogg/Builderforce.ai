@@ -229,6 +229,169 @@ export function confidentialityAtMost(level: ConfidentialityLevel, ceiling: Conf
 }
 
 // ---------------------------------------------------------------------------
+// The boundaries — where the level is actually ASKED
+// ---------------------------------------------------------------------------
+
+/**
+ * The five places a canvas object can leave the board.
+ *
+ * A level nobody reads is a comment. `confidentialityAtMost` was written as THE one
+ * comparison and had no callers, so the vocabulary classified objects that then crossed
+ * every boundary unchallenged. Naming the boundaries here — rather than letting each
+ * caller decide privately what it is — is what makes "do these five agree" a question
+ * with an answer.
+ *
+ *  • `export`      a file written to a workspace member's own disk (docx/pdf/xlsx/csv…).
+ *  • `share`       a public link handed to somebody with no account.
+ *  • `guest`       the object set a signed-out visitor's board advertises.
+ *  • `publicMedia` a card's picture or clip re-hosted at a URL a social network fetches
+ *                  with no session and no headers of ours — the most irreversible of the
+ *                  five, because a network that has fetched it has a copy.
+ *  • `aiContext`   the snapshot a model may quote back into a transcript.
+ *
+ * A connected cloud Drive is deliberately NOT on this list. The Drive integration reads
+ * INTO the canvas and has no write path (`driveRoutes` exposes list and download only), so
+ * a `drive` boundary would be a ceiling with nothing to stop — the same declared-contract-
+ * with-no-caller this whole module exists to stop being. When a push is built, it is added
+ * here first.
+ */
+export const CANVAS_BOUNDARIES = ['export', 'share', 'guest', 'publicMedia', 'aiContext'] as const;
+export type CanvasBoundary = typeof CANVAS_BOUNDARIES[number];
+
+/**
+ * The most confidential thing each boundary admits.
+ *
+ * ── THE LINE THIS TABLE DRAWS ───────────────────────────────────────────────────
+ * The deciding question is NOT "does this leave the workspace" — it is "does a member
+ * DECIDE, object by object, that it should". Four of the five boundaries are a deliberate
+ * act by a signed-in member against a card they picked: they export it, they mint a link
+ * for it, they push it to their Drive. A member exercising that authority may publish
+ * something `internal`; that is what the authority is for, and a ceiling of `public` would
+ * mean the sell-motion share link could carry almost nothing, since `internal` is the
+ * default for everything unlabelled. What none of them may ever move is `restricted`,
+ * which was defined as "named audience only, and never leaves the board" — so those four
+ * sit at `internal` and `restricted` crosses nothing, anywhere.
+ *
+ * `guest` is the one boundary that is not a decision. A signed-out visitor's board
+ * advertises its object set with nobody choosing card by card, so it admits `public`
+ * only — which is exactly the distinction `public` exists to draw, and the reason the
+ * level is not merely a two-value flag.
+ *
+ * `publicMedia` sits at `internal` with the other deliberate acts, but it is the one to
+ * revisit first if this table is ever loosened: the others produce a link that can be
+ * revoked or a file whose holder is known, and this one hands a permanent copy to a
+ * third party.
+ *
+ * `aiContext` is `internal` for a subtler reason than the others: the model runs inside
+ * the workspace's own turn, so nothing has left. What it must not do is quote a grievance
+ * or a comp band into a transcript that a different reader of the board later scrolls —
+ * a re-disclosure INSIDE the workspace, to an audience the restricted object never named.
+ */
+export const BOUNDARY_CEILING: Readonly<Record<CanvasBoundary, ConfidentialityLevel>> = {
+  export: 'internal',
+  share: 'internal',
+  guest: 'public',
+  publicMedia: 'internal',
+  aiContext: 'internal',
+};
+
+/** True when an object at `level` may cross `boundary`. THE question, asked once. */
+export function boundaryAdmits(level: ConfidentialityLevel, boundary: CanvasBoundary): boolean {
+  return confidentialityAtMost(level, BOUNDARY_CEILING[boundary]);
+}
+
+// ---------------------------------------------------------------------------
+// Retention — the rule that points the OPPOSITE WAY on the same board
+// ---------------------------------------------------------------------------
+
+/**
+ * How long a kind's rows must be kept, and whether the person they describe may demand
+ * they be deleted.
+ *
+ * These are opposite rules living one card apart, which is why they must be declared
+ * rather than left to whoever writes the delete button. An unsuccessful `candidate` has a
+ * GDPR Article 17 erasure right — and a retention FLOOR anyway, because the same records
+ * are the employer's evidence in a discrimination claim, so "delete on request" and
+ * "delete immediately" are not the same instruction. An `employee`'s payroll and
+ * employment records carry a statutory MINIMUM (FLSA three years, longer in most of the
+ * EU) that no erasure request overrides while the obligation runs.
+ *
+ * Days, not dates, because the clock differs: hiring records run from the DECISION, and
+ * employment records run from the end of the RELATIONSHIP. `clock` says which.
+ *
+ * This is a default schedule a workspace can lengthen, not legal advice, and nothing here
+ * deletes anything on its own — it answers "may this be erased now", which is the question
+ * the erasure path and the retention sweep both have to ask and neither could.
+ */
+export interface RetentionRule {
+  /** The data subject may request deletion once `minimumRetentionDays` has run. */
+  erasable: boolean;
+  /** Days the record must be KEPT, counted from `clock`. Survives an erasure request. */
+  minimumRetentionDays: number;
+  /** Days after which it should go even unasked. `0` = keep while the rule's reason holds. */
+  maximumRetentionDays: number;
+  /** Which event the window is measured from. */
+  clock: 'created' | 'relationshipEnded';
+}
+
+const HIRING_RETENTION: RetentionRule = {
+  // One year from the decision covers the longest ordinary discrimination-claim window;
+  // two years is the point at which keeping a rejected applicant's assessment stops being
+  // defensible as anything but a habit.
+  erasable: true, minimumRetentionDays: 365, maximumRetentionDays: 730, clock: 'created',
+};
+
+const EMPLOYMENT_RETENTION: RetentionRule = {
+  // Six years past the end of the relationship is the common floor once payroll, pension
+  // and tax obligations are taken together. Not erasable while that obligation runs.
+  erasable: false, minimumRetentionDays: 2190, maximumRetentionDays: 0, clock: 'relationshipEnded',
+};
+
+const CASE_RETENTION: RetentionRule = {
+  // A grievance or a performance plan is the record that is produced in a dispute. It
+  // outlives the relationship it describes and cannot be erased on request.
+  erasable: false, minimumRetentionDays: 2190, maximumRetentionDays: 0, clock: 'relationshipEnded',
+};
+
+/** Per-kind overrides. Anything absent uses {@link DEFAULT_RETENTION}. */
+export const RETENTION_RULES: Readonly<Record<string, RetentionRule>> = {
+  candidate: HIRING_RETENTION,
+  scorecard: HIRING_RETENTION,
+  shortlist: HIRING_RETENTION,
+  offer: HIRING_RETENTION,
+  placement: HIRING_RETENTION,
+  employee: EMPLOYMENT_RETENTION,
+  employeeLifecycle: EMPLOYMENT_RETENTION,
+  performanceReview: CASE_RETENTION,
+  case: CASE_RETENTION,
+};
+
+/**
+ * The rule for a kind with no special obligation: keep it while it is useful, and honour
+ * an erasure request immediately, because there is nothing requiring otherwise.
+ */
+export const DEFAULT_RETENTION: RetentionRule = {
+  erasable: true, minimumRetentionDays: 0, maximumRetentionDays: 0, clock: 'created',
+};
+
+/** The retention rule a kind is held to. */
+export function retentionForKind(kind: string): RetentionRule {
+  return RETENTION_RULES[kind] ?? DEFAULT_RETENTION;
+}
+
+/**
+ * Whether an object of this kind may be erased today, given how long its clock has run.
+ *
+ * `daysElapsed` is measured from whichever event the rule's `clock` names — the caller
+ * owns that date because only the caller knows when the relationship ended.
+ */
+export function mayErase(kind: string, daysElapsed: number): boolean {
+  const rule = retentionForKind(kind);
+  if (!rule.erasable) return false;
+  return daysElapsed >= rule.minimumRetentionDays;
+}
+
+// ---------------------------------------------------------------------------
 // Forms — the shape a response is collected in
 // ---------------------------------------------------------------------------
 

@@ -24,6 +24,8 @@
 
 import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
 
+import { partitionForBoundary, type ConfidentialityCandidate } from './canvasConfidentiality';
+
 /** Identity-only view of one object: enough to FIND it, not to reason about it. */
 export interface CanvasInventoryEntry {
   id: string;
@@ -101,4 +103,46 @@ export function findInInventory(inventory: readonly CanvasInventoryEntry[], need
     ?? candidates.find(({ haystacks }) => haystacks.some((value) => stem(value) === stem(query)))?.entry
     ?? candidates.find(({ haystacks }) => haystacks.some((value) => value.includes(query) || query.includes(value)))?.entry
     ?? null;
+}
+
+/**
+ * The confidentiality gate on everything the model is shown.
+ *
+ * ── WHY THIS LIVES HERE AND NOT AT EACH CALL SITE ───────────────────────────────
+ * Three different places build a model-facing view of the board — the turn snapshot,
+ * `canvas_read_snapshot` and `canvas_read_object` — and each one built its own object
+ * list. A gate written three times is a gate that will be written twice next quarter, and
+ * the one that gets forgotten is the one that leaks a grievance into a transcript. So the
+ * decision is made once, here, in the module whose whole subject is what the Brain is
+ * allowed to believe.
+ *
+ * ── WHY THE OBJECT IS STILL IN THE INVENTORY ────────────────────────────────────
+ * A withheld object keeps its inventory row, because the inventory is identity only
+ * (id, kind, title) and dropping it would resurrect the exact bug this file was written
+ * to kill: the model, unable to see a card, telling the user it does not exist and asking
+ * them to upload it again. "You may not read this" and "this is not here" are different
+ * sentences, and the note below makes the model say the first one.
+ */
+export function aiContextGate<T extends ConfidentialityCandidate>(
+  nodes: readonly T[],
+): { visible: T[]; note: string | null; withheldIds: string[] } {
+  const partition = partitionForBoundary(nodes, 'aiContext');
+  if (partition.withheld.length === 0) {
+    return { visible: partition.allowed, note: null, withheldIds: [] };
+  }
+  const named = partition.withheld.slice(0, 8).map((entry) => `${entry.title} (${entry.kind})`).join(', ');
+  const more = partition.withheld.length > 8 ? ` and ${partition.withheld.length - 8} more` : '';
+  return {
+    visible: partition.allowed,
+    withheldIds: partition.withheld.map((entry) => entry.id),
+    note: [
+      `CONFIDENTIAL — ${partition.withheld.length} object${partition.withheld.length === 1 ? ' is' : 's are'} on this board`,
+      'whose detail has been withheld from you because they are marked restricted:',
+      `${named}${more}.`,
+      'They ARE on the canvas and appear in boardInventory — never tell the user they are missing',
+      'or ask for them to be uploaded. You simply may not read or quote their contents.',
+      'If the user needs one of them discussed, say that it is marked restricted and ask them to',
+      'change its confidentiality on the card, rather than guessing at what it contains.',
+    ].join(' '),
+  };
 }

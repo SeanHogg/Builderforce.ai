@@ -94,7 +94,12 @@ const PACK_FIGURES: Readonly<Record<string, readonly string[]>> = {
   forecast: ['horizon', 'runwayMonths', 'basis', 'currency'],
   invoice: ['customer', 'amount', 'paidAmount', 'dueAt', 'ageingDays', 'currency'],
   bill: ['vendor', 'amount', 'dueAt', 'category', 'currency'],
-  capTable: ['postMoney', 'fullyDiluted', 'optionPool'],
+  // The cap table is a PROJECTION as of the equity migration: `postMoney` and
+  // `optionPool` were authored figures and no longer exist on the card. What a
+  // board pack quotes now is what the ledger actually folded to.
+  capTable: ['companyRef', 'asOf', 'issued', 'fullyDiluted', 'poolUnallocated'],
+  equityGrant: ['holder', 'shareClass', 'instrument', 'quantity', 'vested', 'cliffAt'],
+  convertible: ['instrumentKind', 'holder', 'principal', 'valuationCap', 'discountPercent', 'maturesAt'],
   fundingRound: ['roundType', 'targetAmount', 'committed', 'valuation', 'closeTarget'],
   investorUpdate: ['period'],
   pricing: ['pricingModel', 'grossMargin', 'paybackMonths'],

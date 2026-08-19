@@ -26,7 +26,7 @@ import { getOrSetCached, getCacheVersion, invalidateCached } from '../../infrast
 import { financeVersionKey, allocationVersionKey } from '../../application/insights/versionKeys';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { rdTaxCreditConfig, socControls } from '../../application/finops/finopsTables';
+import { rdTaxCreditConfig, finopsSocControls } from '../../infrastructure/database/schema';
 import {
   computeRdTaxCredit,
   getRdTaxCreditConfig,
@@ -136,12 +136,12 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
 
     const existing = await db
-      .select({ id: socControls.id })
-      .from(socControls)
-      .where(eq(socControls.tenantId, tenantId))
+      .select({ id: finopsSocControls.id })
+      .from(finopsSocControls)
+      .where(eq(finopsSocControls.tenantId, tenantId))
       .limit(1);
     if (existing.length === 0) {
-      await db.insert(socControls).values(
+      await db.insert(finopsSocControls).values(
         DEFAULT_SOC_CONTROLS.map((d) => ({
           tenantId,
           controlRef: d.controlRef,
@@ -157,7 +157,7 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
     if (controlRef && objective) {
       const category = typeof body.category === 'string' && body.category.trim() ? body.category.trim() : 'general';
       await db
-        .insert(socControls)
+        .insert(finopsSocControls)
         .values({
           tenantId,
           controlRef,
@@ -193,10 +193,10 @@ export function createFinopsRoutes(db: Db): Hono<HonoEnv> {
     }
 
     const updated = await db
-      .update(socControls)
+      .update(finopsSocControls)
       .set(set)
-      .where(and(eq(socControls.id, id), eq(socControls.tenantId, tenantId)))
-      .returning({ id: socControls.id });
+      .where(and(eq(finopsSocControls.id, id), eq(finopsSocControls.tenantId, tenantId)))
+      .returning({ id: finopsSocControls.id });
     if (updated.length === 0) return c.json({ error: 'control not found' }, 404);
 
     await invalidateCached(c.env as Env, socCoverageCacheKey(tenantId));

@@ -528,3 +528,203 @@ export function contractVerdict(violations: readonly ContractViolation[]): 'pass
 function cellText(value: TabularCell | undefined): string {
   return typeof value === 'number' ? String(value) : (value ?? '').toString();
 }
+
+// ---------------------------------------------------------------------------
+// PURPOSE, LAWFUL BASIS, RETENTION — binding a classification to a USE
+// ---------------------------------------------------------------------------
+
+/**
+ * ── THE DEFECT THIS SECTION CLOSES ──────────────────────────────────────────────
+ * Everything above this line DESCRIBES data: it finds the personal columns, ranks the
+ * sensitivity, masks the cells and holds the frame to a declared contract. None of it
+ * ever RESTRAINED anything. A dataset classified as containing health records or
+ * government identifiers could still become a fine-tune corpus or an export, because no
+ * path consulted the classification before using the rows — the tag was documentation,
+ * and documentation does not refuse.
+ *
+ * The product already models the idea correctly one kind over: `battlecard.doNotSay` is a
+ * restriction that TRAVELS WITH THE OBJECT and is read at the point of composition. This
+ * is the same shape for data — a purpose, a lawful basis and a retention window authored
+ * on the classification, and a gate on the paths that consume rows.
+ *
+ * Three questions, because the regulation asks three and answering two is answering none:
+ *   • PURPOSE       what were these rows collected FOR? Using them for something else is
+ *                   purpose creep, which is the violation that training a model on
+ *                   support tickets usually is.
+ *   • LAWFUL BASIS  what makes processing them lawful at all (GDPR Article 6)?
+ *   • RETENTION     how long may they be kept? An expired dataset is not a dataset with a
+ *                   warning on it; it is rows that should not exist.
+ *
+ * Not legal advice, and deliberately not a compliance score: it answers ONE question —
+ * may this specific use proceed — and refuses when the answer is unknown for the use that
+ * cannot be undone, because "nobody filled this in" is exactly the state in which the
+ * unsafe thing happens.
+ */
+
+/** What a caller wants to DO with the rows. The uses that CONSUME data, not the ones that
+ *  merely display it — rendering a masked table on the board is not a use. */
+export const DATASET_USES = ['train', 'export', 'publish', 'share'] as const;
+export type DatasetUse = typeof DATASET_USES[number];
+
+/** GDPR Article 6. Named rather than free text so a gate can reason about them. */
+export const LAWFUL_BASES = [
+  'consent', 'contract', 'legal_obligation', 'vital_interests', 'public_task', 'legitimate_interests',
+] as const;
+export type LawfulBasis = typeof LAWFUL_BASES[number];
+
+/**
+ * The categories training cannot reach on anything weaker than explicit consent.
+ *
+ * Article 9 in spirit, plus the two that are not Article 9 but cause the same harm when
+ * they leak. Legitimate interests cannot carry health records or government identifiers
+ * into a model's weights: weights cannot be un-trained, cannot honour an erasure request,
+ * and outlive any basis that can later be withdrawn.
+ */
+const CONSENT_ONLY_FOR_TRAINING: ReadonlySet<PiiCategory> = new Set<PiiCategory>([
+  'health', 'government_id', 'financial', 'credentials',
+]);
+
+/** Authored on the dataset beside its column classifications. */
+export interface DatasetUsePolicy {
+  /** What the rows were collected for, in the collector's own words. */
+  purpose?: string;
+  lawfulBasis?: LawfulBasis;
+  /** Days from `collectedAt` the rows may be kept. Absent = no declared limit. */
+  retentionDays?: number;
+  /** ISO date the rows were collected — the clock `retentionDays` runs from. */
+  collectedAt?: string;
+  /**
+   * The uses the purpose actually covers. Absent means "not decided", which this gate
+   * treats as permitting the reversible uses and refusing training — the asymmetry is
+   * deliberate and is explained on {@link evaluateDatasetUse}.
+   */
+  permittedUses?: readonly DatasetUse[];
+}
+
+export type UseRefusalCode =
+  | 'retention-expired'
+  | 'use-not-permitted'
+  | 'no-lawful-basis'
+  | 'special-category-needs-consent';
+
+export interface DatasetUseDecision {
+  allowed: boolean;
+  code?: UseRefusalCode;
+  /** What to say to the person, naming the field that would clear it. */
+  reason?: string;
+  /** The categories that drove the refusal, so a surface can point at the columns. */
+  categories?: PiiCategory[];
+}
+
+export function isLawfulBasis(value: unknown): value is LawfulBasis {
+  return typeof value === 'string' && (LAWFUL_BASES as readonly string[]).includes(value);
+}
+
+export function isDatasetUse(value: unknown): value is DatasetUse {
+  return typeof value === 'string' && (DATASET_USES as readonly string[]).includes(value);
+}
+
+/** Read a policy off a canvas object's fields, ignoring anything malformed. */
+export function normalizeUsePolicy(value: unknown): DatasetUsePolicy | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const uses = Array.isArray(raw.permittedUses) ? raw.permittedUses.filter(isDatasetUse) : undefined;
+  const policy: DatasetUsePolicy = {
+    ...(typeof raw.purpose === 'string' && raw.purpose.trim() ? { purpose: raw.purpose.trim().slice(0, 400) } : {}),
+    ...(isLawfulBasis(raw.lawfulBasis) ? { lawfulBasis: raw.lawfulBasis } : {}),
+    ...(typeof raw.retentionDays === 'number' && Number.isFinite(raw.retentionDays) && raw.retentionDays > 0
+      ? { retentionDays: Math.floor(raw.retentionDays) } : {}),
+    ...(typeof raw.collectedAt === 'string' && raw.collectedAt.trim() ? { collectedAt: raw.collectedAt.trim() } : {}),
+    ...(uses && uses.length ? { permittedUses: uses } : {}),
+  };
+  return Object.keys(policy).length ? policy : null;
+}
+
+/**
+ * May this use of these rows proceed?
+ *
+ * ── THE ASYMMETRY, STATED ───────────────────────────────────────────────────────
+ * A dataset with NO personal data in it is not gated at all: refusing to export a CSV of
+ * server latencies because nobody filled in a lawful basis would make the product unusable
+ * and would teach people to tick boxes, which is worse than having no boxes.
+ *
+ * Once personal data IS present the rules split by how reversible the use is. Export,
+ * publish and share produce a copy somebody can later delete; TRAINING produces weights
+ * nobody can delete, that cannot honour an erasure request, and that cannot be un-learned.
+ * So training is the one use that must be affirmatively PERMITTED rather than merely
+ * not-forbidden, and the one that special categories cannot reach on legitimate interests.
+ *
+ * Retention is checked first and applies to everything, because expired rows have no
+ * lawful use left at all — not even the reversible ones.
+ */
+export function evaluateDatasetUse(
+  use: DatasetUse,
+  classifications: readonly ColumnClassification[],
+  policy: DatasetUsePolicy | null | undefined,
+  now: Date = new Date(),
+): DatasetUseDecision {
+  const personal = classifications.filter((entry) => entry.pii && entry.pii !== 'none');
+  const categories = [...new Set(personal.map((entry) => entry.pii))];
+
+  // 1. Retention. Applies whether or not the rows are personal — a declared window is a
+  //    promise made to somebody, and it binds even where the law would not.
+  if (policy?.retentionDays && policy.collectedAt) {
+    const collected = new Date(policy.collectedAt);
+    if (!Number.isNaN(collected.getTime())) {
+      const age = Math.floor((now.getTime() - collected.getTime()) / 86_400_000);
+      if (age > policy.retentionDays) {
+        return {
+          allowed: false,
+          code: 'retention-expired',
+          reason: `These rows passed their declared retention window ${age - policy.retentionDays} day(s) ago, so they cannot be used for anything until they are re-collected or the window on the dataset is changed.`,
+          categories,
+        };
+      }
+    }
+  }
+
+  // 2. No personal data — nothing further to ask.
+  if (personal.length === 0) return { allowed: true };
+
+  // 3. An explicit permitted-use list is decisive, in both directions.
+  if (policy?.permittedUses && !policy.permittedUses.includes(use)) {
+    const forWhat = policy.purpose ? `"${policy.purpose}"` : 'a declared purpose';
+    return {
+      allowed: false,
+      code: 'use-not-permitted',
+      reason: `This dataset was collected for ${forWhat}, and "${use}" is not one of the uses it permits. Add it to the dataset's permitted uses if the purpose genuinely covers it.`,
+      categories,
+    };
+  }
+
+  // 4. Training: the irreversible one.
+  if (use === 'train') {
+    if (!policy?.lawfulBasis) {
+      return {
+        allowed: false,
+        code: 'no-lawful-basis',
+        reason: 'This dataset holds personal data and declares no lawful basis, so it cannot be used as a training corpus. Model weights cannot be un-trained and cannot honour an erasure request, so training has to be decided before it happens rather than justified afterwards.',
+        categories,
+      };
+    }
+    const special = categories.filter((category) => CONSENT_ONLY_FOR_TRAINING.has(category));
+    if (special.length > 0 && policy.lawfulBasis !== 'consent') {
+      return {
+        allowed: false,
+        code: 'special-category-needs-consent',
+        reason: `This dataset holds ${special.join(', ')} data. Training on it needs explicit consent as the lawful basis — "${policy.lawfulBasis}" is not enough for data of this category, because the weights outlive any basis that can later be withdrawn.`,
+        categories: special,
+      };
+    }
+    if (!policy.permittedUses) {
+      return {
+        allowed: false,
+        code: 'use-not-permitted',
+        reason: 'This dataset holds personal data and does not say which uses its purpose covers. Training has to be permitted explicitly — silence is not permission for the one use that cannot be undone.',
+        categories,
+      };
+    }
+  }
+
+  return { allowed: true };
+}

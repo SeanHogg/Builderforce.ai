@@ -201,6 +201,14 @@ export const GUEST_GATED_CANVAS_TOOLS = [
   // Server-side stock search / image generation. The ONLY route to real pixels, so its
   // absence rewrote every "draw me…" turn into a drawing-tool failure.
   'canvas_add_image',
+  // The ONLY route to pixels of a page that ALREADY EXISTS, and the same classification
+  // for the same measured reason. Without it, "upgrade my website — show me a before and
+  // after" produced an after and an apology: "as a large language model, I don't have the
+  // ability to browse the web visually or take screenshots of live websites" (2026-08-19,
+  // ui 2026.8.60). That is a fact about a model presented as a fact about the product,
+  // which is exactly what an absent tool buys. Gated rather than absent so a visitor
+  // hears the true, one-click reason instead.
+  'canvas_capture_screenshot',
   // The ONLY route to a playable game. Deliberately here rather than in the safe set
   // even though HALF of it is guest-safe: a web game is authored in the visitor's own
   // browser and needs no account, while a Roblox place is written on the server. The
@@ -288,6 +296,28 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   'canvas_sync_account',
   'canvas_sync_sales_pipeline',
   'canvas_move_deal',
+  // Reads the pay runs a connected payroll provider actually ran, onto a `payRun`
+  // card. Account-required for the plainest possible reason: it makes an
+  // authenticated call to the tenant's own Gusto, Rippling, ADP or Deel account. A
+  // guest board has no payroll — and unlike an image, there is no true
+  // one-sentence answer that becomes a capability on sign-up either, because an
+  // empty workspace has no payroll provider connected.
+  'canvas_sync_pay_run',
+  // ── Ownership (0927) ─────────────────────────────────────────────────────────
+  // Account-required for the same reason, with one addition that is specific to
+  // this family: three of the five WRITE the ledger that says who owns the
+  // company. There is no guest-safe reading of "issue shares", and a board with no
+  // workspace has no ledger to fold, so advertising them to a visitor would spend
+  // the model's attention on five routes it cannot take.
+  //
+  // `canvas_sync_cap_table` is the one that matters structurally: it replaces a
+  // hand-typed `holders` array with a FOLD, which is what makes the percentages
+  // total 100 by construction rather than by instruction.
+  'canvas_sync_cap_table',
+  'canvas_record_equity_grant',
+  'canvas_record_convertible',
+  'canvas_record_equity_event',
+  'canvas_model_round',
   // Re-reads the domain metric series a `liveMetric` object was bound to. This is the
   // LIVE half the finance and investor answers never had: without it every runway, burn
   // and pipeline number on a board is a snapshot with an as-of date and no way to ask
@@ -608,5 +638,37 @@ export const CANVAS_QA_ACCOUNT_GATE = `canvas_publish_tests needs a free Builder
  * media management platform while looking at one.
  */
 export const CANVAS_SOCIAL_ACCOUNT_GATE = `Connected social accounts need a free Builderforce account: X, LinkedIn, Facebook Pages, Instagram and TikTok are connected as workspace connections, and this board has no workspace behind it. The account prompt is now open and the canvas is unchanged. Do ALL THREE of these in your reply: say in ONE sentence that connecting the accounts and publishing needs a free account; author the campaign itself on the board right now with canvas_add_object — the copy, the per-network variants, the link and the media brief — so the moment an account is connected there is something to publish; and if the user asked you to REGISTER new accounts on those networks, say plainly that signing up on a social network is something only they can do, and that Builderforce connects the accounts they already have. Do NOT say that you cannot connect social accounts, do NOT suggest a third-party social media management tool, and do NOT describe any of this as a technical limitation: connecting is a built-in capability and it is one click away.`;
+
+/**
+ * The ONE tool that puts pixels of a LIVE, EXISTING page on the canvas.
+ *
+ * Sibling of {@link CANVAS_IMAGE_TOOL} and separate from it on purpose: search and
+ * generation answer "make me a picture of X", and no amount of either can answer "show
+ * me what MY site looks like right now". A redesign is a claim that one design beats
+ * another, and the claim is unreadable without the thing being replaced.
+ */
+export const CANVAS_SCREENSHOT_TOOL = 'canvas_capture_screenshot';
+
+/**
+ * Returned to the MODEL when it is about to tell a user the product cannot see, browse,
+ * or photograph a live web page.
+ *
+ * Written as a redirect rather than a rule in the prompt because the failing turn was
+ * not a refused tool call — it was a model that had NO tool and filled the gap with a
+ * sentence about its own architecture. The prompt names this tool; this string is what
+ * every other refusal path points at, so a rename cannot strand either.
+ */
+export function canvasScreenshotToolRedirect(): string {
+  return `This product CAN photograph a live web page: call ${CANVAS_SCREENSHOT_TOOL} with the page's URL and a real browser renders it server-side. Never tell the user you cannot browse the web visually, cannot see a website, or cannot take screenshots — that is a statement about a language model, not about this canvas, and it is false here. For a redesign, capture the current page FIRST and attach it to the new design with compareWithObjectId, so the board holds a real before and after rather than an after on its own.`;
+}
+
+/**
+ * Returned to the MODEL when a capture is requested on a canvas with no account.
+ *
+ * Same rule as every gate above: name the ONE real reason, say what the board still
+ * has, and forbid the invented limitation — which for this capability is the specific
+ * sentence that made it necessary.
+ */
+export const CANVAS_SCREENSHOT_ACCOUNT_GATE = `${CANVAS_SCREENSHOT_TOOL} needs a free Builderforce account: the page is rendered by a real browser on the server, not in this tab. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the "before" screenshot needs a free account, and then build the comparison this board CAN hold right now — read the live page with builtin_web_fetch and set out its current headline, structure and calls to action beside the new design, so the user can see what changed. Do NOT say that you are unable to browse the web visually, that you cannot see or screenshot a website, or that this is a technical limitation of the product: the only reason is the account, and it is one click away.`;
 
 export const CANVAS_IMAGE_ACCOUNT_GATE = `${CANVAS_IMAGE_TOOL} needs a free Builderforce account: image search and generation run on the server, not in this browser. The account prompt is now open and the canvas is unchanged. Do BOTH of these in your reply: say in ONE sentence that the picture needs a free account, and then build what this canvas CAN hold right now — the authored plan, the labelled layout, the planting list — with canvas_add_object. Do NOT say that you are unable to generate images, that you cannot see or look things up, or that a tool is technically limited: the only reason is the account, and it is one click away.`;

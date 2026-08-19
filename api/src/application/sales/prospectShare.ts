@@ -31,9 +31,10 @@
 
 import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import {
-  PROSPECT_EVENTS, isProspectEvent, prospectVerb, quoteAcceptability, quoteCheckoutIntent,
+  PROSPECT_EVENTS, boundaryAdmits, defaultConfidentialityForKind, isConfidentialityLevel,
+  isProspectEvent, prospectVerb, quoteAcceptability, quoteCheckoutIntent,
   readQuoteLines, renameLegacyKind, summarizeProspectEngagement,
-  type ProspectEngagement, type ProspectEvent, type ProspectSignal,
+  type ConfidentialityLevel, type ProspectEngagement, type ProspectEvent, type ProspectSignal,
 } from '@builderforce/creation-canvas-contract';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -132,6 +133,9 @@ export interface MintProspectShareInput {
   objectId: string | null;
   objectKind: string | null;
   objectTitle: string | null;
+  /** The card's authored confidentiality. Omitted falls to the kind default, which is
+   *  `restricted` for the kinds where not thinking about it IS the disclosure. */
+  objectConfidentiality?: ConfidentialityLevel | null;
   label: string;
   settings: ProspectShareSettings;
   expiresAt: Date | null;
@@ -176,6 +180,12 @@ export async function mintProspectShare(
     const kind = renameLegacyKind(String(input.objectKind ?? ''));
     if (!SHAREABLE_CANVAS_KINDS.has(kind)) {
       return { error: `A ${kind || 'card'} cannot be shared with a prospect. Shareable kinds: ${[...SHAREABLE_CANVAS_KINDS].join(', ')}.` };
+    }
+    // Refused at MINT, not only at render. A link that exists and resolves to an empty
+    // page is a link a seller believes they sent — they quote it in an email, the buyer
+    // opens nothing, and nobody learns why until the deal is cold.
+    if (!boundaryAdmits(input.objectConfidentiality ?? defaultConfidentialityForKind(kind), 'share')) {
+      return { error: `That ${kind} is marked restricted, so it cannot be put outside the workspace. Change its confidentiality on the card first.` };
     }
     target = await registerObject(db, env, {
       tenantId: input.tenantId,
@@ -328,6 +338,14 @@ function projectCard(row: { id: string; kind: string; content: unknown }): Prosp
   const raw = row.content && typeof row.content === 'object' && !Array.isArray(row.content)
     ? row.content as Record<string, unknown>
     : {};
+  // The kind allow-list answers "is this the sort of thing a buyer sees". The
+  // confidentiality label answers "did the person who authored THIS one say otherwise",
+  // and only the second survives a `quote` that happens to carry an unreleased price or a
+  // `trustPacket` marked restricted while it is being revised. Both are asked, because a
+  // shareable KIND is not a shareable OBJECT.
+  const declared = raw.confidentiality;
+  const level = isConfidentialityLevel(declared) ? declared : defaultConfidentialityForKind(kind);
+  if (!boundaryAdmits(level, 'share')) return null;
   const data: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(raw)) {
     if (NEVER_SHARED.has(key)) continue;

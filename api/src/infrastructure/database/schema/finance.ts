@@ -550,12 +550,48 @@ export const invoices = pgTable('invoices', {
   paidAt:        timestamp('paid_at'),
   notes:         text('notes'),
   createdBy:     varchar('created_by', { length: 64 }),
+  /** Who ISSUED it, from the session. Separate from `createdBy` for the same
+   *  reason `bills.approvedBy` is separate from its creator: drafting a document
+   *  and standing behind the one that left the building are two acts, and only
+   *  the second is attested. */
+  issuedBy:      varchar('issued_by', { length: 64 }),
+  /** Where the issued document was delivered, and when. Null on an invoice that
+   *  was issued without a recipient — legitimate for one handed over in person,
+   *  and the reason delivery is not inferred from `issuedAt`. */
+  sentTo:        varchar('sent_to', { length: 320 }),
+  sentAt:        timestamp('sent_at'),
+  /** The credential for the PUBLIC document page — the customer has no
+   *  Builderforce account, so the token IS the authorisation. Only its hash is
+   *  stored, exactly as `form_recipients.token_hash` and the signature parties
+   *  do; the plaintext is returned once, by `issueInvoice`. */
+  documentTokenHash: varchar('document_token_hash', { length: 64 }),
+  /** FO-C4 — the hosted checkout the customer pays through, minted against the
+   *  tenant's OWN connected merchant account. Null when the workspace has not
+   *  onboarded one: an issued invoice is still a real invoice, it simply has to
+   *  be paid by bank transfer. */
+  paymentLinkUrl:    text('payment_link_url'),
+  paymentSessionId:  varchar('payment_session_id', { length: 160 }),
+  /**
+   * How hard the collections ladder may work this one (FO-C5).
+   *
+   * 'off'    — never chased by the sweep.
+   * 'notify' — the DEFAULT. The sweep records the step that is due and tells the
+   *            workspace; nothing leaves the building unattended. This is the
+   *            same line `runTriggerSweep` draws when it refuses to perform a
+   *            trigger's `thenDo`: the board says what happened, a person acts.
+   * 'auto'   — the tenant has explicitly delegated the chase, so the sweep sends
+   *            the email itself.
+   */
+  collectionMode: varchar('collection_mode', { length: 16 }).notNull().default('notify'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_invoices_reference').on(t.tenantId, t.reference),
   index('idx_invoices_status').on(t.tenantId, t.status, t.dueAt),
   index('idx_invoices_customer').on(t.tenantId, t.customerRef, t.status),
+  /** The collections sweep's own read: overdue, chaseable, oldest first. */
+  index('idx_invoices_collection').on(t.tenantId, t.collectionMode, t.status, t.dueAt),
+  uniqueIndex('uq_invoices_document_token').on(t.documentTokenHash),
 ]);
 
 /**
@@ -642,6 +678,120 @@ export const invoiceLineItems = pgTable('invoice_line_items', {
   index('idx_invoice_line_items_invoice').on(t.tenantId, t.documentKind, t.invoiceRef, t.position),
 ]);
 
+/**
+ * One rung of the collections ladder, actually climbed (FO-C5).
+ *
+ * `invoice.collection` was authored prose under a hint that says "collections
+ * work with no record is collections work that gets done twice or not at all".
+ * This is that record, and the shape of it is the whole design:
+ *
+ * **`(tenant, invoice_ref, step)` is UNIQUE.** A ladder rung can be climbed once
+ * per invoice, and a second attempt collides in the DATABASE rather than in a
+ * check somebody remembered to write — the same argument `bills`' vendor
+ * reference makes, and the same one `ledger_entries.reference` makes about a
+ * replayed webhook. That is what makes the sweep safe to run twice in a day, to
+ * force-run from the operator control, and to retry after a partial failure: it
+ * cannot chase the same customer twice for the same rung.
+ *
+ * `outcome` is the other half. A row written by a workspace in `notify` mode is
+ * `pending` — the rung is DUE and nothing has left the building — and becomes
+ * `sent` when a person (or an `auto` workspace's sweep) actually sends it. So a
+ * pending row is a worklist item rather than a lie, and turning the ladder up to
+ * `auto` later does not skip the rungs it recorded while it was quiet.
+ */
+export const collectionActions = pgTable('collection_actions', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  /** `invoices.reference` — the same natural key the lines resolve to. */
+  invoiceRef: varchar('invoice_ref', { length: 64 }).notNull(),
+  /** Which rung: the index into the declared ladder. Stored rather than derived
+   *  because it is what the unique index keys on, which is the point. */
+  step:       integer('step').notNull(),
+  /** A label for the rung, denormalised so a ladder that is later re-tuned does
+   *  not rewrite the history of what was actually sent. */
+  stepLabel:  varchar('step_label', { length: 64 }).notNull().default(''),
+  /** 'email' — reaches the customer. 'internal' — a worklist entry for us. */
+  channel:    varchar('channel', { length: 16 }).notNull().default('email'),
+  /** 'pending' | 'sent' | 'failed' | 'skipped'. */
+  outcome:    varchar('outcome', { length: 16 }).notNull().default('pending'),
+  detail:     text('detail'),
+  /** Who did it — a user id, or 'system' when the sweep climbed the rung. */
+  actorRef:   varchar('actor_ref', { length: 64 }).notNull().default('system'),
+  actedAt:    timestamp('acted_at').notNull().defaultNow(),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_collection_actions_step').on(t.tenantId, t.invoiceRef, t.step),
+  index('idx_collection_actions_invoice').on(t.tenantId, t.invoiceRef, t.step),
+  index('idx_collection_actions_outcome').on(t.tenantId, t.outcome, t.actedAt),
+]);
+
+/**
+ * A pay run that HAPPENED, read back from the payroll provider that ran it.
+ *
+ * ── WHY THIS IS A READ AND NOT AN ENGINE ────────────────────────────────────
+ * `connectors/defaults/payroll.ts` argues at length that this platform must
+ * never calculate payroll: a mistaken push is somebody's salary, and the tax
+ * tables are a full-time job in every jurisdiction. Nothing here calculates
+ * anything. Every column is a figure a provider returned, or a total of the
+ * lines it returned, and `source` names which provider said so — so the largest
+ * line on a forecast is money that actually left rather than a number somebody
+ * typed.
+ *
+ * `(tenant, source, external_ref)` is UNIQUE, which is what makes re-hydration
+ * idempotent: syncing the same period twice updates one row rather than
+ * doubling the burn.
+ *
+ * NO per-employee table. A pay-run line is a description, a quantity, a rate and
+ * an amount, which is `invoice_line_items` exactly — the file's own argument for
+ * why one line table serves both directions applies a third time, and a
+ * `pay_run_line_items` copy is the per-feature duplicate §0 forbids. The
+ * discriminator is `document_kind = 'pay_run'`.
+ */
+export const payRuns = pgTable('pay_runs', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull(),
+  objectId:      uuid('object_id').references(() => objects.id, { onDelete: 'set null' }),
+  /** The connector manifest key that produced it: 'gusto' | 'rippling' | … —
+   *  or 'manual' for a run entered by hand from a bureau's PDF, which is the
+   *  honest state of most small companies outside the US. */
+  source:        varchar('source', { length: 48 }).notNull(),
+  /** The provider's own id for the run. The natural key the lines resolve to and
+   *  the half of the uniqueness that makes a re-sync an update. */
+  externalRef:   varchar('external_ref', { length: 96 }).notNull(),
+  /** Our own reference — what `invoice_line_items.invoice_ref` carries. Derived
+   *  from `source` and `externalRef` and stored, because the lines join on it. */
+  reference:     varchar('reference', { length: 64 }).notNull(),
+  currency:      varchar('currency', { length: 8 }).notNull().default('USD'),
+  /** 'processed' | 'open' | 'cancelled' — the provider's own state. Only a
+   *  processed run is money that left, so only a processed run reaches burn. */
+  status:        varchar('status', { length: 16 }).notNull().default('processed'),
+  periodStart:   timestamp('period_start'),
+  periodEnd:     timestamp('period_end'),
+  /** The date the money left. What the burn month is keyed on — NOT the period,
+   *  because a period that straddles a month boundary would otherwise land its
+   *  cost in the wrong one. */
+  paidAt:        timestamp('paid_at'),
+  /** Gross pay, employer taxes, and the two added together. All three stored
+   *  because all three are figures the provider RETURNED — deriving the total
+   *  would silently drop anything a provider bills that is neither (benefits,
+   *  the provider's own fee), and the total is the one that is burn. */
+  grossAmount:   numeric('gross_amount', { precision: 16, scale: 2 }),
+  employerTaxes: numeric('employer_taxes', { precision: 16, scale: 2 }),
+  totalCost:     numeric('total_cost', { precision: 16, scale: 2 }).notNull(),
+  employeeCount: integer('employee_count').notNull().default(0),
+  /** When this row was last read back from the provider. A pay run whose sync is
+   *  a month old is still a fact; saying WHEN it was read is what stops it being
+   *  mistaken for a live one. */
+  syncedAt:      timestamp('synced_at').notNull().defaultNow(),
+  notes:         text('notes'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_pay_runs_external').on(t.tenantId, t.source, t.externalRef),
+  uniqueIndex('uq_pay_runs_reference').on(t.tenantId, t.reference),
+  index('idx_pay_runs_paid').on(t.tenantId, t.status, t.paidAt),
+]);
+
 /** A stored way to pay. The token never touches this table — the secret lives in
  *  kernel `credentials`; this is what the UI renders. */
 export const paymentMethods = pgTable('payment_methods', {
@@ -683,6 +833,214 @@ export const fundingRounds = pgTable('funding_rounds', {
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_funding_rounds_name').on(t.tenantId, t.companyRef, t.name),
+]);
+
+// ---------------------------------------------------------------------------
+// Ownership — the cap table is a PROJECTION, not a table (migration 0927)
+// ---------------------------------------------------------------------------
+//
+// `grep cap_table` returns nothing here on purpose. A cap table is a fold of
+// `equityEvents` as of an instant, computed by `application/finance/equity.ts`,
+// so every total on it is arithmetic over rows a reader can see rather than a
+// number somebody typed — the "no stored totals" rule migration 0464 states for
+// `work_estimates.lines`, applied to the one place where a total that disagrees
+// with its own rows is a legal problem rather than a display bug.
+//
+// A HOLDER IS NOT A ROW HERE EITHER. `party_roles` already carries exactly one
+// row per (tenant, party kind, party ref, role) and 0469 added `equity_holder`
+// to that vocabulary for this. `holderRef` is that `party_ref` — the same ref an
+// `account` card joins by.
+
+/** A class of stock a company has AUTHORISED. */
+export const shareClasses = pgTable('share_classes', {
+  id:                  serial('id').primaryKey(),
+  tenantId:            integer('tenant_id').notNull(),
+  objectId:            uuid('object_id').references(() => objects.id, { onDelete: 'set null' }),
+  /** Same grain `funding_rounds.companyRef` uses, so a round and the classes it
+   *  prices resolve to one company with no join table. */
+  companyRef:          varchar('company_ref', { length: 64 }),
+  /** The stable reference grants and events point at, normalised by `partyRef()`
+   *  — so "Series A" and "series a" cannot become two classes. */
+  classRef:            varchar('class_ref', { length: 64 }).notNull(),
+  name:                varchar('name', { length: 96 }).notNull(),
+  /** 'common' | 'preferred' | 'option-pool'. A pool is a CLASS because it has its
+   *  own authorised count and its own grants; a boolean on common cannot express
+   *  "what is unallocated". */
+  kind:                varchar('kind', { length: 16 }).notNull().default('common'),
+  /** The one legitimately stored quantity in this group: a board resolution, not
+   *  a sum over anything. Issued and unallocated are computed against it. */
+  authorized:          numeric('authorized', { precision: 20, scale: 4 }).notNull().default('0'),
+  parValue:            numeric('par_value', { precision: 18, scale: 8 }),
+  pricePerShare:       numeric('price_per_share', { precision: 18, scale: 8 }),
+  currency:            varchar('currency', { length: 8 }).notNull().default('USD'),
+  /** Nullable rather than defaulted: a 0 preference and NO preference are
+   *  different claims, and a default would assert the first about every common. */
+  liquidationMultiple: numeric('liquidation_multiple', { precision: 8, scale: 4 }),
+  participating:       boolean('participating').notNull().default(false),
+  /** Lower is more senior — who is paid first in a waterfall. */
+  seniority:           integer('seniority').notNull().default(0),
+  conversionRatio:     numeric('conversion_ratio', { precision: 12, scale: 6 }).notNull().default('1'),
+  votesPerShare:       numeric('votes_per_share', { precision: 12, scale: 6 }).notNull().default('1'),
+  fundingRoundId:      integer('funding_round_id').references(() => fundingRounds.id, { onDelete: 'set null' }),
+  authorizedAt:        timestamp('authorized_at'),
+  notes:               text('notes'),
+  createdAt:           timestamp('created_at').notNull().defaultNow(),
+  updatedAt:           timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_share_classes_ref').on(t.tenantId, t.companyRef, t.classRef),
+  index('idx_share_classes_company').on(t.tenantId, t.companyRef, t.seniority),
+]);
+
+/**
+ * An award's TERMS — and deliberately no quantity.
+ *
+ * How many shares were granted is the issuance EVENT. A count here would be a
+ * stored total the ledger beneath it contradicts the moment anything is
+ * cancelled, transferred or exercised.
+ *
+ * `holderName` sits beside `holderRef` for the same reason `invoices.customerName`
+ * sits beside `customerRef`: a certificate records what was issued to WHOM, and
+ * that name must not change because somebody later renamed the party.
+ *
+ * Every vesting column is a TERM. Vested-to-date is computed by `vestedQuantity()`
+ * in the canvas contract — the SAME function the card calls — and stored nowhere.
+ */
+export const equityGrants = pgTable('equity_grants', {
+  id:               serial('id').primaryKey(),
+  tenantId:         integer('tenant_id').notNull(),
+  objectId:         uuid('object_id').references(() => objects.id, { onDelete: 'set null' }),
+  companyRef:       varchar('company_ref', { length: 64 }),
+  shareClassId:     integer('share_class_id').notNull().references(() => shareClasses.id, { onDelete: 'restrict' }),
+  /** `party_roles.party_ref` under the `equity_holder` role. */
+  holderRef:        varchar('holder_ref', { length: 64 }).notNull(),
+  holderName:       varchar('holder_name', { length: 200 }).notNull(),
+  /** 'common' | 'preferred' | 'option' | 'rsu' | 'warrant'. An option is not a
+   *  share until exercised, which the projection reports separately. */
+  instrument:       varchar('instrument', { length: 16 }).notNull().default('common'),
+  /** Our own certificate / grant number — the natural key a person quotes. */
+  reference:        varchar('reference', { length: 64 }).notNull(),
+  grantedAt:        timestamp('granted_at').notNull().defaultNow(),
+  pricePerShare:    numeric('price_per_share', { precision: 18, scale: 8 }),
+  /** The 409A fair market value it was priced against, where there was one. */
+  fmvPerShare:      numeric('fmv_per_share', { precision: 18, scale: 8 }),
+  currency:         varchar('currency', { length: 8 }).notNull().default('USD'),
+  vestingStartAt:   timestamp('vesting_start_at'),
+  vestingMonths:    integer('vesting_months'),
+  cliffMonths:      integer('cliff_months'),
+  /** 'none' | 'monthly' | 'quarterly' | 'annual'. `none` is fully vested stock. */
+  vestingFrequency: varchar('vesting_frequency', { length: 16 }).notNull().default('none'),
+  /** 'none' | 'single-trigger' | 'double-trigger'. */
+  acceleration:     varchar('acceleration', { length: 16 }).notNull().default('none'),
+  fundingRoundId:   integer('funding_round_id').references(() => fundingRounds.id, { onDelete: 'set null' }),
+  notes:            text('notes'),
+  createdBy:        varchar('created_by', { length: 64 }),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_equity_grants_reference').on(t.tenantId, t.companyRef, t.reference),
+  index('idx_equity_grants_holder').on(t.tenantId, t.holderRef),
+  index('idx_equity_grants_class').on(t.tenantId, t.shareClassId),
+]);
+
+/**
+ * A SAFE or a convertible note — money that is not yet equity.
+ *
+ * Two kinds and not one: a note is DEBT that accrues and matures, a SAFE is
+ * neither, and one value would make "what is due when" unanswerable for the
+ * instrument that has an answer.
+ *
+ * `postMoney` is decisive. On a post-money SAFE the holder's percentage is fixed
+ * and the FOUNDERS absorb every other SAFE's dilution; on a pre-money one the
+ * SAFEs dilute each other. Founders discover the difference at the priced round,
+ * which is exactly too late — so the modeller reads it off this column.
+ */
+export const convertibleInstruments = pgTable('convertible_instruments', {
+  id:              serial('id').primaryKey(),
+  tenantId:        integer('tenant_id').notNull(),
+  objectId:        uuid('object_id').references(() => objects.id, { onDelete: 'set null' }),
+  companyRef:      varchar('company_ref', { length: 64 }),
+  reference:       varchar('reference', { length: 64 }).notNull(),
+  /** 'safe' | 'note'. */
+  kind:            varchar('kind', { length: 16 }).notNull().default('safe'),
+  holderRef:       varchar('holder_ref', { length: 64 }).notNull(),
+  holderName:      varchar('holder_name', { length: 200 }).notNull(),
+  principal:       numeric('principal', { precision: 18, scale: 2 }).notNull(),
+  currency:        varchar('currency', { length: 8 }).notNull().default('USD'),
+  valuationCap:    numeric('valuation_cap', { precision: 18, scale: 2 }),
+  discountPercent: numeric('discount_percent', { precision: 6, scale: 3 }),
+  postMoney:       boolean('post_money').notNull().default(true),
+  /** Most-favoured-nation: this holder takes the best terms any later instrument
+   *  gets. Agreed in conversation and, until now, recorded nowhere. */
+  mfn:             boolean('mfn').notNull().default(false),
+  /** Simple annual interest, for a note. Null on a SAFE, which does not accrue. */
+  interestRate:    numeric('interest_rate', { precision: 6, scale: 4 }),
+  issuedAt:        timestamp('issued_at').notNull().defaultNow(),
+  maturesAt:       timestamp('matures_at'),
+  /** 'outstanding' | 'converted' | 'repaid' | 'cancelled'. A lifecycle state of
+   *  the instrument itself — NOT an aggregate, which is why it may be a column
+   *  while the shares it converts into may not. */
+  status:          varchar('status', { length: 16 }).notNull().default('outstanding'),
+  convertedAt:     timestamp('converted_at'),
+  fundingRoundId:  integer('funding_round_id').references(() => fundingRounds.id, { onDelete: 'set null' }),
+  notes:           text('notes'),
+  createdBy:       varchar('created_by', { length: 64 }),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_convertible_instruments_reference').on(t.tenantId, t.companyRef, t.reference),
+  index('idx_convertible_instruments_status').on(t.tenantId, t.companyRef, t.status),
+  index('idx_convertible_instruments_maturity').on(t.tenantId, t.maturesAt),
+]);
+
+/**
+ * The append-only ownership ledger — the ONLY place a share quantity lives.
+ *
+ * Seven verbs, each with declared debit and credit legs (`EQUITY_EVENT_LEGS` in
+ * the canvas contract), folded by `application/finance/equity.ts`. A pool top-up,
+ * a round, a departure and a buy-back were all re-typing before this table
+ * existed, which is why a cap table could not survive its second event.
+ *
+ * APPEND-ONLY IS ENFORCED BY WHO MAY WRITE IT: the entity is registered
+ * read-only, so a generic PATCH cannot reach it, and the one writer only ever
+ * INSERTs. Same argument as `bills.approvedBy`, on a table where a silent edit
+ * rewrites who owns the company.
+ *
+ * `effectiveAt` is separate from `createdAt` deliberately — the date something
+ * took effect is what the fold cuts on, and a genuine March issuance recorded in
+ * May is normal. Conflating them makes "what did we own in March" answer with
+ * what had been TYPED by March.
+ */
+export const equityEvents = pgTable('equity_events', {
+  id:               serial('id').primaryKey(),
+  tenantId:         integer('tenant_id').notNull(),
+  companyRef:       varchar('company_ref', { length: 64 }),
+  /** 'issue' | 'transfer' | 'cancel' | 'exercise' | 'repurchase' |
+   *  'pool-increase' | 'conversion'. */
+  eventKind:        varchar('event_kind', { length: 24 }).notNull(),
+  /** The class the quantity LEAVES, or the sole class for a one-legged event. */
+  shareClassId:     integer('share_class_id').references(() => shareClasses.id, { onDelete: 'restrict' }),
+  /** The class it ARRIVES in when that differs — an exercise moves options out of
+   *  the pool and common in, which is one event rather than two that can be
+   *  half-recorded. */
+  toShareClassId:   integer('to_share_class_id').references(() => shareClasses.id, { onDelete: 'restrict' }),
+  grantId:          integer('grant_id').references(() => equityGrants.id, { onDelete: 'restrict' }),
+  instrumentId:     integer('instrument_id').references(() => convertibleInstruments.id, { onDelete: 'restrict' }),
+  fundingRoundId:   integer('funding_round_id').references(() => fundingRounds.id, { onDelete: 'set null' }),
+  fromHolderRef:    varchar('from_holder_ref', { length: 64 }),
+  toHolderRef:      varchar('to_holder_ref', { length: 64 }),
+  quantity:         numeric('quantity', { precision: 20, scale: 4 }).notNull(),
+  pricePerShare:    numeric('price_per_share', { precision: 18, scale: 8 }),
+  currency:         varchar('currency', { length: 8 }).notNull().default('USD'),
+  effectiveAt:      timestamp('effective_at').notNull().defaultNow(),
+  /** Why it happened, in the words of whoever recorded it. The ledger is read by
+   *  people, and "a departure" and "a secondary sale" are the same numbers. */
+  reason:           text('reason'),
+  recordedBy:       varchar('recorded_by', { length: 64 }),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_equity_events_company').on(t.tenantId, t.companyRef, t.effectiveAt),
+  index('idx_equity_events_grant').on(t.tenantId, t.grantId),
+  index('idx_equity_events_instrument').on(t.tenantId, t.instrumentId),
 ]);
 
 /** How a role is paid — the band, not the person's salary. */

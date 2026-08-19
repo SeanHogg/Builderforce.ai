@@ -1,20 +1,22 @@
 /**
- * DevEx Surveys (ROADMAP EMP-15) — domain types + Drizzle table definitions for
- * the developer-experience pulse-survey framework.
+ * DevEx Surveys — the DOMAIN of the developer-experience pulse-survey framework:
+ * the question/answer vocabulary and the pure rules that validate a submission.
  *
  * A *template* is a named set of questions. A *campaign* sends a template to the
- * workspace for a period (open → closed). A *response* is one submission per
+ * workspace for a period (open -> closed). A *response* is one submission per
  * respondent per campaign, with answers keyed by question id.
  *
- * The pgTable definitions live here (not only in schema.ts) so the routes + the
- * insights collector share one source of truth and the migration (0229) is the
- * DDL contract. The same definitions are mirrored into schema.ts by the
- * orchestrator merge so the rest of the app's typed `schema` import sees them.
+ * WHY THIS IS THE DOMAIN LAYER AND NOT THE APPLICATION LAYER. The three Drizzle
+ * tables used to live beside these types in `application/devex/devexSurveys.ts`,
+ * which meant the application layer declared its own DDL and reached into the
+ * infrastructure barrel to do it (`import { tenants, segments } from
+ * '.../database/schema'`). The tables now live where every other table lives —
+ * `infrastructure/database/schema/governance.ts` — and both that schema file and
+ * the routes/collector read this ONE vocabulary, so a question type cannot mean
+ * one thing to the validator and another to the column it is stored in.
  */
 
-import { pgTable, serial, integer, uuid, varchar, text, jsonb, boolean, timestamp, index } from 'drizzle-orm/pg-core';
-import { tenants, segments } from '../../infrastructure/database/schema';
-import { fnv1a32 as fnv1a } from '../../domain/shared/strings';
+import { fnv1a32 as fnv1a } from '../shared/strings';
 
 // ---------------------------------------------------------------------------
 // Domain types
@@ -209,54 +211,3 @@ export function respondentHash(userId: string, campaignId: number): string {
   const h4 = fnv1a(`${input}:b`, 0x01000193);
   return [h1, h2, h3, h4].map((h) => (h >>> 0).toString(16).padStart(8, '0')).join('').slice(0, 64);
 }
-
-// ---------------------------------------------------------------------------
-// Drizzle tables (mirror migration 0229 exactly)
-// ---------------------------------------------------------------------------
-
-export const devexSurveyTemplates = pgTable('devex_survey_templates', {
-  id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  name:        varchar('name', { length: 160 }).notNull(),
-  description: text('description').notNull().default(''),
-  questions:   jsonb('questions').$type<SurveyQuestion[]>().notNull().default([]),
-  isActive:    boolean('is_active').notNull().default(true),
-  createdBy:   varchar('created_by', { length: 36 }),
-  createdAt:   timestamp('created_at').notNull().defaultNow(),
-  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
-}, (t) => [
-  index('idx_devex_templates_tenant').on(t.tenantId),
-]);
-
-export const devexCampaigns = pgTable('devex_campaigns', {
-  id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  templateId:  integer('template_id').references(() => devexSurveyTemplates.id, { onDelete: 'set null' }),
-  title:       varchar('title', { length: 200 }).notNull(),
-  periodMonth: varchar('period_month', { length: 7 }),
-  status:      varchar('status', { length: 16 }).notNull().default('open').$type<'open' | 'closed'>(),
-  anonymous:   boolean('anonymous').notNull().default(true),
-  recipientCount: integer('recipient_count'),
-  openedAt:    timestamp('opened_at').notNull().defaultNow(),
-  closedAt:    timestamp('closed_at'),
-  createdAt:   timestamp('created_at').notNull().defaultNow(),
-}, (t) => [
-  index('idx_devex_campaigns_tenant').on(t.tenantId),
-]);
-
-export const devexResponses = pgTable('devex_responses', {
-  id:             serial('id').primaryKey(),
-  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  campaignId:     integer('campaign_id').notNull().references(() => devexCampaigns.id, { onDelete: 'cascade' }),
-  respondentHash: varchar('respondent_hash', { length: 64 }),
-  userId:         varchar('user_id', { length: 36 }),
-  answers:        jsonb('answers').$type<AnswerMap>().notNull().default({}),
-  segments:       jsonb('segments').$type<DevexSegments>().notNull().default({}),
-  submittedAt:    timestamp('submitted_at').notNull().defaultNow(),
-}, (t) => [
-  index('idx_devex_responses_tenant').on(t.tenantId),
-  index('idx_devex_responses_campaign').on(t.campaignId),
-  index('idx_devex_responses_dedup').on(t.campaignId, t.respondentHash),
-]);

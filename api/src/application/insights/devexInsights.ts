@@ -21,12 +21,12 @@
 
 import { and, eq, gte, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import { devexCampaigns, devexResponses, devexSurveyTemplates } from '../../infrastructure/database/schema';
 import {
-  devexCampaigns, devexResponses, devexSurveyTemplates,
   ANONYMITY_THRESHOLD, DEVEX_SEGMENT_KINDS,
   type SurveyQuestion, type DevexDimension, type AnswerMap,
   type DevexSegments, type DevexSegmentKind,
-} from '../devex/devexSurveys';
+} from '../../domain/devex/surveys';
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;

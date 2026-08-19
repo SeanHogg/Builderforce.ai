@@ -25,10 +25,10 @@ import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrast
 import {
   computeDevexInsights, computeDevexBenchmark, type BenchmarkPercentile,
 } from '../../application/insights/devexInsights';
+import { devexSurveyTemplates, devexCampaigns, devexResponses } from '../../infrastructure/database/schema';
 import {
-  devexSurveyTemplates, devexCampaigns, devexResponses,
   normalizeQuestions, validateAnswers, respondentHash, normalizeSegments,
-} from '../../application/devex/devexSurveys';
+} from '../../domain/devex/surveys';
 import { deriveSegments } from '../../application/devex/deriveSegments';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';

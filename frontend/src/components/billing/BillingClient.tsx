@@ -18,8 +18,14 @@
  * bank details" is an email somebody receives — and a query param is a worse URL
  * to paste. Rendered through the one `DestinationIndex`, so the tabs sit across
  * the top exactly like every other nested sub-menu:
- *   - Account (`/billing`)          — plan, cycle, seats, billing email, card.
- *   - Payouts (`/billing/payouts`)  — where money goes OUT, and what has gone.
+ *   - Account (`/billing`)           — plan, cycle, seats, billing email, card.
+ *   - Payouts (`/billing/payouts`)   — where money goes OUT, and what has gone.
+ *   - Get paid (`/billing/get-paid`) — where money comes IN, from the tenant's own
+ *     customers. Its own view rather than a section under Payouts because the two
+ *     are opposite directions with opposite counterparties: a payout destination is
+ *     where WE send money, a merchant account is where a CUSTOMER sends it. Filing
+ *     the second under the first is how a founder comes to look for "how do I
+ *     invoice somebody" under a heading about their own bank details.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -30,6 +36,8 @@ import { DestinationIndex, type IndexItem } from '@/components/shell/Destination
 import { Button } from '@/components/ui';
 import { RoleGate } from '@/components/RoleGate';
 import { PayoutConnections } from '@/components/payouts/PayoutConnections';
+import { MerchantAccount } from '@/components/billing/MerchantAccount';
+import { openReceivables, type OpenReceivable } from '@/lib/founderOpsApi';
 import { getStoredTenant } from '@/lib/auth';
 import { billingApi, type BillingSubscription } from '@/lib/billingApi';
 import { cardValidationApi, type CardValidationState } from '@/lib/builderforceApi';
@@ -53,7 +61,7 @@ const rowStyle: React.CSSProperties = {
   display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 'var(--font-size-body)', padding: '6px 0',
 };
 
-export type BillingView = 'account' | 'payouts';
+export type BillingView = 'account' | 'payouts' | 'getPaid';
 
 export default function BillingClient({ view = 'account' }: { view?: BillingView }) {
   const t = useTranslations('billing');
@@ -66,6 +74,7 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
   const [subscription, setSubscription] = useState<BillingSubscription | null>(null);
   const [card, setCard] = useState<CardValidationState | null>(null);
   const [payouts, setPayouts] = useState<PayoutRecord[]>([]);
+  const [receivables, setReceivables] = useState<OpenReceivable[]>([]);
   const [paidCents, setPaidCents] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -99,7 +108,17 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
     } catch { /* the destinations still render; history is additive */ }
   }, []);
 
+  /** The receivables beside the merchant panel. Loaded only on the view that
+   *  renders them, exactly as the payout history is — a tab nobody opened must
+   *  not cost a query. */
+  const loadReceivables = useCallback(async () => {
+    try {
+      setReceivables(await openReceivables());
+    } catch { /* the merchant panel still renders; the list is additive */ }
+  }, []);
+
   useEffect(() => { if (view === 'payouts') void loadPayouts(); }, [loadPayouts, view]);
+  useEffect(() => { if (view === 'getPaid') void loadReceivables(); }, [loadReceivables, view]);
 
   const startCardValidation = async () => {
     if (tenantId == null) return;
@@ -121,6 +140,7 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
   const subTabs: IndexItem[] = [
     { id: 'account', label: t('accountTab'), icon: '💳', href: '/billing' },
     { id: 'payouts', label: t('payoutsTab'), icon: '🏦', href: '/billing/payouts' },
+    { id: 'getPaid', label: t('getPaidTab'), icon: '📥', href: '/billing/get-paid' },
   ];
 
   const renderAccount = () => (
@@ -180,6 +200,62 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
     </>
   );
 
+  /**
+   * Money coming IN.
+   *
+   * The merchant account and the receivables that depend on it, on one screen,
+   * because the question they answer together is the only one worth asking here:
+   * "can I take a payment, and who has not paid me". A merchant panel with no
+   * receivables beside it is a settings toggle; the list is what makes it a
+   * console.
+   */
+  const renderGetPaid = () => (
+    <>
+      <div style={cardStyle}>
+        <div style={sectionTitle}>{t('merchantTitle')}</div>
+        <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 14px', lineHeight: 1.55 }}>{t('merchantIntro')}</p>
+        <MerchantAccount returnTo="/billing/get-paid" onChanged={() => void loadReceivables()} />
+      </div>
+
+      <div style={cardStyle}>
+        <div style={sectionTitle}>{t('receivablesTitle')}</div>
+        {receivables.length === 0 ? (
+          <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: 0 }}>{t('noReceivables')}</p>
+        ) : (
+          // Wide content scrolls inside its own container; the page never does.
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-body)', minWidth: 480 }}>
+              <thead>
+                <tr>
+                  {[t('colInvoice'), t('colCustomer'), t('colOutstanding'), t('colDue'), t('colAge')].map((heading) => (
+                    <th key={heading} style={{ textAlign: 'left', padding: '6px 10px 6px 0', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{heading}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {receivables.map((invoice) => (
+                  <tr key={invoice.reference} style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                    <td style={{ padding: '8px 10px 8px 0', whiteSpace: 'nowrap' }}>{invoice.reference}</td>
+                    <td style={{ padding: '8px 10px 8px 0' }}>{invoice.customerName}</td>
+                    <td style={{ padding: '8px 10px 8px 0', color: 'var(--text-primary)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      {invoice.outstanding.toLocaleString(locale, { style: 'currency', currency: invoice.currency })}
+                    </td>
+                    <td style={{ padding: '8px 10px 8px 0', whiteSpace: 'nowrap' }}>{invoice.dueAtISO ? date(invoice.dueAtISO) : t('none')}</td>
+                    {/* Overdue is the only state worth colouring: a current invoice
+                        is not news, and colouring every row is colouring none. */}
+                    <td style={{ padding: '8px 10px 8px 0', whiteSpace: 'nowrap', color: invoice.ageingDays > 0 ? 'var(--coral-bright)' : 'var(--text-muted)' }}>
+                      {invoice.ageingDays > 0 ? t('daysOverdue', { count: invoice.ageingDays }) : t('current')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
   const renderPayouts = () => (
     <>
       <div style={cardStyle}>
@@ -230,7 +306,7 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
       <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '0 0 20px' }}>{t('intro')}</p>
       <DestinationIndex items={subTabs} activeId={view} ariaLabel={t('subnavLabel')} />
       {error && <p role="alert" style={{ color: 'var(--coral-bright)', fontSize: 'var(--font-size-body)', marginBottom: 14 }}>{error}</p>}
-      {view === 'payouts' ? renderPayouts() : renderAccount()}
+      {view === 'payouts' ? renderPayouts() : view === 'getPaid' ? renderGetPaid() : renderAccount()}
     </PageContainer>
   );
 }

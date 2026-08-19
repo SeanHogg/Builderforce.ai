@@ -217,7 +217,11 @@ export function daysUntil(deadlineMs: number, nowMs: number): number {
  * ambushed by, and its expiry is usually the same day expressed differently.
  */
 export const DEADLINE_FIELD_NAMES: readonly string[] = [
-  'dueAt', 'renewsAt', 'closeTarget', 'reviewAt', 'deadlineAt', 'expiresAt',
+  // `cliffAt` precedes `maturesAt` on the same principle: a vesting cliff is the date a
+  // founder is ambushed by, and it is the one an `equityGrant` carries. Both are written
+  // onto their card by the equity projection rather than authored, so the sweep — which
+  // reads saved rows and cannot run a derivation — sees the same date the card shows.
+  'dueAt', 'renewsAt', 'closeTarget', 'cliffAt', 'maturesAt', 'reviewAt', 'deadlineAt', 'expiresAt',
 ];
 
 /**

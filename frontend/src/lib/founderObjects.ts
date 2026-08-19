@@ -35,12 +35,24 @@
  * `hint` is model-facing and stays English, like every other tool description.
  */
 
-import { ACCOUNT_RELATIONSHIPS, type FounderObjectKind } from '@builderforce/creation-canvas-contract';
+import { scoreExperiment, type ExperimentVariantInput } from './canvasInference';
+import {
+  ACCELERATION_KINDS,
+  ACCOUNT_RELATIONSHIPS,
+  CONVERTIBLE_KINDS,
+  EQUITY_INSTRUMENTS,
+  VESTING_FREQUENCIES,
+  type FounderObjectKind,
+} from '@builderforce/creation-canvas-contract';
 import {
   SOURCES_FIELD,
   SUMMARY_FIELD,
+  deriveNumber,
+  derivePercent,
+  deriveRows,
   registerSpecObjectSet,
   specMutableFields,
+  sumColumn,
   type SpecDeriveBoard,
   type SpecField,
   type SpecObjectSpec,
@@ -334,7 +346,45 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       { name: 'primaryMetric', render: 'stat', label: 'primaryMetric', hint: 'The ONE metric that decides it. Naming two is how an experiment is declared a success afterwards.' },
       { name: 'sampleSize', render: 'stat', label: 'sampleSize', hint: 'Units observed, as an integer.' },
       { name: 'result', render: 'stat', label: 'result', hint: 'The measured outcome, with its confidence where one was computed.' },
-      { name: 'variants', render: 'rows', label: 'variants', columns: ['variant', 'exposure', 'conversion', 'lift'], hint: 'One row per variant: {variant, exposure, conversion, lift}.' },
+      { name: 'variants', render: 'rows', label: 'variants', columns: ['variant', 'exposure', 'conversion', 'lift'], hint: 'One row per variant: {variant, exposure, conversion, lift}. The FIRST row is the control — every other row is tested against it.' },
+      {
+        name: 'significance',
+        render: 'verdict',
+        label: 'significance',
+        // The credibility half. `variants` was an AUTHORED table with a `lift` column
+        // somebody typed, and nothing anywhere asked whether the lift was real — so
+        // n=12 and n=1.2M rendered identically and "we tested it" resolved to a number
+        // with no denominator behind it. `canvasInference` had the two-proportion test
+        // written and tested and NO consumer, which is the same defect one level up.
+        // Computed from the rows printed directly beneath it, so it cannot disagree
+        // with them.
+        hint: 'COMPUTED. Whether each variant beats the control by more than noise, with its p-value and interval.',
+        derive: (data) => {
+          const rows = deriveRows(data.variants);
+          if (rows.length < 2) return undefined;
+          const scored = scoreExperiment(rows as ExperimentVariantInput[]);
+          const control = scored[0];
+          if (!control || control.rate == null) return undefined;
+          const compared = scored.slice(1).filter((row) => row.test);
+          if (!compared.length) return undefined;
+          const parts = compared.map((row) => {
+            const test = row.test!;
+            // `absoluteLift` and not a `difference`/`level` pair: `ProportionTest`
+            // reports the lift in RATE POINTS and its own interval, and there is no
+            // confidence level on the result to quote — the interval IS the
+            // statement. Naming fields the type never had is how a card comes to
+            // render "NaNpp real at NaN%" beside a real p-value.
+            const direction = test.absoluteLift >= 0 ? 'up' : 'down';
+            const points = Math.abs(Math.round(test.absoluteLift * 1000) / 10);
+            return test.significant
+              ? `${row.variant} is ${direction} ${points}pp on the control (p=${test.pValue}), interval ${Math.round(test.interval.low * 1000) / 10} to ${Math.round(test.interval.high * 1000) / 10}pp.`
+              : `${row.variant} is within noise of the control (p=${test.pValue}); n is too small to call.`;
+          });
+          const anyReal = compared.some((row) => row.test!.significant);
+          const lead = anyReal ? '' : 'NOTHING here is significant yet. ';
+          return `${lead}${parts.join(' ')}`;
+        },
+      },
       { name: 'verdict', render: 'verdict', label: 'verdict', hint: 'shipped | rejected | inconclusive, and the reason. "Inconclusive" is a real and common answer.' },
       SUMMARY_FIELD,
       SOURCES_FIELD,
@@ -455,16 +505,220 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     ],
   },
   {
+    // ── A PROJECTION, AS OF 0927 ────────────────────────────────────────────────
+    //
+    // This card used to be a hand-typed `holders` array whose own hint asked the
+    // model to "say so in `summary`" when the percentages did not total 100 — an
+    // object that documented its own inability to be right. Nothing on it can be
+    // right by authoring, because a cap table is not a set of numbers somebody
+    // agrees on: it is the FOLD of every issuance, transfer, cancellation,
+    // exercise and conversion the company has ever recorded.
+    //
+    // So every figure below is either `derived` (written by `canvas_sync_cap_table`
+    // from the real ledger) or `derive`d (computed here from those rows). There is
+    // nothing left for a model to assert, which is the point: the percentages now
+    // total 100 because they are one division by one denominator, not because
+    // somebody was asked nicely.
+    //
+    // `companyRef` is the ONE authorable field, and it is the join — which company
+    // this card is the cap table OF.
     kind: 'capTable',
     icon: '◱',
     group: 'Work',
     defaultStatus: 'draft',
-    actions: ['model', 'review'],
+    actions: ['sync', 'model'],
     fields: [
-      { name: 'postMoney', render: 'stat', label: 'postMoney', hint: MONEY_HINT },
-      { name: 'optionPool', render: 'stat', label: 'optionPool', hint: 'Option pool as a percentage of fully diluted shares.' },
-      { name: 'fullyDiluted', render: 'stat', label: 'fullyDiluted', hint: 'Total fully diluted shares as an integer.' },
-      { name: 'holders', render: 'rows', label: 'holders', columns: ['holder', 'instrument', 'shares', 'percent'], hint: 'One row per holder: {holder, instrument, shares, percent}. Percentages must total ~100 including the pool — if they do not, say so in `summary` rather than adjusting a number to make it balance.' },
+      {
+        name: 'companyRef',
+        render: 'stat',
+        label: 'companyRef',
+        hint: 'Which company this is the cap table of — lowercase and hyphenated, the same ref the `company` object and every `equityGrant` uses. The one field on this card you author; everything else is folded from the ledger by canvas_sync_cap_table.',
+        bookkeeping: true,
+      },
+      {
+        name: 'asOf',
+        render: 'stat',
+        label: 'asOf',
+        hint: 'READ-ONLY. The instant this table was folded at. A past date is a real answer — "what did we own in March" is the same ledger with an earlier cutoff — so never treat an old `asOf` as staleness without checking whether it was asked for.',
+        derived: true,
+      },
+      {
+        name: 'holders',
+        render: 'rows',
+        label: 'holders',
+        columns: ['holder', 'shareClass', 'instrument', 'shares', 'vested', 'percent'],
+        hint: 'READ-ONLY. One row per holder per share class, folded from `equity_events` by canvas_sync_cap_table — never author it. `vested` is computed from that holder\'s grant schedule at `asOf`, so a founder two years into a four-year vest reads as half. If a holder is missing, the ledger has no event for them: record the grant, do not type a row.',
+        derived: true,
+      },
+      {
+        name: 'issued',
+        render: 'stat',
+        label: 'issued',
+        hint: 'READ-ONLY. Shares actually issued and outstanding — options excluded, because an option is not a share until it is exercised.',
+        derived: true,
+      },
+      {
+        name: 'fullyDiluted',
+        render: 'stat',
+        label: 'fullyDiluted',
+        hint: 'READ-ONLY. Issued plus every option, RSU and warrant plus the UNALLOCATED pool. The denominator every percentage on this card divides by.',
+        derived: true,
+      },
+      {
+        name: 'poolAuthorized',
+        render: 'stat',
+        label: 'poolAuthorized',
+        hint: 'READ-ONLY. Shares authorised into the option pool by the board.',
+        derived: true,
+      },
+      {
+        name: 'poolUnallocated',
+        render: 'stat',
+        label: 'poolUnallocated',
+        hint: 'READ-ONLY. Pool authorised minus pool granted — what is actually left to hire against, which is the number a founder is asked for and the one a typed cap table always got wrong.',
+        derived: true,
+      },
+      {
+        name: 'convertibles',
+        render: 'rows',
+        label: 'convertibles',
+        columns: ['reference', 'holder', 'kind', 'principal', 'cap', 'discount'],
+        hint: 'READ-ONLY. Outstanding SAFEs and notes. They are NOT in the percentages above and must never be added to them: what they become is not known until a round prices them. Model that with the `model` action rather than estimating it.',
+        derived: true,
+      },
+      {
+        name: 'ownershipCheck',
+        render: 'verdict',
+        label: 'ownershipCheck',
+        // The replacement for the old prose instruction. It is arithmetic over the
+        // rows printed directly beneath it, so it cannot disagree with them — and
+        // it names the convertible overhang the percentages deliberately exclude,
+        // which is the honest reading a typed table could never give.
+        hint: 'COMPUTED. Whether the folded holdings account for the fully diluted total, and what is outstanding beside them.',
+        derive: (data) => {
+          const fullyDiluted = deriveNumber(data.fullyDiluted);
+          const holders = deriveRows(data.holders);
+          if (!fullyDiluted || !holders.length) return undefined;
+          const held = sumColumn(holders, 'shares') ?? 0;
+          const unallocated = deriveNumber(data.poolUnallocated) ?? 0;
+          const accounted = derivePercent(held + unallocated, fullyDiluted) ?? 0;
+          const overhang = deriveRows(data.convertibles).length;
+          const balanced = accounted >= 99 && accounted <= 101;
+          const note = overhang
+            ? ` ${overhang} convertible${overhang === 1 ? '' : 's'} outstanding — not priced into these percentages until a round converts them.`
+            : '';
+          return balanced
+            ? `Holders and the unallocated pool account for ${accounted}% of the fully diluted total.${note}`
+            : `Holders and the unallocated pool account for only ${accounted}% of the fully diluted total — the ledger and the authorised counts disagree, which is a real condition to investigate rather than a rounding error.${note}`;
+        },
+      },
+      SUMMARY_FIELD,
+    ],
+  },
+  // ── The award, and the schedule that makes it checkable ───────────────────────
+  //
+  // FO-D3. `vesting` used to appear only as prose inside `offer.equity`, so an
+  // offer's equity line was a sentence rather than a fact. This card is the fact:
+  // a grant with a real schedule, whose vested figure is COMPUTED at read time and
+  // whose `cliffAt` is a declared deadline — which is what makes the cliff the
+  // first ownership date a `trigger` can watch.
+  //
+  // Every figure is written by `canvas_record_equity_grant` / `canvas_sync_cap_table`
+  // from `equity_grants` and its ledger, because a grant typed onto a board and a
+  // grant in the ledger are two answers to "what was I given".
+  {
+    kind: 'equityGrant',
+    icon: '◇',
+    group: 'Work',
+    defaultStatus: 'granted',
+    actions: ['issue', 'sync'],
+    fields: [
+      { name: 'reference', render: 'stat', label: 'reference', hint: 'The certificate or grant number — the string a holder quotes. Unique per company.', bookkeeping: true },
+      { name: 'holder', render: 'stat', label: 'holder', hint: 'Who holds it, by name. The grant also carries the `partyRef` this resolves to, which is what joins it to an `account` card and to the cap table.' },
+      { name: 'shareClass', render: 'stat', label: 'shareClass', hint: 'Which authorised class it comes out of — "Common", "Series A Preferred", "Option Pool". A grant out of a class nobody authorised is refused, which is what keeps the table adding up.' },
+      { name: 'instrument', render: 'stat', label: 'instrument', hint: `What is actually held: ${EQUITY_INSTRUMENTS.join(' | ')}. An option is not a share until it is exercised.` },
+      { name: 'quantity', render: 'stat', label: 'quantity', hint: 'READ-ONLY. Shares or options under this grant, folded from its own ledger events — so a partly cancelled grant reads as what is left rather than what was promised.', derived: true },
+      { name: 'vested', render: 'stat', label: 'vested', hint: 'READ-ONLY. Vested at the date this card was last synced. Computed from the schedule below and stored nowhere, so it cannot go stale in the direction that matters.', derived: true },
+      {
+        name: 'vestingStartAt',
+        render: 'stat',
+        label: 'vestingStartAt',
+        hint: 'ISO date the clock starts — usually a start date, not the grant date. The two differ more often than they agree.',
+      },
+      { name: 'vestingMonths', render: 'stat', label: 'vestingMonths', hint: 'Total length of the schedule in months. 48 is the common answer and is not the only one.' },
+      { name: 'cliffMonths', render: 'stat', label: 'cliffMonths', hint: 'Nothing vests until this many months have passed, and then that whole portion vests at once. 12 is standard.' },
+      { name: 'vestingFrequency', render: 'stat', label: 'vestingFrequency', hint: `How often a tranche vests after the cliff: ${VESTING_FREQUENCIES.join(' | ')}. \`none\` means fully vested — purchased shares, or a founder's already-earned stock.` },
+      { name: 'acceleration', render: 'stat', label: 'acceleration', hint: `What happens on a change of control: ${ACCELERATION_KINDS.join(' | ')}. Single accelerates on the acquisition alone; double needs the acquisition AND a termination. They are agreed in a conversation and recorded nowhere, which is why this field exists.` },
+      {
+        name: 'cliffAt',
+        render: 'stat',
+        label: 'cliffAt',
+        hint: 'READ-ONLY. The date the cliff lands, computed from `vestingStartAt` + `cliffMonths` and written by the sync. Bind a `trigger` with comparator "due-within" to it so the conversation happens before the date rather than after — this is the first ownership date on the canvas that a trigger can watch.',
+        derived: true,
+        deadline: true,
+      },
+      {
+        name: 'unvested',
+        render: 'stat',
+        label: 'unvested',
+        hint: 'COMPUTED. Quantity minus vested — what a departure would return to the pool.',
+        derive: (data) => {
+          const quantity = deriveNumber(data.quantity);
+          const vested = deriveNumber(data.vested);
+          if (quantity === undefined || vested === undefined) return undefined;
+          return Math.max(0, quantity - vested);
+        },
+      },
+      {
+        name: 'vestedPercent',
+        render: 'meter',
+        label: 'vestedPercent',
+        hint: 'COMPUTED. How far through the schedule this grant is.',
+        derive: (data) => derivePercent(deriveNumber(data.vested), deriveNumber(data.quantity)),
+      },
+      { name: 'pricePerShare', render: 'stat', label: 'pricePerShare', hint: MONEY_HINT },
+      { name: 'fmvPerShare', render: 'stat', label: 'fmvPerShare', hint: 'The 409A fair market value the grant was priced against, where there was one. A strike below FMV is a tax problem, not a bargain.' },
+      SUMMARY_FIELD,
+    ],
+  },
+  // ── Money that is not yet equity ──────────────────────────────────────────────
+  //
+  // FO-D4. `fundingRound.roundType: 'safe'` was a label over nothing: the
+  // instrument a pre-seed company actually issues could not be represented, so a
+  // priced round could not be modelled against what came before it.
+  //
+  // The terms here are the ones that decide what everybody ELSE ends up owning,
+  // which is why they are fields rather than prose — a cap and a discount argued
+  // over in an email and recorded in a sentence is how a founder discovers the
+  // dilution at the round.
+  {
+    kind: 'convertible',
+    icon: '◐',
+    group: 'Work',
+    defaultStatus: 'outstanding',
+    actions: ['record', 'model'],
+    fields: [
+      { name: 'reference', render: 'stat', label: 'reference', hint: 'This instrument\'s own reference. Unique per company.', bookkeeping: true },
+      { name: 'instrumentKind', render: 'stat', label: 'instrumentKind', hint: `${CONVERTIBLE_KINDS.join(' | ')}. A note is DEBT — it accrues and it matures; a SAFE is neither. Recording one as the other makes "what is due when" unanswerable.` },
+      { name: 'holder', render: 'stat', label: 'holder', hint: 'Who put the money in.' },
+      { name: 'principal', render: 'stat', label: 'principal', hint: MONEY_HINT },
+      { name: 'valuationCap', render: 'stat', label: 'valuationCap', hint: 'The valuation the holder\'s money buys in at, at most. Leave empty for an uncapped instrument rather than writing a large number — uncapped and capped-very-high convert differently.' },
+      { name: 'discountPercent', render: 'stat', label: 'discountPercent', hint: 'Percent off the round price, 0–100. The holder takes whichever of the cap and the discount gives them the better price, which is the standard term on every form of both instruments.' },
+      {
+        name: 'postMoney',
+        render: 'stat',
+        label: 'postMoney',
+        hint: 'true for a post-money SAFE (the 2018 YC form), false for pre-money. DECISIVE, not cosmetic: on a post-money SAFE the holder\'s percentage is fixed and the FOUNDERS absorb every other SAFE\'s dilution; on a pre-money one the SAFEs dilute each other. If you do not know, say you do not know — guessing this misstates who owns the company.',
+      },
+      { name: 'interestRate', render: 'stat', label: 'interestRate', hint: 'Simple annual interest, for a note. A SAFE does not accrue — leave it empty rather than writing 0, which reads as "a note at zero percent".' },
+      {
+        name: 'maturesAt',
+        render: 'stat',
+        label: 'maturesAt',
+        hint: 'ISO date a note falls due. Bind a `trigger` with comparator "due-within" to it: a note nobody noticed maturing is a demand letter. A SAFE has no maturity and must leave this empty.',
+        deadline: true,
+      },
+      { name: 'convertsInto', render: 'stat', label: 'convertsInto', hint: 'READ-ONLY. What this would become at the last modelled round, and on which basis — cap, discount or round price. Written by the `model` action; a number here that no round produced would be a promise rather than a projection.', derived: true },
       SUMMARY_FIELD,
     ],
   },
@@ -477,11 +731,25 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     fields: [
       { name: 'roundType', render: 'stat', label: 'roundType', hint: 'pre-seed | seed | series-a | bridge | safe.' },
       { name: 'targetAmount', render: 'stat', label: 'targetAmount', hint: MONEY_HINT },
-      { name: 'committed', render: 'stat', label: 'committed', hint: MONEY_HINT },
+      { name: 'committed', render: 'stat', label: 'committed', hint: `${MONEY_HINT} Money actually CLOSED — never money promised. Written by canvas_sync_funding_round from the allocations that reached the closing stage; counting soft circles here is the single most common way a raise is misreported.`, bookkeeping: true },
       { name: 'valuation', render: 'stat', label: 'valuation', hint: MONEY_HINT },
       { name: 'closeTarget', render: 'stat', label: 'closeTarget', hint: 'ISO date you intend to close. Bind a `trigger` with comparator "due-within" so the runway conversation happens while there is still runway.', deadline: true },
       { name: 'useOfFunds', render: 'rows', label: 'useOfFunds', columns: ['area', 'amount', 'outcome'], hint: 'Where the money goes: {area, amount, outcome}. `outcome` is what the money BUYS, which is the question an investor actually asks.' },
-      { name: 'investors', render: 'rows', label: 'investors', columns: ['investor', 'stage', 'amount', 'nextStep'], hint: 'Pipeline, one row per firm: {investor, stage, amount, nextStep}.' },
+      {
+        name: 'investors',
+        render: 'rows',
+        label: 'investors',
+        columns: ['investor', 'stage', 'amount', 'nextStep', 'warmIntro', 'touches'],
+        hint: 'READ-ONLY. The raise, one row per firm: {investor, stage, amount, nextStep, warmIntro, touches}. Projected from the workspace\'s real investor allocations by canvas_sync_funding_round — never authored, because a hand-typed investor list is a second set of numbers that starts disagreeing with the record immediately and cannot hold a conversation. Add a firm with canvas_open_deal, move one with canvas_move_deal, and record a conversation with canvas_log_deal_touch; `nextStep` IS the latest conversation and `touches` is how many there have been, so a firm with a stage and no touches is a name somebody typed.',
+        derived: true,
+      },
+      {
+        name: 'syncedAt',
+        render: 'stat',
+        label: 'syncedAt',
+        hint: 'ISO instant the allocations were last read. Rendered as staleness, so a round nobody has refreshed says so rather than looking current.',
+        bookkeeping: true,
+      },
       SUMMARY_FIELD,
     ],
   },
@@ -515,13 +783,51 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     actions: ['assemble', 'share'],
     fields: [
       { name: 'audience', render: 'stat', label: 'audience', hint: 'Who this room is for — a named firm or a stage of diligence.' },
-      { name: 'readiness', render: 'meter', label: 'readiness', hint: '0-100: share of required documents actually present.' },
-      { name: 'documents', render: 'rows', label: 'documents', columns: ['document', 'category', 'status', 'owner'], hint: 'One row per required document: {document, category, status, owner}. Include the MISSING ones with status "missing" — a data room that lists only what exists hides the gap it was built to close.' },
-      { name: 'ndaRequired', render: 'stat', label: 'ndaRequired', hint: 'true | false. Whether `share` must collect a signed NDA from the recipient before access is granted. Defaults to true — the safer default for diligence material.' },
-      { name: 'recipientName', render: 'stat', label: 'recipientName', hint: 'Who `share` grants access to next. Required for `share` to do anything.' },
-      { name: 'recipientEmail', render: 'stat', label: 'recipientEmail', hint: 'Their real email, never invented — this is who the NDA (when required) and the access grant go to.' },
-      { name: 'ndaState', render: 'stat', label: 'ndaState', hint: 'not-required | pending | signed. Written by the share flow over `signature_requests`.', bookkeeping: true },
+      {
+        name: 'dataRoomId',
+        render: 'stat',
+        label: 'dataRoomId',
+        hint: 'The canonical `data_rooms` row this card is a view of. Written by canvas_sync_data_room, and what canvas_share_data_room reads back — the id is the identity, and matching a room by its title is the defect this removes.',
+        bookkeeping: true,
+      },
+      {
+        name: 'readiness',
+        render: 'meter',
+        label: 'readiness',
+        hint: 'READ-ONLY, 0-100: share of REQUIRED documents actually provided, computed from the room\'s own diligence obligations by canvas_sync_data_room. A room with nothing required reads 0 rather than 100 — "nothing is required" is an unprepared room, not a complete one.',
+        derived: true,
+      },
+      {
+        name: 'documents',
+        render: 'rows',
+        label: 'documents',
+        columns: ['document', 'category', 'status', 'owner', 'required'],
+        hint: 'READ-ONLY. One row per required document: {document, category, status, owner, required}. Projected from the room\'s real diligence obligations by canvas_sync_data_room, INCLUDING the ones still missing (status "missing") — a data room that lists only what exists hides the gap it was built to close.',
+        derived: true,
+      },
+      { name: 'ndaRequired', render: 'stat', label: 'ndaRequired', hint: 'true | false, read from the room itself. When true, a shared link resolves to "NDA pending" and opens NOTHING until the recipient signs the mutual NDA the share sends. Defaults to true — the safer default for diligence material.', derived: true },
+      { name: 'watermark', render: 'stat', label: 'watermark', hint: 'true | false, read from the room itself. When true no share can carry a download at all, and text documents are stamped with the recipient and the instant on the way out — the only way to read the room is through the stamped view.', derived: true },
+      { name: 'expiresAt', render: 'stat', label: 'expiresAt', hint: 'ISO date the whole room lapses. Enforced on top of each link\'s own expiry, so shortening the room shortens every link into it. Bind a `trigger` with comparator "due-within" to be told before a live diligence room closes under a firm mid-read.', deadline: true, derived: true },
+      { name: 'recipientName', render: 'stat', label: 'recipientName', hint: 'Who the last share granted access to. Pass the recipient to canvas_share_data_room rather than typing it here.', bookkeeping: true },
+      { name: 'recipientEmail', render: 'stat', label: 'recipientEmail', hint: 'Their real email, never invented — this is who the NDA (when required) and the access grant went to.', bookkeeping: true },
+      { name: 'ndaState', render: 'stat', label: 'ndaState', hint: 'not-required | pending | signed | declined | expired. Derived from the `signature_requests` row the share is bound to — never asserted, because a room must not report "signed" for an NDA that was declined.', bookkeeping: true },
       { name: 'ndaSignatureRequestId', render: 'stat', label: 'ndaSignatureRequestId', hint: 'The signature_requests row the NDA was sent through.', bookkeeping: true },
+      {
+        name: 'shares',
+        render: 'rows',
+        label: 'shares',
+        columns: ['recipient', 'email', 'access', 'nda', 'state', 'expires'],
+        hint: 'READ-ONLY. Who currently holds a link: {recipient, email, access, nda, state, expires}. Written by canvas_sync_data_room and canvas_share_data_room; each row carries its `shareId`, which canvas_revoke_data_room_share reads back. A revoked or lapsed row stays visible — who HAD access is part of the record.',
+        derived: true,
+      },
+      {
+        name: 'views',
+        render: 'rows',
+        label: 'views',
+        columns: ['document', 'views', 'lastViewedAt'],
+        hint: 'READ-ONLY. What the recipients actually read: {document, views, lastViewedAt}, most-read first, from the room\'s access log. This is the half that makes sending a data room something you can follow up on — a firm that opened the cap table twice and never opened the contracts is a different conversation from one that read everything.',
+        derived: true,
+      },
       SUMMARY_FIELD,
     ],
   },
@@ -595,7 +901,8 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
     fields: [
       { name: 'customer', render: 'stat', label: 'customer', hint: `The party that owes this. ${COUNTERPARTY_HINT}` },
       counterpartyAccountField('customer'),
-      { name: 'invoiceNumber', render: 'stat', label: 'invoiceNumber', hint: 'Your own reference for it.' },
+      { name: 'invoiceNumber', render: 'stat', label: 'invoiceNumber', hint: 'Your own reference for it. This is the key everything else joins to — the lines, the payments and the collections history — so set it once and never edit it after the invoice is issued.' },
+      { name: 'customerEmail', render: 'stat', label: 'customerEmail', hint: 'Where the issued invoice is SENT, and where the collections ladder chases. Without it an invoice can still be issued — for one handed over in person — but nothing will ever leave the building for it.' },
       CURRENCY_FIELD,
       { name: 'amount', render: 'stat', label: 'amount', hint: `${EXACT_MONEY_HINT} The total payable including tax.` },
       { name: 'issuedAt', render: 'stat', label: 'issuedAt', hint: 'ISO date it was issued.' },
@@ -603,7 +910,10 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       { name: 'paidAmount', render: 'stat', label: 'paidAmount', hint: `${EXACT_MONEY_HINT} How much has actually landed. Part payment is the normal case, so this is not a boolean.` },
       { name: 'ageingDays', render: 'stat', label: 'ageingDays', hint: 'Days past due. Computed from `dueAt` — never authored, because a stale ageing is worse than none.', bookkeeping: true },
       { name: 'lineItems', render: 'rows', label: 'lineItems', columns: ['description', 'quantity', 'unitPrice', 'amount'], hint: 'One row per billed item: {description, quantity, unitPrice, amount}. Plain numbers in the object currency.' },
-      { name: 'collection', render: 'list', label: 'collection', hint: 'What has actually been done to collect it: [{title, detail}] with a date in each detail. Collections work with no record is collections work that gets done twice or not at all.' },
+      { name: 'collection', render: 'list', label: 'collection', hint: 'What has actually been done to collect it: [{title, detail}] with a date in each detail. Collections work with no record is collections work that gets done twice or not at all. READ-ONLY once the invoice is issued: the collections ladder writes every rung it climbs here, and an authored entry beside those is a second collections history.', bookkeeping: true },
+      { name: 'collectionMode', render: 'stat', label: 'collectionMode', hint: 'off | notify | auto. How hard the collections ladder may work this one. `notify` (the default) records the reminder that is due and tells the board; `auto` is you delegating the send, so the customer is emailed without anybody looking. Set `off` for an invoice you are handling by hand.' },
+      { name: 'issuedBy', render: 'stat', label: 'issuedBy', hint: 'Who issued it. Written by the issue flow from the session — never authored, because it is who stood behind the document that left the building.', bookkeeping: true },
+      { name: 'paymentLink', render: 'stat', label: 'paymentLink', hint: 'The hosted page the customer pays on, minted against this workspace\'s own merchant account when the invoice is issued. Written by the issue flow. Absent means no merchant account is connected — the invoice is still real and is paid by bank transfer.', bookkeeping: true },
       SUMMARY_FIELD,
     ],
   },
@@ -627,6 +937,48 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       SUMMARY_FIELD,
     ],
   },
+  /**
+   * What payroll actually cost.
+   *
+   * ── EVERY FIGURE HERE IS ONE A PROVIDER RETURNED ────────────────────────────
+   * Nothing on this card is calculated by the platform, and that is a rule rather
+   * than a limitation: withholding across jurisdictions is a regulated,
+   * per-country, continuously-changing obligation with real liability attached,
+   * and a rate table that is wrong is worse than no rate table because a wrong one
+   * gets used. `canvas_sync_pay_run` reads the runs back from a connected Gusto,
+   * Rippling, ADP or Deel account; `source` says which of them said so.
+   *
+   * ── WHY IT IS NOT A `bill` ──────────────────────────────────────────────────
+   * A pay run has no counterparty to approve, dispute or schedule — the money has
+   * already left. Modelling it as a payable would make `bill.approve`, the one act
+   * on this platform that can cause real financial harm, available on a row nobody
+   * can authorise because it is already done.
+   */
+  {
+    kind: 'payRun',
+    icon: '⇉',
+    group: 'Work',
+    defaultStatus: 'processed',
+    // `sync` and not `run`. This card can re-read what happened and can never make
+    // it happen — see the kind's note, and `connectors/defaults/payroll.ts` for the
+    // argument at length.
+    actions: ['sync'],
+    fields: [
+      { name: 'source', render: 'stat', label: 'source', hint: 'Which provider ran it: gusto | rippling | adp | deel | manual. `manual` is a run entered from a bureau\'s PDF, which is how most companies outside the US actually receive one. Written by the sync — never authored for a connected provider.' },
+      { name: 'externalRef', render: 'stat', label: 'reference', hint: 'The provider\'s own id for this run. What makes re-reading the same period an update rather than a second run.', bookkeeping: true },
+      CURRENCY_FIELD,
+      { name: 'periodStart', render: 'stat', label: 'periodStart', hint: 'ISO date the pay period starts.' },
+      { name: 'periodEnd', render: 'stat', label: 'periodEnd', hint: 'ISO date the pay period ends.' },
+      { name: 'paidAt', render: 'stat', label: 'paidAt', hint: 'ISO date the money actually left. This — not the period — is the month the cost belongs to, because a period straddling a month boundary would otherwise land its whole cost in the wrong one.', deadline: true },
+      { name: 'grossAmount', render: 'stat', label: 'grossAmount', hint: `${EXACT_MONEY_HINT} Total gross pay before employer taxes.` },
+      { name: 'employerTaxes', render: 'stat', label: 'employerTaxes', hint: `${EXACT_MONEY_HINT} What the employer owed on top of gross.` },
+      { name: 'totalCost', render: 'stat', label: 'totalCost', hint: `${EXACT_MONEY_HINT} What the run cost the company in total. This is the number that is BURN — stored separately from gross plus taxes rather than derived from them, because a provider also bills benefits and its own fee and deriving the total would silently drop both.` },
+      { name: 'employeeCount', render: 'stat', label: 'employeeCount', hint: 'How many people were paid.' },
+      { name: 'lines', render: 'rows', label: 'lines', columns: ['employee', 'hours', 'rate', 'amount'], hint: 'One row per person: {employee, hours, rate, amount}. Plain numbers in the object currency. Read from the provider — do not author these, and do not correct them here: a figure that disagrees with the provider is a conversation with the provider.' },
+      { name: 'syncedAt', render: 'stat', label: 'syncedAt', hint: 'When this was last read back from the provider. A run whose sync is a month old is still a fact; saying WHEN it was read is what stops it being mistaken for a live one.', bookkeeping: true },
+      SUMMARY_FIELD,
+    ],
+  },
   // ── The paper ─────────────────────────────────────────────────────────────────
   {
     kind: 'contract',
@@ -642,6 +994,19 @@ export const FOUNDER_OBJECT_SPECS: readonly FounderObjectSpec[] = [
       { name: 'renewsAt', render: 'stat', label: 'renewsAt', hint: 'ISO renewal or expiry date — the field that makes a contract something the board can warn about. Bind a `trigger` with comparator "due-within" to be told before an auto-renewal rather than after it.', deadline: true },
       { name: 'valueAmount', render: 'stat', label: 'valueAmount', hint: MONEY_HINT },
       { name: 'obligations', render: 'rows', label: 'obligations', columns: ['obligation', 'owner', 'due'], hint: 'What this commits us to: {obligation, owner, due}. The reason to hold a contract on a board rather than in a drive.' },
+      {
+        name: 'documentBody',
+        render: 'text',
+        label: 'documentBody',
+        hint: 'The FULL text of the agreement, in markdown. This is what `canvas_request_signature` sends verbatim and what the signature record freezes — so what the card holds is what the signer sees, not a summary of it. Written by canvas_draft_legal_document from a real template; edit it here to change the terms before sending, and never send a contract whose body you have not read back to the user.',
+      },
+      {
+        name: 'templateKey',
+        render: 'stat',
+        label: 'templateKey',
+        hint: 'Which document template `documentBody` was drafted from — provenance, not resolution. A later edit to the template does not change what was signed.',
+        bookkeeping: true,
+      },
       { name: 'risks', render: 'chips', label: 'risks', hint: 'Clauses worth a second look — auto-renewal, unlimited liability, exclusivity, IP assignment.' },
       { name: 'signatureState', render: 'stat', label: 'signatureState', hint: 'unsent | sent | completed | declined | expired. Written by the sign flow over `signature_requests` — never asserted, because a signature is a recorded event with its own audit trail.', bookkeeping: true },
       { name: 'signatureRequestId', render: 'stat', label: 'signatureRequestId', hint: 'The signature_requests row this sign flow created. Written by the sign flow.', bookkeeping: true },

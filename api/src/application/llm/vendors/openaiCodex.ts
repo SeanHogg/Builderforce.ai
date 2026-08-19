@@ -1,6 +1,7 @@
 import { parseSseDataFrames } from '../sseFrames';
 import { AUTH_STATUSES, VendorFatalError, VendorRetryableError, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
 import { pseudoStreamFromCall } from './pseudoStream';
+import { peekResponsesStreamError, responsesStreamResponse } from './responsesStream';
 import { buildResponsesBody, normalizeResponsesPayload, type ResponsesPayload } from './responsesApi';
 
 const ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
@@ -117,7 +118,16 @@ async function readPayload(response: Response, model: string): Promise<Responses
   }
 }
 
-async function callResponses(params: VendorCallParams): Promise<VendorCallResult> {
+/**
+ * Issue the Codex request and classify a non-2xx answer, returning the still-unread
+ * upstream `Response`.
+ *
+ * Split out of `callResponses` so the streaming surface can consume the SAME body as
+ * a live SSE stream instead of buffering it: the request contract, the auth/entitlement
+ * classification and the failover semantics below are identical for both surfaces and
+ * must not be duplicated (they had already drifted once).
+ */
+async function codexFetch(params: VendorCallParams): Promise<Response> {
   const auth = unpack(params.apiKey);
   const sessionId = crypto.randomUUID();
   const threadId = crypto.randomUUID();
@@ -177,7 +187,34 @@ async function callResponses(params: VendorCallParams): Promise<VendorCallResult
     if (response.status === 400 || response.status === 422) throw new VendorFatalError('openai-codex', response.status, message);
     throw new VendorRetryableError('openai-codex', params.model, response.status, message);
   }
+  return response;
+}
+
+async function callResponses(params: VendorCallParams): Promise<VendorCallResult> {
+  const response = await codexFetch(params);
   return normalizeResponsesPayload(await readPayload(response, params.model));
+}
+
+/**
+ * TRUE passthrough streaming.
+ *
+ * The Codex backend already emits `response.output_text.delta` frames — this used to
+ * run `callResponses` to completion and replay the finished answer as one synthetic
+ * chunk, so a consumer waited for the whole generation before seeing a token. The
+ * request is byte-identical either way (`stream: true` is mandatory on this backend),
+ * so nothing new can fail here: only the arrival time of the first token changes.
+ *
+ * A backend that answers non-SSE (plain JSON) still works — it falls back to the
+ * shared one-shot replay.
+ */
+async function callResponsesStream(params: VendorCallParams): Promise<VendorStreamResult> {
+  const response = await codexFetch(params);
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!response.body || !contentType.includes('text/event-stream')) {
+    return pseudoStreamFromCall(normalizeResponsesPayload(await readPayload(response, params.model)), params);
+  }
+  const body = await peekResponsesStreamError(response.body, 'openai-codex', params.model);
+  return { response: responsesStreamResponse(body, params.model) };
 }
 
 export const openAiCodexModule: VendorModule = {
@@ -186,10 +223,9 @@ export const openAiCodexModule: VendorModule = {
   tierFor(): AiModelTier { return 'ULTRA'; },
   apiKeyFrom(env: VendorEnv): string | null { return env.OPENAI_CODEX_AUTH ?? null; },
   call: callResponses,
-  // The Codex backend's own SSE is Responses-shaped, not OpenAI-chat-shaped, so the
-  // completed call is replayed through the SHARED pseudo-stream adapter (which
-  // carries `usage` and `model` — the hand-rolled version here dropped both).
-  async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
-    return pseudoStreamFromCall(await callResponses(params), params);
-  },
+  // The Codex backend's own SSE is Responses-shaped, not OpenAI-chat-shaped, so it is
+  // TRANSLATED frame-by-frame by the shared `responsesStream` adapter rather than
+  // buffered and replayed. Deltas reach the consumer as they arrive; `usage` and
+  // `model` still ride the trailing chunk the client's `readUsage` expects.
+  callStream: callResponsesStream,
 };

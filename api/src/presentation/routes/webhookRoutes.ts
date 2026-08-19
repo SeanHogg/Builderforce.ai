@@ -20,6 +20,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import { recordReferralConversion } from '../../application/sales/recordReferralConversion';
 import { recordBusinessPhoneEvent } from '../../application/tenant/businessPhoneSubscription';
 import { completeListingCheckout } from '../../application/marketplace/listingCommerce';
+import { settleInvoiceCheckout } from '../../application/finance/receivables';
 
 export function createWebhookRoutes(
   tenantService: TenantService,
@@ -132,6 +133,44 @@ export function createWebhookRoutes(
           operation: 'listingPurchase',
           level: 'warning',
           context: { logMessage: '[webhook] listing grant did not apply:', details: err },
+        });
+        return c.json({ received: true, processed: false });
+      }
+    }
+
+    /**
+     * A TENANT's own invoice was paid by THEIR customer (FO-C4).
+     *
+     * The redirect back to the invoice page is the normal way this is recorded,
+     * and this is the path for the customer who paid and then closed the tab —
+     * without it they have been charged and the invoice stays open until somebody
+     * reconciles a bank statement by hand. Both routes end at
+     * `settleInvoiceCheckout`, which re-reads the session from the processor and
+     * lands on one `ledger_entries` row; the unique reference makes the second
+     * arrival a no-op rather than a second payment.
+     */
+    if (event.type === 'invoice.paid') {
+      if (!event.checkoutSessionId || !event.invoiceRef || !event.tenantId) {
+        console.warn('[webhook] invoice payment with incomplete metadata; ignoring');
+        return c.json({ received: true, processed: false });
+      }
+      try {
+        const settled = await settleInvoiceCheckout(buildDatabase(c.env as Env), c.env as Env, {
+          tenantId: event.tenantId,
+          invoiceRef: event.invoiceRef,
+          checkoutSessionId: event.checkoutSessionId,
+        });
+        return c.json({ received: true, processed: settled.applied });
+      } catch (err) {
+        // A payment the redirect already recorded is the COMMON case here, not a
+        // fault — and `applied: false` is the answer for that one, so anything
+        // reaching this branch is a genuine problem. Acknowledge anyway so the
+        // processor stops retrying, and record it.
+        reportCaughtError(err, {
+          source: 'presentation/routes/webhookRoutes.ts',
+          operation: 'invoicePaid',
+          level: 'warning',
+          context: { logMessage: '[webhook] invoice payment did not apply:', details: err },
         });
         return c.json({ received: true, processed: false });
       }

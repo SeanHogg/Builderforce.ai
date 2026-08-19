@@ -15,7 +15,7 @@
 
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { socControls } from './finopsTables';
+import { finopsSocControls } from '../../infrastructure/database/schema';
 
 export type SocControlStatus = 'implemented' | 'partial' | 'gap';
 
@@ -89,17 +89,17 @@ export function summarizeCoverage(controls: SocControl[], seeded: boolean): Cont
 export async function computeControlCoverage(db: Db, tenantId: number): Promise<ControlCoverage> {
   const rows = await db
     .select({
-      id: socControls.id,
-      controlRef: socControls.controlRef,
-      objective: socControls.objective,
-      category: socControls.category,
-      status: socControls.status,
-      owner: socControls.owner,
-      note: socControls.note,
-      lastReviewed: socControls.lastReviewed,
+      id: finopsSocControls.id,
+      controlRef: finopsSocControls.controlRef,
+      objective: finopsSocControls.objective,
+      category: finopsSocControls.category,
+      status: finopsSocControls.status,
+      owner: finopsSocControls.owner,
+      note: finopsSocControls.note,
+      lastReviewed: finopsSocControls.lastReviewed,
     })
-    .from(socControls)
-    .where(eq(socControls.tenantId, tenantId));
+    .from(finopsSocControls)
+    .where(eq(finopsSocControls.tenantId, tenantId));
 
   if (rows.length === 0) {
     const controls: SocControl[] = DEFAULT_SOC_CONTROLS.map((d) => ({

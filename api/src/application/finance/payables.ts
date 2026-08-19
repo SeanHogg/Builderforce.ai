@@ -89,7 +89,18 @@ function assertTransition(act: keyof typeof LEGAL_FROM, current: string): void {
 // Line items — one shape, two headers
 // ---------------------------------------------------------------------------
 
-export type DocumentKind = 'invoice' | 'bill';
+/**
+ * Which header a line belongs to.
+ *
+ * Three values, not two. `pay_run` was added when the per-employee lines of a pay
+ * run needed a home (`application/finance/payRuns.ts`), and it is a VALUE rather
+ * than a fourth table for the third time by the same argument the section note in
+ * the schema makes: a billed line is a description, a quantity, a unit amount and
+ * an amount, and an employee's gross for a period has no invariant that differs
+ * from a customer's. A `pay_run_line_items` table would be the per-feature copy of
+ * an existing shape §0 forbids.
+ */
+export type DocumentKind = 'invoice' | 'bill' | 'pay_run';
 
 export interface BilledLine {
   description: string;

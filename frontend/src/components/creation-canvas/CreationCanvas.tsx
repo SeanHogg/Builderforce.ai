@@ -134,11 +134,11 @@ import { screenCandidates } from '@/lib/canvasResumeScreening';
 import { guestLimitRefusal, type GuestLimitRefusal } from '@/lib/guestLimit';
 import { GuestSignupCta, type GuestSignupPrompt } from '@/components/GuestSignupCta';
 import { ApiRequestError } from '@/lib/apiClient';
-import { resolveCanvasImage, type CanvasImageResolveMode } from '@/lib/canvasImageAssets';
+import { captureCanvasScreenshot, resolveCanvasImage, type CanvasImageAsset, type CanvasImageResolveMode } from '@/lib/canvasImageAssets';
 import { evaluateModel, fetchProjects, publishSite } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { createCloudAgent, updateAgent } from '@/lib/api';
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, emptyShellProblem, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, creationPaletteGroupsFor, emptyShellProblem, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
 import { describeSocialFilter, socialApi, totalEngagement, type SocialCampaign, type SocialFeedFilter, type SocialFeedItem, type SocialNetwork } from '@/lib/socialApi';
@@ -147,7 +147,7 @@ import { canvasMediaSource, isCanvasMediaKind, resolvePublicMediaUrls } from '@/
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { analyzeDependencies, appendCanvasVideoSource, canvasGameToolRedirect, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, checkDataUse, findingFingerprint, normalizeQaSteps, CANVAS_GAME_ACCOUNT_GATE, CANVAS_GAME_TOOL, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CANVAS_SOCIAL_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, GAME_PLATFORMS, isGamePlatform, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type DependencyAnalysis, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
+import { analyzeDependencies, appendCanvasVideoSource, canvasGameToolRedirect, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, checkDataUse, findingFingerprint, normalizeQaSteps, CANVAS_GAME_ACCOUNT_GATE, CANVAS_GAME_TOOL, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CANVAS_SCREENSHOT_ACCOUNT_GATE, CANVAS_SCREENSHOT_TOOL, CANVAS_SOCIAL_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, GAME_PLATFORMS, isGamePlatform, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type DependencyAnalysis, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
 import { getStoredTenantToken } from '@/lib/auth';
 import { claimLocalDraft } from '@/lib/pendingWork';
 import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
@@ -188,7 +188,7 @@ import { dataModelDdl, dataModelMermaid } from '@/lib/canvasDataModelDdl';
 import {
   DATA_CLASSIFICATIONS, PII_CATEGORIES,
   classificationSummary, classifyTabular, contractVerdict, evaluateDataContract, inferDataContract,
-  normalizeClassifications, normalizeDataContract,
+  evaluateDatasetUse, normalizeClassifications, normalizeDataContract, normalizeUsePolicy,
 } from '@/lib/canvasDataGovernance';
 import {
   DATA_QUALITY_CHECK_KINDS, checksFromContract, dataQualityVerdict, normalizeDataQualityChecks,
@@ -215,7 +215,8 @@ import {
 } from '@/lib/canvasFileImport';
 import { uploadAttachmentSource } from '@/lib/canvasAttachmentUploadApi';
 import { importResumeFromAttachment } from '@/lib/resumeImportApi';
-import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
+import { aiContextGate, boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
+import { objectMayCross, partitionForBoundary, withheldNotice } from '@/lib/canvasConfidentiality';
 import {
   RESUME_TEMPLATES, RESUME_TEMPLATE_IDS, activeResumeRevision, createResumeFamily,
   initializeResumeFromPatch, preserveResumeSourceForPatch, renderResumeMarkdown,
@@ -287,14 +288,15 @@ import { generateFixture } from '@/lib/canvasTestData';
 import * as qaApi from '@/lib/qa/api';
 import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
 import { canvasBuildActions, type BoundCanvasBuild } from '@/lib/canvasBuildTools';
-import { canvasFounderOpsActions, type CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
+import { canvasFounderOpsActions, pipelineFieldsFrom, type CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
+import { canvasEquityActions } from '@/lib/canvasEquityTools';
 import { canvasLegalDocumentActions } from '@/lib/canvasLegalDocumentTools';
 import { canvasSellMotionActions } from '@/lib/canvasSellMotionTools';
 import { canvasSignatureActions } from '@/lib/canvasSignatureTools';
-import { sendInvestorUpdate } from '@/lib/founderOpsApi';
+import { chaseInvoice, draftInvoice, issueInvoice, moveDeal as moveDealOnBoard, recordInvoicePayment, sendInvestorUpdate } from '@/lib/founderOpsApi';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
 import { canvasWebPageUrl, normalizeWebPageUrl, webPageHost } from '@/lib/canvasWebPage';
-import { canvasViewport } from '@/lib/canvasViewport';
+import { CANVAS_VIEWPORTS, canvasViewport, websiteBeforePatch } from '@builderforce/creation-canvas-contract';
 import { deleteIdeProject, listIdeProjects } from '@/lib/api';
 import { CREATIVE_GENERATOR_KINDS } from '@/lib/creationObjectGroups';
 import {
@@ -462,6 +464,18 @@ const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly stri
   // cannot fire it: what changed is that a human who approves it now gets a send
   // instead of "no delivery adapter is connected".
   investorUpdate: ['send'],
+  // The receivable's three acts (FO-C2). They were advertised by the spec, named
+  // by the approval gate as irreversible or attested, and answered "no delivery
+  // adapter is connected" for every one of them — the same state the three BILL
+  // acts were in before 0469. `issue` freezes the figures, mints the customer's
+  // own link, prices the way to pay it against this workspace's merchant account
+  // and sends it; `record-payment` lands a receipt on the ledger idempotently;
+  // `chase` climbs one rung of the collections ladder through the SAME function
+  // the nightly sweep uses, so there is one collections history and not two.
+  invoice: ['issue', 'record-payment', 'chase'],
+  // Read the runs a connected payroll provider actually ran. `sync` and not `run`:
+  // this platform must never calculate a salary — see the kind's own note.
+  payRun: ['sync'],
   // The assessment cycle. `distribute` fans an assignment into one `submission` per
   // roster row; `compute` surfaces the gradebook's already-live derivation as a
   // reported figure; `mark` applies the rubric to a submission's authored
@@ -480,6 +494,12 @@ const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly stri
   // asserts nothing new. `policy.acknowledge` is open: sending a roster its own
   // reviewer a nudge to sign is reversible and not attested.
   contract: ['sign'], policy: ['acknowledge'], offer: ['send', 'sign'], dataRoom: ['share'],
+  // FO-D1..FO-D4: the ownership acts, each of which reaches the real ledger.
+  // `capTable.sync` FOLDS it onto the card and `model` prices a round against it;
+  // `equityGrant.issue` and `convertible.record` WRITE it, and both stay GATED in
+  // `canvasApprovalGate` — what changed is that a human who approves either now
+  // gets a real event instead of a number typed onto a card.
+  capTable: ['sync', 'model'], equityGrant: ['issue', 'sync'], convertible: ['record', 'model'],
 };
 const WEBSITE_SECTION_SCHEMA = {
   type: 'object', required: ['id', 'kind'], additionalProperties: false,
@@ -2605,6 +2625,37 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
   }, [cardsEditable, setNodes, syncSocialCampaign]);
 
+  /**
+   * A deal dragged into another stage, on the card.
+   *
+   * The gesture FO-F1 named itself after and could not perform: every piece was in
+   * place — each projected card carries its `dealId`, and ONE call both moves the
+   * deal and returns the redrawn board — and the renderer had no drag handler, so
+   * the move was reachable through the MODEL and not through a pointer.
+   *
+   * Deliberately NOT `updateNodeData`: this is not a patch to the card, it is a
+   * write to the DEAL followed by a redraw from that same response. Which is also
+   * why there is no optimistic reorder — the board that comes back is the board,
+   * and painting a guess first would reintroduce, for a few hundred milliseconds,
+   * exactly the "the card says one thing and the CRM says another" the projection
+   * exists to remove. A refusal (a stage the tenant retired, a deal somebody else
+   * closed) leaves the card where it was and says why.
+   */
+  const moveDealFromNode = useCallback((nodeId: string, dealId: number, stage: string) => {
+    if (!cardsEditable) return;
+    noteSaveState(t('noticeMovingDeal'));
+    void moveDealOnBoard(dealId, stage)
+      .then((pipeline) => {
+        setNodes((current) => current.map((node) => node.id === nodeId
+          ? { ...node, data: { ...node.data, ...pipelineFieldsFrom(pipeline) } }
+          : node));
+        setNotice(t('noticeDealMoved', { stage }));
+      })
+      .catch((error: unknown) => {
+        setNotice(error instanceof Error ? error.message : t('noticeDealNotMoved'));
+      });
+  }, [cardsEditable, setNodes, t]);
+
   /* Takes the node it resizes rather than reading the selection: the panel that offers
      this is anchored to ONE card, and "whichever card is selected" is exactly the
      ambiguity anchoring the panel removed. */
@@ -4288,6 +4339,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }), [canEdit, persistence, sessionId]);
 
   const canvasFounderOpsActionList = useMemo<BrainAction[]>(() => canvasFounderOpsActions(canvasOpsContext), [canvasOpsContext]);
+  /** Ownership — fold the cap table, record a grant or a convertible, append a ledger
+   *  event, model a round. See `canvasEquityTools.ts` for why there is deliberately no
+   *  tool that WRITES a cap table. */
+  const canvasEquityActionList = useMemo<BrainAction[]>(() => canvasEquityActions(canvasOpsContext), [canvasOpsContext]);
   /** The secure legal-document vocabulary — share, revoke, request signature, sync.
    *  See `canvasLegalDocumentTools.ts` for why these are dedicated tools rather than
    *  routed through `canvas_invoke_object_action`. */
@@ -4300,6 +4355,82 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    *  a trial, hand the board off, and drive a cadence. See `canvasSellMotionTools.ts` for
    *  why none of them can accept a quote. */
   const canvasSellMotionActionList = useMemo<BrainAction[]>(() => canvasSellMotionActions(canvasOpsContext), [canvasOpsContext]);
+
+  /**
+   * Stage ONE resolved image asset as an `image` object — the single place a picture
+   * becomes a canvas node.
+   *
+   * Extracted when live-page CAPTURE arrived. `canvas_add_image` had authored this
+   * inline: the node, the mime/extension sniff, the download name, the deliverable
+   * ledger entry and the proposal label, ~35 lines of it. `canvas_capture_screenshot`
+   * needs every one of those to be identical — a captured "before" that lands with no
+   * deliverable is a picture the export, the print document and the marketplace listing
+   * all silently drop — so the choice was one helper or two copies that drift.
+   *
+   * Source is DATA here rather than a branch at each call site: `stock`, `ai` and
+   * `capture` differ only in what they put in the subtitle, the status and the
+   * validation note.
+   */
+  const stageImageAsset = (
+    asset: CanvasImageAsset,
+    options: { title: string; prompt?: string; at?: { x?: number; y?: number } },
+  ): CreationFlowNode => {
+    const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+    const node = newNode('image', nextCanvasObjectPosition([...nodes, ...stagedNodes], options.at ?? {}, typeof window !== 'undefined' && window.innerWidth <= 760, 'image'));
+    const mimeType = asset.url.startsWith('data:image/png') || /\.png(?:$|[?#])/i.test(asset.url) ? 'image/png'
+      : asset.url.startsWith('data:image/webp') || /\.webp(?:$|[?#])/i.test(asset.url) ? 'image/webp' : 'image/jpeg';
+    const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+    const delivered: CreationDeliverable = {
+      id: crypto.randomUUID(),
+      action: asset.source === 'stock' ? 'find' : asset.source === 'capture' ? 'capture' : 'generate',
+      artifactKind: 'image',
+      status: 'delivered', createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+      url: asset.url, mimeType, fileName: `${safeDownloadName(options.title)}.${extension}`, provider: asset.provider,
+      validation: {
+        status: 'passed',
+        detail: asset.source === 'stock' ? t('imageFoundValidation', { provider: asset.licence ?? asset.provider })
+          : asset.source === 'capture' ? t('imageCapturedValidation', { url: asset.capturedUrl ?? '' })
+          : t('imageGeneratedValidation'),
+      },
+      metadata: { source: asset.source, ...(asset.model ? { model: asset.model } : {}) },
+    };
+    node.data = {
+      ...node.data,
+      title: options.title,
+      subtitle: asset.source === 'stock' ? `${asset.licence ?? asset.provider}${asset.author ? ` · ${asset.author}` : ''}`
+        : asset.source === 'capture' ? (asset.capturedUrl ?? '')
+        : (options.prompt ?? ''),
+      status: asset.source === 'stock' ? t('imageFoundStatus')
+        : asset.source === 'capture' ? t('imageCapturedStatus')
+        : t('creativeGeneratedStatus'),
+      ...(options.prompt ? { prompt: options.prompt } : {}),
+      outputUrl: asset.url,
+      thumbnailUrl: asset.thumbnailUrl,
+      outputFormat: 'Image',
+      outputFileName: delivered.fileName,
+      outputMimeType: mimeType,
+      provider: asset.provider,
+      ...(asset.model ? { model: asset.model } : {}),
+      ...(asset.width ? { imageWidth: asset.width } : {}),
+      ...(asset.height ? { imageHeight: asset.height } : {}),
+      imageSource: asset.source,
+      imageLicence: asset.licence,
+      imageAuthor: asset.author,
+      imageAuthorUrl: asset.authorUrl,
+      // A capture is EVIDENCE, so it carries what it is of and when. Without these the
+      // board holds a screenshot nobody can date or attribute to a page.
+      ...(asset.capturedUrl ? { capturedUrl: asset.capturedUrl, url: asset.capturedUrl } : {}),
+      ...(asset.capturedAt ? { capturedAt: asset.capturedAt } : {}),
+      ...(asset.capturedViewport ? { viewport: asset.capturedViewport } : {}),
+      deliverables: withCreationDeliverable(node.data, delivered),
+    };
+    node.style = { width: 520, height: 430 };
+    proposalBuffer.current.push({
+      id: crypto.randomUUID(), type: 'object.add', node,
+      label: t(asset.source === 'stock' ? 'imageFoundProposal' : asset.source === 'capture' ? 'imageCapturedProposal' : 'imageGeneratedProposal', { title: node.data.title }),
+    });
+    return node;
+  };
 
   const canvasActions = useMemo<BrainAction[]>(() => ([{
     name: 'canvas_prepare_executive_use_case',
@@ -5144,12 +5275,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // an explicit request to leave the scope, so it now does.
     description: 'Read every object and relationship on the creation canvas — the WHOLE board, regardless of what the user has selected. Use this whenever you are about to say something is not on the canvas.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
-    run: () => ({
+    run: () => {
+      // "Every object" means every object the reader is CLEARED for. The withheld ones
+      // still reach the model as inventory rows, so the promise this tool exists to keep
+      // — never claim something is absent — survives the gate.
+      const gate = aiContextGate(nodes);
+      return {
       scope: resolvedScopeMode,
       scopeNote: scopeNote('canvas', nodes.length, nodes.length),
-      objects: ((board) => nodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data, board), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true, inScope: scopedNodeIds.has(node.id) }; }))(specBoardOf(nodes)),
+      ...(gate.note ? { confidentialityNote: gate.note } : {}),
+      boardInventory: boardInventory(nodes, scopedNodeIds),
+      objects: ((board) => gate.visible.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data, board), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true, inScope: scopedNodeIds.has(node.id) }; }))(specBoardOf(nodes)),
       connections: edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
-    }),
+      };
+    },
   }, {
     // The lookup the scope note points at. Named rather than positional because
     // the reported failure was a NAME miss (`.htm` vs `.html`), and a model that
@@ -5176,6 +5315,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }
       const node = nodes.find((candidate) => candidate.id === match.id);
       if (!node) return { found: false, boardInventory: inventory };
+      // The object is HERE and you may not read it. Saying so plainly is the whole
+      // point: a refusal that looked like a miss would send the model back to
+      // "upload it again", which is the failure this tool was built to end.
+      if (!objectMayCross(node, 'aiContext')) {
+        return {
+          found: true, restricted: true, object: { id: node.id, kind: node.data.kind, title: node.data.title || '(untitled)' },
+          message: 'This object is on the canvas and is marked restricted, so its contents are withheld from you. Do NOT say it is missing and do NOT ask the user to upload it. Tell them it is marked restricted and that they can change its confidentiality on the card if they want it discussed.',
+        };
+      }
       const definition = creationObjectDefinition(node.data.kind);
       return {
         found: true,
@@ -7326,45 +7474,88 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!query || !mode) return { error: 'Pass an image query and mode (find, generate, or auto)' };
       try {
         const asset = await resolveCanvasImage(query, mode);
-        const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
-        const node = newNode('image', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, typeof window !== 'undefined' && window.innerWidth <= 760, 'image'));
         const imageTitle = typeof args.title === 'string' && args.title.trim() ? args.title.trim().slice(0, 160) : query.slice(0, 80);
-        const mimeType = asset.url.startsWith('data:image/png') || /\.png(?:$|[?#])/i.test(asset.url) ? 'image/png'
-          : /\.webp(?:$|[?#])/i.test(asset.url) ? 'image/webp' : 'image/jpeg';
-        const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
-        const delivered: CreationDeliverable = {
-          id: crypto.randomUUID(), action: asset.source === 'stock' ? 'find' : 'generate', artifactKind: 'image',
-          status: 'delivered', createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
-          url: asset.url, mimeType, fileName: `${safeDownloadName(imageTitle)}.${extension}`, provider: asset.provider,
-          validation: { status: 'passed', detail: asset.source === 'stock' ? t('imageFoundValidation', { provider: asset.licence ?? asset.provider }) : t('imageGeneratedValidation') },
-          metadata: { source: asset.source, ...(asset.model ? { model: asset.model } : {}) },
-        };
-        node.data = {
-          ...node.data,
-          title: imageTitle,
-          subtitle: asset.source === 'stock' ? `${asset.licence ?? asset.provider}${asset.author ? ` · ${asset.author}` : ''}` : query,
-          status: asset.source === 'stock' ? t('imageFoundStatus') : t('creativeGeneratedStatus'),
-          prompt: query,
-          outputUrl: asset.url,
-          thumbnailUrl: asset.thumbnailUrl,
-          outputFormat: 'Image',
-          outputFileName: delivered.fileName,
-          outputMimeType: mimeType,
-          provider: asset.provider,
-          ...(asset.model ? { model: asset.model } : {}),
-          ...(asset.width ? { imageWidth: asset.width } : {}),
-          ...(asset.height ? { imageHeight: asset.height } : {}),
-          imageSource: asset.source,
-          imageLicence: asset.licence,
-          imageAuthor: asset.author,
-          imageAuthorUrl: asset.authorUrl,
-          deliverables: withCreationDeliverable(node.data, delivered),
-        };
-        node.style = { width: 520, height: 430 };
-        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: t(asset.source === 'stock' ? 'imageFoundProposal' : 'imageGeneratedProposal', { title: node.data.title }), node });
+        const node = stageImageAsset(asset, { title: imageTitle, prompt: query, at: args });
         return { ok: true, proposed: true, object: { id: node.id, kind: 'image', title: node.data.title }, source: asset.source, provider: asset.provider, imageUrl: asset.url };
       } catch (error) {
         return { error: error instanceof Error ? error.message : 'The image could not be resolved' };
+      }
+    },
+  }, {
+    name: CANVAS_SCREENSHOT_TOOL,
+    description: 'Photograph a LIVE web page and put the real screenshot on the Canvas. A real browser renders the page server-side, so this works on any public URL and on JS-rendered sites. ALWAYS use this for "screenshot", "show me the current site", "what does it look like now", or the BEFORE half of any redesign, audit or comparison — never say you cannot browse the web visually, cannot see a website, or cannot take screenshots. To build a before-and-after, capture the live page with compareWithObjectId set to the website or prototype object holding the new design: the capture is attached to that object as its "before" and the site opens on a side-by-side comparison. Without compareWithObjectId the screenshot lands as its own image object.',
+    parameters: {
+      type: 'object', required: ['url'], additionalProperties: false,
+      properties: {
+        url: { type: 'string', description: 'Absolute http(s) URL of the page to photograph.' },
+        compareWithObjectId: { type: 'string', description: 'Id of the website or prototype object this page is the BEFORE of. Attaches the capture to that design instead of creating a separate image object.' },
+        viewport: { type: 'string', enum: [...CANVAS_VIEWPORTS], description: 'Device width to render at. Use the same one the new design is being judged at.' },
+        fullPage: { type: 'boolean', description: 'Capture the whole scrollable page rather than the first screen. Default false.' },
+        title: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      // Gated on CREDENTIALS at CALL time, exactly like `canvas_add_image` and for the
+      // same reason: the renderer is a real browser on the server, so a signed-in user
+      // on an unsaved board gets real pixels, and a guest gets a true one-sentence
+      // reason instead of the invented one this tool exists to stop.
+      if (!getStoredTenantToken()) {
+        requireAccount('image', t('gateScreenshotTitle'), t('gateScreenshotBody'));
+        return accountGateResult(CANVAS_SCREENSHOT_TOOL, CANVAS_SCREENSHOT_ACCOUNT_GATE);
+      }
+      const args = raw as { url?: string; compareWithObjectId?: string; viewport?: string; fullPage?: boolean; title?: string; x?: number; y?: number };
+      const url = typeof args.url === 'string' ? args.url.trim().slice(0, 2_000) : '';
+      if (!url) return { error: 'Pass the absolute http(s) URL of the page to capture' };
+      const viewport = canvasViewport(args.viewport);
+
+      // Resolve the comparison target BEFORE spending a render: attaching a "before" to
+      // an object that is not a site is a silent no-op the model would report as done.
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const targetId = typeof args.compareWithObjectId === 'string' ? args.compareWithObjectId.trim() : '';
+      const target = targetId ? [...nodes, ...stagedNodes].find((node) => node.id === targetId) : undefined;
+      if (targetId && !target) return { error: `No object with id ${targetId} is on this canvas` };
+      if (target && target.data.kind !== 'website' && target.data.kind !== 'prototype') {
+        return { error: `A before/after comparison belongs to a website or prototype object; ${targetId} is a "${target.data.kind}". Capture without compareWithObjectId to add the screenshot as its own image object.` };
+      }
+
+      try {
+        const asset = await captureCanvasScreenshot(url, viewport, args.fullPage === true);
+        if (target) {
+          const patch = websiteBeforePatch({
+            url: asset.capturedUrl ?? url,
+            imageUrl: asset.url,
+            ...(asset.capturedAt ? { capturedAt: asset.capturedAt } : {}),
+            viewport: asset.capturedViewport ?? viewport,
+            ...(asset.width ? { width: asset.width } : {}),
+            ...(asset.height ? { height: asset.height } : {}),
+          });
+          proposalBuffer.current.push({
+            id: crypto.randomUUID(), type: 'object.update', objectId: target.id,
+            label: t('screenshotComparisonProposal', { title: target.data.title }),
+            patch: patch as Partial<CreationNodeData>,
+          });
+          return {
+            ok: true, proposed: true, comparison: true,
+            object: { id: target.id, kind: target.data.kind, title: target.data.title },
+            capturedUrl: asset.capturedUrl ?? url, capturedAt: asset.capturedAt, viewport,
+            note: `The capture is attached as this design's "before". Open the site object to read them side by side.`,
+          };
+        }
+        const captureTitle = typeof args.title === 'string' && args.title.trim()
+          ? args.title.trim().slice(0, 160)
+          : t('screenshotDefaultTitle', { host: webPageHost(asset.capturedUrl ?? url) });
+        const node = stageImageAsset(asset, { title: captureTitle, at: args });
+        return {
+          ok: true, proposed: true, object: { id: node.id, kind: 'image', title: node.data.title },
+          source: asset.source, provider: asset.provider, capturedUrl: asset.capturedUrl ?? url, capturedAt: asset.capturedAt,
+        };
+      } catch (error) {
+        // The service's message names the REAL reason (unconfigured / timed out / too
+        // large). Relaying it verbatim is the entire contract — a generic failure is
+        // what sends the model back to inventing a limitation of its own.
+        return { error: error instanceof Error ? error.message : 'The page could not be captured' };
       }
     },
   }, {
@@ -8180,8 +8371,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(projectId == null ? { note: 'Published without a project. Add a project object to the canvas to file these under it, which is what gives them a run target and a persona.' } : {}),
       };
     },
-  }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasLegalDocumentActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [canEdit, canvasBuildActionList, canvasFounderOpsActionList, canvasLegalDocumentActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
+  }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasEquityActionList, ...canvasLegalDocumentActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
+  [canEdit, canvasBuildActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasLegalDocumentActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -8295,6 +8486,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, trace: [] } } : node));
       setProposedChanges([]);
       const request = requestText;
+      // Restricted objects are stripped of DETAIL here and keep their inventory row —
+      // see `aiContextGate` for why withholding is not the same as hiding.
+      const aiGate = aiContextGate(scopedNodes);
       const snapshot = JSON.stringify({
         sessionId, scope: resolvedScopeMode, selectedObjectIds: effectiveSelectedIds,
         // A scoped turn used to send ONLY the scoped objects, with nothing saying
@@ -8304,7 +8498,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // complete, so an absence claim is never available to be made.
         scopeNote: scopeNote(resolvedScopeMode, nodes.length, scopedNodes.length),
         boardInventory: boardInventory(nodes, scopedNodeIds),
-        objects: ((board) => scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data, board), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }))(specBoardOf(nodes)),
+        ...(aiGate.note ? { confidentialityNote: aiGate.note } : {}),
+        objects: ((board) => aiGate.visible.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data, board), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }))(specBoardOf(nodes)),
         connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
       });
       clearComposer();
@@ -9236,6 +9431,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const exportArtifact = useCallback(async (nodeId: string, action: CanvasExportAction): Promise<string> => {
     const target = nodes.find((node) => node.id === nodeId);
     if (!target) return t('exportFailed');
+    // THE enforcement point for the export boundary. The button row hides the formats
+    // for a restricted card, but the AI tool path and the drag-to-desktop path call this
+    // directly with `defaultExportAction`, so the refusal has to live where the bytes are
+    // written rather than where the buttons are drawn.
+    if (!objectMayCross(target, 'export')) return t('exportRestricted');
+    // The second gate, and a different question: confidentiality asks whether this CARD
+    // may leave, the use policy asks whether these ROWS may be used this way. A dataset
+    // classified as personal data and collected for one purpose does not become
+    // exportable because somebody with edit rights clicked Download — the classification
+    // has to be able to refuse, or it is documentation rather than governance.
+    const useGate = evaluateDatasetUse('export', normalizeClassifications(target.data.classifications), normalizeUsePolicy(target.data.usePolicy));
+    if (!useGate.allowed) { setNotice(useGate.reason ?? t('exportRestricted')); return useGate.reason ?? t('exportRestricted'); }
     const markdown = canvasObjectMarkdown(target.data);
     const base = safeDownloadName(target.data.title);
     try {
@@ -9498,6 +9705,114 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [persistence, setNodes, t]);
 
   /**
+   * THE receivable's three acts, on the card (FO-C2).
+   *
+   * ── WHY THE CARD IS MATERIALISED FIRST ──────────────────────────────────────
+   * A canvas `invoice` is authored, not created through a form, so the row it
+   * refers to may not exist when somebody clicks Issue. `draftInvoice` upserts it
+   * from the card's own fields keyed on the invoice number, and only then does the
+   * act run. That is deliberate rather than convenient: the ACT is what makes the
+   * record, so there is no window in which a board shows an issued invoice that
+   * the ledger has never heard of.
+   *
+   * ── WHY THE RESULT IS STAMPED BACK ──────────────────────────────────────────
+   * `issuedAt`, `dueAt`, `paymentLink` and `status` all come back from the server
+   * and are written onto the card in the same turn. The register's complaint about
+   * an act that ends at a card applies just as well to an act that ends at a
+   * toast: without this, the only trace that an invoice was issued is a notice the
+   * user is about to dismiss.
+   */
+  const runInvoiceAction = useCallback(async (objectId: string, action: string) => {
+    const target = nodesRef.current.find((node) => node.id === objectId && node.data.kind === 'invoice');
+    if (!target) return;
+    if (persistence !== 'server') { setNotice(t('noticeInvoiceNeedsAccount')); return; }
+
+    const data = target.data as Record<string, unknown>;
+    const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+    const reference = text(data.invoiceNumber) || text(data.title);
+    const customerName = text(data.customer) || text(data.counterpartyAccount);
+    const amount = Number(data.amount);
+    if (!reference || !customerName || !Number.isFinite(amount)) {
+      setNotice(t('noticeInvoiceIncomplete'));
+      return;
+    }
+
+    const stamp = (patch: Record<string, unknown>) => setNodes((current) => current.map((node) => (
+      node.id === objectId ? { ...node, data: { ...node.data, ...patch } } : node
+    )));
+
+    try {
+      // Always re-drafted before an act: the card is the authoring surface, and a
+      // figure edited on it after the row was written must reach the row before
+      // anything is frozen. `draftInvoice` refuses once the invoice is issued, so
+      // this is a no-op on the two acts that follow issuing.
+      if (action === 'issue') {
+        await draftInvoice({
+          reference,
+          customerName,
+          customerRef: text(data.counterpartyAccount) || null,
+          amount,
+          ...(text(data.currency) ? { currency: text(data.currency) } : {}),
+          dueAt: text(data.dueAt) || null,
+          notes: text(data.summary) || null,
+          ...(text(data.collectionMode) ? { collectionMode: text(data.collectionMode) } : {}),
+          lines: (Array.isArray(data.lineItems) ? data.lineItems : []).flatMap((row) => {
+            const line = row as { description?: unknown; quantity?: unknown; unitPrice?: unknown; amount?: unknown };
+            const unitAmount = Number(line.unitPrice);
+            if (!text(line.description) || !Number.isFinite(unitAmount)) return [];
+            return [{
+              description: text(line.description),
+              quantity: Number.isFinite(Number(line.quantity)) ? Number(line.quantity) : 1,
+              unitAmount,
+              ...(Number.isFinite(Number(line.amount)) ? { amount: Number(line.amount) } : {}),
+            }];
+          }),
+        });
+
+        const issued = await issueInvoice(reference, {
+          deliverTo: text(data.customerEmail) || null,
+          dueAt: text(data.dueAt) || null,
+        });
+        stamp({
+          status: 'issued',
+          issuedAt: issued.issuedAtISO.slice(0, 10),
+          ...(issued.dueAtISO ? { dueAt: issued.dueAtISO.slice(0, 10) } : {}),
+          ...(issued.paymentLinkUrl ? { paymentLink: issued.paymentLinkUrl } : {}),
+        });
+        setNotice(issued.deliveredTo
+          ? t('noticeInvoiceIssuedSent', { reference, to: issued.deliveredTo })
+          : t('noticeInvoiceIssued', { reference }));
+        return;
+      }
+
+      if (action === 'record-payment') {
+        const paid = Number(data.paidAmount);
+        const outstanding = amount - (Number.isFinite(paid) ? paid : 0);
+        if (!(outstanding > 0)) { setNotice(t('noticeInvoiceNothingOutstanding')); return; }
+        const recorded = await recordInvoicePayment(reference, {
+          amount: outstanding,
+          // Stable per (invoice, amount), so a double-click is one payment — the
+          // server's unique ledger reference is what actually enforces it.
+          externalRef: `canvas:${reference}:${outstanding.toFixed(2)}`,
+          method: 'bank',
+        });
+        stamp({ status: recorded.status, paidAmount: recorded.paidAmount });
+        setNotice(recorded.applied
+          ? t('noticeInvoicePaymentRecorded', { reference, outstanding: recorded.outstanding })
+          : t('noticeInvoicePaymentAlreadyRecorded', { reference }));
+        return;
+      }
+
+      const chased = await chaseInvoice(reference, { deliverTo: text(data.customerEmail) || null });
+      setNotice(chased.deliveredTo
+        ? t('noticeInvoiceChased', { reference, to: chased.deliveredTo })
+        : t('noticeInvoiceChaseNoRecipient', { reference }));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : t('noticeInvoiceActionFailed'));
+    }
+  }, [persistence, setNodes, t]);
+
+  /**
    * `assignment.distribute` — fan the task into one `submission` per roster row.
    *
    * Idempotent by construction: a learner who already has a submission for this
@@ -9745,6 +10060,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else if (target.data.kind === 'evermind' && pending.action === 'evaluate') evaluateEvermind(target.id);
     else if (target.data.kind === 'testPlan' && pending.action === 'gate') evaluateReleaseGate(target.id);
     else if (target.data.kind === 'investorUpdate' && pending.action === 'send') void sendUpdateToInvestors(target.id);
+    // The receivable's three acts. Routed BEFORE the generic `export` branch
+    // below, which would otherwise never see them but reads better next to the
+    // other founder-operations acts.
+    else if (target.data.kind === 'invoice' && ['issue', 'record-payment', 'chase'].includes(pending.action)) {
+      void runInvoiceAction(target.id, pending.action);
+    }
+    // A `payRun` refreshes itself through the canvas tool that hydrates it, so
+    // there is exactly one path from a provider's records to this card.
+    else if (target.data.kind === 'payRun' && pending.action === 'sync') setNotice(t('noticePayRunSync'));
     else if (target.data.kind === 'assignment' && pending.action === 'distribute') distributeAssignment(target.id);
     else if (target.data.kind === 'cohort' && pending.action === 'import') void importCohortRosterFromLti(target.id);
     else if (target.data.kind === 'gradebook' && pending.action === 'compute') computeGradebook(target.id);
@@ -9761,7 +10085,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('noticeNoDeliveryAdapter', { action: pending.action, kind: creationObjectDefinition(target.data.kind).label }));
     }
     finish();
-  }, [compareProjects, compileWorkflow, computeGradebook, convertObjectToDiagram, deliverMockup, distributeAssignment, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, importCohortRosterFromLti, importReferencesFromDocument, markSubmission, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, sendUpdateToInvestors, setEdges, setNodes, startStandup, validateCurriculumMap, visualizeDataset]);
+  }, [compareProjects, compileWorkflow, computeGradebook, convertObjectToDiagram, deliverMockup, distributeAssignment, evaluateEvermind, evaluateReleaseGate, expandMockupSet, expandProject, exportArtifact, generateVideo, importCohortRosterFromLti, importReferencesFromDocument, markSubmission, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runInvoiceAction, runWorkflow, selectedId, sendUpdateToInvestors, setEdges, setNodes, startStandup, t, validateCurriculumMap, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
@@ -10088,13 +10412,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} onOpenSurface={(nodeId, surface) => setSurface(surface, nodeId)} onRevealObject={revealObject} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} onOpenSurface={(nodeId, surface) => setSurface(surface, nodeId)} onRevealObject={revealObject} {...(cardsEditable ? { onEditData: updateNodeData, onMoveDeal: moveDealFromNode } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       // Asking for a specific section (knowledge, test, evaluation, delivery) is asking
       // for the WIDE panel directly — the short one has no such section to scroll to.
       setSelectedId(nodeId); setSelectedIds([nodeId]); openNodeInspector(nodeId, focus || null);
     }} />,
-  }), [canRun, cardsEditable, exportFromNode, openBuiltinAgentSurfaceFromNode, openInsertPicker, openNodeInspector, openNodePanel, runWorkflowFromNode, setSurface, updateNodeData]);
+  }), [canRun, cardsEditable, exportFromNode, moveDealFromNode, openBuiltinAgentSurfaceFromNode, openInsertPicker, openNodeInspector, openNodePanel, runWorkflowFromNode, setSurface, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     // Objects are passed WHOLE: the report decides which fields explain whether
@@ -11191,7 +11515,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {!presentMode && paletteOpen && <aside id="canvas-object-palette" data-testid="canvas-palette" className={styles.palette}>
           <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label={t('closePalette')}>×</button></div>
           <div className={styles.paletteSearchWrap}><span aria-hidden><Icon source="⌕" size="1em" /></span><input ref={paletteSearchRef} data-testid="canvas-palette-search" className={styles.search} aria-label={t('searchObjectTypes')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchObjectTypes')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
-          <div className={styles.paletteSections}>{CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${t(`group.${item.group}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
+          <div className={styles.paletteSections}>{creationPaletteGroupsFor(persistence === 'server').map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${t(`group.${item.group}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
             const collapsed = !paletteSearch.trim() && collapsedPaletteGroups.has(group.group);
             const regionId = `canvas-palette-${group.group.toLowerCase()}`;
             return <section key={group.group} className={styles.paletteSection}>

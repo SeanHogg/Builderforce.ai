@@ -33,6 +33,7 @@ deployment_events
 dev_team_members
 drive_connections
 email_preferences
+equity_events
 error_collector_integrations
 error_events
 execution_messages

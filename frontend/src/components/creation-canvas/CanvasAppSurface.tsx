@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { CodeReadingIcon, ConsoleReadingIcon, PreviewReadingIcon } from '@/components/canvas/CanvasCommands';
 import { CANVAS_APP_FRAME_SANDBOX, canvasApp, type CanvasAppFile } from '@/lib/canvasApp';
-import type { CanvasViewport } from '@/lib/canvasViewport';
+import type { CanvasViewport } from '@builderforce/creation-canvas-contract';
 import { CanvasDeviceFrame } from './CanvasDeviceFrame';
 import { CanvasViewportSwitcher } from './CanvasViewportSwitcher';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';

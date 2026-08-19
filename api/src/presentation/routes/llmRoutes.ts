@@ -121,6 +121,7 @@ import {
   buildOpenAICodexAuthorizeUrl,
   parseOpenAICodexCallback,
   exchangeOpenAICodexCode,
+  OPENAI_CODEX_CODE_CONSUMED,
 } from '../../application/llm/openaiCodexOAuth';
 import { buildXaiAuthorizeUrl, parseXaiCallback, exchangeXaiCode } from '../../application/llm/xaiOAuth';
 import { parseAnthropicSseUsage } from '../../application/llm/anthropicSseUsage';
@@ -1697,7 +1698,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       });
       return c.json({ ok: true, provider: 'openai', authType: 'oauth' });
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : 'OAuth exchange failed', code: 'oauth_exchange_failed' }, 502);
+      // A code the local Codex CLI already redeemed is the user's problem to fix
+      // (quit the CLI, reconnect) — a 400 with its own code, not a 502 that reads
+      // like our gateway or OpenAI is down. See OPENAI_CODEX_CODE_CONSUMED.
+      const spent = (e as { code?: string } | null)?.code === OPENAI_CODEX_CODE_CONSUMED;
+      return c.json(
+        { error: e instanceof Error ? e.message : 'OAuth exchange failed', code: spent ? OPENAI_CODEX_CODE_CONSUMED : 'oauth_exchange_failed' },
+        spent ? 400 : 502,
+      );
     }
   });
 

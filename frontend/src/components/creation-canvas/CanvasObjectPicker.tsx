@@ -3,7 +3,8 @@ import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { SearchPicker, type SearchPickerSection } from '@/components/ui/SearchPicker';
 import type { CreationObjectGroup, CreationObjectKind } from './types';
-import { CREATION_PALETTE_GROUPS } from './creationObjectRegistry';
+import { useAuth } from '@/lib/AuthContext';
+import { creationPaletteGroupsFor } from './creationObjectRegistry';
 import styles from './CreationCanvas.module.css';
 
 /**
@@ -55,9 +56,15 @@ const PICKER_CLASS_NAMES = {
 export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose }: CanvasObjectPickerProps) {
   const t = useTranslations('creationCanvas');
   const tPicker = useTranslations('creationCanvas.picker');
+  // The picker decides its own contents rather than being handed a boolean: a signed-out
+  // board has no access control, so it does not advertise the restricted-by-default
+  // kinds. `authReady` guards the first hydrated frame, where `isAuthenticated` is
+  // unavoidably false for everyone and would briefly hide those kinds from a member.
+  const { isAuthenticated, authReady } = useAuth();
+  const signedIn = !authReady || isAuthenticated;
 
   const sections = useMemo<SearchPickerSection<CreationObjectKind>[]>(
-    () => CREATION_PALETTE_GROUPS.map((entry) => ({
+    () => creationPaletteGroupsFor(signedIn).map((entry) => ({
       key: entry.group,
       label: t(`group.${entry.group}` as 'group.Build'),
       items: entry.items.map((item) => ({
@@ -67,7 +74,7 @@ export function CanvasObjectPicker({ anchor, group, fromNodeId, onPick, onClose 
         description: t(`objectDescription.${item.kind}` as 'objectDescription.note'),
       })),
     })),
-    [t],
+    [t, signedIn],
   );
 
   return (

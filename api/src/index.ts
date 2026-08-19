@@ -147,7 +147,10 @@ import { resolvePublicResume } from './application/creation/publicResumeProjecti
 import { createFormRoutes, createPublicFormRoutes } from './presentation/routes/formRoutes';
 import { createSignatureRoutes, createPublicSignatureRoutes } from './presentation/routes/signatureRoutes';
 import { createLegalDocumentRoutes, createPublicLegalDocumentRoutes } from './presentation/routes/legalDocumentRoutes';
-import { createPayableRoutes } from './presentation/routes/payableRoutes';
+import { createDataRoomRoutes, createPublicDataRoomRoutes } from './presentation/routes/dataRoomRoutes';
+import { createDocumentTemplateRoutes } from './presentation/routes/documentTemplateRoutes';
+import { createPayableRoutes, createPublicInvoiceRoutes } from './presentation/routes/payableRoutes';
+import { createEquityRoutes } from './presentation/routes/equityRoutes';
 import {
   createCofounderRoutes,
   createInvestorUpdateRoutes,
@@ -832,16 +835,30 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // what makes a demo something you hand over rather than something you screen-share.
   app.route('/api/public/deals',      createPublicProspectRoutes(db));
   app.route('/api/public/forms',      createPublicFormRoutes(db));
+  // The CUSTOMER's invoice, and the checkout they just completed (FO-C2/FO-C4).
+  // Same shape again: a person with no account holds a token, and the row it
+  // resolves to reports its own tenant. This is what makes an invoice payable.
+  app.route('/api/public/invoices',   createPublicInvoiceRoutes(db));
   app.route('/api/public/signatures', createPublicSignatureRoutes(db));
   // A legal-document share link is the same shape again: a token, no session.
   app.route('/api/public/legal-documents', createPublicLegalDocumentRoutes(db));
+  // And a data-room share link is the same shape a fourth time: a token, no session
+  // — plus the NDA gate, both expiry clocks and the watermark, all enforced inside
+  // `dataRoomSharing.ts` rather than at this seam (FO-E2).
+  app.route('/api/public/data-rooms', createPublicDataRoomRoutes(db));
   // The workspace halves.
   app.route('/api/forms',             createFormRoutes(db));
   app.route('/api/signatures',        createSignatureRoutes(db));
   app.route('/api/legal-documents',   createLegalDocumentRoutes(db));
+  // The data room's own share flow, and what the firm actually read.
+  app.route('/api/data-rooms',        createDataRoomRoutes(db));
+  // The founders' agreement, the IP assignment, the vesting schedule and the NDA —
+  // ONE registry, rendered or sent through the signature engine (FO-D5).
+  app.route('/api/document-templates', createDocumentTemplateRoutes(db));
   // Receivable and payable, and the three acts a bill has. The approver comes
   // from the session inside the route — never from the body.
   app.route('/api/payables',          createPayableRoutes(db));
+  app.route('/api/equity',            createEquityRoutes(db));
   // The sales board as a PROJECTION of the deals, and the one-call stage move
   // that replaces the mirroring instruction in the canvas prompt.
   app.route('/api/pipeline',          createPipelineRoutes(db));

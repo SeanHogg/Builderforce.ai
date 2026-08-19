@@ -28,10 +28,20 @@ export * from './resumeDocument';
 // kind, the API's `party_roles` writer and the kernel's own role column must mean the
 // same thing on purpose; see `parties.ts`.
 export * from './parties';
+// The OWNERSHIP vocabulary — share classes, the append-only event ledger the cap table
+// is a fold of, vesting (computed, never stored) and SAFE/note conversion. Shared for
+// the same reason `parties.ts` is, and for one more: the vesting and conversion
+// arithmetic is read by BOTH the projection on the server and the card on the board, and
+// a company's ownership computed two ways is the one place two answers is unacceptable.
+export * from './equity';
 // The authored-website vocabulary, parser and block-level section operations. Shared
 // because the `site` surface renders it as React and the site publisher renders the
 // SAME object to static HTML in a Worker — two renderers, and a section vocabulary
 // stated twice is one that drifts until the publisher drops what the editor allows.
+// The one set of device widths every surface that frames OR captures a document reads.
+// Shared rather than frontend-local because the gateway's page-capture service needs the
+// same numbers — see the module header.
+export * from './viewport';
 export * from './website';
 // The framework-free HTML renderer for that same vocabulary — one document string
 // shared by the static site publisher and the canvas `app` surface. See its own header
@@ -141,6 +151,21 @@ export const FOUNDER_OBJECT_KINDS = [
   // THE MONEY. A canvas that can design and market a product but cannot price it,
   // raise against it, or say who owns it is a canvas for a project, not a company.
   'pricing', 'capTable', 'fundingRound', 'investorUpdate', 'dataRoom',
+  // ── OWNERSHIP, AS EVENTS RATHER THAN A TYPED TABLE ──────────────────────────────
+  // `capTable` above is now a PROJECTION — it computes its own totals from the real
+  // ledger and nothing writes a percentage onto it. These two are what the ledger is
+  // made of, and each is its own kind for a reason the other cannot carry:
+  //
+  //  • `equityGrant` is an award with a VESTING SCHEDULE, which is a set of terms with
+  //    a date attached — so it is the only ownership object a `trigger` can watch, and
+  //    `cliffAt` is a declared deadline for exactly that. Folding it into `capTable`
+  //    would mean one card per company holding N schedules with N cliff dates, of which
+  //    a deadline binding could watch precisely one.
+  //  • `convertible` is a SAFE or a note: money that is NOT yet equity and converts on
+  //    terms (cap, discount, pre/post-money) that decide what everybody else ends up
+  //    owning. `fundingRound.roundType: 'safe'` was a label over nothing, and a priced
+  //    round modelled without the stack in front of it is modelled against a fiction.
+  'equityGrant', 'convertible',
   // ── THE MONEY, OPERATED ─────────────────────────────────────────────────────────
   // The five kinds above hold the money a company RAISES and CHARGES. These five hold
   // the money it PLANS, COLLECTS, OWES and SPENDS ON PEOPLE — the difference between a
@@ -171,6 +196,22 @@ export const FOUNDER_OBJECT_KINDS = [
   // HR owns the establishment, finance owns what it costs, and a role's loaded cost is
   // one fact in one place.
   'budget', 'forecast', 'invoice', 'bill',
+  // ── WHAT PAYROLL ACTUALLY COST ──────────────────────────────────────────────────
+  // The fifth of the operated-money kinds, and the one that makes the largest line on
+  // a forecast a FACT rather than a figure somebody typed.
+  //
+  // WHY IT IS ITS OWN KIND AND NOT A `bill`. A pay run has no counterparty to approve,
+  // dispute or schedule: the money has already left, through a provider that calculated
+  // it. Modelling it as a payable would put a vendor's demand and a completed
+  // disbursement under one lifecycle, and `bill.approve` — the one act on this platform
+  // that can cause real financial harm — would become available on a row nobody can
+  // authorise because it is already done.
+  //
+  // WHY IT IS READ-ONLY IN PRACTICE. Every figure on it is one a payroll provider
+  // returned, hydrated by `canvas_sync_pay_run`. The platform must never CALCULATE a
+  // salary or a tax — see `connectors/defaults/payroll.ts` for the full argument — so
+  // this card reports and never computes.
+  'payRun',
   // THE PAPER. Formation, customer and vendor agreements — the first ninety days of a
   // company, which the governance vocabulary (SOC 2 controls, vendor registers) covers
   // for an enterprise and not at all for a new one.

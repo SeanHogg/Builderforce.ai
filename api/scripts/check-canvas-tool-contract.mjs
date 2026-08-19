@@ -51,6 +51,7 @@ const CANVAS_FILES = [
   path.resolve('..', 'frontend', 'src', 'components', 'creation-canvas', 'CreationCanvas.tsx'),
   path.resolve('..', 'frontend', 'src', 'lib', 'canvasBuildTools.ts'),
   path.resolve('..', 'frontend', 'src', 'lib', 'canvasFounderOpsTools.ts'),
+  path.resolve('..', 'frontend', 'src', 'lib', 'canvasEquityTools.ts'),
   // These three were declaring canvas tools that this guard never saw, which is the
   // instruction above going unfollowed rather than a limitation: five tools
   // (`canvas_legal_document_*`, `canvas_request_signature`) were advertised by the canvas

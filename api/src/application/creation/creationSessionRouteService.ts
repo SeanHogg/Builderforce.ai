@@ -54,10 +54,12 @@ import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
 import { notify } from '../notifications/notify';
 import {
+  isConfidentialityLevel,
   isCreationConnectionKind,
   isCreationObjectKind,
   projectPublicResumeFamily,
   type CanvasResumeFamily,
+  type ConfidentialityLevel,
   type CreationObjectKind,
 } from '@builderforce/creation-canvas-contract';
 import { broadcastRoom, creationSessionRoomName } from '../../infrastructure/relay/broadcastRoom';
@@ -1535,6 +1537,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
 
     let objectKind: string | null = null;
     let objectTitle: string | null = null;
+    let objectConfidentiality: ConfidentialityLevel | null = null;
     if (objectId) {
       const [row] = await db.select({ kind: creationSessionObjects.kind, content: creationSessionObjects.content })
         .from(creationSessionObjects)
@@ -1543,6 +1546,11 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       if (!row) return c.json({ error: 'Object not found on this session' }, 404);
       objectKind = row.kind;
       objectTitle = cleanTitle((row.content as Record<string, unknown> | null)?.title, row.kind);
+      // Read from the STORED row, never from the request body: a client that could name
+      // its own confidentiality could name `public` for a grievance, which is not a
+      // boundary at all. The row is the only copy the author actually wrote.
+      const declared = (row.content as Record<string, unknown> | null)?.confidentiality;
+      objectConfidentiality = isConfidentialityLevel(declared) ? declared : null;
     }
 
     const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
@@ -1565,6 +1573,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       objectId,
       objectKind,
       objectTitle,
+      objectConfidentiality,
       label: String(body.label ?? objectTitle ?? access.session.title ?? '').slice(0, 160),
       settings,
       expiresAt,

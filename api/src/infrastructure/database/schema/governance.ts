@@ -35,6 +35,7 @@ import { approvalStatusEnum, privacyRequestStatusEnum, privacyRequestTypeEnum, s
 import { segments, tenants, users } from './identity';
 import { agentHosts, agents } from './agents';
 import { boards, initiatives, projects, tasks } from './delivery';
+import type { AnswerMap, DevexSegments, SurveyQuestion } from '../../../domain/devex/surveys';
 
 
 export const privacyRequests = pgTable('privacy_requests', {
@@ -735,4 +736,133 @@ export const webauthnChallenges = pgTable('webauthn_challenges', {
 }, (t) => [
   uniqueIndex('uq_webauthn_challenges_challenge').on(t.challenge),
   index('idx_webauthn_challenges_expiry').on(t.expiresAt),
+]);
+
+
+// ---------------------------------------------------------------------------
+// DevEx surveys (migration 0229) — the pulse-survey framework behind the DevEx
+// lens and SPACE Satisfaction.
+//
+// These three tables, the DevFinOps trio and `recommendation_dismissals` below
+// were each declared inside the feature that queried them
+// (`application/devex/devexSurveys.ts`, `application/finops/finopsTables.ts`,
+// `application/insights/recommendationsEngine.ts`), on the reasoning that the
+// feature "owns" its table. The cost was real: the application layer declared
+// DDL and imported the infrastructure barrel to reference `tenants`, the
+// `schema.tables.test.ts` render sweep never saw them (so a broken reference
+// thunk surfaced as a 500, not a failing test), `drizzle-kit` did not generate
+// their DDL, and a table name could collide with a canonical one unnoticed —
+// which is exactly what `finops_soc_controls` did against `soc_controls` and
+// what migration 0254 had to repair.
+//
+// The vocabulary they are typed against lives in `domain/devex/surveys.ts`, so
+// a question type means the same thing to the validator and to the column.
+// ---------------------------------------------------------------------------
+
+export const devexSurveyTemplates = pgTable('devex_survey_templates', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:        varchar('name', { length: 160 }).notNull(),
+  description: text('description').notNull().default(''),
+  questions:   jsonb('questions').$type<SurveyQuestion[]>().notNull().default([]),
+  isActive:    boolean('is_active').notNull().default(true),
+  createdBy:   varchar('created_by', { length: 36 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_devex_templates_tenant').on(t.tenantId),
+]);
+
+export const devexCampaigns = pgTable('devex_campaigns', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  templateId:  integer('template_id').references(() => devexSurveyTemplates.id, { onDelete: 'set null' }),
+  title:       varchar('title', { length: 200 }).notNull(),
+  periodMonth: varchar('period_month', { length: 7 }),
+  status:      varchar('status', { length: 16 }).notNull().default('open').$type<'open' | 'closed'>(),
+  anonymous:   boolean('anonymous').notNull().default(true),
+  recipientCount: integer('recipient_count'),
+  openedAt:    timestamp('opened_at').notNull().defaultNow(),
+  closedAt:    timestamp('closed_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_devex_campaigns_tenant').on(t.tenantId),
+]);
+
+export const devexResponses = pgTable('devex_responses', {
+  id:             serial('id').primaryKey(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  campaignId:     integer('campaign_id').notNull().references(() => devexCampaigns.id, { onDelete: 'cascade' }),
+  respondentHash: varchar('respondent_hash', { length: 64 }),
+  userId:         varchar('user_id', { length: 36 }),
+  answers:        jsonb('answers').$type<AnswerMap>().notNull().default({}),
+  segments:       jsonb('segments').$type<DevexSegments>().notNull().default({}),
+  submittedAt:    timestamp('submitted_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_devex_responses_tenant').on(t.tenantId),
+  index('idx_devex_responses_campaign').on(t.campaignId),
+  index('idx_devex_responses_dedup').on(t.campaignId, t.respondentHash),
+]);
+
+
+// ---------------------------------------------------------------------------
+// DevFinOps (migration 0233) — the R&D-credit definition, the SOC 1 Type II
+// control register and the log of assembled audit-period reports.
+// ---------------------------------------------------------------------------
+
+/** Per-tenant R&D-credit (QRE) definition — the qualified-research filter + rate. */
+export const rdTaxCreditConfig = pgTable('rd_tax_credit_config', {
+  tenantId:            integer('tenant_id').primaryKey(),
+  qualifiedCategories: jsonb('qualified_categories').$type<string[]>().notNull().default(sql`'["innovation","tech_debt"]'::jsonb`),
+  blendedLaborRateUsd: real('blended_labor_rate_usd').notNull().default(95),
+  qualifiedActionTypes: jsonb('qualified_action_types').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  updatedAt:           timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** SOC 1 Type II controls register — one assertion row per control objective.
+ *  The table is `finops_soc_controls`, NOT `soc_controls`: the latter is the
+ *  unrelated SOC 2 governance tracker declared above. Colliding on it made
+ *  0233's CREATE a no-op and 500'd the finops audit report (repaired by 0254),
+ *  which is precisely the failure mode a per-feature table declaration hides and
+ *  the barrel's duplicate-name test now catches. */
+export const finopsSocControls = pgTable('finops_soc_controls', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  controlRef:   varchar('control_ref', { length: 32 }).notNull(),
+  objective:    varchar('objective', { length: 240 }).notNull(),
+  category:     varchar('category', { length: 48 }).notNull().default('general'),
+  status:       varchar('status', { length: 16 }).notNull().default('gap'),
+  owner:        varchar('owner', { length: 120 }),
+  note:         text('note').default(''),
+  lastReviewed: timestamp('last_reviewed'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** Log of assembled audit-ready period reports (the report itself is computed live). */
+export const auditReportRuns = pgTable('audit_report_runs', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  periodMonth: varchar('period_month', { length: 7 }).notNull(),
+  generatedBy: varchar('generated_by', { length: 36 }),
+  summary:     jsonb('summary'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+});
+
+
+// ---------------------------------------------------------------------------
+// Dismissed recommendations (migration 0232). The recommendations themselves are
+// computed live from finance/engineering/allocation insights; only the dismissal
+// is persisted, keyed by the rule's stable `rec_key`.
+// ---------------------------------------------------------------------------
+export const recommendationDismissals = pgTable('recommendation_dismissals', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  recKey:      varchar('rec_key', { length: 120 }).notNull(),
+  dismissedBy: varchar('dismissed_by', { length: 36 }),
+  dismissedAt: timestamp('dismissed_at').notNull().defaultNow(),
+}, (t) => [
+  unique('recommendation_dismissals_tenant_id_rec_key_key').on(t.tenantId, t.recKey),
 ]);

@@ -37,3 +37,27 @@ export async function mintShareToken(): Promise<MintedShareToken> {
 export async function hashShareToken(token: string): Promise<string> {
   return sha256Hex(token.trim());
 }
+
+/**
+ * What a stored share grant is RIGHT NOW — the one test four tables share.
+ *
+ * `signature_parties`, `form_recipients`, `legal_document_shares` and
+ * `data_room_shares` all resolve a presented token into a row and then ask the
+ * same two questions in the same order: has it been revoked, and has it lapsed.
+ * Written out per caller, the second one is the one that drifts — `<=` in one
+ * place and `<` in another, or an expiry checked before a revocation so a revoked
+ * link reports "expired" and the recipient asks for a fresh one.
+ *
+ * Returns a REASON rather than a boolean so a caller can say which it was where
+ * that is safe to disclose, and collapse both to "invalid" where it is not.
+ */
+export type ShareGrantState = 'active' | 'revoked' | 'expired';
+
+export function shareGrantState(
+  row: { revokedAt?: Date | null; expiresAt?: Date | null },
+  now: Date = new Date(),
+): ShareGrantState {
+  if (row.revokedAt) return 'revoked';
+  if (row.expiresAt && row.expiresAt.getTime() <= now.getTime()) return 'expired';
+  return 'active';
+}

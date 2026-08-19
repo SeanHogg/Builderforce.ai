@@ -23,7 +23,7 @@ import {
   respondToIntroduction,
   upsertCofounderProfile,
 } from '../../application/legal/cofounderMatching';
-import { PipelineError, moveDeal, project } from '../../application/revenue/pipelineProjection';
+import { PipelineError, dealThread, logDealTouch, moveDeal, openDeal, project } from '../../application/revenue/pipelineProjection';
 import { InvestorUpdateError, sendInvestorUpdate } from '../../application/investor/investorUpdateDelivery';
 
 /** One translation for all three, keyed on the error type each service throws —
@@ -106,30 +106,84 @@ export function createPipelineRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  /** The two query parameters, narrowed once. `laneBy` is a closed set, so an
-   *  unrecognised value falls back to the default rather than reaching the
-   *  service as a string it would have to re-validate. */
-  const options = (c: Context<HonoEnv>): { pipelineRef: string | null; laneBy?: 'source' | 'owner' | 'none' } => {
+  /**
+   * The three query parameters, narrowed once.
+   *
+   * `laneBy` is a closed set, so an unrecognised value falls back to the family's
+   * own default rather than reaching the service as a string it would have to
+   * re-validate. `family` is passed through as-is because `pipelineFamily()` is
+   * the ONE place that decides what an unknown family means — narrowing it twice
+   * is how the two answers come to disagree.
+   */
+  const options = (c: Context<HonoEnv>): { family: string | undefined; pipelineRef: string | null; laneBy?: 'source' | 'owner' | 'none' } => {
     const raw = c.req.query('laneBy');
     const laneBy = raw === 'owner' || raw === 'none' || raw === 'source' ? raw : undefined;
-    return { pipelineRef: c.req.query('pipelineRef') ?? null, ...(laneBy ? { laneBy } : {}) };
+    return { family: c.req.query('family'), pipelineRef: c.req.query('pipelineRef') ?? null, ...(laneBy ? { laneBy } : {}) };
   };
 
   /** The board, read from the deals. The canvas object is overwritten from this,
-   *  which is what makes it a projection rather than a second copy. */
+   *  which is what makes it a projection rather than a second copy. `?family=raise`
+   *  is the SAME board over `deals.kind='investment'` — see `pipelineFamilies.ts`. */
   router.get('/', (c) => handle(async () =>
     Response.json({ pipeline: await project(db, tenant(c), options(c)) })));
+
+  /**
+   * Open a deal against a counterparty, creating the counterparty when it is new.
+   *
+   * The `party_roles` write is what turns "Northwind Ventures" from a string in a
+   * spreadsheet cell into an object every other board can join to — FO-E1's actual
+   * complaint, and the reason this is not just an insert into `deals`.
+   */
+  router.post('/deals', (c) => handle(async () => {
+    const body = await c.req.json<Record<string, unknown>>();
+    const result = await openDeal(db, tenant(c), {
+      family: c.req.query('family') ?? body.family,
+      counterparty: String(body.counterparty ?? ''),
+      name: typeof body.name === 'string' ? body.name : null,
+      amount: Number.isFinite(body.amount) ? Number(body.amount) : null,
+      currency: typeof body.currency === 'string' ? body.currency : null,
+      stage: typeof body.stage === 'string' ? body.stage : null,
+      pipelineRef: typeof body.pipelineRef === 'string' ? body.pipelineRef : null,
+      ownerRef: typeof body.ownerRef === 'string' ? body.ownerRef : null,
+      source: typeof body.source === 'string' ? body.source : null,
+      introVia: typeof body.introVia === 'string' ? body.introVia : null,
+      expectedCloseAt: typeof body.expectedCloseAt === 'string' ? body.expectedCloseAt : null,
+    });
+    return Response.json(result);
+  }));
 
   /**
    * Move a deal, and get the board back in the same response.
    *
    * ONE call on purpose: the failure this whole feature removes is the second
-   * write somebody forgets. There is no "now mirror it" step to skip.
+   * write somebody forgets. There is no "now mirror it" step to skip. Which board
+   * comes back is read off the DEAL's own kind — a caller that could name the
+   * family is a caller that could name the wrong one.
    */
   router.post('/deals/:id/stage', (c) => handle(async () => {
     const body = await c.req.json<{ stage?: unknown }>();
-    const pipeline = await moveDeal(db, tenant(c), Number(c.req.param('id')), String(body.stage ?? ''), options(c));
+    const { family: _family, pipelineRef: _pipelineRef, ...moveOptions } = options(c);
+    const pipeline = await moveDeal(db, tenant(c), Number(c.req.param('id')), String(body.stage ?? ''), moveOptions);
     return Response.json({ pipeline });
+  }));
+
+  /** One deal's conversation — the per-investor thread FO-E1 says a rows table
+   *  could never hold. Newest first. */
+  router.get('/deals/:id/touchpoints', (c) => handle(async () =>
+    Response.json({ thread: await dealThread(db, tenant(c), Number(c.req.param('id'))) })));
+
+  /** Log a touch, and get the thread back. Same one-call shape as the move, so a
+   *  surface renders what it just wrote rather than what it wrote a moment ago. */
+  router.post('/deals/:id/touchpoints', (c) => handle(async () => {
+    const body = await c.req.json<Record<string, unknown>>();
+    const thread = await logDealTouch(db, tenant(c), Number(c.req.param('id')), {
+      summary: String(body.summary ?? ''),
+      ...(typeof body.channel === 'string' ? { channel: body.channel } : {}),
+      ...(typeof body.direction === 'string' ? { direction: body.direction } : {}),
+      contactRef: typeof body.contactRef === 'string' ? body.contactRef : null,
+      occurredAt: typeof body.occurredAt === 'string' ? body.occurredAt : null,
+    });
+    return Response.json({ thread });
   }));
 
   return router;

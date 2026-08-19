@@ -13,7 +13,10 @@ import {
   businessPricingModels,
   churnPredictions,
   compensationStructures,
+  convertibleInstruments,
   customKpis,
+  equityEvents,
+  equityGrants,
   expenses,
   fundingRounds,
   invoiceLineItems,
@@ -28,6 +31,7 @@ import {
   roiTimelineEntries,
   savedCalculations,
   scenarioAssumptions,
+  shareClasses,
   timesheets,
 } from '../../../infrastructure/database/schema/finance';
 import { defineDomainEntities, entity } from '../entityDefinition';
@@ -64,6 +68,29 @@ export const FINANCE_ENTITIES = defineDomainEntities('finance', [
    *  and its secret columns are redacted. */
   entity(paymentMethods, { readOnly: true }),
   fundingRounds,
+  /**
+   * Ownership (0927). A share class is a board resolution — authorising one is
+   * ordinary work, so it stays writable through the generic path and `registers`
+   * because a person navigates to it.
+   */
+  entity(shareClasses, { kind: 'shareClass', registers: true }),
+  /**
+   * A grant, a convertible and an event are READ-ONLY here, and the reason is not
+   * symmetry with `bills` — it is that a generic PATCH over any of the three
+   * rewrites who owns the company.
+   *
+   *  · `equity_grants` carries no quantity by design; the count is the issuance
+   *    EVENT, and a create through this path would produce a grant with no event
+   *    behind it — a certificate the cap table cannot see.
+   *  · `convertible_instruments.status` decides whether a SAFE still dilutes the
+   *    next round. Flipping it to 'converted' with no conversion event behind it
+   *    removes money from the stack that is still owed shares.
+   *  · `equity_events` is APPEND-ONLY. Read-only here is what makes that true
+   *    rather than documented: the one writer only ever INSERTs.
+   */
+  entity(equityGrants, { kind: 'equityGrant', registers: true, readOnly: true }),
+  entity(convertibleInstruments, { kind: 'convertible', registers: true, readOnly: true }),
+  entity(equityEvents, { kind: 'equityEvent', readOnly: true }),
   compensationStructures,
   timesheets,
   paybackPeriod,

@@ -151,7 +151,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 12 | [🖥️ VS Code Extension](#12--vs-code-extension) | 10 |
 | 13 | [🏢 Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 10 |
 | 14 | [🖥️ Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 43 |
-| 15 | [🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 28 |
+| 15 | [🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 29 |
 
 ---
 
@@ -1031,27 +1031,16 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
   burn on a forecast is money that actually left. **Not blocked.** Unblocks: the forecast's largest
   line being a fact.
 
-#### FO-D · Ownership — equity does not exist
+#### FO-D · Ownership — the cap table is a projection now
 
-- **FO-D1 — No cap-table tables exist.** `grep cap_table` across the schema returns nothing; the canvas
-  `capTable` is a hand-typed `holders: {holder, instrument, shares, percent}` array whose hint asks the
-  model to say so in `summary` when the percentages do not total 100 — an object that documents its own
-  inability to be right. Fix = `share_classes`, an `equity_holder` `party_roles` role (per FO-A1) and
-  `equity_grants`, with the cap table as a PROJECTION that computes its own totals rather than storing
-  them, per the "no stored totals" rule migration 0464 states for `work_estimates.lines`. Unblocks: a
-  cap table that survives its second event.
-- **FO-D2 — No issuance EVENT, so nothing can be applied.** A pool top-up, a round, a departure and a
-  buy-back are all re-typing today. Fix = an append-only issuance / transfer / cancellation event that
-  the projection folds — which is also what makes a historical cap table askable ("what did we own in
-  March"). Unblocks: FO-D3, FO-D4 and FO-E1 modelling a round against something real.
-- **FO-D3 — No vesting.** `grep 409a|safe_note|equity_grant` returns nothing; `vesting` appears only in
-  `career/compensation.ts` and as prose inside `offer.equity`. Fix = a schedule (cliff, duration,
-  frequency, acceleration) on `equity_grants`, vested-to-date COMPUTED rather than stored, and a
-  `due-within` trigger on the cliff date — which now works. Unblocks: an offer whose equity line is
-  checkable rather than a sentence.
-- **FO-D4 — No SAFE, note or conversion modelling.** The instrument a pre-seed company actually issues
-  cannot be represented, so `fundingRound.roundType: 'safe'` is a label over nothing and a priced round
-  cannot be modelled against what came before it. Needs FO-D2.
+> **FO-D1, FO-D2, FO-D3 and FO-D4 landed 2026-08-19 (migration 0927)** — `share_classes`,
+> `equity_grants` (terms, no quantity), `convertible_instruments` and the append-only
+> `equity_events` ledger the cap table is FOLDED from; vesting computed by one shared
+> function both the API and the card call; a cliff date a `trigger` can watch; and a round
+> modeller that converts every outstanding SAFE and note on its own cap and discount. See
+> [DONE.md](./DONE.md). What is left below is the paperwork half.
+
+
 - **FO-D5 (paperwork half) — a co-founder agreement still has no template and no signature flow.**
   *(matching half landed 2026-08-15 — `cofounder_profiles`, the scorer and `/cofounder`; see
   [DONE.md](./DONE.md).)* Two founders can now find each other and have nowhere to record what they
@@ -1525,6 +1514,10 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
 ## 15 · 🛠️ Platform — DB, CI/CD, Migrations, Cost & Tech-debt
 
 - **The isolation manifest still carves five files out of T2 for a wave that closed, and one lane branch is still open.** *(found 2026-08-18 during the roadmap validation pass)* Wave 1's acceptance test passed on 2026-08-16 and all five lanes merged, but [.github/isolation-tracks.json](./.github/isolation-tracks.json) still declares `W1A`–`W1E` and still removes `frontend/src/components/{apps,commerce,site-editor}/**`, `CanvasReleasesPanel.tsx`, `frontend/src/app/marketplace/listing/**` and `packages/creation-canvas-contract/src/marketplaceListings.ts` from T2's `owns` set — so the track that is meant to own those surfaces is still fenced out of them by `check-track-scope.mjs`, and T9's band is still narrowed to `[190, 899]` to protect reserved bands 0900–0929 that nothing will draw from again. **⚠️ BLOCKED on one open lane:** `track/W1D` still exists locally and on `origin`, so returning the carve-outs now would reject that branch's next push. Close or merge `track/W1D`, then delete the five `W1*` track entries, return the carve-outs to T2 and widen T9 back to `[190, ∞]` in one edit — `check-track-manifest.mjs` validates the result. Unblocks: T2 being able to edit the files it owns without a manifest exception.
+
+### 🧮 The founder EQUITY vocabulary is half-landed in the working tree — `api` and `frontend` both fail to typecheck
+
+- **`equityGrant` and `convertible` are declared as founder object kinds and as a `finance` domain entity, but nothing behind them exists — 25 typecheck errors across the two packages.** *(found 2026-08-19 while shipping live-page capture)* `FOUNDER_OBJECT_KINDS` in [packages/creation-canvas-contract/src/index.ts](./packages/creation-canvas-contract/src/index.ts) now lists both, and `packages/creation-canvas-contract/src/equity.ts` is a new untracked module — but `FOUNDER_LABELS` in [frontend/src/components/creation-canvas/specDerivedRegistry.ts](./frontend/src/components/creation-canvas/specDerivedRegistry.ts) has no entry for either (TS2739) and `FOUNDER_OBJECT_SPECS` in `frontend/src/lib/founderObjects.ts` declares neither, so the palette would emit no card even once it compiled. On the gateway side [api/src/application/finance/equity.ts](./api/src/application/finance/equity.ts) imports `shareClasses`, `equityGrants`, `convertibleInstruments` and `equityEvents` from the schema barrel and none of the four tables exist (TS2305 ×4, plus TS2304 ×4 in `application/domains/finance/entities.ts` and six `possibly undefined` row reads). **⚠️ BLOCKED on the author of that in-flight change:** `index.ts` and the finance schema are staged-modified and `equity.ts` is untracked, i.e. somebody's uncommitted work mid-landing. Completing it means authoring a cap-table `equityGrant` spec (vesting schedule, cliff, strike) and a `convertible` spec (SAFE/note, cap, discount, maturity) plus the four Drizzle tables and a migration — guessing at those would collide with the change already in flight. Land or revert that work, then the two label entries and the schema exports close it. Unblocks: `pnpm --filter api typecheck` and `pnpm --filter frontend typecheck` going green at all, which currently hides any new error either package introduces.
 
 ### 🛡️ Cloudflare serves a managed challenge to every datacenter caller of the whole `builderforce.ai` zone *(found 2026-08-08)*
 

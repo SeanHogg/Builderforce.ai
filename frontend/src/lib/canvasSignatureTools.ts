@@ -68,9 +68,20 @@ function signatureCapableKinds(): ReadonlySet<string> {
   );
 }
 
-/** The text to sign, when the model did not supply one: the object's own summary
- *  (every spec kind has one) plus its title, never invented content. */
+/**
+ * The text to sign, when the model did not supply one.
+ *
+ * `documentBody` FIRST, and that order is load-bearing: a `contract` drafted from a
+ * real template (`canvas_draft_legal_document`) holds the whole agreement there, and
+ * falling through to `summary` would send a signer a one-line description of a
+ * founders' agreement instead of the founders' agreement. The summary remains the
+ * fallback for a kind that carries no body — an `offer`, or a contract somebody
+ * described rather than drafted — because a short honest statement of terms is a
+ * real thing to sign, and invented content is not.
+ */
 function defaultDocumentBody(object: { kind: string; title: string; data: Record<string, unknown> }): string {
+  const body = typeof object.data.documentBody === 'string' ? object.data.documentBody.trim() : '';
+  if (body) return body;
   const summary = typeof object.data.summary === 'string' ? object.data.summary.trim() : '';
   const lines = [object.title || object.kind, summary].filter(Boolean);
   return lines.join('\n\n') || `${object.kind}: ${object.title}`;

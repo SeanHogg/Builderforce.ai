@@ -1,5 +1,5 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
-import { CREATION_CONNECTION_KINDS, emptyCanvasVideoTimeline, emptyCanvasWorldScene, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type LegalObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SellMotionObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
+import { CREATION_CONNECTION_KINDS, defaultConfidentialityForKind, emptyCanvasVideoTimeline, emptyCanvasWorldScene, FOUNDER_OBJECT_KINDS, type AcademicObjectKind, type CreationConnectionKind, type DataScienceObjectKind, type FounderObjectKind, type HiringObjectKind, type LegalObjectKind, type OperationsObjectKind, type PeopleObjectKind, type SellMotionObjectKind, type SharedObjectKind } from '@builderforce/creation-canvas-contract';
 import { FOUNDER_BOOKKEEPING_FIELDS, FOUNDER_FIELD_NAMES, FOUNDER_OBJECT_SPECS, founderMutableFields } from '@/lib/founderObjects';
 // Importing the vocabulary registers it (see `specObjects.ts`), which is what makes the
 // academic kinds resolvable everywhere else without a second list of them here.
@@ -822,8 +822,18 @@ export function creationObjectName(data: Pick<CreationNodeData, 'kind' | 'title'
   return data.title?.trim() || creationObjectDefinition(data.kind).label;
 }
 
-export function availableCreationObjects(capabilities: ReadonlySet<string>): readonly CreationObjectDefinition[] {
-  return CREATION_OBJECT_REGISTRY.filter((definition) => !definition.capability || capabilities.has(definition.capability));
+export function availableCreationObjects(
+  capabilities: ReadonlySet<string>,
+  options?: { signedIn?: boolean },
+): readonly CreationObjectDefinition[] {
+  const signedIn = options?.signedIn ?? true;
+  return CREATION_OBJECT_REGISTRY.filter((definition) => (
+    (!definition.capability || capabilities.has(definition.capability))
+    // The same guest rule `creationPaletteGroupsFor` applies, asked from the contract
+    // rather than copied, so the palette and the capability set cannot disagree about
+    // what a signed-out visitor may author.
+    && (signedIn || defaultConfidentialityForKind(definition.kind) !== 'restricted')
+  ));
 }
 
 /**
@@ -837,3 +847,36 @@ export const CREATION_PALETTE_GROUPS = ([
   'Pitch', 'People', 'Hiring', 'Operations', 'Revenue', 'Agents', 'Models', 'Collaborate', 'Integrations',
 ] as const satisfies readonly CreationObjectGroup[])
   .map((group) => ({ group, items: CREATION_OBJECT_REGISTRY.filter((definition) => definition.group === group) }));
+
+export type CreationPaletteGroup = typeof CREATION_PALETTE_GROUPS[number];
+
+/**
+ * The palette a SIGNED-OUT board advertises.
+ *
+ * ── WHY THE GUEST PALETTE IS NOT THE FULL PALETTE ───────────────────────────────
+ * A guest board is stored on the device, belongs to no tenant, and has no access control
+ * of any kind — which makes it the one surface where `restricted` cannot mean anything,
+ * because there is no audience to name. Offering a visitor "Grievance case", "Comp band",
+ * "Employee", "Candidate", "Offer" or "Incident" invites them to type the most sensitive
+ * category of record the product models onto the least protected surface it has, and the
+ * card would then carry a `restricted` label enforcing nothing.
+ *
+ * So the guest palette is the full palette minus the kinds whose DEFAULT confidentiality
+ * is `restricted` — the same list, read from the same contract, that classifies them on a
+ * tenant board. Derived rather than hand-listed: a kind added to
+ * `RESTRICTED_BY_DEFAULT_KINDS` next quarter drops out of the guest palette without
+ * anybody remembering this function exists, which is the only way a second list stays
+ * true.
+ *
+ * Empty groups are dropped, so the guest never sees a category heading with nothing under
+ * it — a heading over an empty list reads as a loading failure.
+ */
+export function creationPaletteGroupsFor(signedIn: boolean): readonly CreationPaletteGroup[] {
+  if (signedIn) return CREATION_PALETTE_GROUPS;
+  return CREATION_PALETTE_GROUPS
+    .map((entry) => ({
+      ...entry,
+      items: entry.items.filter((item) => defaultConfidentialityForKind(item.kind) !== 'restricted'),
+    }))
+    .filter((entry) => entry.items.length > 0);
+}

@@ -75,6 +75,13 @@ export interface Env {
    *  a Worker SECRET (not committed config) so the id isn't exposed in the repo.
    *  Set via `wrangler secret put CLOUDFLARE_ACCOUNT_ID`. */
   CLOUDFLARE_ACCOUNT_ID?: string;
+  /** Cloudflare Browser Rendering token — scoped `Browser Rendering:Edit`. Powers the
+   *  live-page CAPTURE behind `/api/creative/screenshot` (a redesign's "before" shot).
+   *  Falls back to {@link CLOUDFLARE_AI_API_TOKEN} when a single account-wide token
+   *  carries both scopes; with neither bound, capture reports itself unconfigured and
+   *  the canvas relays that reason rather than inventing a limitation. Set via
+   *  `wrangler secret put CLOUDFLARE_BROWSER_API_TOKEN`. */
+  CLOUDFLARE_BROWSER_API_TOKEN?: string;
 
   // ---------------------------------------------------------------------------
   // OpenAI-compatible commercial LLM vendors (the "30+ providers" surface).

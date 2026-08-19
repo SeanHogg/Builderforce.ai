@@ -11592,7 +11592,7 @@
       "openai": {
         "blurb": "Verbinden Sie Ihr ChatGPT/Codex-Abo oder fügen Sie einen OpenAI-API-Schlüssel ein.",
         "subscription": "ChatGPT/Codex-Abo",
-        "pastePrompt": "Kopieren Sie nach der Anmeldung die vollständige URL <code>http://localhost:1455/auth/callback?code=…&state=…</code> aus der Adressleiste und fügen Sie sie hier ein.",
+        "pastePrompt": "Nach der Anmeldung zeigt Ihr Browser möglicherweise einen localhost-Fehler — das ist normal. Kopieren Sie die vollständige URL <code>http://localhost:1455/auth/callback?code=…&state=…</code> aus der Adresszeile und fügen Sie sie unten ein. Beenden Sie zuvor jeden laufenden <code>codex login</code>: Die CLI belegt diesen Port und verbraucht den Code, bevor Sie ihn einfügen können.",
         "pastePlaceholder": "OpenAI-Weiterleitungs-URL einfügen…"
       },
       "google": {
@@ -14048,7 +14048,19 @@
       "pro": "Pro",
       "teams": "Teams"
     },
-    "cycleLabel": "Abrechnungszeitraum"
+    "cycleLabel": "Abrechnungszeitraum",
+    "getPaidTab": "Geld erhalten",
+    "merchantTitle": "Kartenzahlungen annehmen",
+    "merchantIntro": "Wo das Geld HEREINKOMMT. Verbinden Sie ein Händlerkonto, und jede ausgestellte Rechnung trägt einen Zahlungslink – das Geld geht an Sie, und Builderforce behält nichts ein.",
+    "receivablesTitle": "Offene Rechnungen",
+    "noReceivables": "Nichts ist offen. Ausgestellte Rechnungen erscheinen hier, bis sie bezahlt sind.",
+    "colInvoice": "Rechnung",
+    "colCustomer": "Kundschaft",
+    "colOutstanding": "Offen",
+    "colDue": "Fällig",
+    "colAge": "Alter",
+    "daysOverdue": "{count, plural, one {# Tag} other {# Tage}}",
+    "current": "Aktuell"
   },
   "policyPacks": {
     "title": "Richtlinienpakete",
@@ -18063,7 +18075,10 @@
         "liveMetric": "Live-Kennzahl",
         "objective": "Ziel",
         "pricing": "Preisgestaltung",
-        "trigger": "Auslöser"
+        "trigger": "Auslöser",
+        "equityGrant": "Anteilszuteilung",
+        "convertible": "SAFE / Wandeldarlehen",
+        "payRun": "Lohnlauf"
       },
       "field": {
         "actualTotal": "Ist-Summe",
@@ -18136,7 +18151,6 @@
         "obligations": "Verpflichtungen",
         "offer": "Einstiegsangebot",
         "offerings": "Angebot",
-        "optionPool": "Optionspool",
         "options": "Optionen",
         "owner": "Verantwortlich",
         "paidAmount": "bezahlt",
@@ -18222,7 +18236,49 @@
         "watchesField": "Überwachtes Feld",
         "weaknesses": "Schwächen",
         "website": "Website",
-        "wedge": "Ansatzpunkt"
+        "wedge": "Ansatzpunkt",
+        "companyRef": "Unternehmen",
+        "asOf": "Stand",
+        "issued": "Ausgegeben",
+        "poolAuthorized": "Pool genehmigt",
+        "poolUnallocated": "Pool nicht zugeteilt",
+        "convertibles": "Wandelinstrumente",
+        "ownershipCheck": "Eigentumsprüfung",
+        "holder": "Inhaber",
+        "shareClass": "Anteilsklasse",
+        "instrument": "Instrument",
+        "quantity": "Menge",
+        "vested": "Erdient",
+        "vestingStartAt": "Vesting-Beginn",
+        "vestingMonths": "Vesting-Monate",
+        "cliffMonths": "Cliff-Monate",
+        "vestingFrequency": "Vesting-Frequenz",
+        "acceleration": "Beschleunigung",
+        "cliffAt": "Cliff-Datum",
+        "unvested": "Nicht erdient",
+        "vestedPercent": "Erdient",
+        "pricePerShare": "Preis je Anteil",
+        "fmvPerShare": "Verkehrswert je Anteil",
+        "instrumentKind": "Instrument",
+        "principal": "Nominalbetrag",
+        "valuationCap": "Bewertungsobergrenze",
+        "discountPercent": "Abschlag",
+        "interestRate": "Zinssatz",
+        "maturesAt": "Fälligkeit",
+        "convertsInto": "Wandelt in",
+        "collectionMode": "Mahnung",
+        "issuedBy": "ausgestellt von",
+        "paymentLink": "Zahlungslink",
+        "customerEmail": "Kunden-E-Mail",
+        "source": "Anbieter",
+        "periodStart": "Zeitraum von",
+        "periodEnd": "Zeitraum bis",
+        "paidAt": "gezahlt",
+        "grossAmount": "brutto",
+        "employerTaxes": "Arbeitgeberabgaben",
+        "totalCost": "Gesamtkosten",
+        "employeeCount": "bezahlte Personen",
+        "syncedAt": "gelesen"
       },
       "column": {
         "actual": "Ist",
@@ -18302,7 +18358,15 @@
         "value": "Wert",
         "variance": "Abweichung",
         "variant": "Variante",
-        "verdict": "Bewertung"
+        "verdict": "Bewertung",
+        "shareClass": "Anteilsklasse",
+        "vested": "Erdient",
+        "principal": "Nominalbetrag",
+        "cap": "Obergrenze",
+        "discount": "Abschlag",
+        "employee": "Person",
+        "hours": "Stunden",
+        "rate": "Satz"
       }
     },
     "datasetImportedWithPii": "{name} importiert — {rows} Zeilen, {columns} Spalten. {pii} Spalten enthalten personenbezogene Daten und werden maskiert.",
@@ -19676,11 +19740,22 @@
         "readings": "Ansichten dieser Website",
         "reading": {
           "preview": "Vorschau",
-          "edit": "Bearbeiten"
+          "edit": "Bearbeiten",
+          "compare": "Vergleichen"
         },
         "scheme": "Heller und dunkler Modus der Website",
         "schemeLight": "Hell",
-        "schemeDark": "Dunkel"
+        "schemeDark": "Dunkel",
+        "before": "Vorher",
+        "after": "Nachher",
+        "beforeAlt": "Screenshot der aktuellen Website unter {url}",
+        "compareEmpty": "Noch nichts zu vergleichen. Füge die Adresse der Website ein, die dieser Entwurf ersetzt, und nimm sie auf — der Screenshot bleibt als „Vorher“ bei diesem Entwurf.",
+        "captureLabel": "Vorher",
+        "capturePlaceholder": "https://deine-aktuelle-website.de",
+        "capture": "Aufnehmen",
+        "recapture": "Neu aufnehmen",
+        "capturing": "Wird aufgenommen…",
+        "captureFailed": "Die Seite konnte nicht aufgenommen werden."
       },
       "timeline": {
         "label": "Zeitleiste",
@@ -20199,7 +20274,26 @@
         "sellerOwner": "Unser Owner",
         "buyerOwner": "Ihr Owner"
       }
-    }
+    },
+    "exportRestricted": "Eingeschränkt – diese Karte kann nicht exportiert werden",
+    "imageCapturedStatus": "Aufgenommen",
+    "imageCapturedValidation": "Live-Seite gerendert und von {url} aufgenommen",
+    "imageCapturedProposal": "Screenshot „{title}“ hinzufügen",
+    "screenshotDefaultTitle": "{host} — aktuelle Website",
+    "screenshotComparisonProposal": "Den „Vorher“-Screenshot an „{title}“ anhängen",
+    "gateScreenshotTitle": "Konto erstellen, um Live-Seiten aufzunehmen",
+    "gateScreenshotBody": "Ein echter Browser rendert die Seite auf Builderforce-Servern, daher erfordert ein Screenshot ein Konto. Erstelle kostenlos eines, und diese Arbeitsfläche — Objekte, Unterhaltung und Layout — kommt mit.",
+    "noticeInvoiceNeedsAccount": "Ausstellen, eine Zahlung erfassen und Mahnen schreiben in ein echtes Buch und brauchen daher einen gespeicherten Arbeitsbereich. Ihre Rechnung bleibt auf dieser Arbeitsfläche.",
+    "noticeInvoiceIncomplete": "Diese Rechnung braucht eine Rechnungsnummer, eine Kundschaft und einen Betrag, bevor sie ausgestellt werden kann.",
+    "noticeInvoiceIssued": "Rechnung {reference} ausgestellt.",
+    "noticeInvoiceIssuedSent": "Rechnung {reference} ausgestellt und an {to} gesendet.",
+    "noticeInvoiceNothingOutstanding": "Auf dieser Rechnung ist nichts mehr offen.",
+    "noticeInvoicePaymentRecorded": "Zahlung auf {reference} erfasst. {outstanding} bleiben offen.",
+    "noticeInvoicePaymentAlreadyRecorded": "Diese Zahlung war auf {reference} bereits erfasst.",
+    "noticeInvoiceChased": "{reference} gemahnt – an {to} gesendet.",
+    "noticeInvoiceChaseNoRecipient": "Mahnung zu {reference} erfasst, aber auf der Karte steht keine Kunden-E-Mail, an die sie gehen könnte.",
+    "noticeInvoiceActionFailed": "Das war nicht möglich. Es wurde nichts gesendet.",
+    "noticePayRunSync": "Bitten Sie Brain, die Lohnläufe zu synchronisieren – sie werden vom verbundenen Lohnanbieter zurückgelesen."
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -22982,5 +23076,55 @@
       "notApplicable": "Nicht zutreffend",
       "gap": "Bekannte Lücke"
     }
+  },
+  "merchant": {
+    "loading": "Ihr Händlerkonto wird geprüft …",
+    "loadFailed": "Ihr Händlerkonto konnte nicht gelesen werden.",
+    "statusLabel": "Kartenzahlungen",
+    "status": {
+      "absent": "Nicht eingerichtet",
+      "pending": "Wartet auf Sie",
+      "restricted": "Eingeschränkt",
+      "connected": "Bereit"
+    },
+    "readyBody": "Ihre Kundschaft kann Ihre Rechnungen per Karte bezahlen. Das Geld wird auf Ihr eigenes Konto ausgezahlt – Builderforce behält davon nichts ein.",
+    "incompleteBody": "Ihr Konto besteht, kann aber noch keine Zahlung annehmen. Erledigen Sie, was Ihr Zahlungsdienstleister noch verlangt; bis dahin tragen ausgestellte Rechnungen keinen Zahlungslink.",
+    "absentBody": "Richten Sie ein Händlerkonto ein, und jede ausgestellte Rechnung erhält einen Zahlungslink. Das Geld geht auf Ihr Konto, nicht auf unseres, und Builderforce behält nichts ein.",
+    "outstandingTitle": "Beim Zahlungsdienstleister noch offen",
+    "country": "Land",
+    "currency": "Abrechnungswährung",
+    "payoutsLabel": "Auszahlungen aktiv",
+    "unknown": "Noch nicht bekannt",
+    "yes": "Ja",
+    "no": "Noch nicht",
+    "connect": "Kartenzahlungen einrichten",
+    "resume": "Einrichtung fortsetzen",
+    "connectFailed": "Die Einrichtung der Kartenzahlungen konnte nicht gestartet werden.",
+    "disconnect": "Trennen",
+    "disconnectTitle": "Händlerkonto trennen?",
+    "disconnectBody": "Neue Rechnungen tragen keinen Zahlungslink mehr. Beim Zahlungsdienstleister wird nichts gelöscht – Ihre Aufzeichnungen, Rückerstattungen und Streitfälle bleiben bestehen – und eine spätere Neuverbindung legt ein frisches Konto an.",
+    "disconnectConfirm": "Trennen",
+    "disconnectFailed": "Das Händlerkonto konnte nicht getrennt werden."
+  },
+  "publicInvoice": {
+    "loading": "Ihre Rechnung wird geladen …",
+    "loadFailed": "Dieser Rechnungslink ist ungültig. Bitten Sie den Absender um einen neuen.",
+    "missingToken": "Diesem Link fehlt sein Zugangscode. Verwenden Sie den Link genau so, wie er Ihnen zugesandt wurde.",
+    "unavailableTitle": "Diese Rechnung ist nicht verfügbar",
+    "title": "Rechnung {reference}",
+    "billedTo": "Rechnung an {customer}",
+    "total": "Gesamt",
+    "paid": "Bisher gezahlt",
+    "outstanding": "Offen",
+    "due": "Fällig",
+    "daysOverdue": "{count, plural, one {# Tag überfällig} other {# Tage überfällig}}",
+    "colDescription": "Beschreibung",
+    "colQuantity": "Menge",
+    "colUnit": "Einzelpreis",
+    "colAmount": "Betrag",
+    "payNow": "{amount} bezahlen",
+    "confirming": "Ihre Zahlung wird bestätigt …",
+    "payByTransfer": "Diese Rechnung wird per Banküberweisung bezahlt. Antworten Sie auf die Nachricht mit diesem Link, wenn Sie die Kontodaten benötigen.",
+    "settled": "Diese Rechnung ist beglichen. Vielen Dank."
   }
 }

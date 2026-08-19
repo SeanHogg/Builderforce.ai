@@ -24,6 +24,7 @@
  * no better than the one we were given.
  */
 
+import { fieldsMayCross } from './canvasConfidentiality';
 import { growthApi } from './growthApi';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
@@ -46,6 +47,13 @@ export function isCanvasMediaKind(kind: unknown): boolean {
  */
 export function canvasMediaSource(data: Partial<CreationNodeData> | undefined): string | null {
   if (!data) return null;
+  // THE publicMedia boundary. This function is the only door from a board object to a
+  // publishable source — the social panel's picker, the model's campaign tool and its
+  // missing-object check all ask it — so a restricted card having no source here means it
+  // has none anywhere, and neither surface needs its own copy of the rule. It is also the
+  // most irreversible boundary of the five: a network that has fetched the URL has a copy,
+  // and no revocation reaches it.
+  if (!fieldsMayCross({ kind: String(data.kind ?? ''), confidentiality: (data as Record<string, unknown>).confidentiality }, 'publicMedia')) return null;
   for (const key of ['outputUrl', 'renderedVideoUrl', 'videoUrl', 'imageUrl', 'thumbnailUrl'] as const) {
     const value = (data as Record<string, unknown>)[key];
     if (typeof value === 'string' && value.trim()) return value.trim();

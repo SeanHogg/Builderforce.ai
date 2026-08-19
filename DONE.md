@@ -1,3 +1,171 @@
+## ✅ RESOLVED 2026-08-19 — FO-D1..FO-D4: ownership, and the end of the typed cap table
+
+**What was wrong.** `grep cap_table` across the schema returned nothing. The canvas `capTable` was
+a hand-typed `holders: {holder, instrument, shares, percent}` array whose own hint asked the model to
+*"say so in `summary`"* when the percentages did not total 100 — an object that documented its own
+inability to be right. Everything else followed from that one shape: a pool top-up, a round, a
+departure and a buy-back were all RE-TYPING, so a cap table could not survive its second event;
+`grep 409a|safe_note|equity_grant` was empty and `vesting` appeared only as prose inside
+`offer.equity`; and `fundingRound.roundType: 'safe'` was a label over nothing, so a priced round
+could not be modelled against what came before it.
+
+### 1 · Migration 0927 — four tables, and deliberately no cap table
+
+`share_classes` (what the board authorised — `option-pool` is a CLASS, not a flag, because
+"what is unallocated" is authorised minus granted WITHIN it), `equity_grants` (the TERMS of an
+award and **no quantity**), `convertible_instruments` (SAFE and note as two kinds, because only one
+of them accrues and matures), and `equity_events` — append-only, seven verbs, the only place a share
+quantity lives.
+
+**No cap-table table, and that is the point.** A cap table is `capTable()` folding the ledger as of
+an instant: issued, fully diluted, each holder's percentage and the unallocated pool are all computed
+on read. That is the "no stored totals" rule migration 0464 states for `work_estimates.lines`,
+applied where a total that disagrees with its own rows is a legal problem rather than a display bug.
+**No holder table either** — `party_roles` already carries one row per (tenant, kind, ref, role), and
+`recordGrant` registers the `equity_holder` role 0469 added for exactly this, so a cap-table holder
+is the same party an `account` card joins by.
+
+An `asOf` in the past is the SAME traversal with a cutoff, which is what makes "what did we own in
+March" answerable without a second stored history.
+
+### 2 · `packages/creation-canvas-contract/src/equity.ts` — one arithmetic, two callers
+
+`vestedQuantity`, `cliffDate`, `convertInstrument` and `foldEquityEvents` live in the package the
+API and the frontend both import, so a company's ownership is never computed two ways. Each verb's
+debit and credit legs are DATA (`EQUITY_EVENT_LEGS`), read by both the fold and the write validator —
+so a transfer with no destination is refused at the door rather than folding to a silent zero.
+
+Every function refuses rather than guesses: nothing vests before the cliff (zero, not a proportion), a
+position folded to zero is dropped rather than reported as a row of nothing, and a conversion with no
+price to work from returns no shares rather than dividing by zero. 20 unit tests pin the refusals.
+
+### 3 · `application/finance/equity.ts` + `/api/equity`
+
+The projection, the writers and the round modeller. Read-through cached under a VERSION token rather
+than a plain key — the key includes `asOf`, so the keyspace is unbounded by construction and no
+writer could enumerate the historical reads it just invalidated; every write bumps the company's token
+and retires all of them at once. `equity_events`, `equity_grants` and `convertible_instruments` are
+registered READ-ONLY on the generic entity path, which is what makes "append-only" true rather than
+documented: recording a grant is two writes that must not be separable, and a generic POST would
+happily create the certificate without the issuance event behind it.
+
+`POST /rounds/model` writes NOTHING and `POST /rounds/apply` changes who owns the company — two
+routes and not a flag, because a caller that can accidentally pass `apply: true` is a caller that can
+accidentally issue shares. Apply re-models server-side rather than trusting the plan the caller was
+shown, since the table may have moved.
+
+### 4 · The canvas — `capTable` becomes a projection, and two new kinds
+
+Every figure on `capTable` is now `derived` (written by the fold) or `derive`d (computed from those
+rows); `companyRef` is the one authorable field, and it is the join. `ownershipCheck` replaces the
+old prose instruction with arithmetic over the rows printed directly beneath it — and names the
+convertible overhang the percentages deliberately exclude, which a typed table could never do.
+
+`equityGrant` carries the schedule and a real `cliffAt`, declared as a `deadline` field
+(`DEADLINE_FIELD_NAMES` gains `cliffAt` and `maturesAt`) — so a vesting cliff and a note's maturity
+are the first ownership dates on the canvas a `due-within` trigger can watch, on the server sweep as
+well as in the browser. `convertible` carries the terms that decide what everybody ELSE ends up
+owning, including the pre/post-money flag whose tool hint tells the model to ASK rather than guess.
+
+Five tools (`canvas_sync_cap_table`, `canvas_record_equity_grant`, `canvas_record_convertible`,
+`canvas_record_equity_event`, `canvas_model_round`), each of which re-folds the board in the same
+call — the `canvas_move_deal` pattern, so there is no "now update the cap table" step to forget.
+**There is deliberately no tool that WRITES a cap table**, because offering one would restore exactly
+the object this work deletes, and it is the shorter path to a card that looks finished.
+
+`equityGrant.issue`, `convertible.record` and the round modeller are GATED in `canvasApprovalGate`;
+`sync` is not, because refusing to let a person LOOK at their own ownership is not a control.
+Localized across all five catalogs; `optionPool` — an authored figure the projection replaced — was
+deleted from each.
+
+**Also fixed in the same pass:** `boardPackReport`'s `capTable` fields still named `postMoney` and
+`optionPool`, which no longer exist on the card, so a board pack quoted nothing; and
+`experiment.significance` read `test.difference` / `test.level` off a `ProportionTest` that has
+neither, which did not compile — it now reads `absoluteLift` and the interval.
+
+**Still open:** FO-D5's paperwork half (a co-founder agreement template and its signature flow).
+
+## ✅ RESOLVED 2026-08-19 — "I can't take screenshots of live websites" — the before half of a redesign
+
+**The measured failure** (Creation Canvas, ui 2026.8.60 / api 2026.8.26). A user asked to upgrade
+`aicoachbuild.com` and to be shown a before and after. Brain read the page with `builtin_web_fetch`,
+authored a genuinely good `website` object — and when asked where the before was, replied:
+
+> "As a large language model, I don't have the ability to browse the web visually or take
+> screenshots of live websites."
+
+That is a fact about a MODEL offered as a fact about the PRODUCT. It then offered the page's TEXT as
+a substitute for its appearance, the user said yes, and the turn ended with
+`I couldn't prepare any canvas changes from that request.` — nothing on the board.
+
+The model was not wrong to improvise; it had no tool. This is the third time the same root cause has
+been recorded (`canvas_add_image`, `canvas_add_game`): a capability the product should have, absent
+from the tool list, becomes an invented limitation. So the fix is the capability, not a prompt patch.
+
+### 1 · `application/web/webScreenshot.ts` — pixels of a live page
+
+Sibling of `webFetch.ts` beside it: that module reads what a page SAYS, this reads what a page LOOKS
+LIKE, and a redesign conversation needs both. Cloudflare Browser Rendering on the account the Worker
+already holds credentials for, so a JS-rendered marketing site captures as its visitors see it. Behind
+the same `assertSafeUrl` + `resolveAndAssertPublic` SSRF guard as the fetch, cached read-through for
+six hours (a real browser is expensive; a page's appearance changes on the scale of days), capped at
+4 MB because a capture is inlined as a data URL and would otherwise bloat every future save of the
+board.
+
+**Every refusal carries a reason the caller relays verbatim** — `unconfigured` (an operator fact:
+no Browser Rendering token on this deployment), `provider` (the page timed out or refused),
+`too-large`. A generic "screenshot failed" is exactly what sends a model back to inventing a
+limitation of its own, so the reason is a typed field, not prose. `POST /api/creative/screenshot`
+answers 503 / 502 / 400 accordingly, and `GET /api/admin/system-health` reports `browserCapture`
+so an operator can see the credential state without reading a canvas.
+
+### 2 · `canvas_capture_screenshot` — the tool, gated like every other server-side one
+
+Guest-GATED rather than account-required, on the reasoning the gated set exists for: an absent tool
+makes the model invent a limitation, and the invented one is always worse than the real one. A visitor
+now hears "that needs a free account" plus what the board can still build, from
+`CANVAS_SCREENSHOT_ACCOUNT_GATE`. `canvasScreenshotToolRedirect()` is the string every other refusal
+path points at, so the specific false sentence above is answered wherever it would be produced.
+
+Both prompt blocks were corrected: PICTURES now separates "a picture OF something" (find/generate)
+from "pixels of a page that already exists" (capture), and the website block makes the before
+non-optional — *"A redesign delivered without the before is an unsupported claim, and offering the
+page's TEXT as a substitute for its appearance is a failure."*
+
+### 3 · The comparison belongs TO the design, not beside it
+
+The obvious shape is a loose `image` object dragged next to the site. It is the wrong one: two
+unrelated objects somebody once arranged side by side are one drag from no longer being a comparison,
+and nothing downstream — an export, a share link, a marketplace listing — can tell the picture was
+ever the "before" of that particular design. So `websiteBeforeFrom` / `websiteBeforePatch` in the
+shared website contract put the capture ON the object, and the `site` surface gains a third reading:
+**Compare**, two equal columns, the dated capture beside the same framed document Preview shows.
+Equal width is the whole argument — a before drawn narrower flatters the new design for a reason that
+has nothing to do with the design. The reading only appears when there is something to compare or
+someone who can capture it, and an author who is not using Brain gets an address field and a Capture
+button that writes the identical patch.
+
+### 4 · Two duplications closed in the same pass
+
+- **`stageImageAsset`** — `canvas_add_image` had authored the image node, mime sniff, download name,
+  deliverable ledger entry and proposal label inline. Capture needs all five to be identical (a
+  captured before with no deliverable is a picture the export silently drops), so it is one helper
+  and `source` is data rather than a branch at each call site.
+- **`CANVAS_VIEWPORT_WIDTHS` moved into the canvas contract.** A remote browser needs a viewport, so
+  "desktop" had to be a number on the SERVER too — and retyping 1280 there is precisely the drift
+  `canvasViewport.ts` was extracted to end, one process boundary further out. A before captured at
+  1280 and framed beside an after drawn at 1200 is a comparison of two different layouts presented as
+  the same one. Ten frontend importers were repointed in the same pass.
+
+**Verification.** 14 service tests (`webScreenshot.test.ts`: SSRF refusal before a render is spent,
+unconfigured vs provider reasons, the token fallback, the device width actually sent, a 200 carrying a
+JSON error, the size ceiling) and 6 comparison tests (`websiteBeforeAfter.test.tsx`: a half-authored
+capture reads as no comparison rather than a broken image; the compare reading is absent when there is
+nothing to compare; a hand capture writes the same patch the agent does; the renderer's real reason
+reaches the user). `check-canvas-tool-contract`, `check-i18n-keys`, `check-design-tokens`,
+`check-design-scale` and `check-frontend-architecture` all pass; five locale catalogs carry real
+translations. api 2026.8.28 / ui 2026.8.62.
+
 ## ✅ RESOLVED 2026-08-19 — A stored alert that never ran, and fixed-price work nobody could transact
 
 Two Consolidated Gap Register items from the marketplace/freelance section, plus three entries that

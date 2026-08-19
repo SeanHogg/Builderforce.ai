@@ -25,6 +25,13 @@
  * leaves the document intact is the failure mode this vocabulary exists to guarantee.
  */
 
+import {
+  CANVAS_VIEWPORT_CAPTURE_HEIGHTS,
+  CANVAS_VIEWPORT_WIDTHS,
+  canvasViewport,
+  type CanvasViewport,
+} from './viewport';
+
 /** The declared section vocabulary. A section kind is a VALUE, never a new shape. */
 export const WEBSITE_SECTION_KINDS = ['hero', 'features', 'content', 'stats', 'testimonial', 'cta'] as const;
 
@@ -186,6 +193,79 @@ export function websiteThemeFrom(data: Record<string, unknown>): WebsiteTheme {
 export function activeWebsitePage(pages: WebsitePage[], activeId?: unknown): WebsitePage | null {
   if (!pages.length) return null;
   return pages.find((page) => page.id === activeId) ?? pages[0] ?? null;
+}
+
+/**
+ * The "BEFORE" — a dated photograph of the live page this design replaces.
+ *
+ * ── WHY A SITE OBJECT OWNS ITS OWN BEFORE ────────────────────────────────────────
+ * A redesign is not a document, it is a CLAIM: this is better than that. The claim is
+ * unreadable without the thing being replaced, and the canvas had nowhere to put it —
+ * so "show me a before and after" produced an after, alone, and an apology (measured
+ * 2026-08-19, ui 2026.8.60; see `api/src/application/web/webScreenshot.ts`).
+ *
+ * It lives ON the website object rather than as a loose `image` object beside it because
+ * the pairing has to survive everything the object survives: a save, a duplicate, an
+ * export, a marketplace listing, a share link. Two unrelated objects that a person once
+ * arranged side by side are one drag away from no longer being a comparison, and nothing
+ * downstream can tell that the image was ever the "before" of that particular site.
+ *
+ * ── WHY IT IS A CAPTURE AND NOT A URL ────────────────────────────────────────────
+ * Framing the old site live would make the comparison self-erasing: the moment the
+ * redesign ships, the "before" becomes the "after" and the board silently starts showing
+ * two copies of the same page. Most real sites refuse third-party framing anyway. Hence
+ * `capturedAt` — a before without a date is a picture, not evidence.
+ */
+export interface WebsiteBeforeCapture {
+  /** The live page these pixels are of. */
+  url: string;
+  /** `data:image/…` or an https image URL. */
+  imageUrl: string;
+  capturedAt: string;
+  /** The width the page was laid out at, so the comparison frames both halves alike. */
+  viewport: CanvasViewport;
+  width: number;
+  height: number;
+}
+
+/**
+ * Read an object's before-capture, or null when it has none.
+ *
+ * TOTAL and defensive for the same reason every parser in this module is: the fields may
+ * arrive from a model patch, and a half-authored capture must read as "no comparison yet"
+ * rather than rendering a broken image beside a finished design.
+ */
+export function websiteBeforeFrom(data: Record<string, unknown>): WebsiteBeforeCapture | null {
+  const url = text(data.beforeUrl, 2_000);
+  const imageUrl = typeof data.beforeImageUrl === 'string' ? data.beforeImageUrl.trim() : '';
+  if (!url || !imageUrl) return null;
+  const viewport = canvasViewport(data.beforeViewport);
+  return {
+    url,
+    imageUrl,
+    capturedAt: text(data.beforeCapturedAt, 40) ?? '',
+    viewport,
+    width: Number(data.beforeWidth) || CANVAS_VIEWPORT_WIDTHS[viewport],
+    height: Number(data.beforeHeight) || CANVAS_VIEWPORT_CAPTURE_HEIGHTS[viewport],
+  };
+}
+
+/**
+ * The patch that ATTACHES a capture to a site object — one authored shape, so a capture
+ * taken by Brain and one taken by a person pressing the button write identical fields.
+ */
+export function websiteBeforePatch(capture: {
+  url: string; imageUrl: string; capturedAt?: string; viewport?: unknown; width?: number; height?: number;
+}): Record<string, unknown> {
+  const viewport = canvasViewport(capture.viewport);
+  return {
+    beforeUrl: capture.url,
+    beforeImageUrl: capture.imageUrl,
+    beforeCapturedAt: capture.capturedAt || new Date().toISOString(),
+    beforeViewport: viewport,
+    beforeWidth: capture.width || CANVAS_VIEWPORT_WIDTHS[viewport],
+    beforeHeight: capture.height || CANVAS_VIEWPORT_CAPTURE_HEIGHTS[viewport],
+  };
 }
 
 export function websiteHeroFrom(data: Record<string, unknown>): { heading: string; body: string; cta: string } {

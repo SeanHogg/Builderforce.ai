@@ -1960,6 +1960,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
           qaRunnerContainer: Boolean(c.env.QA_RUNNER_CONTAINER),
           cloudRunner: Boolean(c.env.CLOUD_RUNNER),
           cloudflareAi: Boolean(c.env.CLOUDFLARE_AI_API_TOKEN && c.env.CLOUDFLARE_ACCOUNT_ID),
+          // Live-page capture (a redesign's "before" screenshot). Reported here because
+          // its absence is an OPERATOR fact the canvas relays to users verbatim — see
+          // application/web/webScreenshot.ts.
+          browserCapture: Boolean((c.env.CLOUDFLARE_BROWSER_API_TOKEN ?? c.env.CLOUDFLARE_AI_API_TOKEN) && c.env.CLOUDFLARE_ACCOUNT_ID),
         },
       },
       runtime: {

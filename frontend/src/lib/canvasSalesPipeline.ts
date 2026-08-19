@@ -40,6 +40,18 @@ export interface PipelineLane {
 
 export interface PipelineCard {
   id: string;
+  /**
+   * The canonical `deals.id` this card is a handle on, when the board was
+   * PROJECTED rather than authored.
+   *
+   * Null on a hand-authored card, and that null is load-bearing: it is exactly the
+   * difference between a card that can be dragged (the move writes the deal and the
+   * board comes back from the same response) and one that cannot, because there is
+   * no row behind it to move. The projection has always written it onto the object
+   * — this model simply dropped it, which is why FO-F1 could say "each card carries
+   * its dealId" and the renderer still had nothing to drag with.
+   */
+  dealId: number | null;
   lane: string;
   stage: string;
   title: string;
@@ -107,8 +119,10 @@ export function readPipelineModel(data: Record<string, unknown>): PipelineModel 
       const title = text(row.title ?? row.name);
       if (!title) return null;
       const probability = numberOrNull(row.probabilityPercent);
+      const dealId = numberOrNull(row.dealId);
       return {
         id: text(row.id, 40) || `card-${index}`,
+        dealId: dealId != null && Number.isInteger(dealId) && dealId > 0 ? dealId : null,
         lane: text(row.lane ?? row.swimlane, 40),
         stage: text(row.stage, 32),
         title,

@@ -11592,7 +11592,7 @@
       "openai": {
         "blurb": "Conecta tu suscripción ChatGPT/Codex o pega una clave de API de OpenAI.",
         "subscription": "suscripción ChatGPT/Codex",
-        "pastePrompt": "Después de iniciar sesión, copia la URL completa <code>http://localhost:1455/auth/callback?code=…&state=…</code> de la barra de direcciones y pégala aquí.",
+        "pastePrompt": "Tras iniciar sesión, el navegador puede mostrar un error de localhost: es lo esperado. Copia la URL completa <code>http://localhost:1455/auth/callback?code=…&state=…</code> desde la barra de direcciones y pégala abajo. Cierra antes cualquier <code>codex login</code> en ejecución: la CLI ocupa ese puerto y consumirá el código antes de que puedas pegarlo.",
         "pastePlaceholder": "Pega la URL de redirección de OpenAI…"
       },
       "google": {
@@ -14048,7 +14048,19 @@
       "pro": "Pro",
       "teams": "Equipos"
     },
-    "cycleLabel": "Ciclo de facturación"
+    "cycleLabel": "Ciclo de facturación",
+    "getPaidTab": "Cobrar",
+    "merchantTitle": "Aceptar pagos con tarjeta",
+    "merchantIntro": "Por donde ENTRA el dinero. Conecta una cuenta de cobro y cada factura que emitas llevará un enlace de pago: el dinero se liquida en tu cuenta y Builderforce no se queda con ninguna comisión.",
+    "receivablesTitle": "Facturas pendientes",
+    "noReceivables": "No hay nada pendiente. Las facturas emitidas aparecen aquí hasta que se pagan.",
+    "colInvoice": "Factura",
+    "colCustomer": "Cliente",
+    "colOutstanding": "Pendiente",
+    "colDue": "Vence",
+    "colAge": "Antigüedad",
+    "daysOverdue": "{count, plural, one {# día} other {# días}}",
+    "current": "Al día"
   },
   "policyPacks": {
     "title": "Paquetes de políticas",
@@ -18063,7 +18075,10 @@
         "liveMetric": "Métrica en vivo",
         "objective": "Objetivo",
         "pricing": "Precios",
-        "trigger": "Disparador"
+        "trigger": "Disparador",
+        "equityGrant": "Concesión de acciones",
+        "convertible": "SAFE / pagaré",
+        "payRun": "Nómina"
       },
       "field": {
         "actualTotal": "total real",
@@ -18136,7 +18151,6 @@
         "obligations": "Obligaciones",
         "offer": "Propuesta de entrada",
         "offerings": "Oferta",
-        "optionPool": "Pool de opciones",
         "options": "Opciones",
         "owner": "Responsable",
         "paidAmount": "cobrado",
@@ -18222,7 +18236,49 @@
         "watchesField": "Campo observado",
         "weaknesses": "Debilidades",
         "website": "Sitio web",
-        "wedge": "Punto de ataque"
+        "wedge": "Punto de ataque",
+        "companyRef": "Empresa",
+        "asOf": "A fecha de",
+        "issued": "Emitidas",
+        "poolAuthorized": "Pool autorizado",
+        "poolUnallocated": "Pool sin asignar",
+        "convertibles": "Convertibles",
+        "ownershipCheck": "Comprobación de titularidad",
+        "holder": "Titular",
+        "shareClass": "Clase de acciones",
+        "instrument": "Instrumento",
+        "quantity": "Cantidad",
+        "vested": "Consolidado",
+        "vestingStartAt": "Inicio de consolidación",
+        "vestingMonths": "Meses de consolidación",
+        "cliffMonths": "Meses de cliff",
+        "vestingFrequency": "Frecuencia de consolidación",
+        "acceleration": "Aceleración",
+        "cliffAt": "Fecha del cliff",
+        "unvested": "Sin consolidar",
+        "vestedPercent": "Consolidado",
+        "pricePerShare": "Precio por acción",
+        "fmvPerShare": "Valor razonable por acción",
+        "instrumentKind": "Instrumento",
+        "principal": "Principal",
+        "valuationCap": "Cap de valoración",
+        "discountPercent": "Descuento",
+        "interestRate": "Tipo de interés",
+        "maturesAt": "Vencimiento",
+        "convertsInto": "Se convierte en",
+        "collectionMode": "reclamación",
+        "issuedBy": "emitida por",
+        "paymentLink": "enlace de pago",
+        "customerEmail": "correo del cliente",
+        "source": "proveedor",
+        "periodStart": "periodo desde",
+        "periodEnd": "periodo hasta",
+        "paidAt": "pagada",
+        "grossAmount": "bruto",
+        "employerTaxes": "cotizaciones",
+        "totalCost": "coste total",
+        "employeeCount": "personas pagadas",
+        "syncedAt": "leída"
       },
       "column": {
         "actual": "Real",
@@ -18302,7 +18358,15 @@
         "value": "Valor",
         "variance": "Desviación",
         "variant": "Variante",
-        "verdict": "Veredicto"
+        "verdict": "Veredicto",
+        "shareClass": "Clase de acciones",
+        "vested": "Consolidado",
+        "principal": "Principal",
+        "cap": "Cap",
+        "discount": "Descuento",
+        "employee": "Persona",
+        "hours": "Horas",
+        "rate": "Tarifa"
       }
     },
     "datasetImportedWithPii": "Se importó {name}: {rows} filas, {columns} columnas. {pii} columnas contienen datos personales y se enmascaran.",
@@ -19676,11 +19740,22 @@
         "readings": "Formas de ver este sitio",
         "reading": {
           "preview": "Vista previa",
-          "edit": "Editar"
+          "edit": "Editar",
+          "compare": "Comparar"
         },
         "scheme": "Modo claro y oscuro del propio sitio",
         "schemeLight": "Claro",
-        "schemeDark": "Oscuro"
+        "schemeDark": "Oscuro",
+        "before": "Antes",
+        "after": "Después",
+        "beforeAlt": "Captura de pantalla del sitio actual en {url}",
+        "compareEmpty": "Todavía no hay nada que comparar. Pega la dirección del sitio al que sustituye este diseño y captúrala: la captura se guarda junto a este diseño como su «antes».",
+        "captureLabel": "Antes",
+        "capturePlaceholder": "https://tu-sitio-actual.com",
+        "capture": "Capturar",
+        "recapture": "Volver a capturar",
+        "capturing": "Capturando…",
+        "captureFailed": "No se pudo capturar la página."
       },
       "timeline": {
         "label": "Línea de tiempo",
@@ -20199,7 +20274,26 @@
         "sellerOwner": "Responsable nuestro",
         "buyerOwner": "Responsable suyo"
       }
-    }
+    },
+    "exportRestricted": "Restringido: esta tarjeta no se puede exportar",
+    "imageCapturedStatus": "Capturada",
+    "imageCapturedValidation": "Página en vivo renderizada y capturada desde {url}",
+    "imageCapturedProposal": "Añadir captura de pantalla «{title}»",
+    "screenshotDefaultTitle": "{host} — sitio actual",
+    "screenshotComparisonProposal": "Adjuntar la captura «antes» a «{title}»",
+    "gateScreenshotTitle": "Crea una cuenta para capturar páginas en vivo",
+    "gateScreenshotBody": "Un navegador real renderiza la página en los servidores de Builderforce, por lo que una captura requiere una cuenta. Crea una gratis y este lienzo —objetos, conversación y disposición— te acompaña.",
+    "noticeInvoiceNeedsAccount": "Emitir, registrar un pago y reclamar escriben en un libro real, así que necesitan un espacio de trabajo guardado. Tu factura se queda en este lienzo.",
+    "noticeInvoiceIncomplete": "Esta factura necesita un número, un cliente y un importe antes de poder emitirse.",
+    "noticeInvoiceIssued": "Factura {reference} emitida.",
+    "noticeInvoiceIssuedSent": "Factura {reference} emitida y enviada a {to}.",
+    "noticeInvoiceNothingOutstanding": "No queda nada pendiente en esta factura.",
+    "noticeInvoicePaymentRecorded": "Pago registrado en {reference}. Quedan {outstanding} pendientes.",
+    "noticeInvoicePaymentAlreadyRecorded": "Ese pago ya estaba registrado en {reference}.",
+    "noticeInvoiceChased": "{reference} reclamada — enviada a {to}.",
+    "noticeInvoiceChaseNoRecipient": "Reclamación de {reference} registrada, pero la tarjeta no tiene correo del cliente al que enviarla.",
+    "noticeInvoiceActionFailed": "No se ha podido hacer. No se ha enviado nada.",
+    "noticePayRunSync": "Pide a Brain que sincronice las nóminas: las lee de tu proveedor de nóminas conectado."
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -22982,5 +23076,55 @@
       "notApplicable": "No aplica",
       "gap": "Brecha conocida"
     }
+  },
+  "merchant": {
+    "loading": "Comprobando tu cuenta de cobro…",
+    "loadFailed": "No se ha podido leer tu cuenta de cobro.",
+    "statusLabel": "Pagos con tarjeta",
+    "status": {
+      "absent": "Sin configurar",
+      "pending": "Pendiente de ti",
+      "restricted": "Restringida",
+      "connected": "Lista"
+    },
+    "readyBody": "Tus clientes pueden pagar tus facturas con tarjeta. El dinero se liquida en tu propia cuenta y Builderforce no se queda con ninguna comisión.",
+    "incompleteBody": "Tu cuenta existe pero todavía no puede cobrar. Completa lo que te pide tu proveedor de pagos; hasta entonces, las facturas emitidas no llevarán enlace de pago.",
+    "absentBody": "Configura una cuenta de cobro y cada factura que emitas incluirá un enlace de pago. El dinero se liquida en tu cuenta, no en la nuestra, y Builderforce no se queda con ninguna comisión.",
+    "outstandingTitle": "Pendiente en tu proveedor de pagos",
+    "country": "País",
+    "currency": "Moneda de liquidación",
+    "payoutsLabel": "Retiros activados",
+    "unknown": "Aún se desconoce",
+    "yes": "Sí",
+    "no": "Todavía no",
+    "connect": "Configurar pagos con tarjeta",
+    "resume": "Continuar la configuración",
+    "connectFailed": "No se ha podido iniciar la configuración de pagos con tarjeta.",
+    "disconnect": "Desconectar",
+    "disconnectTitle": "¿Desconectar tu cuenta de cobro?",
+    "disconnectBody": "Las nuevas facturas dejarán de llevar enlace de pago. No se borra nada en tu proveedor de pagos —tus registros, reembolsos y disputas siguen donde están— y volver a conectar más adelante creará una cuenta nueva.",
+    "disconnectConfirm": "Desconectar",
+    "disconnectFailed": "No se ha podido desconectar la cuenta de cobro."
+  },
+  "publicInvoice": {
+    "loading": "Cargando tu factura…",
+    "loadFailed": "Ese enlace de factura no es válido. Pide uno nuevo a quien te lo envió.",
+    "missingToken": "A ese enlace le falta su código de acceso. Usa el enlace tal como te lo enviaron.",
+    "unavailableTitle": "Esta factura no está disponible",
+    "title": "Factura {reference}",
+    "billedTo": "Facturada a {customer}",
+    "total": "Total",
+    "paid": "Pagado hasta ahora",
+    "outstanding": "Pendiente",
+    "due": "Vence",
+    "daysOverdue": "{count, plural, one {# día de retraso} other {# días de retraso}}",
+    "colDescription": "Descripción",
+    "colQuantity": "Cant.",
+    "colUnit": "Precio unitario",
+    "colAmount": "Importe",
+    "payNow": "Pagar {amount}",
+    "confirming": "Confirmando tu pago…",
+    "payByTransfer": "Esta factura se paga por transferencia bancaria. Responde al mensaje que te envió este enlace si necesitas los datos de la cuenta.",
+    "settled": "Esta factura está saldada. Gracias."
   }
 }

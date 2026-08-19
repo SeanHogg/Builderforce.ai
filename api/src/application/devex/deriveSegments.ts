@@ -16,7 +16,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { tenantMembers, teams, teamMembers, memberProfiles } from '../../infrastructure/database/schema';
-import { normalizeSegments, type DevexSegments } from './devexSurveys';
+import { normalizeSegments, type DevexSegments } from '../../domain/devex/surveys';
 
 /** "engineering" → "Engineering", "ai_tools" → "Ai tools" — for enum-y labels. */
 function titleCase(s: string): string {

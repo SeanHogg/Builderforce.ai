@@ -100,6 +100,8 @@ const FOUNDER_LABELS: Record<FounderObjectKind, string> = {
   dataRoom: 'Data room', contract: 'Contract',
   budget: 'Budget', forecast: 'Forecast', invoice: 'Invoice', bill: 'Bill',
   account: 'Account',
+  equityGrant: 'Equity grant', convertible: 'SAFE / note',
+  payRun: 'Pay run',
 };
 
 const FOUNDER_STATUSES: Record<string, string> = {
@@ -115,6 +117,12 @@ const FOUNDER_STATUSES: Record<string, string> = {
   // card lie about the one field it exists to carry — the same argument `budget`'s
   // `drafting` default makes one line up.
   prospect: 'Prospect',
+  // A blank `equityGrant` starts `granted` and not `vested`, and a blank
+  // `convertible` starts `outstanding` and not `converted`: both defaults are the
+  // state that asserts the LEAST, because the alternative would have the card
+  // claim a fact about who owns the company before anybody recorded one.
+  granted: 'Granted', vesting: 'Vesting', vested: 'Vested', outstanding: 'Outstanding',
+  converted: 'Converted', live: 'Live',
 };
 
 export const FOUNDER_REGISTRY = lower({ specs: FOUNDER_OBJECT_SPECS, labels: FOUNDER_LABELS, statuses: FOUNDER_STATUSES });

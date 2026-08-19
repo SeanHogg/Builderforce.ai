@@ -27,6 +27,8 @@
 
 import type {
   BusinessPhoneCheckoutOpts,
+  ConnectedAccountStatus,
+  InvoicePaymentLinkOpts,
   PaymentProvider,
   CheckoutSessionOpts,
   CheckoutSessionResult,
@@ -294,6 +296,152 @@ export class StripeProvider implements PaymentProvider {
     return { sessionId: session.id, checkoutUrl: session.url };
   }
 
+  // ── Connect: the tenant's OWN merchant account (FO-C4) ──────────────────
+  //
+  // Three calls and one checkout mode. Everything above settles to Builderforce;
+  // everything here settles to the TENANT, with the tenant as merchant of record.
+  //
+  // Deliberately DESTINATION charges rather than direct ones: the session is
+  // created on the platform account with `transfer_data[destination]`, so
+  // `retrieveCheckoutSession` and the single signed webhook endpoint keep working
+  // unchanged. A direct charge would live on the connected account and need a second
+  // webhook endpoint with a second secret and a second verification path — three more
+  // things to get right for no behaviour the tenant can perceive.
+
+  /** Create a connected account for a tenant. It can take no money until onboarding
+   *  completes; `createConnectedAccountLink` is where that happens. */
+  async createConnectedAccount(opts: { email?: string | null; country?: string | null; metadata: Record<string, string> }): Promise<{ accountId: string }> {
+    this.requireConfigured();
+    const params = new URLSearchParams({
+      // `standard`: Stripe owns the dashboard for the connected account, which is
+      // what makes the TENANT — not us — responsible for their own disputes,
+      // refunds and tax reporting. An `express` account would put those on the
+      // platform, which is a commitment this product has not made.
+      type: 'standard',
+      'capabilities[card_payments][requested]': 'true',
+      'capabilities[transfers][requested]': 'true',
+    });
+    if (opts.email) params.set('email', opts.email);
+    if (opts.country) params.set('country', opts.country.toUpperCase().slice(0, 2));
+    for (const [key, value] of Object.entries(opts.metadata)) params.set(`metadata[${key}]`, value);
+
+    const account = await this.stripePost<{ id: string }>('https://api.stripe.com/v1/accounts', params, 'Stripe connect account error');
+    return { accountId: account.id };
+  }
+
+  /** A single-use onboarding URL. Short-lived by Stripe's design, which is why it is
+   *  never stored: a persisted link is one that has expired by the time it is used. */
+  async createConnectedAccountLink(opts: { accountId: string; returnUrl: string; refreshUrl: string }): Promise<{ url: string }> {
+    this.requireConfigured();
+    const params = new URLSearchParams({
+      account: opts.accountId,
+      return_url: opts.returnUrl,
+      refresh_url: opts.refreshUrl,
+      type: 'account_onboarding',
+    });
+    const link = await this.stripePost<{ url: string }>('https://api.stripe.com/v1/account_links', params, 'Stripe account link error');
+    return { url: link.url };
+  }
+
+  /** What Stripe says about the account — the only thing that may authorise a link. */
+  async connectedAccountStatus(accountId: string): Promise<ConnectedAccountStatus> {
+    this.requireConfigured();
+    const res = await fetch(`https://api.stripe.com/v1/accounts/${encodeURIComponent(accountId)}`, {
+      headers: { Authorization: `Bearer ${this.config.secretKey}` },
+    });
+    if (!res.ok) {
+      const err = await res.json() as { error?: { message?: string } };
+      throw new Error(`Stripe connect account read error: ${err.error?.message ?? res.status}`);
+    }
+    const account = await res.json() as {
+      id: string;
+      charges_enabled?: boolean;
+      payouts_enabled?: boolean;
+      details_submitted?: boolean;
+      country?: string | null;
+      default_currency?: string | null;
+      requirements?: { currently_due?: string[] | null; past_due?: string[] | null } | null;
+    };
+    // `currently_due` and `past_due` overlap; a set keeps the list honest rather than
+    // showing the tenant the same outstanding document twice.
+    const outstanding = new Set([
+      ...(account.requirements?.currently_due ?? []),
+      ...(account.requirements?.past_due ?? []),
+    ]);
+    return {
+      accountId: account.id,
+      chargesEnabled: account.charges_enabled === true,
+      payoutsEnabled: account.payouts_enabled === true,
+      detailsSubmitted: account.details_submitted === true,
+      country: account.country ?? null,
+      defaultCurrency: account.default_currency ? account.default_currency.toUpperCase() : null,
+      requirements: [...outstanding],
+    };
+  }
+
+  /**
+   * A hosted page where the TENANT's customer pays the TENANT's invoice.
+   *
+   * `transfer_data[destination]` sends the money to the tenant; `on_behalf_of` makes
+   * them the merchant of record, so the statement descriptor, the settlement currency
+   * and the dispute liability are all theirs rather than ours.
+   *
+   * NO `application_fee_amount`. Builderforce is not a party to a tenant invoicing
+   * their own customer, and a silent percentage on somebody else's revenue is not a
+   * thing to add without saying so on a pricing page.
+   */
+  async createInvoicePaymentLink(opts: InvoicePaymentLinkOpts): Promise<{ sessionId: string; checkoutUrl: string }> {
+    this.requireConfigured();
+    const params = new URLSearchParams({
+      mode: 'payment',
+      success_url: opts.successUrl,
+      cancel_url: opts.cancelUrl,
+      'line_items[0][quantity]': '1',
+      'line_items[0][price_data][currency]': opts.currency.toLowerCase(),
+      'line_items[0][price_data][unit_amount]': String(opts.amountCents),
+      'line_items[0][price_data][product_data][name]': opts.productName.slice(0, 250),
+      'payment_intent_data[transfer_data][destination]': opts.merchantAccountId,
+      'payment_intent_data[on_behalf_of]': opts.merchantAccountId,
+    });
+    if (opts.billingEmail) params.set('customer_email', opts.billingEmail);
+    for (const [key, value] of Object.entries(opts.metadata)) {
+      params.set(`metadata[${key}]`, value);
+      params.set(`payment_intent_data[metadata][${key}]`, value);
+    }
+    const session = await this.stripePost<{ id: string; url: string }>(
+      'https://api.stripe.com/v1/checkout/sessions',
+      params,
+      'Stripe invoice payment link error',
+      opts.idempotencyKey,
+    );
+    return { sessionId: session.id, checkoutUrl: session.url };
+  }
+
+  /**
+   * ONE form-encoded POST to Stripe.
+   *
+   * The call sites above each hand-wrote the same fetch, the same two headers, the
+   * same `res.ok` check and the same error unwrap. The four Connect calls would have
+   * made it eight copies, which is well past the point at which "did we remember to
+   * read `error.message`" is a defect waiting rather than a style preference.
+   */
+  private async stripePost<T>(url: string, params: URLSearchParams, failure: string, idempotencyKey?: string): Promise<T> {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.config.secretKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+      },
+      body: params.toString(),
+    });
+    if (!res.ok) {
+      const err = await res.json() as { error?: { message?: string } };
+      throw new Error(`${failure}: ${err.error?.message ?? res.status}`);
+    }
+    return await res.json() as T;
+  }
+
   /**
    * Read a checkout session back from Stripe.
    *
@@ -538,6 +686,24 @@ export class StripeProvider implements PaymentProvider {
             checkoutSessionId: obj['id'] as string,
             buyerRef: meta['buyerRef'],
             ...(Number.isInteger(buyerTenantId) && buyerTenantId > 0 ? { tenantId: buyerTenantId } : {}),
+            externalCustomerId: customer ?? '',
+            externalSubscriptionId: '',
+            billingEmail: (obj['customer_email'] as string | undefined) ?? customerDetails?.['email'],
+            raw: event,
+          };
+        }
+
+        // A TENANT's own invoice, paid by THEIR customer (FO-C4). Branched with the
+        // marketplace sale and for the same structural reason: it is `mode: 'payment'`
+        // with no subscription, so the plan mapping below would otherwise read a
+        // Builderforce plan activation out of somebody else's receivable.
+        if (meta['purchaseKind'] === 'tenant_invoice') {
+          const sellerTenantId = Number(meta['invoiceTenantId']);
+          return {
+            type: 'invoice.paid',
+            checkoutSessionId: obj['id'] as string,
+            invoiceRef: meta['invoiceRef'],
+            ...(Number.isInteger(sellerTenantId) && sellerTenantId > 0 ? { tenantId: sellerTenantId } : {}),
             externalCustomerId: customer ?? '',
             externalSubscriptionId: '',
             billingEmail: (obj['customer_email'] as string | undefined) ?? customerDetails?.['email'],

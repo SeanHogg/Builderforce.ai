@@ -130,7 +130,19 @@ export interface WebhookEvent {
      * revisit the link. The handler is idempotent against the redirect path —
      * both end at the same licence, which the unique index makes one.
      */
-    | 'listing.purchased';
+    | 'listing.purchased'
+    /**
+     * A TENANT's own invoice was paid by THEIR customer (FO-C4).
+     *
+     * Same shape of event as `listing.purchased` and for the same reason: the
+     * redirect back from the hosted page is the normal way a payment is recorded,
+     * and it cannot be the only way — a customer who pays and closes the tab has
+     * been charged, and the invoice would sit unpaid until somebody reconciled a
+     * bank statement by hand. The handler re-reads the session from the processor
+     * and lands on a `ledger_entries` row whose unique reference makes the second
+     * arrival a no-op rather than a second payment.
+     */
+    | 'invoice.paid';
 
   /** Use this to look up the tenant */
   externalCustomerId: string;
@@ -165,6 +177,8 @@ export interface WebhookEvent {
   checkoutSessionId?: string;
   /** `listing.purchased` — who bought it, from the session's signed metadata. */
   buyerRef?: string;
+  /** `invoice.paid` — which receivable, from the session's signed metadata. */
+  invoiceRef?: string;
 
   /** Raw provider-specific data for logging/debugging */
   raw: unknown;
@@ -210,6 +224,49 @@ export interface SubscriptionCheckoutOpts {
   metadata: Record<string, string>;
   /** Same key for the same subscriber + listing, so a double-click is one session. */
   idempotencyKey: string;
+}
+
+/**
+ * A hosted page where a TENANT's customer pays a TENANT's invoice (FO-C4).
+ *
+ * The distinguishing field is `merchantAccountId`. Every other checkout in this
+ * interface settles to Builderforce; this one settles to the tenant's own connected
+ * account, with the tenant as merchant of record. The session is still created on the
+ * platform account (a destination charge, not a direct one) so that
+ * {@link PaymentProvider.retrieveCheckoutSession} and the one signed webhook endpoint
+ * keep working unchanged — see `application/finance/merchantAccount.ts` for the whole
+ * argument.
+ *
+ * There is no application fee, deliberately. Builderforce is not a party to a tenant
+ * invoicing their own customer.
+ */
+export interface InvoicePaymentLinkOpts {
+  /** The tenant's connected account — money settles here. */
+  merchantAccountId: string;
+  amountCents: number;
+  currency: string;
+  /** Shown on the processor's page: the tenant's own invoice reference. */
+  productName: string;
+  billingEmail?: string | null;
+  successUrl: string;
+  cancelUrl: string;
+  /** Stamped on the session and read back to authorise. Never trusted from a client. */
+  metadata: Record<string, string>;
+  /** Same key for the same invoice, so re-issuing does not mint a second link. */
+  idempotencyKey: string;
+}
+
+/** What the processor says about a connected account, as opposed to what our row claims. */
+export interface ConnectedAccountStatus {
+  accountId: string;
+  /** The ONLY field that may authorise minting a payment link. */
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  detailsSubmitted: boolean;
+  country: string | null;
+  defaultCurrency: string | null;
+  /** What is still outstanding, in the processor's own words. */
+  requirements: string[];
 }
 
 /** What the processor says about a session, as opposed to what a redirect claims. */
@@ -293,6 +350,38 @@ export interface PaymentProvider {
    * card was already gone). Never throws for "nothing to do".
    */
   detachCards(opts: { paymentMethodId?: string | null; externalCustomerId?: string | null }): Promise<number>;
+
+  /**
+   * Create a CONNECTED merchant account for a tenant, so they can charge their own
+   * customers (FO-C4). Returns the processor's account id; the account cannot take
+   * money until onboarding completes — see {@link connectedAccountLink}.
+   */
+  createConnectedAccount(opts: { email?: string | null; country?: string | null; metadata: Record<string, string> }): Promise<{ accountId: string }>;
+
+  /**
+   * A single-use URL where the tenant completes (or resumes) onboarding at the
+   * processor. Short-lived by the processor's design, which is why this is a call
+   * rather than a stored column: a link persisted in our database would be a link
+   * that has expired by the time anybody clicks it.
+   */
+  createConnectedAccountLink(opts: { accountId: string; returnUrl: string; refreshUrl: string }): Promise<{ url: string }>;
+
+  /**
+   * Read a connected account back FROM THE PROCESSOR.
+   *
+   * The only thing that may authorise minting a payment link. An account can exist,
+   * look connected in our own row, and be unable to take a payment because a document
+   * is outstanding — which surfaces to the tenant as a customer telling them the link
+   * did not work.
+   */
+  connectedAccountStatus(accountId: string): Promise<ConnectedAccountStatus>;
+
+  /**
+   * A hosted page where a tenant's customer pays a tenant's invoice. Grants nothing
+   * and marks nothing paid; pair it with {@link retrieveCheckoutSession}, exactly like
+   * the listing paths.
+   */
+  createInvoicePaymentLink(opts: InvoicePaymentLinkOpts): Promise<{ sessionId: string; checkoutUrl: string }>;
 
   /**
    * Parse and validate an inbound webhook payload.

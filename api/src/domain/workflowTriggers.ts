@@ -4,9 +4,9 @@
  *   • transport triggers  — schedule / webhook / rss / inbound-email: fired by the
  *     scheduler sweep (schedule/rss) or an addressed inbound request (webhook/
  *     inbound-email token).
- *   • event triggers      — monitor-breach / incident-created / incident-resolved /
- *     incident-status-change: fired SYNCHRONOUSLY by a domain event inside the app
- *     (see application/workflow/eventTriggers.ts fireEventTriggers). No cron, no
+ *   • event triggers      — every entry in {@link EVENT_TRIGGER_TYPES}: fired
+ *     SYNCHRONOUSLY by a domain event inside the app (see
+ *     application/workflow/eventTriggers.ts fireEventTriggers). No cron, no
  *     token — they sit in the registry as enabled rows keyed by (tenant, type) and
  *     the emitting service matches + runs them when the event happens.
  * `manual` and the various data-collection labels that have no autonomous transport
@@ -20,17 +20,69 @@
 import type { WorkflowDefinition } from './workflowGraph';
 
 /**
- * Event-driven trigger types — fired by an internal domain event (a monitor
- * breaching, an incident opening/resolving/changing status) rather than by a
- * cron sweep or an inbound request. The Reliability subsystem emits these.
+ * Event-driven trigger types — fired by an internal domain event rather than by a
+ * cron sweep or an inbound request.
+ *
+ * Three families, all dispatched by the SAME `fireEventTriggers` seam:
+ *   • Reliability — a monitor breaching, an incident opening / resolving /
+ *     changing status. Emitted by MonitoringService / IncidentService.
+ *   • Delivery    — a board event (task created / moved / completed, comment
+ *     added). Emitted by the task application service.
+ *   • Growth      — a form submission, a page view, a signup, a purchase, an
+ *     email open / click, and a generic integration event. Emitted by the
+ *     collection, site, commerce, campaign and webhook services that own them.
+ *
+ * The Delivery/Growth half rendered in the builder's palette for a long time
+ * while being excluded from {@link ACTIVATABLE_TRIGGER_TYPES}, so choosing "task
+ * moved → run this workflow" created no `workflow_triggers` row and nothing ever
+ * fired it. Adding a type here is the whole activation step; the emitting service
+ * then calls `fireEventTriggers` with the matching context.
  */
 export const EVENT_TRIGGER_TYPES = [
+  // Reliability
   'monitor-breach',
   'incident-created',
   'incident-resolved',
   'incident-status-change',
+  // Delivery
+  'board-event',
+  // Growth
+  'form-submit',
+  'page-view',
+  'signup',
+  'purchase',
+  'email-open',
+  'email-click',
+  'integration',
 ] as const;
 export type EventTriggerType = (typeof EVENT_TRIGGER_TYPES)[number];
+
+/**
+ * The config keys a trigger row may filter on, and therefore the keys an emitting
+ * service may supply as event context. Same key on both sides by construction —
+ * the builder writes `config.<key>`, `fireEventTriggers` matches it against
+ * `match.<key>`, and a blank/absent filter means "any".
+ *
+ * This is a LIST rather than a chain of hand-written comparisons because the
+ * previous five-branch version is exactly what made adding a sixth trigger family
+ * a code change in the matcher instead of a data change here. Keys must stay in
+ * agreement with the builder palette's field keys (`nodeKinds.ts`).
+ */
+export const TRIGGER_FILTER_KEYS = [
+  // Reliability
+  'severity', 'affectedSystem', 'incidentSource', 'monitorType', 'status',
+  // Delivery
+  'boardEvent',
+  // Growth
+  'formId', 'pagePath', 'sku', 'campaign', 'integrationEvent',
+  // NOTE: the palette's `source` field is a free-text LABEL on every trigger node,
+  // not a filter. Treating it as one would silently stop every existing trigger
+  // whose author typed a label into it, because no emitter supplies that context.
+] as const;
+export type TriggerFilterKey = (typeof TRIGGER_FILTER_KEYS)[number];
+
+/** The event context an emitter supplies, keyed by the filter it satisfies. */
+export type TriggerMatchContext = Partial<Record<TriggerFilterKey, string | null | undefined>>;
 
 /** Trigger types that fire workflows autonomously (no user click). */
 export const ACTIVATABLE_TRIGGER_TYPES = [

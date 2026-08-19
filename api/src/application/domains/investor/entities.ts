@@ -7,6 +7,7 @@
  */
 import {
   companies,
+  dataRoomShares,
   dataRooms,
   dueDiligenceChecklists,
   dueDiligenceDocuments,
@@ -25,6 +26,15 @@ export const INVESTOR_ENTITIES = defineDomainEntities('investor', [
   entity(companies, { kind: 'company', registers: true }),
   entity(products, { kind: 'product', registers: true }),
   entity(dataRooms, { kind: 'data_room', registers: true }),
+  /**
+   * READ-ONLY through the generic path, for the same reason the signature and
+   * legal-document share entities are: minting one sends an NDA and mints a
+   * credential whose plaintext exists for exactly one response, and revoking one
+   * is a decision with an audit trail. Every write goes through
+   * `dataRoomSharing.ts`; this registration gives the grant metadata a seat on
+   * `canvas_read_domain` and the entity browser and nothing more.
+   */
+  entity(dataRoomShares, { kind: 'data_room_share', readOnly: true }),
   entity(investmentOpportunities, { kind: 'opportunity', registers: true }),
   productIdeas,
   dueDiligenceChecklists,

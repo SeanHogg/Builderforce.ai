@@ -71,6 +71,7 @@ import { runTriggerSweep } from './application/canvas/runTriggerSweep';
 import { runOperationsRollup } from './application/operations/operationsRollup';
 import { runSignatureReminderSweep } from './application/signature/runSignatureReminderSweep';
 import { runFormReminderSweep } from './application/collection/formInvitations';
+import { runCollectionsSweep } from './application/finance/collectionsLadder';
 import { runLegalRollup } from './application/legal/legalRollup';
 import { runSequenceSweep } from './application/sales/sequenceRunner';
 
@@ -190,6 +191,27 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       const r = await runSignatureReminderSweep(env);
       return r.expired || r.reminded || r.failed
         ? `expired=${r.expired} reminded=${r.reminded}${r.failed ? ` failed=${r.failed}` : ''}`
+        : null;
+    },
+  },
+  {
+    key: 'collections',
+    cadence: 'daily',
+    // The receivable half of the same job, and the half a company actually needs:
+    // an unsigned contract costs an opportunity, an unpaid invoice costs cash.
+    // `notify` is the DEFAULT mode, so on most workspaces this records the rung
+    // that is due and tells the board rather than emailing a customer — see the
+    // ladder's own note on why an unattended send to somebody else's customer is
+    // the line `runTriggerSweep` also refuses to cross.
+    description:
+      'Climb one rung of the collections ladder on every overdue invoice, and rewrite '
+      + '`ageingDays` on every canvas invoice card from its own due date. The rung is '
+      + 'recorded before it is sent and the (tenant, invoice, step) index is unique, so '
+      + 'a re-run cannot chase the same customer twice for the same rung.',
+    run: async ({ env }) => {
+      const r = await runCollectionsSweep(env, buildDatabase(env));
+      return r.sent || r.queued || r.failed || r.aged
+        ? `sent=${r.sent} queued=${r.queued} aged=${r.aged}${r.failed ? ` failed=${r.failed}` : ''}${r.skipped ? ` skipped=${r.skipped}` : ''}`
         : null;
     },
   },

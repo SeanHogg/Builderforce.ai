@@ -42,7 +42,7 @@ import { CanvasObjectSurfaceButton } from './CanvasObjectSurfaceButton';
 import { controlLabels, readGameControls } from '@/lib/gamePoster';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, WEB_PAGE_KINDS } from '@/lib/canvasWebPage';
-import { canvasViewport } from '@/lib/canvasViewport';
+import { canvasViewport } from '@builderforce/creation-canvas-contract';
 import { dashboardWidgetsPatch, readDashboardWidgets } from '@/lib/canvasDashboard';
 import { PIPELINE_MAX_CARDS_PER_CELL, cardProbabilityPercent, cardsAt, pipelineTotals, readPipelineModel, stageTotals } from '@/lib/canvasSalesPipeline';
 import {
@@ -602,17 +602,32 @@ function SocialCampaignBody({ data }: { data: CreationNodeData }) {
 }
 
 /**
- * The sales pipeline, as a kanban with swimlanes.
+ * A pipeline, as a kanban with swimlanes — and a deal you can actually drag.
  *
  * Stages across, segments down, a deal at the intersection — because "qualified"
  * is different work for a founder and for an enterprise buyer, and one column of
  * both is a list nobody can act on. The model (`canvasSalesPipeline`) does the
  * normalising; this only draws it.
  *
+ * ── WHY THE DRAG IS THE POINT ────────────────────────────────────────────────
+ * FO-F1 made the board a PROJECTION and gave every card its `dealId`, and named
+ * itself after "a deal dragged on the board" — which was then possible through the
+ * MODEL (`canvas_move_deal`) and not through a pointer, because this component had
+ * no drag handler. Everything the gesture needs already existed: the card carries
+ * the canonical id, and ONE call both moves the deal and returns the redrawn
+ * board. So this is an affordance over an existing write, and it is deliberately
+ * not a second write path — `onMoveDeal` reaches exactly the same `moveDeal` the
+ * tool does, and the card is redrawn from that call's own response.
+ *
+ * A card with no `dealId` is NOT draggable, and that is the honest rendering: a
+ * hand-authored card has no row behind it to move, and letting it slide into
+ * another column would show a change the CRM never made.
+ *
  * `nowheel`/`nodrag` on the scroller: the board owns the wheel for zoom, so
- * without them scrolling to a later stage zooms the canvas instead.
+ * without them scrolling to a later stage zooms the canvas instead, and a pointer
+ * drag on a card would pan the board rather than move the deal.
  */
-function SalesPipelineBody({ data }: { data: CreationNodeData }) {
+function PipelineBoardBody({ data, onMoveDeal }: { data: CreationNodeData; onMoveDeal?: (dealId: number, stage: string) => void }) {
   const t = useTranslations('creationCanvas.node');
   const model = useMemo(() => readPipelineModel(data as unknown as Record<string, unknown>), [data]);
   const stageLabel = (stage: string) => (t.has(`pipelineStage.${stage}`) ? t(`pipelineStage.${stage}`) : stage);
@@ -624,6 +639,28 @@ function SalesPipelineBody({ data }: { data: CreationNodeData }) {
   // The whole board's OPEN pipeline, weighted. This is what makes the object answer the
   // question it exists for — "will I hit my number" — rather than only "how many cards".
   const totals = useMemo(() => pipelineTotals(model), [model]);
+
+  /** The deal under the pointer, and the column it is over. Local because it is
+   *  pure gesture state — nothing outside this card needs to know a drag is in
+   *  flight, and putting it on the node would make a hover a board mutation. */
+  const [dragging, setDragging] = useState<number | null>(null);
+  const [overStage, setOverStage] = useState<string | null>(null);
+
+  const canMove = Boolean(onMoveDeal);
+  const endDrag = () => { setDragging(null); setOverStage(null); };
+
+  const drop = (stage: string) => (event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const dealId = Number(event.dataTransfer.getData('application/x-builderforce-deal') || dragging || 0);
+    endDrag();
+    // A drop back into the column it came from is not a move. Refused here rather
+    // than at the API, so an accidental nudge costs nothing and writes no touch.
+    if (!dealId || !onMoveDeal) return;
+    const card = model.cards.find((row) => row.dealId === dealId);
+    if (card && card.stage === stage) return;
+    onMoveDeal(dealId, stage);
+  };
 
   return (
     <div
@@ -666,16 +703,45 @@ function SalesPipelineBody({ data }: { data: CreationNodeData }) {
             const cards = cardsAt(model, laneIndex, stage);
             const shown = cards.slice(0, PIPELINE_MAX_CARDS_PER_CELL);
             return (
-              <span key={stage} className={styles.pipelineCell}>
-                {shown.map((card) => (
-                  <article key={card.id} className={styles.pipelineCard}>
-                    <b>{card.title}</b>
-                    {card.note && <p>{card.note}</p>}
-                    {card.valueCents != null && (
-                      <em>{money(card.valueCents)} · {t('pipelineOdds', { percent: cardProbabilityPercent(card) })}</em>
-                    )}
-                  </article>
-                ))}
+              <span
+                key={stage}
+                className={styles.pipelineCell}
+                data-drop={canMove && dragging != null && overStage === stage ? 'true' : undefined}
+                // `preventDefault` on drag-over is what MAKES an element a drop
+                // target in the HTML drag protocol — without it the drop event
+                // never fires and the card silently springs back.
+                onDragOver={canMove ? (event) => { event.preventDefault(); setOverStage(stage); } : undefined}
+                onDrop={canMove ? drop(stage) : undefined}
+              >
+                {shown.map((card) => {
+                  const draggable = canMove && card.dealId != null;
+                  return (
+                    <article
+                      key={card.id}
+                      className={styles.pipelineCard}
+                      draggable={draggable}
+                      data-draggable={draggable ? 'true' : undefined}
+                      data-dragging={dragging != null && dragging === card.dealId ? 'true' : undefined}
+                      // Named so a screen reader is told the card is movable and
+                      // where it currently sits — a drag affordance nobody can
+                      // perceive is a drag affordance for one kind of user.
+                      aria-grabbed={draggable ? (dragging === card.dealId) : undefined}
+                      title={draggable ? t('pipelineDragHint', { stage: stageLabel(card.stage) }) : undefined}
+                      onDragStart={draggable ? (event) => {
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData('application/x-builderforce-deal', String(card.dealId));
+                        setDragging(card.dealId);
+                      } : undefined}
+                      onDragEnd={draggable ? endDrag : undefined}
+                    >
+                      <b>{card.title}</b>
+                      {card.note && <p>{card.note}</p>}
+                      {card.valueCents != null && (
+                        <em>{money(card.valueCents)} · {t('pipelineOdds', { percent: cardProbabilityPercent(card) })}</em>
+                      )}
+                    </article>
+                  );
+                })}
                 {cards.length > shown.length && <small>{t('pipelineMore', { count: cards.length - shown.length })}</small>}
               </span>
             );
@@ -2462,6 +2528,16 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
    *  Selecting, clearing the inspector and flying the viewport are one call, so a
    *  card never spells out three of the four and forget the fourth. */
   onRevealObject?: (nodeId: string) => void;
+  /**
+   * A deal dragged into another stage on a pipeline card.
+   *
+   * Deliberately NOT `onEditData`: this does not patch the card, it moves the DEAL
+   * and redraws the card from the same response — which is the whole mechanism
+   * FO-F1 put in place of the mirroring instruction. Absent on a read-only board or
+   * on one with no workspace behind it, which is what makes every card
+   * non-draggable there rather than draggable-and-silently-inert.
+   */
+  onMoveDeal?: (nodeId: string, dealId: number, stage: string) => void;
 };
 
 /** Object kinds whose body IS a document. Registry kinds, so a new document-like
@@ -2570,7 +2646,7 @@ function DensityIcon({ density }: { density: CanvasNodeDensity }) {
   </svg>;
 }
 
-export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onOpenPanel, onInsertFrom, onOpenSurface, onRevealObject }: CreationNodeProps) {
+export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onOpenBuiltinAgent, onEditData, onExport, onOpenPanel, onInsertFrom, onOpenSurface, onRevealObject, onMoveDeal }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const specBoard = useSpecDeriveBoard(data.kind);
   const isWide = ['workflow', 'website', 'prototype', 'guidedTour', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
@@ -2758,7 +2834,15 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
           {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})}
         />}
         {(data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report') && <DashboardBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
-        {data.kind === 'salesPipeline' && <SalesPipelineBody data={data} />}
+        {/* One renderer for BOTH boards. A `fundingRound` whose `cards` were written by
+            the raise projection (FO-E1) is a pipeline in every sense the kanban cares
+            about — stages across, a deal at each intersection — and giving it a second
+            component would be two answers to "how is a pipeline drawn". A round nobody
+            has synced has no `cards` and falls through to its spec fields, unchanged. */}
+        {(data.kind === 'salesPipeline' || (data.kind === 'fundingRound' && Array.isArray(data.cards) && data.cards.length > 0)) && <PipelineBoardBody
+          data={data}
+          {...(onMoveDeal ? { onMoveDeal: (dealId: number, stage: string) => onMoveDeal(id, dealId, stage) } : {})}
+        />}
         {data.kind === 'map' && <MapBody
           data={data}
           {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})}

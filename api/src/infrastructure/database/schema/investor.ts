@@ -134,6 +134,58 @@ export const dataRooms = pgTable('data_rooms', {
   uniqueIndex('uq_data_rooms_name').on(t.tenantId, t.companyId, t.name),
 ]);
 
+/**
+ * A revocable link that lets an external firm — no account, no session — open one
+ * `data_rooms` row and read the documents in it.
+ *
+ * ── WHAT THIS TURNS FROM DECORATION INTO ENFORCEMENT (FO-E2) ────────────────
+ * `data_rooms.nda_required`, `.watermark` and `.expires_at` had no reader. This
+ * table is the reader: a share cannot resolve while the NDA it is bound to is
+ * unsigned, cannot resolve past either clock, and cannot carry `download` while
+ * the room requires a watermark — because an un-watermarked copy of a
+ * watermarked room is exactly what that column exists to prevent.
+ *
+ * Same mint/hash/resolve shape as `signature_parties.tokenHash`,
+ * `form_recipients.tokenHash` and `legal_document_shares.tokenHash`
+ * (`shareToken.ts`); the resolve-time policy is the ONE `shareGrantState()`
+ * predicate all four now call rather than four re-tests of the same two columns.
+ *
+ * No `nda_state` column: whether it is signed is `signature_requests.status` on
+ * the row `ndaSignatureRequestId` points at, derived at read time — the same rule
+ * `legal_document_files` states, and the reason this cannot report "signed" for
+ * an NDA that was declined. No access-log column either: every view is an
+ * `activity_log` row (migration 0295 — THE audit store), which is what the
+ * analytics read groups over.
+ */
+export const dataRoomShares = pgTable('data_room_shares', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull(),
+  dataRoomId:  integer('data_room_id').notNull().references(() => dataRooms.id, { onDelete: 'cascade' }),
+  tokenHash:   varchar('token_hash', { length: 64 }).notNull(),
+  recipientName:  varchar('recipient_name', { length: 200 }),
+  recipientEmail: varchar('recipient_email', { length: 320 }),
+  /** The FIRM as a `party_roles.party_ref`, so "which fund read the cap table"
+   *  joins to the same investor object the raise pipeline uses (FO-A1/FO-E1)
+   *  rather than to a typed name. */
+  firmPartyRef: varchar('firm_party_ref', { length: 64 }),
+  /** 'view' | 'download'. Forced to 'view' at mint time while the room watermarks. */
+  permission:  varchar('permission', { length: 16 }).notNull().default('view'),
+  /** The `signature_requests` row the NDA was sent through. Real FK declared in
+   *  the migration; kept off the Drizzle declaration for the same cross-module
+   *  reason `legal_document_files.signatureRequestId` is. */
+  ndaSignatureRequestId: integer('nda_signature_request_id'),
+  /** The SHARE's own lapse date. The ROOM's `expiresAt` is enforced on top of it,
+   *  so shortening the room shortens every link into it. */
+  expiresAt:   timestamp('expires_at'),
+  revokedAt:   timestamp('revoked_at'),
+  createdBy:   varchar('created_by', { length: 64 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_data_room_shares_token').on(t.tokenHash),
+  index('idx_data_room_shares_room').on(t.dataRoomId, t.createdAt),
+  index('idx_data_room_shares_tenant').on(t.tenantId, t.createdAt),
+]);
+
 /** A diligence checklist. */
 export const dueDiligenceChecklists = pgTable('due_diligence_checklists', {
   id:         serial('id').primaryKey(),
