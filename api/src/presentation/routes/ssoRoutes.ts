@@ -21,14 +21,14 @@
  */
 
 import { Hono, type Context } from 'hono';
-import { and, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { resolveApiOrigin, resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { signState, verifyState } from '../../infrastructure/auth/oauthState';
-import { oauthAccounts, tenantMembers, users } from '../../infrastructure/database/schema';
-import { ensureStarterWorkspace } from '../../application/tenant/starterWorkspace';
+import {
+  mintSessionExchangeCode, readSsoLoginState, safeRedirectPath, signSsoLoginState,
+} from '../../application/auth/ssoLoginState';
+import { signInWithSso } from '../../application/auth/ssoSignIn';
 import {
   SsoError,
   addDomain,
@@ -55,24 +55,6 @@ const handle = async (run: () => Promise<Response>): Promise<Response> => {
     throw error;
   }
 };
-
-/** `oauth_accounts.provider` for an SSO identity. One value, with the connection
- *  id inside the account id, so two institutions' identically-numbered subjects
- *  stay distinct under `uq_oauth_provider_account`. */
-const SSO_PROVIDER = 'sso';
-const ssoAccountId = (connectionId: number, subject: string): string => `${connectionId}|${subject}`.slice(0, 255);
-
-/** Only a same-origin relative path survives. Same guard as the OAuth routes —
- *  the check has to exist on every path that echoes a redirect back. */
-function safeRedirect(path: string | null | undefined): string {
-  return typeof path === 'string'
-    && path.startsWith('/')
-    && !path.startsWith('//')
-    && !path.includes('://')
-    && !path.includes('\\')
-    ? path
-    : '/dashboard';
-}
 
 // ---------------------------------------------------------------------------
 // The public half — signing in
@@ -118,12 +100,12 @@ export function createSsoLoginRoutes(db: Db): Hono<HonoEnv> {
       throw new SsoError('That address does not belong to a workspace with single sign-on. Sign in with your password, or ask your administrator to connect your domain.', 404);
     }
 
-    const redirect = safeRedirect(c.req.query('redirect'));
+    const redirect = safeRedirectPath(c.req.query('redirect'));
     // The nonce is minted by the service and signed INTO the state here — the
     // authorization URL comes back without one precisely so the two cannot
     // disagree, and the callback rejects itself if they ever do.
     const started = await startSsoLogin(c.env as Env, connection, callbackUrl(c));
-    const state = await signState(c.env.JWT_SECRET, {
+    const state = await signSsoLoginState(c.env.JWT_SECRET, {
       cid: connection.id,
       nonce: started.nonce,
       redirect,
@@ -145,10 +127,8 @@ export function createSsoLoginRoutes(db: Db): Hono<HonoEnv> {
     // 10 minutes: long enough for an IdP that shows a consent screen and an MFA
     // prompt, short enough that a captured authorization URL is not a standing
     // invitation.
-    const parsed = await verifyState<{ cid: number; nonce: string; redirect: string }>(
-      c.env.JWT_SECRET, state, 600_000,
-    );
-    if (!parsed?.cid || !parsed.nonce) return fail('sso_invalid_state');
+    const parsed = await readSsoLoginState(c.env.JWT_SECRET, state);
+    if (!parsed) return fail('sso_invalid_state');
 
     const connection = await connectionById(db, parsed.cid);
     if (!connection) return fail('sso_connection_unavailable');
@@ -167,80 +147,17 @@ export function createSsoLoginRoutes(db: Db): Hono<HonoEnv> {
       return fail('sso_domain_not_permitted');
     }
 
-    const accountId = ssoAccountId(connection.id, identity.subject);
-    const [bound] = await db
-      .select({ userId: oauthAccounts.userId })
-      .from(oauthAccounts)
-      .where(and(eq(oauthAccounts.provider, SSO_PROVIDER), eq(oauthAccounts.providerAccountId, accountId)))
-      .limit(1);
+    // Everything that WRITES — provisioning, the provider binding, workspace
+    // membership, the suspension check — is the application layer's. A route
+    // holding the account-creation rules for a whole authentication method is
+    // exactly the seam `check:layering` guards.
+    const signedIn = await signInWithSso(c.env as Env, db, identity);
+    if (!signedIn.ok) return fail(signedIn.error);
 
-    let userId = bound?.userId ?? '';
-    if (!userId) {
-      const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, identity.email)).limit(1);
-      userId = existing?.id ?? '';
-      if (!userId) {
-        // The connection's own switch. Off means the IdP authenticated somebody
-        // real and we still refuse — which is what an institution that
-        // provisions seats by hand is asking for, and it must not be silently
-        // overridden by a successful login.
-        if (!connection.jitProvisioning) return fail('sso_account_not_provisioned');
-        userId = crypto.randomUUID();
-        const username = identity.email.split('@')[0]!.replace(/[^a-z0-9_]/gi, '_').toLowerCase().slice(0, 20)
-          || `user_${crypto.randomUUID().slice(0, 8)}`;
-        await db.insert(users).values({
-          id: userId,
-          email: identity.email,
-          username: `${username}_${crypto.randomUUID().slice(0, 4)}`,
-          displayName: identity.name,
-          passwordHash: null,
-          apiKeyHash: null,
-          // The institution's IdP vouched for the address — exactly what OAuth
-          // vouching is — so the account skips the signup OTP gate.
-          emailVerifiedAt: new Date(),
-        });
-        await ensureStarterWorkspace(c.env as Env, db, {
-          id: userId,
-          email: identity.email,
-          username,
-          displayName: identity.name,
-        });
-      }
-      await db.insert(oauthAccounts).values({
-        userId,
-        provider: SSO_PROVIDER,
-        providerAccountId: accountId,
-        email: identity.email,
-        displayName: identity.name,
-      }).onConflictDoNothing({ target: [oauthAccounts.provider, oauthAccounts.providerAccountId] });
-    }
-
-    // Membership in the workspace that owns the connection, at the role IT
-    // declared. Added on every sign-in rather than only at creation: an
-    // administrator who connects a domain expects existing accounts on it to
-    // arrive in their workspace, not only ones created afterwards.
-    const [member] = await db
-      .select({ id: tenantMembers.id })
-      .from(tenantMembers)
-      .where(and(eq(tenantMembers.tenantId, connection.tenantId), eq(tenantMembers.userId, userId)))
-      .limit(1);
-    if (!member) {
-      await db.insert(tenantMembers).values({
-        tenantId: connection.tenantId,
-        userId,
-        role: (['owner', 'manager', 'developer', 'viewer'] as const).includes(connection.defaultRole as 'viewer')
-          ? connection.defaultRole as 'viewer'
-          : 'developer',
-      });
-    }
-
-    const [user] = await db.select({ id: users.id, isSuspended: users.isSuspended }).from(users).where(eq(users.id, userId)).limit(1);
-    if (!user) return fail('sso_account_not_found');
-    if (user.isSuspended) return fail('account_suspended');
-
-    const exchange = await signState(c.env.JWT_SECRET, {
-      uid: userId,
+    const exchange = await mintSessionExchangeCode(c.env.JWT_SECRET, {
+      uid: signedIn.userId,
       amr: 'sso',
-      redirect: safeRedirect(parsed.redirect),
+      redirect: parsed.redirect,
     });
     return c.redirect(`${frontend}/auth/callback?code=${encodeURIComponent(exchange)}`, 302);
   });

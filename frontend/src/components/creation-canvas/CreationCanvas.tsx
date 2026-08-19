@@ -349,6 +349,12 @@ const CanvasReleasesPanel = dynamic(
 );
 
 const DND_MIME = 'application/x-builderforce-creation-object';
+/**
+ * How long an outcome message holds the pill's one status line before the routine
+ * save state may take it back. Long enough to read a sentence; short enough that
+ * "Saved on this device" is still the resting state a moment later.
+ */
+const OUTCOME_HOLD_MS = 4_000;
 const COURSE_AUTHORING_CONTRACT = '{ version, language, audience, description, estimatedMinutes, passingScore, completedLessonIds: [], modules: [{ id, title, description, lessons: [{ id, title, objective, content, activity, durationMinutes }], assessment: { question, choices, answer, explanation } }] }';
 const COURSE_AUTHORING_SCHEMA = {
   type: 'object',
@@ -1379,7 +1385,33 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [activeAgentIds, setActiveAgentIds] = useState<Set<string>>(() => new Set());
   const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
   const { options: canvasModelOptions, identity: modelIdentity } = useChatModelOptions();
-  const [notice, setNotice] = useState('Session saved');
+  const [notice, setNoticeText] = useState('Session saved');
+  /** When the last OUTCOME was announced — see {@link noteSaveState}. */
+  const lastOutcomeAt = useRef(0);
+  /**
+   * Say what just happened.
+   *
+   * The pill has one status line and two kinds of message compete for it: an
+   * OUTCOME ("Evaluation added to canvas", "Sketch added", an error) and the
+   * routine SAVE STATE ("Saving…", "Saved on this device"). Autosave is debounced
+   * 300ms behind the edit that triggered it, so every outcome used to be wiped by
+   * a save confirmation about a third of a second after it appeared — too fast to
+   * read, and the one message the person was waiting for.
+   */
+  const setNotice = useCallback((text: string) => {
+    lastOutcomeAt.current = Date.now();
+    setNoticeText(text);
+  }, []);
+  /**
+   * Report the save state, unless it would talk over a fresher outcome. A save
+   * that stays quiet is not a save that did not happen — the outcome message
+   * already told the person their change landed, and the next edit's save says so
+   * again once the outcome has had its moment.
+   */
+  const noteSaveState = useCallback((text: string) => {
+    if (Date.now() - lastOutcomeAt.current < OUTCOME_HOLD_MS) return;
+    setNoticeText(text);
+  }, []);
 
   /**
    * SHARED FREE SESSION (no account).
@@ -1910,7 +1942,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         hydrated.current = true;
         trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [...new Set(loadedNodes.map((node) => node.data.kind))] } });
         void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'succeeded', durationMs: performance.now() - openedAt }).catch(() => undefined);
-        setNotice(t('noticeSessionSaved'));
+        noteSaveState(t('noticeSessionSaved'));
       }).catch((error) => {
         void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'failed', durationMs: performance.now() - openedAt }).catch(() => undefined);
         setNotice(error instanceof Error ? error.message : t('noticeLoadSessionFailed'));
@@ -2085,10 +2117,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const snapshot = localCreationSnapshot(sessionId, { title, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current });
         persistSnapshot(snapshot);
         lastSavedGraph.current = serialized;
-        setNotice(t('noticeSavedOnDevice'));
+        noteSaveState(t('noticeSavedOnDevice'));
         return;
       }
-      setNotice(t('noticeSavingChanges'));
+      noteSaveState(t('noticeSavingChanges'));
       saveInFlight.current = true;
       const graph = creationGraphFromSnapshot({ nodes, edges });
       if (!pendingSave.current || pendingSave.current.serialized !== serialized) pendingSave.current = { serialized, key: crypto.randomUUID() };
@@ -2098,7 +2130,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         lastSavedGraph.current = serialized;
         setPersistedObjectIds(new Set(graph.objects.map((object) => object.id)));
         if (pendingSave.current?.key === saveAttempt.key) pendingSave.current = null;
-        setNotice(t('noticeSessionSaved'));
+        noteSaveState(t('noticeSessionSaved'));
       }).catch(async (error) => {
         if (error instanceof Error && error.message === 'Session changed') {
           try {
@@ -2542,7 +2574,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const updateNodeData = useCallback((nodeId: string, patch: Partial<CreationNodeData>) => {
     if (!cardsEditable) return;
     setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...patch } } : node));
-    setNotice(t('noticeSavingChanges'));
+    noteSaveState(t('noticeSavingChanges'));
     const target = nodesRef.current.find((node) => node.id === nodeId);
     const campaignId = Number(target?.data.campaignId);
     if (target?.data.kind === 'socialCampaign'

@@ -25,8 +25,8 @@ import {
 } from '../../application/lti/LtiService';
 import { bridgeLaunch } from '../../application/lti/ltiLaunchBridge';
 import { canReturnGrades } from '../../domain/lti/ltiClaims';
-import { signState } from '../../infrastructure/auth/oauthState';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { mintSessionExchangeCode } from '../../application/auth/sessionExchange';
+import type { Db } from '../../infrastructure/database/connection';
 
 /** Read a form or query parameter, whichever binding the platform used. */
 async function param(request: Request, name: string): Promise<string> {
@@ -39,7 +39,13 @@ async function param(request: Request, name: string): Promise<string> {
   return typeof value === 'string' ? value : '';
 }
 
-export function createLtiRoutes() {
+/**
+ * `db` is INJECTED from the composition root rather than built here. A route that
+ * calls `buildDatabase` is a presentation file reaching into infrastructure, which
+ * `check:layering` refuses — and the reason it refuses is that the connection then
+ * becomes untestable and unmockable from the one place that mounts the router.
+ */
+export function createLtiRoutes(db: Db) {
   const app = new Hono<HonoEnv>();
 
   /** The tool's public keys. Public by design — it is how the platform verifies us. */
@@ -143,7 +149,7 @@ export function createLtiRoutes() {
     // to be a REDIRECT and not a JSON body — except for a caller that asked for
     // JSON, which is how the contract stays testable and how a non-browser
     // integration can still read the service URLs.
-    const bridged = await bridgeLaunch(buildDatabase(c.env as Env), registration, context);
+    const bridged = await bridgeLaunch(db, registration, context);
     const wantsJson = (c.req.header('accept') ?? '').includes('application/json');
 
     if (!wantsJson) {
@@ -156,7 +162,7 @@ export function createLtiRoutes() {
       // leaks through `Referer`, and stays in history. This code is an
       // HMAC-signed state envelope with a 60s life, useless as an API bearer,
       // and it is redeemed by the existing `POST /api/auth/oauth/exchange`.
-      const code = await signState(c.env.JWT_SECRET, {
+      const code = await mintSessionExchangeCode(c.env.JWT_SECRET, {
         uid: bridged.userId,
         amr: 'lti',
         redirect: bridged.redirect,

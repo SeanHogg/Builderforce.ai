@@ -17,6 +17,7 @@ import {
 import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { hashPassword } from '../../infrastructure/auth/HashService';
 import { signState, verifyState, exchangeCodeForTokens } from '../../infrastructure/auth/oauthState';
+import { mintSessionExchangeCode, readSessionExchangeCode } from '../../application/auth/sessionExchange';
 import { ensureStarterWorkspace } from '../../application/tenant/starterWorkspace';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -543,10 +544,10 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
     // POST /oauth/exchange for the real token, which the JS keeps out of the URL.
     // The JWT is only minted + persisted at exchange time (below), so no token is
     // orphaned if the code is never redeemed.
-    const exchangeCodeValue = await signState(c.env.JWT_SECRET, {
+    const exchangeCodeValue = await mintSessionExchangeCode(c.env.JWT_SECRET, {
       uid: user.id,
       amr: name,
-      redirect: safeRedirect(stateData.redirect),
+      redirect: stateData.redirect,
     });
 
     return c.redirect(
@@ -572,26 +573,22 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
     // 60-second freshness window. verifyState checks the HMAC + timestamp. This
     // envelope is NOT a JWT, so even if it leaked it can't authenticate an API
     // request — it only works through this endpoint, and only for 60s.
-    const parsed = await verifyState<{ uid: string; amr?: string; redirect?: string }>(
-      c.env.JWT_SECRET,
-      code,
-      60_000,
-    );
-    if (!parsed?.uid) return c.json({ error: 'Invalid or expired code' }, 400);
+    const parsed = await readSessionExchangeCode(c.env.JWT_SECRET, code);
+    if (!parsed) return c.json({ error: 'Invalid or expired code' }, 400);
 
     const [user] = await db.select().from(users).where(eq(users.id, parsed.uid)).limit(1);
     if (!user) return c.json({ error: 'Account not found' }, 401);
     if (user.isSuspended) return c.json({ error: 'Account suspended' }, 403);
 
     const jwt = await signWebJwt(
-      { sub: user.id, email: user.email, username: user.username ?? '', amr: [parsed.amr ?? 'oauth'] },
+      { sub: user.id, email: user.email, username: user.username ?? '', amr: [parsed.amr] },
       c.env.JWT_SECRET,
       86_400,
     );
 
     await persistWebToken(db, jwt, {
       userId: user.id,
-      sessionName: `OAuth: ${parsed.amr ?? 'oauth'}`,
+      sessionName: `OAuth: ${parsed.amr}`,
       userAgent: getUserAgent(c),
       ipAddress: getClientIp(c),
     });
@@ -605,8 +602,8 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
         displayName: user.displayName,
         avatarUrl: user.avatarUrl,
       },
-      // Already validated at sign time; re-validate on the way out as defence-in-depth.
-      redirect: safeRedirect(parsed.redirect),
+      // Already coerced at both mint and read time inside the shared envelope.
+      redirect: parsed.redirect,
     });
   });
 

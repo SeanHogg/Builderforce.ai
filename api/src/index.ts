@@ -544,7 +544,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // that tree takes signed launches from a platform with no session, and hanging
   // a manager-gated CRUD off the same mount is one middleware-ordering mistake
   // away from either breaking launches or exposing registrations.
-  app.route('/api/lti', createLtiRoutes());
+  app.route('/api/lti', createLtiRoutes(db));
   app.route('/api/lti-registrations', createLtiRegistrationRoutes(db));
 
   // Anonymous guest routes must precede the generic `/api/:domain/...` router
