@@ -32,7 +32,7 @@ async function drain(stream: ReadableStream<Uint8Array>): Promise<string> {
 }
 
 /** Parse the emitted SSE back into chunk objects (dropping `[DONE]`). */
-function chunks(sse: string): Array<Record<string, any>> {
+function chunks(sse: string): Array<any> {
   return sse.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('data:'))
     .map((l) => l.slice(5).trim()).filter((d) => d && d !== '[DONE]')
     .map((d) => JSON.parse(d) as Record<string, any>);
@@ -59,8 +59,8 @@ describe('Responses SSE → OpenAI chat SSE passthrough', () => {
     const deltas = parsed.filter((c) => c.choices?.[0]?.delta?.content).map((c) => c.choices[0].delta.content);
     expect(deltas).toEqual(['Hel', 'lo']);
     // The first delta carries the role; the rest do not restate it.
-    expect(parsed[0].choices[0].delta.role).toBe('assistant');
-    expect(parsed[1].choices[0].delta.role).toBeUndefined();
+    expect(parsed[0]!.choices[0].delta.role).toBe('assistant');
+    expect(parsed[1]!.choices[0].delta.role).toBeUndefined();
     // Response id and model ride every chunk (the client's provenance fallback).
     expect(parsed.every((c) => c.id === 'resp_1' && c.model === 'gpt-5.6-sol')).toBe(true);
     // finish_reason chunk, then a usage-only chunk, mirroring include_usage.
@@ -98,7 +98,7 @@ describe('Responses SSE → OpenAI chat SSE passthrough', () => {
     ]), { model: 'gpt-5.6-sol' }));
 
     const parsed = chunks(out);
-    const opener = parsed[0].choices[0].delta.tool_calls[0];
+    const opener = parsed[0]!.choices[0].delta.tool_calls[0];
     expect(opener).toMatchObject({ index: 0, id: 'call_a', type: 'function', function: { name: 'lookup' } });
     const args = parsed.filter((c) => c.choices?.[0]?.delta?.tool_calls?.[0]?.function?.arguments)
       .map((c) => c.choices[0].delta.tool_calls[0].function.arguments).join('');
@@ -145,7 +145,7 @@ describe('Responses vendors stream for real', () => {
 
     const result = await openAiCodexModule.callStream!(baseParams);
     const parsed = chunks(await result.response.text());
-    expect(parsed[0].choices[0].delta.content).toBe('a');
+    expect(parsed[0]!.choices[0].delta.content).toBe('a');
     expect(parsed.at(-1)).toMatchObject({ usage: { prompt_tokens: 1, completion_tokens: 1 } });
   });
 
@@ -167,8 +167,9 @@ describe('Responses vendors stream for real', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await xaiOAuthModule.callStream!({ ...baseParams, apiKey: 'xai-key', model: 'grok-4.5' });
-    expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string).stream).toBe(true);
-    expect(chunks(await result.response.text())[0].choices[0].delta.content).toBe('grok');
+    const sentBody = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body));
+    expect(sentBody.stream).toBe(true);
+    expect(chunks(await result.response.text())[0]!.choices[0].delta.content).toBe('grok');
   });
 
   it('xai-oauth falls back to the non-streamed call when the backend refuses stream:true', async () => {

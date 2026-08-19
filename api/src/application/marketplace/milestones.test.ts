@@ -20,14 +20,18 @@ import type { Env } from '../../env';
 const notify = vi.fn(async (..._args: unknown[]) => ({ inAppDelivered: true, emailDelivered: null }));
 vi.mock('../notifications/notify', () => ({ notify: (...args: unknown[]) => notify(...args) }));
 
-const createPayout = vi.fn(async (..._args: unknown[]) => ({ configured: true, ok: true, externalRef: 'px_1' }));
-const isPayoutsConfigured = vi.fn(() => true);
+/** The provider's own result shape, stated so a mock of the UNCONFIGURED case (which
+ *  carries no `externalRef`) is not rejected against a type inferred from the happy one. */
+type PayoutResult = { configured: boolean; ok: boolean; externalRef?: string; error?: string };
+const createPayout = vi.fn(async (..._args: unknown[]): Promise<PayoutResult> =>
+  ({ configured: true, ok: true, externalRef: 'px_1' }));
+const isPayoutsConfigured = vi.fn((..._args: unknown[]) => true);
 vi.mock('../integrations/payments', () => ({
   createPayout: (...args: unknown[]) => createPayout(...args),
   isPayoutsConfigured: (...args: unknown[]) => isPayoutsConfigured(...args),
 }));
 
-const { moveMilestone, deleteDraftMilestone } = await import('./milestones');
+const { moveMilestone, deleteDraftMilestone, bindScheduleToEngagement, readJobSchedule } = await import('./milestones');
 
 const env = {} as unknown as Env;
 
@@ -272,6 +276,55 @@ describe('moveMilestone — concurrency', () => {
     const db = fakeDb([[milestone({ status: 'submitted' })], []]);
 
     expect(await move('approve', 'client', db)).toEqual({ ok: false, reason: 'conflict' });
+  });
+});
+
+describe('bindScheduleToEngagement — the accept path', () => {
+  it('stamps the job\'s drafts onto the engagement and the freelancer, scoped to the tenant', async () => {
+    const db = fakeDb([[{ id: 'm-1' }, { id: 'm-2' }]]);
+
+    const bound = await bindScheduleToEngagement(db as unknown as Db, {
+      tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f',
+    });
+
+    expect(bound).toBe(2);
+    const update = db.calls.find((call) => call.kind === 'update');
+    expect(update?.payload).toMatchObject({ engagementId: 'e-1', freelancerUserId: 'user-f' });
+    // Tenant AND job in the predicate: a bare job id on a tenant-owned table is the
+    // shape that becomes an IDOR the moment somebody can guess one.
+    const bound_ = boundValues(update?.where);
+    expect(bound_).toContain(7);
+    expect(bound_).toContain('j-1');
+  });
+
+  it('only ever moves DRAFTS, so re-accepting cannot reopen transacted work', async () => {
+    const db = fakeDb([[]]);
+
+    await bindScheduleToEngagement(db as unknown as Db, {
+      tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f',
+    });
+
+    expect(boundValues(db.calls[0]?.where)).toContain('draft');
+  });
+
+  it('is a no-op for an hourly posting, which simply has no schedule', async () => {
+    const db = fakeDb([[]]);
+
+    expect(await bindScheduleToEngagement(db as unknown as Db, {
+      tenantId: 7, jobId: 'j-1', engagementId: 'e-1', freelancerUserId: 'user-f',
+    })).toBe(0);
+  });
+});
+
+describe('readJobSchedule', () => {
+  it('scopes the bidding-side read to the tenant that owns the posting', async () => {
+    const db = fakeDb([[milestone({ jobId: 'j-1', engagementId: null })]]);
+
+    await readJobSchedule(db as unknown as Db, 7, 'j-1');
+
+    const where = boundValues(db.calls[0]?.where);
+    expect(where).toContain(7);
+    expect(where).toContain('j-1');
   });
 });
 

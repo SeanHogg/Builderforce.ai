@@ -23,7 +23,14 @@ describe('talk ratio', () => {
 
   it('handles several people on their side', () => {
     const two = `${transcript}\nJordan: And security review takes two weeks`;
-    expect(talkRatioPercent(two, 'Priya and Jordan')).toBeLessThan(talkRatioPercent(two, 'Priya'));
+    const theirSide = talkRatioPercent(two, 'Priya and Jordan');
+    const priyaOnly = talkRatioPercent(two, 'Priya');
+    // Both transcripts are labelled, so both carry a ratio. Asserted before the
+    // comparison so a regression to `undefined` fails as this test rather than as
+    // a type error in whatever edits the function next.
+    expect(theirSide).toBeDefined();
+    expect(priyaOnly).toBeDefined();
+    expect(theirSide!).toBeLessThan(priyaOnly!);
   });
 
   it('refuses rather than reporting a confident 50%', () => {
