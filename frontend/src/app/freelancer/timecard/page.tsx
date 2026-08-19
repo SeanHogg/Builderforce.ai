@@ -11,6 +11,7 @@ import {
 import {
   listMyTimecards, resolveTimecard, submitTimecard, listTimecardEntries, addTimecardEntry, updateTimecardEntry, deleteTimecardEntry, type Timecard, type TimecardEntry,
 } from '@/lib/freelancerTimecardsApi';
+import { formatCents } from '@/lib/canvasMoney';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18,
@@ -27,7 +28,7 @@ function currentWeek(): { start: string; end: string } {
 }
 
 const fmtHrs = (min: number) => `${(min / 60).toFixed(1)}h`;
-const money = (cents: number, cur: string) => `${cur} ${(cents / 100).toFixed(2)}`;
+const money = (cents: number, cur: string) => formatCents(cents, { currency: cur });
 
 export default function FreelancerTimecardPage() {
   const t = useTranslations('freelancer');

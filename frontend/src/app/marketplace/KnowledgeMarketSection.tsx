@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { knowledgeApi, type KnowledgeListing, type DocType } from '@/lib/knowledgeApi';
 import { signInHref } from '@/lib/auth';
+import { formatCents } from '@/lib/canvasMoney';
 
 /**
  * Marketplace section for KNOWLEDGE listings (SOPs / processes / docs / canvases
@@ -107,7 +108,7 @@ export function KnowledgeMarketSection({ search = '' }: { search?: string }) {
               <span>{t('installs', { count: l.installCount })}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <span style={{ fontWeight: 700 }}>{l.priceCents > 0 ? `$${(l.priceCents / 100).toFixed(2)}` : t('free')}</span>
+              <span style={{ fontWeight: 700 }}>{l.priceCents > 0 ? formatCents(l.priceCents) : t('free')}</span>
               <button type="button" className="btn btn-primary btn-sm" disabled={installing === l.id} onClick={() => acquire(l)}>
                 {installing === l.id
                   ? t('installing')

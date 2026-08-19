@@ -21,11 +21,12 @@ import {
 import {
   listMyTimecards, type Timecard,
 } from '@/lib/freelancerTimecardsApi';
+import { formatCents } from '@/lib/canvasMoney';
 
 const FREELANCER_TABS = ['work', 'timecards'] as const;
 type FreelancerTab = (typeof FREELANCER_TABS)[number];
 
-const money = (cents: number, cur = 'USD') => `${cur} ${(cents / 100).toFixed(2)}`;
+const money = (cents: number, cur = 'USD') => formatCents(cents, { currency: cur });
 const fmtHrs = (min: number) => `${(min / 60).toFixed(1)}h`;
 
 const ENGAGEMENT_TONE: Record<Engagement['status'], string> = {

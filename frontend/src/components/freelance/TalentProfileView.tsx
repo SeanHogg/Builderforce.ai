@@ -6,6 +6,7 @@ import { TrustBadge } from '@/components/freelance/TrustBadge';
 import { ProfileAvatar } from '@/components/profile/ProfileIdentityCard';
 import { ResumeDocumentView } from '@/components/resume/ResumeDocumentView';
 import type { FreelancerProfile, FreelancerStats } from '@/lib/freelancerApi';
+import { formatCents } from '@/lib/canvasMoney';
 
 /**
  * Presentational render of a for-hire profile — the SINGLE source of truth for how a
@@ -78,7 +79,7 @@ export function TalentProfileView({ profile, actions, resumeEmptyNote }: TalentP
               {profile.stats && <TrustBadge badge={profile.stats.badge} jss={profile.stats.jss} />}
             </div>
             <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-              {profile.hourlyRateCents != null && <span>{t('rate')}: <strong style={{ color: 'var(--coral-bright)' }}>{profile.currency} {(profile.hourlyRateCents / 100).toFixed(0)}{t('perHour')}</strong></span>}
+              {profile.hourlyRateCents != null && <span>{t('rate')}: <strong style={{ color: 'var(--coral-bright)' }}>{formatCents(profile.hourlyRateCents, { currency: profile.currency, maximumFractionDigits: 0 })}{t('perHour')}</strong></span>}
               {profile.location && <span>{t('location')}: {profile.location}</span>}
               <span>{t('availability')}: {profile.availability}</span>
             </div>

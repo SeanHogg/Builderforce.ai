@@ -40,6 +40,20 @@ import { accountHistory, moveDeal, readPipeline, type AccountHistory, type Proje
 
 /** What the canvas hands these tools so they can author onto the board. */
 export interface CanvasFounderOpsContext {
+  /**
+   * The board these tools are acting on.
+   *
+   * Added for the sell-motion family, whose routes are addressed by session
+   * (`/api/sell-motion/:id/objects/:objectId/...`) because a call, a trust packet and a
+   * trial are all read and written THROUGH the board they sit on. On the context rather
+   * than curried into that one family, because it is a property of the surface every tool
+   * here already runs inside — and a second, family-local way of learning which board this
+   * is would be a second thing to keep in step with the canvas.
+   *
+   * Empty string on a board with no server session; the tools that need it are already
+   * refused by `hasTenant`.
+   */
+  sessionId: string;
   /** False on an unsaved or anonymous board: every tool here reaches a tenant. */
   hasTenant: boolean;
   /** False when the session role may not edit. */

@@ -289,6 +289,7 @@ import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvas
 import { canvasBuildActions, type BoundCanvasBuild } from '@/lib/canvasBuildTools';
 import { canvasFounderOpsActions, type CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
 import { canvasLegalDocumentActions } from '@/lib/canvasLegalDocumentTools';
+import { canvasSellMotionActions } from '@/lib/canvasSellMotionTools';
 import { canvasSignatureActions } from '@/lib/canvasSignatureTools';
 import { sendInvestorUpdate } from '@/lib/founderOpsApi';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
@@ -536,7 +537,7 @@ export function canInvokeCreationObjectAction(kind: CreationObjectKind, action: 
 }
 const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
   Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', Quality: '⛉', Teaching: '◈', Research: '⌕',
-  Pitch: '◈', People: '●', Hiring: '◐', Operations: '⬢', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
+  Pitch: '◈', People: '●', Hiring: '◐', Operations: '⬢', Revenue: '⌸', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
 };
 export type ProposedCanvasChange =
   | { id: string; type: 'object.add'; label: string; node: CreationFlowNode }
@@ -4259,6 +4260,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * is the user's stated intent; what gets staged is the board's redraw of it.
    */
   const canvasOpsContext = useMemo<CanvasFounderOpsContext>(() => ({
+    sessionId,
     hasTenant: persistence === 'server',
     canEdit,
     objects: () => {
@@ -4283,7 +4285,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         patch: sanitizeCreationObjectPatch((kind ?? 'account') as CreationObjectKind, patch),
       });
     },
-  }), [canEdit, persistence]);
+  }), [canEdit, persistence, sessionId]);
 
   const canvasFounderOpsActionList = useMemo<BrainAction[]>(() => canvasFounderOpsActions(canvasOpsContext), [canvasOpsContext]);
   /** The secure legal-document vocabulary — share, revoke, request signature, sync.
@@ -4293,6 +4295,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   /** The generic e-signature request for authored (non-file) objects — closes the
    *  `contract.sign` gap; see `canvasSignatureTools.ts`. */
   const canvasSignatureActionList = useMemo<BrainAction[]>(() => canvasSignatureActions(canvasOpsContext), [canvasOpsContext]);
+  /** The commercial half of the motion — share a board or a card with a prospect, read
+   *  what they did with it, price a quote, read a call, assemble a trust packet, provision
+   *  a trial, hand the board off, and drive a cadence. See `canvasSellMotionTools.ts` for
+   *  why none of them can accept a quote. */
+  const canvasSellMotionActionList = useMemo<BrainAction[]>(() => canvasSellMotionActions(canvasOpsContext), [canvasOpsContext]);
 
   const canvasActions = useMemo<BrainAction[]>(() => ([{
     name: 'canvas_prepare_executive_use_case',
@@ -8173,8 +8180,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(projectId == null ? { note: 'Published without a project. Add a project object to the canvas to file these under it, which is what gives them a run target and a persona.' } : {}),
       };
     },
-  }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasLegalDocumentActionList, ...canvasSignatureActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [canEdit, canvasBuildActionList, canvasFounderOpsActionList, canvasLegalDocumentActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
+  }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasLegalDocumentActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
+  [canEdit, canvasBuildActionList, canvasFounderOpsActionList, canvasLegalDocumentActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');

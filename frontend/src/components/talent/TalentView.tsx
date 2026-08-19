@@ -21,6 +21,7 @@ import {
 } from '@/lib/freelancerTimecardsApi';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { Select } from '@/components/Select';
+import { formatCents } from '@/lib/canvasMoney';
 
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 18 };
 const input: React.CSSProperties = { background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: 13, outline: 'none', width: '100%' };
@@ -31,7 +32,7 @@ const btn = (v: 'primary' | 'ghost' | 'danger'): React.CSSProperties => ({
   color: v === 'primary' ? 'var(--text-on-accent)' : v === 'danger' ? 'var(--error)' : 'var(--text-primary)',
 });
 const fmtHrs = (m: number) => `${(m / 60).toFixed(1)}h`;
-const money = (c: number, cur: string) => `${cur} ${(c / 100).toFixed(2)}`;
+const money = (c: number, cur: string) => formatCents(c, { currency: cur });
 const DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
 const POSTING_TYPES: PostingType[] = ['project_bid', 'design', 'fte'];
 const ENGAGEMENT_TYPES: EngagementType[] = ['fixed_bid', 'hourly', 'fte'];
@@ -208,7 +209,7 @@ export function TalentView() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{e.freelancerName ?? e.freelancerUserId}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t(`status.${e.status}`)}{e.rateCents != null ? ` · ${e.currency} ${(e.rateCents / 100).toFixed(0)}${t('perHour')}` : ''}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{t(`status.${e.status}`)}{e.rateCents != null ? ` · ${formatCents(e.rateCents, { currency: e.currency, maximumFractionDigits: 0 })}${t('perHour')}` : ''}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     <MessagesButton side="employer" variant="inline" context={{ freelancerUserId: e.freelancerUserId, engagementId: e.id, title: e.title ?? undefined }} />
@@ -327,7 +328,7 @@ export function TalentView() {
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{p.freelancerName}{p.rateCents != null ? ` · ${p.currency} ${(p.rateCents / 100).toFixed(0)}${t('perHour')}` : ''}</span>
+                                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{p.freelancerName}{p.rateCents != null ? ` · ${formatCents(p.rateCents, { currency: p.currency, maximumFractionDigits: 0 })}${t('perHour')}` : ''}</span>
                                 {score != null && <ScoreChip score={score} />}
                                 {p.status === 'shortlisted' && statusPill(p.status, tg(isFte ? 'candidate.shortlisted' : 'proposal.shortlisted'))}
                               </div>

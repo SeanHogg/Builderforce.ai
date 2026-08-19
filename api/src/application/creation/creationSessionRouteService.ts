@@ -101,9 +101,20 @@ import {
   listForObject,
   revokeInvitation,
 } from '../kernel/InvitationService';
+import {
+  resolveSessionAccess, SESSION_ROLE_RANK, type SessionRole as SharedSessionRole,
+} from './sessionAccess';
+// The prospect share — the same `share_links` primitive the résumé shares already use,
+// pointed at a whole board or one commercial card. Kept in its own module because the
+// projection it serves is a BUYER's read (see `prospectShare.ts`), not a member's.
+import {
+  findCardShare, listProspectShares, mintProspectShare,
+  readProspectEngagement, revokeProspectShare, SHAREABLE_CANVAS_KINDS,
+  type ProspectShareSettings,
+} from '../sales/prospectShare';
 
-type SessionRole = 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner';
-const ROLE_RANK: Record<SessionRole, number> = { viewer: 0, commenter: 1, editor: 2, runner: 3, owner: 4 };
+type SessionRole = SharedSessionRole;
+const ROLE_RANK = SESSION_ROLE_RANK;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function creationKindForModality(modality: string): CreationObjectKind {
@@ -137,6 +148,11 @@ type SaveGraphBody = { objects?: GraphObjectInput[]; connections?: GraphConnecti
 type InviteBody = { userId?: string; email?: string; role?: string; expiresInHours?: number };
 type CommentBody = { body?: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[]; anchor?: unknown };
 type ResumeShareBody = { expiresAt?: string | null; maxUses?: number | null };
+type ProspectShareBody = {
+  objectId?: string | null; label?: string; expiresAt?: string | null;
+  sellerName?: string; sellerCompany?: string; accentColor?: string;
+  allowControlRequest?: boolean; message?: string;
+};
 type CanvasCommand = { type?: string; [key: string]: unknown };
 type CommandsBody = { commands?: CanvasCommand[]; atomic?: boolean };
 type PinBody = { pinned?: boolean };
@@ -458,29 +474,11 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
-  async function membership(sessionId: string, tenantId: number, userId: string) {
-    const [row] = await db
-      .select({ session: creationSessions, role: creationSessionMembers.role })
-      .from(creationSessions)
-      .innerJoin(creationSessionMembers, and(
-        eq(creationSessionMembers.sessionId, creationSessions.id),
-        eq(creationSessionMembers.userId, userId),
-      ))
-      .where(and(eq(creationSessions.id, sessionId), eq(creationSessions.tenantId, tenantId)))
-      .limit(1);
-    if (row) return row;
-    // Platform superadmins collaborate in associate-owned sales canvases across
-    // tenant boundaries. They must still be explicit session members; this does
-    // not grant blanket access to every canvas.
-    const [adminMember] = await db
-      .select({ session: creationSessions, tenantId: creationSessions.tenantId, role: creationSessionMembers.role })
-      .from(creationSessions)
-      .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
-      .innerJoin(users, eq(users.id, userId))
-      .where(and(eq(creationSessions.id, sessionId), eq(users.isSuperadmin, true)))
-      .limit(1);
-    return adminMember ?? null;
-  }
+  /** Delegated to `sessionAccess.ts`, which the sell-motion routes read too. A second
+   *  copy of an authorization check is the copy that keeps granting after the original
+   *  learns to refuse — see that module's header. */
+  const membership = (sessionId: string, tenantId: number, userId: string) =>
+    resolveSessionAccess(db, sessionId, tenantId, userId);
 
   async function requireSession(c: Context<HonoEnv>, minimum: SessionRole = 'viewer') {
     const sessionId = c.req.param('id') ?? '';
@@ -1511,6 +1509,107 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!ownsShare) return c.json({ error: 'Resume share not found' }, 404);
     await revokeShareLink(db, c.env, access.session.tenantId, registered.id, shareId);
     return c.body(null, 204);
+  });
+
+  /**
+   * The seller's half of the prospect share: mint, list, revoke, and read what the buyer
+   * did with it. Editor-gated, because minting a link is giving away access.
+   *
+   * These live beside the résumé shares deliberately — same primitive, same session, same
+   * revocation path — rather than in a `/api/prospect-shares` tree of their own, which
+   * would be a second place a canvas session's outbound links are managed from.
+   */
+  router.get('/:id/prospect-shares', async (c) => {
+    const access = await requireSession(c, 'editor');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    return c.json({ shares: await listProspectShares(db, c.env, access.session.tenantId, access.session.id) });
+  });
+
+  router.post('/:id/prospect-shares', async (c) => {
+    const access = await requireSession(c, 'editor');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const body = await c.req.json<ProspectShareBody>().catch(() => ({} as ProspectShareBody));
+
+    const objectId = typeof body.objectId === 'string' && body.objectId.trim() ? body.objectId.trim() : null;
+    if (objectId && !UUID_RE.test(objectId)) return c.json({ error: 'Invalid object id' }, 400);
+
+    let objectKind: string | null = null;
+    let objectTitle: string | null = null;
+    if (objectId) {
+      const [row] = await db.select({ kind: creationSessionObjects.kind, content: creationSessionObjects.content })
+        .from(creationSessionObjects)
+        .where(and(eq(creationSessionObjects.id, objectId), eq(creationSessionObjects.sessionId, access.session.id)))
+        .limit(1);
+      if (!row) return c.json({ error: 'Object not found on this session' }, 404);
+      objectKind = row.kind;
+      objectTitle = cleanTitle((row.content as Record<string, unknown> | null)?.title, row.kind);
+    }
+
+    const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+    if (expiresAt && (!Number.isFinite(expiresAt.getTime()) || expiresAt <= new Date())) {
+      return c.json({ error: 'Expiry must be in the future' }, 400);
+    }
+
+    const settings: ProspectShareSettings = {
+      sellerName: String(body.sellerName ?? '').trim().slice(0, 120),
+      sellerCompany: String(body.sellerCompany ?? '').trim().slice(0, 160),
+      accentColor: String(body.accentColor ?? '').trim().slice(0, 32),
+      allowControlRequest: body.allowControlRequest === true,
+      message: String(body.message ?? '').trim().slice(0, 600),
+    };
+
+    const minted = await mintProspectShare(db, c.env, {
+      tenantId: access.session.tenantId,
+      sessionId: access.session.id,
+      sessionTitle: access.session.title,
+      objectId,
+      objectKind,
+      objectTitle,
+      label: String(body.label ?? objectTitle ?? access.session.title ?? '').slice(0, 160),
+      settings,
+      expiresAt,
+      createdBy: c.get('userId') as string,
+    });
+    if ('error' in minted) return c.json({ error: minted.error }, 409);
+    return c.json({ ...minted, shareableKinds: [...SHAREABLE_CANVAS_KINDS] }, 201);
+  });
+
+  router.delete('/:id/prospect-shares/:shareId', async (c) => {
+    const access = await requireSession(c, 'editor');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const shares = await listProspectShares(db, c.env, access.session.tenantId, access.session.id);
+    const shareId = c.req.param('shareId');
+    // Ownership is proved by the share appearing in THIS session's list, not by a
+    // tenant match alone — otherwise a share id from another board in the same workspace
+    // would be revocable from here, which is a control nobody asked for.
+    if (!shares.some((share) => share.id === shareId)) return c.json({ error: 'Share not found' }, 404);
+    await revokeProspectShare(db, c.env, access.session.tenantId, shareId);
+    return c.body(null, 204);
+  });
+
+  /**
+   * What the prospect DID. The board-level share when no `objectId` is given, one card's
+   * when there is — the same split minting draws, so a seller reads engagement wherever
+   * they shared from.
+   */
+  router.get('/:id/prospect-engagement', async (c) => {
+    const access = await requireSession(c, 'editor');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const objectId = c.req.query('objectId');
+    if (objectId) {
+      if (!UUID_RE.test(objectId)) return c.json({ error: 'Invalid object id' }, 400);
+      const card = await findCardShare(db, c.env, access.session.tenantId, objectId);
+      if (!card) return c.json({ error: 'This card has never been shared' }, 404);
+      const engagement = await readProspectEngagement(db, access.session.tenantId, card.objectId);
+      // No URL is returned. The raw token exists exactly once, at creation
+      // (`createShareLink`), and only its hash is stored — so a read path CANNOT
+      // reconstruct the link, and pretending otherwise would be the one place this
+      // feature quietly re-introduced a recoverable credential.
+      return c.json({ engagement, shared: card.share != null });
+    }
+    const registered = await findObject(db, access.session.tenantId, 'creation_session', access.session.id);
+    if (!registered) return c.json({ error: 'This board has never been shared' }, 404);
+    return c.json({ engagement: await readProspectEngagement(db, access.session.tenantId, registered.id) });
   });
 
   router.post('/:id/comments', async (c) => {

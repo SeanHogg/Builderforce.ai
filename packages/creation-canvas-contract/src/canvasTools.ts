@@ -294,6 +294,49 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   // again. Named for `liveMetric` rather than the semantic-layer `metric` it must not be
   // confused with — see the kind's note in index.ts.
   'canvas_refresh_live_metric',
+  // ── The secure legal FILE (`/api/legal-documents/*`) ─────────────────────────
+  //
+  // These four and `canvas_request_signature` below were declared by the canvas and named
+  // NOWHERE in this contract, because `check-canvas-tool-contract.mjs` scanned three
+  // source files and their two modules were not among them — the guard's own "a new family
+  // adds one line here" instruction, unfollowed twice. Nothing broke, and that is the
+  // point: an unlisted `canvas_*` tool is dropped from a guest turn by
+  // `restrictGuestTools`, which is the RIGHT outcome for these, arrived at by accident
+  // rather than by decision. They are account-required for the ordinary reason: each one
+  // reads or writes an encrypted tenant document, mints an external link to it, or emails
+  // a counterparty for a signature. A guest has no document to share.
+  'canvas_legal_document_sync',
+  'canvas_legal_document_share',
+  'canvas_legal_document_revoke_share',
+  'canvas_legal_document_request_signature',
+  // The generic e-signature request for an AUTHORED object (a contract, an offer) rather
+  // than an uploaded file. Same reason: it emails a real counterparty.
+  'canvas_request_signature',
+  // ── The sell motion ──────────────────────────────────────────────────────────
+  //
+  // The commercial half of "idea to real". Every one is account-required, and for a
+  // sharper reason than "it reaches a tenant": each acts on a real relationship with a
+  // real person outside the workspace. A prospect share mints a credential; an engagement
+  // read projects `activity_log`; pricing reads the published contract and writes a figure
+  // a buyer will be held to; a trial and a handoff create durable boards; a cadence sends
+  // messages to named people. A guest board has no prospect, no cadence and no evidence to
+  // assemble, so advertising these to one would spend the model's attention on ten routes
+  // it cannot take — the failure this contract's own header measures.
+  //
+  // There is deliberately no `canvas_accept_quote`. Acceptance exists ONLY on the buyer's
+  // own tokenised route, so no seller, agent or model can close a deal on the buyer's
+  // behalf — see `canvasSellMotionTools.ts`.
+  'canvas_share_with_prospect',
+  'canvas_list_prospect_shares',
+  'canvas_revoke_prospect_share',
+  'canvas_refresh_prospect_engagement',
+  'canvas_price_quote',
+  'canvas_read_call',
+  'canvas_assemble_trust_packet',
+  'canvas_provision_trial',
+  'canvas_handoff_plan',
+  'canvas_enrol_in_sequence',
+  'canvas_set_sequence_state',
   // ── Connected data sources (`/api/data-sources/*`) ───────────────────────────
   // The tenant's own connected warehouses — Postgres/Neon, ClickHouse, BigQuery.
   // Account-required for exactly the reason the mailbox tools are: the credential

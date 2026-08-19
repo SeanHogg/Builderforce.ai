@@ -55,6 +55,7 @@ import { SkeletonGrid } from './SkeletonGrid';
 import { ModelsExplorer } from './ModelsExplorer';
 import MarketplaceGigsSection from './MarketplaceGigsSection';
 import { signInHref } from '@/lib/auth';
+import { formatCents } from '@/lib/canvasMoney';
 
 // Human freelancers ("Talent"), the live model catalog ("Models"), and open work to
 // bid on ("Gigs") are categories of the marketplace rather than standalone
@@ -915,7 +916,7 @@ export default function MarketplacePageClient() {
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
                     <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--coral-bright)' }}>
-                      {f.hourlyRateCents != null ? `${f.currency} ${(f.hourlyRateCents / 100).toFixed(0)}${tt('perHour')}` : ''}
+                      {f.hourlyRateCents != null ? `${formatCents(f.hourlyRateCents, { currency: f.currency, maximumFractionDigits: 0 })}${tt('perHour')}` : ''}
                     </span>
                     <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{tt('viewProfile')} →</span>
                   </div>

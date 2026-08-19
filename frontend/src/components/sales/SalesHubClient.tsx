@@ -46,6 +46,7 @@ import {
   type SalesReportWindow,
 } from '@/lib/salesApi';
 import type { PayoutBalance, PayoutRecord } from '@/lib/payoutsApi';
+import { formatCents } from '@/lib/canvasMoney';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -102,7 +103,7 @@ export default function SalesHubClient() {
   const [error, setError] = useState('');
 
   const money = useCallback(
-    (cents: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(cents / 100),
+    (cents: number) => formatCents(cents, { locale }),
     [locale],
   );
   const date = useCallback(

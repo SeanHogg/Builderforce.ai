@@ -3431,6 +3431,16 @@
 .pipelineCard p { margin:0; font-size:7px; line-height:1.35; color:var(--canvas-muted); }
 .pipelineCard em { font-size:8px; font-style:normal; font-weight:700; color:var(--canvas-accent); }
 
+/* The one line a pipeline is actually read for: weighted open value. Wraps rather than
+   truncates, because on a narrow board the unpriced count is the part that matters most
+   and dropping it off the end would hide the reason the number is low. */
+.pipelineTotals {
+  margin:0; display:flex; flex-wrap:wrap; gap:2px 12px;
+  padding:5px 7px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:#f3f7ff; font-size:8px; color:var(--canvas-muted);
+}
+.pipelineTotals span:first-child { color:var(--canvas-accent); font-weight:700; }
+
 /* A kanban needs the room a 290px card does not have. */
 .node_salesPipeline { width:980px; }
 

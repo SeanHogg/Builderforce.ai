@@ -51,6 +51,13 @@ const CANVAS_FILES = [
   path.resolve('..', 'frontend', 'src', 'components', 'creation-canvas', 'CreationCanvas.tsx'),
   path.resolve('..', 'frontend', 'src', 'lib', 'canvasBuildTools.ts'),
   path.resolve('..', 'frontend', 'src', 'lib', 'canvasFounderOpsTools.ts'),
+  // These three were declaring canvas tools that this guard never saw, which is the
+  // instruction above going unfollowed rather than a limitation: five tools
+  // (`canvas_legal_document_*`, `canvas_request_signature`) were advertised by the canvas
+  // and named nowhere in the contract, so rule 1 was simply not being applied to them.
+  path.resolve('..', 'frontend', 'src', 'lib', 'canvasLegalDocumentTools.ts'),
+  path.resolve('..', 'frontend', 'src', 'lib', 'canvasSignatureTools.ts'),
+  path.resolve('..', 'frontend', 'src', 'lib', 'canvasSellMotionTools.ts'),
 ];
 const CONTRACT_FILE = path.resolve('..', 'packages', 'creation-canvas-contract', 'src', 'canvasTools.ts');
 

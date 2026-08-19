@@ -15,6 +15,31 @@ const CAMPAIGN_STATUSES = new Set(['draft', 'scheduled', 'active', 'complete']);
 const clean = (value: unknown, max: number) => typeof value === 'string' ? value.trim().slice(0, max) : '';
 const positive = (value: unknown, fallback: number) => Number.isFinite(Number(value)) ? Math.min(1_000_000, Math.max(1, Math.round(Number(value)))) : fallback;
 const moneyCents = (value: unknown, fallback: number) => Number.isFinite(Number(value)) ? Math.min(10_000_000_000, Math.max(0, Math.round(Number(value)))) : fallback;
+/** 0-100, or 0 for "not overridden". Bounded here rather than trusted, because this value
+ *  multiplies a forecast — an out-of-range probability is a made-up number in a board pack. */
+const percent = (value: unknown) => Number.isFinite(Number(value)) ? Math.min(100, Math.max(0, Math.round(Number(value)))) : 0;
+/** A date, or null. An unparseable close date is dropped rather than stored as an epoch —
+ *  a deal dated 1970 lands in every window and quietly inflates every forecast. */
+const closeDate = (value: unknown) => {
+  if (value == null || value === '') return null;
+  const parsed = new Date(String(value));
+  return Number.isFinite(parsed.getTime()) ? parsed : null;
+};
+
+/**
+ * The money a pipeline card carries, read off a request body.
+ *
+ * ONE reader, shared by create and patch. Two copies is how the create path comes to clamp
+ * a probability the patch path does not, and a forecast then depends on which endpoint the
+ * row happened to be written by.
+ */
+function dealFields(body: Record<string, unknown>): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  if (body.valueCents !== undefined) patch.valueCents = moneyCents(body.valueCents, 0);
+  if (body.probabilityPercent !== undefined) patch.probabilityPercent = percent(body.probabilityPercent);
+  if (body.expectedCloseAt !== undefined) patch.expectedCloseAt = closeDate(body.expectedCloseAt);
+  return patch;
+}
 
 export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
@@ -103,7 +128,11 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
     const target = await owner(c); if (!target) return c.json({ error: 'Forbidden' }, 403);
     const body = await c.req.json<Record<string, unknown>>();
     const stage = clean(body.stage, 24);
-    const row = await sales.createContact(target.id, { name: clean(body.name, 255), email: clean(body.email, 255), company: clean(body.company, 255), market: clean(body.market, 255), stage: STAGES.has(stage) ? stage : 'new' });
+    const row = await sales.createContact(target.id, {
+      name: clean(body.name, 255), email: clean(body.email, 255), company: clean(body.company, 255),
+      market: clean(body.market, 255), stage: STAGES.has(stage) ? stage : 'new',
+      ...dealFields(body),
+    });
     return c.json(row, 201);
   });
 
@@ -113,6 +142,10 @@ export function createSalesRoutes(db: SalesWorkspaceDb): Hono<HonoEnv> {
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     for (const key of ['name', 'email', 'company', 'market'] as const) if (body[key] !== undefined) patch[key] = clean(body[key], 255);
     if (body.stage !== undefined && STAGES.has(String(body.stage))) { patch.stage = body.stage; patch.lastTouchAt = new Date(); }
+    // The SAME patch that moves a stage writes the value. That is the point of putting the
+    // money on the contact rather than in a second table: a board drag and a price change
+    // are one write, so a card cannot be at 'proposal' with last quarter's number on it.
+    Object.assign(patch, dealFields(body));
     const row = await sales.updateContact(target.id, c.req.param('id'), patch);
     if (!row) return c.json({ error: 'Contact not found' }, 404);
     return c.json(row);

@@ -23,6 +23,7 @@ import { ROLE_DISCIPLINES, useRoles, type UseRoles } from '@/lib/useRoles';
 import type {
   Discipline, JobRole, KanbanTemplate, TemplateSummary, TemplateLane, LaneRequirement, RequirementKind, RequirementGate,
 } from '@/lib/kanban';
+import { formatCents } from '@/lib/canvasMoney';
 
 type Tab = 'mine' | 'marketplace' | 'roles';
 
@@ -161,7 +162,7 @@ export function KanbanTemplatesContent() {
                 <div style={{ fontWeight: 600 }}>{tpl.name}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   {t('laneRoleCount', { lanes: tpl.laneCount, roles: tpl.roleCount })}
-                  {' · '}{tpl.priceCents ? `$${(tpl.priceCents / 100).toFixed(2)}` : t('free')}
+                  {' · '}{tpl.priceCents ? formatCents(tpl.priceCents) : t('free')}
                   {tpl.installCount ? ` · ${t('installs', { count: tpl.installCount })}` : ''}
                 </div>
               </div>

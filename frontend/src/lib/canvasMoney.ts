@@ -387,6 +387,48 @@ export function formatMoney(
   return `${prefix}${formatted}${suffix}`;
 }
 
+/**
+ * INTEGER CENTS → a display string. The other money shape this codebase holds.
+ *
+ * ── WHY A SECOND FORMATTER, AND WHY IT IS *THIS* ONE ─────────────────────────────
+ * `MoneyValue` above models a figure a model RESEARCHED — major units, possibly a range,
+ * possibly "not disclosed", possibly carrying a qualifier. That is the right shape for a
+ * competitor's revenue and the wrong shape for money the platform itself owns: a price, a
+ * commission, a payout, a quote total. Those are exact integer cents from our own
+ * database, and running them through `parseMoney` would take a number that is precisely
+ * right and re-derive it through a string parser built for approximation.
+ *
+ * So both shapes exist on purpose — and until now the CENTS shape had no home, which is
+ * exactly what the DRY rule predicts: twenty-plus surfaces each wrote their own
+ * `new Intl.NumberFormat(locale, {style:'currency'}).format(cents / 100)` or, worse,
+ * `` `${cur} ${(cents/100).toFixed(2)}` ``. They had already drifted — some show cents,
+ * some round to whole units, some prefix a bare currency CODE where every other surface
+ * renders a symbol — so the same $1,250.00 read three different ways depending on which
+ * page you were on. This is the one implementation they all now call.
+ *
+ * `null`/non-finite renders as an em dash rather than "$0.00": a price nobody has set and
+ * a price of zero are different facts, and rendering the first as the second is how a
+ * free listing and an unpriced one become indistinguishable.
+ */
+export function formatCents(
+  cents: number | null | undefined,
+  options: { currency?: string; locale?: string; maximumFractionDigits?: number } = {},
+): string {
+  if (cents == null || !Number.isFinite(cents)) return '—';
+  const { currency = 'USD', locale, maximumFractionDigits } = options;
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      ...(maximumFractionDigits == null ? {} : { maximumFractionDigits }),
+    }).format(cents / 100);
+  } catch {
+    // An unknown or malformed ISO code must not blank the figure — the same refusal
+    // `formatMoney` above already makes for the researched shape.
+    return `${(cents / 100).toLocaleString(locale, { maximumFractionDigits: maximumFractionDigits ?? 2 })} ${currency}`;
+  }
+}
+
 /** Format straight from whatever is stored, which is what card bodies actually hold. */
 export function formatMoneyField(input: unknown, options?: Parameters<typeof formatMoney>[1]): string {
   return formatMoney(parseMoney(input), options);

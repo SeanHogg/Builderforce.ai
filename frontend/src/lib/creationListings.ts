@@ -15,6 +15,7 @@
  */
 
 import { apiRequest } from './apiClient';
+import { formatCents } from '@/lib/canvasMoney';
 import type {
   HostedLifecycle,
   ListingDelivery,
@@ -254,8 +255,14 @@ export const publicListingApi = {
     }).then((r) => r.launch),
 };
 
-/** Money, formatted the way every listing surface shows it. One derivation, so a
- *  card, the publish panel and the earnings row cannot disagree about a price. */
+/**
+ * Money, formatted the way every listing surface shows it.
+ *
+ * The comment here used to claim "one derivation, so a card, the publish panel and the
+ * earnings row cannot disagree about a price" — true within listings, and there were
+ * twenty of these across the product. It now delegates to `formatCents`, the one cents
+ * formatter; this stays as a named re-export so every listing surface keeps its import.
+ */
 export function formatListingPrice(cents: number, currency = 'USD', locale?: string): string {
-  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(cents / 100);
+  return formatCents(cents, { currency, ...(locale ? { locale } : {}) });
 }

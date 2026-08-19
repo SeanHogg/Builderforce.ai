@@ -157,6 +157,48 @@ You are attending a live ${meeting.kind} meeting titled "${meeting.title}" as ${
 }
 
 /**
+ * THE transcript-condensing primitive. One model call, two consumers.
+ *
+ * ── WHY THIS WAS EXTRACTED ───────────────────────────────────────────────────
+ * Meetings have condensed a transcript into minutes since 0330. The sell motion needs
+ * exactly the same act for a `call` card — take what was said, produce a faithful
+ * structured reading of it — and the sales half needs a DIFFERENT structure out
+ * (objections and a commitment, not decisions and action items).
+ *
+ * The two things that must not be duplicated are the parts that are easy to get subtly
+ * wrong and impossible to notice: the plan-aware proxy resolution, the temperature, the
+ * token bound, and — above all — the refusal. `Only use what is in the transcript` is the
+ * sentence that stops a model inventing a decision somebody is then held to, and a second
+ * copy of it is a second place it can be softened. What each caller supplies is the SHAPE
+ * it wants back; what neither caller gets to restate is the grounding rule.
+ *
+ * Returns the model's text, or an error. Never a fabricated fallback — a summary of a
+ * conversation that did not happen is worse than no summary.
+ */
+export async function condenseTranscript(
+  env: Env,
+  tenantId: number,
+  input: { transcript: string; header: string; shape: string; maxTokens?: number },
+): Promise<{ text: string } | { error: string }> {
+  const transcript = input.transcript.trim();
+  if (!transcript) return { error: 'No transcript to summarize yet.' };
+
+  // The one sentence neither caller may restate, followed by the shape each one wants.
+  const system = `${input.shape}\n\nOnly use what is in the transcript — never invent decisions, owners, quotations, commitments or tasks. If the transcript does not support a section, omit it rather than filling it.`;
+  const user = `${input.header}\n\nTranscript:\n${transcript}`;
+
+  const { proxy } = await tenantProxyForPlan(env, tenantId, { codingOnly: true });
+  const result = await proxy.complete({
+    messages: [{ role: 'system', content: system }, { role: 'user', content: user }] as never,
+    temperature: 0.3,
+    max_tokens: input.maxTokens ?? 800,
+  });
+  const { content } = await readProxyChoice(result);
+  const text = (content ?? '').trim();
+  return text ? { text } : { error: 'The model produced nothing to record.' };
+}
+
+/**
  * Generate meeting minutes from the transcript, store them on the meeting, and post
  * them into the linked team chat. Returns the summary text, or an error when there
  * is nothing to summarize / the model produced nothing.
@@ -169,19 +211,13 @@ export async function summarizeMeeting(
   const segments = await loadTranscript(db, meeting.id, SUMMARY_MAX_LINES);
   if (segments.length === 0) return { error: 'No transcript to summarize yet.' };
 
-  const convo = segments.map((s) => `${s.speakerName}: ${s.text}`).join('\n');
-  const system = `You write concise, faithful meeting minutes. Given a raw transcript, produce short minutes in Markdown with, in order: a one-paragraph **Summary**; a **Decisions** section as a bullet list (omit the section entirely if there were none); and an **Action items** section as a checklist ("- [ ] Owner — task", omit if none). Only use what is in the transcript — never invent decisions, owners, or tasks.`;
-  const user = `Meeting: "${meeting.title}" (${meeting.kind}).\n\nTranscript:\n${convo}`;
-
-  const { proxy } = await tenantProxyForPlan(env, meeting.tenantId, { codingOnly: true });
-  const result = await proxy.complete({
-    messages: [{ role: 'system', content: system }, { role: 'user', content: user }] as never,
-    temperature: 0.3,
-    max_tokens: 800,
+  const condensed = await condenseTranscript(env, meeting.tenantId, {
+    transcript: segments.map((s) => `${s.speakerName}: ${s.text}`).join('\n'),
+    header: `Meeting: "${meeting.title}" (${meeting.kind}).`,
+    shape: 'You write concise, faithful meeting minutes. Given a raw transcript, produce short minutes in Markdown with, in order: a one-paragraph **Summary**; a **Decisions** section as a bullet list (omit the section entirely if there were none); and an **Action items** section as a checklist ("- [ ] Owner — task", omit if none).',
   });
-  const { content } = await readProxyChoice(result);
-  const summary = (content ?? '').trim();
-  if (!summary) return { error: 'Could not generate minutes.' };
+  if ('error' in condensed) return { error: condensed.error };
+  const summary = condensed.text;
 
   const now = new Date();
   await db.update(meetings).set({ summary, summaryGeneratedAt: now, updatedAt: now }).where(eq(meetings.id, meeting.id));

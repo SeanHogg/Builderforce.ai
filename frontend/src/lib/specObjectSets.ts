@@ -39,5 +39,9 @@ import './operationsObjects';
 // The secure legal FILE — uploaded, encrypted, shared and signed. Distinct from the
 // authored `contract` the founder set already registers; see `legalObjects.ts`.
 import './legalObjects';
+// The sell motion — the commercial half of "idea to real". Listed here for the reason the
+// header gives: a set that registers itself and is never listed works in whichever surface
+// happens to import it and silently renders nothing everywhere else.
+import './sellMotionObjects';
 
 export {};

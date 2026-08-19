@@ -83,6 +83,23 @@ export const GATED_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   // counterparty — the same outbound shape as `dataRoom.share` and `contract.sign`.
   // `upload` and `sync` stay open: uploading and refreshing expose nothing new.
   legalDocument: ['share', 'request-signature'],
+  // ── The sell motion ────────────────────────────────────────────────────────────
+  // Every act here reaches a person OUTSIDE the tenant, which is the whole test this
+  // list applies. A quote `send`/`share` puts a priced, acceptable offer in a buyer's
+  // hands — the same shape as `contract.sign`, with money on it. A sequence `start`
+  // begins an automated multi-channel send to real people and `enrol` adds more of them,
+  // so both are gated while `stop` deliberately is NOT: a control that needs approval to
+  // stop is not a safety control. A `trial.provision` creates a real workspace for
+  // somebody outside the tenant, `invite` emails them into it, and `extend` moves an
+  // expiry a buyer is planning around. A `trustPacket.share` publishes this workspace's
+  // own security posture; `assemble`/`answer` only read internal evidence and stay open.
+  // A `mutualActionPlan.handoff` writes a board into the customer's workspace.
+  quote: ['send', 'share'],
+  sequence: ['start', 'enrol'],
+  call: ['share'],
+  trial: ['provision', 'invite', 'extend'],
+  trustPacket: ['share'],
+  mutualActionPlan: ['share', 'handoff'],
 };
 
 /** True when this act on this kind may not simply be performed. */
@@ -109,6 +126,10 @@ export const ATTRIBUTED_FIELDS: Readonly<Record<string, readonly string[]>> = {
   contract: ['valueAmount', 'renewsAt', 'obligations'],
   liveMetric: ['target'],
   role: ['salary', 'loadedCost', 'startAt'],
+  // The priced deal itself. A discount changed after a buyer has seen the quote is the
+  // single most consequential silent edit in the whole vocabulary, and `lines` carries it.
+  quote: ['lines', 'termMonths', 'expiresAt'],
+  trial: ['expiresAt'],
 };
 
 export function fieldIsAttributed(kind: string, field: string): boolean {

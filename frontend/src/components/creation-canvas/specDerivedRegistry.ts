@@ -23,7 +23,7 @@
 
 import type {
   AcademicObjectKind, DataScienceObjectKind, FounderObjectKind, HiringObjectKind,
-  LegalObjectKind, OperationsObjectKind, PeopleObjectKind, SharedObjectKind,
+  LegalObjectKind, OperationsObjectKind, PeopleObjectKind, SellMotionObjectKind, SharedObjectKind,
 } from '@builderforce/creation-canvas-contract';
 import { OPERATIONS_LABELS, OPERATIONS_OBJECT_SPECS, OPERATIONS_STATUSES } from '@/lib/operationsObjects';
 import { ACADEMIC_LABELS, ACADEMIC_OBJECT_SPECS, ACADEMIC_STATUSES } from '@/lib/academicObjects';
@@ -32,6 +32,7 @@ import { FOUNDER_OBJECT_SPECS } from '@/lib/founderObjects';
 import { HIRING_LABELS, HIRING_OBJECT_SPECS, HIRING_STATUSES } from '@/lib/hiringObjects';
 import { LEGAL_LABELS, LEGAL_OBJECT_SPECS, LEGAL_STATUSES } from '@/lib/legalObjects';
 import { PEOPLE_LABELS, PEOPLE_OBJECT_SPECS, PEOPLE_STATUSES } from '@/lib/peopleObjects';
+import { SELL_MOTION_LABELS, SELL_MOTION_OBJECT_SPECS, SELL_MOTION_STATUSES } from '@/lib/sellMotionObjects';
 import { SHARED_LABELS, SHARED_OBJECT_SPECS, SHARED_STATUSES } from '@/lib/sharedCanvasObjects';
 import { specMutableFieldMap, type SpecObjectSpec } from '@/lib/specObjects';
 import type { CreationNodeData, CreationObjectGroup, CreationObjectKind } from './types';
@@ -140,6 +141,11 @@ export const OPERATIONS_REGISTRY = lower({ specs: OPERATIONS_OBJECT_SPECS, label
 /** The secure legal FILE — one kind, uploaded and encrypted rather than authored.
  *  See `legalObjects.ts` for why it is not folded into `contract`. */
 export const LEGAL_REGISTRY = lower({ specs: LEGAL_OBJECT_SPECS, labels: LEGAL_LABELS, statuses: LEGAL_STATUSES });
+/** The commercial half of the motion — the priced quote a buyer accepts, the cadence that
+ *  follows up, the call that happened, the trial, the trust packet and the mutual plan.
+ *  Six kinds, no render branches, and the first vocabulary that models how the company
+ *  SELLS rather than how it builds. See `sellMotion.ts`. */
+export const SELL_MOTION_REGISTRY = lower({ specs: SELL_MOTION_OBJECT_SPECS, labels: SELL_MOTION_LABELS, statuses: SELL_MOTION_STATUSES });
 
 /**
  * The authorable fields per vocabulary.
@@ -157,6 +163,7 @@ export const SHARED_MUTABLE_FIELDS = specMutableFieldMap<SharedObjectKind>(SHARE
 export const DATA_SCIENCE_MUTABLE_FIELDS = specMutableFieldMap<DataScienceObjectKind>(DATA_SCIENCE_OBJECT_SPECS);
 export const OPERATIONS_MUTABLE_FIELDS = specMutableFieldMap<OperationsObjectKind>(OPERATIONS_OBJECT_SPECS);
 export const LEGAL_MUTABLE_FIELDS = specMutableFieldMap<LegalObjectKind>(LEGAL_OBJECT_SPECS);
+export const SELL_MOTION_MUTABLE_FIELDS = specMutableFieldMap<SellMotionObjectKind>(SELL_MOTION_OBJECT_SPECS);
 
 /** Actions, from the same declaration that gives each kind its fields — so a kind cannot
  *  advertise an action its body has no affordance for. */
@@ -164,6 +171,6 @@ export const SPEC_ACTIONS: Readonly<Record<string, readonly string[]>> = Object.
   [
     ...FOUNDER_OBJECT_SPECS, ...ACADEMIC_OBJECT_SPECS, ...HIRING_OBJECT_SPECS,
     ...PEOPLE_OBJECT_SPECS, ...SHARED_OBJECT_SPECS, ...DATA_SCIENCE_OBJECT_SPECS,
-    ...OPERATIONS_OBJECT_SPECS, ...LEGAL_OBJECT_SPECS,
+    ...OPERATIONS_OBJECT_SPECS, ...LEGAL_OBJECT_SPECS, ...SELL_MOTION_OBJECT_SPECS,
   ].map((spec) => [spec.kind, spec.actions]),
 );

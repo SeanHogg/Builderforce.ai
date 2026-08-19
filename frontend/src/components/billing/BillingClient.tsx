@@ -35,6 +35,7 @@ import { billingApi, type BillingSubscription } from '@/lib/billingApi';
 import { cardValidationApi, type CardValidationState } from '@/lib/builderforceApi';
 import { payoutsApi, type PayoutRecord } from '@/lib/payoutsApi';
 import { useLocale } from 'next-intl';
+import { formatCents } from '@/lib/canvasMoney';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -71,7 +72,7 @@ export default function BillingClient({ view = 'account' }: { view?: BillingView
 
   const money = useCallback(
     (cents: number, currency = 'USD') =>
-      new Intl.NumberFormat(locale, { style: 'currency', currency }).format(cents / 100),
+      formatCents(cents, { currency, locale }),
     [locale],
   );
   const date = useCallback(

@@ -139,6 +139,8 @@ import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
 import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDefinitionRoutes';
 import { createCreationSessionRoutes } from './presentation/routes/creationSessionRoutes';
 import { createPublicResumeRoutes } from './presentation/routes/publicResumeRoutes';
+import { createPublicProspectRoutes } from './presentation/routes/publicProspectRoutes';
+import { createSellMotionRoutes } from './presentation/routes/sellMotionRoutes';
 import { resolvePublicResume } from './application/creation/publicResumeProjection';
 // Founder operations (0469) — collection, signature, payables, and the founder's
 // own network. See the mounts below for why two of these carry no auth.
@@ -809,6 +811,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/workflow-definitions', createWorkflowDefinitionRoutes(db));
   app.route('/api/creation-sessions', createCreationSessionRoutes(db));
   app.route('/api/public/resumes', createPublicResumeRoutes((token) => resolvePublicResume(db, token)));
+  // The seller's half of the sell motion: read a call, assemble a trust packet, provision
+  // a trial, hand the board off on close. Addressed by board id but owned by the revenue
+  // domain, the same way `legalDocumentRoutes` is a legal router rather than more canvas
+  // endpoints — see `sellMotionRoutes.ts`.
+  app.route('/api/sell-motion', createSellMotionRoutes(db));
 
   // ── Founder operations (0469) ─────────────────────────────────────────────
   //
@@ -820,6 +827,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // `share_token` cross-tenant reason the scope helper declares. Mounting either
   // under the authenticated tree would not make it stricter; it would make the
   // feature impossible.
+  // The BUYER's surface. Same shape and same reasoning as the two below it: a person with
+  // no account holds a token, and the row it resolves to reports its own tenant. This is
+  // what makes a demo something you hand over rather than something you screen-share.
+  app.route('/api/public/deals',      createPublicProspectRoutes(db));
   app.route('/api/public/forms',      createPublicFormRoutes(db));
   app.route('/api/public/signatures', createPublicSignatureRoutes(db));
   // A legal-document share link is the same shape again: a token, no session.

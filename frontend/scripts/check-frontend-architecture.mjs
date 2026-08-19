@@ -208,6 +208,16 @@
  *   overview `ManagerContent` already holds, so the panel adds a boundary and not
  *   a second fetch. That is the same shape `CompareArenaTabs.tsx` above documents:
  *   interactivity that is real, payload that is somebody else's.
+ *
+ *   805 -> 806 (`useClientFiles`, 2026-08-19) -- `components/sell/ProspectDealView.tsx`,
+ *   the BUYER's page behind a prospect share link (`/deal/<token>`). It is the client
+ *   entry point under a Server Component route root, the same shape
+ *   `LegalDocumentShareViewer.tsx` and `ReferencesClient.tsx` are already allowed for --
+ *   and it could not be anything else: the page's whole job beyond rendering is to measure
+ *   attention honestly (an IntersectionObserver plus `visibilitychange`, so a dwell clock
+ *   stops behind a backgrounded tab) and to take an acceptance, both of which are browser
+ *   APIs and local state. The route file itself stays a Server Component and carries the
+ *   `noindex` metadata, which is where that belongs.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';

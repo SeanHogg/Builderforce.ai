@@ -47,6 +47,15 @@ export interface PipelineCard {
   /** Deal size in cents, when known. Null renders no figure rather than "$0",
    *  which would read as a worthless deal instead of an unpriced one. */
   valueCents: number | null;
+  /**
+   * How likely this one is to close, 0-100, when somebody has actually judged it.
+   *
+   * Null means "not overridden" and the STAGE decides — the same split the server draws
+   * (`sales_contacts.probability_percent` defaults to 0, and `salesReports`'
+   * `STAGE_PROBABILITY_PERCENT` fills the gap). Storing a per-stage default on every card
+   * would be a policy nobody could change without editing every card that carries it.
+   */
+  probabilityPercent: number | null;
 }
 
 export interface PipelineModel {
@@ -97,6 +106,7 @@ export function readPipelineModel(data: Record<string, unknown>): PipelineModel 
       if (!row) return null;
       const title = text(row.title ?? row.name);
       if (!title) return null;
+      const probability = numberOrNull(row.probabilityPercent);
       return {
         id: text(row.id, 40) || `card-${index}`,
         lane: text(row.lane ?? row.swimlane, 40),
@@ -104,6 +114,7 @@ export function readPipelineModel(data: Record<string, unknown>): PipelineModel 
         title,
         note: text(row.note ?? row.description, 240),
         valueCents: numberOrNull(row.valueCents),
+        probabilityPercent: probability == null ? null : Math.min(100, Math.max(0, Math.round(probability))),
       };
     })
     .filter((card): card is PipelineCard => card != null);
@@ -133,8 +144,80 @@ export function cardsAt(model: PipelineModel, laneIndex: number, stage: string):
   });
 }
 
-/** Per-stage totals for the column headers — count, and value where priced. */
-export function stageTotals(model: PipelineModel, stage: string): { count: number; valueCents: number } {
+/**
+ * How likely a deal at each stage is to close, when nobody has judged the card itself.
+ *
+ * The SAME ladder the server's forecast uses (`salesReports.STAGE_PROBABILITY_PERCENT`).
+ * Restated here rather than fetched because a board must weight its own cards while
+ * offline and before any server round trip — and restated with the deliberate consequence
+ * that `canvasSalesPipeline.test.ts` asserts the two agree, so a policy change that moves
+ * one and not the other fails the build instead of producing a board and a report that
+ * quietly forecast different numbers.
+ */
+export const PIPELINE_STAGE_PROBABILITY: Readonly<Record<string, number>> = {
+  new: 5, contacted: 10, qualified: 25, meeting: 30, proposal: 60, won: 100, lost: 0,
+};
+
+/** The probability for one card: the human's judgement when they made one, the stage
+ *  policy otherwise. */
+export function cardProbabilityPercent(card: Pick<PipelineCard, 'stage' | 'probabilityPercent'>): number {
+  if (card.probabilityPercent != null && card.probabilityPercent > 0) return card.probabilityPercent;
+  return PIPELINE_STAGE_PROBABILITY[card.stage] ?? 0;
+}
+
+export interface PipelineStageTotals {
+  count: number;
+  valueCents: number;
+  /** Value x probability. The number a forecast is made of, and the reason a stage full
+   *  of `new` leads does not read as a quarter that is already won. */
+  weightedCents: number;
+  /** Cards in this stage carrying no value at all. Counted rather than hidden: a pipeline
+   *  that looks small is usually one nobody has priced, and those are different problems. */
+  unpriced: number;
+}
+
+/** Per-stage totals for the column headers — count, value, weighted value, and how much
+ *  of the stage is unpriced. */
+export function stageTotals(model: PipelineModel, stage: string): PipelineStageTotals {
   const rows = model.cards.filter((card) => card.stage === stage);
-  return { count: rows.length, valueCents: rows.reduce((sum, card) => sum + (card.valueCents ?? 0), 0) };
+  let valueCents = 0;
+  let weightedCents = 0;
+  let unpriced = 0;
+  for (const card of rows) {
+    const value = card.valueCents ?? 0;
+    valueCents += value;
+    weightedCents += Math.round((value * cardProbabilityPercent(card)) / 100);
+    if (card.valueCents == null || card.valueCents === 0) unpriced += 1;
+  }
+  return { count: rows.length, valueCents, weightedCents, unpriced };
+}
+
+export interface PipelineTotals {
+  openCount: number;
+  openValueCents: number;
+  weightedCents: number;
+  unpricedCount: number;
+}
+
+/**
+ * The whole board's OPEN pipeline.
+ *
+ * Won and lost are excluded, which is the one decision worth naming: a weighted total that
+ * counted closed revenue would double-count it against the quota it is being compared to,
+ * and would make every pipeline look healthiest immediately after a deal landed.
+ */
+export function pipelineTotals(model: PipelineModel): PipelineTotals {
+  let openCount = 0;
+  let openValueCents = 0;
+  let weightedCents = 0;
+  let unpricedCount = 0;
+  for (const card of model.cards) {
+    if (card.stage === 'won' || card.stage === 'lost') continue;
+    const value = card.valueCents ?? 0;
+    openCount += 1;
+    openValueCents += value;
+    weightedCents += Math.round((value * cardProbabilityPercent(card)) / 100);
+    if (card.valueCents == null || card.valueCents === 0) unpricedCount += 1;
+  }
+  return { openCount, openValueCents, weightedCents, unpricedCount };
 }

@@ -13,6 +13,7 @@ import {
   type Engagement, type JobPosting, type JobProposal,
 } from '@/lib/freelancerApi';
 import { JobAlertsPanel } from '@/components/freelance/JobAlertsPanel';
+import { formatCents } from '@/lib/canvasMoney';
 
 // The "Find work" surface (open jobs to bid on, my proposals, my engagements) is now
 // a category of the marketplace rather than a standalone /freelancer/gigs page — same
@@ -272,7 +273,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
               <div key={p.id} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>{p.jobTitle}</div>
-                  {p.rateCents != null && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 2 }}>{p.currency} {(p.rateCents / 100).toFixed(0)}{t('perHour')}</div>}
+                  {p.rateCents != null && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 2 }}>{formatCents(p.rateCents, { currency: p.currency, maximumFractionDigits: 0 })}{t('perHour')}</div>}
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                   {pill(p.status)}
@@ -298,7 +299,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                   {pill(e.status)}
                 </div>
                 {e.title && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginBottom: 6 }}>{e.title}</div>}
-                <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('gigs.rate')}: <strong style={{ color: 'var(--text-primary)' }}>{e.rateCents != null ? `${e.currency} ${(e.rateCents / 100).toFixed(0)}/hr` : '—'}</strong></div>
+                <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('gigs.rate')}: <strong style={{ color: 'var(--text-primary)' }}>{e.rateCents != null ? `${formatCents(e.rateCents, { currency: e.currency, maximumFractionDigits: 0 })}/hr` : '—'}</strong></div>
                 {(e.status === 'invited' || e.status === 'interviewing') && (
                   <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                     <button type="button" onClick={() => act(`acc:${e.id}`, () => respondEngagement(e.id, true))} disabled={busy === `acc:${e.id}`}

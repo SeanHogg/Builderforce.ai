@@ -14,6 +14,7 @@ import {
   setMarketplaceToken,
   type MarketplacePurchase,
 } from '@/lib/builderforceApi';
+import { formatCents } from '@/lib/canvasMoney';
 
 function formatPrice(item: CartItem, locale: string, freeLabel: string, useLabel: string): string {
   if (item.price === 0) return freeLabel;
@@ -295,7 +296,7 @@ export default function ShoppingCart() {
                 {purchases.slice(0, 20).map((purchase) => (
                   <li key={purchase.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
                     <span style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{purchase.artifactSlug}</span>
-                    <span style={{ flexShrink: 0 }}>{purchase.priceCents === 0 ? t('free') : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(purchase.priceCents / 100)}</span>
+                    <span style={{ flexShrink: 0 }}>{purchase.priceCents === 0 ? t('free') : formatCents(purchase.priceCents, { locale })}</span>
                   </li>
                 ))}
               </ul>

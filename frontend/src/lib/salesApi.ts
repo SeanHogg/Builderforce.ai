@@ -51,6 +51,34 @@ export type SalesQuota = {
   attainedCents: number;
   attainmentPercent: number | null;
   window: SalesReportWindow;
+  /** Weighted open pipeline expected to land inside this window. Deliberately a
+   *  SEPARATE number from `attainedCents`: booked and forecast revenue are different
+   *  confidences, and one blended figure is how a meter reads green in a quarter
+   *  that misses. */
+  forecastCents: number;
+  /** (attained + forecast) ÷ goal, or null when no goal is set. */
+  projectedPercent: number | null;
+};
+
+export type SalesPipelineStage = {
+  stage: string;
+  count: number;
+  valueCents: number;
+  weightedCents: number;
+  unpriced: number;
+};
+
+/** The OPEN pipeline, weighted. What the report gained when `sales_contacts` learned to
+ *  carry money (migration 0923) — before it, attainment could only report the past. */
+export type SalesPipelineSummary = {
+  stages: SalesPipelineStage[];
+  openCount: number;
+  openValueCents: number;
+  weightedCents: number;
+  /** Open deals carrying no value. The honesty figure beside the forecast: a weighted
+   *  pipeline computed over half-priced data is a number nobody should plan from. */
+  unpricedCount: number;
+  weightedInWindowCents: number | null;
 };
 
 export type SalesReport = {
@@ -61,6 +89,7 @@ export type SalesReport = {
   stalledContacts: number;
   associates: SalesAssociateLine[];
   quota: SalesQuota;
+  pipeline: SalesPipelineSummary;
 };
 
 export type SalesLead = {

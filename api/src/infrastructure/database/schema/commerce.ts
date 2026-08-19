@@ -26,6 +26,7 @@ import {
   primaryKey,
   real,
   serial,
+  smallint,
   text,
   timestamp,
   unique,
@@ -468,10 +469,31 @@ export const salesContacts = pgTable('sales_contacts', {
   company: varchar('company', { length: 255 }).notNull().default(''),
   market: varchar('market', { length: 255 }).notNull().default(''),
   stage: varchar('stage', { length: 24 }).notNull().default('new'),
+  /**
+   * Deal size in cents (migration 0923).
+   *
+   * `PipelineCard.valueCents` has been read and rendered by the canvas since the pipeline
+   * kanban shipped and there was nothing to write it FROM — so a weighted pipeline and a
+   * forecast-to-quota could not be computed at all, and the quota meter could only ever
+   * report closed revenue. 0 means UNPRICED, never "worthless": every read distinguishes
+   * the two, because drawing an unpriced deal as $0 is how a real pipeline comes to look
+   * empty.
+   */
+  valueCents: integer('value_cents').notNull().default(0),
+  /** 0-100, set by a human who has judged THIS deal. 0 means "not overridden" and the
+   *  report falls back to the stage policy — a per-stage default stored on every row
+   *  would be a policy nobody could change without a backfill. */
+  probabilityPercent: smallint('probability_percent').notNull().default(0),
+  /** When it is expected to land. What makes a forecast a PERIOD forecast rather than a
+   *  total of everything currently open. */
+  expectedCloseAt: timestamp('expected_close_at', { withTimezone: true }),
   lastTouchAt: timestamp('last_touch_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index('idx_sales_contacts_owner_stage').on(t.ownerUserId, t.stage, t.updatedAt)]);
+}, (t) => [
+  index('idx_sales_contacts_owner_stage').on(t.ownerUserId, t.stage, t.updatedAt),
+  index('idx_sales_contacts_forecast').on(t.ownerUserId, t.expectedCloseAt),
+]);
 
 export const salesCampaigns = pgTable('sales_campaigns', {
   id: uuid('id').primaryKey().defaultRandom(),

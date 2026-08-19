@@ -37,6 +37,13 @@ export * from './website';
 // shared by the static site publisher and the canvas `app` surface. See its own header
 // for why the pixels live here rather than beside either caller.
 export * from './websiteDocument';
+// The SELL-MOTION vocabulary — the commercial half of "idea to real": the priced quote a
+// buyer can accept, the cadence that follows up, the call that actually happened, the
+// trial, the trust packet a security review needs, and the plan both sides own. Shared
+// because the arithmetic is read by THREE consumers that must never disagree — the
+// seller's card, the buyer-facing page served to somebody with no account, and the Worker
+// route that turns an acceptance into a checkout intent. See its own header.
+export * from './sellMotion';
 // `export *` re-exports a binding; it does not bring it INTO scope here, and the
 // kind list below spreads it — without this import the whole contract module
 // throws `PEOPLE_OBJECT_KINDS is not defined` at import time, which takes every
@@ -45,6 +52,7 @@ import { PEOPLE_OBJECT_KINDS } from './people';
 import { ACADEMIC_OBJECT_KINDS } from './academic';
 import { DATA_SCIENCE_OBJECT_KINDS } from './dataScience';
 import { OPERATIONS_OBJECT_KINDS } from './operations';
+import { SELL_MOTION_OBJECT_KINDS } from './sellMotion';
 
 /**
  * The FOUNDER objects — the half of "idea to real" that is not a made artifact.
@@ -492,6 +500,13 @@ export const CREATION_OBJECT_KINDS = [
   // signature history and a share history, distinct from the AUTHORED `contract` in
   // `FOUNDER_OBJECT_KINDS`. See the kind's own comment above for why they are two kinds.
   ...LEGAL_OBJECT_KINDS,
+  // The commercial half of the motion: a priced `quote` a buyer accepts, the `sequence`
+  // that follows up across channels and stops on reply, the `call` that carries what they
+  // actually said, the `trial` the demo board becomes, the `trustPacket` procurement asks
+  // for, and the `mutualActionPlan` both sides own. Every other vocabulary on this list
+  // models how the company BUILDS; this is the first that models how it SELLS. See
+  // `sellMotion.ts` for why each of the six is not one of the six sales kinds above.
+  ...SELL_MOTION_OBJECT_KINDS,
 ] as const;
 
 export type CreationObjectKind = typeof CREATION_OBJECT_KINDS[number];

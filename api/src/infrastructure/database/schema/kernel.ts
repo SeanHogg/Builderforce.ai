@@ -463,6 +463,13 @@ export const shareLinks = pgTable('share_links', {
   lastUsedAt:   timestamp('last_used_at'),
   revokedAt:    timestamp('revoked_at'),
   createdBy:    varchar('created_by', { length: 64 }),
+  /** What the MINTER calls this link — "the quote I sent Acme". Never shown to the
+   *  holder; it names the row in the list of links a person has to be able to revoke. */
+  label:        varchar('label', { length: 160 }),
+  /** Presentation settings the receiving page reads: seller branding, whether control
+   *  may be requested, which objects are on show. Read-only, never joined or filtered
+   *  on — which is the test for when jsonb is the right shape rather than a table. */
+  metadata:     jsonb('metadata'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [

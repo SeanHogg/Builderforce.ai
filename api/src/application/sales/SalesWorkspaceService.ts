@@ -106,7 +106,10 @@ export class SalesWorkspaceService {
     return session.id;
   }
 
-  async createContact(ownerUserId: string, values: { name: string; email: string; company: string; market: string; stage: string }) { const [row] = await this.db.insert(salesContacts).values({ ownerUserId, ...values }).returning(); return row; }
+  /** `values` carries the identity fields plus, optionally, the deal money the route's
+   *  `dealFields` reader validated (value, probability, expected close — migration 0923).
+   *  Typed as the union rather than spread blindly, so a caller cannot set `ownerUserId`. */
+  async createContact(ownerUserId: string, values: { name: string; email: string; company: string; market: string; stage: string } & Partial<{ valueCents: number; probabilityPercent: number; expectedCloseAt: Date | null }>) { const [row] = await this.db.insert(salesContacts).values({ ownerUserId, ...values }).returning(); return row; }
   async updateContact(ownerUserId: string, id: string, patch: Record<string, unknown>) { const [row] = await this.db.update(salesContacts).set(patch).where(and(eq(salesContacts.id, id), eq(salesContacts.ownerUserId, ownerUserId))).returning(); return row; }
   async createCampaign(ownerUserId: string, values: { name: string; market: string; subject: string }) { const [row] = await this.db.insert(salesCampaigns).values({ ownerUserId, ...values }).returning(); return row; }
   async updateCampaign(ownerUserId: string, id: string, patch: Record<string, unknown>) { const [row] = await this.db.update(salesCampaigns).set(patch).where(and(eq(salesCampaigns.id, id), eq(salesCampaigns.ownerUserId, ownerUserId))).returning(); return row; }

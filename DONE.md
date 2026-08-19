@@ -1,3 +1,161 @@
+## ✅ RESOLVED 2026-08-19 — The canvas could build anything and sell none of it
+
+**The report** (ROADMAP, "Canvas — the sell motion", added 2026-08-13): nine gaps from a
+seller's-eye review. The canvas had eighty-plus object kinds covering BUILD end to end, and every
+one of the nine was in the commercial half — a demo that could not be handed over, a price that
+could not be accepted, a follow-up that could not run, a call that could not land on the board.
+
+**What was actually missing.** Not capability. Every port each gap needed was already connected and
+unwired: `share_links` is the kernel's tokenised-access primitive, `activity_log` is the one audit
+store, `GuestRoomDO` already runs anonymous rooms, the SOC control register and the legal document
+store already hold the evidence a security review asks for, `sendFromMailbox` and `publishSocialPost`
+already send. What was missing was a VOCABULARY: the commercial half of the motion had no objects, so
+none of it could be put on a board, connected to the work it was selling, or reasoned over by the
+model that already reasons over everything else.
+
+### The vocabulary — six kinds, one seventh vocabulary
+
+`packages/creation-canvas-contract/src/sellMotion.ts` + `frontend/src/lib/sellMotionObjects.ts`,
+registered the same way the other seven vocabularies are (one `SpecObjectSet`, one palette group
+`Revenue`, no render branches anywhere):
+
+| kind | why it is not an existing kind |
+| --- | --- |
+| `quote` | `pricing` is the price LIST; a quote is one buyer's priced deal with a discount, a term, an expiry, and an ACCEPT |
+| `sequence` | `emailCampaign` is a blast; a sequence is ordered over time ACROSS CHANNELS and stops on reply |
+| `call` | `salesMeeting` is a scheduled conversation; a call is an executed one, and the value is what came out of it |
+| `trial` | not an `environment`: a time-boxed PROSPECT workspace with activation criteria agreed up front |
+| `trustPacket` | not a `dataRoom` (that is for investors): its distinguishing field is the buyer's questionnaire and the evidence each answer rests on |
+| `mutualActionPlan` | not a `roadmap`: every milestone carries a named owner ON THE BUYER'S SIDE, which is the whole mechanism |
+
+A prospect share is deliberately NOT a kind — it is a `share_links` row, exactly as a résumé share
+already is. Prospect engagement is not one either: it is `activity_log` rows under a new `prospect`
+actor type, read back as a rollup.
+
+### The nine, each closed
+
+1. **A demo could not be handed to a prospect.** `POST /api/creation-sessions/:id/prospect-shares`
+   mints a `share_links` token against the board or one card; `/deal/<token>` renders it to somebody
+   with no account, under the SELLER's branding, watch-only, with request-control as an escalation
+   the seller grants live. A token that could escalate its own scope is one that escalates it after
+   the meeting ends, so it cannot: control is granted by a person who is watching.
+2. **Nothing recorded what a prospect did.** `prospect.opened/viewed/dwell/requestedControl/
+   accepted/declined` in `activity_log`, projected by `summarizeProspectEngagement` into opens, total
+   attention and per-card HOTSPOTS. Dwell is measured honestly — an IntersectionObserver plus
+   `visibilitychange`, so the clock stops behind a backgrounded tab — because a time-on-page that
+   keeps counting is the number that makes every engagement report worthless.
+3. **No `quote`.** `quoteTotals`/`quoteCheckoutIntent` live in the shared contract because THREE
+   consumers must not disagree: the seller's card, the buyer's page, and the Worker route that turns
+   an acceptance into a checkout. The accept route recomputes from the STORED lines and never trusts
+   the request body. Acceptance exists ONLY on the buyer's tokenised route, so no seller, agent or
+   model can close a deal on the buyer's behalf — which is what makes `acceptedAt`'s `derived` flag
+   worth anything.
+4. **No `sequence`.** `sequenceDueSteps` is the whole rule and is read by both the card's progress bar
+   and the `sequence-cadence` cron sweep, so what a seller SEES about to happen is what happens.
+   Offsets are from ENROLMENT, so a missed tick catches up rather than sliding the cadence; a
+   `retryable` failure leaves the cursor alone and a permanent one stops that person. Manual channels
+   (call/sms/task) become a task CARD on the same board rather than a delivery-domain ticket — "ring
+   this prospect on Thursday" has no project and would distort every sprint reading.
+5. **A call never landed on the canvas.** `condenseTranscript` extracted from `meetingIntelligence`
+   as the ONE transcript-condensing primitive; minutes and a sales reading are two SHAPES over it,
+   and the grounding refusal ("never invent decisions, owners, quotations…") lives in the primitive
+   so neither caller can relax it. `talkRatioPercent` is arithmetic over the speaker labels, not a
+   number asked of a model, and returns `undefined` rather than a confident 50% for an unlabelled
+   transcript.
+6. **No trial provisioning.** `provisionTrial` copies the board just built with the buyer into a
+   time-boxed board of its own. Deliberately NOT a new tenant: creating one needs an owning user, and
+   the premise of "let me try it" is that they have not signed up.
+7. **Enterprise stalled at the security questionnaire.** `assembleTrustPacket` pulls the workspace's
+   REAL control register, the vendors it has actually connected, and the policy links, then answers
+   the questionnaire rows the evidence supports — never overwriting a row a person wrote, and leaving
+   the rest `unanswered`, which is the state the readiness meter exists to show. Subprocessors come
+   from `connections` rather than the published page: a buyer asks who touches THEIR data.
+8. **No mutual action plan or handoff.** `mutualPlanHealth` counts the milestones nobody on the
+   buyer's side owns and says so on the card, because a plan the buyer has taken no item on is not a
+   mutual plan. `handoffSession` carries objects AND edges into a fresh board on close.
+9. **The pipeline counted cards, not money.** Migration 0923 adds `value_cents`,
+   `probability_percent` and `expected_close_at` to `sales_contacts`, written by the SAME PATCH that
+   moves a stage. `summarizePipeline` weights the open pipeline against a stage policy that lives in
+   one table (0 means "not overridden" — a per-stage default stored on every row is a policy nobody
+   can change without a backfill), and `SalesReportView`'s quota meter now draws booked and forecast
+   as TWO bands: one blended figure is how a meter reads green in a quarter that misses.
+
+### Three gaps found on the way and closed in the same pass
+
+- **`check-canvas-tool-contract` was not scanning two tool families.** Five canvas tools
+  (`canvas_legal_document_*`, `canvas_request_signature`) were advertised by the canvas and named
+  nowhere in the contract, because the guard's file list had never gained the modules that declare
+  them — the guard's own "a new family adds one line here" instruction, unfollowed twice. All three
+  modules are now scanned and all five tools classified.
+- **Twenty-one private cents formatters.** `formatCents` extracted into `canvasMoney.ts` and every
+  duplicate migrated. They had already drifted: some showed cents, some rounded to whole units, some
+  prefixed a bare ISO CODE where every other surface renders a symbol, so the same $1,250.00 read
+  three different ways depending on the page.
+- **The session access check lived as a private closure.** Extracted to
+  `application/creation/sessionAccess.ts` and read by both callers. The superadmin cross-tenant
+  branch most needed one home: it is one `innerJoin` away from "superadmins can open any board in the
+  product".
+
+### What is now provable
+
+`sellMotionObjects.test.ts` (19), `canvasSalesPipeline.test.ts` (5), `salesPipeline.test.ts` (11) and
+`sellMotionService.test.ts` (8) assert the REFUSALS rather than the happy paths — a model cannot
+write an acceptance, a cadence cursor or a transcript; a replied-to contact is never re-sent to; a
+readiness percentage cannot be improved by striking rows out; a `style` attribute on a page served to
+a stranger takes nothing that is not a colour. `canvasSalesPipeline.test.ts` reads the server's stage
+policy out of its own source, so a board and a report cannot come to forecast different numbers.
+
+**Shipped:** migration `0923_sell_motion.sql`; contract `sellMotion.ts`; frontend
+`sellMotionObjects.ts`, `canvasSellMotionTools.ts` (11 tools), `prospectShareApi.ts`,
+`components/sell/ProspectDealView.tsx`, `app/deal/[token]`; api `prospectShare.ts`,
+`prospectActions.ts`, `sellMotionService.ts`, `sequenceRunner.ts`, `sessionAccess.ts`,
+`publicProspectRoutes.ts`, `sellMotionRoutes.ts`; i18n in all five catalogs.
+
+## ✅ RESOLVED 2026-08-19 — The canvas threw away its whole server render on every load, over a version number
+
+**The report:** `Minified React error #418` on `builderforce.ai/create/<local id>`, twice per load,
+with `args[]=HTML` and nothing else. The deployed bundle names no component, so the first pass
+logged it as blocked on a non-minified repro. **That was the wrong call — the repro was obtainable
+locally**, and getting it took one script rather than a browser.
+
+**How it was found.** `frontend/scripts/hydration-probe.mjs` (new, kept) loads a route from the dev
+server inside jsdom, lets the REAL client bundle hydrate the REAL server HTML, and prints React's
+unminified diagnosis — component stack, the `+ client / - server` diff, and every text node React
+rewrote while regenerating the tree. jsdom needs the platform streams polyfilled or the Next client
+bundle throws before React ever hydrates and the page looks clean; the script does that. React
+answered immediately:
+
+```
+<ProductUpdatesTrigger appVersion="2026.8.56" apiVersion={null} …>
+  <button …>
++   2026.8.56      ← client
+-   2026.8.60      ← server
+```
+
+**The bug.** `next.config.js` inlines `NEXT_PUBLIC_APP_VERSION` from `package.json` at COMPILE time
+— into the server bundle when it is built, into the client chunks when THEY are built — and
+`useLegalDocs` fed it straight into the version chip in the sidebar's legal strip and the marketing
+footer. A build-identity string is the one value in the app whose entire purpose is to differ
+between builds, and it was being compared byte-for-byte during hydration. Any skew — a redeploy
+while a cached chunk is still served, a rebuilt server against warm assets — and React discards the
+entire server tree and re-renders the whole app on the client. On the heaviest route in the product,
+for the least important string on the page.
+
+**The fix.** `appVersion` is `string | null` and arrives on the commit AFTER mount, exactly as the
+theme, the auth session and the sidebar's collapsed state already do. One change in the shared hook
+fixes every consumer (`AppFooter`, `LegalStrip`, `ProductUpdatesTrigger`), and the chip renders the
+absence as the same ellipsis it already used for an API version it does not have yet.
+
+**Verified end to end, not asserted:** against a clean dev server the SSR HTML now emits
+`UI …&nbsp;· API …` and the probe reports `hydration-related console output: (none)`, with the real
+version arriving in a post-hydration commit. Plus `useLegalDocs.test.tsx`, which holds the invariant
+without a browser: `renderToString` must contain no version-shaped string, and the first CLIENT
+render must agree with it.
+
+**Also closed:** `realizationApi.plan(idea, sessionId)` — the caller in `/realize` was passing a
+second argument the typed client did not take, which is what had `tsgo --noEmit` red across the
+shared tree. The API route already read `body.sessionId`, so the client was the only half missing.
+
 ## ✅ RESOLVED 2026-08-19 — Dragging a connection onto the right-hand side of a card did nothing
 
 Every card on the Creation Canvas and in the Workflow Builder carries exactly two connection

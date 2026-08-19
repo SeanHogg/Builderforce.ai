@@ -24,6 +24,7 @@ import { useMemo } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { BarChart } from '@/components/charts/BarChart';
 import { SALES_REPORT_WINDOWS, type SalesReport, type SalesReportWindow } from '@/lib/salesApi';
+import { formatCents } from '@/lib/canvasMoney';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
@@ -50,8 +51,9 @@ export function SalesReportView({ report, window = 'month', onWindowChange, onSe
   const t = useTranslations('salesHub.report');
   const locale = useLocale();
 
+  // ONE cents formatter, shared with every other money surface — see `formatCents`.
   const money = useMemo(
-    () => (cents: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100),
+    () => (cents: number) => formatCents(cents, { locale, maximumFractionDigits: 0 }),
     [locale],
   );
   const number = useMemo(() => (value: number) => new Intl.NumberFormat(locale).format(value), [locale]);
@@ -125,13 +127,20 @@ export function SalesReportView({ report, window = 'month', onWindowChange, onSe
               {money(report.quota.attainedCents)} / {money(report.quota.goalCents)}
             </span>
           </div>
+          {/* TWO bands on one track, not one.
+              Booked revenue is solid; weighted pipeline expected to land in this window is
+              hatched behind it. A single bar summing the two would say a quarter is 90%
+              done when half of that is a forecast — which is exactly how a quota meter
+              reads green in a quarter that misses. The `meter` still reports ATTAINED as
+              its value, because that is the fact; the projection is reported in the
+              sentence beneath, where a screen reader gets it with its qualifier attached. */}
           <div
             role="meter"
             aria-valuenow={report.quota.attainmentPercent ?? 0}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-label={t('quotaTitle', { window: t(`window.${report.quota.window}`) })}
-            style={{ marginTop: 10, height: 10, borderRadius: 'var(--radius-full)', background: 'var(--surface-sunken)', overflow: 'hidden' }}
+            style={{ marginTop: 10, height: 10, borderRadius: 'var(--radius-full)', background: 'var(--surface-sunken)', overflow: 'hidden', display: 'flex' }}
           >
             <div style={{
               // Capped at 100% so 240% attainment does not overflow the track —
@@ -140,10 +149,62 @@ export function SalesReportView({ report, window = 'month', onWindowChange, onSe
               height: '100%',
               background: (report.quota.attainmentPercent ?? 0) >= 100 ? 'var(--success)' : 'var(--coral-bright)',
             }} />
+            <div style={{
+              // The forecast band takes whatever the booked band left, never more.
+              width: `${Math.max(0, Math.min(100, report.quota.projectedPercent ?? 0) - Math.min(100, report.quota.attainmentPercent ?? 0))}%`,
+              height: '100%',
+              background: 'repeating-linear-gradient(45deg, var(--coral-bright) 0 3px, transparent 3px 6px)',
+              opacity: 0.7,
+            }} />
           </div>
           <p style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)', margin: '8px 0 0' }}>
             {t('quotaAttainment', { percent: report.quota.attainmentPercent ?? 0 })}
+            {report.quota.forecastCents > 0 && (
+              <> · {t('quotaProjected', {
+                percent: report.quota.projectedPercent ?? 0,
+                amount: money(report.quota.forecastCents),
+              })}</>
+            )}
           </p>
+          {/* The number a forecast should never be read without. A weighted pipeline
+              computed over deals nobody priced is arithmetic over absent data, and saying
+              so beside it is the difference between a forecast and a guess. */}
+          {report.pipeline.unpricedCount > 0 && (
+            <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+              {t('pipelineUnpriced', { count: report.pipeline.unpricedCount, total: report.pipeline.openCount })}
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* 1c — the open pipeline itself, by stage. `goalCents` gates the meter above
+          because a target is what turns a total into a verdict; this section is gated on
+          there being any open pipeline at all, because that is what it draws. */}
+      {report.pipeline.openCount > 0 && (
+        <section style={cardStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'baseline' }}>
+            <p style={{ ...captionStyle, margin: 0 }}>{t('pipelineTitle')}</p>
+            <span style={{ fontSize: 'var(--font-size-body)', color: 'var(--text-muted)' }}>
+              {t('pipelineHeadline', {
+                weighted: money(report.pipeline.weightedCents),
+                open: money(report.pipeline.openValueCents),
+                count: report.pipeline.openCount,
+              })}
+            </span>
+          </div>
+          <ul style={{ listStyle: 'none', margin: '10px 0 0', padding: 0, display: 'grid', gap: 6 }}>
+            {report.pipeline.stages.map((stage) => (
+              <li key={stage.stage} style={{ display: 'grid', gridTemplateColumns: 'minmax(90px, 1fr) auto', gap: 12, alignItems: 'baseline' }}>
+                <span style={{ color: 'var(--text-primary)' }}>
+                  {t.has(`stage.${stage.stage}`) ? t(`stage.${stage.stage}`) : stage.stage}
+                  <span style={{ color: 'var(--text-muted)' }}> · {stage.count}</span>
+                </span>
+                <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                  {money(stage.weightedCents)} / {money(stage.valueCents)}
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

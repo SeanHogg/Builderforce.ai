@@ -22,6 +22,7 @@
 import { useId } from 'react';
 import { useTranslations } from 'next-intl';
 import type { MetricSeries } from '@/lib/kernel/kernelApi';
+import { formatCents } from '@/lib/canvasMoney';
 
 /** Series index → token. Four hues, cycled — enough to tell three or four lines
  *  apart without inventing a palette that only reads in one theme. */
@@ -51,7 +52,7 @@ function formatValue(value: number, unit: string | null, locale: string): string
   const n = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value);
   if (!unit) return n;
   if (unit === 'cents') {
-    return new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(value / 100);
+    return formatCents(value, { locale });
   }
   if (unit === 'percent') return `${n}%`;
   return `${n} ${unit}`;

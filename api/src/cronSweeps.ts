@@ -71,6 +71,7 @@ import { runOperationsRollup } from './application/operations/operationsRollup';
 import { runSignatureReminderSweep } from './application/signature/runSignatureReminderSweep';
 import { runFormReminderSweep } from './application/collection/formInvitations';
 import { runLegalRollup } from './application/legal/legalRollup';
+import { runSequenceSweep } from './application/sales/sequenceRunner';
 
 /**
  * `null` from a sweep's `run` = nothing worth a log line. Preserved verbatim from
@@ -345,6 +346,19 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       await runDueTriggers(env);
       await processPendingCloudWorkflows(env);
       return null;
+    },
+  },
+  {
+    key: 'sequence-cadence',
+    cadence: 'frequent',
+    description:
+      'Advance every running sales `sequence` by whatever step each enrolled person is due — '
+      + 'email, social post, or a task card for the manual channels. Stops on reply.',
+    run: async ({ env }) => {
+      const r = await runSequenceSweep(env);
+      return r.sent > 0 || r.failed > 0 || r.stopped > 0
+        ? `sequences=${r.sequences} sent=${r.sent} stopped=${r.stopped} failed=${r.failed}`
+        : null;
     },
   },
   {

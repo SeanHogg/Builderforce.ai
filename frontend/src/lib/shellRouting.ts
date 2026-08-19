@@ -39,8 +39,15 @@ function underPrefix(pathname: string, prefix: string): boolean {
  * nor the marketing chrome is honest here. A nav bar inviting them to "start building"
  * beside the interview they are booking is the surface equivalent of an ad in a waiting
  * room. The page is its own thing, and that is the whole reason this list exists.
+ *
+ * `/deal` is the same argument pointed the other way, and it is stronger. It is a BUYER
+ * reading what a seller sent them — a price, a security packet, a joint plan — and the
+ * masthead on that page is the SELLER's name, not ours. Wrapping it in our marketing
+ * chrome would put our nav, our pricing link and our sign-up CTA around somebody else's
+ * negotiated offer, which is both a worse demo and, on a link the buyer may forward
+ * internally, a leak of who we are selling to. See `ProspectDealView`.
  */
-const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/', '/book'];
+const NO_CHROME_PREFIXES = ['/embed', '/webcontainer', '/auth/', '/book', '/deal'];
 
 /**
  * The framed cross-origin surface — the VS Code webview and third-party hosts.
