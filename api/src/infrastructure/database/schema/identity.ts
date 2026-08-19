@@ -1565,3 +1565,85 @@ export const emailOtpChallenges = pgTable('email_otp_challenges', {
   index('idx_email_otp_challenges_user').on(t.userRef, t.consumedAt, t.createdAt),
   index('idx_email_otp_challenges_email').on(t.email, t.purpose, t.expiresAt),
 ]);
+
+// ---------------------------------------------------------------------------
+// Enterprise SSO — the institution's own IdP, over OIDC
+// ---------------------------------------------------------------------------
+
+/**
+ * One enterprise SSO connection.
+ *
+ * OIDC ONLY, deliberately, and migration 0482 carries the full argument. The
+ * short version: SAML 2.0's hard part is verifying the signed Response —
+ * exclusive canonicalisation plus reference-digest validation before the RSA
+ * check — where a mistake is an XML signature-wrapping AUTHENTICATION BYPASS that
+ * looks exactly like a working login. So SAML is terminated at a gateway that
+ * already speaks it (the customer's choice of WorkOS / Auth0 / Okta / Entra),
+ * their Shibboleth or InCommon IdP talks SAML to that, and every signature THIS
+ * codebase verifies stays an RS256 JWS — the primitive WebCrypto implements and
+ * `LtiService.ts` already verifies the same way.
+ *
+ * `protocol` exists so that decision is legible in the data rather than implied
+ * by the absence of code. Only 'oidc' is accepted, and the refusal says why.
+ */
+export const ssoConnections = pgTable('sso_connections', {
+  id:               serial('id').primaryKey(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** What an administrator recognises: "University of Melbourne (Okta)". */
+  label:            varchar('label', { length: 160 }).notNull(),
+  /** 'oidc'. See the note above. */
+  protocol:         varchar('protocol', { length: 16 }).notNull().default('oidc'),
+  issuer:           varchar('issuer', { length: 255 }).notNull(),
+  /** When set, the four endpoints are read from the IdP's own discovery
+   *  document. Typed values still win, so a provider with a broken document is
+   *  connectable by hand. */
+  discoveryUrl:     text('discovery_url'),
+  authorizationUrl: text('authorization_url'),
+  tokenUrl:         text('token_url'),
+  jwksUrl:          text('jwks_url'),
+  userinfoUrl:      text('userinfo_url'),
+  clientId:         varchar('client_id', { length: 255 }).notNull(),
+  /** The `credentialCrypto` envelope — the same seal `lti_registrations` uses. */
+  clientSecretEnc:  text('client_secret_enc').notNull(),
+  clientSecretIv:   varchar('client_secret_iv', { length: 32 }).notNull(),
+  scopes:           varchar('scopes', { length: 255 }).notNull().default('openid email profile'),
+  /** Off means the IdP authenticates an unknown person and we still refuse —
+   *  what an institution that provisions seats by hand asks for. */
+  jitProvisioning:  boolean('jit_provisioning').notNull().default(true),
+  defaultRole:      varchar('default_role', { length: 32 }).notNull().default('developer'),
+  status:           varchar('status', { length: 16 }).notNull().default('active'),
+  createdBy:        varchar('created_by', { length: 64 }),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_sso_connections_issuer_client').on(t.issuer, t.clientId),
+  index('idx_sso_connections_tenant').on(t.tenantId, t.status),
+]);
+
+/**
+ * Email domain → SSO connection.
+ *
+ * A TABLE and not a jsonb array on the connection, unlike
+ * `lti_registrations.deployment_ids`, because this one is queried ACROSS rows:
+ * "which connection owns physics.edu" is asked on every sign-in attempt. The
+ * unique index is the rule as well as the index — two workspaces both claiming a
+ * domain would make the routing answer ambiguous, and ambiguity at an auth
+ * boundary resolves arbitrarily rather than refusing.
+ *
+ * Only a VERIFIED row routes. An unverified claim on a domain is a takeover of
+ * every sign-in from it.
+ */
+export const ssoDomains = pgTable('sso_domains', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  connectionId: integer('connection_id').notNull().references(() => ssoConnections.id, { onDelete: 'cascade' }),
+  domain:       varchar('domain', { length: 255 }).notNull(),
+  verifiedAt:   timestamp('verified_at'),
+  /** The DNS TXT value that proves control. Random per row, never derived from
+   *  the domain, so it cannot be guessed from the name. */
+  verifyToken:  varchar('verify_token', { length: 64 }).notNull(),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_sso_domains_domain').on(t.domain),
+  index('idx_sso_domains_connection').on(t.connectionId),
+]);

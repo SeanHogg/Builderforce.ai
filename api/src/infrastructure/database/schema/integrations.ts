@@ -351,3 +351,107 @@ export const tenantExtensionInstalls = pgTable('tenant_extension_installs', {
   uniqueIndex('uq_tenant_extension_install').on(t.tenantId, t.packageId),
   index('idx_tenant_extension_installs_tenant').on(t.tenantId, t.disabledAt),
 ]);
+
+// ═══ LTI 1.3 — the LMS a course actually runs in ═══════════════════════════
+
+/**
+ * One LTI 1.3 platform registration.
+ *
+ * Was the `LTI_REGISTRATIONS` JSON secret, and moved here by migration 0480 for
+ * the reason that migration argues: the objection to a table was that a
+ * registration holds an RSA private key and the generic entity reader redacts by
+ * column-name pattern. Sealing the key in the `credentialCrypto` envelope removes
+ * the objection rather than arguing with it — what is stored is ciphertext, and a
+ * projection that forgot to redact it emits base64 nobody can use.
+ *
+ * `(issuer, clientId)` is the identity, and `deploymentIds` is checked on every
+ * launch: one issuer — `https://canvas.instructure.com` is shared by every Canvas
+ * Cloud institution — hosts many deployments, and matching on issuer alone would
+ * let one university's LMS launch into another's boards.
+ */
+export const ltiRegistrations = pgTable('lti_registrations', {
+  id:                serial('id').primaryKey(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** What an administrator recognises. Never used for matching. */
+  label:             varchar('label', { length: 160 }).notNull(),
+  issuer:            varchar('issuer', { length: 255 }).notNull(),
+  clientId:          varchar('client_id', { length: 255 }).notNull(),
+  deploymentIds:     jsonb('deployment_ids').$type<string[]>().notNull().default([]),
+  authLoginUrl:      text('auth_login_url').notNull(),
+  accessTokenUrl:    text('access_token_url').notNull(),
+  keySetUrl:         text('key_set_url').notNull(),
+  /** Published on /api/lti/jwks so the platform can verify our client assertion. */
+  toolKeyId:         varchar('tool_key_id', { length: 64 }).notNull(),
+  /** The PUBLIC half, in the clear on purpose: /api/lti/jwks serves it to the
+   *  world. Stored beside the sealed private half — and DERIVED from it at write
+   *  time — so publishing and matching a launch never decrypt anything, and the
+   *  two halves cannot drift into an `invalid_client` with no further detail. */
+  toolPublicJwk:     jsonb('tool_public_jwk').$type<Record<string, unknown>>().notNull(),
+  /** AES-256-GCM ciphertext of `{ jwk }`. NEVER plaintext, NEVER in a response. */
+  toolPrivateKeyEnc: text('tool_private_key_enc').notNull(),
+  toolPrivateKeyIv:  varchar('tool_private_key_iv', { length: 32 }).notNull(),
+  /** 'active' | 'disabled'. Disabling retires a registration without destroying
+   *  the audit of the launches it authorised. */
+  status:            varchar('status', { length: 16 }).notNull().default('active'),
+  createdBy:         varchar('created_by', { length: 64 }),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_lti_registrations_issuer_client').on(t.issuer, t.clientId),
+  index('idx_lti_registrations_tenant').on(t.tenantId, t.status),
+]);
+
+/**
+ * One LMS course context ↔ one canvas board.
+ *
+ * The decision migration 0481 records: a launch RESUMES the board bound to its
+ * course and creates one on first launch. Keyed on the COURSE and not the
+ * resource link, because a course-navigation launch and an assignment launch are
+ * two doors into the same module — a board per link would give one cohort two
+ * rosters that drift apart.
+ */
+export const ltiContextBindings = pgTable('lti_context_bindings', {
+  id:              serial('id').primaryKey(),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  registrationId:  integer('registration_id').notNull().references(() => ltiRegistrations.id, { onDelete: 'cascade' }),
+  issuer:          varchar('issuer', { length: 255 }).notNull(),
+  deploymentId:    varchar('deployment_id', { length: 255 }).notNull(),
+  contextId:       varchar('context_id', { length: 255 }).notNull(),
+  /** Frozen at first launch, so a renamed board still says where it came from. */
+  contextLabel:    varchar('context_label', { length: 255 }),
+  contextTitle:    varchar('context_title', { length: 255 }),
+  /** Cross-domain id into `creation_sessions` — the board a launch lands on. */
+  sessionId:       uuid('session_id').notNull(),
+  /** The `cohort` object that carries `ltiIssuer` / `ltiMembershipsUrl`. */
+  cohortObjectId:  uuid('cohort_object_id'),
+  /** NRPS. Null when the platform did not grant the roster scope. */
+  membershipsUrl:  text('memberships_url'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_lti_context_bindings_context').on(t.issuer, t.deploymentId, t.contextId),
+  index('idx_lti_context_bindings_tenant').on(t.tenantId, t.sessionId),
+]);
+
+/**
+ * One LMS resource link ↔ one `assignment` object on the course's board.
+ *
+ * This is where `ltiLineItemUrl` comes from, which is what `submission.mark`
+ * pushes a score through. A second link in the same course adds an object; it
+ * never adds a board.
+ */
+export const ltiResourceBindings = pgTable('lti_resource_bindings', {
+  id:                 serial('id').primaryKey(),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  bindingId:          integer('binding_id').notNull().references(() => ltiContextBindings.id, { onDelete: 'cascade' }),
+  resourceLinkId:     varchar('resource_link_id', { length: 255 }).notNull(),
+  resourceLinkTitle:  varchar('resource_link_title', { length: 255 }),
+  assignmentObjectId: uuid('assignment_object_id'),
+  /** AGS. Null when the platform did not grant the score scope — which is exactly
+   *  when `submission.mark` must NOT claim it pushed a grade back. */
+  lineItemUrl:        text('line_item_url'),
+  createdAt:          timestamp('created_at').notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_lti_resource_bindings_link').on(t.bindingId, t.resourceLinkId),
+]);

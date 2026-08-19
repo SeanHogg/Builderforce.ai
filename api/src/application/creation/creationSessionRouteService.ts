@@ -231,6 +231,42 @@ export function distinctIdCounts(values: readonly string[]): { total: number; di
   };
 }
 
+/** One write the claim was about to make, with enough about it to say which one
+ *  failed when the driver reports only a constraint name. */
+export interface PlannedClaimWrite {
+  table: string;
+  rows: number;
+  statement: unknown;
+}
+
+/**
+ * Map a batch failure back onto the inventory that produced it.
+ *
+ * Postgres names the CONSTRAINT, and every index this schema creates is named
+ * after its table (creation_session_objects_pkey, uq_creation_events_revision).
+ * That is enough to recover the statement index the driver drops — and when it is
+ * not, the report says the index is unknown rather than asserting one, because a
+ * wrong index sends the next reader to the wrong statement.
+ */
+export function describeClaimBatchFailure(
+  error: unknown,
+  planned: readonly PlannedClaimWrite[],
+): Record<string, unknown> {
+  const { code, constraint } = pgFailureDetail(error);
+  const index = constraint
+    ? planned.findIndex((write) => constraint.toLowerCase().includes(write.table.toLowerCase()))
+    : -1;
+  return {
+    pgCode: code,
+    constraint,
+    statementIndex: index >= 0 ? index : null,
+    statementTable: index >= 0 ? planned[index]!.table : null,
+    statementRows: index >= 0 ? planned[index]!.rows : null,
+    statementCount: planned.length,
+    plan: planned.map((write) => `${write.table}x${write.rows}`),
+  };
+}
+
 function parseTemplateGraph(raw: unknown): { objects: GraphObjectInput[]; connections: GraphConnectionInput[]; viewport?: unknown } | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const graph = raw as { objects?: unknown; connections?: unknown; viewport?: unknown };
@@ -877,23 +913,22 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     // reports one Postgres message for the whole batch with no statement index,
     // so the only way the catch below can say WHICH write failed is to know what
     // it was about to run and in what order. See `pgFailureDetail`.
-    const planned: Array<{ label: string; table: string; rows: number; statement: unknown }> = [];
-    const statements: unknown[] = [
-      db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title, preview: buildPreview(objects), createdBy: userId, updatedBy: userId, canvasRevision: 1, viewport: body.viewport ?? { x: 0, y: 0, zoom: 1 } }),
-      db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId, viewport: body.viewport ?? { x: 0, y: 0, zoom: 1 } }),
-      db.insert(creationSessionClaims).values({ userId, clientSessionId, serverSessionId: sessionId }),
-      db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.claimed', payload: { clientSessionId, hadInitialPrompt: !!body.initialPrompt } }),
-      db.insert(creationSessionSnapshots).values({ sessionId, revision: 1, graph: { objects, connections }, viewport: body.viewport ?? { x: 0, y: 0, zoom: 1 }, createdBy: userId }),
+    const planned: PlannedClaimWrite[] = [
+      { table: 'creation_sessions', rows: 1, statement: db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title, preview: buildPreview(objects), createdBy: userId, updatedBy: userId, canvasRevision: 1, viewport: body.viewport ?? { x: 0, y: 0, zoom: 1 } }) },
+      { table: 'creation_session_members', rows: 1, statement: db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId, viewport: body.viewport ?? { x: 0, y: 0, zoom: 1 } }) },
+      { table: 'creation_session_claims', rows: 1, statement: db.insert(creationSessionClaims).values({ userId, clientSessionId, serverSessionId: sessionId }) },
+      { table: 'creation_session_events', rows: 1, statement: db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.claimed', payload: { clientSessionId, hadInitialPrompt: !!body.initialPrompt } }) },
+      { table: 'creation_session_snapshots', rows: 1, statement: db.insert(creationSessionSnapshots).values({ sessionId, revision: 1, graph: { objects, connections }, viewport: body.viewport ?? { x: 0, y: 0, zoom: 1 }, createdBy: userId }) },
     ];
-    if (objects.length) statements.push(db.insert(creationSessionObjects).values(objects.map((object) => ({
+    if (objects.length) planned.push({ table: 'creation_session_objects', rows: objects.length, statement: db.insert(creationSessionObjects).values(objects.map((object) => ({
       id: object.id, sessionId, kind: object.kind, resourceType: object.resourceType ?? null, resourceId: object.resourceId ?? null,
       resourceRevision: object.resourceRevision ?? null, canvasData: object.canvasData ?? {}, content: object.content ?? null,
       searchText: creationObjectSearchText(object.content), createdBy: userId, updatedBy: userId,
-    }))));
-    if (connections.length) statements.push(db.insert(creationSessionConnections).values(connections.map((edge) => ({
+    }))) });
+    if (connections.length) planned.push({ table: 'creation_session_connections', rows: connections.length, statement: db.insert(creationSessionConnections).values(connections.map((edge) => ({
       id: edge.id, sessionId, sourceObjectId: edge.sourceObjectId, targetObjectId: edge.targetObjectId,
       kind: edge.kind ?? 'reference', label: edge.label ?? null, metadata: edge.metadata ?? null, createdBy: userId,
-    }))));
+    }))) });
     const claimedTimeline = Array.isArray(body.timeline) ? body.timeline.slice(0, 500).flatMap((message) => {
       const text = typeof message.body === 'string' ? message.body.trim().slice(0, 50_000) : '';
       if (!text) return [];
@@ -908,12 +943,30 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       return [{ sessionId, clientMessageId: String(message.clientMessageId || crypto.randomUUID()).slice(0, 128), messageRole, body: text, metadata, createdBy: userId }];
     }) : [];
     if (!claimedTimeline.length && typeof body.initialPrompt === 'string' && body.initialPrompt.trim()) claimedTimeline.push({ sessionId, clientMessageId: `claim:${clientSessionId}`, messageRole: 'user', body: body.initialPrompt.trim().slice(0, 50_000), metadata: {}, createdBy: userId });
-    if (claimedTimeline.length) statements.push(db.insert(creationSessionTimeline).values(claimedTimeline));
+    if (claimedTimeline.length) planned.push({ table: 'creation_session_timeline', rows: claimedTimeline.length, statement: db.insert(creationSessionTimeline).values(claimedTimeline) });
     try {
-      await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
+      await db.batch(planned.map((write) => write.statement) as unknown as Parameters<typeof db.batch>[0]);
     } catch (error) {
       const [raced] = await db.select({ sessionId: creationSessionClaims.serverSessionId }).from(creationSessionClaims).where(and(eq(creationSessionClaims.userId, userId), eq(creationSessionClaims.clientSessionId, clientSessionId))).limit(1);
       if (raced) return c.json({ session: { id: raced.sessionId, claimed: true, replayed: true } });
+      // NOT a race, so this is the 500 the operator screenshotted. Everything the
+      // driver refuses to say is reconstructed here BEFORE the rethrow: which
+      // statement the named constraint belongs to, how many rows it carried, and
+      // whether the ids the caller sent were distinct case-sensitively but not
+      // case-INSENSITIVELY. That last pair is the one cause of
+      // creation_session_objects_pkey that has actually been found and fixed, and
+      // nothing could previously confirm or rule it out for a given request.
+      reportCaughtError(error, {
+        source: 'application/creation/creationSessionRouteService.ts',
+        operation: 'claimCreationSession',
+        context: {
+          ...describeClaimBatchFailure(error, planned),
+          objectIds: distinctIdCounts(objects.map((object) => object.id)),
+          connectionIds: distinctIdCounts(connections.map((edge) => edge.id)),
+          timelineRows: claimedTimeline.length,
+          clientSessionId,
+        },
+      });
       throw error;
     }
     return c.json({ session: { id: sessionId, title, revision: 1, claimed: true } }, 201);
