@@ -17,6 +17,7 @@
  * has since acted on are preserved by title, because losing "we already mitigated
  * this" on every regeneration would make the lifecycle worthless.
  */
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, eq, inArray, desc } from 'drizzle-orm';
 import { rfpRisks } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
@@ -54,7 +55,20 @@ export async function projectRiskRegister(db: Db, args: ProjectRegisterArgs): Pr
     for (const row of prior) {
       if (row.status !== 'open' || row.ownerUserId) decided.set(`${row.kind}:${row.title}`, { status: row.status, ownerUserId: row.ownerUserId });
     }
-  } catch { /* a fresh response has no prior rows */ }
+  } catch (error) {
+    // A SELECT over an empty set returns `[]`, so reaching here is a real fault —
+    // a missing table on a partly-migrated deployment, or the connection. The
+    // regeneration still proceeds (losing the carried-over decisions is better
+    // than refusing to regenerate at all) but it is REPORTED rather than
+    // swallowed: a register that silently reopens a risk the team accepted last
+    // week must leave a trace of why.
+    reportCaughtError(error, {
+      source: 'application/rfp/rfpRegister.ts',
+      operation: 'carryPriorDecisions',
+      level: 'warning',
+      context: { responseId },
+    });
+  }
 
   await db.delete(rfpRisks).where(and(eq(rfpRisks.tenantId, tenantId), eq(rfpRisks.responseId, responseId)));
 

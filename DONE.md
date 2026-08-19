@@ -1,3 +1,82 @@
+## ✅ RESOLVED 2026-08-18 — A live preview can now say it is broken instead of looking fine, and a dataset's full rows can no longer reach the model
+
+Two Gap Register entries, closed together because they are the same question asked twice: what
+does the model get to SEE off a canvas object, and who decides?
+
+### 1. `datasource.rows` reaching `CONTEXT_FIELDS` on every object kind
+
+**What was wrong.** `CONTEXT_FIELDS` ends with `...specFieldNames()`, which folds every spec
+vocabulary's field names into the readable set. `dataArchitectureObjects.ts` correctly declares
+`rows` among `datasource`'s mutable fields — an import writes them — so the whole imported sheet
+became a readable context field for EVERY kind, silently reversing a deliberate exclusion that
+existed only as a comment three lines above the spread ("a full sheet would crowd out everything
+else on the board"). Both a context-budget regression and a data-minimisation one.
+
+**The fix.** The deny-list route, not the mutable-list route: a vocabulary may declare whatever
+its objects need, and the snapshot boundary is enforced once, centrally, on the ASSEMBLED list.
+`NEVER_IN_CONTEXT` in `frontend/src/components/creation-canvas/creationObjectContext.ts` holds
+`rows` (reachable through `canvas_query_dataset` instead) and `prompt`, and
+`creationObjectAiContext` subtracts it before cutting the snapshot. Dropping `rows` from the
+spec's `mutable` list would have fixed this symptom and left the next vocabulary free to
+reintroduce it — a comment cannot enforce anything against a spread.
+
+**Proof.** `creationObjectRegistry.test.ts` is green: 22/22, including the assertion whose fixture
+rows are labelled `private customer` / `secret request` for exactly this reason.
+
+### 2. A framed preview that could not report its own console, network errors or HTTP status
+
+**What was wrong.** A `browser` / `service` / `url` card frames a real page, and the browser gives
+an embedder nothing from inside it — no `contentWindow.console`, no `pageerror`, no failed-request
+entries, no `PerformanceObserver`. So a preview that threw on every load looked identical to one
+that worked, and Brain, reading the board, could only ever report that the page loaded. The `app`
+surface had already solved half of this for documents the canvas itself writes, with an injected
+reporter posting over `postMessage`; nothing else on the board benefited, and the reporter was
+private to `canvasApp.ts`.
+
+**The fix, in three parts.**
+
+- **One wire contract, one reader.** `frontend/src/lib/canvasPreviewReport.ts` now owns the tag,
+  the entry shape, the budgets, the injected reporter and the report projection;
+  `useCanvasPreviewLog` is the ONE listener. The app surface's private copies
+  (`CANVAS_APP_MESSAGE`, `CanvasAppLogEntry`, `instrumentation()`) are deleted and both readers
+  migrated. The shared listener scopes on `event.source === frame.contentWindow` — the app
+  surface's own listener matched on the tag alone, so two running previews on one board fed each
+  other's console into the wrong card.
+- **The half that needs no cooperation.** `brain.fetchUrl` already returned the HTTP status and
+  the panel discarded it. A styled 404 frames exactly as happily as the real page, so this is the
+  only broken-ness signal available for a page carrying no reporter at all: it is now stored as
+  `httpStatus` and named in the strip ("This address returned HTTP 503").
+- **The half that needs the page.** Documents the canvas generates carry
+  `CANVAS_PREVIEW_REPORTER` (now also catching capture-phase subresource failures and 4xx/5xx
+  responses, neither of which the old app-surface version saw). Pages somebody else wrote
+  cooperate through `@seanhogg/builderforce-quality` → `installCanvasPreviewReporter()`, wired
+  into `init()` behind `framePreview` (default true, a hard no-op when unframed, and it posts a
+  level + a truncated line + an offset — never page content, bodies or headers, because the
+  framing document may be anyone's).
+
+**And the limit is stated rather than papered over.** `canvasPreviewSummary().reported`
+distinguishes a SILENT page from a CLEAN one, and the strip says "This page does not report its
+console" with a hint naming the SDK — because claiming a console is clean when it was never read
+is the same defect one layer up.
+
+**Read by the model, not just the reader.** The bounded report (`previewLog`,
+`previewErrorCount`, `previewWarningCount`, `previewReported`, `previewReportedAt`, `httpStatus`)
+is written back onto the object, debounced and compared by value, and added to `CONTEXT_FIELDS`
+with `canvasPreviewReportLog` keeping the FAILURES rather than the tail — truncating by time
+would drop the throw on load and keep the request chatter after it.
+
+**What is still out of reach, honestly.** Route (b) — running the page in the QA runner container
+and posting findings back — remains the Agentic Tester path and still needs that container
+deployed. It is not needed for the two routes above, which is why this entry closes.
+
+**Proof.** `canvasPreviewReport.test.ts` (14), `canvasWebPageNode.test.tsx` (15, including a card
+refusing a neighbour frame's report and the bounded write-back under fake timers),
+`canvasAppSurface.test.tsx` and `browser-sdk`'s `canvasPreview.test.ts` (6, one of which reads the
+frontend module and guards the literal tag against drift across two packages that cannot import
+each other). `npm run check` 10/10 and `npm run type-check` 2/2 in `frontend`; `tsc --noEmit` and
+13/13 tests in `browser-sdk`, published surface bumped to 2026.8.0. All five i18n catalogs carry
+the new `creationCanvas.webPage.report*` keys with real translations.
+
 ## ✅ RESOLVED 2026-08-18 — Roadmap re-validated against the running code: 27 register entries were describing a codebase that no longer exists
 
 **What was wrong.** ROADMAP.md had become a record of what was true when each entry was written

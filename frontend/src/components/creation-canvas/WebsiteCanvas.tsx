@@ -4,7 +4,7 @@
  * directive would mark a second entry point that does not exist, and
  * `check-frontend-architecture` counts directives rather than components.
  */
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import ReactMarkdown from 'react-markdown';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
@@ -171,7 +171,14 @@ export interface WebsiteFrameProps {
 export function WebsiteFrame({ data, viewport, colorScheme, onEdit, className }: WebsiteFrameProps) {
   const t = useTranslations('creationCanvas.node');
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const document = canvasWebsiteDocument(data, { colorScheme, reportPageChanges: !!onEdit });
+  // Memoised because a board re-renders its nodes on every pan, selection and hover, and
+  // rebuilding the document each time would re-serialise every page and section of every
+  // site on the board for a string that only changes when the OBJECT does.
+  const reportPageChanges = !!onEdit;
+  const document = useMemo(
+    () => canvasWebsiteDocument(data, { colorScheme, reportPageChanges }),
+    [data, colorScheme, reportPageChanges],
+  );
 
   // The page nav the reader clicks lives INSIDE the frame, so this is how the board hears
   // about it. Held in a ref because `onEdit` is a fresh closure on every parent render and

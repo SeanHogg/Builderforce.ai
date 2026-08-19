@@ -18,7 +18,7 @@ import {
   writeCache,
 } from "./web-shared.js";
 
-const SEARCH_PROVIDERS = ["brave", "perplexity", "grok"] as const;
+const SEARCH_PROVIDERS = ["brave", "perplexity", "grok", "keyless"] as const;
 const DEFAULT_SEARCH_COUNT = 5;
 const MAX_SEARCH_COUNT = 10;
 
@@ -31,6 +31,35 @@ const OPENROUTER_KEY_PREFIXES = ["sk-or-"];
 
 const XAI_API_ENDPOINT = "https://api.x.ai/v1/responses";
 const DEFAULT_GROK_MODEL = "grok-4-1-fast";
+
+/**
+ * The KEYLESS floor — the fourth provider, and the only one an operator can run
+ * with nothing configured.
+ *
+ * Every other provider here refuses without an API key, which meant a
+ * self-hosted gateway researched nothing out of the box while the same
+ * company's cloud canvas researched fine. This closes that, but DELIBERATELY
+ * behind `tools.web.search.keylessFallback` (default off): the gateway's whole
+ * contract is that the operator declares which tools may reach the network and
+ * where, so silently adding an outbound Wikipedia call to every unconfigured
+ * deployment would change its egress profile without anyone asking.
+ *
+ * Two backings, in precedence order:
+ *   1. A SearXNG instance the OPERATOR runs — real open-web coverage, no vendor
+ *      account, no per-query meter, and traffic that leaves only to a host they
+ *      already chose. This is the right shape for a self-hosted product.
+ *   2. Wikipedia's MediaWiki search API — narrower (encyclopedic, not the open
+ *      web) but real, citable, fetchable evidence rather than model recall, and
+ *      licence-clean to quote with attribution.
+ *
+ * This mirrors the platform's own keyless floor (`api/src/application/runtime/
+ * webSearchVendors.ts`). The two are NOT merged: that one is multi-tenant and
+ * reads a tenant's stored vendor keys, this one is configured per-deployment and
+ * has the gateway's freshness filters and in-process cache around it.
+ */
+const MEDIAWIKI_SEARCH_ENDPOINT = "https://en.wikipedia.org/w/api.php";
+const WIKIPEDIA_ATTRIBUTION = "Results from Wikipedia, available under CC BY-SA 4.0";
+const SEARXNG_ATTRIBUTION = "Results from a self-hosted SearXNG instance";
 
 const SEARCH_CACHE = new Map<string, CacheEntry<Record<string, unknown>>>();
 const BRAVE_FRESHNESS_SHORTCUTS = new Set(["pd", "pw", "pm", "py"]);
@@ -188,6 +217,30 @@ function resolveSearchApiKey(search?: WebSearchConfig): string | undefined {
   return fromConfig || fromEnv || undefined;
 }
 
+type KeylessConfig = { searxngUrl?: string };
+
+function resolveKeylessConfig(search?: WebSearchConfig): KeylessConfig {
+  const raw = search && typeof search === "object" && "keyless" in search ? search.keyless : undefined;
+  const fromConfig =
+    raw && typeof raw === "object" && "searxngUrl" in raw && typeof raw.searxngUrl === "string"
+      ? raw.searxngUrl.trim()
+      : "";
+  const fromEnv = (process.env.SEARXNG_URL ?? "").trim();
+  const searxngUrl = fromConfig || fromEnv;
+  return searxngUrl ? { searxngUrl } : {};
+}
+
+/** Whether an unkeyed search may fall back to the keyless adapter. OFF unless the
+ *  operator said so, because it is an egress decision and not a default. */
+function resolveKeylessFallback(search?: WebSearchConfig): boolean {
+  return !!(
+    search &&
+    typeof search === "object" &&
+    "keylessFallback" in search &&
+    search.keylessFallback === true
+  );
+}
+
 function missingSearchKeyPayload(provider: (typeof SEARCH_PROVIDERS)[number]) {
   if (provider === "perplexity") {
     return {
@@ -207,7 +260,10 @@ function missingSearchKeyPayload(provider: (typeof SEARCH_PROVIDERS)[number]) {
   }
   return {
     error: "missing_brave_api_key",
-    message: `web_search needs a Brave Search API key. Run \`${formatCliCommand("builderforce configure --section web")}\` to store it, or set BRAVE_API_KEY in the Gateway environment.`,
+    // The keyless option is named here rather than applied silently: a search
+    // that reaches the network from a deployment the operator believed was
+    // offline is a worse failure than a search that refuses and says why.
+    message: `web_search needs a Brave Search API key. Run \`${formatCliCommand("builderforce configure --section web")}\` to store it, or set BRAVE_API_KEY in the Gateway environment. To search with no key at all, set tools.web.search.keylessFallback: true (and optionally tools.web.search.keyless.searxngUrl to point at your own SearXNG).`,
     docs: "https://docs.builderforce.ai/tools/web",
   };
 }
@@ -225,6 +281,9 @@ function resolveSearchProvider(search?: WebSearchConfig): (typeof SEARCH_PROVIDE
   }
   if (raw === "brave") {
     return "brave";
+  }
+  if (raw === "keyless") {
+    return "keyless";
   }
   return "brave";
 }
@@ -551,6 +610,121 @@ async function runGrokSearch(params: {
   return { content, citations, inlineCitations };
 }
 
+type KeylessRow = { title: string; url: string; description: string; siteName: string | undefined };
+
+/** Drop anything that is not an http(s) address the agent could actually fetch.
+ *  Result URLs come from an untrusted index and the model will very likely
+ *  `web_fetch` one, so a poisoned entry must not become a lead it follows into a
+ *  private network. */
+function keepPublicHttpUrl(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    return undefined;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
+  const host = parsed.hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) {
+    return undefined;
+  }
+  if (/^(?:127\.|10\.|0\.|169\.254\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(host)) return undefined;
+  if (host === "::1") return undefined;
+  return parsed.toString();
+}
+
+/** Strip the `<span class="searchmatch">` markup MediaWiki puts in snippets. */
+function stripHtml(value: unknown): string {
+  return typeof value === "string" ? value.replace(/<[^>]*>/g, "").trim() : "";
+}
+
+async function fetchKeylessJson(url: string, timeoutSeconds: number, label: string): Promise<unknown> {
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      // An honest agent identifies itself; Wikipedia's API asks for it explicitly.
+      "User-Agent": "BuilderForceAgents/1.0 (+https://builderforce.ai)",
+    },
+    signal: withTimeout(undefined, timeoutSeconds * 1000),
+  });
+  if (!res.ok) {
+    const detailResult = await readResponseText(res, { maxBytes: 64_000 });
+    const hint =
+      label === "SearXNG" && res.status === 403
+        ? " — the instance is refusing API requests; enable `formats: [json]` in its settings.yml"
+        : "";
+    throw new Error(`${label} error (${res.status})${hint}: ${detailResult.text || res.statusText}`);
+  }
+  return res.json();
+}
+
+async function runSearxngSearch(params: {
+  query: string;
+  count: number;
+  baseUrl: string;
+  timeoutSeconds: number;
+}): Promise<KeylessRow[]> {
+  const base = params.baseUrl.replace(/\/+$/, "");
+  const search = new URLSearchParams({ q: params.query, format: "json" });
+  const json = (await fetchKeylessJson(
+    `${base}/search?${search.toString()}`,
+    params.timeoutSeconds,
+    "SearXNG",
+  )) as { results?: unknown };
+  const rows = Array.isArray(json.results) ? json.results : [];
+  return rows
+    .map((raw) => {
+      const row = (raw ?? {}) as Record<string, unknown>;
+      const url = keepPublicHttpUrl(row.url);
+      if (!url) return null;
+      return {
+        title: typeof row.title === "string" ? row.title : "",
+        url,
+        description: typeof row.content === "string" ? row.content : "",
+        siteName: resolveSiteName(url) || undefined,
+      };
+    })
+    .filter((row): row is KeylessRow => row !== null)
+    .slice(0, params.count);
+}
+
+async function runWikipediaSearch(params: {
+  query: string;
+  count: number;
+  timeoutSeconds: number;
+}): Promise<KeylessRow[]> {
+  const search = new URLSearchParams({
+    action: "query",
+    list: "search",
+    srsearch: params.query,
+    srlimit: String(params.count),
+    format: "json",
+    origin: "*",
+  });
+  const json = (await fetchKeylessJson(
+    `${MEDIAWIKI_SEARCH_ENDPOINT}?${search.toString()}`,
+    params.timeoutSeconds,
+    "Wikipedia",
+  )) as { query?: { search?: unknown } };
+  const rows = Array.isArray(json.query?.search) ? (json.query?.search ?? []) : [];
+  return rows
+    .map((raw) => {
+      const row = (raw ?? {}) as Record<string, unknown>;
+      const title = typeof row.title === "string" ? row.title.trim() : "";
+      if (!title) return null;
+      // MediaWiki returns titles, not links; the URL is DERIVED and still goes
+      // through the same egress check, because "we built this one ourselves" is
+      // an assumption and this is the assumption that feeds `web_fetch`.
+      const url = keepPublicHttpUrl(`https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, "_"))}`);
+      if (!url) return null;
+      return { title, url, description: stripHtml(row.snippet), siteName: "en.wikipedia.org" as string | undefined };
+    })
+    .filter((row): row is KeylessRow => row !== null)
+    .slice(0, params.count);
+}
+
 async function runWebSearch(params: {
   query: string;
   count: number;
@@ -566,13 +740,16 @@ async function runWebSearch(params: {
   perplexityModel?: string;
   grokModel?: string;
   grokInlineCitations?: boolean;
+  keylessSearxngUrl?: string;
 }): Promise<Record<string, unknown>> {
   const cacheKey = normalizeCacheKey(
     params.provider === "brave"
       ? `${params.provider}:${params.query}:${params.count}:${params.country || "default"}:${params.search_lang || "default"}:${params.ui_lang || "default"}:${params.freshness || "default"}`
       : params.provider === "perplexity"
         ? `${params.provider}:${params.query}:${params.perplexityBaseUrl ?? DEFAULT_PERPLEXITY_BASE_URL}:${params.perplexityModel ?? DEFAULT_PERPLEXITY_MODEL}:${params.freshness || "default"}`
-        : `${params.provider}:${params.query}:${params.grokModel ?? DEFAULT_GROK_MODEL}:${String(params.grokInlineCitations ?? false)}`,
+        : params.provider === "keyless"
+          ? `${params.provider}:${params.query}:${params.count}:${params.keylessSearxngUrl ?? "wikipedia"}`
+          : `${params.provider}:${params.query}:${params.grokModel ?? DEFAULT_GROK_MODEL}:${String(params.grokInlineCitations ?? false)}`,
   );
   const cached = readCache(SEARCH_CACHE, cacheKey);
   if (cached) {
@@ -632,6 +809,64 @@ async function runWebSearch(params: {
       content: wrapWebContent(content),
       citations,
       inlineCitations,
+    };
+    writeCache(SEARCH_CACHE, cacheKey, payload, params.cacheTtlMs);
+    return payload;
+  }
+
+  if (params.provider === "keyless") {
+    // The operator's own instance first; Wikipedia is the floor beneath it. A
+    // SearXNG that is down or misconfigured must not mean no research at all,
+    // so its failure degrades to the encyclopedic index rather than throwing.
+    let rows: KeylessRow[] = [];
+    let backing: "searxng" | "wikipedia" = "wikipedia";
+    let degradedFrom: string | undefined;
+    if (params.keylessSearxngUrl) {
+      try {
+        rows = await runSearxngSearch({
+          query: params.query,
+          count: params.count,
+          baseUrl: params.keylessSearxngUrl,
+          timeoutSeconds: params.timeoutSeconds,
+        });
+        backing = "searxng";
+      } catch (error) {
+        degradedFrom = error instanceof Error ? error.message : String(error);
+      }
+    }
+    if (rows.length === 0) {
+      rows = await runWikipediaSearch({
+        query: params.query,
+        count: params.count,
+        timeoutSeconds: params.timeoutSeconds,
+      });
+      backing = "wikipedia";
+    }
+
+    const payload = {
+      query: params.query,
+      provider: params.provider,
+      backing,
+      // Named honestly so the answering surface can say what KIND of index
+      // backed the research, rather than implying open-web coverage it did not
+      // have. This is the same flag the platform's keyless floor carries.
+      coverage: backing === "searxng" ? "web" : "encyclopedic",
+      attribution: backing === "searxng" ? SEARXNG_ATTRIBUTION : WIKIPEDIA_ATTRIBUTION,
+      ...(degradedFrom ? { degradedFrom } : {}),
+      count: rows.length,
+      tookMs: Date.now() - start,
+      externalContent: {
+        untrusted: true,
+        source: "web_search",
+        provider: params.provider,
+        wrapped: true,
+      },
+      results: rows.map((row) => ({
+        title: row.title ? wrapWebContent(row.title, "web_search") : "",
+        url: row.url, // Keep raw for tool chaining
+        description: row.description ? wrapWebContent(row.description, "web_search") : "",
+        siteName: row.siteName,
+      })),
     };
     writeCache(SEARCH_CACHE, cacheKey, payload, params.cacheTtlMs);
     return payload;
@@ -713,6 +948,9 @@ interface ResolvedSearchBackend {
   provider: (typeof SEARCH_PROVIDERS)[number];
   perplexityConfig: PerplexityConfig;
   grokConfig: GrokConfig;
+  keylessConfig: KeylessConfig;
+  /** Whether an unkeyed provider may degrade to the keyless adapter. */
+  keylessFallback: boolean;
 }
 
 function resolveSearchBackend(config?: BuilderForceAgentsConfig): ResolvedSearchBackend {
@@ -722,6 +960,8 @@ function resolveSearchBackend(config?: BuilderForceAgentsConfig): ResolvedSearch
     provider: resolveSearchProvider(search),
     perplexityConfig: resolvePerplexityConfig(search),
     grokConfig: resolveGrokConfig(search),
+    keylessConfig: resolveKeylessConfig(search),
+    keylessFallback: resolveKeylessFallback(search),
   };
 }
 
@@ -735,18 +975,25 @@ async function executeWebSearch(
   backend: ResolvedSearchBackend,
   params: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const { search, provider, perplexityConfig, grokConfig } = backend;
+  const { search, perplexityConfig, grokConfig, keylessConfig, keylessFallback } = backend;
   const perplexityAuth =
-    provider === "perplexity" ? resolvePerplexityApiKey(perplexityConfig) : undefined;
+    backend.provider === "perplexity" ? resolvePerplexityApiKey(perplexityConfig) : undefined;
   const apiKey =
-    provider === "perplexity"
+    backend.provider === "perplexity"
       ? perplexityAuth?.apiKey
-      : provider === "grok"
+      : backend.provider === "grok"
         ? resolveGrokApiKey(grokConfig)
-        : resolveSearchApiKey(search);
+        : backend.provider === "keyless"
+          ? "keyless"
+          : resolveSearchApiKey(search);
 
-  if (!apiKey) {
-    return missingSearchKeyPayload(provider);
+  // The one place the keyless floor engages: a provider with no key, and an
+  // operator who explicitly allowed the fallback. Without the flag this is still
+  // an honest refusal that names the option.
+  const provider: (typeof SEARCH_PROVIDERS)[number] =
+    !apiKey && keylessFallback ? "keyless" : backend.provider;
+  if (!apiKey && provider !== "keyless") {
+    return missingSearchKeyPayload(backend.provider);
   }
   const query = readStringParam(params, "query", { required: true });
   const count =
@@ -773,7 +1020,7 @@ async function executeWebSearch(
   return runWebSearch({
     query,
     count: resolveSearchCount(count, DEFAULT_SEARCH_COUNT),
-    apiKey,
+    apiKey: apiKey ?? "",
     timeoutSeconds: resolveTimeoutSeconds(search?.timeoutSeconds, DEFAULT_TIMEOUT_SECONDS),
     cacheTtlMs: resolveCacheTtlMs(search?.cacheTtlMinutes, DEFAULT_CACHE_TTL_MINUTES),
     provider,
@@ -789,6 +1036,7 @@ async function executeWebSearch(
     perplexityModel: resolvePerplexityModel(perplexityConfig),
     grokModel: resolveGrokModel(grokConfig),
     grokInlineCitations: resolveGrokInlineCitations(grokConfig),
+    ...(keylessConfig.searxngUrl ? { keylessSearxngUrl: keylessConfig.searxngUrl } : {}),
   });
 }
 
@@ -807,7 +1055,9 @@ export function createWebSearchTool(options?: {
       ? "Search the web using Perplexity Sonar (direct or via OpenRouter). Returns AI-synthesized answers with citations from real-time web search."
       : provider === "grok"
         ? "Search the web using xAI Grok. Returns AI-synthesized answers with citations from real-time web search."
-        : "Search the web using Brave Search API. Supports region-specific and localized search via country and language parameters. Returns titles, URLs, and snippets for fast research.";
+        : provider === "keyless"
+          ? "Search the web with no API key, via this deployment's own SearXNG instance when one is configured and Wikipedia otherwise. Returns titles, URLs and snippets."
+          : "Search the web using Brave Search API. Supports region-specific and localized search via country and language parameters. Returns titles, URLs, and snippets for fast research.";
 
   return {
     label: "Web Search",
@@ -821,6 +1071,14 @@ export function createWebSearchTool(options?: {
 }
 
 export const __testing = {
+  resolveKeylessConfig,
+  resolveKeylessFallback,
+  resolveSearchProvider,
+  keepPublicHttpUrl,
+  runSearxngSearch,
+  runWikipediaSearch,
+  executeWebSearch,
+  resolveSearchBackend,
   inferPerplexityBaseUrlFromApiKey,
   resolvePerplexityBaseUrl,
   isDirectPerplexityBaseUrl,

@@ -114,13 +114,22 @@ export function CanvasWebPage({ data, onEdit }: CanvasWebPageProps) {
    * Debounced and compared by VALUE: a page logging in a render loop would otherwise
    * write to the session on every frame, and an identical report re-written is a canvas
    * revision that says nothing.
+   *
+   * A page that has said nothing writes nothing — a board of live cards must not each
+   * record "reported: false" simply for having been opened. The one exception is a card
+   * that is CARRYING a report: a reload that comes back clean has to clear the previous
+   * run's errors, or Brain keeps reading a failure the page no longer has. The debounce
+   * absorbs the ordinary case, where the page reports again before the clear fires.
    */
   const report = useMemo(() => canvasPreviewReportLog(log), [log]);
+  const stored = summary.reported
+    || data.previewReported === true
+    || (Array.isArray(data.previewLog) && data.previewLog.length > 0);
   const writtenRef = useRef('');
   const liveEdit = useRef(onEdit);
   liveEdit.current = onEdit;
   useEffect(() => {
-    if (!framing || !liveEdit.current || !url) return;
+    if (!framing || !liveEdit.current || !url || !stored) return;
     const next = JSON.stringify({ url, errors: summary.errors, warnings: summary.warnings, report });
     if (next === writtenRef.current) return;
     const timer = setTimeout(() => {
@@ -134,7 +143,7 @@ export function CanvasWebPage({ data, onEdit }: CanvasWebPageProps) {
       });
     }, 1_200);
     return () => clearTimeout(timer);
-  }, [framing, url, report, summary.errors, summary.warnings, summary.reported]);
+  }, [framing, url, stored, report, summary.errors, summary.warnings, summary.reported]);
 
   /**
    * Ask the gateway whether this address may be framed, and keep the text it

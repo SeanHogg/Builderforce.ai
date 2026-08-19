@@ -147,6 +147,40 @@ describe('Web page preview report', () => {
     expect(screen.getByText('This page does not report its console')).toBeInTheDocument();
   });
 
+  /** A board of live cards must not each record "reported: false" simply for having been
+   *  opened — that is a canvas revision per card that says nothing. */
+  it('writes nothing at all for a page that never said anything', async () => {
+    vi.useFakeTimers();
+    try {
+      const onEditData = vi.fn();
+      renderPage(framed, onEditData);
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(onEditData).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /** …but a card CARRYING a report has to be cleared when the run comes back clean, or
+   *  Brain keeps reading a failure the page no longer has. */
+  it('clears a stored report the current run did not reproduce', async () => {
+    vi.useFakeTimers();
+    try {
+      const onEditData = vi.fn();
+      renderPage({
+        ...framed,
+        previewReported: true, previewErrorCount: 3,
+        previewLog: [{ level: 'error', text: 'boom', at: 4 }],
+      }, onEditData);
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(onEditData.mock.calls.at(-1)![1]).toMatchObject({
+        previewLog: [], previewErrorCount: 0, previewReported: false,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reports what the framed page said about itself', async () => {
     const { container } = renderPage(framed);
     reportFromFrame(container, {

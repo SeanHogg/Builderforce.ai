@@ -103,8 +103,9 @@ export function LiveBar() {
 
   // The band this dock owns, published for the shell to subtract. Measured for
   // the same reason `useChromeSpace` measures: the dock's height is not one
-  // number — it is the dormant strip, the live dock, the collapsed pill, and a
-  // phone's two rows, and every literal guess at it has been wrong.
+  // number — it is the live dock, the collapsed pill, and a phone's two rows —
+  // and every literal guess at it has been wrong. It is zero whenever there is no
+  // call, because then there is no dock to measure.
   useEffect(() => {
     const root = document.documentElement;
     if (!dock) {
