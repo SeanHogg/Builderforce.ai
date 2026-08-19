@@ -2141,10 +2141,6 @@
 .playPlayers button { min-height:28px; padding:4px 12px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); background:var(--canvas-panel); color:var(--canvas-brain-accent); font:650 10px var(--font-sans); cursor:pointer; }
 .playPlayers button:hover,.playPlayers button:focus-visible { border-color:var(--canvas-brain-accent); background:var(--canvas-hover); outline:none; }
 
-/* A site is drawn at a WIDTH, so the stage is a backdrop and the frame is the artefact.
-   The three widths are the real device measures the site was authored against, capped at
-   the room available so a phone viewing a desktop site still scrolls in one direction
-   only. `--site-width` is the one number the three states change. */
 /* Same story as `.appStage`: the widths are the frame's, in real device pixels, and this
    is only the room they are centred in. The `edit` reading has no frame — it is markup in
    this document — so it keeps a scrolling stage and a width cap of its own, below. */
