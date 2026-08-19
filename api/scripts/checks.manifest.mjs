@@ -18,7 +18,6 @@ export default [
   ['check:model-coverage', 'check-model-coverage.mjs'],
   ['check:table-adoption', 'check-table-adoption.mjs'],
   ['check:layering', 'check-layering.mjs'],
-  ['check:roadmap', 'check-roadmap.mjs'],
   ['check:tenant-scope', 'check-tenant-scope.mjs'],
   ['check:tracks', 'check-track-manifest.mjs', '--check'],
   ['check:source', 'check-source-text.mjs'],

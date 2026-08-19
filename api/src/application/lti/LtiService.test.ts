@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   buildLoginRedirect, fetchRoster, nextLink, pushScore, randomToken,
-  rosterFromMembers, toolPublicJwks, verifyLaunch, type LtiRegistration,
+  publicHalfOf, rosterFromMembers, toolPublicJwks, verifyLaunch, type LtiRegistration,
 } from './LtiService';
 import { AGS_SCOPE, LTI_CLAIM, capabilityFromRoles, readLaunchClaims } from '../../domain/lti/ltiClaims';
 import type { Env } from '../../env';
@@ -45,7 +45,17 @@ async function signToken(payload: Record<string, unknown>, key: CryptoKey, kid =
   return `${input}.${b64url(new Uint8Array(signature))}`;
 }
 
+/**
+ * A registration as every READ path now sees it: public key only.
+ *
+ * `id: null` marks it as coming from the legacy `LTI_REGISTRATIONS` secret rather
+ * than from `lti_registrations`, which is what lets these tests exercise the real
+ * signing path without a database — `toolPrivateKey` reads the secret for a null
+ * id, and `memoryEnv` below supplies it.
+ */
 const REGISTRATION: LtiRegistration = {
+  id: null,
+  label: 'University LMS',
   issuer: 'https://lms.university.edu',
   clientId: 'builderforce-tool',
   deploymentIds: ['dep-1'],
@@ -53,14 +63,45 @@ const REGISTRATION: LtiRegistration = {
   accessTokenUrl: 'https://lms.university.edu/login/oauth2/token',
   keySetUrl: 'https://lms.university.edu/api/lti/security/jwks',
   toolKeyId: 'tool-1',
-  toolPrivateKeyJwk: { kty: 'RSA' },
+  toolPublicJwk: { kty: 'RSA' },
   tenantId: 7,
 };
+
+/** The same registration with a real, usable signing key behind it. */
+const signable = (over: Partial<LtiRegistration> = {}): LtiRegistration => ({
+  ...REGISTRATION,
+  toolPublicJwk: publicHalfOf(toolPrivateJwk, REGISTRATION.toolKeyId),
+  ...over,
+});
 
 /** An in-memory KV that behaves like the Worker binding the cache helper expects. */
 function memoryEnv(): Env {
   const store = new Map<string, string>();
   return {
+    // The compatibility source `toolPrivateKey` reads for a registration with no
+    // row id. Assembled here rather than written as a literal so the key is a
+    // real one and the assertion this signs actually verifies.
+    LTI_REGISTRATIONS: JSON.stringify([{
+      issuer: REGISTRATION.issuer,
+      clientId: REGISTRATION.clientId,
+      deploymentIds: [...REGISTRATION.deploymentIds],
+      authLoginUrl: REGISTRATION.authLoginUrl,
+      accessTokenUrl: REGISTRATION.accessTokenUrl,
+      keySetUrl: REGISTRATION.keySetUrl,
+      toolKeyId: REGISTRATION.toolKeyId,
+      toolPrivateKeyJwk: toolPrivateJwk,
+      tenantId: REGISTRATION.tenantId,
+    }, {
+      issuer: 'https://other.edu',
+      clientId: REGISTRATION.clientId,
+      deploymentIds: [...REGISTRATION.deploymentIds],
+      authLoginUrl: REGISTRATION.authLoginUrl,
+      accessTokenUrl: REGISTRATION.accessTokenUrl,
+      keySetUrl: REGISTRATION.keySetUrl,
+      toolKeyId: REGISTRATION.toolKeyId,
+      toolPrivateKeyJwk: toolPrivateJwk,
+      tenantId: REGISTRATION.tenantId,
+    }]),
     AUTH_CACHE_KV: {
       get: async (key: string) => store.get(key) ?? null,
       put: async (key: string, value: string) => { store.set(key, value); },
@@ -236,7 +277,7 @@ describe('AGS and NRPS', () => {
       return new Response('{}', { status: 200 });
     }) as unknown as typeof fetch);
 
-    const result = await pushScore(env, { ...REGISTRATION, toolPrivateKeyJwk: toolPrivateJwk },
+    const result = await pushScore(env, signable(),
       'https://lms.university.edu/api/lti/courses/1/line_items/5?type_id=2',
       { userId: 'platform-user-9', scoreGiven: 68, scoreMaximum: 100, released: true, timestamp: '2026-06-01T10:00:00Z', comment: 'Good critique.' });
 
@@ -255,7 +296,7 @@ describe('AGS and NRPS', () => {
       return new Response('{}', { status: 200 });
     }) as unknown as typeof fetch);
 
-    await pushScore(env, { ...REGISTRATION, toolPrivateKeyJwk: toolPrivateJwk }, 'https://lms/li/1',
+    await pushScore(env, signable(), 'https://lms/li/1',
       { userId: 'u', scoreGiven: 40, scoreMaximum: 100, released: false, timestamp: '2026-06-01T10:00:00Z' });
     expect(sent.gradingProgress).toBe('Pending');
     vi.unstubAllGlobals();
@@ -274,7 +315,7 @@ describe('AGS and NRPS', () => {
       return page(['a', 'b'], 'https://lms/nrps?page=2');
     }) as unknown as typeof fetch);
 
-    const result = await fetchRoster(env, { ...REGISTRATION, toolPrivateKeyJwk: toolPrivateJwk }, 'https://lms/nrps');
+    const result = await fetchRoster(env, signable(), 'https://lms/nrps');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.members.map((member) => member.userId)).toEqual(['a', 'b', 'c', 'd']);
@@ -301,7 +342,7 @@ describe('AGS and NRPS', () => {
 
 describe('tool JWKS', () => {
   it('publishes the public half only, derived from the signing key', async () => {
-    const jwks = toolPublicJwks([{ ...REGISTRATION, toolPrivateKeyJwk: toolPrivateJwk }]);
+    const jwks = toolPublicJwks([signable()]);
     expect(jwks.keys).toHaveLength(1);
     const key = jwks.keys[0] as unknown as Record<string, unknown>;
     expect(key.kid).toBe('tool-1');
@@ -312,8 +353,8 @@ describe('tool JWKS', () => {
 
   it('publishes one entry per distinct key, not per registration', () => {
     const registrations = [
-      { ...REGISTRATION, toolPrivateKeyJwk: toolPrivateJwk },
-      { ...REGISTRATION, issuer: 'https://other.edu', toolPrivateKeyJwk: toolPrivateJwk },
+      signable(),
+      signable({ issuer: 'https://other.edu' }),
     ];
     expect(toolPublicJwks(registrations).keys).toHaveLength(1);
   });

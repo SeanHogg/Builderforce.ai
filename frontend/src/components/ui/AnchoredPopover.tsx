@@ -1,7 +1,8 @@
-// No 'use client' directive on purpose: every consumer is already a client module, and a
-// module imported by a client module is client code either way. The directive would only
-// add a file to the architecture ratchet's client-component tally without changing a
-// single boundary — the same reasoning `CanvasCommandBar` and `CanvasDriveBrowser` carry.
+'use client';
+
+// This module owns hooks and a portal, and the `@/components/ui` barrel is imported by
+// server components (e.g. `src/app/product/page.tsx` via `HomePatterns`), so the boundary
+// has to be declared here — a consumer cannot be assumed to be client code.
 import {
   useCallback,
   useEffect,

@@ -139,26 +139,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | 11 |
 | 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | 44 |
 | 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | 31 |
-Exact machine-counted top-level bullets (guarded by `npm run check:roadmap`; update with the body):
 
-| Group | Exact open bullets |
-|---:|---:|
-| 0 | 10 |
-| 1 | 23 |
-| 2 | 6 |
-| 3 | 32 |
-| 4 | 14 |
-| 5 | 19 |
-| 6 | 31 |
-| 7 | 25 |
-| 8 | 3 |
-| 9 | 40 |
-| 10 | 138 |
-| 11 | 9 |
-| 12 | 10 |
-| 13 | 11 |
-| 14 | 44 |
-| 15 | 31 |
 ---
 
 ## 🚦 Parallel Execution Plan — waves, lanes, and what each agent may touch
@@ -905,80 +886,6 @@ sequenced into waves because nothing in them gates the sell motion.
 ---
 
 ## 10 · 🛍️ Marketplace, Talent, Freelance, Knowledge & Canvas
-
-### Canvas presence transport
-
-- **Remote cursors are correct but stale: they still ride the 8-second `/presence` REST poll,
-  so a collaborator's pointer is up to 8s behind where they actually are.** *(2026-08-18)*
-  `RemoteCursors` now draws inside React Flow's viewport, so placement is exact during a pan and
-  the "cursors vanish / point at the wrong thing" defect is closed — but position still arrives
-  from `creationSessionRouteService`'s `POST /:id/presence` on a `setInterval(8_000)`, writing
-  `creation_session_members.cursor` on every tick. **Blocked on a server capability that does not
-  exist:** the canvas WebSocket (`SessionRoomDO`) is deliberately a domain-free `{type:"changed"}`
-  fan-out — "no domain data flows through the DO, so there is nothing here that could leak across
-  segments" — so carrying cursors needs a client→client relay with its own per-peer auth and rate
-  limiting, of the kind `CeremonyRoomDO` already implements for ceremonies. Fixing it unblocks
-  cursors that track at pointer speed instead of at poll speed, and would let the presence poll
-  drop its per-tick DB write.
-
-### Canvas hub contention — the seam that makes the canvas work parallelisable
-
-- **The registry half of `CreationCanvas.tsx`'s dispatch is now fully data-driven; the AI-tool half is
-  not, and the case for generalizing it turned out weaker than assumed.** *(2026-08-16, closes the
-  previous "W0-1" entry and the 42-kind settings-completeness entry it introduced; see DONE.md for the
-  full closure note)* Both halves the W0-1 entry named as "the last mile" are done: the Details-panel
-  chain was already replaced by `lib/canvasKindSettings.*.ts` manifests as of 2026-08-16 morning, and
-  the 42 kinds `canvasKindSettingsCompleteness.test.ts` caught with no declaration at all now each have
-  one (`canvasKindSettings.board.ts` / `.sales.ts` / `.outreach.ts` / `.dataArchitecture.ts` / `.qa.ts`)
-  — `course`/`practice` turned out to already have real authoring UI (`LearningControls.tsx`, mounted
-  unconditionally) and are exempted rather than duplicated. `PENDING_KIND_SETTINGS` is empty.
-  **What the W0-1 rollup got wrong**: it treated its "eight open entries" as hand-written branches
-  blocked only by file contention. Re-investigating each one directly in `CreationCanvas.tsx` found
-  that five of the eight — the delivery-lifecycle kinds, the `blocks` edge, the manager seed path, the
-  PMO `delivery` object, and the per-object cost card — have **no existing code to extract**; they are
-  unbuilt features, each its own product-scoped design-and-build pass, not a registry-extraction
-  candidate. A sixth, the "board-highlight search," was a mislabeling rather than a gap: `paletteSearch`
-  is one generic filter over the object-type palette, not per-kind board-content logic — its
-  `searchEverything` label was untrue and is now `searchObjectTypes` in all five locales; a real
-  board-content highlight still does not exist (unchanged, see its own entry below). The remaining two —
-  task estimate/schedule controls and the human assignee picker — WERE real, bounded, extractable
-  branches, and are closed (see DONE.md). Net: the registry generalization this entry called for
-  (`canvas tools resolve from a registry the same way object kinds already do`) would have unblocked
-  two items that are now closed anyway and zero of the other five, which need their own design pass
-  regardless of how `CreationCanvas.tsx` dispatches. **Not pursuing that generalization now** — no
-  concrete blocked work currently motivates it; revisit only if a specific future build collides on the
-  same hand-authored `canvas_*` tool array this entry flagged as unexamined.
-
-### Embedded apps — "idea to sell" (R8–R11 outstanding; R1–R7, R12–R15e RESOLVED, see DONE.md)
-
-> **Operator decisions taken 2026-08-15** (rev 4 of the Idea-to-Sell mockup), all still binding on the entries below:
-> 1. **The project IS the app.** No separate app entity; conversion is 1 click and the creator inherits the board, tickets, manager and agent workforce on the same `projects` row.
-> 2. **Two shop windows, one product.** The marketplace listing sells it inside the marketplace; a creator-authored `website` canvas card, published to their own address and edited WYSIWYG, sells it in their own brand. Both render their buttons off the same `delivery` field.
-> 3. **No choice of host and no choice of database.** An app runs on Builderforce and its data lives in Builderforce collections. (R5 — closed as ruled out.)
-> 4. **Sell the Vercel-marketplace way**: no second signup, no second invoice, 0% under a lifetime threshold. (R14 — resolved.)
->
-> **Inherited from "Build, Stage, Live" — do NOT contradict when building R7/R8:**
-> - **The preview is the product, bounded** — the visitor gets the real thing running on the sample the seller chose in Stage, never a metadata card; and **the server decides preview-versus-product, the page never re-derives it from the price**.
-> - **A buyer holds a version permanently.** They are OFFERED an update and never moved without accepting — which is why `template_licenses.snapshot_id` and the new `site_subscriptions.snapshot_id` are load-bearing rather than bookkeeping.
-> - Limitations a seller learns in Stage are **declared on the listing**, not discovered by the buyer.
-
-> **R15 was one bullet and is now four.** *(split 2026-08-15 by the parallel-execution pass)* Its four
-> sub-parts have four different owners across three directories, so as one entry it could only ever be
-> dispatched to one agent — which is the shape that left the whole embedded-apps API uncalled for a
-> full pass. Common to all four: shipped and working server-side are
-> `POST /api/creation-sessions/:id/convert-to-app`, `GET /api/creation-sessions/address-available`,
-> `GET /api/creation-sessions/:id/app` (added closing R15e), and
-> `/__api/billing/{me,subscribe,complete,cancel}` on a published site's own origin.
-> **R15a, R15b, R15c, R15d and R15e are all CLOSED** (R15a/b/e 2026-08-16 W1D; R15c/d 2026-08-16
-> W1C — see [DONE.md](./DONE.md)). The embedded-apps API now has a caller end to end: creation,
-> the creator's own overview, a paying `site_user`, the version they are offered, and the receipt
-> that shows what selling actually costs. **R10 (`raises_tickets` → tickets) is now also CLOSED**
-> (2026-08-16 — see [DONE.md](./DONE.md)). **Still open in this group: R8 (deployment harness), R9 and
-> R11 (decisions — R11 in progress).**
-
-
-
-
 
 - **SAML 2.0 / Shibboleth SSO is not implemented, so no institution can buy the academic vocabulary.** *(identified 2026-08-13 while landing LTI 1.3)* Universities authenticate through an institutional IdP (Shibboleth/InCommon, Azure AD, Okta) and procurement does not start without it — LTI 1.3 gets the tool into the LMS, SSO is what gets it past the security review. The tool half is straightforward (SP metadata, an `AuthnRequest` over HTTP-Redirect, an ACS endpoint); the part that is not is **verifying the signed SAML Response**, which needs exclusive XML canonicalisation (C14N) plus reference-digest validation before the RSA check. **Blocker: this is a security-critical component I will not hand-roll in one pass — a C14N or reference-resolution mistake is an XML signature-wrapping (XSW) authentication bypass, and it cannot be validated without a real institutional IdP to test against.** Needed to clear it: a decision on a vetted xmldsig implementation that runs on Workers (or a decision to terminate SAML at an identity provider that already speaks it, e.g. WorkOS/Auth0, and keep only OIDC in-process), plus one live IdP metadata document to integrate against. Unblocks: institutional procurement for the whole teaching vocabulary.
 - **LTI platform registrations live in the `LTI_REGISTRATIONS` secret with no admin surface.** *(landed 2026-08-13)* `presentation/routes/ltiRoutes.ts` reads registrations from a JSON secret, deliberately: a registration holds an RSA **private** key, and the generic entity layer serves every table it knows through one reader whose redaction is column-name-pattern based — a signing key should not be riding on a regex. The consequence is that adding a university is a `wrangler secret put`, not a screen, and key rotation is manual. Fix = a `lti_registrations` table with the private key in the existing `credentials` envelope (`credentialCrypto.ts`) plus a registration screen under /settings/security, or an explicit decision that this stays operator-managed. Unblocks: self-serve onboarding of an institution.

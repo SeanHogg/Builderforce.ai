@@ -27,7 +27,13 @@
  * write marks.
  */
 
+import { eq } from 'drizzle-orm';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { buildDatabase } from '../../infrastructure/database/connection';
+import { ltiRegistrations } from '../../infrastructure/database/schema';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { credentialSecret, decryptCredentials } from '../integrations/credentialCrypto';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
   AGS_SCOPE, NRPS_SCOPE, agsScoreBody, readLaunchClaims, readMembers, rosterFromMembers,
   type AgsScore, type CohortRosterRow, type LtiLaunchContext, type LtiMember,
@@ -45,6 +51,11 @@ export { AGS_SCOPE, NRPS_SCOPE, rosterFromMembers };
  * alone would let one institution's Moodle launch into another's boards.
  */
 export interface LtiRegistration {
+  /** `lti_registrations.id`, or null for a registration still coming from the
+   *  legacy `LTI_REGISTRATIONS` secret. It is how the private half is found. */
+  id: number | null;
+  /** What an administrator recognises. Never used for matching. */
+  label: string;
   issuer: string;
   clientId: string;
   deploymentIds: readonly string[];
@@ -56,8 +67,12 @@ export interface LtiRegistration {
   keySetUrl: string;
   /** Our signing key id, published on our own JWKS. */
   toolKeyId: string;
-  /** Our RSA private key, PKCS#8 JWK. Never logged, never returned by a read path. */
-  toolPrivateKeyJwk: JsonWebKey;
+  /**
+   * Our PUBLIC key. This is the whole registration record as far as every read
+   * path is concerned — matching a launch, publishing /jwks, rendering an admin
+   * screen. The private half is NEVER on this object; see `toolPrivateKey`.
+   */
+  toolPublicJwk: JsonWebKey;
   /** The tenant this registration belongs to. */
   tenantId: number;
 }
@@ -67,6 +82,8 @@ const NONCE_TTL_SECONDS = 600;
 const CLOCK_LEEWAY_SECONDS = 60;
 const REGISTRATIONS_TTL_SECONDS = 300;
 
+const SOURCE = 'application/lti/LtiService.ts';
+
 const jwksCacheKey = (url: string) => `lti:jwks:${url}`;
 const nonceKey = (issuer: string, nonce: string) => `lti:nonce:${issuer}:${nonce}`;
 
@@ -75,37 +92,183 @@ const nonceKey = (issuer: string, nonce: string) => `lti:nonce:${issuer}:${nonce
 // ---------------------------------------------------------------------------
 
 /**
- * Registrations, from the `LTI_REGISTRATIONS` secret.
+ * Every registration this deployment knows, WITHOUT any key material.
  *
- * A secret rather than a table, deliberately and for now: a registration contains an
- * RSA PRIVATE KEY, and the platform's generic entity layer serves every table it knows
- * about through one reader. `entityDefinition.ts` redacts on column-name patterns, and
- * betting a signing key on a regex matching `tool_private_key_jwk` is a bet this
- * subsystem should not make. Secrets are write-only in the deployment (see the
- * Cloudflare account-split note), which is the property a signing key needs.
+ * ── WHY THE PRIVATE KEY IS NOT ON THE OBJECT ────────────────────────────────
+ * This result is memoised through the platform read-through cache, whose second
+ * tier is KV. A registration carrying its RSA private key would therefore write
+ * that key, in plaintext, into a key-value store on every cold read — which is
+ * strictly worse than the secret it replaced and was true of the secret-backed
+ * version too. So the cached record carries the PUBLIC half only, which is what
+ * every read path actually needs: matching a launch reads the issuer, publishing
+ * `/api/lti/jwks` reads the public key, and an admin screen reads neither.
  *
- * Parsing lives here rather than in the route because the storage a registration comes
- * from is exactly what the route must not know — swapping the secret for a table later
- * is then one function's business.
+ * The private half is fetched and decrypted on demand by `toolPrivateKey`, once
+ * per client-assertion signing, and never cached.
+ *
+ * ── WHY BOTH SOURCES ────────────────────────────────────────────────────────
+ * `lti_registrations` (migration 0480) is the source; the `LTI_REGISTRATIONS`
+ * secret is still read so a deployment that has not migrated its rows keeps
+ * launching. The table WINS on `(issuer, clientId)`: once an institution has been
+ * added through the screen, a stale line in the secret must not shadow it.
  */
 export async function loadRegistrations(env: Env): Promise<readonly LtiRegistration[]> {
   return getOrSetCached<readonly LtiRegistration[]>(env, 'lti:registrations', async () => {
-    const raw = (env as unknown as { LTI_REGISTRATIONS?: string }).LTI_REGISTRATIONS;
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      return Array.isArray(parsed) ? parsed as LtiRegistration[] : [];
-    } catch {
-      return [];
-    }
+    const fromDb = await registrationsFromDatabase(env);
+    const seen = new Set(fromDb.map((entry) => `${entry.issuer}|${entry.clientId}`));
+    const fromSecret = registrationsFromSecret(env)
+      .filter((entry) => !seen.has(`${entry.issuer}|${entry.clientId}`));
+    return [...fromDb, ...fromSecret];
   }, { kvTtlSeconds: REGISTRATIONS_TTL_SECONDS });
+}
+
+/** Drop the cached registration list. Called by every write on the admin surface
+ *  — a registration added through a screen that takes five minutes to take
+ *  effect is one the administrator will add twice. */
+export async function invalidateRegistrations(env: Env): Promise<void> {
+  await invalidateCached(env, 'lti:registrations');
+}
+
+async function registrationsFromDatabase(env: Env): Promise<LtiRegistration[]> {
+  const db = buildDatabase(env);
+  const rows = await db
+    .select({
+      id: ltiRegistrations.id,
+      tenantId: ltiRegistrations.tenantId,
+      label: ltiRegistrations.label,
+      issuer: ltiRegistrations.issuer,
+      clientId: ltiRegistrations.clientId,
+      deploymentIds: ltiRegistrations.deploymentIds,
+      authLoginUrl: ltiRegistrations.authLoginUrl,
+      accessTokenUrl: ltiRegistrations.accessTokenUrl,
+      keySetUrl: ltiRegistrations.keySetUrl,
+      toolKeyId: ltiRegistrations.toolKeyId,
+      toolPublicJwk: ltiRegistrations.toolPublicJwk,
+    })
+    .from(ltiRegistrations)
+    // A launch arrives with no session, so there is no tenant to scope by — the
+    // ROW reports which tenant it belongs to, exactly as a share token does. The
+    // access predicate is the issuer/client pair the platform signed with.
+    .where(acrossTenants(ltiRegistrations, 'share_token', eq(ltiRegistrations.status, 'active')));
+
+  return rows.map((row) => ({
+    id: row.id,
+    label: row.label,
+    issuer: row.issuer,
+    clientId: row.clientId,
+    deploymentIds: Array.isArray(row.deploymentIds) ? row.deploymentIds : [],
+    authLoginUrl: row.authLoginUrl,
+    accessTokenUrl: row.accessTokenUrl,
+    keySetUrl: row.keySetUrl,
+    toolKeyId: row.toolKeyId,
+    toolPublicJwk: row.toolPublicJwk as unknown as JsonWebKey,
+    tenantId: row.tenantId,
+  }));
+}
+
+/** The shape the legacy secret held, before migration 0480. */
+interface SecretRegistration {
+  issuer?: string;
+  clientId?: string;
+  deploymentIds?: string[];
+  authLoginUrl?: string;
+  accessTokenUrl?: string;
+  keySetUrl?: string;
+  toolKeyId?: string;
+  toolPrivateKeyJwk?: JsonWebKey;
+  tenantId?: number;
+  label?: string;
+}
+
+function parseSecret(env: Env): SecretRegistration[] {
+  const raw = (env as unknown as { LTI_REGISTRATIONS?: string }).LTI_REGISTRATIONS;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed as SecretRegistration[] : [];
+  } catch {
+    // A malformed secret must not take every registration down with it — the
+    // table is the source now, and this is the compatibility path.
+    reportCaughtError(new Error('LTI_REGISTRATIONS is not valid JSON'), {
+      source: SOURCE,
+      operation: 'parseSecret',
+      level: 'warning',
+    });
+    return [];
+  }
+}
+
+function registrationsFromSecret(env: Env): LtiRegistration[] {
+  return parseSecret(env).flatMap((entry) => {
+    if (!entry.issuer || !entry.clientId || !entry.toolPrivateKeyJwk) return [];
+    return [{
+      id: null,
+      label: entry.label ?? entry.issuer,
+      issuer: entry.issuer,
+      clientId: entry.clientId,
+      deploymentIds: entry.deploymentIds ?? [],
+      authLoginUrl: entry.authLoginUrl ?? '',
+      accessTokenUrl: entry.accessTokenUrl ?? '',
+      keySetUrl: entry.keySetUrl ?? '',
+      toolKeyId: entry.toolKeyId ?? '',
+      toolPublicJwk: publicHalfOf(entry.toolPrivateKeyJwk, entry.toolKeyId ?? ''),
+      tenantId: entry.tenantId ?? 0,
+    }];
+  });
+}
+
+/**
+ * The public half of a private JWK.
+ *
+ * Derived by dropping the private members rather than stored separately, so the
+ * published key and the signing key cannot drift — a mismatch there produces
+ * `invalid_client` from the platform with no further detail, which is among the
+ * least debuggable errors in the protocol. The DATABASE stores the result of this
+ * function at write time for exactly the same reason.
+ */
+export function publicHalfOf(privateJwk: JsonWebKey, keyId: string): JsonWebKey {
+  const { d, p, q, dp, dq, qi, ...pub } = privateJwk as unknown as Record<string, unknown>;
+  void d; void p; void q; void dp; void dq; void qi;
+  return { ...pub, kid: keyId, alg: 'RS256', use: 'sig' } as unknown as JsonWebKey;
+}
+
+/**
+ * The RSA private key for one registration — fetched on demand, never cached.
+ *
+ * Two sources, matching `loadRegistrations`: a row id means the sealed column,
+ * decrypted through the same `credentialCrypto` envelope every other stored
+ * secret uses; a null id means the legacy secret, read straight out of the
+ * environment. Returns null rather than throwing so a caller can report "could
+ * not obtain a token" instead of a stack trace containing a key.
+ */
+export async function toolPrivateKey(env: Env, registration: LtiRegistration): Promise<JsonWebKey | null> {
+  if (registration.id == null) {
+    const entry = parseSecret(env).find(
+      (candidate) => candidate.issuer === registration.issuer && candidate.clientId === registration.clientId,
+    );
+    return entry?.toolPrivateKeyJwk ?? null;
+  }
+  const db = buildDatabase(env);
+  const [row] = await db
+    .select({
+      enc: ltiRegistrations.toolPrivateKeyEnc,
+      iv: ltiRegistrations.toolPrivateKeyIv,
+      tenantId: ltiRegistrations.tenantId,
+    })
+    .from(ltiRegistrations)
+    .where(scopedToTenant(ltiRegistrations, registration.tenantId, eq(ltiRegistrations.id, registration.id)))
+    .limit(1);
+  if (!row) return null;
+  const opened = await decryptCredentials(row.enc, row.iv, credentialSecret(env), row.tenantId);
+  const jwk = opened?.jwk;
+  return jwk && typeof jwk === 'object' ? jwk as JsonWebKey : null;
 }
 
 /**
  * The registration a launch or service call belongs to, or null.
  *
- * `clientId` is optional because the OIDC initiation may omit it, but when the platform
- * does send one it must match: one issuer can host many tools.
+ * `clientId` is optional because the OIDC initiation may omit it, but when the
+ * platform does send one it must match: one issuer can host many tools.
  */
 export async function registrationFor(
   env: Env,
@@ -343,10 +506,19 @@ async function consumeNonce(env: Env, issuer: string, nonce: string): Promise<bo
 // Service access tokens (client credentials, signed assertion)
 // ---------------------------------------------------------------------------
 
-async function signClientAssertion(registration: LtiRegistration, audience: string): Promise<string> {
+async function signClientAssertion(
+  env: Env,
+  registration: LtiRegistration,
+  audience: string,
+): Promise<string | null> {
+  const privateJwk = await toolPrivateKey(env, registration);
+  // No key means the registration is half-written or the envelope secret rotated.
+  // Returning null makes that a "could not obtain a token" the caller reports,
+  // rather than an exception whose message could carry key material.
+  if (!privateJwk) return null;
   const key = await crypto.subtle.importKey(
     'jwk',
-    registration.toolPrivateKeyJwk,
+    privateJwk,
     { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
     false,
     ['sign'],
@@ -386,7 +558,8 @@ export async function serviceAccessToken(
   const scope = [...scopes].sort().join(' ');
   const cacheKey = `lti:token:${registration.issuer}:${registration.clientId}:${scope}`;
   return getOrSetCached<string | null>(env, cacheKey, async () => {
-    const assertion = await signClientAssertion(registration, registration.accessTokenUrl);
+    const assertion = await signClientAssertion(env, registration, registration.accessTokenUrl);
+    if (!assertion) return null;
     const response = await fetch(registration.accessTokenUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -518,11 +691,9 @@ export function toolPublicJwks(registrations: readonly LtiRegistration[]): { key
   const seen = new Set<string>();
   const keys: JsonWebKey[] = [];
   for (const registration of registrations) {
-    if (seen.has(registration.toolKeyId)) continue;
+    if (!registration.toolKeyId || seen.has(registration.toolKeyId)) continue;
     seen.add(registration.toolKeyId);
-    const { d, p, q, dp, dq, qi, ...pub } = registration.toolPrivateKeyJwk as unknown as Record<string, unknown>;
-    void d; void p; void q; void dp; void dq; void qi;
-    keys.push({ ...pub, kid: registration.toolKeyId, alg: 'RS256', use: 'sig' } as unknown as JsonWebKey);
+    keys.push(registration.toolPublicJwk);
   }
   return { keys };
 }
