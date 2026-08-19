@@ -1,3 +1,98 @@
+## ✅ RESOLVED 2026-08-18 — Remote cursors now move at pointer speed: the canvas room relays peers, and three rooms stopped keeping their own copy of the relay
+
+Three Gap Register entries closed together: the canvas presence transport, the canvas hub-contention
+decision, and the stale "Embedded apps R8–R11 outstanding" heading. Only the first was outstanding
+work; the other two were entries that had already been decided or already closed and were still
+sitting in ROADMAP.md.
+
+### The pointer rode the wrong channel
+
+`RemoteCursors` was fixed on 2026-08-18 morning to draw INSIDE React Flow's viewport, which made
+placement exact during a pan. What it could not fix is where the position came from: `POST /:id/presence`
+on a `setInterval(8_000)`, writing `creation_session_members.cursor` on every tick. A collaborator's
+pointer was up to eight seconds behind them and cost a database write per client per tick to be that
+wrong.
+
+The entry called this **blocked on a server capability that does not exist** — the canvas WebSocket
+(`SessionRoomDO`) is deliberately a domain-free `{type:"changed"}` fan-out, "so there is nothing here
+that could leak across segments", and carrying a cursor means a client→client relay with its own
+per-peer auth and rate limiting. That capability now exists, and the property the fan-out design was
+protecting is preserved by SHAPE rather than by abstinence.
+
+**One relay, shared by every room that had written its own.** `infrastructure/relay/peerRelay.ts` is
+the peer registry, roster, channel-scoped fan-out and `join` handling that `CeremonyRoomDO` and
+`GuestRoomDO` each had a copy of — both are migrated onto it in this pass, so there is no fourth copy
+and no "we'll unify it later". What the copies did not have is what makes it safe to point at a board:
+
+- **Identity the client cannot claim.** `relayToRoom` strips any `x-bf-relay-*` header the client sent
+  and writes the identity `requireSession` just proved. The DO stamps `userId` from that, so a socket
+  cannot move somebody else's cursor — and a `join` frame can no longer overwrite a server-asserted
+  identity (a display NAME is still the client's to choose, which is what a guest room needs).
+- **A per-peer token bucket.** 30 frames/second sustained with a burst of 60 on the canvas, so a
+  looping or hostile client cannot turn N peers into an N× amplifier.
+- **One frame type, one shape.** `canvasPresenceFrame` (in the shared contract package, so both ends
+  agree by construction) is a total function from anything a socket sends to at most `{cursor, viewport,
+  typing}`. The relay forwards its OUTPUT, never the input, so a field that is not in the contract
+  cannot cross. That is the "no domain data flows through the DO" property, now enforced rather than
+  assumed.
+
+**The client sends at pointer speed and merges, rather than keeping two rosters.** `lib/canvas/livePresence.ts`
+holds the ephemeral half — a map keyed by user id, fed by relayed frames, expiring after 30s so a
+socket that dies without a close frame does not leave a ghost pointer standing. `mergeLivePresence`
+overlays it on the roster the poll already returns: the poll owns identity (name, role), the relay owns
+position, and one list is drawn, so a name and a pointer can never disagree. A peer who connected
+between two polls is appended rather than dropped — the relay is faster than the poll, which is the
+whole point. Outbound frames are throttled to 50ms and COALESCE rather than drop, because dropping
+would park the pointer wherever the last frame landed exactly when someone moved fast and stopped.
+
+**One part of the entry's premise was wrong, and the fix is better for it.** The entry expected this to
+"let the presence poll drop its per-tick DB write". It cannot, and should not: that tick's UPDATE
+writes `lastSeenAt`, which is what makes a member count as active at all, so the row is written either
+way and dropping one column out of it saves nothing. Worse, dropping it would have broken the cohort
+the fallback exists for — a client whose WebSocket is blocked (a corporate proxy) would have gone from
+seeing cursors eight seconds late to seeing none at all, because every peer with a working relay would
+have stopped writing one. So the durable cursor stays, at no extra cost, and the merge simply prefers
+the live entry when there is one. The win is freshness, not fewer writes. "Follow" works the same way:
+it tracks the relayed viewport live, and the poll's copy of that move only runs when there is no socket.
+
+**Verification.** 12 new relay assertions (identity spoofing, the frame allow-list, the sanitizer
+against a frame carrying board contents, the rate limit and its refill, channel isolation, join/leave
+announcements) and 15 new client assertions (frame narrowing, partial-frame merging, expiry, roster
+merge, self-exclusion). api and frontend typechecks clean on every changed file.
+
+### The canvas hub-contention entry was a decision, not a task
+
+The entry's own conclusion was **"not pursuing that generalization now"** — it had re-investigated its
+eight items and found five were unbuilt features needing their own design pass, one was a mislabeling,
+and two were real and already closed. Nothing in it was outstanding work, so it belongs here rather
+than in a register of work in flight. One thing it claimed was NOT true when checked: it said the
+untrue `searchEverything` label "is now `searchObjectTypes` in all five locales", but only the VALUE
+had been changed — the KEY was still `searchEverything` in all five catalogs. Renamed (5 catalogs +
+the two usages in `CreationCanvas.tsx`); the i18n key guard passes.
+
+### "Embedded apps — R8–R11 outstanding" was outstanding only in the heading
+
+R8 (the `deployment` harness), R9 (withdrawal/abandonment semantics) and R11 (a hosted app's agent-run
+cost coming out of its own payout) are all recorded RESOLVED in this file on 2026-08-16, as are R10 and
+R15a–e. The section had no open bullets left under it — only a heading, the binding operator decisions
+and a note about a split that is finished — so the whole thing is removed from ROADMAP.md. The four
+operator decisions it carried are preserved verbatim here, because they still bind anything built on
+top of embedded apps:
+
+> 1. **The project IS the app.** No separate app entity; conversion is 1 click and the creator inherits
+>    the board, tickets, manager and agent workforce on the same `projects` row.
+> 2. **Two shop windows, one product.** The marketplace listing sells it inside the marketplace; a
+>    creator-authored `website` canvas card, published to their own address and edited WYSIWYG, sells it
+>    in their own brand. Both render their buttons off the same `delivery` field.
+> 3. **No choice of host and no choice of database.** An app runs on Builderforce and its data lives in
+>    Builderforce collections.
+> 4. **Sell the Vercel-marketplace way**: no second signup, no second invoice, 0% under a lifetime
+>    threshold.
+>
+> Inherited from "Build, Stage, Live", and still binding: the preview IS the product, bounded, and the
+> SERVER decides preview-versus-product; a buyer holds a version permanently and is offered an update
+> rather than moved onto one; and a limitation a seller learns in Stage is DECLARED on the listing.
+
 ## ✅ RESOLVED 2026-08-18 — The `+` covered the connector, and the object's settings lived on the far side of the board
 
 Two reports about the same card. Neither was cosmetic: one made a whole gesture unreachable, the

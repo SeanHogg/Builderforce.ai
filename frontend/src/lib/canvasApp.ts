@@ -27,8 +27,9 @@
  * conclude their Twilio credentials were wrong.
  */
 
-import { renderWebsiteDocument, robloxScriptsFrom, websitePagesFrom, websiteThemeFrom } from '@builderforce/creation-canvas-contract';
+import { robloxScriptsFrom } from '@builderforce/creation-canvas-contract';
 import { gameDocumentFromUrl, robloxPlaceFromUrl } from './gameTargets';
+import { canvasWebsiteDocument } from './canvasWebsite';
 
 export type CanvasAppFileRole = 'page' | 'style' | 'script' | 'server' | 'config' | 'other';
 
@@ -214,12 +215,10 @@ export function canvasAppFiles(
       continue;
     }
     if (node.data.kind === 'website' || node.data.kind === 'prototype') {
-      const pages = websitePagesFrom(node.data);
       const title = typeof node.data.title === 'string' ? node.data.title.trim() : '';
-      // No `enterPath`/`enterLabel`: the app preview has no shop-window door to open —
-      // that framing belongs to the PUBLISHED site (`siteLandingPage.ts`), not to a
-      // board's own runnable preview.
-      const source = renderWebsiteDocument(pages, websiteThemeFrom(node.data), { brand: title || 'Site' });
+      // ONE rendering of an authored site, shared with the card and the `site` surface —
+      // see `canvasWebsite.ts` for why the board no longer draws a second one of its own.
+      const source = canvasWebsiteDocument(node.data);
       if (!source) continue;
       const path = slugFile(title, node.id);
       if (seen.has(path)) continue;
@@ -353,8 +352,3 @@ export function canvasApp(
 export function canvasAppIsRunnable(app: CanvasApp): boolean {
   return app.document !== null;
 }
-
-/** The widths the preview offers. Same three the site surface uses, same meaning:
- *  what the READER is checking, never a re-authoring of what the app IS. */
-export const CANVAS_APP_VIEWPORTS = ['desktop', 'tablet', 'mobile'] as const;
-export type CanvasAppViewport = (typeof CANVAS_APP_VIEWPORTS)[number];

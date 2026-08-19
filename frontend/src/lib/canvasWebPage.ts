@@ -101,23 +101,6 @@ export function webPageHost(url: string): string {
 }
 
 /**
- * Frame widths per viewport. The frame is rendered at the device width and
- * scaled down to the panel, so a responsive site lays itself out for a phone
- * instead of being a shrunken desktop — `null` means "whatever the panel is".
- */
-export const WEB_PAGE_VIEWPORT_WIDTHS: Readonly<Record<string, number | null>> = {
-  desktop: null,
-  tablet: 834,
-  mobile: 390,
-};
-
-export type WebPageViewport = 'desktop' | 'tablet' | 'mobile';
-
-export function webPageViewport(value: unknown): WebPageViewport {
-  return value === 'tablet' || value === 'mobile' ? value : 'desktop';
-}
-
-/**
  * Fields the panel writes back after probing an address. Kept together because
  * they are only ever meaningful as a set — a `frameable` verdict without the
  * URL it was measured against would be re-applied to the next address typed.

@@ -6,11 +6,12 @@ import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 import { brain } from '@/lib/builderforceApi';
-import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
+import { canvasViewport } from '@/lib/canvasViewport';
 import {
   canvasWebPageUrl, hasWebPageProbe, isLocalWebPageUrl, isMixedContentFrame, normalizeWebPageUrl,
-  webPageHost, webPageViewport, WEB_PAGE_VIEWPORT_WIDTHS,
+  webPageHost,
 } from '@/lib/canvasWebPage';
+import { CanvasDeviceFrame } from './CanvasDeviceFrame';
 
 /**
  * A live web page, framed as a panel on the board.
@@ -29,7 +30,10 @@ import {
  *
  * The frame is sandboxed and rendered at the selected device width, then scaled
  * into the panel, so a responsive site lays out for the device it is previewing
- * rather than being a squeezed desktop.
+ * rather than being a squeezed desktop. Measuring and scaling that frame is NOT
+ * this panel's job any more: it is `CanvasDeviceFrame`, shared with the app
+ * surface, the site surface and the website card, which is what makes "Desktop"
+ * mean the same 1280px everywhere instead of "whatever the panel happens to be".
  */
 
 interface CanvasWebPageProps {
@@ -41,15 +45,12 @@ interface CanvasWebPageProps {
 export function CanvasWebPage({ data, onEdit }: CanvasWebPageProps) {
   const t = useTranslations('creationCanvas.webPage');
   const url = canvasWebPageUrl(data);
-  const viewport = webPageViewport(data.viewport);
-  const deviceWidth = WEB_PAGE_VIEWPORT_WIDTHS[viewport];
+  const viewport = canvasViewport(data.viewport);
   const [draft, setDraft] = useState(url ?? '');
   const [reloadNonce, setReloadNonce] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [probing, setProbing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const frameWrapRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
 
   // The address bar mirrors the object until the user starts typing in it; a
   // Brain-authored or inspector-side change has to show up here too.
@@ -106,16 +107,6 @@ export function CanvasWebPage({ data, onEdit }: CanvasWebPageProps) {
     return () => { cancelled = true; };
   }, [url, local]);
 
-  // Fit the device-width frame into whatever width the panel has been resized to.
-  useEffect(() => {
-    const wrap = frameWrapRef.current;
-    if (!wrap || !deviceWidth || typeof ResizeObserver === 'undefined') { setScale(1); return; }
-    const measure = () => setScale(Math.min(1, wrap.clientWidth / deviceWidth));
-    const disconnectResize = observeResizeOnAnimationFrame(wrap, measure);
-    measure();
-    return disconnectResize;
-  }, [deviceWidth]);
-
   const load = useCallback((raw: string) => {
     const next = normalizeWebPageUrl(raw);
     if (!next) { setError(t('invalidUrl')); return; }
@@ -170,24 +161,25 @@ export function CanvasWebPage({ data, onEdit }: CanvasWebPageProps) {
         {readerText ? <p>{readerText}</p> : <p className={styles.webPageMuted}>{t('readerEmpty')}</p>}
       </div>}
 
-      {url && !blocked && <div ref={frameWrapRef} className={styles.webPageFrameWrap}>
-        <iframe
-          key={`${url}#${reloadNonce}`}
-          className={`${styles.webPageFrame} nodrag nowheel`}
-          src={url}
-          title={typeof data.pageTitle === 'string' && data.pageTitle ? data.pageTitle : data.title}
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          // The framed document keeps its OWN origin — `allow-same-origin` here
-          // lets a normal site use its own cookies and storage, which most of the
-          // web needs to render at all; it grants the frame nothing of ours.
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
-          allow="clipboard-write; fullscreen; picture-in-picture"
-          onLoad={() => setLoaded(true)}
-          style={deviceWidth ? { width: deviceWidth, height: `${100 / scale}%`, transform: `scale(${scale})` } : undefined}
-        />
+      {url && !blocked && <CanvasDeviceFrame
+        reloadKey={`${url}#${reloadNonce}`}
+        viewport={viewport}
+        src={url}
+        title={typeof data.pageTitle === 'string' && data.pageTitle ? data.pageTitle : data.title}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        // The framed document keeps its OWN origin — `allow-same-origin` here
+        // lets a normal site use its own cookies and storage, which most of the
+        // web needs to render at all; it grants the frame nothing of ours. This
+        // is the one framed document on the canvas that gets it, and the reason
+        // `CanvasDeviceFrame` takes the sandbox rather than declaring one.
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
+        allow="clipboard-write; fullscreen; picture-in-picture"
+        onLoad={() => setLoaded(true)}
+        frameClassName="nodrag nowheel"
+      >
         {!loaded && <div className={styles.webPageLoading} role="status">{t('loading', { host: webPageHost(url) })}</div>}
-      </div>}
+      </CanvasDeviceFrame>}
 
       {(probing || error) && <div className={styles.webPageStatus} role="status">{error ?? t('checking')}</div>}
     </div>

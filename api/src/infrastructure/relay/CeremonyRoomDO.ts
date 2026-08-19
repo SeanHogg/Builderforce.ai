@@ -39,7 +39,15 @@ export class CeremonyRoomDO implements DurableObject {
    * an allow-list would have to be extended for every time signaling changed. The
    * rate limit still applies, so "open" is not "unbounded".
    */
-  private relay = new PeerRelay({ framesPerSecond: 40, burst: 80 });
+  private relay = new PeerRelay({
+    framesPerSecond: 40,
+    burst: 80,
+    // A WebRTC offer/answer carries a full SDP, which is routinely several KB and
+    // occasionally tens of them (many codecs, many candidates). The cap is a
+    // sanity bound on one frame, not a protocol opinion — set below it and the
+    // symptom is a call that silently never connects.
+    maxFrameChars: 65_536,
+  });
 
   constructor(private state: DurableObjectState, private env: unknown) {}
 

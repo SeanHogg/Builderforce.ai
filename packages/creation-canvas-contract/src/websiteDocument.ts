@@ -166,13 +166,26 @@ footer{padding:26px 0;color:var(--muted);font-size:.8rem;border-top:1px solid va
 @media (prefers-reduced-motion:no-preference){.page{animation:in .2s ease both}@keyframes in{from{opacity:0}}}
 `;
 
-/** The page switcher. Inline, tiny, and the only script the document adds itself. */
-const SWITCH_SCRIPT = `
+/**
+ * The page switcher. Inline, tiny, and the only script the document adds itself.
+ *
+ * `messageTag` is what makes the same document usable as a PREVIEW rather than only as a
+ * published page. A canvas card frames this document at device width, so the nav the
+ * reader clicks is inside the frame and the board outside it would otherwise never learn
+ * which page is open — the card and the full-size `site` surface would then disagree
+ * about it, which is exactly the drift `WebsiteBody` was extracted to prevent. Absent
+ * (the published site's case) not a byte of it is emitted.
+ */
+function switchScript(messageTag: string | undefined): string {
+  return `
 (function(){var n=document.querySelectorAll('nav button[data-go]');
 function show(id){document.querySelectorAll('.page').forEach(function(p){p.hidden=p.dataset.page!==id});
-n.forEach(function(b){b.setAttribute('aria-current',String(b.dataset.go===id))});}
+n.forEach(function(b){b.setAttribute('aria-current',String(b.dataset.go===id))});${
+  messageTag ? `try{parent.postMessage({tag:${JSON.stringify(messageTag)},pageId:id},'*');}catch(e){}` : ''
+}}
 n.forEach(function(b){b.addEventListener('click',function(){show(b.dataset.go)})});})();
 `;
+}
 
 export interface WebsiteDocumentOptions {
   /** The site's own name, shown in the nav. */
@@ -191,6 +204,23 @@ export interface WebsiteDocumentOptions {
    * PUBLISHED document, with a real origin, can carry one.
    */
   commerceScriptSrc?: string;
+  /**
+   * Which mode the document paints in.
+   *
+   * `'auto'` — the default, and the only honest answer for a PUBLISHED page — follows the
+   * stranger's own device, which is why both palettes are defined for every theme style.
+   * A PREVIEW is a different question: a canvas card that flipped to dark because the
+   * board's operator toggled their own theme is showing the author a page their visitors
+   * may never see, and reads as the app's styling leaking into the artifact. So a preview
+   * pins the mode and offers the author its own switch to check the other one.
+   */
+  colorScheme?: 'auto' | 'light' | 'dark';
+  /**
+   * When set, a page switch inside the document posts `{ tag, pageId }` to the embedder.
+   * See `switchScript` — this is what keeps a framed preview and the board in agreement
+   * about which page is open. Omitted by the publisher: a live site has no embedder.
+   */
+  pageMessageTag?: string;
 }
 
 /**
@@ -218,8 +248,17 @@ export function renderWebsiteDocument(
       : ''
   }${enterPath ? `<a class="enter" href="${escapeHtml(enterPath)}">${escapeHtml(enterLabel ?? '')}</a>` : ''}</nav>`;
 
+  const scheme = options.colorScheme ?? 'auto';
   const light = paletteFor(theme, 'light');
   const dark = paletteFor(theme, 'dark');
+  // One `:root`, then the dark override only when the reader is the one deciding. A
+  // pinned preview emits a single palette so nothing on the embedder's device — OS
+  // setting or app theme — can repaint it.
+  const rootVars = scheme === 'dark' ? cssVars(dark) : cssVars(light);
+  const colorScheme = scheme === 'auto' ? 'light dark' : scheme;
+  const darkQuery = scheme === 'auto'
+    ? `@media (prefers-color-scheme:dark){:root{${cssVars(dark)}}}`
+    : '';
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -227,12 +266,12 @@ export function renderWebsiteDocument(
 ${description ? `<meta name="description" content="${escapeHtml(description.slice(0, 300))}">` : ''}
 <meta property="og:title" content="${escapeHtml(title)}">
 ${description ? `<meta property="og:description" content="${escapeHtml(description.slice(0, 300))}">` : ''}
-<style>:root{${cssVars(light)};color-scheme:light dark}
-@media (prefers-color-scheme:dark){:root{${cssVars(dark)}}}
+<style>:root{${rootVars};color-scheme:${colorScheme}}
+${darkQuery}
 ${STYLES}</style></head>
 <body><div class="wrap">${nav}${ordered.map((page, index) => renderPage(page, index, enterPath ?? null)).join('')}
 <footer>${escapeHtml(brand)}</footer></div>
-${ordered.length > 1 ? `<script>${SWITCH_SCRIPT}</script>` : ''}${
+${ordered.length > 1 ? `<script>${switchScript(options.pageMessageTag)}</script>` : ''}${
     commerceScriptSrc ? `<script src="${escapeHtml(commerceScriptSrc)}" defer></script>` : ''
   }</body></html>`;
 }

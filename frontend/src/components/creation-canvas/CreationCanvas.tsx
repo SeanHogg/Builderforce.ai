@@ -281,7 +281,8 @@ import { canvasLegalDocumentActions } from '@/lib/canvasLegalDocumentTools';
 import { canvasSignatureActions } from '@/lib/canvasSignatureTools';
 import { sendInvestorUpdate } from '@/lib/founderOpsApi';
 import { notifyWorkspaceFilesChanged } from '@/lib/workspaceFileEvents';
-import { canvasWebPageUrl, normalizeWebPageUrl, webPageHost, webPageViewport } from '@/lib/canvasWebPage';
+import { canvasWebPageUrl, normalizeWebPageUrl, webPageHost } from '@/lib/canvasWebPage';
+import { canvasViewport } from '@/lib/canvasViewport';
 import { deleteIdeProject, listIdeProjects } from '@/lib/api';
 import { CREATIVE_GENERATOR_KINDS } from '@/lib/creationObjectGroups';
 import {
@@ -2136,12 +2137,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     let stopped = false;
     const reconcile = async () => {
       try {
-        // The cursor rides the RELAY when the socket is up, and only falls back to
-        // this poll when it is not — which is what removes the per-tick
-        // `creation_session_members.cursor` write, not just the staleness. A client
-        // whose relay is down still shows up to everyone else, eight seconds behind.
+        // The cursor is STILL written here, on purpose. The relay is what makes a
+        // pointer live; this row is what makes it survive a client with no socket at
+        // all (a blocked WebSocket behind a corporate proxy) — such a client is both
+        // seen by everyone and able to see everyone, exactly as before, because the
+        // merge simply has no live entry to prefer. And it costs nothing: this tick
+        // already UPDATEs the row for `lastSeenAt`, which is what makes a member
+        // count as active, so dropping one column out of a write that happens anyway
+        // would have bought staleness rather than saved a write.
         const relayed = liveSocketRef.current?.readyState === WebSocket.OPEN;
-        const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: relayed ? null : cursorRef.current, selection: selectedIds, typing: isComposingPrompt, followingUserId });
+        const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedIds, typing: isComposingPrompt, followingUserId });
         if (stopped) return;
         const nextActiveIds = new Set(presence.members.map((member) => member.userId));
         if (activePresenceInitialized.current) {
@@ -11756,7 +11761,7 @@ function WebPageInspectorSection({ data, onChange }: KindSectionProps) {
       onChange={(event) => onChange({ url: event.target.value })}
       onBlur={(event) => { const next = normalizeWebPageUrl(event.target.value); if (next) onChange({ url: next, frameCheckedUrl: '', frameable: true, frameBlockedBy: null }); }}
     /></label>
-    <label>{t('viewport')}<select value={webPageViewport(data.viewport)} onChange={(event) => onChange({ viewport: event.target.value })}>
+    <label>{t('viewport')}<select value={canvasViewport(data.viewport)} onChange={(event) => onChange({ viewport: event.target.value })}>
       <option value="desktop">{t('viewportDesktop')}</option>
       <option value="tablet">{t('viewportTablet')}</option>
       <option value="mobile">{t('viewportMobile')}</option>

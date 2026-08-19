@@ -12,8 +12,9 @@ import {
   canvasApp,
   type CanvasAppFile,
   type CanvasAppLogEntry,
-  type CanvasAppViewport,
 } from '@/lib/canvasApp';
+import type { CanvasViewport } from '@/lib/canvasViewport';
+import { CanvasDeviceFrame } from './CanvasDeviceFrame';
 import { CanvasViewportSwitcher } from './CanvasViewportSwitcher';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
 import styles from './CreationCanvas.module.css';
@@ -90,7 +91,7 @@ export function CanvasAppSurface({ nodes, onExit, onOpenObject }: CanvasAppSurfa
   const t = useTranslations('creationCanvas.surface.app');
   const app = useMemo(() => canvasApp(nodes), [nodes]);
   const [reading, setReading] = useState<AppReading>('preview');
-  const [viewport, setViewport] = useState<CanvasAppViewport>('desktop');
+  const [viewport, setViewport] = useState<CanvasViewport>('desktop');
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState<CanvasAppLogEntry[]>([]);
   const [openFile, setOpenFile] = useState<string | null>(null);
@@ -209,9 +210,14 @@ export function CanvasAppSurface({ nodes, onExit, onOpenObject }: CanvasAppSurfa
             {reading === 'preview' && (
               <div className={styles.appStage} data-viewport={viewport}>
                 {app.document && running ? (
-                  <iframe
-                    key={runNonce}
+                  /* Laid out at the width the reader picked and scaled into the stage —
+                     never capped to the stage, which would hand the app's own media
+                     queries the stage's width and make all three readings identical.
+                     See `CanvasDeviceFrame`; that was this surface's defect. */
+                  <CanvasDeviceFrame
+                    reloadKey={runNonce}
                     className={styles.appFrame}
+                    viewport={viewport}
                     title={t('frameTitle', { path: entryPath })}
                     srcDoc={app.document}
                     // No `allow-same-origin`. See `CANVAS_APP_FRAME_SANDBOX` — with

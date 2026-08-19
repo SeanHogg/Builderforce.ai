@@ -2,7 +2,7 @@
 
 > Single source of truth for **outstanding** work (TODO · In Progress · Partial) and deferred issues for the Builderforce.ai sub-project. The [README](./README.md) documents what exists today; completed/shipped/resolved items live in **[DONE.md](./DONE.md)**. This file tracks only what's next and what's broken. Deferred issues found during work are appended to the **Consolidated Gap Register** below (open items only — move an item to DONE.md when it's resolved).
 
-> **Cleaned 2026-08-10.** Completed work lives in DONE.md; the Gap Register contains only open or partially open work. **Group 4 (Evermind / SSM)** now holds only genuinely blocked items (WebGPU / GPU / operator / external-checkpoint / product-decision / live-surface). Bullets are technically compound, so this is not a ticket count; the exact machine-counted total is maintained below.
+> **Cleaned 2026-08-10.** Completed work lives in DONE.md; the Gap Register contains only open or partially open work. **Group 4 (Evermind / SSM)** now holds only genuinely blocked items (WebGPU / GPU / operator / external-checkpoint / product-decision / live-surface). Bullets are technically compound, so the per-group counts in the index are a guide, not a ticket count.
 
 ---
 

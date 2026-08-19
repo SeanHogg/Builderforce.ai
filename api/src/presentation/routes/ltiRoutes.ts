@@ -17,12 +17,16 @@
  * key, a table or a fetch.
  */
 import { Hono, type Context } from 'hono';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
+import { resolveAppBaseUrl } from '../../env';
 import {
   buildLoginRedirect, fetchRoster, loadRegistrations, pushScore, registrationFor,
   rosterFromMembers, toolPublicJwks, verifyLaunch,
 } from '../../application/lti/LtiService';
+import { bridgeLaunch } from '../../application/lti/ltiLaunchBridge';
 import { canReturnGrades } from '../../domain/lti/ltiClaims';
+import { signState } from '../../infrastructure/auth/oauthState';
+import { buildDatabase } from '../../infrastructure/database/connection';
 
 /** Read a form or query parameter, whichever binding the platform used. */
 async function param(request: Request, name: string): Promise<string> {
@@ -126,6 +130,42 @@ export function createLtiRoutes() {
     if (!result.ok) return c.json({ error: result.error }, 401);
 
     const { context } = result;
+
+    // ── THE BRIDGE ──────────────────────────────────────────────────────────
+    // This is what turns a verified launch into somewhere a person lands. It
+    // resolves (or provisions) the launching user, resolves (or creates) the
+    // board bound to the LMS course, stamps `ltiIssuer` / `ltiMembershipsUrl`
+    // onto its cohort and `ltiLineItemUrl` onto the launched assignment, and
+    // hands back where to go. Before this the route returned all of that as JSON
+    // that nothing on the frontend read.
+    //
+    // A launch is a top-level browser navigation from the LMS, so the answer has
+    // to be a REDIRECT and not a JSON body — except for a caller that asked for
+    // JSON, which is how the contract stays testable and how a non-browser
+    // integration can still read the service URLs.
+    const bridged = await bridgeLaunch(buildDatabase(c.env as Env), registration, context);
+    const wantsJson = (c.req.header('accept') ?? '').includes('application/json');
+
+    if (!wantsJson) {
+      const frontend = resolveAppBaseUrl(c.env);
+      if (!bridged.ok) {
+        return c.redirect(`${frontend}/lti/launch?error=${encodeURIComponent(bridged.error)}`, 302);
+      }
+      // The SAME single-use exchange envelope the OAuth callback mints, and for
+      // the same reason: a 24h session JWT in a URL is captured by analytics,
+      // leaks through `Referer`, and stays in history. This code is an
+      // HMAC-signed state envelope with a 60s life, useless as an API bearer,
+      // and it is redeemed by the existing `POST /api/auth/oauth/exchange`.
+      const code = await signState(c.env.JWT_SECRET, {
+        uid: bridged.userId,
+        amr: 'lti',
+        redirect: bridged.redirect,
+      });
+      return c.redirect(`${frontend}/auth/callback?code=${encodeURIComponent(code)}`, 302);
+    }
+
+    if (!bridged.ok) return c.json({ error: bridged.error }, bridged.status as 403 | 409);
+
     return c.json({
       ok: true,
       capability: context.capability,
@@ -150,6 +190,9 @@ export function createLtiRoutes() {
         membershipsUrl: context.membershipsUrl,
         lineItemUrl: context.lineItemUrl,
       },
+      // Where the browser form of this launch would have gone. Returned so the
+      // JSON and redirect answers cannot describe two different destinations.
+      board: { sessionId: bridged.sessionId, redirect: bridged.redirect },
     });
   });
 

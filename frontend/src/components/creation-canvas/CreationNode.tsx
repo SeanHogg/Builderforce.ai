@@ -39,6 +39,7 @@ import { CanvasObjectSurfaceButton } from './CanvasObjectSurfaceButton';
 import { controlLabels, readGameControls } from '@/lib/gamePoster';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { canvasWebPageUrl, WEB_PAGE_KINDS } from '@/lib/canvasWebPage';
+import { canvasViewport } from '@/lib/canvasViewport';
 import { dashboardWidgetsPatch, readDashboardWidgets } from '@/lib/canvasDashboard';
 import { PIPELINE_MAX_CARDS_PER_CELL, cardsAt, readPipelineModel, stageTotals } from '@/lib/canvasSalesPipeline';
 import {
@@ -76,7 +77,7 @@ import { canvasProseText } from '@/lib/canvasProse';
 import ToolRunner from '@/components/tools/ToolRunner';
 import type { ToolResult } from '@/lib/tools';
 import { canvasTourDesignFromNode } from '@/lib/onboarding/canvasTourDesign';
-import { WebsiteBody } from './WebsiteCanvas';
+import { WebsiteFrame } from './WebsiteCanvas';
 import { CanvasVideoEditor } from './CanvasVideoEditor';
 import { CanvasResumeEditor } from './CanvasResumeEditor';
 import { CanvasLegalDocumentUpload } from './CanvasLegalDocumentUpload';
@@ -2564,7 +2565,17 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
       <div className={styles.nodeBody}>
         {typeof data.pipelineStep === 'number' && <div className={styles.pipelineNodeGuide} data-start={data.pipelineStart === true ? 'true' : 'false'}><b>{data.pipelineStart === true ? t('startHere') : t('stepOfFive', { step: data.pipelineStep })}</b><span>{String(data.pipelineInstruction || t('pipelineFallback'))}</span></div>}
         {data.kind === 'workflow' && <WorkflowBody data={data} />}
-        {(data.kind === 'website' || data.kind === 'prototype') && <WebsiteBody data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} />}
+        {/* The REAL document, framed — not the board's own approximation of it. See
+            `WebsiteFrame`: a card drawn as React inherited the app's tokens and theme, so
+            a landing page turned dark when the operator toggled the canvas. `light` is
+            pinned here because a thumbnail has no room for a mode control; the `site`
+            surface is where the author checks the other one. */}
+        {(data.kind === 'website' || data.kind === 'prototype') && <WebsiteFrame
+          data={data}
+          viewport={canvasViewport(data.viewport)}
+          colorScheme="light"
+          {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})}
+        />}
         {data.kind === 'guidedTour' && <GuidedTourBody data={data} />}
         {data.kind === 'build' && <BuildBody data={data} />}
         {WEB_PAGE_KINDS.has(data.kind) && <CanvasWebPage

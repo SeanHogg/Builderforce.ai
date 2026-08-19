@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   canvasWebPageUrl, hasWebPageProbe, isLocalWebPageUrl, isMixedContentFrame, isWebPageKind,
-  normalizeWebPageUrl, webPageHost, webPageViewport,
+  normalizeWebPageUrl, webPageHost,
 } from './canvasWebPage';
+import { CANVAS_VIEWPORT_WIDTHS, canvasViewport } from './canvasViewport';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
 const page = (data: Partial<CreationNodeData>): CreationNodeData => ({ kind: 'browser', title: 'Page', ...data });
@@ -64,12 +65,31 @@ describe('webPageHost', () => {
   });
 });
 
-describe('webPageViewport', () => {
+/**
+ * The viewport vocabulary is shared by every framed document on the canvas — the live
+ * page panel, the app runtime, the site surface and the website card — so it is asserted
+ * once, here, beside the panel that first needed it.
+ */
+describe('canvasViewport', () => {
   it('falls back to desktop for anything unrecognised', () => {
-    expect(webPageViewport('mobile')).toBe('mobile');
-    expect(webPageViewport('tablet')).toBe('tablet');
-    expect(webPageViewport('watch')).toBe('desktop');
-    expect(webPageViewport(undefined)).toBe('desktop');
+    expect(canvasViewport('mobile')).toBe('mobile');
+    expect(canvasViewport('tablet')).toBe('tablet');
+    expect(canvasViewport('watch')).toBe('desktop');
+    expect(canvasViewport(undefined)).toBe('desktop');
+  });
+
+  /**
+   * Three DIFFERENT widths, and a desktop that is a real width rather than "whatever the
+   * panel is". The defect this guards: while `desktop` meant `null`/`100%`, the frame was
+   * handed the panel's own width, so a desktop preview inside a 455px card rendered the
+   * page's MOBILE layout and the three readings were indistinguishable.
+   */
+  it('draws each reading at a real device width, all three different', () => {
+    const widths = Object.values(CANVAS_VIEWPORT_WIDTHS);
+    expect(widths.every((width) => typeof width === 'number' && width > 0)).toBe(true);
+    expect(new Set(widths).size).toBe(widths.length);
+    expect(CANVAS_VIEWPORT_WIDTHS.desktop).toBeGreaterThan(CANVAS_VIEWPORT_WIDTHS.tablet);
+    expect(CANVAS_VIEWPORT_WIDTHS.tablet).toBeGreaterThan(CANVAS_VIEWPORT_WIDTHS.mobile);
   });
 });
 

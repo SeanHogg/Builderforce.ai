@@ -4,10 +4,17 @@
  * directive would mark a second entry point that does not exist, and
  * `check-frontend-architecture` counts directives rather than components.
  */
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import ReactMarkdown from 'react-markdown';
 import { MARKDOWN_REHYPE_PLUGINS, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdownPipeline';
+import type { CanvasViewport } from '@/lib/canvasViewport';
+import {
+  CANVAS_WEBSITE_FRAME_SANDBOX,
+  canvasWebsiteDocument,
+  canvasWebsitePageMessage,
+} from '@/lib/canvasWebsite';
+import { CanvasDeviceFrame } from './CanvasDeviceFrame';
 import styles from './CreationCanvas.module.css';
 import {
   WEBSITE_CONTENT_FRAME_SANDBOX,
@@ -19,7 +26,21 @@ import {
 import type { CreationNodeData } from './types';
 
 /**
- * The rendered face of a `website` / `prototype` object — its pages, drawn.
+ * The AUTHORING face of a `website` / `prototype` object — its pages, drawn as editable
+ * React so a section can be retitled, moved, duplicated and deleted in place.
+ *
+ * ── THIS IS NO LONGER THE PREVIEW ────────────────────────────────────────────────
+ * It used to be both, and being both was the bug. Rendered into the board's own DOM it
+ * inherits the board: `var(--canvas-line)`, `var(--surface)`, the app's fonts and the
+ * app's light/dark theme — so an author checking their landing page saw it repainted by a
+ * theme toggle their visitors will never touch. And because a card is 455px wide, this
+ * renderer's type scale is 6–9px and its sections are approximations: a decorative block
+ * where the hero artwork goes, a heading and one line of prose where the real document
+ * lays out a features grid, a stats band or an embedded form.
+ *
+ * `WebsiteFrame` below is the preview now — the SAME document the publisher serves, in a
+ * frame nothing outside can style. This stays as the thing you edit in, which is the one
+ * job a frame genuinely cannot do.
  *
  * ── WHY THIS IS ITS OWN MODULE ───────────────────────────────────────────────────
  * It used to live inside `CreationNode.tsx` because the card was the only place a site
@@ -65,7 +86,7 @@ export interface WebsiteBodyProps {
    * board, where the card reads `data.viewport` like every other persisted field — a
    * preview cannot have a viewport control, so it must not have a viewport of its own.
    */
-  viewport?: 'desktop' | 'tablet' | 'mobile';
+  viewport?: CanvasViewport;
   /**
    * Chrome drawn beside each section — move, duplicate, delete.
    *
@@ -112,4 +133,74 @@ export function WebsiteBody({ data, onEdit, viewport, sectionControls }: Website
         : <WebsiteSectionBody key={section.id} section={section} accent={accent} />))}
     </div>
   );
+}
+
+export interface WebsiteFrameProps {
+  data: CreationNodeData;
+  /** Which width the reader is checking. The card passes the object's own; the surface
+   *  passes the reader's choice — see `CanvasSiteSurface` for why those differ. */
+  viewport: CanvasViewport;
+  /** Pinned, never `'auto'`: a preview that followed the reader's OS or the board's theme
+   *  is the leak this component exists to stop. The surface offers the author a switch. */
+  colorScheme: 'light' | 'dark';
+  /** Absent on a board the viewer cannot drive — the page nav then reads without writing. */
+  onEdit?: (patch: Partial<CreationNodeData>) => void;
+  className?: string;
+}
+
+/**
+ * The site as its visitors get it: the SAME self-contained document the publisher serves,
+ * framed at a real device width with no origin of its own.
+ *
+ * ── WHAT THIS FIXES ──────────────────────────────────────────────────────────────
+ * Three things at once, all of them one root cause — the board was drawing its own
+ * approximation of a page it already knew how to render properly.
+ *   · The full site renders. Every section the document lays out — the features grid, the
+ *     stats band, the embedded markup block, the real type scale — instead of a heading
+ *     and a line of prose at 7px.
+ *   · Nothing outside can style it. A frame has its own cascade, so `var(--canvas-line)`,
+ *     the app's fonts and the operator's dark-mode toggle stop at its edge.
+ *   · The width means something. `CanvasDeviceFrame` lays it out at 1280 / 834 / 390 and
+ *     scales the result, so the page's own media queries fire for the device chosen.
+ *
+ * ── WHY IT FALLS BACK RATHER THAN FRAMING NOTHING ────────────────────────────────
+ * A site the author has only named holds no page yet, and `renderWebsiteDocument` refuses
+ * to invent an empty shell for one. Framing that would replace a legible "here is your
+ * headline" with a blank white rectangle, so the unauthored case stays with the editor.
+ */
+export function WebsiteFrame({ data, viewport, colorScheme, onEdit, className }: WebsiteFrameProps) {
+  const t = useTranslations('creationCanvas.node');
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const document = canvasWebsiteDocument(data, { colorScheme, reportPageChanges: !!onEdit });
+
+  // The page nav the reader clicks lives INSIDE the frame, so this is how the board hears
+  // about it. Held in a ref because `onEdit` is a fresh closure on every parent render and
+  // a dependency on it would tear the listener down and rebuild it each time.
+  const live = useRef(onEdit);
+  live.current = onEdit;
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      // Scoped to THIS frame: several website cards on one board all listen on the same
+      // window, and without the check each would act on the others' page switches.
+      if (event.source !== frameRef.current?.contentWindow) return;
+      const pageId = canvasWebsitePageMessage(event.data);
+      if (pageId) live.current?.({ activeWebsitePageId: pageId });
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  if (!document) {
+    return <WebsiteBody data={data} viewport={viewport} {...(onEdit ? { onEdit } : {})} />;
+  }
+  return <CanvasDeviceFrame
+    frameRef={frameRef}
+    viewport={viewport}
+    srcDoc={document}
+    title={t('websiteFrameTitle', { title: data.title })}
+    // No `allow-same-origin` — see `CANVAS_WEBSITE_FRAME_SANDBOX`.
+    sandbox={CANVAS_WEBSITE_FRAME_SANDBOX}
+    frameClassName="nodrag nowheel"
+    {...(className ? { className } : {})}
+  />;
 }

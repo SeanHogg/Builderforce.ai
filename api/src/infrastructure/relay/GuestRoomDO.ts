@@ -134,6 +134,8 @@ export class GuestRoomDO implements DurableObject {
     // offer/answer/ICE traffic of the camera meeting. Rate-limited, not unbounded.
     framesPerSecond: 40,
     burst: 80,
+    // Big enough for a full WebRTC SDP — see CeremonyRoomDO for why this is not 4KB.
+    maxFrameChars: 65_536,
     stamp: (peer) => ({ from: peer.id, name: peer.name }),
     publicPeer: (peer) => ({ id: peer.id, name: peer.name, kind: 'human', ref: peer.id }),
   });

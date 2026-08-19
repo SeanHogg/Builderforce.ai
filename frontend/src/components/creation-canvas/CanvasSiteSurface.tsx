@@ -6,11 +6,11 @@
  */
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import type { CanvasAppViewport } from '@/lib/canvasApp';
+import { canvasViewport, type CanvasViewport } from '@/lib/canvasViewport';
 import styles from './CreationCanvas.module.css';
 import { CanvasObjectSurface } from './CanvasObjectSurface';
 import { CanvasViewportSwitcher } from './CanvasViewportSwitcher';
-import { WebsiteBody } from './WebsiteCanvas';
+import { WebsiteBody, WebsiteFrame } from './WebsiteCanvas';
 import {
   WEBSITE_ADDABLE_SECTION_KINDS,
   activeWebsitePage,
@@ -50,6 +50,26 @@ import type { CreationNodeData } from './types';
  * component owns only the buttons, and it owns them here rather than on the card because
  * structural editing needs to show what moved, which a preview has no room to do.
  *
+ * ── WHY THERE ARE TWO READINGS AND NOT ONE ───────────────────────────────────────
+ * The two things an author does with a site full-size need opposite properties. CHECKING
+ * it needs the real document, isolated: the same self-contained page the publisher serves,
+ * at a real device width, with nothing of the app's cascade able to reach it — the defect
+ * that made this surface show a landing page repainted by the operator's dark-mode toggle,
+ * in 7px type, with the features grid reduced to a heading. EDITING it needs the opposite:
+ * markup in this document, reachable by React, so a section can be moved and a heading
+ * retitled in place. No single renderer is both, and pretending one was is what produced
+ * an approximation that was neither a faithful preview nor a comfortable editor. So this
+ * is the same split the `app` surface already makes between Preview, Code and Console —
+ * one artifact, read more than one way — and the switch is one control, not a mode the
+ * user has to infer.
+ *
+ * ── WHY THE SITE'S OWN LIGHT/DARK IS THE AUTHOR'S, NOT THE APP'S ─────────────────
+ * The published document answers `prefers-color-scheme`, because it is served to strangers
+ * on their own devices. A preview must not: the author toggling the CANVAS to dark was
+ * repainting their site, which reads as the app styling the artifact and hides what half
+ * their visitors see. So the preview pins the mode and this surface hands the author the
+ * switch — a question about the site, asked in the site's own controls.
+ *
  * ── WHY THE VIEWPORT IS LOCAL AND NOT PERSISTED ──────────────────────────────────
  * `data.viewport` is what the site IS — the width the author is designing for, and what a
  * board preview and an export both read. The control here is what the READER is currently
@@ -71,11 +91,19 @@ export interface CanvasSiteSurfaceProps {
   onEdit?: (patch: Partial<CreationNodeData>) => void;
 }
 
+/** The two ways to read a site, in the order an author wants them: see it, then change
+ *  it. Data rather than two booleans, so the toggle is one loop and one catalogue key. */
+const READINGS = ['preview', 'edit'] as const;
+type SiteReading = (typeof READINGS)[number];
+
+const SCHEMES = ['light', 'dark'] as const;
+type SiteScheme = (typeof SCHEMES)[number];
+
 export function CanvasSiteSurface({ data, onExit, onEdit }: CanvasSiteSurfaceProps) {
   const t = useTranslations('creationCanvas');
-  const [viewport, setViewport] = useState<CanvasAppViewport>(
-    data.viewport === 'mobile' || data.viewport === 'tablet' ? data.viewport : 'desktop',
-  );
+  const [viewport, setViewport] = useState<CanvasViewport>(canvasViewport(data.viewport));
+  const [reading, setReading] = useState<SiteReading>('preview');
+  const [scheme, setScheme] = useState<SiteScheme>('light');
   // Derived, never stored: a count beside the pages that produce it is a number the rows
   // can contradict the moment Brain adds one.
   const pages = websitePagesFrom(data);
@@ -91,7 +119,10 @@ export function CanvasSiteSurface({ data, onExit, onEdit }: CanvasSiteSurfacePro
     if (patch) onEdit(patch);
   };
 
-  const sectionControls = onEdit && page
+  // Structural chrome belongs to the EDIT reading only: it is markup drawn between the
+  // sections, and there is nowhere to put it over a framed document that would not be a
+  // second, guessed-at layout of a page the frame already owns.
+  const sectionControls = onEdit && page && reading === 'edit'
     ? (section: WebsiteSection) => {
       // The rules live with the operations. Asking the contract what is possible —
       // rather than re-deriving "is this the hero" and "is this the last one" here —
@@ -120,7 +151,27 @@ export function CanvasSiteSurface({ data, onExit, onEdit }: CanvasSiteSurfacePro
     : undefined;
 
   const actions = <span className={styles.siteMeta}>
-    {onEdit && page && <span className={styles.siteAdd}>
+    <span className={styles.appReadings} role="group" aria-label={t('surface.site.readings')}>
+      {READINGS.map((option) => <button
+        key={option}
+        type="button"
+        onClick={() => setReading(option)}
+        aria-pressed={reading === option}
+      >{t(`surface.site.reading.${option}` as 'surface.site.reading.preview')}</button>)}
+    </span>
+
+    {/* The SITE's mode, not the app's — see the header. Only in the reading that shows
+        the real document; the editor draws the author's own theme colours directly. */}
+    {reading === 'preview' && <span className={styles.siteScheme} role="group" aria-label={t('surface.site.scheme')}>
+      {SCHEMES.map((option) => <button
+        key={option}
+        type="button"
+        onClick={() => setScheme(option)}
+        aria-pressed={scheme === option}
+      >{t(`surface.site.scheme${option === 'light' ? 'Light' : 'Dark'}` as 'surface.site.schemeLight')}</button>)}
+    </span>}
+
+    {onEdit && page && reading === 'edit' && <span className={styles.siteAdd}>
       <label htmlFor="site-add-section">{t('surface.site.addSection')}</label>
       <select
         id="site-add-section"
@@ -147,15 +198,23 @@ export function CanvasSiteSurface({ data, onExit, onEdit }: CanvasSiteSurfacePro
 
   return (
     <CanvasObjectSurface surface="site" data={data} onExit={onExit} actions={actions}>
-      <div className={styles.siteStage} data-viewport={viewport}>
-        <div className={styles.siteFrame}>
-          <WebsiteBody
-            data={data}
-            viewport={viewport}
-            {...(onEdit ? { onEdit } : {})}
-            {...(sectionControls ? { sectionControls } : {})}
-          />
-        </div>
+      <div className={styles.siteStage} data-viewport={viewport} data-reading={reading}>
+        {reading === 'preview'
+          ? <WebsiteFrame
+              data={data}
+              viewport={viewport}
+              colorScheme={scheme}
+              className={styles.siteFrame}
+              {...(onEdit ? { onEdit } : {})}
+            />
+          : <div className={styles.siteFrame}>
+              <WebsiteBody
+                data={data}
+                viewport={viewport}
+                {...(onEdit ? { onEdit } : {})}
+                {...(sectionControls ? { sectionControls } : {})}
+              />
+            </div>}
       </div>
     </CanvasObjectSurface>
   );

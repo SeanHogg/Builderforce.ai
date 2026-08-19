@@ -187,6 +187,20 @@ describe('PeerRelay', () => {
     ]);
   });
 
+  it('carries a frame the size of a real WebRTC offer, which is what a call needs', () => {
+    // The rooms that relay signaling (ceremony, meeting, guest) set 64KB for this
+    // reason: a full SDP is routinely several KB, and a cap below it produces a call
+    // that silently never connects rather than an error anybody can see.
+    const relay = new PeerRelay({ maxFrameChars: 65_536 });
+    const listener = fakeSocket();
+    const peer = relay.add(fakeSocket().ws);
+    relay.add(listener.ws);
+    const sdp = 'a=candidate:'.repeat(700);
+
+    expect(relay.relay(peer, JSON.stringify({ type: 'rtc-offer', sdp }))).toBe(true);
+    expect(JSON.parse(listener.sent[0]!).sdp).toBe(sdp);
+  });
+
   it('forgets a socket whose send throws, so a dead peer stops being fanned out to', () => {
     const relay = new PeerRelay();
     const dead = { send: () => { throw new Error('closed'); } } as unknown as WebSocket;

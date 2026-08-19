@@ -5,7 +5,7 @@
  */
 import { useTranslations } from 'next-intl';
 import { ViewportDesktopIcon, ViewportMobileIcon, ViewportTabletIcon } from '@/components/canvas/CanvasCommands';
-import { CANVAS_APP_VIEWPORTS, type CanvasAppViewport } from '@/lib/canvasApp';
+import { CANVAS_VIEWPORTS, type CanvasViewport } from '@/lib/canvasViewport';
 import styles from './CreationCanvas.module.css';
 
 /**
@@ -16,7 +16,8 @@ import styles from './CreationCanvas.module.css';
  * copies of the same segmented trough in the stylesheet, and two sets of catalogue keys
  * (`surface.app.viewportName.*` and `surface.site.desktop`) that could drift into calling
  * the same width two different things in the same product. A third surface with a preview
- * would have made three.
+ * would have made three. The WIDTHS behind the words are `lib/canvasViewport`, shared with
+ * the live web page panel, for the same reason.
  *
  * The VALUE stays with the caller. What the reader is checking is not what the artifact
  * IS — the Site surface's own header says why `data.viewport` must not be re-authored by
@@ -27,11 +28,11 @@ import styles from './CreationCanvas.module.css';
  * second row. The words survive as the accessible name and the tooltip.
  */
 export interface CanvasViewportSwitcherProps {
-  value: CanvasAppViewport;
-  onChange: (viewport: CanvasAppViewport) => void;
+  value: CanvasViewport;
+  onChange: (viewport: CanvasViewport) => void;
 }
 
-const VIEWPORT_ICON: Record<CanvasAppViewport, () => React.ReactElement> = {
+const VIEWPORT_ICON: Record<CanvasViewport, () => React.ReactElement> = {
   desktop: ViewportDesktopIcon,
   tablet: ViewportTabletIcon,
   mobile: ViewportMobileIcon,
@@ -41,7 +42,7 @@ export function CanvasViewportSwitcher({ value, onChange }: CanvasViewportSwitch
   const t = useTranslations('creationCanvas');
   return (
     <div className={styles.viewportSwitcher} role="group" aria-label={t('previewWidth')}>
-      {CANVAS_APP_VIEWPORTS.map((option) => {
+      {CANVAS_VIEWPORTS.map((option) => {
         const Glyph = VIEWPORT_ICON[option];
         const name = t(`viewportName.${option}` as 'viewportName.desktop');
         return (
