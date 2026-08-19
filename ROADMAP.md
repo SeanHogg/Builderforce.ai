@@ -230,14 +230,14 @@ and machine-enforced. Neither W0-1 nor W0-2 has landed, and until they do, five 
 
 ### Wave 2 · Sell it to a business (open — Wave 1's acceptance test has passed)
 
-Same discipline, different files: **tenant merchant accounts** (FO-C4 — Stripe Connect, a payment link
-on an issued invoice, the webhook landing on the `ledger_entries` unique reference `listingCommerce`
-already uses). *The rest of this wave has shipped.* The `contract` object and
-`application/signature/signatureEngine.ts` landed 2026-08-15; **the priced deal on the board** (`quote`)
-and **the prospect-facing live share** landed 2026-08-19 with the whole sell-motion vocabulary — see
-DONE.md, "The canvas could build anything and sell none of it". What FO-C4 now adds on top is the
-MERCHANT half: an accepted quote emits a checkout intent, and taking the money against the seller's own
-Stripe account is the step after it. Group 10's founder-ops section still lists the rest.
+*This wave has shipped.* The `contract` object and `application/signature/signatureEngine.ts` landed
+2026-08-15; **the priced deal on the board** (`quote`) and **the prospect-facing live share** landed
+2026-08-19 with the whole sell-motion vocabulary — see DONE.md, "The canvas could build anything and
+sell none of it". **Tenant merchant accounts** (FO-C4) closed it on 2026-08-19: a `connections` row
+with `capability = 'merchant'`, a payment link minted against the tenant's own connected account on
+every issued invoice, and a webhook landing on the same `ledger_entries` unique reference
+`listingCommerce` already uses — so the money settles to the seller and a replayed webhook collides in
+the database. Group 10's founder-ops section lists what is left elsewhere.
 
 ### Wave 3 · Run the business behind the product
 
@@ -913,12 +913,15 @@ FO-D5's matching half. **FO-A2 and FO-A3 are CLOSED too** — 2026-08-16, Track 
 [DONE.md](./DONE.md): the counterparty resolver, the four bound fields, and
 `account.history` (open invoices and open bills; a contract's renewal reads off the
 `contract` object itself, and support load was evaluated and left out — see the
-entry for why). Fifteen remain, and two of them are unblocked by that pass:
-**FO-C2** now has a header to issue from, and
-**FO-B3** now has both primitives to route through. FO-D1 and FO-E1 have the
-`equity_holder` and `investor` roles they needed (`parties.ts`). FO-F2 is unblocked and
+entry for why). **The whole FO-C money track is CLOSED** — 2026-08-19, migration 0926: FO-C2's
+three receivable acts, FO-C4's per-tenant merchant account, FO-C5's collections ladder and the
+pay-run residual of FO-C6. What remains is unblocked in the same way:
+**FO-B3** now has both primitives to route through. FO-E1 has the
+`investor` role it needed (`parties.ts`), and FO-D used the `equity_holder` half of the same
+pair — `recordGrant` writes that role, so a cap-table holder and an `account` are one party.
+FO-F2 is unblocked and
 should be taken with care — it deletes the mirroring paragraph that FO-F1 replaced.
-FO-D and FO-G2/FO-G3 are unblocked now that Track 1 has landed.
+**FO-D1..FO-D4 are CLOSED** (2026-08-19, migration 0927 — see [DONE.md](./DONE.md)); FO-G2/FO-G3 are unblocked now that Track 1 has landed.
 
 **The tighter constraint is still file collision, not logical dependency.** The remaining
 items edit the same coordination files, so dispatching them at once produces conflicts even
@@ -926,12 +929,12 @@ where none depends on another's behaviour:
 
 | File | Contended by |
 |---|---|
-| `packages/creation-canvas-contract/src/index.ts` (`FOUNDER_OBJECT_KINDS`) | FO-D1, FO-E1 |
-| `frontend/src/lib/founderObjects.ts` | FO-C2, FO-D1, FO-E1, FO-G2 |
+| `packages/creation-canvas-contract/src/index.ts` (`FOUNDER_OBJECT_KINDS`) | FO-E1 |
+| `frontend/src/lib/founderObjects.ts` | FO-C2, FO-E1, FO-G2 |
 | `frontend/src/i18n/messages/{en,zh,es,fr,de}.json` | every item with a surface |
 | `frontend/src/components/creation-canvas/CreationCanvas.tsx` (tool registry) | every item with a tool |
 | `frontend/src/lib/canvasFounderOpsTools.ts` | the founder-ops tool family added by 0469 |
-| `api/migrations/` | FO-D1, FO-D2, FO-D3 — draw from the owning track's reserved band |
+| `api/migrations/` | FO-E1 — draw from the owning track's reserved band |
 
 Per the isolation-track rule at the foot of this file, shared coordination files are not
 file-disjoint and must be serialized and rebased before merge:
@@ -941,10 +944,10 @@ file-disjoint and must be serialized and rebased before merge:
 **Track 2 — collection & signature consumers:** FO-B3 → FO-B4, over the primitives 0469
   landed. **FO-B3 mostly CLOSED 2026-08-16** — see DONE.md; `jobPosting` applications is blocked
   on a decision (see FO-B3's own entry). FO-B4 unaffected.
-**Track 3 — money:** FO-C2 → FO-C5, then FO-C4. Its canvas half rebases onto Track 1.
+**Track 3 — money:** closed 2026-08-19 (FO-C2, FO-C4, FO-C5 and the pay-run residual).
 **Track 4 — the disjoint singles:** FO-F2 (one prompt deletion), FO-E2 (over FO-B2).
 
-FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do.
+FO-G2/FO-G3 should not start until Tracks 1–3 land.
 
 #### FO-A · The counterparty — one object every commercial reference points at
 
@@ -992,44 +995,12 @@ FO-D should not start until Track 1 lands, and FO-G2/FO-G3 until Tracks 1–3 do
 
 #### FO-C · Money — the founder cannot bill anyone, and cannot be paid
 
-> **FO-C1 and FO-C3 landed 2026-08-15 (0469)**: an `invoices` header the line items are now a real
-> reference to, a `bills` header beside it, one line-item table serving both through a
-> `document_kind` discriminator, and the three payable acts (approve / schedule-payment / dispute)
-> with a separation-of-duties check on the approver. **FO-C6 landed** in the same pass — seven
-> payroll and tax connector manifests. See [DONE.md](./DONE.md).
+> **CLOSED 2026-08-19.** FO-C1/FO-C3/FO-C6 landed 2026-08-15 (0469); FO-C2, FO-C4, FO-C5 and the
+> pay-run residual landed 2026-08-19 (0926) — the receivable's three acts with a document the
+> customer can open, per-tenant merchant accounts so money settles to the tenant rather than to us,
+> a collections ladder whose rungs are unique in the database, and a `payRun` kind a connector
+> hydrates. See [DONE.md](./DONE.md). Nothing outstanding under this heading.
 
-- **FO-C2 — `invoice.issue` / `record-payment` / `chase` are gated acts with no handler.**
-  *(unblocked 2026-08-15 — the header now exists, and `payables.ts` is where the three handlers
-  belong beside their payable siblings.)*
-  `canvasApprovalGate.GATED_ACTIONS` correctly names them irreversible/attested and `founderObjects.ts`
-  advertises all three; grep for the handlers returns the gate and its own test. There is no PDF render,
-  no delivery, and `ageingDays` is documented as "computed from `dueAt`" by nothing. Fix = the three
-  handlers over FO-C1 plus an ageing recompute in the daily sweep. Half-solved already: the `overdue-by`
-  trigger comparator shipped 2026-08-15, so an invoice carrying `dueAt` can be WATCHED — what it cannot
-  be is issued.
-- **FO-C4 — A tenant cannot take money from their own customers.**
-  `infrastructure/payment/PaymentProvider.ts` states there is exactly one flow and it is Builderforce's
-  own hosted subscription checkout; `marketplace/listingCommerce.ts` is the only other paid door and it
-  sells a creation on the marketplace with a platform cut. There is no tenant merchant account — no
-  Stripe Connect, no per-tenant processor credential — so "charge my customer" has no path at all, while
-  `payoutProviders` can already send money OUT (itself env-gated behind `PAYOUT_WEBHOOK_URL`, with a
-  "mark paid" fallback that moves no money). The finance category is one-directional by construction.
-  Fix = Connect onboarding per tenant, a payment link on an issued invoice, and a webhook landing on the
-  SAME `ledger_entries` unique reference `listingCommerce` already uses, so a replayed webhook collides
-  in the database rather than in a check somebody remembered to write. Unblocks: the revenue half of
-  running a business on the product.
-- **FO-C5 — A collections ladder.** `invoice.collection` is authored prose today, under a hint that says
-  "collections work with no record is collections work that gets done twice or not at all". With FO-C2
-  and the `overdue-by` trigger both live, the ladder is a small engine over parts that already exist.
-  Unblocks: getting paid without a person remembering to chase.
-- **A pay run and a tax calculation are reachable through a connector and by nothing else.**
-  *(new 2026-08-15, the residual of FO-C6.)* The seven manifests are live and every one of them needs a
-  tenant to have connected a provider. A workspace with `compensation_structures` and `timesheets` and
-  no Gusto account still cannot answer "what did we pay last month", and `finance.burn` is still typed
-  rather than read. The honest next step is not a payroll engine — see the file's own note on why the
-  platform must never become one — it is a `payRun` canvas kind that a connector READ hydrates, so the
-  burn on a forecast is money that actually left. **Not blocked.** Unblocks: the forecast's largest
-  line being a fact.
 
 #### FO-D · Ownership — the cap table is a projection now
 
