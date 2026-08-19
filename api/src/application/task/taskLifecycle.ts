@@ -28,6 +28,7 @@ import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 import { releaseWorkItemWebhook } from '../seams/workItemWebhook';
+import { fireEventTriggers } from '../workflow/eventTriggers';
 import { TaskStatus, ExecutionStatus } from '../../domain/shared/types';
 import { DONE_CLASS, isDoneLane } from '../../domain/shared/doneClass';
 
@@ -233,6 +234,26 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
       reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "recordStatusTransition" });
     }),
   ]);
+
+  // Board-event workflow triggers: a lane move IS the "task moved" event, and the
+  // first arrival in a done-class lane is additionally "task completed". Fired from
+  // HERE rather than the PATCH route because every completion path funnels through
+  // this function — board drag, agent advance, the AI Manager sweep, and the
+  // PR-merge webhook — so "task moved → run a workflow" cannot be true on one path
+  // and false on another. Best-effort: fireEventTriggers never throws, and the
+  // cached listener gate means a tenant with no such workflow pays no query.
+  await fireEventTriggers(db, {
+    tenantId, env, eventType: 'board-event',
+    payload: { taskId, projectId, fromStatus, toStatus, completed: nowDone },
+    match: { boardEvent: 'task-moved', status: toStatus },
+  }).catch(() => undefined);
+  if (nowDone && !wasDone) {
+    await fireEventTriggers(db, {
+      tenantId, env, eventType: 'board-event',
+      payload: { taskId, projectId, fromStatus, toStatus },
+      match: { boardEvent: 'task-completed', status: toStatus },
+    }).catch(() => undefined);
+  }
 
   // A work item FIRST reaching a released/done lane fans out `workitem.released`
   // to any segment webhook subscriptions (the Investor board / Changelog feed,

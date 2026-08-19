@@ -45,6 +45,10 @@ export interface ProjectConnection {
   buildUrl: string | null;
   buildBranch: string | null;
   buildAt: string | null;
+  /** When the delivery sweep last reached this repo's provider. Null = never yet.
+   *  The verdict's AGE — a swept answer can be stale, and saying so is the honest
+   *  alternative to letting a five-minute-old green read as a live one. */
+  buildProbedAt: string | null;
   lastSyncedAt: string | null;
 }
 

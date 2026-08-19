@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
+  EVENT_TRIGGER_TYPES,
   extractTriggers,
   isActivatableTriggerType,
+  isEventTriggerType,
   triggerNeedsToken,
   generateTriggerToken,
   configString,
@@ -19,9 +21,23 @@ describe('isActivatableTriggerType', () => {
     expect(isActivatableTriggerType('webhook')).toBe(true);
     expect(isActivatableTriggerType('rss')).toBe(true);
     expect(isActivatableTriggerType('inbound-email')).toBe(true);
+    // The internal-event half — these rendered in the palette for releases while
+    // being inactivatable, so choosing one created no registry row and nothing fired.
+    for (const type of EVENT_TRIGGER_TYPES) expect(isActivatableTriggerType(type)).toBe(true);
+    // `manual` stays out on purpose: it is only ever started by `POST .../run`.
     expect(isActivatableTriggerType('manual')).toBe(false);
-    expect(isActivatableTriggerType('form-submit')).toBe(false);
     expect(isActivatableTriggerType(undefined)).toBe(false);
+  });
+
+  it('classifies every event type as event-driven and no transport type as one', () => {
+    for (const type of EVENT_TRIGGER_TYPES) expect(isEventTriggerType(type)).toBe(true);
+    for (const type of ['schedule', 'webhook', 'rss', 'inbound-email', 'manual']) {
+      expect(isEventTriggerType(type)).toBe(false);
+    }
+  });
+
+  it('needs no token for an internal event — nothing addresses it from outside', () => {
+    for (const type of EVENT_TRIGGER_TYPES) expect(triggerNeedsToken(type)).toBe(false);
   });
 });
 

@@ -59,6 +59,8 @@ import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
 import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkflows';
 import { runQaExplorationSweep } from './application/qa/runQaExplorationSweep';
 import { runRepoActivitySweep } from './application/contributors/runRepoActivitySweep';
+import { runRepoDeliverySweep } from './application/repos/repoDelivery';
+import { runPublisherDomainSweep } from './application/developer/domainVerification';
 import { runDueReports } from './application/reports/runDueReports';
 import { dueSnapshots } from './application/reports/lensSnapshots';
 import { runDueCeremonies, runCeremonyReaper } from './application/ceremony/runDueCeremonies';
@@ -495,6 +497,24 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       await reapStaleExecutions(env);
       return null;
+    },
+  },
+  {
+    key: 'publisher-domains',
+    cadence: 'frequent',
+    description: 'Resolve outstanding publisher domain claims over DNS and promote the ones whose TXT record is live.',
+    run: async ({ env }) => {
+      const r = await runPublisherDomainSweep(env);
+      return r.pending > 0 ? `pending=${r.pending} verified=${r.verified} errors=${r.errors}` : null;
+    },
+  },
+  {
+    key: 'repo-delivery',
+    cadence: 'frequent',
+    description: 'Probe every connected repo (GitHub / GitLab / Bitbucket) for its build verdict + open pulls, so the dashboard reads them without calling a provider.',
+    run: async ({ env }) => {
+      const r = await runRepoDeliverySweep(env);
+      return r.probed > 0 || r.errors > 0 ? `due=${r.due} probed=${r.probed} errors=${r.errors}` : null;
     },
   },
   {

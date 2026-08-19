@@ -24,8 +24,10 @@ import {
   type TriggerSpec,
 } from '../../domain/workflowTriggers';
 import { nextCronTime, isValidCron } from '../../domain/workflowSchedule';
+import { bumpEventTriggerListeners } from './eventTriggers';
 import type { WorkflowDefinition } from '../../domain/workflowGraph';
 import type { RunTarget } from './instantiateRun';
+import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 export interface SyncTriggersParams {
@@ -34,6 +36,14 @@ export interface SyncTriggersParams {
   segmentId?: string | null;
   definition: WorkflowDefinition;
   target: RunTarget;
+  /**
+   * Worker env, when the caller has one. Re-arms the cached "is anyone listening
+   * for this event type?" gate that `fireEventTriggers` consults, so a trigger the
+   * user just published fires on the very next event instead of after a TTL.
+   * Invalidating HERE rather than at each call site is deliberate — this function
+   * is the single writer of the registry, so no caller can forget.
+   */
+  env?: Env;
 }
 
 /** Compute the initial activation state for one trigger row. */
@@ -83,7 +93,10 @@ export async function syncDefinitionTriggers(db: Db, params: SyncTriggersParams)
   // count is tiny (one per trigger node).
   await db.delete(workflowTriggers).where(eq(workflowTriggers.definitionId, params.definitionId));
 
-  if (specs.length === 0) return 0;
+  if (specs.length === 0) {
+    await bumpEventTriggerListeners(params.env, params.tenantId);
+    return 0;
+  }
 
   const now = new Date();
   await db.insert(workflowTriggers).values(
@@ -110,5 +123,6 @@ export async function syncDefinitionTriggers(db: Db, params: SyncTriggersParams)
     }),
   );
 
+  await bumpEventTriggerListeners(params.env, params.tenantId);
   return specs.length;
 }

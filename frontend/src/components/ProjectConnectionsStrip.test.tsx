@@ -19,6 +19,7 @@ const CONN = (over: Partial<ProjectConnection> = {}): ProjectConnection => ({
   buildUrl: null,
   buildBranch: null,
   buildAt: null,
+  buildProbedAt: null,
   lastSyncedAt: null,
   ...over,
 });

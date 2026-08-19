@@ -114,12 +114,27 @@ const chip = (tone: 'neutral' | 'good' | 'warn'): React.CSSProperties => ({
 
 type Tab = 'installed' | 'catalog' | 'publish';
 
+const TABS = ['installed', 'catalog', 'publish'] as const;
+
+/** `?tab=catalog` opens the portal on the catalogue.
+ *
+ *  The public `/integrations` page now lists published connectors and MCP servers
+ *  alongside our own ports, and its cards have to land somewhere. Without this the
+ *  link would drop a buyer on the "installed" tab and make them find the thing they
+ *  just clicked. Read from the URL rather than pushed through state so the link is a
+ *  plain href that also survives a refresh and a share. */
+function initialTab(): Tab {
+  if (typeof window === 'undefined') return 'installed';
+  const asked = new URLSearchParams(window.location.search).get('tab');
+  return (TABS as readonly string[]).includes(asked ?? '') ? (asked as Tab) : 'installed';
+}
+
 export function DeveloperPortalContent() {
   const t = useTranslations('developerPortal');
   const tc = useTranslations('common');
   const confirm = useConfirm();
 
-  const [tab, setTab] = useState<Tab>('installed');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [contract, setContract] = useState<ExtensionContract | null>(null);
   const [publisher, setPublisher] = useState<Publisher | null>(null);
   const [installs, setInstalls] = useState<ExtensionInstall[]>([]);
@@ -224,7 +239,7 @@ export function DeveloperPortalContent() {
         </header>
 
         <nav style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }} aria-label={t('tabs.label')}>
-          {(['installed', 'catalog', 'publish'] as const).map((key) => (
+          {TABS.map((key) => (
             <button
               key={key}
               type="button"

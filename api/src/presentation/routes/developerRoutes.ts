@@ -46,9 +46,11 @@ import type { Env, HonoEnv } from '../../env';
 import {
   becomePublisher,
   beginDomainVerification,
+  requirePublisher,
   publisherFor,
   PublisherError,
 } from '../../application/developer/publishers';
+import { verifyPublisherDomain } from '../../application/developer/domainVerification';
 import {
   EXTENSION_SCOPES,
   SUBMITTABLE_KINDS,
@@ -137,6 +139,27 @@ export function createDeveloperRoutes(db: Db): Hono<HonoEnv> {
         domain: body.domain ?? '',
       });
       return c.json({ challenge });
+    } catch (error) {
+      const { body: b, status } = fail(error);
+      return c.json(b, status);
+    }
+  });
+
+  /**
+   * POST /publisher/verify-domain/check — perform the DNS lookup NOW.
+   *
+   * The scheduled sweep gets there on its own, but a publisher who has just added
+   * the TXT record wants to know in the next few seconds, not the next few minutes.
+   * Same call the sweep makes, so the two can never disagree about what counts as
+   * verified. `manager` because it is the same authority that STARTED the claim.
+   */
+  router.post('/publisher/verify-domain/check', async (c) => {
+    const { userId, tenantId, env } = ctx(c);
+    if (!userId || !tenantId) return c.json({ error: 'Authentication required' }, 401);
+    try {
+      await requirePublisher(db, tenantId, userId, 'manager');
+      const result = await verifyPublisherDomain(db, env, tenantId);
+      return c.json(result);
     } catch (error) {
       const { body: b, status } = fail(error);
       return c.json(b, status);

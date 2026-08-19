@@ -136,6 +136,7 @@ export function createPublicFormRoutes(db: Db): Hono<HonoEnv> {
       // an anonymous form DISCARDS it inside the service, because the caller does
       // not get to decide that — the form does.
       respondentRef: (c.get('userId') as string | undefined) ?? null,
+      env: c.env as Env,
     });
     return Response.json(result);
   }));

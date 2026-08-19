@@ -16154,16 +16154,14 @@
         "closed": "已交割",
         "committed": "已承诺",
         "diligence": "尽职调查",
-        "meeting": "会议",
+        "meeting": "已约会议",
         "passed": "已放弃",
         "pitched": "已路演",
-        "proposal": "提案",
+        "proposal": "已报价",
         "sourced": "已发掘",
         "new": "新建",
         "contacted": "已联系",
         "qualified": "已确认需求",
-        "meeting": "已约会议",
-        "proposal": "已报价",
         "won": "成交",
         "lost": "流失"
       },
@@ -20352,6 +20350,7 @@
     "moreTitle": "还有 {count} 个连接 — 打开「集成」",
     "buildTitle": "{branch} 上的最新构建：{status}（{date}）",
     "buildAria": "{branch} 上的最新构建：{status}",
+    "buildChecked": "检查于 {date}",
     "openPrs": "{count, plural, other {# 个 PR}}",
     "openPrsTitle": "{count, plural, other {# 个待处理的拉取请求}}",
     "openPrsRecordedTitle": "由 Builderforce 创建的 {count, plural, other {# 个待处理拉取请求}}",
@@ -21750,6 +21749,7 @@
     "title": "将你的智能体团队连接到现有技术栈",
     "lede": "Builderforce.ai 把自托管、不绑定模型的 AI 智能体接入代码仓库、聊天渠道、模型服务商以及你已经在用的工具——每一次操作都有审批和审计记录。",
     "provenCategory": "已连接的服务",
+    "byPublisher": "由 {publisher} 提供",
     "category": {
       "work": "工作管理",
       "devtools": "开发者工具",
@@ -21778,7 +21778,8 @@
       "drive": "连接云盘，将其中的文件带入画布。",
       "mailbox": "连接邮箱以读取会话并从中发送邮件。",
       "ledger": "连接账簿，读取真实的支出、发票与余额。",
-      "payout": "将收入支付到此账户。"
+      "payout": "将收入支付到此账户。",
+      "extension": "由第三方开发者发布，可在开发者门户中安装。"
     }
   },
   "inboxApp": {

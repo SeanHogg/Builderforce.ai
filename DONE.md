@@ -1,3 +1,136 @@
+## ✅ RESOLVED 2026-08-19 — Four residuals closed: real Codex streaming, activatable board/marketing triggers, a swept build verdict, and a self-serve publisher domain
+
+Four Gap Register sections, worked end to end. Each had the same shape: a control the
+product OFFERED and a mechanism that did not exist behind it.
+
+### 1 · `callStream` faked streaming for both Responses vendors
+
+`openai-codex` and `xai-oauth` answered `callStream` by running the NON-streaming call to
+completion and replaying the finished answer as one synthetic `chat.completion.chunk`.
+Functionally correct, and it threw away the point of streaming: a reader waited for the
+whole generation before seeing a token. The Codex backend had been emitting real
+`response.output_text.delta` frames the entire time — we were buffering them and then
+pretending.
+
+`application/llm/vendors/responsesStream.ts` is the new third piece of the shared
+Responses path (beside `responsesApi` and `pseudoStream`): a frame-by-frame transform from
+Responses SSE to OpenAI chat SSE. It forwards `response.output_text.delta` as content
+chunks, opens a `tool_calls` slot on `response.output_item.added` and streams its arguments
+from `response.function_call_arguments.delta`, and closes with the finish_reason chunk, the
+usage-only chunk and `[DONE]` — byte-identical to the contract `pseudoStreamFromCall`
+already produced, so `readUsage` and the per-chunk `model` provenance are unchanged. Only
+the arrival time differs.
+
+- **Codex takes ZERO new risk**: `stream: true` is mandatory on that backend, so the
+  request is byte-identical either way. The fetch plus the auth/entitlement classification
+  moved into a shared `codexFetch` so the two surfaces cannot drift (they had drifted once).
+- **xAI asks for `stream: true` and falls back**: a 400/422 refusal returns to the
+  non-streamed call plus the one-shot replay. Streaming is a latency improvement, never a
+  new way to break a working Grok credential.
+- **In-band failures still cascade**: `peekResponsesStreamError` tees the body and inspects
+  the first chunk for `response.failed`, mirroring `executeChatCompletionStream`'s sniff, so
+  a 200-then-fail raises a retryable vendor error instead of an empty answer.
+
+### 2 · The Codex OAuth code race is now diagnosed by name
+
+Not fixed — the redirect URI is OpenAI's registration, not ours, so it stays on the
+register. What a code change CAN do is stop the failure being anonymous.
+`OPENAI_CODEX_CODE_CONSUMED` recognises the `invalid_grant` that a locally-running
+`codex login` produces when it eats the code off port 1455 first, and the route answers 400
+with its own code and a sentence naming the cause instead of a generic
+"token request failed (400)" 502. The connect copy now warns before the attempt, in all
+five catalogs.
+
+### 3 · Eight palette triggers that created no registry row
+
+`board-event`, `form-submit`, `page-view`, `signup`, `purchase`, `email-open`,
+`email-click` and `integration` rendered in the workflow builder and were excluded from
+`ACTIVATABLE_TRIGGER_TYPES`. A user could pick "task moved", wire a whole workflow to it,
+save, and see it listed as an active automation — with nothing registered and nothing able
+to fire it. There was no error to read: the feature did not exist behind a control that
+said it did.
+
+- **The matcher is data now.** Five hand-written filter comparisons became
+  `TRIGGER_FILTER_KEYS`, so a new trigger family is a list entry rather than a branch. A
+  match value may be a LIST of aliases — a form is addressable by slug or by id, an order
+  line by SKU or catalog-item id, and the author may reasonably have typed either.
+  `source` is deliberately NOT a filter: it is a free-text label on every trigger node, and
+  treating it as one would have silently stopped every existing trigger whose author typed
+  something into it.
+- **Every type has a real emitter.** `recordStatusTransition` owns `task-moved` and
+  `task-completed` (every completion path funnels through it — board drag, agent advance,
+  manager sweep, PR-merge webhook — so it cannot be true on one path and false on another);
+  `emitTaskActivity` owns `task-created`; `ObjectRegistry.addAnnotation` owns
+  `comment-added`; `submitFormResponse`, `siteServer.countRequest`, `requestSiteSignIn`,
+  `listingCommerce.grantListing`, `campaignEngine.recordOpen`/`recordClick`, and both the
+  payment and board webhook routes own the Growth six.
+- **A cached listener gate makes the hot paths free.** A page view happens on every hosted
+  site request and an open pixel on every campaign mail read; a query per event would be
+  indefensible and the answer is almost always "nobody is listening".
+  `hasEventTriggerListeners` answers that from the read-through cache keyed by
+  (tenant, type), so an unsubscribed event costs no round-trip at all.
+  `syncDefinitionTriggers` — the single writer of the registry — re-arms it, so a newly
+  published trigger fires on the very next event rather than after a TTL.
+- **`check:trigger-palette` is the 24th guard.** It parses both lists as text and fails the
+  build on either direction of drift: a palette option the runtime cannot fire, or an
+  activatable type no user can select. This defect shipped because nothing compared them.
+
+### 4 · Build status is swept, not probed on the read path
+
+`buildProjectConnections` called the provider while composing a dashboard read, and two
+cohorts could only ever show `unknown`: GitLab/Bitbucket repos (no reader existed) and
+every repo past `LIVE_PROBE_BUDGET = 20`. Both degraded honestly; neither showed the truth,
+and no tuning at read time could — the honest fix is to stop asking providers on the read
+path.
+
+`repo_delivery_status` (migration 0931) persists one verdict per repo, written by
+`runRepoDeliverySweep` on the frequent tick. Keyed on the REPO, not `(repo, branch)`:
+`open_pull_requests` is a repository fact, and keying it by branch would make it depend on
+part of the key only. `build_branch` records which branch the verdict came from.
+
+With no provider call on the read path there is no budget left to protect, which is what
+made the other providers affordable — one fix for both defects. `repoDelivery.ts` reads
+GitHub (pulls + Actions), GitLab (merge requests via `X-Total` + pipelines) and Bitbucket
+(pull requests + Pipelines) through a provider-to-reader MAP, so a fourth provider is one
+entry. Ordering is `probed_at asc nulls first`, so a repo past the per-tick cap is next in
+the rotation rather than degraded. Attaching a repo re-probes it immediately, so the first
+thing an operator sees is an answer. The card now says when the verdict was read
+(`buildChecked`), because a swept answer can be stale and saying so is the alternative to
+letting a five-minute-old green read as live.
+
+### 5 · A publisher domain claim that nobody looked up
+
+`beginDomainVerification` had always issued the TXT challenge. Nothing ever resolved it —
+promotion past `unverified` was an operator calling `setPublisherState`, so a vendor who
+had done exactly what they were asked sat unverified until a human noticed.
+
+`domainVerification.ts` resolves the record over DNS-over-HTTPS (no binding, no
+credential), normalising the quoted, possibly-split TXT strings before comparing.
+`runPublisherDomainSweep` promotes every live claim on the frequent tick, and
+`POST /developer/publisher/verify-domain/check` is the same call for a publisher who wants
+the answer now. It makes exactly one transition — `unverified` to `domain_verified` — and
+never demotes: a resolver hiccup must not be able to unpublish somebody's extensions.
+`lookup_failed` and `not_found` stay different answers for the same reason.
+
+### 6 · The public integrations page shows the ecosystem
+
+`/integrations` projected six of our own ports and nothing else, so shipping a vendor
+extension changed the product and not the page — the exact defect `integrationCatalog` was
+built to end, one layer out. `buildIntegrationCatalog` merges the static first-party core
+with every LISTED `connector` / `mcp_server` package, through `listPublicCatalog`'s
+existing cache (which a publish, delist or suspension already invalidates — a second cache
+here would be a second thing to forget). A package that extends a system we already
+implement merges onto OUR card and never gives it a publisher badge it did not earn.
+`direction` is derived from whether the manifest proves a non-GET action, never from the
+name — the same test our own connectors face, applied to untrusted input.
+
+**Verified:** the 24-guard chain (the three failures in the working tree are pre-existing
+work this pass did not touch), `tsc --noEmit` clean in `api` and `frontend`, and the
+affected suites green. New tests cover the SSE transform frame by frame — including that a
+delta is forwarded before the upstream finishes — the generalised matcher and the listener
+gate, all three delivery readers, and the composer reading a swept verdict with no provider
+call.
+
 ## ✅ RESOLVED 2026-08-19 — The escrow gate was reading a signal it should never have had
 
 Follow-up to the milestones + escrow slice landed earlier the same day. Three guard

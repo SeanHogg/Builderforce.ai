@@ -16162,8 +16162,6 @@
         "new": "New",
         "contacted": "Contacted",
         "qualified": "Qualified",
-        "meeting": "Meeting",
-        "proposal": "Proposal",
         "won": "Won",
         "lost": "Lost"
       },
@@ -20352,6 +20350,7 @@
     "moreTitle": "{count} more connection(s) — open Integrations",
     "buildTitle": "Latest build on {branch}: {status} ({date})",
     "buildAria": "Latest build on {branch}: {status}",
+    "buildChecked": "Checked {date}",
     "openPrs": "{count, plural, one {# PR} other {# PRs}}",
     "openPrsTitle": "{count, plural, one {# open pull request} other {# open pull requests}}",
     "openPrsRecordedTitle": "{count, plural, one {# open pull request} other {# open pull requests}} opened by Builderforce",
@@ -21750,6 +21749,7 @@
     "title": "Connect your agent workforce to your stack",
     "lede": "Builderforce.ai plugs your self-hosted, model-agnostic AI agents into source control, chat channels, model providers and the tools you already use — every action governed by approvals and an audit trail.",
     "provenCategory": "Connected services",
+    "byPublisher": "by {publisher}",
     "category": {
       "work": "Work management",
       "devtools": "Developer tools",
@@ -21778,7 +21778,8 @@
       "drive": "Connect the drive and bring its files onto the canvas.",
       "mailbox": "Connect the mailbox to read threads and send from it.",
       "ledger": "Connect the books to read real expenses, invoices and balances.",
-      "payout": "Send earnings to this destination."
+      "payout": "Send earnings to this destination.",
+      "extension": "Published by a third-party developer and installable from the Developer Portal."
     }
   },
   "inboxApp": {

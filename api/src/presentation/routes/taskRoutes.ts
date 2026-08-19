@@ -19,6 +19,7 @@ import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest
 import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskPrd';
 import { recordStatusTransition } from '../../application/task/taskLifecycle';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import { fireEventTriggers } from '../../application/workflow/eventTriggers';
 import { buildTicketLifecycle } from '../../application/activity/ticketLifecycleLedger';
 import { buildTicketContext } from '../../application/task/ticketContext';
 import { pmoVersionKey } from './pmoRoutes';
@@ -205,6 +206,21 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     o: { taskId: number; projectId?: number | null; title?: string | null; summary?: string | null; metadata?: Record<string, unknown> | null },
   ): void => {
     c.executionCtx.waitUntil((async () => {
+      // Ticket events that a `board-event` workflow trigger can listen for. A map,
+      // not a branch, so a new board event is one entry here. `task-moved` and
+      // `task-completed` are deliberately ABSENT: recordStatusTransition owns those
+      // (it is the single path every lane move funnels through), and firing them
+      // here too would run a matching workflow twice per move.
+      const boardEvent = ({ 'task.created': 'task-created' } as Record<string, string>)[verb];
+      if (boardEvent) {
+        await fireEventTriggers(db, {
+          tenantId: c.get('tenantId'),
+          env: c.env as Env,
+          eventType: 'board-event',
+          payload: { taskId: o.taskId, projectId: o.projectId ?? null, title: o.title ?? null },
+          match: { boardEvent },
+        });
+      }
       const actor = await resolveActorFromContext(c.env as Env, db, c);
       await recordActivity(c.env as Env, db, {
         tenantId:   c.get('tenantId'),

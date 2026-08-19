@@ -26,6 +26,7 @@ export default [
   ['check:pinned-defects', 'check-pinned-defects.mjs'],
   ['check:prompt-tools', 'check-prompt-tool-names.mjs'],
   ['check:canvas-tools', 'check-canvas-tool-contract.mjs'],
+  ['check:trigger-palette', 'check-trigger-palette-parity.mjs'],
   ['check:no-burnrate-runtime', 'check-no-burnrate-runtime.mjs'],
   ['check:burnrate-policy', 'check-burnrate-cutover-policy.mjs'],
   ['audit:burnrate-cutover', 'audit-burnrate-cutover.mjs', '--validate-only'],

@@ -122,6 +122,7 @@ export async function createWorkflowDefinition(
     segmentId: args.segmentId,
     definition: args.definition,
     target: runTargetFromDefinition(args.target),
+    env,
   });
 
   await invalidateCached(env, workflowDefinitionListCacheKey(args.tenantId));

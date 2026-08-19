@@ -383,7 +383,7 @@ export function createCampaignTrackRoutes(db: Db): Hono<HonoEnv> {
 
   router.get('/open/:token{.+\\.gif}', async (c) => {
     const token = c.req.param('token').replace(/\.gif$/i, '');
-    await recordOpen(db, token).catch(() => undefined);
+    await recordOpen(db, token, c.env as Env).catch(() => undefined);
     return new Response(TRACKING_PIXEL, {
       headers: {
         'content-type': 'image/gif',
@@ -395,7 +395,7 @@ export function createCampaignTrackRoutes(db: Db): Hono<HonoEnv> {
 
   router.get('/click/:token', async (c) => {
     const target = c.req.query('u') ?? '';
-    const destination = await recordClick(db, c.req.param('token'), target).catch(() => null);
+    const destination = await recordClick(db, c.req.param('token'), target, c.env as Env).catch(() => null);
     // An unresolvable destination must not become an open redirect — fall back
     // to our own origin rather than trusting the query string.
     if (!destination) return c.redirect(resolveTrackingOrigin(c.env), 302);

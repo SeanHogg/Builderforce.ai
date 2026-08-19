@@ -42,6 +42,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import { formRecipients, questionSets, responses } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hashShareToken, mintShareToken } from '../security/shareToken';
+import { fireEventTriggers } from '../workflow/eventTriggers';
+import type { Env } from '../../env';
 
 /** The `question_sets.kind` a canvas `form` object projects to. A kind is a
  *  column value — see the table's own note. */
@@ -477,6 +479,10 @@ export interface SubmitFormInput {
   respondentRef?: string | null;
   /** What was true at the moment of submission, for the audit the caller keeps. */
   submittedAt?: Date;
+  /** Worker env, when the caller has one. Lets the accepted submission fire any
+   *  `form-submit` workflow trigger the workspace published (and lets that
+   *  dispatch use its cached listener gate). Omitting it simply skips the fan-out. */
+  env?: Env;
 }
 
 /**
@@ -551,6 +557,18 @@ export async function submitFormResponse(
       // the responder has no session to assert one with.
       .where(scopedToTenant(formRecipients, resolved.tenantId, eq(formRecipients.id, resolved.recipient.id)));
   }
+
+  // A `form-submit` workflow trigger fires on the ACCEPTED submission — after every
+  // audience/required/closed rule above, so a refused post never starts a workflow.
+  // Both the public slug and the set id are offered as aliases because the builder's
+  // "Form id" field could honestly hold either.
+  await fireEventTriggers(db, {
+    tenantId: resolved.tenantId,
+    env: input.env,
+    eventType: 'form-submit',
+    payload: { submissionId, questionSetId: resolved.questionSetId, slug: form.slug, title: form.title, respondentRef },
+    match: { formId: [form.slug, resolved.questionSetId] },
+  }).catch(() => undefined);
 
   return { submissionId, confirmationMessage: form.confirmationMessage };
 }

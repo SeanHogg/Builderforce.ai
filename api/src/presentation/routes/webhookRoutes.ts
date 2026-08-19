@@ -21,6 +21,7 @@ import { recordReferralConversion } from '../../application/sales/recordReferral
 import { recordBusinessPhoneEvent } from '../../application/tenant/businessPhoneSubscription';
 import { completeListingCheckout } from '../../application/marketplace/listingCommerce';
 import { settleInvoiceCheckout } from '../../application/finance/receivables';
+import { fireEventTriggers } from '../../application/workflow/eventTriggers';
 
 export function createWebhookRoutes(
   tenantService: TenantService,
@@ -53,6 +54,23 @@ export function createWebhookRoutes(
     if (!event) {
       // Provider returned null — unhandled event type, acknowledge without processing
       return c.json({ received: true, processed: false });
+    }
+
+    // An `integration` workflow trigger fires on ANY verified provider event that
+    // names a tenant — this is the generic "something happened at a connected
+    // integration" seam the builder's `integration` trigger addresses by event name
+    // (the palette's own example is `invoice.paid`). Fired before the per-type
+    // handling below, and best-effort, so a subscriber's workflow can never delay or
+    // fail the provider's delivery. `processed` still reflects OUR handling, not the
+    // fan-out.
+    if (event.tenantId) {
+      await fireEventTriggers(buildDatabase(c.env as Env), {
+        tenantId: event.tenantId,
+        env: c.env as Env,
+        eventType: 'integration',
+        payload: { provider: 'payment', event: event.type, externalCustomerId: event.externalCustomerId ?? null, billingEmail: event.billingEmail ?? null },
+        match: { integrationEvent: event.type },
+      }).catch(() => undefined);
     }
 
     // Card-validation events are NOT subscription state — they only stamp the

@@ -10,27 +10,32 @@
  * Mounted BEFORE the authenticated `/api/integrations` router so the literal
  * `catalog` segment answers before `/:id` can claim it.
  *
- * Uncached on purpose: the handler serialises a module constant built at load
- * time. There is no DB round-trip and no external call to amortise, so a cache
- * would add a KV round-trip to a synchronous read — the same reason
- * `GET /api/tools` is uncached.
+ * No cache of its own. The first-party core is a module constant built at load
+ * time, and the published-package half is served through `listPublicCatalog`'s
+ * existing read-through cache — which a publish, delist or suspension already
+ * invalidates. A second cache here would be a second thing to invalidate, and the
+ * one most likely to be forgotten.
  */
 
 import { Hono } from 'hono';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
+import type { Db } from '../../infrastructure/database/connection';
 import {
   INTEGRATION_CATEGORIES,
+  buildIntegrationCatalog,
   integrationCatalogByCategory,
 } from '../../application/integrations/integrationCatalog';
 
-export function createIntegrationCatalogRoutes(): Hono<HonoEnv> {
+export function createIntegrationCatalogRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  router.get('/', (c) =>
+  router.get('/', async (c) =>
     c.json({
       // Grouped rather than flat: the category order IS the page's section order,
       // and a page that re-derived it would be free to disagree with the product.
-      groups: integrationCatalogByCategory(),
+      // Entries now include every LISTED published connector / MCP server, so the
+      // page shows the ecosystem rather than only the ports we wrote ourselves.
+      groups: integrationCatalogByCategory(await buildIntegrationCatalog(db, c.env as Env)),
       categories: INTEGRATION_CATEGORIES,
     }));
 

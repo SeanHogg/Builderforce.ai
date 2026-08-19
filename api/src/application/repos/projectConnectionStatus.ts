@@ -10,52 +10,42 @@
  * composes that answer once, for every project in a tenant, so the card and the
  * list row render the same status without an N+1 per-card fetch.
  *
- * WHAT IS LIVE AND WHAT IS RECORDED
- * - Build status + open-PR count for a GitHub repo are read LIVE from the
- *   provider (Actions runs + open pulls), because the recorded `pull_requests`
- *   rows only ever describe PRs Builderforce itself opened — a repo whose CI
- *   runs on `main` would otherwise look like it had never built.
- * - Everything else (which connections exist, board sync health, last sync time)
- *   is DB-derived and needs no provider round-trip.
- * - When the live probe cannot run (no credential, non-GitHub provider, probe
- *   budget spent) the entry falls back to the RECORDED open-PR count and reports
- *   `health: 'unknown'` rather than inventing a green tick.
+ * WHAT IS PROBED AND WHAT IS DB-DERIVED — AND WHY NOTHING IS PROBED HERE
+ * Build status + open pulls come from `repo_delivery_status`, a table a scheduled
+ * sweep (`repos/repoDelivery.ts` → `runRepoDeliverySweep`) keeps current for EVERY
+ * provider. This composer used to call the provider itself, and that produced two
+ * cohorts of permanent `unknown`: GitLab/Bitbucket repos, for which no reader
+ * existed, and every repo past a per-composition subrequest budget. Moving the
+ * conversation off the read path removed the budget's reason to exist, which is
+ * what made the other providers affordable — one fix for both.
+ *
+ * Everything else (which connections exist, board sync health, last sync time) is
+ * DB-derived and always was. A repo the sweep has not reached yet reports
+ * `unknown` with `not_probed` and falls back to the Builderforce-recorded PR
+ * count, exactly as before — never a green tick it cannot justify.
  *
  * COST
- * Two grouped DB queries + one cached probe per GitHub repo. Each probe is
- * itself read-through cached (`repo-delivery:*`, 60s KV / 30s L1) and the whole
- * composed payload is cached per tenant by the route, so the steady state for a
- * dashboard load is zero provider subrequests. {@link LIVE_PROBE_BUDGET} caps a
- * cold read so a tenant with many repos cannot exhaust the Worker's subrequest
- * allowance; default repos are probed first.
+ * Three grouped DB queries, ZERO provider subrequests, however many repos the
+ * tenant has. The composed payload is still cached per tenant by the route.
  */
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { boardConnections, projectRepositories, pullRequests } from '../../infrastructure/database/schema';
-import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { githubRequest, repoPath, resolveRepoAuth } from './githubClient';
+import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { loadRepoDelivery, refreshRepoDelivery } from './repoDelivery';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
-/** Max GitHub repos probed live in one composition. Defaults are probed first. */
-const LIVE_PROBE_BUDGET = 20;
-
 export type ProjectConnectionKind = 'source_control' | 'board';
 
-/** ok = reachable/syncing · degraded = syncing with errors · error = broken · unknown = not probed. */
-export type ProjectConnectionHealth = 'ok' | 'degraded' | 'error' | 'unknown';
-
-/** Machine reason for a non-ok health. The frontend owns the localized wording. */
-export type ProjectConnectionReason =
-  | 'no_credential'
-  | 'unauthorized'
-  | 'not_found'
-  | 'rate_limited'
-  | 'provider_error'
-  | 'disabled'
-  | 'not_probed'
-  | null;
-
-export type ProjectBuildStatus = 'success' | 'failure' | 'pending' | 'cancelled' | null;
+// The health / reason / build vocabularies are declared ONCE, beside the probe
+// that produces them, and re-exported here so every existing consumer of this
+// module's types keeps working without a second definition to drift from.
+export type {
+  ProjectConnectionHealth,
+  ProjectConnectionReason,
+  ProjectBuildStatus,
+} from './repoDelivery';
+import type { ProjectConnectionHealth, ProjectConnectionReason, ProjectBuildStatus } from './repoDelivery';
 
 export interface ProjectConnection {
   kind: ProjectConnectionKind;
@@ -80,6 +70,9 @@ export interface ProjectConnection {
   buildBranch: string | null;
   /** ISO timestamp of that run. */
   buildAt: string | null;
+  /** When the delivery sweep last reached this repo's provider. Null = never. The
+   *  verdict's AGE, so a stale one can be shown as stale rather than as fresh. */
+  buildProbedAt: string | null;
   /** ISO timestamp of the last successful sync/poll, when the connection tracks one. */
   lastSyncedAt: string | null;
 }
@@ -89,158 +82,23 @@ export interface ProjectConnectionsSummary {
   connections: ProjectConnection[];
 }
 
-/** Read-through cache key for one repo's live delivery signals. */
-function repoDeliveryKey(tenantId: number, repoId: string): string {
-  return `repo-delivery:t:${tenantId}:r:${repoId}`;
-}
-
 /** Read-through cache key for a tenant's composed project-connections payload. */
 export function projectConnectionsKey(tenantId: number): string {
   return `project-connections:t:${tenantId}`;
 }
 
 /**
- * Drop a tenant's composed connections payload AND the per-repo probe behind it.
- * Called from every repo/board write so attaching a repo shows up immediately
- * instead of after the 60s TTL. `repoId` is optional — omit it for board writes.
- */
-export async function invalidateProjectConnections(env: Env, tenantId: number, repoId?: string): Promise<void> {
-  await Promise.all([
-    invalidateCached(env, projectConnectionsKey(tenantId)),
-    ...(repoId ? [invalidateCached(env, repoDeliveryKey(tenantId, repoId))] : []),
-  ]);
-}
-
-interface GithubRun {
-  status: string | null;
-  conclusion: string | null;
-  html_url: string | null;
-  head_branch: string | null;
-  updated_at: string | null;
-}
-
-/**
- * Map a GitHub Actions run to the four-state verdict the UI renders. A run that
- * has not completed is `pending`; `neutral`/`skipped` are green because they are
- * how a workflow says "nothing to do here", not "this broke".
- */
-function runToBuildStatus(run: GithubRun | undefined): ProjectBuildStatus {
-  if (!run) return null;
-  if (run.status !== 'completed') return 'pending';
-  switch (run.conclusion) {
-    case 'success':
-    case 'neutral':
-    case 'skipped':
-      return 'success';
-    case 'cancelled':
-      return 'cancelled';
-    case null:
-    case undefined:
-      return 'pending';
-    default:
-      return 'failure';
-  }
-}
-
-/**
- * Exact result count from a `per_page=1` listing: with one item per page the
- * `rel="last"` page number IS the total. Falls back to the page length when the
- * response is a single page (GitHub omits `Link` entirely in that case).
- */
-function totalFromLinkHeader(headers: Headers, itemsOnPage: number): number {
-  const link = headers.get('link');
-  if (!link) return itemsOnPage;
-  const last = /[?&]page=(\d+)[^>]*>;\s*rel="last"/.exec(link);
-  return last ? Number(last[1]) : itemsOnPage;
-}
-
-interface RepoDeliveryProbe {
-  health: ProjectConnectionHealth;
-  reason: ProjectConnectionReason;
-  openPullRequests: number | null;
-  buildStatus: ProjectBuildStatus;
-  buildUrl: string | null;
-  buildBranch: string | null;
-  buildAt: string | null;
-}
-
-/**
- * Live delivery signals for ONE GitHub repo: is it reachable, how many pulls are
- * open, and what did its most recent workflow run conclude. Two subrequests,
- * cached together so a widget refresh costs nothing.
+ * Drop a tenant's composed connections payload, and re-probe the repo that changed.
  *
- * Only GitHub is probed. GitLab/Bitbucket repos are perfectly usable — they just
- * have no equivalent single call here yet — so they report `unknown` rather than
- * a false failure.
+ * Called from every repo/board write so attaching a repo shows up immediately. The
+ * re-probe is what makes a NEWLY attached repo show a real verdict now rather than
+ * `unknown` until the sweep's next tick — the read path no longer probes anything,
+ * so without it the first thing an operator sees after connecting a repo would be
+ * the absence of an answer. `repoId` is optional: omit it for board writes.
  */
-async function probeRepoDelivery(
-  env: Env,
-  db: Db,
-  secret: string,
-  tenantId: number,
-  repoId: string,
-): Promise<RepoDeliveryProbe> {
-  return getOrSetCached<RepoDeliveryProbe>(
-    env,
-    repoDeliveryKey(tenantId, repoId),
-    async () => {
-      const auth = await resolveRepoAuth(env, db, secret, tenantId, repoId);
-      if (!auth.ok) {
-        return {
-          health: 'error', reason: 'no_credential', openPullRequests: null,
-          buildStatus: null, buildUrl: null, buildBranch: null, buildAt: null,
-        };
-      }
-      if (auth.auth.repo.provider !== 'github') {
-        return {
-          health: 'unknown', reason: 'not_probed', openPullRequests: null,
-          buildStatus: null, buildUrl: null, buildBranch: null, buildAt: null,
-        };
-      }
-
-      const { coords, token } = auth.auth;
-      const branch = auth.auth.repo.defaultBranch?.trim();
-      const [pulls, runs] = await Promise.all([
-        githubRequest<Array<unknown>>({
-          coords, token,
-          path: repoPath(coords, '/pulls?state=open&per_page=1'),
-        }),
-        githubRequest<{ total_count?: number; workflow_runs?: GithubRun[] }>({
-          coords, token,
-          path: repoPath(
-            coords,
-            `/actions/runs?per_page=1&exclude_pull_requests=true${branch ? `&branch=${encodeURIComponent(branch)}` : ''}`,
-          ),
-        }),
-      ]);
-
-      // The pulls listing is the liveness probe: it exists on every repo, so a
-      // failure there is a real access problem. The Actions listing can 404 on a
-      // repo with Actions disabled, which is not a connection fault.
-      if (!pulls.ok) {
-        return {
-          health: 'error', reason: pulls.code === 'unsupported' ? 'provider_error' : pulls.code,
-          openPullRequests: null,
-          buildStatus: null, buildUrl: null, buildBranch: null, buildAt: null,
-        };
-      }
-
-      const run = runs.ok ? runs.data.workflow_runs?.[0] : undefined;
-      return {
-        health: 'ok',
-        reason: null,
-        openPullRequests: totalFromLinkHeader(pulls.headers, pulls.data.length),
-        buildStatus: runToBuildStatus(run),
-        buildUrl: run?.html_url ?? null,
-        buildBranch: run?.head_branch ?? branch ?? null,
-        buildAt: run?.updated_at ?? null,
-      };
-    },
-    { kvTtlSeconds: 60, l1TtlMs: 30_000 },
-  ).catch(() => ({
-    health: 'unknown' as const, reason: 'provider_error' as const, openPullRequests: null,
-    buildStatus: null, buildUrl: null, buildBranch: null, buildAt: null,
-  }));
+export async function invalidateProjectConnections(env: Env, tenantId: number, repoId?: string, db?: Db): Promise<void> {
+  await invalidateCached(env, projectConnectionsKey(tenantId));
+  if (repoId && db) await refreshRepoDelivery(env, db, tenantId, repoId).catch(() => undefined);
 }
 
 /** Browser URL for a repo, so the status chip can link somewhere useful. */
@@ -270,8 +128,6 @@ export async function buildProjectConnections(
   db: Db,
   tenantId: number,
 ): Promise<ProjectConnectionsSummary[]> {
-  const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
-
   const [repos, boards] = await Promise.all([
     db
       .select({
@@ -322,14 +178,9 @@ export async function buildProjectConnections(
     recordedOpen.filter((r) => r.repoId != null).map((r) => [r.repoId as string, Number(r.open)]),
   );
 
-  // Live probes, budget-capped. `repos` is already ordered defaults-first, so the
-  // repo agents actually dispatch against is the one that always gets probed.
-  const probable = repos.filter((r) => r.provider === 'github').slice(0, LIVE_PROBE_BUDGET);
-  const probes = new Map<string, RepoDeliveryProbe>(
-    await Promise.all(
-      probable.map(async (r) => [r.id, await probeRepoDelivery(env, db, secret, tenantId, r.id)] as const),
-    ),
-  );
+  // The sweep's persisted verdicts — one query for the whole tenant, no provider
+  // calls, no per-repo budget. A repo the sweep has not reached yet is simply absent.
+  const probes = await loadRepoDelivery(db, tenantId);
 
   const byProject = new Map<number, ProjectConnection[]>();
   const push = (projectId: number, conn: ProjectConnection) => {
@@ -358,6 +209,7 @@ export async function buildProjectConnections(
       buildUrl: probe?.buildUrl ?? null,
       buildBranch: probe?.buildBranch ?? null,
       buildAt: probe?.buildAt ?? null,
+      buildProbedAt: probe?.probedAt ?? null,
       lastSyncedAt: toIso(r.lastSyncedAt),
     });
   }
@@ -378,6 +230,7 @@ export async function buildProjectConnections(
       buildUrl: null,
       buildBranch: null,
       buildAt: null,
+      buildProbedAt: null,
       lastSyncedAt: toIso(b.lastPolledAt),
     });
   }

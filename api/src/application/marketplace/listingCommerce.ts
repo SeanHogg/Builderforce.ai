@@ -44,6 +44,7 @@ import { verifyJwt } from '../../infrastructure/auth/JwtService';
 import { buildPaymentProvider } from '../../infrastructure/payment';
 import { acrossTenants } from '../../infrastructure/database/tenantScope';
 import { registerObject } from '../kernel/ObjectRegistry';
+import { fireEventTriggers } from '../workflow/eventTriggers';
 import { PayoutAccountService } from '../payouts/PayoutAccountService';
 import { ListingError, invalidateListingCaches, recordInstall } from './creationListings';
 import { chargeAllHostedAppMaintenance, sellerMaintenanceCostCents } from './appMaintenanceCost';
@@ -387,6 +388,23 @@ async function grantListing(
   }
 
   await recordInstall(db, env, listing.id);
+
+  // A completed acquisition IS the `purchase` event a workflow can react to
+  // ("somebody bought the onboarding template → send them the welcome sequence").
+  // Fired after the licence and the seller credit, so a workflow that reads the
+  // order finds a settled one. The listing's slug and its catalog-item id are both
+  // offered as aliases for the builder's "Product / SKU" filter.
+  await fireEventTriggers(db, {
+    tenantId: input.tenantId, env,
+    eventType: 'purchase',
+    payload: {
+      orderId: order.id, orderNumber, licenseId: licence.id,
+      listingSlug: listing.slug, listingName: listing.name,
+      priceCents, currency: listing.currency ?? 'USD',
+      buyerRef: input.buyerRef, buyerEmail: input.buyerEmail ?? null,
+    },
+    match: { sku: [listing.slug, listing.id] },
+  }).catch(() => undefined);
 
   return {
     orderId: order.id,

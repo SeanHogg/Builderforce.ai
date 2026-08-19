@@ -861,6 +861,20 @@ export const swimlanes = pgTable('swimlanes', {
   position:      integer('position').notNull().default(0),
   isTerminal:    boolean('is_terminal').notNull().default(false),
   gate:          varchar('gate', { length: 16 }).notNull().default('auto'),              // 'auto' | 'human'
+  /**
+   * Whether {@link swimlanes.gate} was SEEDED by a board template or CHOSEN by a
+   * person: 'seed' | 'operator' (migration 0931).
+   *
+   * It exists because migration 0369 needed exactly this and did not have it. It
+   * had to flip every seeded `in_review` human gate to `auto` — the default was
+   * switching autonomy off one lane short of Done on every board — and with no
+   * provenance on the row it could not spare the teams who had deliberately chosen
+   * that gate. A value alone cannot answer "did anyone decide this?".
+   *
+   * Written 'operator' by the board-configuration API whenever a person changes
+   * the gate, so the NEXT default change can leave explicit choices alone.
+   */
+  gateSource:    varchar('gate_source', { length: 16 }).notNull().default('seed'),        // 'seed' | 'operator'
   executionMode: varchar('execution_mode', { length: 16 }).notNull().default('sequential'), // 'parallel' | 'sequential'
   failurePolicy: varchar('failure_policy', { length: 24 }).notNull().default('needs_attention'), // 'needs_attention' | 'retry' | 'skip'
   // Lane action fired once the stage settles per successPolicy (migration 0084).
@@ -1234,6 +1248,45 @@ export const projectRepositories = pgTable('project_repositories', {
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
   // UNIQUE (project_id, provider, owner, repo) enforced in migration 0067.
 });
+
+
+/**
+ * repo_delivery_status (migration 0931) — the LATEST delivery verdict for one
+ * connected repository, written by a scheduled sweep and read by the dashboard.
+ *
+ * This exists so `buildProjectConnections` can answer "is the build green" without
+ * calling a provider on the read path. While it probed live, two cohorts could only
+ * ever show `unknown`: non-GitHub repos (no reader existed) and every repo past the
+ * per-composition subrequest budget. Persisting the verdict removes the budget's
+ * reason to exist, which is what lets every provider be probed.
+ *
+ * Keyed on the REPO, not on (repo, branch): `openPullRequests` is a repository fact,
+ * and keying it by branch would make it depend on part of the key only. `buildBranch`
+ * records which branch the verdict came from (the repo's default). Single writer:
+ * `runRepoDeliverySweep`.
+ */
+export const repoDeliveryStatus = pgTable('repo_delivery_status', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  repoId:        uuid('repo_id').notNull().references(() => projectRepositories.id, { onDelete: 'cascade' }),
+  /** Shares the ProjectConnectionHealth vocabulary — the application layer owns it. */
+  health:        varchar('health', { length: 16 }).notNull().default('unknown'),
+  reason:        varchar('reason', { length: 32 }),
+  openPullRequests: integer('open_pull_requests'),
+  buildStatus:   varchar('build_status', { length: 16 }),
+  buildUrl:      varchar('build_url', { length: 500 }),
+  buildBranch:   varchar('build_branch', { length: 255 }),
+  buildAt:       timestamp('build_at'),
+  /** Last time the sweep reached the provider — the verdict's age, so a stale row
+   *  can be shown as stale instead of as absent. */
+  probedAt:      timestamp('probed_at').notNull().defaultNow(),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_repo_delivery_repo').on(t.repoId),
+  index('idx_repo_delivery_tenant').on(t.tenantId),
+  index('idx_repo_delivery_probed_at').on(t.probedAt),
+]);
 
 
 /**
@@ -2817,13 +2870,36 @@ export const errorCollectors = pgTable('error_collectors', {
   /** NULL = tenant-level collector (routes via mapping rules); set = project collector. */
   projectId:        integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   name:             varchar('name', { length: 255 }).notNull(),
-  /** SHA-256 of the bfq_* ingest key (raw key shown once at creation). */
+  /** SHA-256 of the bfq_* ingest key (raw key shown once at creation/rotation). */
   keyHash:          varchar('key_hash', { length: 64 }).unique(),
+  /**
+   * The PREVIOUS key's hash, still accepted until {@link previousKeyExpiresAt}.
+   *
+   * An ingest key lives inside already-deployed software — a browser bundle, a
+   * container image, an OTLP exporter config — so a rotation that took effect
+   * instantly would drop every event from every one of those until it redeploys.
+   * The grace window is the whole point of the column: rotate, redeploy at your
+   * own pace, and the old key stops working on its own. No sweep expires it; the
+   * resolver's predicate does (see `resolveCollectorByKey`).
+   */
+  previousKeyHash:  varchar('previous_key_hash', { length: 64 }),
+  previousKeyExpiresAt: timestamp('previous_key_expires_at'),
+  keyRotatedAt:     timestamp('key_rotated_at'),
   /** Fallback project for a tenant-level collector when no mapping rule matches. */
   defaultProjectId: integer('default_project_id').references(() => projects.id, { onDelete: 'set null' }),
   enabled:          boolean('enabled').notNull().default(true),
   status:           varchar('status', { length: 16 }).notNull().default('active'),
   lastEventAt:      timestamp('last_event_at'),
+  /**
+   * Events this collector RECEIVED and discarded because nothing routes them —
+   * no mapping rule matched and no `default_project_id` is set. Separated from
+   * the ingest engine's generic `dropped` (which also counts an event that threw
+   * mid-upsert) because this one names a configuration the operator can fix, and
+   * because a silently-discarding collector is otherwise indistinguishable from
+   * a quiet one on every surface.
+   */
+  unmappedEventCount: integer('unmapped_event_count').notNull().default(0),
+  lastUnmappedAt:   timestamp('last_unmapped_at'),
   createdBy:        varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
   updatedAt:        timestamp('updated_at').notNull().defaultNow(),

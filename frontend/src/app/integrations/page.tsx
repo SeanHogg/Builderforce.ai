@@ -7,7 +7,7 @@ import {
 import { pageMetadata } from '@/lib/seo';
 import { breadcrumbSchema } from '@/lib/structured-data';
 import { INTEGRATION_CAPABILITY_PROOF } from '@/lib/content';
-import { getIntegrationCatalog, leafPageFor } from '@/lib/integrationCatalog';
+import { getIntegrationCatalog, leafPageFor, listingPageFor } from '@/lib/integrationCatalog';
 
 export const runtime = 'edge';
 
@@ -75,13 +75,18 @@ export default async function IntegrationsIndexPage() {
                   // A curated leaf page gets the link and the written tagline; a
                   // registry-only entry states what the connection DOES, which is
                   // the honest card for a system nobody has written a page for yet.
+                  // A PUBLISHED package has neither — it links to the portal where it
+                  // can be installed, and says who ships it, because "by Acme" and
+                  // "built in" are different answers to the buyer's actual question.
                   const leaf = leafPageFor(entry);
+                  const listing = listingPageFor(entry);
+                  const href = leaf?.href ?? listing;
                   return (
                     <ReferenceCard
                       key={entry.id}
-                      {...(leaf ? { href: leaf.href } : {})}
+                      {...(href ? { href } : {})}
                       title={entry.name}
-                      badge={t(`direction.${entry.direction}`)}
+                      badge={entry.publisher ? t('byPublisher', { publisher: entry.publisher.name }) : t(`direction.${entry.direction}`)}
                     >
                       {leaf ? leaf.tagline : t(`surface.${entry.surfaces[0]}`)}
                     </ReferenceCard>

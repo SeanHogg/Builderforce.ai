@@ -58,6 +58,7 @@ import {
   visitorSalt,
 } from './siteTraffic';
 import { buildDatabase } from '../../infrastructure/database/connection';
+import { fireEventTriggers } from '../workflow/eventTriggers';
 import { SITE_LANDING_KEY } from './siteLandingPage';
 import { jsonResponse, readSubmission, corsHeaders } from './siteServer.http';
 import { handleSiteBilling } from '../marketplace/siteBilling';
@@ -213,6 +214,22 @@ async function countRequest(
     bytes,
     visitor,
   });
+
+  // A `page-view` workflow trigger fires on the view itself, not on the batched
+  // flush — a workflow that reacts to "somebody hit /pricing" is worthless if it
+  // waits for the buffer to fill. This is the hottest path in the product, so the
+  // dispatch is gated by the CACHED listener check inside fireEventTriggers: a
+  // tenant with no such workflow pays no database round-trip at all.
+  if (pageView) {
+    await fireEventTriggers(buildDatabase(env), {
+      tenantId: site.tenantId,
+      env,
+      eventType: 'page-view',
+      payload: { siteId: site.siteId, projectId: site.projectId, path, day },
+      match: { pagePath: path },
+    }).catch(() => undefined);
+  }
+
   if (!shouldFlush) return;
 
   const deltas = buffer.drain();
@@ -347,7 +364,7 @@ async function handleSiteAuth(
 
   if (action === 'request' && request.method === 'POST') {
     const body = await readSubmission(request);
-    const started = await requestSiteSignIn(db, site.siteId, site.tenantId, (body as { email?: unknown } | null)?.email);
+    const started = await requestSiteSignIn(db, site.siteId, site.tenantId, (body as { email?: unknown } | null)?.email, env);
     if (started.ok) {
       // Delivery is best-effort and its failure must not tell the caller whether
       // the address exists. A code that could not be sent simply expires.

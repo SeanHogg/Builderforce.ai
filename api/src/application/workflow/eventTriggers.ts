@@ -31,7 +31,7 @@ import { and, eq } from 'drizzle-orm';
 import { workflowDefinitions, workflowTriggers } from '../../infrastructure/database/schema';
 import { parseDefinition } from '../../domain/workflowGraph';
 import { instantiateWorkflowRun, type RunTarget } from './instantiateRun';
-import { EVENT_TRIGGER_TYPES, TRIGGER_FILTER_KEYS, type EventTriggerType, type TriggerMatchContext } from '../../domain/workflowTriggers';
+import { EVENT_TRIGGER_TYPES, TRIGGER_FILTER_KEYS, type EventTriggerType, type TriggerFilterKey, type TriggerMatchContext } from '../../domain/workflowTriggers';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -103,11 +103,13 @@ export interface FireEventResult {
   errors: number;
 }
 
-/** A saved filter passes when it is blank ("any") or equals the event's value (case-insensitive). */
-function filterPasses(configValue: unknown, contextValue: string | null | undefined): boolean {
+/** A saved filter passes when it is blank ("any") or equals ANY of the event's
+ *  aliases for that key (case-insensitive). */
+function filterPasses(configValue: unknown, contextValue: TriggerMatchContext[TriggerFilterKey]): boolean {
   const filter = typeof configValue === 'string' ? configValue.trim() : '';
   if (!filter) return true;
-  return filter.toLowerCase() === String(contextValue ?? '').trim().toLowerCase();
+  const aliases = Array.isArray(contextValue) ? contextValue : [contextValue as string | null | undefined];
+  return aliases.some((alias) => filter.toLowerCase() === String(alias ?? '').trim().toLowerCase());
 }
 
 /** The run target a trigger row fires onto (snapshotted from its definition at sync). */

@@ -155,6 +155,7 @@ import {
 } from '../../application/llm/tokenUsage';
 import { getTenantTokenAvailability, tokenGateUpgradeHint } from '../../application/llm/tenantTokenAvailability';
 import { getMemberSpendAvailability, maybeEmitSpendNotification, millicentsToUsd } from '../../application/consumption/memberSpend';
+import { positiveIntOrNull } from './queryParams';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -3438,11 +3439,6 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   // Parse an optional `?projectId=` filter for the insights surfaces. Bad/blank
   // values collapse to null (whole-tenant scope) rather than erroring — a wrong
   // id simply matches no rows since the ledger is already tenant-scoped.
-  const parseProjectIdParam = (raw: string | undefined): number | null => {
-    if (!raw) return null;
-    const n = Number(raw);
-    return Number.isInteger(n) && n > 0 ? n : null;
-  };
 
   // -----------------------------------------------------------------------
   // GET /v1/builder-insights
@@ -3462,7 +3458,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const snapshot = await getCachedBuilderInsightsSnapshot(db, c.env, {
       tenantId: access.tenantId,
       userId: access.userId,
-      projectId: parseProjectIdParam(c.req.query('projectId')),
+      projectId: positiveIntOrNull(c.req.query('projectId')),
     });
     return c.json(snapshot);
   });
@@ -3487,7 +3483,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const scope = {
       tenantId: access.tenantId,
       userId: access.userId,
-      projectId: parseProjectIdParam(c.req.query('projectId')),
+      projectId: positiveIntOrNull(c.req.query('projectId')),
     };
     const signal = c.req.raw.signal;
     const MAX_TICKS = 10;

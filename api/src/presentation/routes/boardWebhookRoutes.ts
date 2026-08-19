@@ -26,6 +26,7 @@ import { hashFields } from '../../application/boardsync/reconciler';
 import { verifyProviderWebhookSignature, normalizeWebhookPayload } from '../../application/boardsync/webhookIngest';
 import { getBoardProviderMeta } from '../../application/boardsync/providerCatalog';
 import { ingestIncidentWebhook } from '../../application/boardsync/opsIngest';
+import { fireEventTriggers } from '../../application/workflow/eventTriggers';
 
 export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -82,6 +83,18 @@ export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
     if (!normalized) {
       return c.json({ received: true, processed: false, reason: 'event carried no actionable ticket' });
     }
+
+    // A verified event from a connected board IS an `integration` event a workflow
+    // can react to. Addressed by `<provider>.<state>` (e.g. `jira.done`), with the
+    // bare provider offered as an alias so "anything from Jira" is expressible.
+    // Best-effort and before the reconcile, so a subscriber cannot delay the sync.
+    await fireEventTriggers(db, {
+      tenantId: conn.tenantId,
+      env: c.env as Env,
+      eventType: 'integration',
+      payload: { provider, connectionId, externalId: normalized.externalId, title: normalized.title, state: normalized.state },
+      match: { integrationEvent: [`${provider}.${normalized.state}`, provider] },
+    }).catch(() => undefined);
 
     // Ops events (Sentry/PagerDuty = `incident` category) are NOT kanban tickets:
     // divert them into prod_incidents (the Quality lens) instead of the task board.

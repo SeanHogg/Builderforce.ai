@@ -64,10 +64,13 @@ async function invalidateRepoCaches(
   tenantId: number,
   projectId: number,
   repoId?: string,
+  db?: Db,
 ): Promise<void> {
   await Promise.all([
     invalidateCached(env, reposCacheKey(tenantId, projectId)),
-    invalidateProjectConnections(env, tenantId, repoId),
+    // `db` re-probes the repo that changed, so a just-attached repo shows a real
+    // build verdict now instead of `unknown` until the delivery sweep's next tick.
+    invalidateProjectConnections(env, tenantId, repoId, db),
   ]);
 }
 
@@ -233,7 +236,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       return c.json({ error: 'This repository is already added to the project' }, 409);
     }
 
-    await invalidateRepoCaches(c.env as Env, tenantId, projectId, row.id);
+    await invalidateRepoCaches(c.env as Env, tenantId, projectId, row.id, db);
     return c.json(row, 201);
   });
 
@@ -295,7 +298,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .from(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
     if (!row) return c.json({ error: 'Repository not found' }, 404);
-    await invalidateRepoCaches(c.env as Env, tenantId, row.projectId, row.id);
+    await invalidateRepoCaches(c.env as Env, tenantId, row.projectId, row.id, db);
     return c.json(row);
   });
 
@@ -330,7 +333,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .select()
       .from(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
-    await invalidateRepoCaches(c.env as Env, tenantId, target.projectId, id);
+    await invalidateRepoCaches(c.env as Env, tenantId, target.projectId, id, db);
     return c.json(row);
   });
 
@@ -363,7 +366,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     // An operator re-tests a repo precisely when they have just fixed (or broken)
     // its access, so drop the cached probe: the projects widget's status strip
     // re-reads the live verdict rather than showing the pre-fix one for a minute.
-    await invalidateProjectConnections(c.env as Env, tenantId, id);
+    await invalidateProjectConnections(c.env as Env, tenantId, id, db);
     return c.json(result);
   });
 

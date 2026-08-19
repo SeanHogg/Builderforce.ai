@@ -38,8 +38,20 @@
  * total and explicit below — a new port category is a compile error here, not a
  * silently-dropped integration.
  *
- * Pure and static: no DB round-trip, no external call, so there is nothing to
- * cache — the route returns a module constant, exactly like `GET /api/tools`.
+ * ── THE FIRST-PARTY CORE IS PURE; THE ECOSYSTEM IS NOT ──────────────────────
+ * {@link INTEGRATION_CATALOG} is still built once at module load from the ports
+ * above — no DB, no external call. What it could NOT contain is the half of the
+ * answer a marketplace exists to give: a `connector` or `mcp_server` somebody
+ * ELSE published through the Developer Portal is a real integration this product
+ * supports, and `/integrations` claimed only our own ports, so shipping a vendor
+ * extension changed the product and not the page — the same defect this module
+ * was built to end, one layer out.
+ *
+ * {@link buildIntegrationCatalog} is therefore the full answer: the static core
+ * merged with every LISTED published package, read through the same cache
+ * `listPublicCatalog` already uses (a publish/delist/suspension invalidates it).
+ * A published package that names a first-party system merges onto that system's
+ * card — one system, one answer, exactly as the port merge already works.
  */
 
 import { BOARD_PROVIDERS, type BoardProviderCategory } from '../boardsync/providerCatalog';
@@ -51,6 +63,9 @@ import { MAILBOX_PROVIDER_NAMES } from '../mailbox/mailboxProviders';
 import { describePayoutProviders } from '../payouts/payoutProviders';
 import { describeAccountingProviders } from '../finance/accountingProviders';
 import { describeProviders, type ProviderFamily } from './dataProviderCatalog';
+import { listPublicCatalog } from '../developer/extensionPackages';
+import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 
 /**
  * One vocabulary for the public page. Twelve keys, each translated once in the
@@ -75,7 +90,10 @@ export const INTEGRATION_CATEGORIES = [
 export type IntegrationCategory = (typeof INTEGRATION_CATEGORIES)[number];
 
 /** Which port backs an entry. An entry may have several. */
-export type IntegrationSurface = 'connector' | 'board' | 'data' | 'drive' | 'mailbox' | 'payout' | 'ledger' | 'ads' | 'measurement';
+export type IntegrationSurface =
+  | 'connector' | 'board' | 'data' | 'drive' | 'mailbox' | 'payout' | 'ledger' | 'ads' | 'measurement'
+  /** A package published through the Developer Portal — the ecosystem half. */
+  | 'extension';
 
 /** What moves, and which way. Derived per surface — never asserted by hand. */
 export type IntegrationDirection = 'import' | 'export' | 'two-way' | 'event-ingest';
@@ -92,6 +110,15 @@ export interface IntegrationCatalogEntry {
   surfaces: IntegrationSurface[];
   direction: IntegrationDirection;
   capabilities: IntegrationCapability[];
+  /**
+   * Who ships it, when that is not us. Absent on a first-party entry — which is
+   * what lets the page say "built in" versus "by Acme" without a second flag that
+   * could disagree with this one. A system we implement AND somebody extends keeps
+   * no publisher: the first-party adapter is the one a buyer gets by default.
+   */
+  publisher?: { slug: string; name: string };
+  /** The listing to open, for a published package. Absent on a first-party entry. */
+  listingSlug?: string;
 }
 
 /** Total map — adding a `BoardProviderCategory` without a home fails to compile. */
@@ -318,8 +345,101 @@ function build(): IntegrationCatalogEntry[] {
 export const INTEGRATION_CATALOG: readonly IntegrationCatalogEntry[] = build();
 
 /** Category → entries, in the declared category order. Empty categories are dropped. */
-export function integrationCatalogByCategory(): { category: IntegrationCategory; entries: IntegrationCatalogEntry[] }[] {
+export function integrationCatalogByCategory(
+  entries: readonly IntegrationCatalogEntry[] = INTEGRATION_CATALOG,
+): { category: IntegrationCategory; entries: IntegrationCatalogEntry[] }[] {
   return INTEGRATION_CATEGORIES
-    .map((category) => ({ category, entries: INTEGRATION_CATALOG.filter((entry) => entry.category === category) }))
+    .map((category) => ({ category, entries: entries.filter((entry) => entry.category === category) }))
     .filter((group) => group.entries.length > 0);
+}
+
+// ---------------------------------------------------------------------------
+// The ecosystem half - published packages projected onto the same shape
+// ---------------------------------------------------------------------------
+
+/** Only these kinds are INTEGRATIONS. A published `template` or `canvas_kind` is a
+ *  real extension and belongs in the marketplace, not on a page answering "can you
+ *  connect to X?" - the surface names what the thing IS, so it cannot be stretched. */
+const INTEGRATION_PACKAGE_KINDS = new Set(['connector', 'mcp_server']);
+
+/** A published package's declared category, when it is one this page speaks. A
+ *  package that names something else lands in `other` rather than being dropped:
+ *  a vendor's typo must not delete their listing from the page. */
+function packageCategory(categories: readonly string[]): IntegrationCategory {
+  const named = categories.find((c) => (INTEGRATION_CATEGORIES as readonly string[]).includes(c));
+  return (named as IntegrationCategory | undefined) ?? 'other';
+}
+
+/**
+ * Project one listed package onto a catalog entry.
+ *
+ * Deliberately conservative about `direction`: the package's spec is UNTRUSTED
+ * input, and this module's whole rule is that a claim on the public page comes
+ * from what EXISTS, never from what a name suggests. An MCP server reads
+ * (`import`); a connector is `two-way` only once its manifest proves a non-GET
+ * action - the same test `connectorDirection` applies to our own manifests.
+ */
+export function packageToCatalogEntry(pkg: {
+  slug: string;
+  kind: string;
+  name: string;
+  categories: string[];
+  publisher: { slug: string; name: string } | null;
+  spec?: Record<string, unknown> | null;
+}): IntegrationCatalogEntry {
+  const actions = Array.isArray((pkg.spec as { actions?: unknown } | undefined)?.actions)
+    ? ((pkg.spec as { actions: Array<{ method?: string; mutates?: boolean }> }).actions)
+    : [];
+  const writes = actions.some((a) => a?.mutates === true || (!!a?.method && a.method.toUpperCase() !== 'GET'));
+  return {
+    id: `ext:${pkg.slug}`,
+    name: pkg.name,
+    category: packageCategory(pkg.categories),
+    surfaces: ['extension'],
+    direction: pkg.kind === 'connector' && writes ? 'two-way' : 'import',
+    capabilities: [],
+    ...(pkg.publisher ? { publisher: { slug: pkg.publisher.slug, name: pkg.publisher.name } } : {}),
+    listingSlug: pkg.slug,
+  };
+}
+
+/**
+ * The catalog a buyer actually sees: our ports PLUS the published ecosystem.
+ *
+ * Served through `listPublicCatalog`'s existing read-through cache, so this costs
+ * one cached read rather than a query per page load, and a publish / delist /
+ * suspension invalidates it through the path that already exists. The static core
+ * is copied into a fresh map each call so a merge can never mutate the module
+ * constant - a projection must not be able to edit its own source.
+ */
+export async function buildIntegrationCatalog(
+  db: Db,
+  env: Env,
+): Promise<IntegrationCatalogEntry[]> {
+  const byId = new Map<string, IntegrationCatalogEntry>(
+    INTEGRATION_CATALOG.map((entry) => [entry.id, {
+      ...entry,
+      surfaces: [...entry.surfaces],
+      capabilities: [...entry.capabilities],
+    }]),
+  );
+
+  // A failure here degrades to the first-party catalog rather than to an error
+  // page: the ecosystem is an addition to the answer, never a precondition for it.
+  const packages = await listPublicCatalog(db, env).catch(() => []);
+  for (const pkg of packages) {
+    if (!INTEGRATION_PACKAGE_KINDS.has(pkg.kind)) continue;
+    const entry = packageToCatalogEntry(pkg);
+    // A package that extends a system we already implement merges onto OUR card -
+    // one system a buyer asks about once. The first-party entry keeps its identity,
+    // so it never acquires a publisher badge it did not earn.
+    const firstParty = byId.get(pkg.slug);
+    if (firstParty) {
+      merge(byId, { ...entry, id: pkg.slug, name: firstParty.name, category: firstParty.category });
+      continue;
+    }
+    merge(byId, entry);
+  }
+
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

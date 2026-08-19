@@ -400,6 +400,7 @@ export class MonitoringService {
     try {
       await fireEventTriggers(this.db, {
         tenantId,
+        env,
         eventType: 'monitor-breach',
         payload: {
           monitorId: monitor.id, label: monitor.label, monitorType: monitor.monitorType,

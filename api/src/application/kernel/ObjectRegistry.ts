@@ -48,6 +48,7 @@ import {
   shareLinks,
 } from '../../infrastructure/database/schema';
 import { sha256Hex } from '../../domain/shared/hash';
+import { fireEventTriggers } from '../workflow/eventTriggers';
 import type { Env } from '../../env';
 
 /**
@@ -347,6 +348,18 @@ export async function addAnnotation(
     })
     .returning();
   await invalidateObject(env, input.tenantId, input.objectId);
+  // A comment on any registered object IS the board's "comment added" event — the
+  // registry is the platform's single annotation store, so wiring the trigger here
+  // covers every surface that comments rather than one of them. Best-effort.
+  if ((input.kind ?? 'comment') === 'comment') {
+    await fireEventTriggers(db, {
+      tenantId: input.tenantId,
+      env,
+      eventType: 'board-event',
+      payload: { objectId: input.objectId, annotationId: row?.id ?? null, body: input.body ?? null, authorRef: input.authorRef ?? null },
+      match: { boardEvent: 'comment-added' },
+    }).catch(() => undefined);
+  }
   return row;
 }
 

@@ -875,7 +875,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Public integration catalog — the projection the marketing page renders.
   // Registered FIRST so the literal `catalog` segment wins over `/:id` in the
   // authenticated router below.
-  app.route('/api/integrations/catalog', createIntegrationCatalogRoutes());
+  app.route('/api/integrations/catalog', createIntegrationCatalogRoutes(db));
   app.route('/api/integrations',    createIntegrationRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));
   // The canvas's read-only view of the SAME connected warehouses — list, schema,
   // and one bounded SELECT. Same credential store, same encryption secret.

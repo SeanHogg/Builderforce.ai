@@ -16162,8 +16162,6 @@
         "new": "Nouveau",
         "contacted": "Contacté",
         "qualified": "Qualifié",
-        "meeting": "Rendez-vous",
-        "proposal": "Proposition",
         "won": "Gagné",
         "lost": "Perdu"
       },
@@ -20352,6 +20350,7 @@
     "moreTitle": "{count} connexion(s) de plus — ouvrir Intégrations",
     "buildTitle": "Dernier build sur {branch} : {status} ({date})",
     "buildAria": "Dernier build sur {branch} : {status}",
+    "buildChecked": "Vérifié le {date}",
     "openPrs": "{count, plural, one {# PR} other {# PR}}",
     "openPrsTitle": "{count, plural, one {# pull request ouverte} other {# pull requests ouvertes}}",
     "openPrsRecordedTitle": "{count, plural, one {# pull request ouverte} other {# pull requests ouvertes}} créée(s) par Builderforce",
@@ -21750,6 +21749,7 @@
     "title": "Connectez vos agents à votre stack",
     "lede": "Builderforce.ai relie vos agents IA auto-hébergés et indépendants du modèle à votre gestion de versions, à vos canaux de discussion, à vos fournisseurs de modèles et aux outils que vous utilisez déjà — chaque action passe par des approbations et une piste d'audit.",
     "provenCategory": "Services connectés",
+    "byPublisher": "par {publisher}",
     "category": {
       "work": "Gestion du travail",
       "devtools": "Outils de développement",
@@ -21778,7 +21778,8 @@
       "drive": "Connectez le drive et amenez ses fichiers sur le canvas.",
       "mailbox": "Connectez la boîte mail pour lire les fils et envoyer depuis celle-ci.",
       "ledger": "Connectez la comptabilité pour lire dépenses, factures et soldes réels.",
-      "payout": "Versez les gains vers cette destination."
+      "payout": "Versez les gains vers cette destination.",
+      "extension": "Publié par un développeur tiers et installable depuis le portail développeur."
     }
   },
   "inboxApp": {

@@ -53,6 +53,7 @@ import {
   type CampaignTransport,
 } from './campaignTransports';
 import { defaultLogoUrl, getTemplate, resolveAssetOrigin } from './templateLibrary';
+import { fireEventTriggers } from '../workflow/eventTriggers';
 
 /** How many recipients one batch attempts. Bounded by the Worker's subrequest
  *  budget, not by taste — each send is one outbound HTTP call. */
@@ -926,7 +927,7 @@ export const TRACKING_PIXEL = Uint8Array.from([
  * campaign counter tracks unique opens rather than however many times a client
  * re-fetched the image.
  */
-export async function recordOpen(db: Db, trackToken: string): Promise<void> {
+export async function recordOpen(db: Db, trackToken: string, env?: Env): Promise<void> {
   const updated = await db
     .update(marketingCampaignSends)
     .set({ openedAt: sql`NOW()` })
@@ -934,17 +935,26 @@ export async function recordOpen(db: Db, trackToken: string): Promise<void> {
       eq(marketingCampaignSends.trackToken, trackToken),
       sql`${marketingCampaignSends.openedAt} IS NULL`,
     ))
-    .returning({ campaignId: marketingCampaignSends.campaignId, tenantId: marketingCampaignSends.tenantId });
+    .returning({ campaignId: marketingCampaignSends.campaignId, tenantId: marketingCampaignSends.tenantId, email: marketingCampaignSends.email });
   const hit = updated[0];
   if (!hit) return;
   await db
     .update(marketingCampaigns)
     .set({ opened: sql`${marketingCampaigns.opened} + 1`, updatedAt: sql`NOW()` })
     .where(and(eq(marketingCampaigns.id, hit.campaignId), eq(marketingCampaigns.tenantId, hit.tenantId)));
+  // FIRST open only — the guard above already made this branch unique per send, so
+  // an `email-open` workflow fires once per recipient rather than once per image
+  // re-fetch by their mail client.
+  await fireEventTriggers(db, {
+    tenantId: hit.tenantId, env,
+    eventType: 'email-open',
+    payload: { campaignId: hit.campaignId, email: hit.email },
+    match: { campaign: String(hit.campaignId) },
+  }).catch(() => undefined);
 }
 
 /** Record a click and return the destination to redirect to (validated). */
-export async function recordClick(db: Db, trackToken: string, rawUrl: string): Promise<string | null> {
+export async function recordClick(db: Db, trackToken: string, rawUrl: string, env?: Env): Promise<string | null> {
   // Only ever redirect to an absolute http(s) URL — an open redirect to
   // `javascript:` or a protocol-relative URL would be a real vulnerability.
   let destination: URL;
@@ -962,13 +972,21 @@ export async function recordClick(db: Db, trackToken: string, rawUrl: string): P
       eq(marketingCampaignSends.trackToken, trackToken),
       sql`${marketingCampaignSends.clickedAt} IS NULL`,
     ))
-    .returning({ campaignId: marketingCampaignSends.campaignId, tenantId: marketingCampaignSends.tenantId });
+    .returning({ campaignId: marketingCampaignSends.campaignId, tenantId: marketingCampaignSends.tenantId, email: marketingCampaignSends.email });
   const hit = updated[0];
   if (hit) {
     await db
       .update(marketingCampaigns)
       .set({ clicked: sql`${marketingCampaigns.clicked} + 1`, updatedAt: sql`NOW()` })
       .where(and(eq(marketingCampaigns.id, hit.campaignId), eq(marketingCampaigns.tenantId, hit.tenantId)));
+    // First click only, same reasoning as recordOpen. The redirect below happens
+    // regardless — a workflow must never be able to break the link the reader clicked.
+    await fireEventTriggers(db, {
+      tenantId: hit.tenantId, env,
+      eventType: 'email-click',
+      payload: { campaignId: hit.campaignId, email: hit.email, destination: destination.toString() },
+      match: { campaign: String(hit.campaignId) },
+    }).catch(() => undefined);
   }
   return destination.toString();
 }

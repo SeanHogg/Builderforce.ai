@@ -88,6 +88,13 @@ describe('the entity catalog', () => {
     // may still have a bespoke one — `marketing_session_prompts` does — so this
     // reports what is uncovered rather than failing on a number.
     //
+    // Ceiling moved 11 → 12 (2026-08-19) with `repo_delivery_status` (migration
+    // 0931). It is a 1:1 derived-state extension of the already-registered
+    // `project_repositories`, unique on the parent's id, holding the verdict a
+    // scheduled sweep last read from the provider. It has no identity of its own
+    // and nobody opens one — the same structural reason `hosted_listing_lifecycle`
+    // below is exempt, and the single writer is the sweep rather than a person.
+    //
     // Ceiling moved 6 → 11 (2026-08-18) with the LTI-registrations and
     // enterprise-SSO tables. Every one of the five ADDED here has a structural
     // reason the generic path must not model it, and for three of them the
@@ -126,7 +133,7 @@ describe('the entity catalog', () => {
     //    no identity of its own to register.
     //  - `workflow_variables` is a raw scope/key/value store backing a workflow
     //    node, not a titled object.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(11);
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(12);
   });
 
   it('declares nothing that no migration creates', () => {

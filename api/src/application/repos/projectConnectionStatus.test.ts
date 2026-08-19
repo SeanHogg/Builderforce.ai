@@ -1,26 +1,15 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { boardConnections, projectRepositories, pullRequests } from '../../infrastructure/database/schema';
+import { describe, expect, it } from 'vitest';
+import { boardConnections, projectRepositories, pullRequests, repoDeliveryStatus } from '../../infrastructure/database/schema';
+import { buildProjectConnections } from './projectConnectionStatus';
 import type { Env } from '../../env';
 
-const mocks = vi.hoisted(() => ({
-  resolveRepoAuth: vi.fn(),
-  githubRequest: vi.fn(),
-}));
-
-vi.mock('./githubClient', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./githubClient')>()),
-  resolveRepoAuth: mocks.resolveRepoAuth,
-  githubRequest: mocks.githubRequest,
-}));
-
-const { buildProjectConnections } = await import('./projectConnectionStatus');
-
-type TableRef = typeof projectRepositories | typeof boardConnections | typeof pullRequests;
+type TableRef = typeof projectRepositories | typeof boardConnections | typeof pullRequests | typeof repoDeliveryStatus;
 
 /**
  * Minimal chainable fake Db keyed by the leading table of each select, mirroring
- * resolveDefaultRepo.test.ts. The composer issues exactly three selects (repos,
- * boards, recorded open-PR counts) — enough to exercise the whole shape.
+ * resolveDefaultRepo.test.ts. The composer issues exactly four selects (repos,
+ * boards, recorded open-PR counts, persisted delivery verdicts) and — the point of
+ * this suite since the sweep took over — NO provider call of any kind.
  */
 function makeFakeDb(rowsByTable: Map<TableRef, unknown[]>) {
   function chain(rows: unknown[]) {
@@ -37,7 +26,6 @@ function makeFakeDb(rowsByTable: Map<TableRef, unknown[]>) {
   } as never;
 }
 
-/** No KV binding → getOrSetCached falls straight through to the loader. */
 const ENV = { JWT_SECRET: 'test-secret' } as unknown as Env;
 
 const REPO = (over: Record<string, unknown> = {}) => ({
@@ -46,47 +34,21 @@ const REPO = (over: Record<string, unknown> = {}) => ({
   lastSyncedAt: null, ...over,
 });
 
-const githubAuth = (over: Record<string, unknown> = {}) => ({
-  ok: true,
-  auth: {
-    coords: { host: 'github.com', owner: 'acme', repo: 'site' },
-    token: 'tok',
-    authKind: 'user_token',
-    repo: { id: 'repo-1', provider: 'github', projectId: 1, defaultBranch: 'main', segmentId: null },
-    ...over,
-  },
+/** A row as `repo_delivery_status` holds it — what the sweep wrote. */
+const VERDICT = (over: Record<string, unknown> = {}) => ({
+  repoId: 'repo-1', tenantId: 1, health: 'ok', reason: null,
+  openPullRequests: 4, buildStatus: 'success', buildUrl: 'https://gh/run/9',
+  buildBranch: 'main', buildAt: new Date('2026-08-06T10:00:00.000Z'),
+  probedAt: new Date('2026-08-06T10:01:00.000Z'), ...over,
 });
-
-/** GitHub `Link` header for a `per_page=1` listing with `total` results. */
-const linkFor = (total: number) =>
-  new Headers(
-    total > 1
-      ? { link: `<https://api.github.com/x?page=2>; rel="next", <https://api.github.com/x?page=${total}>; rel="last"` }
-      : {},
-  );
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
-
-/**
- * Each case uses its OWN tenant + repo id. The per-repo probe is read-through
- * cached by `t:<tenant>:r:<repo>`, and that L1 map outlives a single assertion —
- * so distinct keys are what keep these cases independent of each other and of
- * their own second call.
- */
-let nextTenant = 100;
-const freshTenant = () => nextTenant++;
 
 type Summary = Awaited<ReturnType<typeof buildProjectConnections>>[number];
 
-/** The single summary a case seeds — asserted present so the reads below are typed. */
 function only(rows: Summary[]): Summary {
   expect(rows).toHaveLength(1);
   return rows[0]!;
 }
 
-/** That summary's first connection, likewise asserted present. */
 function firstConnection(rows: Summary[]): Summary['connections'][number] {
   const [connection] = only(rows).connections;
   expect(connection).toBeDefined();
@@ -94,23 +56,16 @@ function firstConnection(rows: Summary[]): Summary['connections'][number] {
 }
 
 describe('buildProjectConnections — the projects-widget status strip', () => {
-  it('reports a healthy repo with its live open-PR count and latest build', async () => {
+  it('serves the swept verdict: open-PR count, build, and how old the answer is', async () => {
     const db = makeFakeDb(new Map<TableRef, unknown[]>([
       [projectRepositories, [REPO()]],
       [boardConnections, []],
       [pullRequests, []],
+      [repoDeliveryStatus, [VERDICT()]],
     ]));
-    mocks.resolveRepoAuth.mockResolvedValue(githubAuth());
-    mocks.githubRequest
-      .mockResolvedValueOnce({ ok: true, status: 200, data: [{}], headers: linkFor(4) })
-      .mockResolvedValueOnce({
-        ok: true, status: 200, headers: new Headers(),
-        data: { workflow_runs: [{ status: 'completed', conclusion: 'success', html_url: 'https://gh/run/9', head_branch: 'main', updated_at: '2026-08-06T10:00:00.000Z' }] },
-      });
 
-    const summary = only(await buildProjectConnections(ENV, db, freshTenant()));
+    const summary = only(await buildProjectConnections(ENV, db, 1));
     expect(summary.projectId).toBe(1);
-    expect(summary.connections).toHaveLength(1);
     expect(summary.connections[0]!).toMatchObject({
       kind: 'source_control',
       label: 'acme/site',
@@ -123,68 +78,69 @@ describe('buildProjectConnections — the projects-widget status strip', () => {
       buildStatus: 'success',
       buildUrl: 'https://gh/run/9',
       buildBranch: 'main',
+      buildAt: '2026-08-06T10:00:00.000Z',
+      buildProbedAt: '2026-08-06T10:01:00.000Z',
     });
-  });
-
-  it('calls an unfinished run pending, and a red one failing', async () => {
-    const db = makeFakeDb(new Map<TableRef, unknown[]>([
-      [projectRepositories, [REPO({ id: 'repo-running' })]], [boardConnections, []], [pullRequests, []],
-    ]));
-    mocks.resolveRepoAuth.mockResolvedValue(githubAuth());
-    mocks.githubRequest
-      .mockResolvedValueOnce({ ok: true, status: 200, data: [], headers: linkFor(0) })
-      .mockResolvedValueOnce({
-        ok: true, status: 200, headers: new Headers(),
-        data: { workflow_runs: [{ status: 'in_progress', conclusion: null, html_url: null, head_branch: 'main', updated_at: null }] },
-      });
-    const running = firstConnection(await buildProjectConnections(ENV, db, freshTenant()));
-    expect(running.buildStatus).toBe('pending');
-
-    vi.clearAllMocks();
-    const redDb = makeFakeDb(new Map<TableRef, unknown[]>([
-      [projectRepositories, [REPO({ id: 'repo-red' })]], [boardConnections, []], [pullRequests, []],
-    ]));
-    mocks.resolveRepoAuth.mockResolvedValue(githubAuth());
-    mocks.githubRequest
-      .mockResolvedValueOnce({ ok: true, status: 200, data: [], headers: linkFor(0) })
-      .mockResolvedValueOnce({
-        ok: true, status: 200, headers: new Headers(),
-        data: { workflow_runs: [{ status: 'completed', conclusion: 'timed_out', html_url: null, head_branch: 'main', updated_at: null }] },
-      });
-    const failed = firstConnection(await buildProjectConnections(ENV, redDb, freshTenant()));
-    expect(failed.buildStatus).toBe('failure');
   });
 
   it('surfaces a denied credential as a broken connection, never a green tick', async () => {
     const db = makeFakeDb(new Map<TableRef, unknown[]>([
       [projectRepositories, [REPO({ id: 'repo-denied' })]], [boardConnections, []], [pullRequests, []],
+      [repoDeliveryStatus, [VERDICT({
+        repoId: 'repo-denied', health: 'error', reason: 'unauthorized',
+        openPullRequests: null, buildStatus: null, buildUrl: null,
+      })]],
     ]));
-    mocks.resolveRepoAuth.mockResolvedValue(githubAuth());
-    mocks.githubRequest.mockResolvedValue({ ok: false, status: 401, code: 'unauthorized', reason: '401: Bad credentials' });
 
-    const summary = only(await buildProjectConnections(ENV, db, freshTenant()));
-    expect(summary.connections[0]!).toMatchObject({ health: 'error', reason: 'unauthorized', buildStatus: null });
+    expect(firstConnection(await buildProjectConnections(ENV, db, 1)))
+      .toMatchObject({ health: 'error', reason: 'unauthorized', buildStatus: null });
   });
 
-  it('falls back to the recorded open-PR count when the repo cannot be probed', async () => {
+  it('reports a GitLab repo\'s build — the cohort that could only ever say `unknown`', async () => {
     const db = makeFakeDb(new Map<TableRef, unknown[]>([
-      // A GitLab repo is a real connection with no probe path — it must still be
-      // listed, with the Builderforce-recorded PR count and an honest 'unknown'.
       [projectRepositories, [REPO({ id: 'repo-gitlab', provider: 'gitlab', host: 'gitlab.com' })]],
       [boardConnections, []],
       [pullRequests, [{ repoId: 'repo-gitlab', open: 2 }]],
+      [repoDeliveryStatus, [VERDICT({ repoId: 'repo-gitlab', openPullRequests: 7, buildStatus: 'failure', buildUrl: 'https://gitlab.com/acme/site/-/pipelines/3' })]],
     ]));
 
-    const summary = only(await buildProjectConnections(ENV, db, freshTenant()));
-    expect(mocks.githubRequest).not.toHaveBeenCalled();
-    expect(summary.connections[0]!).toMatchObject({
+    expect(firstConnection(await buildProjectConnections(ENV, db, 1))).toMatchObject({
       provider: 'gitlab',
       url: 'https://gitlab.com/acme/site',
+      health: 'ok',
+      openPullRequests: 7,
+      // The provider's own count, not the Builderforce-recorded 2.
+      openPullRequestsRecordedOnly: false,
+      buildStatus: 'failure',
+    });
+  });
+
+  it('falls back to the recorded PR count for a repo the sweep has not reached yet', async () => {
+    const db = makeFakeDb(new Map<TableRef, unknown[]>([
+      [projectRepositories, [REPO({ id: 'repo-new' })]],
+      [boardConnections, []],
+      [pullRequests, [{ repoId: 'repo-new', open: 2 }]],
+      [repoDeliveryStatus, []],
+    ]));
+
+    expect(firstConnection(await buildProjectConnections(ENV, db, 1))).toMatchObject({
       health: 'unknown',
       reason: 'not_probed',
       openPullRequests: 2,
       openPullRequestsRecordedOnly: true,
+      buildStatus: null,
+      buildProbedAt: null,
     });
+  });
+
+  it('says `no_credential` for an unprobeable repo rather than blaming the sweep', async () => {
+    const db = makeFakeDb(new Map<TableRef, unknown[]>([
+      [projectRepositories, [REPO({ id: 'repo-nocred', credentialId: null })]],
+      [boardConnections, []], [pullRequests, []], [repoDeliveryStatus, []],
+    ]));
+
+    expect(firstConnection(await buildProjectConnections(ENV, db, 1)))
+      .toMatchObject({ health: 'unknown', reason: 'no_credential' });
   });
 
   it('includes external boards and maps their sync state to the shared health vocabulary', async () => {
@@ -195,9 +151,10 @@ describe('buildProjectConnections — the projects-widget status strip', () => {
         { projectId: 2, provider: 'rally', externalBoardId: null, status: 'disabled', lastPolledAt: null },
       ]],
       [pullRequests, []],
+      [repoDeliveryStatus, []],
     ]));
 
-    const summary = only(await buildProjectConnections(ENV, db, freshTenant()));
+    const summary = only(await buildProjectConnections(ENV, db, 1));
     expect(summary.projectId).toBe(2);
     expect(summary.connections).toMatchObject([
       { kind: 'board', provider: 'jira', label: 'ENG', health: 'degraded', lastSyncedAt: '2026-08-06T09:00:00.000Z' },
@@ -207,8 +164,8 @@ describe('buildProjectConnections — the projects-widget status strip', () => {
 
   it('returns nothing for a tenant with no connections at all', async () => {
     const db = makeFakeDb(new Map<TableRef, unknown[]>([
-      [projectRepositories, []], [boardConnections, []], [pullRequests, []],
+      [projectRepositories, []], [boardConnections, []], [pullRequests, []], [repoDeliveryStatus, []],
     ]));
-    expect(await buildProjectConnections(ENV, db, freshTenant())).toEqual([]);
+    expect(await buildProjectConnections(ENV, db, 1)).toEqual([]);
   });
 });

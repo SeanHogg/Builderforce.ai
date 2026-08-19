@@ -16162,8 +16162,6 @@
         "new": "Nuevo",
         "contacted": "Contactado",
         "qualified": "Cualificado",
-        "meeting": "Reunión",
-        "proposal": "Propuesta",
         "won": "Ganado",
         "lost": "Perdido"
       },
@@ -20352,6 +20350,7 @@
     "moreTitle": "{count} conexión(es) más — abrir Integraciones",
     "buildTitle": "Última compilación en {branch}: {status} ({date})",
     "buildAria": "Última compilación en {branch}: {status}",
+    "buildChecked": "Comprobado el {date}",
     "openPrs": "{count, plural, one {# PR} other {# PR}}",
     "openPrsTitle": "{count, plural, one {# pull request abierto} other {# pull requests abiertos}}",
     "openPrsRecordedTitle": "{count, plural, one {# pull request abierto} other {# pull requests abiertos}} creados por Builderforce",
@@ -21750,6 +21749,7 @@
     "title": "Conecta tu equipo de agentes con tu stack",
     "lede": "Builderforce.ai conecta tus agentes de IA autoalojados e independientes del modelo con el control de versiones, los canales de chat, los proveedores de modelos y las herramientas que ya usas: cada acción queda sujeta a aprobaciones y a un registro de auditoría.",
     "provenCategory": "Servicios conectados",
+    "byPublisher": "por {publisher}",
     "category": {
       "work": "Gestión del trabajo",
       "devtools": "Herramientas de desarrollo",
@@ -21778,7 +21778,8 @@
       "drive": "Conecta la unidad y lleva sus archivos al lienzo.",
       "mailbox": "Conecta el buzón para leer hilos y enviar desde él.",
       "ledger": "Conecta la contabilidad para leer gastos, facturas y saldos reales.",
-      "payout": "Envía los ingresos a este destino."
+      "payout": "Envía los ingresos a este destino.",
+      "extension": "Publicado por un desarrollador externo e instalable desde el Portal de desarrolladores."
     }
   },
   "inboxApp": {

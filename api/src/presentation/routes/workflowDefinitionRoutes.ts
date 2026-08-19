@@ -40,6 +40,7 @@ import {
   workflowDefinitionListCacheKey as listCacheKey,
 } from '../../application/workflow/definitionStore';
 import { syncDefinitionTriggers } from '../../application/workflow/triggerSync';
+import { bumpEventTriggerListeners } from '../../application/workflow/eventTriggers';
 import { compileCanvasWorkflowSteps, connectorActionIndex } from '../../domain/canvasWorkflowSpec';
 import { connectorActionCatalog } from '../../application/connectors/connectorActionCatalog';
 import type { Env, HonoEnv } from '../../env';
@@ -496,6 +497,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
           segmentId: updated.segmentId ?? null,
           definition: parseDefinition(updated.definition),
           target: runTargetFromDefinition(updated),
+          env: c.env as Env,
         });
       }
     }
@@ -514,6 +516,9 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       .delete(workflowDefinitions)
       .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
+    // The definition's trigger rows go with it (FK cascade), so the cached
+    // "is anyone listening?" answer is now stale — re-arm it.
+    await bumpEventTriggerListeners(c.env as Env, tenantId);
     return c.json({ ok: true });
   });
 

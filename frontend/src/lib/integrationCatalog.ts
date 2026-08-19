@@ -41,10 +41,13 @@ export const INTEGRATION_CATEGORIES: readonly IntegrationCategory[] = [
   'productivity', 'finance', 'marketing', 'support', 'storage', 'data', 'hiring', 'other',
 ];
 
-export type IntegrationSurface = 'connector' | 'board' | 'data' | 'drive' | 'mailbox' | 'payout' | 'ledger';
+export type IntegrationSurface =
+  | 'connector' | 'board' | 'data' | 'drive' | 'mailbox' | 'payout' | 'ledger'
+  /** Published through the Developer Portal by a third party, not by us. */
+  | 'extension';
 
 export const INTEGRATION_SURFACES: readonly IntegrationSurface[] = [
-  'connector', 'board', 'data', 'drive', 'mailbox', 'payout', 'ledger',
+  'connector', 'board', 'data', 'drive', 'mailbox', 'payout', 'ledger', 'extension',
 ];
 
 export interface IntegrationCatalogEntry {
@@ -54,6 +57,11 @@ export interface IntegrationCatalogEntry {
   surfaces: IntegrationSurface[];
   direction: 'import' | 'export' | 'two-way' | 'event-ingest';
   capabilities: ('webhook' | 'discovery' | 'oauth')[];
+  /** Who ships it, when that is not us. Absent on a first-party entry — which is
+   *  what lets a card say "by Acme" without a second flag to disagree with. */
+  publisher?: { slug: string; name: string };
+  /** The marketplace listing to open, for a published package. */
+  listingSlug?: string;
 }
 
 export interface IntegrationCatalogGroup {
@@ -74,6 +82,16 @@ const SEO_BY_NAME = new Map(SEO_INTEGRATIONS.map((entry) => [entry.name.toLowerC
 export function leafPageFor(entry: IntegrationCatalogEntry): { href: string; tagline: string } | null {
   const seo = SEO_BY_NAME.get(entry.name.toLowerCase());
   return seo ? { href: `/integrations/${seo.slug}`, tagline: seo.tagline } : null;
+}
+
+/**
+ * Where a published-package card links: the Developer Portal's catalogue, where
+ * the thing can actually be installed. A first-party entry has no listing and gets
+ * no link from here — it falls back to its editorial page or to no link at all,
+ * which is the honest card for a system nobody has written a page for yet.
+ */
+export function listingPageFor(entry: IntegrationCatalogEntry): string | null {
+  return entry.listingSlug ? '/developers?tab=catalog' : null;
 }
 
 /**

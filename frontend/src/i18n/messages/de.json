@@ -16162,8 +16162,6 @@
         "new": "Neu",
         "contacted": "Kontaktiert",
         "qualified": "Qualifiziert",
-        "meeting": "Termin",
-        "proposal": "Angebot",
         "won": "Gewonnen",
         "lost": "Verloren"
       },
@@ -20352,6 +20350,7 @@
     "moreTitle": "{count} weitere Verbindung(en) — Integrationen öffnen",
     "buildTitle": "Letzter Build auf {branch}: {status} ({date})",
     "buildAria": "Letzter Build auf {branch}: {status}",
+    "buildChecked": "Geprüft am {date}",
     "openPrs": "{count, plural, one {# PR} other {# PRs}}",
     "openPrsTitle": "{count, plural, one {# offener Pull Request} other {# offene Pull Requests}}",
     "openPrsRecordedTitle": "{count, plural, one {# offener Pull Request} other {# offene Pull Requests}} von Builderforce erstellt",
@@ -21750,6 +21749,7 @@
     "title": "Verbinden Sie Ihre Agenten mit Ihrem Stack",
     "lede": "Builderforce.ai bindet Ihre selbst gehosteten, modellunabhängigen KI-Agenten an Versionsverwaltung, Chat-Kanäle, Modellanbieter und die Werkzeuge an, die Sie bereits nutzen — jede Aktion mit Freigaben und Audit-Protokoll.",
     "provenCategory": "Verbundene Dienste",
+    "byPublisher": "von {publisher}",
     "category": {
       "work": "Arbeitsmanagement",
       "devtools": "Entwickler-Tools",
@@ -21778,7 +21778,8 @@
       "drive": "Laufwerk verbinden und dessen Dateien auf das Canvas holen.",
       "mailbox": "Postfach verbinden, um Threads zu lesen und daraus zu senden.",
       "ledger": "Buchhaltung verbinden, um echte Ausgaben, Rechnungen und Salden zu lesen.",
-      "payout": "Auszahlungen an dieses Ziel senden."
+      "payout": "Auszahlungen an dieses Ziel senden.",
+      "extension": "Von einem Drittanbieter veröffentlicht und über das Entwicklerportal installierbar."
     }
   },
   "inboxApp": {

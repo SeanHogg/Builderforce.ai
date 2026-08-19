@@ -31,6 +31,8 @@
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { siteUsers, siteUserSessions } from '../../infrastructure/database/schema';
+import { fireEventTriggers } from '../workflow/eventTriggers';
+import type { Env } from '../../env';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isSendableEmail, normalizeEmail } from '../shared/dnsVerification';
 
@@ -91,6 +93,9 @@ export async function requestSiteSignIn(
   siteId: number,
   tenantId: number,
   rawEmail: unknown,
+  /** Worker env, when the caller has one — lets a genuinely NEW site user fire the
+   *  workspace's `signup` workflow triggers. Omitting it skips that fan-out. */
+  env?: Env,
 ): Promise<RequestSignInResult> {
   const email = normalizeEmail(String(rawEmail ?? ''));
   if (!email || !isSendableEmail(email)) {
@@ -104,12 +109,24 @@ export async function requestSiteSignIn(
       target: [siteUsers.siteId, siteUsers.email],
       set: { updatedAt: sql`NOW()` },
     })
-    .returning({ id: siteUsers.id, status: siteUsers.status });
+    // `xmax = 0` is Postgres' canonical "this row was INSERTED, not updated" answer
+    // for an upsert. Without it a returning-row from `onConflictDoUpdate` cannot tell
+    // a first-ever visitor from someone signing in for the hundredth time — and
+    // "signup" must mean the former, or every sign-in would fire it.
+    .returning({ id: siteUsers.id, status: siteUsers.status, isNew: sql<boolean>`(xmax = 0)` });
   if (!user) return { ok: false, status: 400, error: 'Could not start sign-in.' };
   if (user.status !== 'active') {
     // Deliberately the same shape of answer as success would be at the route, so
     // a blocked address cannot be distinguished from an unknown one by probing.
     return { ok: false, status: 400, error: 'Could not start sign-in.' };
+  }
+
+  if (user.isNew) {
+    await fireEventTriggers(db, {
+      tenantId, env,
+      eventType: 'signup',
+      payload: { siteId, siteUserId: user.id, email },
+    }).catch(() => undefined);
   }
 
   const code = newCode();

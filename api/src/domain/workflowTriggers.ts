@@ -81,8 +81,15 @@ export const TRIGGER_FILTER_KEYS = [
 ] as const;
 export type TriggerFilterKey = (typeof TRIGGER_FILTER_KEYS)[number];
 
-/** The event context an emitter supplies, keyed by the filter it satisfies. */
-export type TriggerMatchContext = Partial<Record<TriggerFilterKey, string | null | undefined>>;
+/**
+ * The event context an emitter supplies, keyed by the filter it satisfies.
+ *
+ * A value may be a LIST of aliases when the thing being matched has more than one
+ * honest identifier — a published form is addressable by its slug or its id, an
+ * order line by its SKU or its catalog-item id — and the author may reasonably
+ * have typed either into the builder. The filter passes when it equals ANY alias.
+ */
+export type TriggerMatchContext = Partial<Record<TriggerFilterKey, string | readonly (string | null | undefined)[] | null | undefined>>;
 
 /** Trigger types that fire workflows autonomously (no user click). */
 export const ACTIVATABLE_TRIGGER_TYPES = [
