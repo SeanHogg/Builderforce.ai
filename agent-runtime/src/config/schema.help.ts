@@ -110,6 +110,10 @@ export const FIELD_HELP: Record<string, string> = {
   "tools.web.search.maxResults": "Default number of results to return (1-10).",
   "tools.web.search.timeoutSeconds": "Timeout in seconds for web_search requests.",
   "tools.web.search.cacheTtlMinutes": "Cache TTL in minutes for web_search results.",
+  "tools.web.search.keylessFallback":
+    "Let web_search fall back to a keyless index when the selected provider has no API key (default: off). Opt-in because it adds outbound requests the operator did not configure.",
+  "tools.web.search.keyless.searxngUrl":
+    "Base URL of a SearXNG instance you run. Used by the keyless adapter in preference to Wikipedia; the instance needs formats: [json] enabled.",
   "tools.web.search.perplexity.apiKey":
     "Perplexity or OpenRouter API key (fallback: PERPLEXITY_API_KEY or OPENROUTER_API_KEY env var).",
   "tools.web.search.perplexity.baseUrl":

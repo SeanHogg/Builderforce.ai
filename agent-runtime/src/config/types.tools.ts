@@ -397,10 +397,32 @@ export type ToolsConfig = {
     search?: {
       /** Enable web search tool (default: true when API key is present). */
       enabled?: boolean;
-      /** Search provider ("brave", "perplexity", or "grok"). */
-      provider?: "brave" | "perplexity" | "grok";
+      /** Search provider ("brave", "perplexity", "grok", or "keyless"). */
+      provider?: "brave" | "perplexity" | "grok" | "keyless";
       /** Brave Search API key (optional; defaults to BRAVE_API_KEY env var). */
       apiKey?: string;
+      /**
+       * Fall back to the keyless adapter when the selected provider has no key
+       * (default: FALSE).
+       *
+       * Off by default on purpose. The gateway's contract is that the operator
+       * declares which tools may reach the network and where; turning an
+       * unconfigured `web_search` into an outbound call to Wikipedia would
+       * change a deployment's egress profile without anyone asking for it. With
+       * this on, an unkeyed search reaches the operator's own SearXNG if one is
+       * configured below, and Wikipedia otherwise.
+       */
+      keylessFallback?: boolean;
+      /** Keyless adapter configuration (provider="keyless", or the fallback). */
+      keyless?: {
+        /**
+         * Base URL of a SearXNG instance the OPERATOR runs — real open-web
+         * coverage with no vendor account and no per-query meter. Preferred over
+         * Wikipedia whenever it is set. The instance must have `formats: [json]`
+         * enabled in its settings.yml or it will refuse API requests with 403.
+         */
+        searxngUrl?: string;
+      };
       /** Default search results count (1-10). */
       maxResults?: number;
       /** Timeout in seconds for search requests. */
