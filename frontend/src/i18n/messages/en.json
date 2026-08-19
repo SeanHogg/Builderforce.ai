@@ -16388,7 +16388,7 @@
     "run": "Run",
     "saveCollaborate": "Save & collaborate",
     "addToCanvas": "Add to canvas",
-    "searchEverything": "Search object types…",
+    "searchObjectTypes": "Search object types…",
     "askBrain": "Ask Brain about this canvas",
     "sendBrain": "Send to Brain",
     "resizePrompt": "Resize prompt area",

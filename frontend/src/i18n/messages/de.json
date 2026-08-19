@@ -16388,7 +16388,7 @@
     "run": "Ausführen",
     "saveCollaborate": "Speichern und zusammenarbeiten",
     "addToCanvas": "Zum Canvas hinzufügen",
-    "searchEverything": "Objekttypen durchsuchen…",
+    "searchObjectTypes": "Objekttypen durchsuchen…",
     "askBrain": "Brain zu diesem Canvas fragen",
     "sendBrain": "An Brain senden",
     "resizePrompt": "Größe des Prompt-Bereichs ändern",

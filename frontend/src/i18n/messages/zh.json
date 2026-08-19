@@ -16388,7 +16388,7 @@
     "run": "运行",
     "saveCollaborate": "保存并协作",
     "addToCanvas": "添加到画布",
-    "searchEverything": "搜索对象类型…",
+    "searchObjectTypes": "搜索对象类型…",
     "askBrain": "就此画布询问 Brain",
     "sendBrain": "发送给 Brain",
     "resizePrompt": "调整提示词区域大小",

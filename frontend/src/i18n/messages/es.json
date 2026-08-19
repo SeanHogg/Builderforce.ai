@@ -16388,7 +16388,7 @@
     "run": "Ejecutar",
     "saveCollaborate": "Guardar y colaborar",
     "addToCanvas": "Añadir al Lienzo",
-    "searchEverything": "Buscar tipos de objeto…",
+    "searchObjectTypes": "Buscar tipos de objeto…",
     "askBrain": "Pregunta a Brain sobre este lienzo",
     "sendBrain": "Enviar a Brain",
     "resizePrompt": "Cambiar el tamaño del área de indicaciones",

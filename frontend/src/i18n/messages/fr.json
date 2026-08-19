@@ -16388,7 +16388,7 @@
     "run": "Exécuter",
     "saveCollaborate": "Enregistrer et collaborer",
     "addToCanvas": "Ajouter au Canevas",
-    "searchEverything": "Rechercher des types d'objets…",
+    "searchObjectTypes": "Rechercher des types d'objets…",
     "askBrain": "Interroger Brain sur ce canevas",
     "sendBrain": "Envoyer à Brain",
     "resizePrompt": "Redimensionner la zone de saisie",

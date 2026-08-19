@@ -183,6 +183,54 @@ export function isCreationEventWriteConflict(error: unknown): boolean {
   return isUniqueViolation && /(?:uq_creation_events_(?:revision|idempotency)|creation_session_events_session_id_(?:revision|idempotency_key)_key)/i.test(text);
 }
 
+/**
+ * What a Postgres error was actually about, as far as the driver will say.
+ *
+ * `db.batch` on neon-http reports ONE message for the whole batch and no
+ * statement index, so a `duplicate key value violates unique constraint
+ * "creation_session_objects_pkey"` arriving from a six-statement claim names the
+ * TABLE and nothing else — not which row, not how many were in flight, not
+ * whether the ids the caller sent were even distinct. That is exactly the report
+ * the register had to reason about by inference, and inference is how a fix gets
+ * declared for a path nobody proved was taken.
+ *
+ * The constraint name is the only handle the driver gives, so it is extracted
+ * rather than guessed at, and the caller maps it back onto its own labelled
+ * inventory of what it was about to write.
+ */
+export function pgFailureDetail(error: unknown): { code: string | null; constraint: string | null } {
+  const detail = error && typeof error === 'object'
+    ? error as { code?: unknown; constraint?: unknown; message?: unknown }
+    : null;
+  const text = [detail?.message, error instanceof Error ? error.message : String(error)]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ');
+  const named = typeof detail?.constraint === 'string' && detail.constraint
+    ? detail.constraint
+    : /unique constraint "([^"]+)"|violates [a-z ]*constraint "([^"]+)"/i.exec(text)?.slice(1).find(Boolean) ?? null;
+  return {
+    code: typeof detail?.code === 'string' ? detail.code : null,
+    constraint: named,
+  };
+}
+
+/**
+ * How many of `values` are distinct once case is ignored.
+ *
+ * The claim's own primary-key collision had exactly this shape: `UUID_RE` accepts
+ * either case, the `uuid` column does not distinguish them, and a validator using
+ * a case-SENSITIVE Set therefore passed two ids that Postgres then rejected as
+ * one. Reporting BOTH counts is what makes the next occurrence readable — equal
+ * counts rule that cause out, unequal counts confirm it, and a guess does neither.
+ */
+export function distinctIdCounts(values: readonly string[]): { total: number; distinct: number; distinctCaseless: number } {
+  return {
+    total: values.length,
+    distinct: new Set(values).size,
+    distinctCaseless: new Set(values.map((value) => value.toLowerCase())).size,
+  };
+}
+
 function parseTemplateGraph(raw: unknown): { objects: GraphObjectInput[]; connections: GraphConnectionInput[]; viewport?: unknown } | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const graph = raw as { objects?: unknown; connections?: unknown; viewport?: unknown };
@@ -825,6 +873,11 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const { objects, connections } = durableCreationGraph(localObjects, localConnections);
     const sessionId = crypto.randomUUID();
     const title = cleanTitle(body.title, 'Untitled session');
+    // A LABELLED inventory rather than a bare array: `db.batch` on neon-http
+    // reports one Postgres message for the whole batch with no statement index,
+    // so the only way the catch below can say WHICH write failed is to know what
+    // it was about to run and in what order. See `pgFailureDetail`.
+    const planned: Array<{ label: string; table: string; rows: number; statement: unknown }> = [];
     const statements: unknown[] = [
       db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title, preview: buildPreview(objects), createdBy: userId, updatedBy: userId, canvasRevision: 1, viewport: body.viewport ?? { x: 0, y: 0, zoom: 1 } }),
       db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId, viewport: body.viewport ?? { x: 0, y: 0, zoom: 1 } }),

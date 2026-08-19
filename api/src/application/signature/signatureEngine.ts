@@ -72,7 +72,7 @@ const asPartyStatus = (value: string): SignaturePartyStatus =>
  * concurrent decision. Deriving it means a sixth status added to the contract is
  * classified once, in the contract, and this stays correct.
  */
-const TERMINAL_PARTY_STATUSES: readonly string[] =
+const TERMINAL_PARTY_STATUSES: string[] =
   SIGNATURE_PARTY_STATUSES.filter((status) => isTerminalPartyStatus(status));
 
 // ---------------------------------------------------------------------------

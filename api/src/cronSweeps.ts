@@ -69,6 +69,7 @@ import { runFinanceRollup } from './application/finance/financeRollup';
 import { runTriggerSweep } from './application/canvas/runTriggerSweep';
 import { runOperationsRollup } from './application/operations/operationsRollup';
 import { runSignatureReminderSweep } from './application/signature/runSignatureReminderSweep';
+import { runFormReminderSweep } from './application/collection/formInvitations';
 import { runLegalRollup } from './application/legal/legalRollup';
 
 /**
@@ -187,6 +188,25 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       const r = await runSignatureReminderSweep(env);
       return r.expired || r.reminded || r.failed
         ? `expired=${r.expired} reminded=${r.reminded}${r.failed ? ` failed=${r.failed}` : ''}`
+        : null;
+    },
+  },
+  {
+    key: 'form-reminders',
+    cadence: 'daily',
+    // The form half of the same job. It was logged as blocked on a roster that
+    // does not exist yet, and that was wrong: for `namedRecipients`,
+    // `form_recipients` IS the roster and `responded_at` is the answer, so "who
+    // still owes us" is one predicate rather than a feature waiting on a feature.
+    description:
+      'Chase every named recipient of an open form who has not answered it, on the '
+      + 'cadence the form declared. Each reminder RE-ISSUES the recipient credential '
+      + 'so the message can carry a link that opens — only the hash is ever stored, so '
+      + 'the old link is the price of a working one.',
+    run: async ({ env }) => {
+      const r = await runFormReminderSweep(env);
+      return r.chased || r.reminded || r.failed
+        ? `chased=${r.chased} reminded=${r.reminded}${r.failed ? ` failed=${r.failed}` : ''}`
         : null;
     },
   },

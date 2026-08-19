@@ -1615,6 +1615,37 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const liveSocketRef = useRef<WebSocket | null>(null);
   /** Last outbound presence frame's timestamp + payload, for the send throttle. */
   const presenceSentRef = useRef<{ atMs: number; pending: CanvasPresenceState | null; timer: number | null }>({ atMs: 0, pending: null, timer: null });
+  /**
+   * Put this client's ephemeral state on the relay.
+   *
+   * Throttled to {@link PRESENCE_SEND_INTERVAL_MS}, and the throttle COALESCES
+   * rather than drops: a move inside the window is remembered and flushed at the
+   * end of it. Dropping instead would leave the pointer stopped at wherever the
+   * last frame happened to land whenever someone moved fast and then stopped —
+   * which is exactly when a cursor is being watched.
+   *
+   * Silent when the socket is not open; the presence poll is the fallback and
+   * resumes carrying the cursor on its own (see the reconcile effect).
+   */
+  const sendPresence = useCallback((state: CanvasPresenceState) => {
+    const socket = liveSocketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    const throttle = presenceSentRef.current;
+    const flush = (payload: CanvasPresenceState) => {
+      throttle.atMs = Date.now();
+      throttle.pending = null;
+      try { socket.send(JSON.stringify({ type: CANVAS_PRESENCE_FRAME, ...payload })); } catch { /* the socket is closing; the poll takes over */ }
+    };
+    const waited = Date.now() - throttle.atMs;
+    if (waited >= PRESENCE_SEND_INTERVAL_MS && throttle.timer == null) { flush(state); return; }
+    throttle.pending = { ...throttle.pending, ...state };
+    if (throttle.timer != null) return;
+    throttle.timer = window.setTimeout(() => {
+      throttle.timer = null;
+      const pending = throttle.pending;
+      if (pending) flush(pending);
+    }, Math.max(0, PRESENCE_SEND_INTERVAL_MS - waited));
+  }, []);
   const pendingViewport = useRef<{ x: number; y: number; zoom: number } | null>(null);
   const flowWrapRef = useRef<HTMLDivElement | null>(null);
   // The prompt's real height, published to the board as `--composer-space` — the
@@ -2988,37 +3019,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const clearSelection = useCallback(() => {
     setSelectedId((current) => current == null ? current : null);
     setSelectedIds((current) => current.length ? [] : current);
-  }, []);
-  /**
-   * Put this client's ephemeral state on the relay.
-   *
-   * Throttled to {@link PRESENCE_SEND_INTERVAL_MS}, and the throttle COALESCES
-   * rather than drops: a move inside the window is remembered and flushed at the
-   * end of it. Dropping instead would leave the pointer stopped at wherever the
-   * last frame happened to land whenever someone moved fast and then stopped —
-   * which is exactly when a cursor is being watched.
-   *
-   * Silent when the socket is not open; the presence poll is the fallback and
-   * resumes carrying the cursor on its own (see the reconcile effect).
-   */
-  const sendPresence = useCallback((state: CanvasPresenceState) => {
-    const socket = liveSocketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    const throttle = presenceSentRef.current;
-    const flush = (payload: CanvasPresenceState) => {
-      throttle.atMs = Date.now();
-      throttle.pending = null;
-      try { socket.send(JSON.stringify({ type: CANVAS_PRESENCE_FRAME, ...payload })); } catch { /* the socket is closing; the poll takes over */ }
-    };
-    const waited = Date.now() - throttle.atMs;
-    if (waited >= PRESENCE_SEND_INTERVAL_MS && throttle.timer == null) { flush(state); return; }
-    throttle.pending = { ...throttle.pending, ...state };
-    if (throttle.timer != null) return;
-    throttle.timer = window.setTimeout(() => {
-      throttle.timer = null;
-      const pending = throttle.pending;
-      if (pending) flush(pending);
-    }, Math.max(0, PRESENCE_SEND_INTERVAL_MS - waited));
   }, []);
   const onCanvasPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!flowRef.current) return;
@@ -11087,7 +11087,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
         {!presentMode && paletteOpen && <aside id="canvas-object-palette" data-testid="canvas-palette" className={styles.palette}>
           <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label={t('closePalette')}>×</button></div>
-          <div className={styles.paletteSearchWrap}><span aria-hidden><Icon source="⌕" size="1em" /></span><input ref={paletteSearchRef} data-testid="canvas-palette-search" className={styles.search} aria-label={t('searchEverything')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
+          <div className={styles.paletteSearchWrap}><span aria-hidden><Icon source="⌕" size="1em" /></span><input ref={paletteSearchRef} data-testid="canvas-palette-search" className={styles.search} aria-label={t('searchObjectTypes')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchObjectTypes')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
           <div className={styles.paletteSections}>{CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${t(`group.${item.group}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
             const collapsed = !paletteSearch.trim() && collapsedPaletteGroups.has(group.group);
             const regionId = `canvas-palette-${group.group.toLowerCase()}`;
