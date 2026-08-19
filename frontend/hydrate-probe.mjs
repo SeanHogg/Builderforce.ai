@@ -22,6 +22,24 @@ const dom = await JSDOM.fromURL(url, {
   pretendToBeVisual: true,
   virtualConsole: vc,
   beforeParse(window) {
+    // Record every text-node change React makes while it regenerates a mismatched
+    // tree: the OLD value is what the server sent, the NEW value is what the client
+    // rendered — which is the actual diff the minified error refuses to name.
+    window.__textEdits = [];
+    const install = () => {
+      const observer = new window.MutationObserver((records) => {
+        for (const record of records) {
+          if (record.type === 'characterData') {
+            window.__textEdits.push({ from: record.oldValue, to: record.target.data, phase: window.document.readyState, tag: record.target.parentNode?.nodeName });
+          }
+          for (const node of record.addedNodes ?? []) {
+            if (node.nodeType === 3 && node.data.trim()) window.__textEdits.push({ from: null, to: node.data, phase: window.document.readyState, tag: record.target?.nodeName });
+          }
+        }
+      });
+      observer.observe(window.document, { subtree: true, childList: true, characterData: true, characterDataOldValue: true });
+    };
+    install();
     // jsdom ships none of the platform streams/encoders the Next client bundle
     // touches on boot; without them it throws before React ever hydrates.
     window.ReadableStream ||= ReadableStream;
@@ -61,6 +79,15 @@ console.log('react fiber on root:', fiberKey ?? 'NONE — React never mounted');
 console.log('body text sample   :', (doc.body.textContent ?? '').replace(/\s+/g, ' ').slice(0, 200));
 
 const hydration = seen.filter(([, m]) => /hydrat|did not match|server rendered|418|425|423/i.test(m));
+const edits = dom.window.__textEdits ?? [];
+// Parser-time chunking rewrites the same text node repeatedly while readyState is
+// 'loading'; React's own rewrites land after that, which is the only window of interest.
+const changed = edits.filter((e) => e.from != null && e.from !== e.to && e.phase !== 'loading' && e.tag !== 'SCRIPT');
+console.log('--- text nodes REWRITTEN during hydration (server -> client) ---');
+for (const e of changed.slice(0, 25)) console.log(`  <${e.tag}> [${e.phase}]
+  server: ${JSON.stringify(e.from).slice(0, 300)}
+  client: ${JSON.stringify(e.to).slice(0, 300)}`);
+if (!changed.length) console.log('  (none captured)');
 console.log('--- hydration-related console output ---');
 if (!hydration.length) console.log('(none)');
 for (const [level, m] of hydration) console.log(`[${level}] ${m.slice(0, 4000)}\n`);

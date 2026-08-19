@@ -20,6 +20,8 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { flowConnectionProps } from '@/lib/flowConnection';
+import { useCoarsePointer } from '@/lib/useCoarsePointer';
 import {
   workflowDefinitions,
   type WorkflowDefinitionGraph,
@@ -371,6 +373,11 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
 
   const hasBuild = useMemo(() => hasBuildNodes(nodes.map((n) => ({ kind: n.data.kind }))), [nodes]);
 
+  // The same connection contract the creation canvas uses: a handle is a connection
+  // point, and the drag decides direction — not which side of the card you released on.
+  const coarsePointer = useCoarsePointer();
+  const connectionProps = useMemo(() => flowConnectionProps(coarsePointer ? 'coarse' : 'fine'), [coarsePointer]);
+
   // Save (if needed), then download the definition as YAML.
   const exportYaml = useCallback(async () => {
     setBusy(true);
@@ -547,6 +554,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            {...connectionProps}
             onInit={(inst) => { rfRef.current = inst; }}
             nodeTypes={nodeTypes}
             onNodeClick={(_, n) => setSelectedId(n.id)}

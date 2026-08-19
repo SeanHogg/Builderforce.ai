@@ -205,6 +205,7 @@ import { detectGeoColumns, mapObjectFields, mapPointsFromRows } from '@/lib/canv
 import { analyzeCompetitorGeography, competitorSitesFrom } from '@/lib/competitorGeo';
 import { evaluateCanvasTriggers, isDateComparator, triggerUnboundHint } from '@/lib/canvasTriggers';
 import { useCoarsePointer } from '@/lib/useCoarsePointer';
+import { flowConnectionProps } from '@/lib/flowConnection';
 import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
 import { canvasStrokes, drawingPatch, DRAWING_TOOLS, eraseStrokes, strokesSvg, type CanvasDrawingTool, type CanvasStroke } from '@/lib/canvasDrawing';
 import { DEFAULT_DRAWING_PREFERENCES, readDrawingPreferences, writeDrawingPreferences, type DrawingPreferences } from './drawingPreferences';
@@ -2990,6 +2991,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     () => canvasInteractionProps({ gesture: canvasGesture, pointer: coarsePointer ? 'coarse' : 'fine', drawing: drawingMode }),
     [canvasGesture, coarsePointer, drawingMode],
   );
+
+  // How a drawn connection is accepted. Shared with the workflow builder, because
+  // "released on the wrong side of the card and nothing happened" is one bug, not two.
+  const connectionProps = useMemo(() => flowConnectionProps(coarsePointer ? 'coarse' : 'fine'), [coarsePointer]);
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), type: 'smoothstep', data: { connectionKind }, label: connectionKind, markerEnd: { type: MarkerType.ArrowClosed } }, current));
@@ -10944,6 +10949,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onNodesChange={onCanvasNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          {...connectionProps}
           onNodeClick={onNodeClick}
           onSelectionChange={onSelectionChange}
           onPaneClick={clearSelection}
