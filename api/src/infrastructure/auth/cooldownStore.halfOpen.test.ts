@@ -78,8 +78,11 @@ describe('half-open early recovery (gap [1235])', () => {
     await recordFailure(env, VENDOR, MODEL, 429);
     expect((await loadCooldowns(env, [{ vendor: VENDOR, model: MODEL }])).has(KEY)).toBe(true);
 
-    // The new trial window is measured from the re-cool, not the original.
-    vi.advanceTimersByTime(74_000);
+    // The new window is measured from the re-cool AND escalated: strike 2 doubles
+    // the transient TTL to 600s, so the probe delay is min(600 * .25, 90 * 2) =
+    // 150s rather than the first strike's 75s. A model that keeps failing must
+    // back off, or the half-open probe itself becomes the thing spending the runs.
+    vi.advanceTimersByTime(149_000);
     expect((await loadCooldowns(env, [{ vendor: VENDOR, model: MODEL }])).has(KEY)).toBe(true);
     vi.advanceTimersByTime(2_000);
     expect((await loadCooldowns(env, [{ vendor: VENDOR, model: MODEL }])).has(KEY)).toBe(false);

@@ -19,6 +19,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { approvals, executions, llmUsageLog, pullRequests, tasks, toolAuditEvents, runModelOutcomes } from '../../infrastructure/database/schema';
 import { normalizeActionType } from '../llm/actionTypes';
+import { classifyRunFailure } from './runFailureReasons';
 import { applyOutcomeToRoutingTable } from '../llm/routingTable';
 import { bumpOutcomesVersion } from '../../infrastructure/cache/readThroughCache';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
@@ -175,6 +176,10 @@ export interface ClientRunOutcome {
   steps?: number;
   costMc?: number;
   approved?: boolean;
+  /** The run died on a provider rate limit. An AVAILABILITY signal that demotes the
+   *  model in the learned router without teaching it the model is low-quality
+   *  (migration 0485). Defaults false when the client cannot tell. */
+  rateLimited?: boolean;
 }
 
 /**
@@ -224,6 +229,7 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
         steps,
         costUsdMillicents: costMc,
         terminalStatus: o.terminalStatus,
+        rateLimited: !!o.rateLimited,
       })
       .onConflictDoNothing({ target: runModelOutcomes.clientRunId })
       .returning({ id: runModelOutcomes.id });
@@ -240,6 +246,7 @@ export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number,
         score,
         costMc,
         merged: !!o.merged,
+        rateLimited: !!o.rateLimited,
       });
       // A new labeled outcome means the tenant's SFT/DPO datasets + variant-eval
       // views are stale — orphan them (best-effort, same fold gate as routing).
@@ -363,7 +370,7 @@ const TERMINAL = new Set<string>(['completed', 'failed', 'cancelled']);
 export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: number }): Promise<void> {
   try {
     const [exec] = await db
-      .select({ status: executions.status, taskId: executions.taskId, tenantId: executions.tenantId, cloudAgentRef: executions.cloudAgentRef, result: executions.result })
+      .select({ status: executions.status, taskId: executions.taskId, tenantId: executions.tenantId, cloudAgentRef: executions.cloudAgentRef, result: executions.result, errorMessage: executions.errorMessage })
       .from(executions)
       .where(eq(executions.id, args.executionId))
       .limit(1);
@@ -412,6 +419,14 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       approved,
     });
 
+    // AVAILABILITY, not quality (migration 0485). A run the provider refused with a 429
+    // still scores 0 — it did not complete — but the router must not read that 0 as
+    // "this model writes bad code". The classification is the platform's existing
+    // failure taxonomy, so this records `classifyRunFailure`'s verdict rather than
+    // inventing a second regex for the same question.
+    const rateLimited = terminalStatus === 'failed'
+      && classifyRunFailure(exec.errorMessage) === 'rate_limited';
+
     const resolvedModel = model || 'unknown';
     const rowValues = {
       tenantId: exec.tenantId,
@@ -429,6 +444,7 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       steps,
       costUsdMillicents: costMc,
       terminalStatus,
+      rateLimited,
       // Literal reinforcement signals (migration 0333).
       toolCalls: toolCounts.toolCalls,
       toolErrors: toolCounts.toolErrors,
@@ -452,7 +468,7 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       await db
         .update(runModelOutcomes)
         .set({
-          score, merged: pr.merged, ciGreen: pr.ciGreen, degraded, steps, costUsdMillicents: costMc, resolvedModel, plan,
+          score, merged: pr.merged, ciGreen: pr.ciGreen, degraded, steps, costUsdMillicents: costMc, resolvedModel, plan, rateLimited,
           // Refresh the literal signals on re-score too (a late PR-close / approval lands here).
           toolCalls: toolCounts.toolCalls, toolErrors: toolCounts.toolErrors, humanRejected,
           // Re-evaluate on re-score too (the deliverable text may have settled).
@@ -486,6 +502,7 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
         score,
         costMc,
         merged: pr.merged,
+        rateLimited,
       });
       // Orphan the tenant's SFT/DPO datasets + variant-eval views (see client path).
       await bumpOutcomesVersion(env, exec.tenantId);

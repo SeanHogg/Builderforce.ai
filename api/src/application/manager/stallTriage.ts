@@ -203,6 +203,16 @@ export interface StallInput {
   mergeWithheld: boolean;
   /** How long the ticket may idle before counting as stalled. Defaults to {@link STALL_AFTER_MS}. */
   stallAfterMs?: number;
+  /**
+   * The tenant's coding pool has no provider headroom right now (see
+   * `llm/poolHealth.ts`). Resolved ONCE PER PASS and threaded to every ticket — it is a
+   * property of the workspace's capacity, not of this ticket.
+   *
+   * When true, {@link diagnoseStall} still diagnoses the ticket honestly and still
+   * records it as stuck; it only refuses to hand back a remedy that would SPEND A RUN.
+   * See {@link holdWhilePoolRateLimited}.
+   */
+  poolRateLimited?: boolean;
 }
 
 const NOT_STALLED = (cause: StallCause, detail: string): StallDiagnosis =>
@@ -249,6 +259,63 @@ export function isStallResolved(cause: StallCause): boolean {
  * the two never contradict each other on the same ticket.
  */
 export function diagnoseStall(input: StallInput): StallDiagnosis {
+  return holdWhilePoolRateLimited(classifyStall(input), input.poolRateLimited === true);
+}
+
+/**
+ * Remedies whose whole effect is to START A RUN.
+ *
+ * ONE definition, two consumers, and they must never drift: the triage stage governs
+ * these with its dispatch cap, and {@link holdWhilePoolRateLimited} withholds these when
+ * the provider pool has no headroom. Both are asking the identical question — "does this
+ * remedy spend a run?" — so a remedy added to the taxonomy has exactly one place to be
+ * classified. It lives here rather than in the stage because this module owns the remedy
+ * vocabulary; the stage only executes it.
+ *
+ * `return_to_implementation` is deliberately ABSENT even though the lane move it makes
+ * can trigger a run: the move itself is a correction of a wrong status (a ticket sitting
+ * in review with no deliverable IS in the wrong lane), and leaving it mis-filed until
+ * capacity returns would make the board lie for the duration.
+ */
+export const RUN_SPENDING_REMEDIES: ReadonlySet<StallRemedy> = new Set<StallRemedy>([
+  'dispatch', 'reset_breaker', 'drive_signoff', 'resolve_conflict',
+]);
+
+/**
+ * Withhold a run-spending remedy while the provider pool is rate-limited. PURE.
+ *
+ * THE LOOP THIS BREAKS. Measured on project 11, 2026-07-31: three consecutive 429s trip
+ * a ticket's autonomy breaker → triage diagnoses `failure_breaker` and resets it → the
+ * fresh run dispatches into the same saturated pool and 429s → the breaker re-arms. The
+ * `failure_breaker` cohort GREW while triage was working exactly as designed, because a
+ * reset is a bet that the next attempt can succeed and that bet is knowably lost before
+ * it is placed. Every pass spent a billable run to rediscover the same fact.
+ *
+ * The verdict is `cooling_down` on purpose, and the choice is load-bearing in two ways:
+ * {@link isStallResolved} treats it as UNRESOLVED, so the ticket's register row stays
+ * open and keeps its attempt count instead of being erased and refiled (the same defect
+ * that made the escalation ceiling unreachable); and the manager's feed says the true
+ * thing — the platform is out of capacity — rather than blaming the ticket.
+ *
+ * It is a HOLD, not a stop: nothing here changes the diagnosis, and the very next pass
+ * after the pool recovers applies the remedy it was always going to.
+ */
+export function holdWhilePoolRateLimited(diagnosis: StallDiagnosis, poolRateLimited: boolean): StallDiagnosis {
+  if (!poolRateLimited || !diagnosis.stalled) return diagnosis;
+  if (!RUN_SPENDING_REMEDIES.has(diagnosis.remedy)) return diagnosis;
+  return {
+    stalled: false,
+    cause: 'cooling_down',
+    remedy: 'none',
+    escalated: false,
+    detail:
+      'Holding: every provider in the coding pool is rate-limited right now, so starting '
+      + 'a run would fail on dispatch and spend the attempt for nothing. It resumes on its '
+      + 'own as soon as capacity returns.',
+  };
+}
+
+function classifyStall(input: StallInput): StallDiagnosis {
   const stallAfter = input.stallAfterMs ?? STALL_AFTER_MS;
 
   // ── Not stalled ───────────────────────────────────────────────────────────

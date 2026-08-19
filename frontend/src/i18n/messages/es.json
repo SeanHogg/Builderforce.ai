@@ -9403,6 +9403,39 @@
         "plan": "¿Qué vas a hacer a continuación para desbloquearlo?"
       },
       "copyDiagnosticsAria": "Copiar la conversación y el registro de herramientas del gestor"
+    },
+    "blockedPrs": {
+      "title": "Pull requests a la espera de una persona ({count})",
+      "caption": "El manager lo intentó hasta su límite y se detuvo: ninguna pasada posterior las tocará. Primero el ticket de mayor valor, que es el orden en el que conviene trabajarlas. Una fila cuyo ticket ya terminó es residuo: el trabajo se entregó por otra vía y solo queda la rama.",
+      "empty": "Ahora mismo no hay nada a la espera de una persona.",
+      "more": "{count} más sin listar: esta es la porción superior por valor de negocio.",
+      "col": {
+        "pr": "PR",
+        "ticket": "Ticket",
+        "value": "Valor",
+        "reason": "Por qué se detuvo"
+      },
+      "row": {
+        "noTicket": "Sin ticket",
+        "ticketDone": "Ticket ya terminado: se puede cerrar",
+        "blocked": "Bloqueada"
+      },
+      "action": {
+        "closeDone": "Cerrar {count} PR de tickets terminados",
+        "working": "Cerrando…"
+      },
+      "confirm": {
+        "title": "¿Cerrar los pull requests de tickets terminados?",
+        "message": "Esto cierra {count} pull requests en el proveedor. Cada uno pertenece a un ticket ya terminado, así que el trabajo se entregó por otra vía. El cierre no se puede deshacer desde aquí.",
+        "action": "Cerrarlos"
+      },
+      "result": {
+        "summary": "Cerrados {closed}. Omitidos {skipped}.",
+        "truncated": "Se seleccionaron más de los que permite una sola petición ({max}): vuelve a ejecutarlo para continuar."
+      },
+      "error": {
+        "generic": "No se pudieron cerrar estos pull requests."
+      }
     }
   },
   "project360": {

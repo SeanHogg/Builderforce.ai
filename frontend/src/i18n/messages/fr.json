@@ -9403,6 +9403,39 @@
         "plan": "Que ferez-vous ensuite pour débloquer la situation ?"
       },
       "copyDiagnosticsAria": "Copier la conversation et le relevé d’outils du gestionnaire"
+    },
+    "blockedPrs": {
+      "title": "Pull requests en attente d’une personne ({count})",
+      "caption": "Le manager a essayé jusqu’à sa limite puis s’est arrêté : aucune passe ultérieure n’y touchera. Ticket de plus forte valeur en premier, c’est l’ordre dans lequel les traiter. Une ligne dont le ticket est déjà terminé n’est qu’un résidu : le travail a été livré autrement et il ne reste que la branche.",
+      "empty": "Rien n’attend une personne pour le moment.",
+      "more": "{count} de plus non listées — il s’agit du haut du classement par valeur métier.",
+      "col": {
+        "pr": "PR",
+        "ticket": "Ticket",
+        "value": "Valeur",
+        "reason": "Pourquoi c’est arrêté"
+      },
+      "row": {
+        "noTicket": "Aucun ticket",
+        "ticketDone": "Ticket déjà terminé — fermeture sans risque",
+        "blocked": "Bloquée"
+      },
+      "action": {
+        "closeDone": "Fermer {count} PR de tickets terminés",
+        "working": "Fermeture…"
+      },
+      "confirm": {
+        "title": "Fermer les pull requests des tickets terminés ?",
+        "message": "Cette action ferme {count} pull requests chez le fournisseur. Chacune appartient à un ticket déjà terminé, le travail a donc été livré autrement. La fermeture est irréversible depuis ici.",
+        "action": "Les fermer"
+      },
+      "result": {
+        "summary": "{closed} fermées. {skipped} ignorées.",
+        "truncated": "Plus d’éléments sélectionnés qu’une requête ne peut en fermer ({max}) — relancez pour continuer."
+      },
+      "error": {
+        "generic": "Impossible de fermer ces pull requests."
+      }
     }
   },
   "project360": {

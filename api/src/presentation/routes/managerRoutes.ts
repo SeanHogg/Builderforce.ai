@@ -16,6 +16,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  *   GET   /api/manager/:projectId/stalls    the stuck-ticket register (0367)
  *   GET   /api/manager/:projectId/digest    what you + the team accomplished today
  *   GET   /api/manager/:projectId/chat      the manager's accountability chat + who answers
+ *   POST  /api/manager/:projectId/blocked-prs/close  bulk-close retired PRs whose ticket is done (MANAGER)
  */
 import { Hono } from 'hono';
 import { and, eq, sql, asc, desc, inArray } from 'drizzle-orm';
@@ -38,6 +39,7 @@ import { getDailyDigest } from '../../application/manager/dailyDigest';
 import { resolveManagerVoice } from '../../application/manager/managerChat';
 import type { BrainService } from '../../application/brain/BrainService';
 import { listSystemicFindings } from '../../application/manager/systemicDiagnosis';
+import { closeRetiredPullRequests, MAX_BULK_CLOSE } from '../../application/manager/closeRetiredPullRequests';
 import {
   normalizePrMergePolicy, resolveTenantManagerDefaults, DEFAULT_MANAGER_POLICY, isProjectManaged,
   AGENT_REASSIGN_IDLE_HOURS_RANGE, AGENT_REASSIGN_MAX_PER_SESSION_RANGE,
@@ -607,6 +609,36 @@ export function createManagerRoutes(
       }
     })());
     return c.json({ started: true });
+  });
+
+  /**
+   * POST /api/manager/:projectId/blocked-prs/close — clear the retired-PR pile.
+   *
+   * The pile the merge queue creates by design is RANKED on the overview and, until now,
+   * could only be worked one PR at a time on the provider. This is the doing half. It is
+   * deliberately NOT a "close everything blocked" switch: the use case re-verifies
+   * server-side that each ticket is actually done, so the only PRs it can close are the
+   * ones whose work has already landed another way.
+   *
+   * MANAGER+ because closing a pull request is irreversible from our side — the same bar
+   * the merge-authority policy sits behind.
+   */
+  router.post('/:projectId/blocked-prs/close', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId');
+    const userId = (c as { get(k: 'userId'): string | undefined }).get('userId');
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    const body = await c.req.json<{ prIds?: unknown }>().catch(() => ({} as { prIds?: unknown }));
+    const prIds = Array.isArray(body.prIds) ? body.prIds.filter((v): v is string => typeof v === 'string') : [];
+    if (prIds.length === 0) {
+      return c.json({ error: 'prIds must be a non-empty array of pull-request ids' }, 400);
+    }
+    const result = await closeRetiredPullRequests(c.env as Env, db, {
+      tenantId, projectId, prIds, actorId: userId ?? null,
+    });
+    return c.json({ ...result, max: MAX_BULK_CLOSE });
   });
 
   // POST /api/manager/:projectId/coach — the human coaches the manager (managers only).

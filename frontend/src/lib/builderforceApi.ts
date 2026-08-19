@@ -11,6 +11,7 @@ import { planLimitErrorFromResponse } from './planLimitError';
 import { apiRequest, apiRequestStream, apiRequestText, type RequestOptions } from './apiClient';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
 import type { SessionApp } from './embeddedApps';
+import type { OutcomeMetric, OutcomeMetricFamilyRef } from './outcomeMetrics';
 
 /**
  * `request` / `webRequest` are the two credential flavours this module's ~250
@@ -2212,6 +2213,21 @@ export interface ManagerAutonomy {
  * deliver, because the merge queue turns a livelock into a pile and a pile nobody can
  * rank is only marginally better than the livelock.
  */
+/** Why one requested PR was not closed. Mirrors `CloseSkipReason` on the API. */
+export type CloseBlockedPrSkipReason =
+  'not_open' | 'ticket_not_done' | 'no_credential' | 'already_merged' | 'provider_error';
+
+export interface CloseBlockedPrsResult {
+  closed: number;
+  /** Rows the caller may drop from its list immediately. */
+  closedIds: string[];
+  skipped: Array<{ id: string; number: number | null; reason: CloseBlockedPrSkipReason; detail?: string }>;
+  /** More were requested than one request may close — the tail was not attempted. */
+  truncated: boolean;
+  /** The server's per-request ceiling, so the UI can say how many presses remain. */
+  max?: number;
+}
+
 export interface ManagerBlockedPr {
   id: string;
   number: number | null;
@@ -2357,6 +2373,19 @@ export const managerApi = {
   ): Promise<{ mode: 'directive' | 'task'; id?: string; taskId?: number; started: boolean }> =>
     request<{ mode: 'directive' | 'task'; id?: string; taskId?: number; started: boolean }>(
       `/api/manager/${projectId}/coach`, { method: 'POST', body: JSON.stringify(body) }),
+
+  /**
+   * Bulk-close retired pull requests whose ticket has already finished.
+   *
+   * The pile the merge queue creates by design is ranked on the overview; this is the
+   * only way to ACT on it in-product. The server re-verifies each ticket's done-ness, so
+   * a stale list cannot close a PR that has become live again — `skipped` says which and
+   * why, and `truncated` is true when more were sent than one request may close.
+   */
+  closeBlockedPrs: (projectId: number, prIds: string[]): Promise<CloseBlockedPrsResult> =>
+    request<CloseBlockedPrsResult>(`/api/manager/${projectId}/blocked-prs/close`, {
+      method: 'POST', body: JSON.stringify({ prIds }),
+    }),
 
   /** Retire a coaching directive (dismissed / done). */
   dismissDirective: (projectId: number, directiveId: string, status: 'dismissed' | 'done' = 'dismissed'): Promise<{ ok: boolean }> =>
@@ -8322,18 +8351,18 @@ export interface CreationTimelineMessage {
   createdAt: string;
 }
 
-export interface CreationOutcomeMetric {
-  key: string;
-  label: string;
-  unit: 'seconds' | 'percent' | 'agents' | 'count' | 'usd';
-  direction: 'higher' | 'lower';
-  current: number | null;
-  baseline: number | null;
-}
+/** The metric shape is the platform's, not this endpoint's — see
+ *  `lib/outcomeMetrics.ts`, which both scorecards render from. */
+export type CreationOutcomeMetric = OutcomeMetric;
 
 export interface CreationOutcomeMetrics {
   sessionId: string;
   scope: 'tenant';
+  /** Which definition set produced these numbers. */
+  definitionVersion?: string;
+  /** The one metric the panel leads with. */
+  northStarKey?: string;
+  families?: OutcomeMetricFamilyRef[];
   sampleSize: number;
   metrics: CreationOutcomeMetric[];
 }
@@ -8679,18 +8708,23 @@ export const realizationApi = {
     request<{ realization: Realization }>(`/api/realizations/${encodeURIComponent(id)}`).then((r) => r.realization),
 
   /** Read an idea and rank the proofs. Persists nothing. */
-  plan: (idea: string): Promise<{
+  /** Reading an idea persists nothing — except, when the idea belongs to a
+   *  board, that a READ happened. That is what `readBeforeBuildRate` counts. */
+  plan: (idea: string, sessionId?: string | null): Promise<{
     spec: ChallengeSpec;
     recommendations: RealizationRecommendation[];
     targets: RealizationTargetSummary[];
   }> =>
-    request('/api/realizations/plan', { method: 'POST', body: JSON.stringify({ idea }) }),
+    request('/api/realizations/plan', { method: 'POST', body: JSON.stringify({ idea, ...(sessionId ? { sessionId } : {}) }) }),
 
   /** Choose a proof and plan it. Still builds nothing. */
   create: (input: {
     idea?: string;
     challengeId?: string;
     projectId?: number;
+    /** The board whose idea this proves. Recorded on the row, and the reason the
+     *  loop's outcome events have a session to attach to. */
+    sessionId?: string | null;
     targetKey: RealizationKey;
     strategy?: BackendStrategyKey;
   }): Promise<Realization> =>

@@ -197,6 +197,17 @@
  *   `components/security/IdentityProvidersPanel.tsx` -- deliberately does NOT take
  *   one: `SecurityClient.tsx` is its only importer and is already a boundary, which
  *   is exactly the shape the tightenings above kept finding.
+ *
+ *   804 -> 805 (`useClientFiles`, 2026-08-18) -- `components/manager/
+ *   ManagerBlockedPrs.tsx`, the panel that finally lets a person ACT on the
+ *   retired-PR pile. Its whole reason to exist is interaction: it holds the
+ *   selection of finished-ticket PRs, opens the destructive confirm, calls the
+ *   bulk-close endpoint and drops the rows that closed. None of that is a server
+ *   render. It costs exactly one client file and zero client-rooted pages, and it
+ *   takes NO payload of its own -- the ranked pile is handed in as a prop from the
+ *   overview `ManagerContent` already holds, so the panel adds a boundary and not
+ *   a second fetch. That is the same shape `CompareArenaTabs.tsx` above documents:
+ *   interactivity that is real, payload that is somebody else's.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';

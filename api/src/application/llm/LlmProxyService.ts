@@ -71,7 +71,7 @@ import { validateJsonSchema } from './jsonSchemaValidator';
 import { parseClientReasoningIntent } from './reasoningCapability';
 import { estimateTokensFromChars } from './tokenUsage';
 import type { ActionType } from './actionTypes';
-import { blendedQualityScore, qualityEvidence } from './modelQualityScore';
+import { blendedQualityScore, isChronicallyRateLimited, qualityEvidence } from './modelQualityScore';
 import { PROVIDER_VENDOR_MAP, byoVendorIdsFromCredentials, type TenantVendorKeys } from './tenantProviderKeyService';
 import {
   bareModelId,
@@ -2012,6 +2012,9 @@ export interface ActionModelRankStat {
    *  absent on blobs written before migration 0468. */
   ratedUp?: number;
   ratedDown?: number;
+  /** Share of this bucket's runs that died on a provider 429 (migration 0485).
+   *  An AVAILABILITY signal — see `modelQualityScore.isChronicallyRateLimited`. */
+  rateLimitRate?: number;
 }
 
 export interface RankModelsOptions {
@@ -2054,14 +2057,27 @@ export function rankModelsForAction(
   const curatedIndex = new Map<string, number>();
   reachable.forEach((m, i) => curatedIndex.set(m, i));
 
+  // THROTTLED models are pulled out FIRST, before eligibility is even asked, and
+  // appended last. A model whose recent history is mostly 429s is not a low scorer to
+  // be ranked below the good ones — it is one the provider will refuse again, and
+  // seeding it costs a real dispatch and a failed run to rediscover that. It is never
+  // DROPPED: the cascade must always have somewhere to land, and "the only model left
+  // is one that keeps getting throttled" beats returning nothing. Applied across both
+  // bands because a chronically-refused model is frequently ALSO cold on quality
+  // evidence (its runs never produced a deliverable to score), and leaving it in the
+  // curated `rest` in its original position is exactly how it kept getting seeded.
+  const throttled: string[] = [];
   const eligible: string[] = [];
   const rest: string[] = [];
   for (const m of reachable) {
     const s = statByModel.get(m);
-    if (s && qualityEvidence(s) >= minSamples) eligible.push(m);
+    if (s && isChronicallyRateLimited(s)) throttled.push(m);
+    else if (s && qualityEvidence(s) >= minSamples) eligible.push(m);
     else rest.push(m);
   }
-  if (eligible.length === 0) return [...reachable]; // cold-start: static order unchanged.
+  // Cold-start safety: with nothing ranked AND nothing throttled, the curated order
+  // stands unchanged. A throttled model alone is still worth demoting.
+  if (eligible.length === 0 && throttled.length === 0) return [...reachable];
 
   const scoreOf = (m: string): number => blendedQualityScore(statByModel.get(m)!) + (bias[m] ?? 0);
   eligible.sort((a, b) => {
@@ -2071,7 +2087,7 @@ export function rankModelsForAction(
     if (c !== 0) return c;
     return (curatedIndex.get(a)! - curatedIndex.get(b)!);
   });
-  return [...eligible, ...rest];
+  return [...eligible, ...rest, ...throttled];
 }
 
 export interface PickCloudModelOptions {

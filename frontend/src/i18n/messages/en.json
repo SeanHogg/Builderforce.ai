@@ -9403,6 +9403,39 @@
         "plan": "What will you do next to unblock it?"
       },
       "copyDiagnosticsAria": "Copy the conversation and the manager's tool trace"
+    },
+    "blockedPrs": {
+      "title": "Pull requests waiting on a person ({count})",
+      "caption": "The manager tried these to its ceiling and stopped — no further pass will touch them. Highest-value ticket first, which is the order to work them in. A row whose ticket already finished is litter: the work landed another way and only the branch is left.",
+      "empty": "Nothing is waiting on a person right now.",
+      "more": "{count} more not listed — this is the top slice by business value.",
+      "col": {
+        "pr": "PR",
+        "ticket": "Ticket",
+        "value": "Value",
+        "reason": "Why it stopped"
+      },
+      "row": {
+        "noTicket": "No ticket",
+        "ticketDone": "Ticket already finished — safe to close",
+        "blocked": "Blocked"
+      },
+      "action": {
+        "closeDone": "Close {count} finished-ticket PRs",
+        "working": "Closing…"
+      },
+      "confirm": {
+        "title": "Close finished-ticket pull requests?",
+        "message": "This closes {count} pull requests on the provider. Each one belongs to a ticket that is already finished, so the work has landed another way. Closing cannot be undone from here.",
+        "action": "Close them"
+      },
+      "result": {
+        "summary": "Closed {closed}. Skipped {skipped}.",
+        "truncated": "More were selected than one request may close ({max}) — run it again to continue."
+      },
+      "error": {
+        "generic": "Could not close these pull requests."
+      }
     }
   },
   "project360": {

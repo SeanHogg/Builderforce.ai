@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   diagnoseStall, escalateIfIneffective, isManagerActionable, stageSignoffFor,
-  MAX_REMEDY_ATTEMPTS, STALL_AFTER_MS, STALL_CAUSE_LABEL,
+  MAX_REMEDY_ATTEMPTS, STALL_AFTER_MS, STALL_CAUSE_LABEL, isStallResolved,
   type StallInput,
 } from './stallTriage';
 
@@ -405,5 +405,61 @@ describe('a project that does not require sign-off is never diagnosed awaiting_s
       stageSignoff: { roleNames: ['Product Owner'], dispatchable: true },
     }));
     expect(d).toMatchObject({ cause: 'awaiting_signoff', remedy: 'drive_signoff' });
+  });
+});
+
+describe('poolRateLimited — the manager holds instead of spending a run it knows will 429', () => {
+  /**
+   * THE LOOP THIS BREAKS (measured project 11, 2026-07-31): three consecutive provider
+   * 429s trip a ticket's breaker → triage resets it → the fresh run 429s → the breaker
+   * re-arms. The `failure_breaker` cohort GREW while triage was working perfectly.
+   */
+  const breakerTicket = (over: Partial<StallInput> = {}) =>
+    diagnose({ autoRunReason: 'run_cap_exhausted', ...over });
+
+  it('resets the breaker as usual while the pool has headroom', () => {
+    const d = breakerTicket({ poolRateLimited: false });
+    expect(d.stalled).toBe(true);
+    expect(d.remedy).toBe('reset_breaker');
+  });
+
+  it('withholds the reset while every provider is rate-limited', () => {
+    const d = breakerTicket({ poolRateLimited: true });
+    expect(d.remedy).toBe('none');
+    expect(d.cause).toBe('cooling_down');
+    expect(d.detail).toMatch(/rate-limited/i);
+  });
+
+  it('holds every remedy that would SPEND a run', () => {
+    // `dispatch` (a ticket that never started) and `drive_signoff` (asks an agent to
+    // review) both start a run, so each is withheld while the pool cannot serve one.
+    expect(diagnose({ autoRunReason: 'will_run', everRan: false, poolRateLimited: true }).remedy).toBe('none');
+    expect(diagnose({
+      status: 'in_review', readiness: 'drive_signoff', signoffDispatchable: true,
+    }).remedy).toBe('drive_signoff');
+    expect(diagnose({
+      status: 'in_review', readiness: 'drive_signoff', signoffDispatchable: true, poolRateLimited: true,
+    }).remedy).toBe('none');
+  });
+
+  it('does NOT hold the cheap, durable work — a throttled provider must not stop the manager managing', () => {
+    // Staffing writes an owner; reconciling corrects a stale PR row. Neither costs a run,
+    // and both are exactly what should still happen while capacity is out.
+    expect(diagnose({ autoRunReason: 'no_agent', poolRateLimited: true }).remedy).toBe('assign');
+    expect(diagnose({
+      pr: { open: true, providerClosed: true, conflicted: false }, poolRateLimited: true,
+    }).remedy).toBe('reconcile_pr');
+    expect(diagnose({ autoRunReason: 'human_gate', poolRateLimited: true }).remedy).toBe('escalate_human');
+  });
+
+  it('holds as cooling_down so the register row KEEPS its attempt count', () => {
+    // `isStallResolved('cooling_down')` is false — the row stays open. Resolving it here
+    // would reset `attempts` to zero and make the escalation ceiling unreachable again.
+    expect(isStallResolved(breakerTicket({ poolRateLimited: true }).cause)).toBe(false);
+  });
+
+  it('leaves a ticket that is not stalled at all untouched', () => {
+    const d = diagnose({ isTerminal: true, poolRateLimited: true });
+    expect(d.cause).toBe('moving');
   });
 });

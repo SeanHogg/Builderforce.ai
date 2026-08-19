@@ -210,6 +210,12 @@ export function classifyBulkAutoRunReason(f: CensusTicketFacts): AutoRunReason {
  */
 export function censusDiagnose(f: CensusTicketFacts, policy: CensusPolicy, stallAfterMs = STALL_AFTER_MS) {
   return diagnoseStall({
+    // `poolRateLimited` is deliberately NOT passed here, and the asymmetry with the deep
+    // stage is the point. That flag withholds a REMEDY; the census applies none — it
+    // counts. Passing it would fold the `failure_breaker` cohort into `cooling_down` for
+    // the duration of a throttle, i.e. the census would stop reporting the largest fact
+    // about the board on exactly the days that fact is true. The report says what is
+    // wrong; the actor decides what it is worth spending on.
     status: f.status,
     isTerminal: f.lane?.isTerminal ?? f.status === TaskStatus.DONE,
     idleMs: f.idleMs,

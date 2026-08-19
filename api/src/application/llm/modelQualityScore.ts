@@ -53,6 +53,41 @@ export interface ModelQualitySignals {
   avgScore: number;
   ratedUp?: number;
   ratedDown?: number;
+  /**
+   * Share of this model's scored runs that ended on a PROVIDER RATE LIMIT — the 0/1
+   * `run_model_outcomes.rate_limited` flag, averaged. Optional: absent on blobs
+   * written before migration 0485.
+   *
+   * Deliberately NOT folded into {@link blendedQualityScore}. A rate-limited model is
+   * not a BAD model — it is an UNREACHABLE one, and the two demand opposite responses.
+   * Scoring it as low quality would teach the router that a strong coder is weak, and
+   * that lesson would outlive the throttling by the full 60-day routing window. So the
+   * signal is carried beside the quality score and consumed only by
+   * {@link isChronicallyRateLimited}, which reorders — it never rescores.
+   */
+  rateLimitRate?: number;
+}
+
+/**
+ * A model is chronically rate-limited for this kind of work when MOST of its recent
+ * runs died on a provider 429 — not when one did.
+ *
+ * MEASURED (project 11, 2026-07-31): 150 of 164 terminal runs in a day were 429s from
+ * the free coder pool, and the router kept seeding the same saturated models because
+ * nothing in the learned table knew the difference between "tried and failed" and
+ * "could not be tried at all". The per-model cooldown handles the next few minutes;
+ * this is the STANDING preference that stops the router leading with a model whose
+ * pool is saturated for this tenant day after day.
+ */
+export const RATE_LIMIT_DEMOTE_THRESHOLD = 0.5;
+
+/** Minimum runs behind a rate-limit share before it may demote a model. Two 429s on a
+ *  model that has only ever run twice is not a pattern; it is a bad afternoon. */
+export const RATE_LIMIT_MIN_RUNS = 4;
+
+/** True when the model's recent history says the provider will refuse it again. PURE. */
+export function isChronicallyRateLimited(s: ModelQualitySignals): boolean {
+  return (s.n || 0) >= RATE_LIMIT_MIN_RUNS && (s.rateLimitRate ?? 0) >= RATE_LIMIT_DEMOTE_THRESHOLD;
 }
 
 /** Total independent observations behind a model's score — runs PLUS human presses.

@@ -71,7 +71,7 @@ beforeEach(() => {
 });
 
 describe('decideRemedyExecution never authorises a run once the budget is spent', () => {
-  const REMEDIES = ['assign', 'dispatch', 'coordinate', 'reset_breaker', 'drive_signoff', 'resolve_conflict', 'return_to_implementation', 'reconcile_pr'];
+  const REMEDIES = ['assign', 'dispatch', 'coordinate', 'reset_breaker', 'drive_signoff', 'resolve_conflict', 'return_to_implementation', 'reconcile_pr'] as const;
 
   it.each(REMEDIES)('%s may not start or race a run with no budget left', (remedy) => {
     const plan = decideRemedyExecution({

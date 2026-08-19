@@ -44,9 +44,26 @@ import { isActionExhausted } from './stallTriage';
 /**
  * How many PRs may cost provider round-trips in one pass.
  *
- * Measured cost of one worked PR is ~1.4s (28839ms across 20). Three keeps the stage
- * near 4s of the 14s discretionary window, which is what leaves room for the stages
- * after it AND the triage reserve. Deeper does not merge more — only the head can merge.
+ * Measured cost of one worked PR is ~1.4s (28839ms across 20), so the 14s discretionary
+ * window could afford several. IT STAYS AT ONE ANYWAY, and the reason is the module
+ * header rather than the budget — this comment previously read "Three", which is the
+ * number the budget allows and not the number the invariant allows.
+ *
+ * ── WHY A BIGGER BUDGET IS NOT A REASON TO GO DEEPER (decided 2026-08-18) ─────────
+ * The question was raised because the PR stage is no longer the pass bottleneck: the
+ * queue bounds it to ~4s, so the budget pressure the depth was chosen under is gone.
+ * But the depth was never really about the budget. Only the HEAD can merge, so a deeper
+ * window buys no additional merges by construction; what it buys is provider round-trips
+ * against branches BEHIND the head — and the moment the head lands, every one of those
+ * is stale again. That is precisely the O(N²) the queue was introduced to stop (349
+ * conflicts against 2 merges). Spending a bigger budget on work that is void before it
+ * finishes is not throughput, it is the old failure with more headroom.
+ *
+ * The pile of already-retired PRs is a real problem and this is not its lever: those are
+ * finished with the manager and waiting on a person, so they are cleared by the bulk
+ * close on the Manager tab (`closeRetiredPullRequests.ts`), not by working the queue
+ * harder. Raise this only if the head's own conclusion — merge or ceiling — is ever
+ * measured to be what the pass is short of.
  */
 export const MERGE_QUEUE_DEPTH = 1;
 

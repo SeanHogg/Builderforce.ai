@@ -1,3 +1,452 @@
+## ✅ RESOLVED 2026-08-19 — 91% of runs were dying on provider 429s, and every layer that should have noticed was measuring the wrong thing
+
+Three seams, one measured fact. On project 11, 2026-07-31, **150 of 164 terminal runs in a
+single day were provider rate limits** — `Gateway 429 on model 'direct/…' · chain: … → … → …`
+— with only 16 completions. Every downstream symptom on that board was this: the per-ticket
+breaker tripping, triage resetting it, the fresh run 429ing, the breaker re-arming. The
+roadmap named the three fixes; all three are now in.
+
+**(a) The dispatcher backs off harder each time a model refuses.** The per-model cooldown
+existed and was FLAT — 5 minutes, with a half-open probe at 90 seconds. That is exactly right
+for a model that blipped and exactly wrong for a pool that is saturated for the day, and the
+flat TTL could not tell them apart: a chronically-throttled model was re-dispatched roughly
+every 90 seconds forever, each probe a real run that cost a billable dispatch and learned
+nothing the previous ninety-one had not. A cooldown now carries a STRIKE COUNT and each
+consecutive strike doubles both the bench and the probe delay (`escalatedTtlSeconds` /
+`trialAfterDelaySeconds`, capped at an hour); the vendor-level bench escalates on the same
+ladder. It self-resets with **no extra write on the success path** — the count lives inside
+the cooldown record, so when the TTL elapses without a fresh failure the record expires and
+the next strike starts at one. A success hook would have meant a KV write on every good
+request, which is the hot path.
+
+**(b) The learned router now knows the difference between "bad" and "unreachable".** A
+rate-limited run scores 0 like any other non-completion, and that 0 was being folded into the
+model's QUALITY — so a strong coder whose free pool was saturated was being taught to the
+router as a weak one, for the full 60-day routing window, most severely for exactly the models
+a free tenant leans on hardest. Migration **0485** adds `run_model_outcomes.rate_limited`
+(classified by the platform's existing `classifyRunFailure`, not a second regex), the routing
+blob carries it as `rateLimitRate` beside the quality score rather than inside it, and
+`isChronicallyRateLimited` (≥4 runs, ≥50% 429s) pulls those models into a TRAILING BAND in
+both `rankModelsForAction` and the blob's own sort. They are demoted, never dropped — the
+cascade must always have somewhere to land.
+
+**(c) The manager stops paying to rediscover a throttle.** `readCodingPoolHealth` answers, in
+one KV read per vendor once per pass, whether the coding pool has headroom (≥75% of its
+vendors cooled ⇒ it does not). When it does not, `holdWhilePoolRateLimited` withholds exactly
+the remedies that SPEND A RUN — `dispatch`, `reset_breaker`, `drive_signoff`,
+`resolve_conflict` — and nothing else: staffing, coordination, PR reconciliation and
+escalation all still happen, because a throttled provider must not stop the manager managing.
+The hold reports `cooling_down`, which `isStallResolved` treats as unresolved, so the ticket's
+register row keeps its attempt count instead of being erased and refiled — the same defect
+that once made the escalation ceiling unreachable. The CENSUS deliberately does **not** take
+the flag: it counts rather than acts, and folding `failure_breaker` into `cooling_down` during
+a throttle would stop it reporting the largest fact about the board on exactly the days that
+fact is true.
+
+Also folded in: `triageStage`'s private `DISPATCHING_REMEDIES` and the new hold were asking
+the identical question, so there is now ONE `RUN_SPENDING_REMEDIES` in `stallTriage.ts` (the
+module that owns the remedy vocabulary) and the stage consults it.
+
+---
+
+## ✅ RESOLVED 2026-08-19 — The retired-PR pile can now be cleared in one press instead of one PR at a time
+
+The manager already ranked the pile it creates by design and already flagged the rows whose
+ticket had finished elsewhere. What a reader could not do was ACT: 75 PRs, each one closed by
+hand on the provider. `POST /api/manager/:projectId/blocked-prs/close` (MANAGER+) and the
+`ManagerBlockedPrs` panel on the Stuck tab close them in bulk.
+
+The criterion is deliberately narrow — **the ticket is already done**, i.e. the work landed
+another way and only the branch is left. That is the one call a person would make without
+opening the branch; a conflict, a red build or a withheld merge is a judgement about
+unfinished work and stays a per-PR link out. The client's flag is only a hint about what to
+OFFER: the server re-verifies each ticket's done-ness, so a list rendered ten minutes ago
+cannot close a PR whose ticket has since reopened. Closing goes through the multi-provider
+`closePullRequest`; a PR the provider reports as already merged is reconciled to `merged`
+rather than mis-recorded, and one the provider does not have is closed locally, because a row
+the provider disagrees with would otherwise sit in the pile forever. Bounded at 25 per request
+with `truncated` surfaced, never silent.
+
+**`MERGE_QUEUE_DEPTH` stays at 1**, and the open question is closed rather than left open. It
+was raised because the PR stage is no longer the pass bottleneck, but the depth was never
+really about the budget: only the HEAD can merge, so a deeper window buys no additional merges
+by construction — it buys provider round-trips against branches that go stale the moment the
+head lands, which is the O(N²) the queue exists to stop. The comment claiming "Three" was
+stale against a value of 1 and now states the invariant instead of the budget. The pile is
+cleared by the bulk close, not by working the queue harder.
+
+---
+
+## ✅ RESOLVED 2026-08-18 — The RFP block is closed, and eight canvas/design gaps with it
+
+Eleven Gap Register entries, closed in one pass. They are grouped below by the question each
+one was really asking, because several of them turned out to be the same question.
+
+---
+
+### 1 · RFP / RFQ Response (PRD 15) — all five deferred sub-items
+
+**A proposal claimed a freshness it did not have.** The >5-day gate re-ran the deterministic
+system audits and set `scan_refreshed=true` — but the capability roster does not come from those
+audits, it comes from the deep `architecture-analysis` artifacts, which age on their own clock.
+So a project could show a "Scan refreshed" badge over a roster years older than the badge. There
+are now TWO clocks. `ensureDeepAnalysis` reads the newest artifact, and when it is stale it FIRES
+the Architect (reusing a run already in flight rather than putting a second ticket on the board),
+records the run id on `rfp_responses.deep_analysis_run_id`, and labels the roster `refreshing`.
+The detail view polls `POST /api/rfp/responses/:id/reground`, which re-reads the roster and
+re-renders the branded document the moment the run lands — the run is asynchronous by design, so
+"await it" was never the right answer; saying so honestly was.
+
+Starting the Architect moved down a layer to `application/repos/architectRunner.ts` — it had been
+written inline in `repoAnalysisRoutes`, which made it something only a human clicking "Analyse"
+could cause. The route now owns HTTP and nothing else, and gained `GET /runs/:runId` so anything
+waiting on a deep analysis reads the run rather than the table.
+
+**"Download PDF" opened a print dialog.** That is not an export: it needs a human at a keyboard,
+it cannot be attached to something an agent sends, and it gives each browser a different file.
+`application/office/pdfWriter.ts` writes real PDF bytes — no dependency added, because a PDF is a
+text container with an offset table and the base-14 fonts mean no font program has to be embedded
+(the AFM widths live in `pdfFonts.ts`, so the writer measures what the viewer will draw).
+Headings, inline emphasis, lists, GFM tables and code fences — the same block model `markdownBlocks`
+already gives the .docx and .pptx writers — plus a branded cover band. `renderRfpDocPdf` and
+`renderRfpDocHtml` now both read ONE `rfpDocSections(body)`, so the file a buyer opens and the page
+a seller previews cannot quote different numbers.
+
+The writer is shared, not RFP-private: `POST /api/exports/pdf` serves it, and the canvas's own
+`pdf` action stopped printing for every document-shaped kind. `pdfExportStrategy(kind)` in
+`canvasExports.ts` owns that split in one place — a picture or a paged layout still PRINTS
+(only the browser can render what is on the board), everything document-shaped is WRITTEN.
+`printDocument.ts` now imports `PICTURE_KINDS` from there rather than keeping a second copy.
+
+**Risks and dependencies were JSON inside one document.** Enough to print a proposal, not enough
+to run a business: nothing could ask which risk we raise on every bid, how much open
+high-severity exposure the live pipeline carries, or who owns a third-party dependency. Migration
+**0483** adds `rfp_risks` — ONE table, not two, because a risk and a dependency are the same fact
+(a named thing that can stop the delivery, attached to one response) differing only in which
+vocabulary grades it, and `kind` is that column value. It carries the lifecycle a document has no
+room for (`status`, `owner_user_id`), and the migration BACKFILLS from every response already
+generated, so existing proposals join the roll-up without being regenerated. Regenerating a
+proposal replaces its entries but PRESERVES decisions made by title — losing "we already
+mitigated this" on every regeneration would make the lifecycle worthless.
+
+**Brand capture was hand-entry.** Someone opened the customer's site, eyedropped a screenshot and
+typed six hex codes. Both halves are now read, and each runs where the decoder actually lives:
+`api/src/application/rfp/brandExtraction.ts` reads a WEBSITE's declared brand (meta `theme-color`
+→ `--brand`/`--primary` custom properties → colour usage ranked by chroma), because only a server
+can fetch a third-party origin's stylesheet — fenced against SSRF, since "read this URL" is an
+SSRF primitive if it is not. `frontend/src/lib/brandPalette.ts` reads a LOGO's pixels, because
+only a browser has a decoder for PNG/JPEG/WebP/SVG. Neither silently overwrites what someone
+typed: the candidates stay on screen as swatches.
+
+**Every tenant's proposal was the same colour.** `blendPalettes` had no responder side to blend —
+there was no per-tenant brand-colour store anywhere in the platform. 0483 adds
+`tenants.brand_palette` (one column on the row that owns the fact, not a settings singleton), and
+`GET`/`PUT /api/rfp/brand` manage it behind one `BrandPaletteEditor` shared with the requester
+half.
+
+**Proof.** `pdfWriter.test.ts` (7) walks the xref table and asserts every offset lands on its
+object header, that pagination numbers every page, that literal-string delimiters are escaped
+rather than corrupting the stream, and that a glyph WinAnsi cannot carry degrades to `?` instead
+of emitting multi-byte text. `rfpRegister.test.ts` (5) asserts the roll-up: only OPEN high risks
+count as exposure, a title raised on three responses is recurring while one response listing it
+twice is not, and a risk and a dependency of the same name stay apart. `api` typecheck green.
+
+---
+
+### 2 · The knowledge whiteboard can hold a live web page — and no iframe is written there any more
+
+`CanvasBoard` (the Miro-style block board behind knowledge docs and the Brainstorm slide-out) had
+`image | video | file | embed`, where `embed` transcludes a knowledge DOCUMENT by id — so a
+research board could hold everything about a source except the source. `canvasModel.ts` gains a
+`webpage` block, rendered through the SAME `CanvasWebPage` panel the Creation Canvas uses
+(sandboxed frame, gateway-measured framability, reader fallback, status strip) via a projection
+adapter, not a second implementation.
+
+The board's hand-rolled `<iframe src>` for embeddable video went with it. An iframe on a board is
+a security decision — which sandbox tokens, which `allow` features, which referrer policy — and
+this board had been making that decision a second time, differently. `CanvasDeviceFrame` gained a
+`fill` mode (a player has no media queries to exercise, so a device width would only shrink the
+picture) and now serves both.
+
+---
+
+### 3 · A self-hosted gateway can research with nothing configured — if the operator says so
+
+`agent-runtime`'s `web_search` had three providers and all three refused without a key, so a
+self-hosted gateway researched nothing out of the box while the same company's cloud canvas
+researched fine. There is now a fourth adapter: the operator's own SearXNG when one is configured,
+Wikipedia's MediaWiki search otherwise, with the result honestly labelled `coverage: 'web'` vs
+`'encyclopedic'` so the answering surface can say what kind of index backed the research.
+
+It is OFF by default, behind `tools.web.search.keylessFallback`. The gateway's whole contract is
+that the operator declares which tools may reach the network and where; turning an unconfigured
+`web_search` into an outbound Wikipedia call would change a deployment's egress profile without
+anyone asking. The unkeyed refusal now NAMES the flag instead of applying it. Index rows are run
+through an egress check before they reach the model, because a poisoned entry must not become an
+SSRF lead the agent follows.
+
+**Proof.** `web-search.keyless.test.ts` (6): no key and no flag makes ZERO fetches and returns a
+message naming the opt-in; SearXNG wins when configured; a 403 from it degrades to Wikipedia with
+the `formats: [json]` hint rather than failing; private-network rows are dropped.
+
+---
+
+### 4 · The design-system ratchet can now see the other spelling of a hardcoded colour
+
+The literal-hex ratchet was already at zero. What it could never see is the SAME defect written as
+a function: `background: rgba(34,197,94,0.12)` is a mix of the DARK theme's green at 12%, so when
+the light theme darkened its green for paper the chip kept the near-black wash and its border and
+its label became two different greens. `check-design-scale.mjs` gains a fifth ratchet —
+`themeLockedColours` — scoped to ink/ground/edge slots and deliberately NOT counting a `var()`
+fallback (that guard owns undeclared tokens), a gradient, or a shadow. Baselined at 195; it can
+only come down.
+
+The three surfaces the design-system audit named — `Soc2AuditVisual`, `ProjectDiagnosticsStrip`,
+`RfpDetailClient` — were migrated onto the status families they had been hand-mixing
+(`--success-bg`/`--success-border` and siblings), which is what took the number to 195.
+
+---
+
+### 5 · The homepage is the board on a phone
+
+`LandingCanvasHero` removed the board from the DOM below 900px, so the homepage argued for the
+canvas everywhere except the device most visitors arrive on. The original reason was real — five
+absolutely-positioned percentage-placed cards overlap at 360px — so the fix is the LAYOUT, not the
+gate. The coordinates are published as custom properties and consumed only inside a
+`min-width: 900px` block; below it the same markup stacks in normal flow inside a scrolling board,
+with the roster scrolling sideways and the composer under it. An inline `left: 52%` beats every
+media query, which is exactly why the board could not previously be laid out twice from one tree.
+
+There is no width branch in the component at all now, so there is no hydration seam either. The
+Evermind brain scene that stood in for the board on narrow — and the wholesale light-on-dark
+palette re-declaration it needed — went with it; it lives on `/evermind`, where it is the subject.
+
+**Proof.** `LandingCanvasHero.test.tsx` (10, up from 9): the narrow viewport renders the same eight
+objects and the same roster, and a second test asserts the cards carry `--n-left` and NO inline
+`left`/`top`.
+
+---
+
+### 6 · The Map object can be interrogated
+
+`MapBody` rendered one projection fitted to the data and stopped: a marker's only affordance was
+its `<title>`, so a plot of every district in one metro was a smudge that could be admired and not
+read. Zoom and pan are now state ON THE OBJECT (`mapZoom` / `mapCenter`) rather than in the
+component — a reading a person worked for has to survive a re-render, ride the session snapshot,
+and be something Brain can set. They are a factor and a point rather than stored bounds, because
+the base extent moves when the data does.
+
+The surface carries `nodrag nowheel` and `touch-action: none`, which is how React Flow is told a
+wheel or a drag here is not a canvas pan. Zoom is anchored on the pointer; panning CLAMPS the
+centre rather than the edges, so dragging to a corner cannot silently change the zoom. A marker
+click selects (and a pan that ends on a marker does not), writing `mapSelectedLabel` back to the
+object, and where the map came from a dataset on the board the selection offers it through the
+`sourceDatasetId` link — `onRevealObject` hands `revealObject` down to the card, so a drill-through
+is the same one call the Files library already used.
+
+**Proof.** `canvasMapViewport.test.ts` (9) on the pure maths: at rest the viewport IS the base
+extent; 2× halves each span; panning to 89°N keeps the window a quarter-span and inside the
+extent; a one-point extent and an unmeasured surface both stay finite.
+
+---
+
+### 7 · Every workflow node kind is named in the reader's language
+
+`I18N_NODE_KIND_SLUG` covered only the kinds added alongside Flow Control / Tools / Text Parser /
+Diagnostics; the ~30 older ones fell through a `??` to their catalog literal. A French operator's
+palette therefore named half its steps in French and half in English, and the config panel and the
+3D card sublabel inherited the same split. The map is now total across all 57 kinds, translated in
+all five catalogs, and the fallback is unreachable — so a kind added without a translation shows a
+raw key (visible, fixable) instead of silently shipping English into four locales.
+
+`BuilderNode` and `WorkflowBuilder` stopped reading `meta.label` directly, and a dropped node is
+now named in the AUTHOR'S language — resolved once at creation, because the label is workflow data
+a person then edits, not chrome to re-translate on every render.
+
+**Still open, narrowed in the register:** the ~103 config-FIELD labels and `integrations.ts`
+(94 descriptions + 250 operation labels).
+
+---
+
+## ✅ RESOLVED 2026-08-18 — The north star is a measured number, not a sentence in a roadmap
+
+**The claim.** *"Percentage of ideas that reach a graded proof — a Build whose kill
+condition was measured, not merely a deliverable that was produced."*
+
+**What was wrong.** The method was fully BUILT and entirely UNMEASURED. `/api/realizations`
+could read an idea, rank eight proofs, build the chosen one, publish it and roll up the
+verdict its own console recorded — and not one step of that reached the outcome ledger. So
+the platform could report how many things were *delivered* and could not report the one
+number the method exists to produce. Worse, the fifteen metrics it *did* report were
+written TWICE — once in `admin/outcomeValueRollup.ts`, once inline in the session scorecard
+route — and the two already disagreed: the scorecard's baseline was a MEAN OF PER-SESSION
+RATES while the rollup's was a RATIO OVER THE COHORT, so a board could be told it beat a
+baseline the sales deck computed differently from the same rows.
+
+**What shipped.**
+
+* **`api/src/application/outcomes/outcomeMetricContract.ts`** — THE registry. Each metric
+  declares both halves of its own definition: `session(fact)` (the scorecard's number) and
+  `aggregate` (a SQL expression over the same facts, used by every rollup and every
+  baseline), plus its family, direction, one-sentence definition, and — for exactly one
+  metric — the `northStar` flag. `outcomeFactsSql()` is the single per-session fact CTE.
+  Both consumers were migrated onto it; ~120 lines of duplicated SQL deleted.
+* **The north star: `gradedProofRate`** — ideas whose proof had its kill condition
+  measured. Beside it, `proofGradingRate` (graded / built), `reachableProofRate`,
+  `timeToProofChoice` and `readBeforeBuildRate`. Metrics are grouped by the act of the
+  method they measure — Read → Prove, Build, Measure, Collaboration, Compounding,
+  Efficiency, Measurement integrity — because a flat list says "graded a kill condition"
+  and "published something" are the same kind of news.
+* **The loop records itself.** `application/realization/proofOutcomes.ts` + migration
+  **0484** (`realizations.session_id`): `idea.read` on `/plan`, `proof.choose` on create,
+  `proof.build` around the build (carrying `metadata.reachable`), and `proof.grade`
+  — `validated` with 1 for met and **0 for missed**, because both are grades, and `failed`
+  when an idea is parked, because abandoning is a judgement, not a measurement.
+* **One write path.** `application/outcomes/outcomeLedger.ts` owns the insert, the action
+  charset, the metadata ceiling and idempotence; `resolveOutcomeSession` is why a producer
+  outside the canvas cannot attribute a proof to another workspace's numbers.
+* **A door from the board.** `prove` joins the canvas session-action registry and hands the
+  board's own idea to `/realize?session=…`, which is what gives the loop a session to
+  record against. A local-only board gets the account gate instead of an unmeasurable proof.
+* **`frontend/src/lib/outcomeMetrics.ts`** — one presentation contract for both scorecards.
+  This also fixed a real defect: the canvas panel reported EVERY movement on a
+  "lower is better" metric as unfavourable, so a session that halved its cost per delivery
+  was shown a red arrow.
+* **Localised and themed.** 41 `admin.outcomes.*` keys, the shared `outcomeMetrics.*`
+  vocabulary (20 metric labels + definitions, 7 family names, units) and the canvas
+  `northStar`/`proveThisIdea` strings, in all five catalogs with real translations. The
+  scorecard's hardcoded `#b14f45` / `#16856f` deltas became `--tone-danger-ink` /
+  `--tone-success-ink`, which had no dark-theme definition before.
+* **Honest denominators.** A rate with no denominator reports `null` — "Not measured" —
+  never zero; `OUTCOME_DEFINITION_VERSION` rides every payload so a deck states which
+  definitions produced the figure it quotes; and proof grading is excluded from the
+  artifact validation pass rate, because a missed kill condition is a finding, not a defect.
+* **Read-through cached** (60s) on the session scorecard, which touches up to 500 sessions'
+  worth of subqueries on a panel that re-polls on every open.
+
+Vanity metrics stay out of the registry by construction: stars, downloads, workflow counts,
+MCP connections and active-agent counts cannot lead a value review by accident.
+
+Contract: **[Creation outcome metrics](./docs/design/creation-canvas/OUTCOME-METRICS.md)**.
+Tests: `outcomeMetricContract.test.ts`, `proofOutcomes.test.ts`, `outcomeValueRollup.test.ts`.
+
+This also closes the gap-register entry logged the same day against the concurrently-edited
+tree — the 41 untranslated `admin.outcomes.*` keys, the ambiguous `creationCanvas.northStar`,
+and `CreationCanvas.tsx` referencing `CreationOutcomeMetric` where only `CreationOutcomeMetrics`
+was exported. All three are fixed: `check:i18n-keys` is green and the type is now exported as
+the shared `OutcomeMetric` alias.
+
+## ✅ RESOLVED 2026-08-18 — "Connecting…" now says which of the three things it means
+
+**The report:** *"it indicates connecting… and then never connects."*
+
+**What was wrong.** `useMediaRoom` read the transport's credential ONCE, outside its retry
+loop, and returned from the effect when there was none (`if (!token) return`). Nothing in
+that effect's dependency list changes when a token is minted a moment later — a guest room
+being opened, a session being refreshed — so a call started in that window could never
+connect at all, for as long as the page stayed open. And the hook reported a single
+`connected` boolean, so the surface printed one word, "Connecting…", for **three different
+situations**: the half-second before a healthy call, a relay that refused or dropped the
+upgrade, and a room this browser holds no credential for. An unrecoverable state that looks
+identical to a working one is why the report had nothing behind it.
+
+**What shipped.**
+
+* **`MediaRoomConnection`** — `idle | connecting | connected | retrying | unauthenticated`,
+  returned beside `connected` (now derived, so every existing caller is unchanged).
+* **The credential is read PER ATTEMPT.** The same 2s loop that survives a dropped socket
+  now survives a late token: no credential is `unauthenticated` and keeps trying, so the
+  call heals instead of sitting behind an effect that already gave up. A refused upgrade
+  and a dropped call both close the socket, so both are `retrying` — the honest word for
+  what the loop is about to do.
+* **`components/live/CallConnectionNotice`** — ONE sentence for why a call is not up,
+  self-gating on the session, rendered by both surfaces that show a room: the shell dock
+  (`LiveBar`) and the free room's meeting panel (`GuestRoomMeeting`). Both previously held
+  their own "Connecting" wording in their own namespace, so improving one would have left
+  the other saying the old thing; `guestRoom.meetingConnecting` is deleted from all five
+  catalogs and `liveBar.reconnecting` / `liveBar.callUnauthenticated` added to them.
+* Missing `CreationOutcomeMetric` type import in `CreationCanvas.tsx`, which was making
+  `tsgo --noEmit` red in the shared tree (fixed, then de-duplicated when the outcome-metrics
+  refactor landed its own import).
+
+**Guards:** `tsgo --noEmit` clean, `npm run check` 10/10, and a new
+`useMediaRoom.connection.test.tsx` (3 cases) that fakes the socket and the clock to assert
+the state machine directly — including the one the old code could not pass: no credential →
+`unauthenticated` → a token arrives → the next retry opens the socket → `connected`.
+
+**Still open:** whether the production call ALSO fails for a reason on the relay side is now
+answerable rather than invisible — the dock says which state it is in. The React #418
+hydration mismatch reported alongside it is logged in the Gap Register (blocked on a
+non-minified repro).
+
+## ✅ RESOLVED 2026-08-18 — The red API build was two stale tests, and the risk register had no generic code path
+
+**What was wrong (the red build).** `Deploy API` failed on `check:silent-catches`
+(`application/rfp/rfpRegister.ts:57` swallowed a SELECT failure with a bare `catch {}`) and, before
+that, on `TenantRole.ADMIN` in `rfpRoutes.ts` — a role the enum has never had. Both were already
+corrected in the tree. Underneath them the vitest suite was red on two tests that had drifted from
+the code they cover:
+
+- `admin/outcomeValueRollup.test.ts` asserted `trends` with `toEqual`, so the `graded` dimension the
+  rollup now projects onto every trend, tenant and project row read as an unexpected key. Fixed by
+  teaching the test the new column rather than loosening the assertion: the mocks now return a
+  `graded` count and the expectations carry it through, including the `gradedSessions` headline that
+  had no coverage at all.
+- `auth/cooldownStore.halfOpen.test.ts` expected a re-cooled model to reopen its half-open probe
+  after the same 75s as the first strike. That contradicts the strike ladder the store now
+  implements: strike 2 doubles the transient TTL to 600s and scales the probe ceiling, so the
+  correct delay is `min(600 × .25, 90 × 2)` = 150s. The test asserted the behaviour the escalation
+  exists to replace — a chronically-throttled model probed every ~90s forever — so it was the test
+  that was wrong, and it now pins the escalated window.
+
+**The register gained its code path.** `rfp_risks` (migration 0483) was the one table on
+`entityCatalog.test.ts`'s uncovered list with no structural reason written beside it, and the
+ceiling had been raised 11 → 12 to keep the suite green. It is registered now, under **commerce**,
+where `rfp_requests` and `rfp_responses` already live: `entity(rfpRisks, { readOnly: true })`.
+
+`readOnly` is the substantive part. The register is PROJECTED — `projectRiskRegister` deletes and
+re-inserts a response's entries on every regeneration, carrying decided ones over BY TITLE — and its
+lifecycle is moved by `updateRegisterEntry`, which validates the status. A generic PATCH could
+repoint `response_id` or rewrite the `title` the carry matches on, silently reopening a risk the team
+had accepted. So the rows read through the generic path and are written only by the service that
+owns those invariants, the same rule `orders` sits under two lines above. It does not register as an
+object: a register entry is read on the proposal it belongs to, not navigated to on its own. The
+ceiling is back to 11.
+
+The stale PRD 15 sub-item claiming "there is no queryable `rfp_risks` table" is retired with it.
+
+## ✅ RESOLVED 2026-08-18 — The Architect's start result declared string ids for two integer primary keys, and the frontend read a response shape the route never sent
+
+**What was wrong (the red build).** `Deploy API` failed type-check on
+`api/src/application/repos/architectRunner.ts:162`: `ArchitectStart` declared
+`{ runId: string; taskId: string; executionId: string | null }`, but `tasks.id` is `serial`
+(surfaced as the branded `TaskId = number & …`) and `executions.id` is `serial` too. Only `runId`
+was genuinely a string — `repo_analysis_runs.id` is a `uuid`. So the success arm of the typed
+refusal union described two integer primary keys as text, and the two `TS2322`s were the compiler
+catching a declaration that never matched the schema it returns rows from.
+
+**The fix.** Correct the declaration to the schema, not the call site: `taskId: number;
+executionId: number | null`. The alternative — stringifying the ids at the return — would have
+made the API emit `"41"` where every other route emits `41` for the same column, and pushed the
+coercion onto each consumer. `runId` stays `string` because its column really is a uuid.
+
+The same pass drops the now-dead `task.id as unknown as number` cast on the `onTaskLandedInLane`
+call: `TaskId` is `number & { __brand }`, directly assignable to the `taskId: number` the lane
+trigger takes. That double cast existed only because the surrounding type claimed `string`, and it
+was the thing hiding the mismatch from a reader.
+
+**The adjacent drift, fixed in the same pass.** `RunArchitectureAnalysisResult` in
+`frontend/src/lib/api.ts` declared `{ task: { id; projectId; status }; executionId }`, while
+`POST /api/repo-analysis/projects/:projectId/architect` answers `{ taskId, executionId, runId }`
+(202). A caller that read `result.task.id` would have got `undefined` at runtime with the
+typechecker asserting otherwise; it survived only because the one consumer,
+`ProjectDiagnosticsTab.tsx:87`, awaits the call and discards the value. The interface now mirrors
+the route's actual body, including the `runId` the frontend never knew it was being handed — which
+is the field a caller needs to poll `GET /api/repo-analysis/runs/:runId`.
+
+**Proof.** `api` `npm run type-check` — 2/2 guards (tsgo + tsc) green, from 0/2. Fixes are on
+`origin/main`.
+
 ## ✅ RESOLVED 2026-08-18 — A live preview can now say it is broken instead of looking fine, and a dataset's full rows can no longer reach the model
 
 Two Gap Register entries, closed together because they are the same question asked twice: what

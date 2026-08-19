@@ -1243,6 +1243,11 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   steps:            integer('steps').notNull().default(0),
   costUsdMillicents: integer('cost_usd_millicents').notNull().default(0),
   terminalStatus:   varchar('terminal_status', { length: 16 }).notNull(), // completed|failed|cancelled
+  /** The run died on a PROVIDER RATE LIMIT (migration 0485) — `classifyRunFailure`
+   *  returned `rate_limited`. An AVAILABILITY fact, never a quality one: the learned
+   *  router demotes a chronically-429ing model without letting the 0.0 score that a
+   *  failed run necessarily carries teach it that the model writes bad code. */
+  rateLimited:      boolean('rate_limited').notNull().default(false),
   // ── Literal tool-use + human-review telemetry (migration 0333) ─────────────
   // Captured by the scorer from tool_audit_events / approvals / the PR row so trait
   // reinforcement reads REAL counts (toolErrorRate = tool_errors/tool_calls;

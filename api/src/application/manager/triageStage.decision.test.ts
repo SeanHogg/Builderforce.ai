@@ -24,7 +24,7 @@ const plan = (over: Partial<Parameters<typeof decideRemedyExecution>[0]> = {}) =
   });
 
 describe('decideRemedyExecution — manager-owned recoveries on the cron path', () => {
-  for (const remedy of ['reset_breaker', 'drive_signoff', 'resolve_conflict']) {
+  for (const remedy of ['reset_breaker', 'drive_signoff', 'resolve_conflict'] as const) {
     it(`runs ${remedy} even when the executor owns dispatch`, () => {
       const p = plan({ remedy, ownsDispatch: false });
       expect(p.act).toBe(true);
@@ -60,14 +60,14 @@ describe('decideRemedyExecution — manager-owned recoveries on the cron path', 
 
 describe('decideRemedyExecution — the billable-run ceiling', () => {
   it('defers every run-starting remedy once the budget is spent', () => {
-    for (const remedy of ['dispatch', 'reset_breaker', 'drive_signoff', 'resolve_conflict']) {
+    for (const remedy of ['dispatch', 'reset_breaker', 'drive_signoff', 'resolve_conflict'] as const) {
       const p = plan({ remedy, budgetLeft: false, ownsDispatch: true });
       expect(p, remedy).toMatchObject({ act: false, deferred: true });
     }
   });
 
   it('never defers a remedy that starts no run — it just runs', () => {
-    for (const remedy of ['assign', 'coordinate', 'return_to_implementation', 'reconcile_pr']) {
+    for (const remedy of ['assign', 'coordinate', 'return_to_implementation', 'reconcile_pr'] as const) {
       const p = plan({ remedy, budgetLeft: false, ownsDispatch: false });
       expect(p, remedy).toMatchObject({ act: true, deferred: false, mayStartRun: false });
     }
@@ -90,7 +90,7 @@ describe('decideRemedyExecution — when the manager must not act at all', () =>
   });
 
   it('never reports a ticket as BOTH acted on and deferred', () => {
-    for (const remedy of ['dispatch', 'drive_signoff', 'assign', 'reconcile_pr']) {
+    for (const remedy of ['dispatch', 'drive_signoff', 'assign', 'reconcile_pr'] as const) {
       for (const ownsDispatch of [true, false]) {
         for (const budgetLeft of [true, false]) {
           const p = plan({ remedy, ownsDispatch, budgetLeft });

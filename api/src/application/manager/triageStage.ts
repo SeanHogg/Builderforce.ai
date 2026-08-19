@@ -49,9 +49,10 @@ import { coordinateTicket } from './coordinateTicket';
 import { staffUnfilledRole } from './staffUnfilledRole';
 import { assignTicketOwner } from './assignOwner';
 import { reconcilePullRequestState } from '../repos/reconcilePullRequestState';
+import { readCodingPoolHealth } from '../llm/poolHealth';
 import {
   diagnoseStall, isActionExhausted, isManagerActionable, isStallResolved,
-  stageSignoffFor, STALL_AFTER_MS, type StallInput,
+  stageSignoffFor, RUN_SPENDING_REMEDIES, STALL_AFTER_MS, type StallInput, type StallRemedy,
 } from './stallTriage';
 import { loadOpenStalls, gradeStall, recordStall, resolveStalls, type OpenStall } from './stallWatch';
 import {
@@ -208,14 +209,12 @@ export const MAX_TRIAGE_DISPATCHES_PER_RUN =
  */
 export const TRIAGE_PASS_STATE_KEY = 'triage_pass_limits';
 
-/** Remedies whose whole effect is to START a run — the ones the dispatch cap governs. */
-const DISPATCHING_REMEDIES = new Set(['dispatch', 'reset_breaker', 'drive_signoff', 'resolve_conflict']);
 
 /**
  * Remedies that start work the AUTONOMOUS EXECUTOR would start anyway, and which the
  * manager therefore must not race on the cron path.
  *
- * This is a strictly smaller set than {@link DISPATCHING_REMEDIES}, and conflating the
+ * This is a strictly smaller set than {@link RUN_SPENDING_REMEDIES}, and conflating the
  * two was the bug. `reset_breaker`, `drive_signoff` and `resolve_conflict` all start a
  * run, but each is a MANAGER-OWNED recovery the executor will never perform: the
  * executor does not clear a tripped breaker, does not ask a reviewer for a verdict, and
@@ -275,7 +274,7 @@ export interface RemedyExecution {
  * nothing about.
  */
 export function decideRemedyExecution(input: {
-  remedy: string;
+  remedy: StallRemedy;
   actionable: boolean;
   alreadyConducted: boolean;
   ownsDispatch: boolean;
@@ -283,7 +282,7 @@ export function decideRemedyExecution(input: {
 }): RemedyExecution {
   const idle: RemedyExecution = { act: false, deferred: false, mayStartRun: false, mayRaceExecutor: false };
   if (!input.actionable || input.alreadyConducted) return idle;
-  if (!DISPATCHING_REMEDIES.has(input.remedy)) {
+  if (!RUN_SPENDING_REMEDIES.has(input.remedy)) {
     // Costs no run — `coordinate`, `assign`, `return_to_implementation`, `reconcile_pr`.
     // These still take the optional "and start it" step only when nothing owns dispatch.
     return { act: true, deferred: false, mayStartRun: false, mayRaceExecutor: input.ownsDispatch && input.budgetLeft };
@@ -571,10 +570,21 @@ export async function runStallTriage(
 
   const now = Date.now();
   const taskIds = managed.map((t) => t.id);
-  const [signals, openStalls] = await Promise.all([
+  const [signals, openStalls, poolHealth] = await Promise.all([
     ctx.signals ?? loadBulkSignals(db, runtimeService, { tenantId, projectId, taskIds }),
     loadOpenStalls(db, projectId).catch(() => new Map()),
+    // ONCE PER PASS, never per ticket: provider headroom is a property of the workspace,
+    // and the whole point of the hold is that it costs nothing to observe. See
+    // `llm/poolHealth.ts` for the 429 → reset → 429 loop this breaks.
+    readCodingPoolHealth(env),
   ]);
+  if (poolHealth.rateLimited) {
+    console.warn(
+      `[triage] project ${projectId}: coding pool rate-limited `
+      + `(${poolHealth.cooledVendors.length}/${poolHealth.totalVendors} vendors cooled: `
+      + `${poolHealth.cooledVendors.join(', ')}) — withholding run-spending remedies this pass`,
+    );
+  }
 
   // 1. MEASURE. A ticket that has never transitioned is idle since it was CREATED —
   //    which is exactly the inert-from-birth population, and treating it as "no data"
@@ -760,6 +770,11 @@ export async function runStallTriage(
         // merge is left", which is exactly the population this gate asks about — matching
         // on `complete` here would have made merge_withheld permanently undiagnosable.
         mergeWithheld: !policy.allowAutoMerge && prRow?.status === 'open' && readiness === 'await_merge',
+        // Withholds ONLY the remedies that would start a run (see
+        // `RUN_SPENDING_REMEDIES`). Staffing, coordination, PR reconciliation and
+        // escalation still happen — a throttled provider must not stop the manager
+        // from managing.
+        poolRateLimited: poolHealth.rateLimited,
       });
 
       if (!diagnosis.stalled) {

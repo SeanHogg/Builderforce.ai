@@ -25,7 +25,7 @@ import { getOrSetCached, peekCached, setCached } from '../../infrastructure/cach
 import { llmActionRatings, runModelOutcomes } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { normalizeActionType, type ActionType } from './actionTypes';
-import { blendedQualityScore } from './modelQualityScore';
+import { blendedQualityScore, isChronicallyRateLimited } from './modelQualityScore';
 
 /** Minimum samples in a (scope, action_type, model) bucket before learned routing
  *  will prefer it. Below this, the curated static order stands. Single source of
@@ -58,6 +58,15 @@ export interface ActionModelStat {
    */
   ratedUp?: number;
   ratedDown?: number;
+  /**
+   * Share of this bucket's runs that died on a provider 429 (migration 0485).
+   *
+   * An AVAILABILITY signal, kept strictly beside the quality score rather than inside
+   * it — see `modelQualityScore.ts` for why conflating the two poisons the ranking.
+   * Optional: blobs written before 0485 have none, and absent reads as 0 (not
+   * rate-limited), which under-reports rather than demoting on evidence nobody has.
+   */
+  rateLimitRate?: number;
 }
 
 export interface RoutingTable {
@@ -104,8 +113,11 @@ function emptyTable(): RoutingTable {
  *  applies, so the blob and the router never disagree. */
 function sortStats(stats: ActionModelStat[]): ActionModelStat[] {
   return stats
-    .map((s, i) => ({ s, i, q: blendedQualityScore(s) }))
-    .sort((a, b) => b.q - a.q || a.s.avgCostMc - b.s.avgCostMc || a.i - b.i)
+    .map((s, i) => ({ s, i, q: blendedQualityScore(s), rl: isChronicallyRateLimited(s) ? 1 : 0 }))
+    // Rate-limited models form a TRAILING BAND, ranked normally within it. They are not
+    // removed — "the only model left is one the provider keeps refusing" is still
+    // strictly better than returning nothing, and the cascade needs somewhere to land.
+    .sort((a, b) => a.rl - b.rl || b.q - a.q || a.s.avgCostMc - b.s.avgCostMc || a.i - b.i)
     .map(({ s }) => s);
 }
 
@@ -147,6 +159,7 @@ export async function reconcileRoutingTable(env: Env, db: Db, scope: RoutingScop
           avgScore: sql<number>`avg(${runModelOutcomes.score})::float8`,
           avgCost: sql<number>`avg(${runModelOutcomes.costUsdMillicents})::float8`,
           mergeRate: sql<number>`(sum(case when ${runModelOutcomes.merged} then 1 else 0 end)::float8 / count(*))`,
+          rateLimitRate: sql<number>`(sum(case when ${runModelOutcomes.rateLimited} then 1 else 0 end)::float8 / count(*))`,
         })
         .from(runModelOutcomes)
         .where(
@@ -178,7 +191,7 @@ export async function reconcileRoutingTable(env: Env, db: Db, scope: RoutingScop
       const list = (byAction[action] ??= []);
       const found = list.find((s) => s.model === model);
       if (found) return found;
-      const fresh: ActionModelStat = { model, n: 0, avgScore: 0, mergeRate: 0, avgCostMc: 0 };
+      const fresh: ActionModelStat = { model, n: 0, avgScore: 0, mergeRate: 0, avgCostMc: 0, rateLimitRate: 0 };
       list.push(fresh);
       return fresh;
     };
@@ -188,6 +201,7 @@ export async function reconcileRoutingTable(env: Env, db: Db, scope: RoutingScop
       stat.avgScore = Number(r.avgScore) || 0;
       stat.mergeRate = Number(r.mergeRate) || 0;
       stat.avgCostMc = Number(r.avgCost) || 0;
+      stat.rateLimitRate = Number(r.rateLimitRate) || 0;
     }
     // A model rated by humans but never scored by a cloud run gets a stat row with
     // `n: 0` — which is correct and load-bearing: for chat and canvas work there IS
@@ -222,28 +236,44 @@ export async function getRoutingTable(env: Env, db: Db, scope: RoutingScope): Pr
   );
 }
 
+/** One terminal run, as the blob folds it. `rateLimited` rides alongside `merged`
+ *  because it is the same grain — a property of THIS run — and giving it its own
+ *  fold path would mean two writers racing on one bucket. */
+export interface RoutingObservation {
+  actionType: ActionType;
+  model: string;
+  score: number;
+  costMc: number;
+  merged: boolean;
+  /** The run died on a provider rate limit (`classifyRunFailure === 'rate_limited'`). */
+  rateLimited?: boolean;
+}
+
 /** Welford-style update of one model's running stats with a fresh observation. */
-function foldObservation(prev: ActionModelStat | undefined, model: string, score: number, costMc: number, merged: boolean): ActionModelStat {
-  if (!prev) return { model, n: 1, avgScore: score, mergeRate: merged ? 1 : 0, avgCostMc: costMc };
+function foldObservation(prev: ActionModelStat | undefined, model: string, score: number, costMc: number, merged: boolean, rateLimited: boolean): ActionModelStat {
+  const rl = rateLimited ? 1 : 0;
+  if (!prev) return { model, n: 1, avgScore: score, mergeRate: merged ? 1 : 0, avgCostMc: costMc, rateLimitRate: rl };
   const n = prev.n + 1;
   return {
+    ...prev,
     model,
     n,
     avgScore: prev.avgScore + (score - prev.avgScore) / n,
     mergeRate: prev.mergeRate + ((merged ? 1 : 0) - prev.mergeRate) / n,
     avgCostMc: prev.avgCostMc + (costMc - prev.avgCostMc) / n,
+    rateLimitRate: (prev.rateLimitRate ?? 0) + (rl - (prev.rateLimitRate ?? 0)) / n,
   };
 }
 
 /** Apply one fresh observation to a blob (pure) — returns a NEW table, re-sorted. */
 export function applyObservation(
   table: RoutingTable,
-  obs: { actionType: ActionType; model: string; score: number; costMc: number; merged: boolean },
+  obs: RoutingObservation,
 ): RoutingTable {
   const byAction = { ...table.byAction };
   const list = (byAction[obs.actionType] ?? []).slice();
   const idx = list.findIndex((s) => s.model === obs.model);
-  const updated = foldObservation(idx >= 0 ? list[idx] : undefined, obs.model, obs.score, obs.costMc, obs.merged);
+  const updated = foldObservation(idx >= 0 ? list[idx] : undefined, obs.model, obs.score, obs.costMc, obs.merged, obs.rateLimited === true);
   if (idx >= 0) list[idx] = updated;
   else list.push(updated);
   byAction[obs.actionType] = sortStats(list);
@@ -260,7 +290,7 @@ export function applyRatingObservation(
   const byAction = { ...table.byAction };
   const list = (byAction[obs.actionType] ?? []).slice();
   const idx = list.findIndex((s) => s.model === obs.model);
-  const prev = idx >= 0 ? list[idx]! : { model: obs.model, n: 0, avgScore: 0, mergeRate: 0, avgCostMc: 0 };
+  const prev = idx >= 0 ? list[idx]! : { model: obs.model, n: 0, avgScore: 0, mergeRate: 0, avgCostMc: 0, rateLimitRate: 0 };
   const updated: ActionModelStat = {
     ...prev,
     ratedUp: (prev.ratedUp ?? 0) + (obs.up ? 1 : 0),
@@ -316,15 +346,7 @@ export async function applyRatingToRoutingTable(
 export async function applyOutcomeToRoutingTable(
   env: Env,
   db: Db,
-  outcome: {
-    tenantId: number | null;
-    projectId: number | null;
-    actionType: ActionType;
-    model: string;
-    score: number;
-    costMc: number;
-    merged: boolean;
-  },
+  outcome: RoutingObservation & { tenantId: number | null; projectId: number | null },
 ): Promise<void> {
   const scopes: RoutingScope[] = [{ kind: 'global' }];
   if (outcome.tenantId != null) scopes.push({ kind: 'tenant', id: outcome.tenantId });
@@ -346,6 +368,7 @@ export async function applyOutcomeToRoutingTable(
           score: outcome.score,
           costMc: outcome.costMc,
           merged: outcome.merged,
+          rateLimited: outcome.rateLimited === true,
         });
         await setCached(env, cacheKey(scope), next, { kvTtlSeconds: 86_400, l1TtlMs: 60_000 });
       } catch (error) {

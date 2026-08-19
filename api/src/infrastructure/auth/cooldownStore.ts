@@ -77,12 +77,57 @@ const TTL_SECONDS: Record<Exclude<CooldownClass, 'request_error'>, number> = {
  * hammered every request.
  */
 const TRIAL_AFTER_FRACTION = 0.25;   // probe after a quarter of the TTL …
-const TRIAL_AFTER_MAX_SEC  = 90;     // … but never wait longer than 90s.
+const TRIAL_AFTER_MAX_SEC  = 90;     // … but never wait longer than 90s on the FIRST strike.
+
+/**
+ * ESCALATING BACKOFF — the fix for "the whole failover chain burns on every dispatch".
+ *
+ * MEASURED (project 11, 2026-07-31): 150 of 164 terminal runs in one day were provider
+ * 429s — `Gateway 429 on model 'direct/…' · chain: … → … → …` — i.e. the cascade walked
+ * its entire chain and exhausted it, over and over, all day.
+ *
+ * The flat TTL above cannot stop that, and it is worth being precise about WHY, because
+ * the numbers look like they should: a 5-minute cool with a 90-second half-open probe
+ * means a chronically-throttled model is re-tried roughly every 90 seconds FOREVER. Each
+ * of those probes is a real dispatch that costs a billable run, marks a ticket failed,
+ * and learns nothing that the previous ninety-one probes did not already establish. The
+ * half-open trial is exactly right for a model that blipped; it is exactly wrong for a
+ * free pool that is saturated for the day, and the flat TTL cannot tell the two apart.
+ *
+ * So a cooldown now carries a STRIKE COUNT, and each consecutive strike doubles both the
+ * bench time and the probe delay. A model that blipped once is still back in ~75s; a
+ * model that has 429'd five times in a row stands down for the hour it needs to.
+ *
+ * It SELF-RESETS with no extra write on the success path — the strike count lives inside
+ * the cooldown record, so when the full TTL elapses without a fresh failure the record
+ * expires and the next strike starts again at one. That matters: a success hook would
+ * mean a KV write on every successful request, which is the hot path.
+ */
+const COOLDOWN_MAX_TTL_SEC = 60 * 60;   // no class benches a model longer than an hour.
+
+/**
+ * Bench time owed after `strikes` CONSECUTIVE failures of the same (vendor, model).
+ * Doubles per strike from the class base, capped. PURE — unit-tested directly.
+ */
+export function escalatedTtlSeconds(cls: Exclude<CooldownClass, 'request_error'>, strikes: number): number {
+  const n = Math.max(1, Math.floor(strikes) || 1);
+  return Math.min(TTL_SECONDS[cls] * 2 ** (n - 1), COOLDOWN_MAX_TTL_SEC);
+}
+
+/**
+ * How long before a cooled entry opens its single half-open probe. Still a quarter of
+ * the (already escalated) TTL, but the 90-second ceiling now scales with the strike
+ * count — otherwise the escalation above would be defeated by the probe, which is the
+ * thing actually spending the runs. PURE.
+ */
+export function trialAfterDelaySeconds(ttlSec: number, strikes: number): number {
+  const n = Math.max(1, Math.floor(strikes) || 1);
+  return Math.min(ttlSec * TRIAL_AFTER_FRACTION, TRIAL_AFTER_MAX_SEC * n);
+}
 
 /** Epoch-ms at which a cooldown opens its single half-open trial window. */
-function trialAfterFor(now: number, ttlSec: number): number {
-  const delaySec = Math.min(ttlSec * TRIAL_AFTER_FRACTION, TRIAL_AFTER_MAX_SEC);
-  return now + delaySec * 1000;
+function trialAfterFor(now: number, ttlSec: number, strikes: number): number {
+  return now + trialAfterDelaySeconds(ttlSec, strikes) * 1000;
 }
 
 /**
@@ -161,6 +206,17 @@ const vendorFailuresKey = (vendor: VendorId) => `vendor_failures:${vendor}`;
 interface CooldownRecord {
   until: number;
   trialAfter?: number;
+  /** Consecutive failures of this (vendor, model) — drives {@link escalatedTtlSeconds}.
+   *  Absent on legacy entries written before escalation; treated as 0 so the next
+   *  failure starts the ladder at one. */
+  strikes?: number;
+}
+
+/** Vendor-level cooldown as stored. `strikes` escalates the vendor bench exactly as
+ *  the per-model one does — a vendor that keeps tripping is saturated, not blipping. */
+interface VendorCooldownRecord {
+  until: number;
+  strikes?: number;
 }
 
 interface CooldownBackend {
@@ -168,13 +224,13 @@ interface CooldownBackend {
    *  undefined if not cooled at all. Does NOT apply half-open eligibility —
    *  callers (`read`-gating vs `status`-display) decide via `isStillActive`. */
   read(vendor: VendorId, model: string): Promise<CooldownRecord | undefined>;
-  /** Persists `until` epoch-ms + `trialAfter` with a `ttlSec` lifetime. Errors are absorbed. */
-  write(vendor: VendorId, model: string, until: number, trialAfter: number, ttlSec: number, status: number, cls: CooldownClass): Promise<void>;
+  /** Persists `until` epoch-ms + `trialAfter` + the strike count with a `ttlSec` lifetime. Errors are absorbed. */
+  write(vendor: VendorId, model: string, until: number, trialAfter: number, ttlSec: number, status: number, cls: CooldownClass, strikes: number): Promise<void>;
 
-  /** Returns vendor cooldown expiry epoch-ms; undefined if not cooled. */
-  readVendor(vendor: VendorId): Promise<number | undefined>;
+  /** Returns the vendor's cooldown record (expiry epoch-ms + strike count); undefined if not cooled. */
+  readVendor(vendor: VendorId): Promise<VendorCooldownRecord | undefined>;
   /** Persists vendor cooldown for `ttlSec`. */
-  writeVendor(vendor: VendorId, until: number, ttlSec: number, cls: 'transient' | 'auth' | 'capacity'): Promise<void>;
+  writeVendor(vendor: VendorId, until: number, ttlSec: number, cls: 'transient' | 'auth' | 'capacity', strikes: number): Promise<void>;
   /** Read recent failure timestamps for sliding-window decisions. */
   readVendorFailures(vendor: VendorId): Promise<number[]>;
   /** Persist filtered + appended failure ring. TTL bounded by `VENDOR_FAILURE_WINDOW_MS`. */
@@ -182,7 +238,7 @@ interface CooldownBackend {
 }
 
 const memMap            = new Map<string, CooldownRecord>();
-const memVendorCooldown = new Map<VendorId, number>();
+const memVendorCooldown = new Map<VendorId, VendorCooldownRecord>();
 const memVendorRing     = new Map<VendorId, number[]>();
 
 const memBackend: CooldownBackend = {
@@ -193,17 +249,17 @@ const memBackend: CooldownBackend = {
     if (Date.now() >= rec.until) { memMap.delete(k); return undefined; }
     return rec;
   },
-  async write(vendor, model, until, trialAfter) {
-    memMap.set(cacheKey(vendor, model), { until, trialAfter });
+  async write(vendor, model, until, trialAfter, _ttlSec, _status, _cls, strikes) {
+    memMap.set(cacheKey(vendor, model), { until, trialAfter, strikes });
   },
   async readVendor(vendor) {
-    const until = memVendorCooldown.get(vendor);
-    if (!until) return undefined;
-    if (Date.now() >= until) { memVendorCooldown.delete(vendor); return undefined; }
-    return until;
+    const rec = memVendorCooldown.get(vendor);
+    if (!rec) return undefined;
+    if (Date.now() >= rec.until) { memVendorCooldown.delete(vendor); return undefined; }
+    return rec;
   },
-  async writeVendor(vendor, until) {
-    memVendorCooldown.set(vendor, until);
+  async writeVendor(vendor, until, _ttlSec, _cls, strikes) {
+    memVendorCooldown.set(vendor, { until, strikes });
   },
   async readVendorFailures(vendor) {
     return memVendorRing.get(vendor) ?? [];
@@ -220,16 +276,17 @@ function kvBackend(kv: KVNamespace): CooldownBackend {
       const v = await kv.get(cacheKey(vendor, model)).catch(() => null);
       if (v == null) return undefined;
       try {
-        const parsed = JSON.parse(v) as { until?: unknown; trialAfter?: unknown };
+        const parsed = JSON.parse(v) as { until?: unknown; trialAfter?: unknown; strikes?: unknown };
         const until = typeof parsed?.until === 'number' ? parsed.until : 0;
         const trialAfter = typeof parsed?.trialAfter === 'number' ? parsed.trialAfter : undefined;
-        return { until, trialAfter };
+        const strikes = typeof parsed?.strikes === 'number' ? parsed.strikes : undefined;
+        return { until, trialAfter, strikes };
       } catch { return { until: 0 }; /* malformed value — still cooled, expiry unknown */ }
     },
-    async write(vendor, model, until, trialAfter, ttlSec, status, cls) {
+    async write(vendor, model, until, trialAfter, ttlSec, status, cls, strikes) {
       await kv.put(
         cacheKey(vendor, model),
-        JSON.stringify({ cls, status, until, trialAfter }),
+        JSON.stringify({ cls, status, until, trialAfter, strikes }),
         { expirationTtl: ttlSec },
       ).catch((err) => {
         reportCaughtError(err, { source: "infrastructure/auth/cooldownStore.ts", operation: "write", level: 'warning', context: { logMessage: `[cooldown] kv.put failed for ${vendor}/${model}: ${err}` } });
@@ -239,14 +296,17 @@ function kvBackend(kv: KVNamespace): CooldownBackend {
       const v = await kv.get(vendorCooldownKey(vendor)).catch(() => null);
       if (v == null) return undefined;
       try {
-        const parsed = JSON.parse(v) as { until?: unknown };
-        return typeof parsed?.until === 'number' ? parsed.until : 0;
-      } catch { return 0; }
+        const parsed = JSON.parse(v) as { until?: unknown; strikes?: unknown };
+        return {
+          until: typeof parsed?.until === 'number' ? parsed.until : 0,
+          strikes: typeof parsed?.strikes === 'number' ? parsed.strikes : undefined,
+        };
+      } catch { return { until: 0 }; }
     },
-    async writeVendor(vendor, until, ttlSec, cls) {
+    async writeVendor(vendor, until, ttlSec, cls, strikes) {
       await kv.put(
         vendorCooldownKey(vendor),
-        JSON.stringify({ cls, until }),
+        JSON.stringify({ cls, until, strikes }),
         { expirationTtl: ttlSec },
       ).catch((err) => {
         reportCaughtError(err, { source: "infrastructure/auth/cooldownStore.ts", operation: "writeVendor", level: 'warning', context: { logMessage: `[cooldown] kv.put failed for vendor ${vendor}: ${err}` } });
@@ -362,19 +422,27 @@ export async function recordFailure(
     return;
   }
 
-  const ttl = TTL_SECONDS[cls];
+  const backend = backendFor(env);
+
+  // ONE extra read on the FAILURE path (never the success path) buys the strike count.
+  // An entry that has already lived out its TTL is gone from the store, so a model that
+  // recovered starts the ladder over at one — the escalation self-resets without needing
+  // a success hook that would write KV on every good request.
+  const prior = await backend.read(vendor, model).catch(() => undefined);
+  const strikes = (prior?.strikes ?? 0) + 1;
+
+  const ttl = escalatedTtlSeconds(cls, strikes);
   const now = Date.now();
   const until = now + ttl * 1000;
-  const trialAfter = trialAfterFor(now, ttl);
+  const trialAfter = trialAfterFor(now, ttl, strikes);
 
   console.warn(
-    `[cooldown] ${vendor}/${model} cooled for ${ttl}s (half-open trial after ${Math.round((trialAfter - now) / 1000)}s) — class=${cls} status=${status}` +
+    `[cooldown] ${vendor}/${model} cooled for ${ttl}s (strike ${strikes}, half-open trial after ${Math.round((trialAfter - now) / 1000)}s) — class=${cls} status=${status}` +
     (hint ? ` hint="${hint.slice(0, 120)}"` : ''),
   );
 
-  const backend = backendFor(env);
   await Promise.all([
-    backend.write(vendor, model, until, trialAfter, ttl, status, cls),
+    backend.write(vendor, model, until, trialAfter, ttl, status, cls, strikes),
     maybeTripVendorCooldown(backend, vendor, cls, status),
   ]);
 }
@@ -385,6 +453,24 @@ export async function recordFailure(
  * model failures land in the same window. Embedded failures do not propagate
  * to vendor cooldown because they're model-specific.
  */
+/**
+ * Vendor bench time after `strikes` consecutive trips. Same ladder as the per-model
+ * one ({@link escalatedTtlSeconds}) and for the same reason: a vendor that trips again
+ * while its previous cooldown is still warm is saturated, not blipping. PURE.
+ */
+export function escalatedVendorTtlSeconds(cls: 'transient' | 'auth' | 'capacity', strikes: number): number {
+  const n = Math.max(1, Math.floor(strikes) || 1);
+  return Math.min(VENDOR_COOLDOWN_TTL_SEC[cls] * 2 ** (n - 1), COOLDOWN_MAX_TTL_SEC);
+}
+
+/** Strike number this trip represents. A vendor still inside its previous cooldown (or
+ *  whose record has not yet expired) escalates; one whose record has aged out starts at
+ *  1 — the same self-resetting rule as the per-model ladder. */
+async function nextVendorStrike(backend: CooldownBackend, vendor: VendorId): Promise<number> {
+  const prior = await backend.readVendor(vendor).catch(() => undefined);
+  return (prior?.strikes ?? 0) + 1;
+}
+
 async function maybeTripVendorCooldown(
   backend: CooldownBackend,
   vendor: VendorId,
@@ -401,12 +487,13 @@ async function maybeTripVendorCooldown(
   // funded Anthropic floor that blew its monthly limit) stands down instead of
   // being re-reached — and re-billed — by the next run.
   if (cls === 'auth' || cls === 'capacity') {
-    const ttl   = VENDOR_COOLDOWN_TTL_SEC[cls];
+    const strikes = await nextVendorStrike(backend, vendor);
+    const ttl   = escalatedVendorTtlSeconds(cls, strikes);
     const until = Date.now() + ttl * 1000;
     console.warn(
-      `[cooldown] vendor ${vendor} cooled for ${ttl}s — ${cls} failure (status=${status}); cascade will skip this vendor`,
+      `[cooldown] vendor ${vendor} cooled for ${ttl}s (strike ${strikes}) — ${cls} failure (status=${status}); cascade will skip this vendor`,
     );
-    await backend.writeVendor(vendor, until, ttl, cls);
+    await backend.writeVendor(vendor, until, ttl, cls, strikes);
     return;
   }
 
@@ -417,15 +504,16 @@ async function maybeTripVendorCooldown(
   const ring   = [...prior.filter((t) => t >= cutoff), now];
 
   if (ring.length >= VENDOR_FAILURE_THRESHOLD) {
-    const ttl   = VENDOR_COOLDOWN_TTL_SEC.transient;
+    const strikes = await nextVendorStrike(backend, vendor);
+    const ttl   = escalatedVendorTtlSeconds('transient', strikes);
     const until = now + ttl * 1000;
     console.warn(
-      `[cooldown] vendor ${vendor} cooled for ${ttl}s — ${ring.length} transient failures in ${VENDOR_FAILURE_WINDOW_MS}ms; cascade will skip this vendor`,
+      `[cooldown] vendor ${vendor} cooled for ${ttl}s (strike ${strikes}) — ${ring.length} transient failures in ${VENDOR_FAILURE_WINDOW_MS}ms; cascade will skip this vendor`,
     );
     // Clear the ring once we've tripped — fresh failures after cooldown lifts
     // shouldn't inherit prior timestamps.
     await Promise.all([
-      backend.writeVendor(vendor, until, ttl, 'transient'),
+      backend.writeVendor(vendor, until, ttl, 'transient', strikes),
       backend.writeVendorFailures(vendor, []),
     ]);
     return;
@@ -447,8 +535,8 @@ export async function loadCooledVendorExpiries(
   const backend = backendFor(env);
   const out = new Map<VendorId, number>();
   await Promise.all(vendors.map(async (vendor) => {
-    const until = await backend.readVendor(vendor);
-    if (until !== undefined) out.set(vendor, until);
+    const rec = await backend.readVendor(vendor);
+    if (rec !== undefined) out.set(vendor, rec.until);
   }));
   return out;
 }

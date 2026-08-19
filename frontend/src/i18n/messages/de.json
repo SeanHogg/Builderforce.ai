@@ -9403,6 +9403,39 @@
         "plan": "Was tun Sie als Nächstes, um das aufzulösen?"
       },
       "copyDiagnosticsAria": "Unterhaltung und Werkzeugprotokoll des Managers kopieren"
+    },
+    "blockedPrs": {
+      "title": "Pull Requests, die auf einen Menschen warten ({count})",
+      "caption": "Der Manager hat es bis zu seiner Obergrenze versucht und gestoppt — kein weiterer Durchlauf rührt sie an. Das Ticket mit dem höchsten Wert zuerst, in dieser Reihenfolge sollten sie abgearbeitet werden. Eine Zeile, deren Ticket bereits fertig ist, ist nur noch Überbleibsel: die Arbeit ist anderweitig gelandet, übrig bleibt der Branch.",
+      "empty": "Derzeit wartet nichts auf einen Menschen.",
+      "more": "{count} weitere nicht aufgeführt — dies ist der oberste Ausschnitt nach Geschäftswert.",
+      "col": {
+        "pr": "PR",
+        "ticket": "Ticket",
+        "value": "Wert",
+        "reason": "Warum gestoppt"
+      },
+      "row": {
+        "noTicket": "Kein Ticket",
+        "ticketDone": "Ticket bereits fertig — Schließen unbedenklich",
+        "blocked": "Blockiert"
+      },
+      "action": {
+        "closeDone": "{count} PRs fertiger Tickets schließen",
+        "working": "Wird geschlossen…"
+      },
+      "confirm": {
+        "title": "Pull Requests fertiger Tickets schließen?",
+        "message": "Damit werden {count} Pull Requests beim Anbieter geschlossen. Jeder gehört zu einem bereits fertigen Ticket, die Arbeit ist also anderweitig gelandet. Das Schließen lässt sich hier nicht rückgängig machen.",
+        "action": "Schließen"
+      },
+      "result": {
+        "summary": "{closed} geschlossen. {skipped} übersprungen.",
+        "truncated": "Es wurden mehr ausgewählt, als eine Anfrage schließen kann ({max}) — erneut ausführen, um fortzufahren."
+      },
+      "error": {
+        "generic": "Diese Pull Requests konnten nicht geschlossen werden."
+      }
     }
   },
   "project360": {

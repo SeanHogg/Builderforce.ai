@@ -15,6 +15,7 @@ import {
 } from '@/components/manager/ManagerAutonomyControls';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import { ManagerStallRegister } from '@/components/manager/ManagerStallRegister';
+import ManagerBlockedPrs from '@/components/manager/ManagerBlockedPrs';
 import { ManagerStallCensus } from '@/components/manager/ManagerStallCensus';
 import { ManagerCopyDiagnostics } from '@/components/manager/ManagerCopyDiagnostics';
 import { ManagerTodayDigest } from '@/components/manager/ManagerTodayDigest';
@@ -905,6 +906,15 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
               whole picture — which is exactly how a 313-ticket cohort stayed invisible
               behind a 44-row register. Scale and root cause first, then the detail. */}
           <ManagerStallCensus projectId={projectId} />
+          {/* The pile the merge queue creates BY DESIGN, and the only in-product way to
+              clear it. Above the per-ticket register because it is bounded, ranked and
+              actionable in one press, where the register is a reading task. */}
+          <ManagerBlockedPrs
+            projectId={projectId}
+            blockedPrs={data.blockedPrs ?? []}
+            total={data.stats.blockedPullRequests ?? (data.blockedPrs?.length ?? 0)}
+            onChanged={() => { void load(); }}
+          />
           <ManagerStallRegister projectId={projectId} />
         </div>
       )}
