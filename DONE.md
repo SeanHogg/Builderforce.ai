@@ -1,3 +1,84 @@
+## ✅ RESOLVED 2026-08-19 — Second roadmap validation pass: every cited path checked, and the two red frontend ratchets actually fixed
+
+**What this pass added over the first one.** The first pass validated claims. This one validated
+**references**: a script pulled all **279 source paths ROADMAP.md cites in backticks** and checked
+each against the tree. Thirty-six did not resolve. Most were legitimate — they name hired.video's or
+BurnRateOS's source, generated build output, or a file the entry is *reporting as absent* — but nine
+pointed at this repo and were wrong, and one of them was load-bearing.
+
+**The load-bearing one: the hired.video port was anchored on a seam that had been deliberately
+deleted.** The program paragraph said the port is "anchored on the existing
+`application/integrations/hiredVideo.ts` provider seam (strangler-fig: reimplement natively behind
+the same signatures, call sites unchanged)". That file does not exist. DONE.md records why —
+migration 0471 deleted it, dropped `@seanhogg/hired-video-sdk`, removed `HIRED_API_KEY` /
+`HIRED_API_BASE_URL` from `env.ts`, and reimplemented the résumé capability natively over the
+Canvas `resume` object. So the strangler-fig is *finished*, not pending: there is no vendor seam
+left to hide behind, and each remaining surface lands as native code or not at all. The roadmap now
+says that.
+
+**Other corrections:**
+
+* **"The frontend has no architecture ratchet at all" — deleted.** `frontend/scripts/` holds **ten**
+  guards, including `check-frontend-architecture.mjs`. It exists, and it bites: it was RED when the
+  claim was re-read.
+* **`DOMAIN_MANIFEST` — recorded as "~40 keys, fifteen domains, only `finance.*` has a writer".**
+  Re-counted: **45 keys across 17 domains** (`operations` and `legal` became seats since), and
+  **three** domains write `metric_facts` — `financeRollup.ts`, `operationsRollup.ts` and
+  `legalRollup.ts`. Fourteen still produce nothing, which is the real item. The same item was also
+  written **twice**, in group 0 and group 7; group 7 is now the owner and group 0 points at it.
+* **The five HRMS-backed `hr.*` tools were blocked on a connector category that now exists.**
+  `connectors/defaults/hiring.ts` ships Greenhouse, Lever, Ashby, Indeed and LinkedIn Jobs;
+  `payroll.ts` ships Gusto, Rippling and Deel with `list_employees` and `list_compensation`.
+  Blocker cleared; the work is now binding each tool to the port.
+* **"Two Creation Canvas tests are red" — deleted.** Both files were run: `canvasSurfaces.test.tsx`
+  17/17 and `CreationCanvas.test.tsx` 86/86. The `world`-surface assertion had been fixed in place.
+* **The "two elements labelled Model" entry was NOT deleted, and the reason matters.** The test that
+  used to fail on it no longer asserts it, so the entry's evidence was stale — but
+  `creationCanvas.node.model` and `chatInput.model` both still resolve to the literal `"Model"` in
+  `en.json`. It is now a live accessibility defect with no test holding it, which is worse than a red
+  test, and the entry says so.
+* Two entries citing routes that no longer exist (`frontend/src/app/ide/[id]/page.tsx`) and a
+  `.claude/hooks/localize-guard.mjs` that is not in the repo were corrected rather than left to
+  imply an enforcement that does not run.
+
+**Then the two red frontend ratchets were fixed rather than re-logged.** Last pass they were blocked
+on "another session's uncommitted work"; that work is now committed, so the blocker was gone and the
+entry was closed by doing it. `frontend npm run check` is **10/10 green**, and `tsgo --noEmit` is
+clean.
+
+* **`check:design-scale` — the one literal hex left in the entire frontend was in
+  `components/invoice/PublicInvoice.tsx`**, which had shipped with an inline `React.CSSProperties`
+  object full of `var(--token, #hex)` fallbacks. The fix is not "delete the fallbacks": the page is
+  the *third* member of a family — a signer, a diligence reader and a paying customer are the same
+  visitor, with no account, a token in the link, and whatever theme their machine is in.
+  `LegalDocumentShareViewer.tsx` and `DataRoomShareViewer.tsx` already share
+  `signature/SignerConsole.module.css` for exactly that reason. `PublicInvoice` now does too, with
+  the invoice-specific rows and line table appended to that one stylesheet the same way the data
+  room's document list was. Tokens only, both themes, and the wide line table scrolls inside its own
+  container so the page never does.
+* Four more off-scale literals named their ROLE instead of their size —
+  `QualityCollectorsManager.tsx` (`borderRadius: 8` → `var(--radius-md)`, plus three font sizes),
+  `WorkspaceAllowanceBanner.tsx` and `AllocationLens.tsx`.
+* **`check:architecture` — 809 `'use client'` files against a baseline of 806, and the arithmetic
+  is the interesting part.** Two files were added that genuinely must be client entries
+  (`PublicInvoice.tsx`, `DataRoomShareViewer.tsx` — both the client root under a Server Component
+  route, both reading their token from `window.location`). Two carried a directive they did not
+  need: `WorkspaceAllowanceBanner.tsx` and `FounderPaperwork.tsx` are each imported by exactly one
+  component that is *already* a boundary, so the directive marked nothing. Those two were dropped,
+  the baseline moved 806 → **807** for the net, and the reasoning is written into the guard's own
+  header the way its previous four raises are. A redundant `'use client'` is not free — it is what
+  makes that number drift upward with no new interactivity, which is the drift the ratchet exists
+  to see.
+* **One dead prop removed:** `PublicInvoice` took a `reference` prop the page dutifully decoded and
+  passed, and the component never read — the token resolves the row and the row reports its own
+  reference. Taking it as a prop implied a second source for one fact.
+
+**Register arithmetic:** 366 → 363 open bullets, index counts re-derived, and the two entries added
+by the first pass are now one — the frontend-ratchet entry is closed here, and the isolation-manifest
+entry stays open with its blocker unchanged (`track/W1D` still exists locally and on `origin`).
+
+---
+
 ## ✅ RESOLVED 2026-08-19 — §7 Insights & Audits: AI-Impact parity (AIIMP-1..5, INS-HUB-1, QUAL-7/8, project scope) and the three dispatch-backpressure residuals
 
 Two whole roadmap blocks, worked end to end. They shared a shape worth naming: in almost

@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import type { CloudRunAllowance } from '@/lib/builderforceApi';
 
@@ -37,7 +35,7 @@ export function WorkspaceAllowanceBanner({ allowance }: { allowance: CloudRunAll
         border: '1px solid var(--warning-border, var(--border-subtle))',
         background: 'var(--warning-bg, var(--bg-elevated))',
         color: 'var(--text-primary)',
-        fontSize: 13,
+        fontSize: 'var(--font-size-small)',
         lineHeight: 1.5,
       }}
     >

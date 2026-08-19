@@ -33,7 +33,7 @@ const STATUS_TONE: Record<CapitalizationStatus, string> = {
 
 const inputStyle: CSSProperties = {
   padding: '7px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '0.83rem',
+  background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)',
 };
 const btnStyle: CSSProperties = {
   padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--accent)',

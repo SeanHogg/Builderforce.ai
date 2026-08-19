@@ -17,7 +17,6 @@ import { PublicInvoice } from '@/components/invoice/PublicInvoice';
  */
 export const runtime = 'edge';
 
-export default async function InvoicePage({ params }: { params: Promise<{ reference: string }> }) {
-  const { reference } = await params;
-  return <PublicInvoice reference={decodeURIComponent(reference)} />;
+export default function InvoicePage() {
+  return <PublicInvoice />;
 }

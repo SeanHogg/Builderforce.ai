@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * The paperwork half of FO-D5 — where two founders record what they agreed.
  *

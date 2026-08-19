@@ -22,11 +22,11 @@ import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 const ingestBase = `${AUTH_API_URL}/api/quality-ingest`;
 
 const card: React.CSSProperties = { background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20 };
-const input: React.CSSProperties = { padding: '8px 12px', fontSize: 13, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', color: 'var(--text-primary)', width: '100%', boxSizing: 'border-box' };
-const btnPrimary: React.CSSProperties = { padding: '8px 14px', fontSize: 13, fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
+const input: React.CSSProperties = { padding: '8px 12px', fontSize: 'var(--font-size-small)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', color: 'var(--text-primary)', width: '100%', boxSizing: 'border-box' };
+const btnPrimary: React.CSSProperties = { padding: '8px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--coral-bright)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
 const btnSubtle: React.CSSProperties = { padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' };
 const pre: React.CSSProperties = { background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 12, fontSize: 12, color: 'var(--text-primary)', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' };
-const sectionTitle: React.CSSProperties = { fontWeight: 600, fontSize: 14, marginBottom: 8 };
+const sectionTitle: React.CSSProperties = { fontWeight: 600, fontSize: 'var(--font-size-card-title)', marginBottom: 8 };
 
 /**
  * Quality collectors — a project is the unit of error gathering: ONE collector
@@ -209,7 +209,7 @@ function CollectorPanel({
           <div
             role="status"
             style={{
-              marginTop: 10, padding: '8px 10px', borderRadius: 8,
+              marginTop: 10, padding: '8px 10px', borderRadius: 'var(--radius-md)',
               border: '1px solid var(--warning-border, var(--border))',
               background: 'var(--warning-bg, var(--surface-2))',
               color: 'var(--text-primary)', fontSize: 12, lineHeight: 1.5,

@@ -228,6 +228,24 @@
  *   stops behind a backgrounded tab) and to take an acceptance, both of which are browser
  *   APIs and local state. The route file itself stays a Server Component and carries the
  *   `noindex` metadata, which is where that belongs.
+ *
+ *   806 -> 807 (`useClientFiles`, 2026-08-19) -- net +1 across four files, and the
+ *   arithmetic is the point. TWO were added: `components/invoice/PublicInvoice.tsx`
+ *   and `components/investor/DataRoomShareViewer.tsx`, the third and fourth pages in
+ *   the token-authorised family `LegalDocumentShareViewer.tsx` and `SignerConsole`
+ *   already hold. Each is the client entry under a Server Component route root, and
+ *   neither could be anything else: the token rides the query string (read from
+ *   `window.location`), and the invoice additionally has to survive the payment
+ *   processor's redirect back to its own URL and post the returned session id.
+ *
+ *   TWO were removed in the same pass, and they are the more interesting half:
+ *   `components/board/WorkspaceAllowanceBanner.tsx` and
+ *   `components/cofounder/FounderPaperwork.tsx` each carried a directive they did not
+ *   need. `TaskMgmtContent.tsx` and `CofounderMatching.tsx` are their only importers
+ *   and both are already boundaries, so the directive marked nothing -- the exact
+ *   shape the `IdentityProvidersPanel.tsx` note above describes. A redundant
+ *   `'use client'` is not free: it is what makes this number drift upward without any
+ *   new interactivity, which is the drift this ratchet exists to see.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';

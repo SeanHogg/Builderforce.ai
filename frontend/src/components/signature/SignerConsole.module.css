@@ -145,3 +145,38 @@
 .documentName { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .documentName b { color: var(--text-primary); font-size: var(--font-size-body); overflow-wrap: anywhere; }
 .documentName small { color: var(--text-secondary); font-size: var(--font-size-small); }
+
+/* ── The customer's invoice (FO-C2) ─────────────────────────────────────────
+   The third page this sheet serves, and the reason it is a shared stylesheet
+   rather than three: a signer, a diligence reader and a paying customer are the
+   same visitor — no account, a token in the link, and whatever theme their
+   machine is in. `PublicInvoice` shipped with an inline style object instead,
+   which is how the one literal hex in the whole app got in. */
+.summary { display: grid; gap: 2px; margin-bottom: 18px; }
+.summaryRow {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px;
+  padding: 6px 0; font-size: var(--font-size-body); color: var(--text-primary);
+}
+.summaryKey { color: var(--text-muted); }
+/* Outstanding money is the one number on the page that changes what the reader
+   does next, so it carries the accent until it is zero. */
+.summaryDue { color: var(--coral-bright); }
+.summarySettled { color: var(--text-primary); }
+
+/* Wide content scrolls inside its own container; the page never does. */
+.tableScroll { overflow-x: auto; margin-bottom: 18px; }
+.lineTable { width: 100%; border-collapse: collapse; font-size: var(--font-size-body); min-width: 420px; }
+.lineTable th {
+  text-align: left; padding: 6px 10px 6px 0; white-space: nowrap;
+  color: var(--text-muted); font-weight: 600;
+}
+.lineTable td { padding: 8px 10px 8px 0; }
+.lineTable tbody tr { border-top: 1px solid var(--border); }
+.lineTable td:not(:first-child) { white-space: nowrap; }
+
+.notes { margin: 0 0 18px; color: var(--text-secondary); font-size: var(--font-size-body); line-height: 1.55; }
+.payLink {
+  display: inline-block; min-height: 44px; padding: 11px 20px;
+  border-radius: var(--radius-md); background: var(--coral-bright); color: var(--bg-base);
+  font-size: var(--font-size-body); font-weight: 600; text-decoration: none;
+}

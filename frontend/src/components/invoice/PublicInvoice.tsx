@@ -14,6 +14,15 @@
  * a form recipient, and the row it resolves to reports its own tenant. Nothing on
  * this page asks who they are.
  *
+ * ── WHY IT SHARES THE SIGNER'S STYLESHEET ───────────────────────────────────
+ * A signer, a diligence reader and a paying customer are the same visitor: no
+ * account, a token in the link, and whatever theme their machine happens to be in.
+ * `SignerConsole.module.css` already answers that for the first two, so this page
+ * uses it rather than describing the page a third time. It shipped with an inline
+ * style object instead, and that was the only literal hex left in the frontend —
+ * a colour that renders identically in both themes, which is the defect
+ * `check:design-scale` exists to catch.
+ *
  * ── WHAT HAPPENS AFTER THEY PAY ─────────────────────────────────────────────
  * The processor redirects back here with its session id, and this page hands that
  * id to `/settle` — which does not trust it: the server re-reads the session from
@@ -25,6 +34,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { apiRequest } from '@/lib/apiClient';
+import styles from '../signature/SignerConsole.module.css';
 
 interface PublicInvoiceDocument {
   reference: string;
@@ -42,35 +52,13 @@ interface PublicInvoiceDocument {
   lines: Array<{ description: string; quantity: number; unitAmount: number; amount: number }>;
 }
 
-export interface PublicInvoiceProps {
-  reference: string;
-}
-
-const page: React.CSSProperties = {
-  maxWidth: 760,
-  margin: '0 auto',
-  padding: 'clamp(20px, 5vw, 48px)',
-  color: 'var(--text-primary, #111827)',
-  background: 'var(--surface-page, #ffffff)',
-};
-
-const card: React.CSSProperties = {
-  border: '1px solid var(--border-subtle, #e5e7eb)',
-  borderRadius: 'var(--radius-lg, 12px)',
-  background: 'var(--bg-base, #ffffff)',
-  padding: 'clamp(16px, 4vw, 28px)',
-};
-
-const row: React.CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  justifyContent: 'space-between',
-  gap: 8,
-  padding: '6px 0',
-  fontSize: 'var(--font-size-body, 14px)',
-};
-
-export function PublicInvoice({ reference }: PublicInvoiceProps) {
+/**
+ * No props. The reference is a path segment so the processor has a return
+ * address to redirect to, but this component never reads it: the token resolves
+ * the row, and the row reports its own reference. Taking it as a prop implied a
+ * second source for the same fact.
+ */
+export function PublicInvoice() {
   const t = useTranslations('publicInvoice');
   const locale = useLocale();
   const [invoice, setInvoice] = useState<PublicInvoiceDocument | null>(null);
@@ -130,52 +118,49 @@ export function PublicInvoice({ reference }: PublicInvoiceProps) {
     }
   };
 
-  if (loading) return <div style={page}><p>{t('loading')}</p></div>;
+  if (loading) {
+    return <main className={styles.page}><div className={styles.sheet}><p className={styles.notice}>{t('loading')}</p></div></main>;
+  }
+
   if (error || !invoice) {
     return (
-      <div style={page}>
-        <div style={card}>
-          <h1 style={{ fontSize: 'var(--font-size-page-title, 24px)', margin: '0 0 8px' }}>{t('unavailableTitle')}</h1>
-          <p role="alert" style={{ margin: 0, color: 'var(--text-muted, #6b7280)' }}>{error || t('loadFailed')}</p>
+      <main className={styles.page}>
+        <div className={styles.sheet}>
+          <h1 className={styles.title}>{t('unavailableTitle')}</h1>
+          <p role="alert" className={styles.error}>{error || t('loadFailed')}</p>
         </div>
-      </div>
+      </main>
     );
   }
 
   const settled = invoice.outstanding <= 0;
 
   return (
-    <div style={page}>
-      <div style={card}>
-        <header style={{ marginBottom: 18 }}>
-          <h1 style={{ fontSize: 'var(--font-size-page-title, 24px)', margin: '0 0 4px' }}>
-            {t('title', { reference: invoice.reference })}
-          </h1>
-          <p style={{ margin: 0, color: 'var(--text-muted, #6b7280)', fontSize: 'var(--font-size-body, 14px)' }}>
-            {t('billedTo', { customer: invoice.customerName })}
-          </p>
-        </header>
+    <main className={styles.page}>
+      <div className={styles.sheet}>
+        <h1 className={styles.title}>{t('title', { reference: invoice.reference })}</h1>
+        <p className={styles.addressed}>{t('billedTo', { customer: invoice.customerName })}</p>
 
-        <div style={{ display: 'grid', gap: 2, marginBottom: 18 }}>
-          <div style={row}>
-            <span style={{ color: 'var(--text-muted, #6b7280)' }}>{t('total')}</span>
+        <div className={styles.summary}>
+          <div className={styles.summaryRow}>
+            <span className={styles.summaryKey}>{t('total')}</span>
             <strong>{money(invoice.amount, invoice.currency)}</strong>
           </div>
           {invoice.paidAmount > 0 && (
-            <div style={row}>
-              <span style={{ color: 'var(--text-muted, #6b7280)' }}>{t('paid')}</span>
+            <div className={styles.summaryRow}>
+              <span className={styles.summaryKey}>{t('paid')}</span>
               <span>{money(invoice.paidAmount, invoice.currency)}</span>
             </div>
           )}
-          <div style={row}>
-            <span style={{ color: 'var(--text-muted, #6b7280)' }}>{t('outstanding')}</span>
-            <strong style={{ color: settled ? 'var(--text-primary, #111827)' : 'var(--coral-bright, #dc2626)' }}>
+          <div className={styles.summaryRow}>
+            <span className={styles.summaryKey}>{t('outstanding')}</span>
+            <strong className={settled ? styles.summarySettled : styles.summaryDue}>
               {money(invoice.outstanding, invoice.currency)}
             </strong>
           </div>
           {invoice.dueAtISO && (
-            <div style={row}>
-              <span style={{ color: 'var(--text-muted, #6b7280)' }}>{t('due')}</span>
+            <div className={styles.summaryRow}>
+              <span className={styles.summaryKey}>{t('due')}</span>
               <span>
                 {invoice.dueAtISO.slice(0, 10)}
                 {invoice.ageingDays > 0 && !settled ? ` · ${t('daysOverdue', { count: invoice.ageingDays })}` : ''}
@@ -185,23 +170,22 @@ export function PublicInvoice({ reference }: PublicInvoiceProps) {
         </div>
 
         {invoice.lines.length > 0 && (
-          // Wide content scrolls inside its own container; the page never does.
-          <div style={{ overflowX: 'auto', marginBottom: 18 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-body, 14px)', minWidth: 420 }}>
+          <div className={styles.tableScroll}>
+            <table className={styles.lineTable}>
               <thead>
                 <tr>
                   {[t('colDescription'), t('colQuantity'), t('colUnit'), t('colAmount')].map((heading) => (
-                    <th key={heading} style={{ textAlign: 'left', padding: '6px 10px 6px 0', color: 'var(--text-muted, #6b7280)', fontWeight: 600, whiteSpace: 'nowrap' }}>{heading}</th>
+                    <th key={heading}>{heading}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {invoice.lines.map((line, index) => (
-                  <tr key={`${line.description}-${index}`} style={{ borderTop: '1px solid var(--border-subtle, #e5e7eb)' }}>
-                    <td style={{ padding: '8px 10px 8px 0' }}>{line.description}</td>
-                    <td style={{ padding: '8px 10px 8px 0', whiteSpace: 'nowrap' }}>{line.quantity}</td>
-                    <td style={{ padding: '8px 10px 8px 0', whiteSpace: 'nowrap' }}>{money(line.unitAmount, invoice.currency)}</td>
-                    <td style={{ padding: '8px 10px 8px 0', whiteSpace: 'nowrap' }}>{money(line.amount, invoice.currency)}</td>
+                  <tr key={`${line.description}-${index}`}>
+                    <td>{line.description}</td>
+                    <td>{line.quantity}</td>
+                    <td>{money(line.unitAmount, invoice.currency)}</td>
+                    <td>{money(line.amount, invoice.currency)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -209,33 +193,20 @@ export function PublicInvoice({ reference }: PublicInvoiceProps) {
           </div>
         )}
 
-        {invoice.notes && (
-          <p style={{ fontSize: 'var(--font-size-body, 14px)', color: 'var(--text-muted, #6b7280)', lineHeight: 1.55 }}>{invoice.notes}</p>
-        )}
+        {invoice.notes && <p className={styles.notes}>{invoice.notes}</p>}
 
         {settled ? (
-          <p style={{ fontSize: 'var(--font-size-body, 14px)', margin: 0 }}>{t('settled')}</p>
+          <p className={styles.notice}>{t('settled')}</p>
         ) : invoice.paymentLinkUrl ? (
-          <a
-            href={invoice.paymentLinkUrl}
-            style={{
-              display: 'inline-block',
-              padding: '10px 18px',
-              borderRadius: 'var(--radius-md, 8px)',
-              background: 'var(--accent, #2563eb)',
-              color: 'var(--text-on-accent, #ffffff)',
-              fontWeight: 600,
-              textDecoration: 'none',
-            }}
-          >
+          <a href={invoice.paymentLinkUrl} className={styles.payLink}>
             {settling ? t('confirming') : t('payNow', { amount: money(invoice.outstanding, invoice.currency) })}
           </a>
         ) : (
           // No merchant account on the issuing workspace. Saying so plainly beats
           // an absent button, which reads as a page that is broken.
-          <p style={{ fontSize: 'var(--font-size-body, 14px)', color: 'var(--text-muted, #6b7280)', margin: 0 }}>{t('payByTransfer')}</p>
+          <p className={styles.notice}>{t('payByTransfer')}</p>
         )}
       </div>
-    </div>
+    </main>
   );
 }
