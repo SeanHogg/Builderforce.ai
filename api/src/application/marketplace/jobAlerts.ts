@@ -261,10 +261,20 @@ export async function runJobAlertSweep(env: Env, db: Db, now = new Date()): Prom
   return result;
 }
 
-/** Record that these alerts ran, and what they found. */
+/**
+ * Record that these alerts ran, and what they found.
+ *
+ * Cross-tenant for the same reason the read above is: the batch deliberately spans
+ * every tenant with a due alert, so there is no single tenant to filter by. The ids
+ * are not caller input — they came from `dueAlerts` in this same sweep — so the
+ * `IN (…)` IS the access predicate, which is what `acrossTenants` refuses to build a
+ * statement without. Grouping the batch by tenant to satisfy the guard literally would
+ * turn one write into one per tenant and buy nothing: the rows written are exactly the
+ * rows just read.
+ */
 async function stamp(db: Db, ids: readonly number[], now: Date, resultCount: number): Promise<void> {
   if (!ids.length) return;
   await db.update(savedSearches)
     .set({ lastRunAt: now, resultCount, updatedAt: now })
-    .where(inArray(savedSearches.id, [...ids]));
+    .where(acrossTenants(savedSearches, 'scheduled_sweep', inArray(savedSearches.id, [...ids])));
 }

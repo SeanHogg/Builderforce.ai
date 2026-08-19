@@ -46,13 +46,15 @@ import { resolveTenantPlan } from './llmRoutes';
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
 import { evaluateProposal, evalPercent } from '../../application/marketplace/proposalEval';
 import { jobFilterConditions, jobFilterIsEmpty, normalizeJobFilters } from '../../application/marketplace/jobFilters';
+import { bindScheduleToEngagement, createMilestone, readJobSchedule } from '../../application/marketplace/milestones';
+import { hireShape } from '../../application/marketplace/engagementShape';
+import { summariseEscrow } from '../../application/marketplace/escrow';
 import type { EvalJudge } from '../../application/eval/semanticEval';
 import type { Env, HonoEnv } from '../../env';
 
 const JOBS_PUBLIC_CACHE_KEY = 'jobs:public:open';
 const DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'];
 const POSTING_TYPES = ['project_bid', 'design', 'fte'];
-const ENGAGEMENT_TYPES = ['fixed_bid', 'hourly', 'fte'];
 
 function parseSkills(raw: unknown): string[] {
   return parseJsonArray<string>(raw);
@@ -424,6 +426,58 @@ export function createJobRoutes(): Hono<HonoEnv> {
     return c.json({ ok: true });
   });
 
+  // ---- Employer: the job's payment schedule ------------------------------------
+  //
+  // A fixed-price posting says what it will pay FOR, before anybody bids. These
+  // milestones hang off the job (`job_id`), and accepting a proposal stamps them onto
+  // the engagement — see `bindScheduleToEngagement` in the accept route below. That is
+  // why the schedule is authored here rather than only after hiring: a freelancer
+  // deciding whether to bid needs to see the deliverables and the money attached to
+  // them, and a schedule invented after the handshake is a different agreement.
+  //
+  // The escrow ACTIONS are deliberately not here. Nothing on a job-level milestone can
+  // be funded, submitted or released — it has no engagement and therefore no
+  // counterparty — so the whole state machine lives on the engagement routes and this
+  // surface only authors drafts.
+
+  // GET /:id/milestones — the schedule attached to one of this tenant's postings.
+  router.get('/:id/milestones', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const milestones = await readJobSchedule(db, c.get('tenantId') as number, c.req.param('id'));
+    return c.json({ milestones, summary: summariseEscrow(milestones) });
+  });
+
+  // POST /:id/milestones — add a deliverable to a posting. Always a draft.
+  router.post('/:id/milestones', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const jobId = c.req.param('id');
+    const b = await c.req.json<{ title?: string; description?: string; amountCents?: number; currency?: string; sequence?: number; dueAt?: string }>();
+    const title = String(b.title ?? '').trim();
+    if (!title) return c.json({ error: 'title is required' }, 400);
+    const amountCents = Math.floor(Number(b.amountCents ?? 0));
+    if (!Number.isFinite(amountCents) || amountCents < 0) return c.json({ error: 'amountCents must be a positive integer' }, 400);
+    // The posting must be this tenant's, and must still be open: adding deliverables to
+    // a filled job would change the agreement after somebody was hired against it.
+    const [job] = await db.select({ id: jobPostings.id })
+      .from(jobPostings)
+      .where(and(eq(jobPostings.id, jobId), eq(jobPostings.tenantId, tenantId), eq(jobPostings.status, 'open')))
+      .limit(1);
+    if (!job) return c.json({ error: 'Not found' }, 404);
+    const milestone = await createMilestone(db, {
+      tenantId,
+      jobId,
+      title,
+      description: b.description ?? null,
+      amountCents,
+      currency: b.currency,
+      sequence: Number.isFinite(Number(b.sequence)) ? Number(b.sequence) : 0,
+      dueAt: b.dueAt ? new Date(b.dueAt) : null,
+      createdByUserId: c.get('userId') as string,
+    });
+    return c.json({ milestone }, 201);
+  });
+
   // POST /proposals/:pid/accept — EMPLOYER accepts a proposal → creates an active
   // engagement, marks the job filled, and notifies the freelancer.
   router.post('/proposals/:pid/accept', authMiddleware, async (c) => {
@@ -437,6 +491,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
         job_tenant: jobPostings.tenantId,
         project_id: jobPostings.projectId,
         job_title: jobPostings.title,
+        job_engagement_type: jobPostings.engagementType,
       }).from(jobProposals)
         .innerJoin(jobPostings, eq(jobPostings.id, jobProposals.jobId))
         .where(and(eq(jobProposals.id, pid), inArray(jobProposals.status, ['submitted', 'shortlisted'])));
@@ -470,8 +525,22 @@ export function createJobRoutes(): Hono<HonoEnv> {
           freelancerUserId: pr.freelancer_user_id, status: 'active',
           rateCents: pr.rate_cents, currency: pr.currency ?? 'USD',
           title: pr.job_title, createdByUserId: actor, hiredAt: new Date(),
+          // Frozen at hire from the posting that was bid on — see 0928 on why this is
+          // a declared copy rather than a join, and why it must not be re-read later.
+          engagementType: hireShape(pr.job_engagement_type),
         });
       }
+      // Carry the job's agreed payment schedule onto the engagement, in the SAME
+      // transaction that created it. Stamps rather than copies, so the milestones the
+      // client published with the posting are the very rows they later fund — a copy
+      // would be a second schedule that can differ from the one that was bid against.
+      // A no-op for an hourly posting, which simply has none.
+      await bindScheduleToEngagement(tx, {
+        tenantId,
+        jobId: pr.job_id as string,
+        engagementId,
+        freelancerUserId: pr.freelancer_user_id as string,
+      });
       await tx.update(jobProposals).set({ status: 'accepted', updatedAt: new Date() }).where(eq(jobProposals.id, pid));
       await tx.update(jobProposals).set({ status: 'declined', updatedAt: new Date() })
         .where(and(eq(jobProposals.jobId, pr.job_id), inArray(jobProposals.status, ['submitted', 'shortlisted'])));
@@ -629,7 +698,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const discipline = DISCIPLINES.includes(b.discipline as string) ? (b.discipline as string) : null;
     const skills = Array.isArray(b.skills) ? JSON.stringify((b.skills as unknown[]).filter((s) => typeof s === 'string').slice(0, 30)) : null;
     const postingType = POSTING_TYPES.includes(b.postingType as string) ? (b.postingType as string) : 'project_bid';
-    const engagementType = ENGAGEMENT_TYPES.includes(b.engagementType as string) ? (b.engagementType as string) : null;
+    const engagementType = hireShape(b.engagementType);
     const requirements = typeof b.requirements === 'string' ? b.requirements.slice(0, 8000) : null;
     const sourceTicketId = typeof b.sourceTicketId === 'number' ? Math.round(b.sourceTicketId) : null;
     const id = crypto.randomUUID();
@@ -667,7 +736,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const b = await c.req.json<{ status?: string; title?: string; description?: string; requirements?: string; postingType?: string; engagementType?: string }>();
     const status = ['open', 'closed', 'filled'].includes(b.status ?? '') ? (b.status as string) : null;
     const postingType = POSTING_TYPES.includes(b.postingType ?? '') ? (b.postingType as string) : null;
-    const engagementType = ENGAGEMENT_TYPES.includes(b.engagementType ?? '') ? (b.engagementType as string) : null;
+    const engagementType = hireShape(b.engagementType);
     const rows = await db
       .update(jobPostings)
       .set({

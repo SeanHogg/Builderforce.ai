@@ -22,10 +22,12 @@
  * neon-http, where there are none.
  */
 import { and, asc, eq, inArray } from 'drizzle-orm';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   engagementMilestones,
+  freelancerEngagements,
   ledgerEntries,
 } from '../../infrastructure/database/schema';
 import { notify } from '../notifications/notify';
@@ -111,28 +113,42 @@ export interface MilestoneScheduleView {
 
 /** Read one engagement's schedule, its rolled-up money, and whether work is authorised. */
 export async function readEngagementSchedule(db: Db, tenantId: number, engagementId: string): Promise<MilestoneScheduleView> {
-  const rows = await db.select(columns).from(engagementMilestones)
-    .where(and(
-      eq(engagementMilestones.tenantId, tenantId),
-      eq(engagementMilestones.engagementId, engagementId),
-    ))
-    .orderBy(asc(engagementMilestones.sequence), asc(engagementMilestones.createdAt)) as Milestone[];
+  // Two reads, not one query with a join: the schedule and the engagement's SHAPE are
+  // independent facts, and the gate needs both even when one is empty — a fixed-price
+  // engagement with NO milestones is precisely the case the gate must refuse, and a join
+  // would return no rows and make it indistinguishable from an hourly one.
+  const [rows, [engagement]] = await Promise.all([
+    db.select(columns).from(engagementMilestones)
+      .where(and(
+        eq(engagementMilestones.tenantId, tenantId),
+        eq(engagementMilestones.engagementId, engagementId),
+      ))
+      .orderBy(asc(engagementMilestones.sequence), asc(engagementMilestones.createdAt)) as Promise<Milestone[]>,
+    db.select({ engagementType: freelancerEngagements.engagementType })
+      .from(freelancerEngagements)
+      .where(and(
+        eq(freelancerEngagements.tenantId, tenantId),
+        eq(freelancerEngagements.id, engagementId),
+      ))
+      .limit(1),
+  ]);
   return {
     milestones: rows,
     summary: summariseEscrow(rows),
-    // An engagement WITH a schedule is fixed-price work — the schedule is what makes it
-    // so. `freelancer_engagements` carries no engagement_type of its own (the shape
-    // lives on the posting), so the presence of milestones is the honest local signal
-    // and `evaluateWorkGate` remains the single decision. Same rule as
-    // `workIsAuthorised`, which is why neither restates the gate itself.
-    gate: evaluateWorkGate(rows.length ? 'fixed_bid' : null, rows),
+    gate: evaluateWorkGate(engagement?.engagementType ?? null, rows),
   };
 }
 
-/** Read the schedule proposed against a job (the bidding half, before anybody is hired). */
-export async function readJobSchedule(db: Db, jobId: string): Promise<Milestone[]> {
+/**
+ * Read the schedule proposed against a job — the bidding half, before anybody is hired.
+ *
+ * Tenant-scoped even though `job_id` alone would identify the rows: the posting belongs
+ * to the employer's workspace, and a bare id predicate on a tenant-owned table is the
+ * shape that becomes an IDOR the moment a caller can guess or enumerate one.
+ */
+export async function readJobSchedule(db: Db, tenantId: number, jobId: string): Promise<Milestone[]> {
   const rows = await db.select(columns).from(engagementMilestones)
-    .where(eq(engagementMilestones.jobId, jobId))
+    .where(scopedToTenant(engagementMilestones, tenantId, eq(engagementMilestones.jobId, jobId)))
     .orderBy(asc(engagementMilestones.sequence), asc(engagementMilestones.createdAt));
   return rows as Milestone[];
 }
@@ -183,7 +199,12 @@ export async function createMilestone(db: Db, input: CreateMilestoneInput): Prom
  * freelancer, which is what makes a later release pay whoever was engaged at the time.
  */
 export async function bindScheduleToEngagement(
-  db: Db,
+  // Structural rather than `Db`, so the accept path can pass its TRANSACTION. Binding
+  // has to happen in the same transaction that creates the engagement: a commit that
+  // hires somebody but leaves the schedule on the job is an engagement whose agreed
+  // deliverables silently vanished, and there is no second request that would repair it
+  // — accepting a proposal is a one-shot, concurrency-gated move.
+  db: Pick<Db, 'update'>,
   input: { tenantId: number; jobId: string; engagementId: string; freelancerUserId: string; proposalId?: string | null },
 ): Promise<number> {
   const rows = await db.update(engagementMilestones)
@@ -354,18 +375,25 @@ async function announce(env: Env, db: Db, milestone: Milestone, input: MoveMiles
  * their statuses.
  */
 export async function workIsAuthorised(db: Db, tenantId: number, engagementId: string): Promise<WorkGateVerdict> {
-  const rows = await db
-    .select({ status: engagementMilestones.status, amountCents: engagementMilestones.amountCents })
-    .from(engagementMilestones)
-    .where(and(
-      eq(engagementMilestones.tenantId, tenantId),
-      eq(engagementMilestones.engagementId, engagementId),
-    ));
-  const milestones = rows as { status: MilestoneStatus; amountCents: number }[];
-  // No schedule at all means this is not fixed-price work — hourly engagements are
-  // governed by timecards and must not be gated here.
-  if (milestones.length === 0) return evaluateWorkGate(null, []);
-  return evaluateWorkGate('fixed_bid', milestones);
+  const [rows, [engagement]] = await Promise.all([
+    db.select({ status: engagementMilestones.status, amountCents: engagementMilestones.amountCents })
+      .from(engagementMilestones)
+      .where(and(
+        eq(engagementMilestones.tenantId, tenantId),
+        eq(engagementMilestones.engagementId, engagementId),
+      )),
+    db.select({ engagementType: freelancerEngagements.engagementType })
+      .from(freelancerEngagements)
+      .where(and(
+        eq(freelancerEngagements.tenantId, tenantId),
+        eq(freelancerEngagements.id, engagementId),
+      ))
+      .limit(1),
+  ]);
+  return evaluateWorkGate(
+    engagement?.engagementType ?? null,
+    rows as { status: MilestoneStatus; amountCents: number }[],
+  );
 }
 
 /**
@@ -381,19 +409,35 @@ export async function milestoneTenantForFreelancer(db: Db, milestoneId: string, 
   const [row] = await db
     .select({ tenantId: engagementMilestones.tenantId })
     .from(engagementMilestones)
-    .where(and(
-      eq(engagementMilestones.id, milestoneId),
-      eq(engagementMilestones.freelancerUserId, userId),
+    // Cross-tenant for the same reason `readFreelancerMilestones` is, and declared the
+    // same way: the caller has no tenant, and the subject predicate is what makes the
+    // read safe. Resolving the tenant here is precisely what stops the route having to
+    // accept one from the request.
+    .where(acrossTenants(
+      engagementMilestones,
+      'subject_own_rows',
+      and(
+        eq(engagementMilestones.id, milestoneId),
+        eq(engagementMilestones.freelancerUserId, userId),
+      )!,
     ))
     .limit(1);
   return row ? Number(row.tenantId) : null;
 }
 
-/** Every milestone this freelancer is engaged on, newest schedules first. The worker's
- *  own "what am I owed" view — served by `idx_engagement_milestones_freelancer`. */
+/**
+ * Every milestone this freelancer is engaged on — the worker's own "what am I owed"
+ * view, served by `idx_engagement_milestones_freelancer`.
+ *
+ * Cross-tenant BY DESIGN and declared as such: a for-hire account works for many client
+ * workspaces and is a member of none, so this question's answer spans every tenant that
+ * has hired them. `userId` must be the verified subject from the web JWT — the whole
+ * safety of `subject_own_rows` is that the predicate names one authenticated person,
+ * which is a strictly narrower filter than a tenant would be.
+ */
 export async function readFreelancerMilestones(db: Db, userId: string): Promise<Milestone[]> {
   const rows = await db.select(columns).from(engagementMilestones)
-    .where(eq(engagementMilestones.freelancerUserId, userId))
+    .where(acrossTenants(engagementMilestones, 'subject_own_rows', eq(engagementMilestones.freelancerUserId, userId)))
     .orderBy(asc(engagementMilestones.sequence), asc(engagementMilestones.createdAt))
     .limit(500);
   return rows as Milestone[];

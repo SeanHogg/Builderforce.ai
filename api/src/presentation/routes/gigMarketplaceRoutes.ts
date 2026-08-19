@@ -39,6 +39,7 @@ import {
   tenants,
   users,
 } from '../../infrastructure/database/schema';
+import { hireShape } from '../../application/marketplace/engagementShape';
 import type { EvalJudge } from '../../application/eval/semanticEval';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
@@ -50,7 +51,6 @@ const JOBS_PUBLIC_CACHE_KEY = 'jobs:public:open';
 const ticketPostingKey = (tenantId: number, taskId: number | string) =>
   `gig:ticket-posting:${tenantId}:${taskId}`;
 const POSTING_TYPES = ['project_bid', 'design', 'fte'];
-const ENGAGEMENT_TYPES = ['fixed_bid', 'hourly', 'fte'];
 
 const mapPosting = (r: typeof jobPostings.$inferSelect) => ({
   id: r.id,
@@ -117,9 +117,10 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
     const postingType = POSTING_TYPES.includes(b.postingType as string)
       ? (b.postingType as string)
       : (t.taskType === 'design' ? 'design' : 'project_bid');
-    const engagementType = ENGAGEMENT_TYPES.includes(b.engagementType as string)
-      ? (b.engagementType as string)
-      : (postingType === 'fte' ? 'fte' : 'fixed_bid');
+    // Falls back to the shape the posting type implies, so a gig published from a
+    // ticket is never left shapeless — the escrow gate reads an unstated shape as
+    // not-fixed-price, which would silently opt these out of the funding check.
+    const engagementType = hireShape(b.engagementType) ?? (postingType === 'fte' ? 'fte' : 'fixed_bid');
     const requirements = typeof b.requirements === 'string' && b.requirements.trim()
       ? b.requirements.slice(0, 8000)
       : (t.description ?? null);

@@ -1082,6 +1082,12 @@ export const freelancerEngagements = pgTable('freelancer_engagements', {
    *  grants this freelancer — enforced by EngagementAccessService. Default 'project'
    *  = view + work the engaged project's board (incl. moving a ticket to In Review). */
   accessScope:        varchar('access_scope', { length: 20 }).notNull().default('project'), // project|board_readonly|tenant
+  /** `fixed_bid|hourly|fte` — the shape AT THE TIME OF HIRE (migration 0930). A
+   *  declared denormalisation of `job_postings.engagement_type` with a single writer
+   *  (`application/marketplace/engagementShape.ts`): the direct-hire path has no posting
+   *  to join to, and the escrow work gate cannot be correct without it. NULL means
+   *  "not stated", which the gate reads as not-fixed-price. */
+  engagementType:     varchar('engagement_type', { length: 20 }),
   rateCents:          integer('rate_cents'),
   currency:           varchar('currency', { length: 3 }).notNull().default('USD'),
   title:              varchar('title', { length: 200 }),

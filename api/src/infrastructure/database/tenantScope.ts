@@ -134,6 +134,27 @@ export function scopedToNullableTenant(
  *     itself. Use it ONLY where the uniqueness constraint is genuinely global —
  *     if the column is unique per tenant, `scopedToTenant` is both correct and
  *     the tighter answer.
+ *   `subject_own_rows` — the row is ABOUT the caller, and the caller belongs to no
+ *     tenant. This is the freelance marketplace's shape and it is not an exception
+ *     to the model, it is a second axis of it: a for-hire account works for many
+ *     client workspaces and is a member of none, so "my engagements", "my proposals",
+ *     "my milestones" are questions whose answer legitimately spans every tenant that
+ *     has ever hired them. Filtering by tenant is not the tighter answer here — there
+ *     is no tenant on the web JWT to filter BY, and asking the caller to supply one
+ *     would be an IDOR wearing a parameter.
+ *
+ *     The access control is the predicate itself, and it is strictly STRONGER than a
+ *     tenant filter: `<subject_column> = <the authenticated caller>` returns rows for
+ *     exactly one person, where a tenant filter returns rows for everyone in a
+ *     workspace. Use it ONLY where the subject column is compared against an identity
+ *     the server established (a verified `userId` from the web JWT) — never against a
+ *     value from the request body, a query parameter or a path segment, which is the
+ *     one way this reason becomes the leak the closed set exists to prevent.
+ *
+ *     Several such reads sit in the frozen baseline today (`freelancerRoutes.ts`,
+ *     `jobRoutes.ts`) for a decision nobody disagrees with, which is the same thing
+ *     `scheduled_sweep` was added to stop: debt that reports work which is not owed,
+ *     then dares the next reader to pay it down by breaking a feature.
  */
 export type CrossTenantReason =
   | 'public_catalogue'
@@ -141,7 +162,8 @@ export type CrossTenantReason =
   | 'platform_admin'
   | 'platform_aggregate'
   | 'scheduled_sweep'
-  | 'global_uniqueness';
+  | 'global_uniqueness'
+  | 'subject_own_rows';
 
 /**
  * A DECLARED cross-tenant read.

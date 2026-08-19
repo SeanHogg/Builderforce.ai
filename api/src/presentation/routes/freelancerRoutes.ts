@@ -55,6 +55,7 @@ import {
   readFreelancerMilestones,
 } from '../../application/marketplace/milestones';
 import { summariseEscrow, type MilestoneAction } from '../../application/marketplace/escrow';
+import { hireShape } from '../../application/marketplace/engagementShape';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import {
   freelancerEngagements,
@@ -990,7 +991,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
-    const b = await c.req.json<{ freelancerUserId?: string; projectId?: number; rateCents?: number; title?: string; note?: string; status?: string }>();
+    const b = await c.req.json<{ freelancerUserId?: string; projectId?: number; rateCents?: number; title?: string; note?: string; status?: string; engagementType?: string }>();
     if (!b.freelancerUserId) return c.json({ error: 'freelancerUserId required' }, 400);
     // Must be a PUBLISHED for-hire profile — the same gate the marketplace browse
     // uses. This covers both dedicated 'freelancer' accounts AND standard builders
@@ -1041,6 +1042,10 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       title: b.title ?? null,
       note: b.note ?? null,
       createdByUserId: actor,
+      // The shape at the time of hire. A direct hire has no posting to derive it from,
+      // which is the whole reason the column exists (0928) — an unstated shape stays
+      // null and the escrow work gate reads it as not-fixed-price.
+      engagementType: hireShape(b.engagementType),
       hiredAt: status === 'active' ? new Date() : null,
     });
     await notify(db, c.env, { userId: b.freelancerUserId, tenantId, kind: notifyKind, title: status === 'active' ? `${tenantName} hired you` : `${tenantName} wants to ${status === 'interviewing' ? 'interview' : 'engage'} you`, body: b.title ?? b.note ?? null, ref: id });
