@@ -57,6 +57,7 @@ import { acrossTenants, scopedToTenant } from '../../infrastructure/database/ten
 import type { Env } from '../../env';
 import { resolveAppBaseUrl } from '../../env';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { buildPaymentProvider } from '../../infrastructure/payment';
 import { hashShareToken, mintShareToken } from '../security/shareToken';
 import { deliverShareInvitations } from '../security/shareInvitationMailer';
 import { recordActivity } from '../activity/activityLog';
@@ -455,7 +456,6 @@ async function mintPaymentLink(
   const merchantAccountId = await chargeableMerchantId(db, tenantId);
   if (!merchantAccountId) return null;
 
-  const { buildPaymentProvider } = await import('../../infrastructure/payment');
   const session = await buildPaymentProvider(env).createInvoicePaymentLink({
     merchantAccountId,
     amountCents: input.amountCents,
@@ -680,7 +680,6 @@ export async function settleInvoiceCheckout(
   env: Env,
   input: { tenantId: number; invoiceRef: string; checkoutSessionId: string },
 ): Promise<RecordPaymentResult> {
-  const { buildPaymentProvider } = await import('../../infrastructure/payment');
   const session = await buildPaymentProvider(env).retrieveCheckoutSession(input.checkoutSessionId);
   if (!session) throw new ReceivableError('That payment could not be found at the processor.', 404);
   if (session.paymentStatus !== 'paid') throw new ReceivableError('That payment has not completed.', 400);
