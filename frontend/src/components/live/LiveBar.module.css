@@ -28,24 +28,9 @@
   color: var(--text-secondary);
 }
 
-/* Dormant: the room does not exist yet, so the dock is a single control and a
-   line of explanation — the smallest thing that can still be its own home. */
-.dock[data-state='idle'] {
-  gap: 12px;
-  padding-block: 6px;
-}
-
 .dock[data-state='collapsed'] {
   gap: 8px;
   padding-block: 5px;
-}
-
-.hint {
-  color: var(--text-muted);
-  font-size: var(--font-size-eyebrow);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .identity {
@@ -377,10 +362,6 @@
     min-width: 0;
     padding: 0 14px;
     font-size: var(--font-size-eyebrow);
-  }
-
-  .hint {
-    display: none;
   }
 }
 

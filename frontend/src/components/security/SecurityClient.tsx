@@ -21,6 +21,7 @@ import { SecurityTicketAccessCard } from '@/components/security/SecurityTicketAc
 import { SecurityAuditPanel } from '@/components/security/SecurityAuditPanel';
 import { WebSecurityScanPanel } from '@/components/security/WebSecurityScanPanel';
 import PolicyPacksPanel from '@/components/security/PolicyPacksPanel';
+import IdentityProvidersPanel from '@/components/security/IdentityProvidersPanel';
 import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
 import PageContainer from '@/components/PageContainer';
 
@@ -103,6 +104,10 @@ export default function SecurityClient() {
     { id: 'webscan', label: t('webTab'), icon: '🌐', href: '/security?sub=webscan' },
     { id: 'soc2', label: t('auditTab'), icon: '📋', href: '/security?sub=soc2' },
     { id: 'policies', label: t('policiesTab'), icon: '⚖️', href: '/security?sub=policies' },
+    // Enterprise SSO and the LMS platforms that launch into this workspace. One
+    // tab, because a university's IT department configures both from the same two
+    // screens on their side in the same afternoon.
+    { id: 'identity', label: t('identityTab'), icon: '🏛', href: '/security?sub=identity' },
   ];
 
   const renderMembers = () => (
@@ -245,7 +250,8 @@ export default function SecurityClient() {
             : sub === 'webscan' ? <WebSecurityScanPanel />
               : sub === 'soc2' ? renderSoc2()
                 : sub === 'policies' ? <PolicyPacksPanel />
-                  : renderMembers()}
+                  : sub === 'identity' ? <IdentityProvidersPanel />
+                    : renderMembers()}
         </>
       )}
     </PageContainer>

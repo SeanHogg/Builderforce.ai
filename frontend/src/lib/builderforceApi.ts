@@ -8955,3 +8955,185 @@ export const developerApi = {
   uninstall: (installId: string): Promise<void> =>
     request(`/api/developer/installs/${installId}`, { method: 'DELETE' }).then(() => undefined),
 };
+
+// ---------------------------------------------------------------------------
+// Institutional identity — enterprise SSO and LTI 1.3 platform registrations
+// ---------------------------------------------------------------------------
+
+/** One SSO connection as a screen may see it: no client secret, ever. */
+export interface SsoConnection {
+  id: number;
+  label: string;
+  protocol: string;
+  issuer: string;
+  discoveryUrl: string | null;
+  authorizationUrl: string | null;
+  tokenUrl: string | null;
+  jwksUrl: string | null;
+  userinfoUrl: string | null;
+  clientId: string;
+  scopes: string;
+  jitProvisioning: boolean;
+  defaultRole: string;
+  status: string;
+  domains: Array<{ id: number; domain: string; verified: boolean; verifyToken: string }>;
+}
+
+export interface SsoConnectionInput {
+  label: string;
+  issuer: string;
+  discoveryUrl?: string | null;
+  authorizationUrl?: string | null;
+  tokenUrl?: string | null;
+  jwksUrl?: string | null;
+  userinfoUrl?: string | null;
+  clientId: string;
+  /** Omit on edit to LEAVE the stored secret alone — the server treats empty as
+   *  "unchanged" rather than "blank it", because a form that never receives a
+   *  secret would otherwise erase it on every save. */
+  clientSecret?: string;
+  scopes?: string;
+  jitProvisioning?: boolean;
+  defaultRole?: string;
+}
+
+export const ssoConnectionsApi = {
+  list: (): Promise<{ connections: SsoConnection[]; redirectUri: string }> =>
+    request('/api/sso-connections'),
+
+  create: (input: SsoConnectionInput): Promise<{ connection: SsoConnection }> =>
+    request('/api/sso-connections', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }),
+
+  update: (id: number, input: SsoConnectionInput): Promise<{ connection: SsoConnection }> =>
+    request(`/api/sso-connections/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }),
+
+  remove: (id: number): Promise<void> =>
+    request(`/api/sso-connections/${id}`, { method: 'DELETE' }).then(() => undefined),
+
+  addDomain: (id: number, domain: string): Promise<{ domain: string; recordName: string; recordValue: string }> =>
+    request(`/api/sso-connections/${id}/domains`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain }),
+    }),
+
+  verifyDomain: (domainId: number): Promise<{ verified: boolean; recordName: string; expected: string; found: string[] }> =>
+    request(`/api/sso-connections/domains/${domainId}/verify`, { method: 'POST' }),
+
+  removeDomain: (domainId: number): Promise<void> =>
+    request(`/api/sso-connections/domains/${domainId}`, { method: 'DELETE' }).then(() => undefined),
+};
+
+/** One LTI platform registration. No key material — the private half is sealed
+ *  server-side and no read path returns it. */
+export interface LtiRegistration {
+  id: number;
+  label: string;
+  issuer: string;
+  clientId: string;
+  deploymentIds: string[];
+  authLoginUrl: string;
+  accessTokenUrl: string;
+  keySetUrl: string;
+  toolKeyId: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LtiRegistrationInput {
+  label: string;
+  issuer: string;
+  clientId: string;
+  deploymentIds: string[];
+  authLoginUrl: string;
+  accessTokenUrl: string;
+  keySetUrl: string;
+}
+
+/** The URLs an administrator pastes back INTO their LMS. Served with the list so
+ *  nobody has to type them from memory — a mistyped one fails with
+ *  `invalid_client` and no further detail. */
+export interface LtiToolUrls {
+  oidcInitiationUrl: string;
+  targetLinkUri: string;
+  publicJwkUrl: string;
+  configUrl: string;
+}
+
+export const ltiRegistrationsApi = {
+  list: (): Promise<{ registrations: LtiRegistration[]; tool: LtiToolUrls }> =>
+    request('/api/lti-registrations'),
+
+  create: (input: LtiRegistrationInput): Promise<{ registration: LtiRegistration; publicJwk: Record<string, unknown> }> =>
+    request('/api/lti-registrations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }),
+
+  update: (id: number, input: LtiRegistrationInput): Promise<{ registration: LtiRegistration }> =>
+    request(`/api/lti-registrations/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }),
+
+  rotateKey: (id: number): Promise<{ registration: LtiRegistration; publicJwk: Record<string, unknown> }> =>
+    request(`/api/lti-registrations/${id}/rotate-key`, { method: 'POST' }),
+
+  disable: (id: number): Promise<{ registration: LtiRegistration }> =>
+    request(`/api/lti-registrations/${id}/disable`, { method: 'POST' }),
+
+  enable: (id: number): Promise<{ registration: LtiRegistration }> =>
+    request(`/api/lti-registrations/${id}/enable`, { method: 'POST' }),
+};
+
+/** Whether an email address signs in through an institution. Unauthenticated —
+ *  it is called from the login page before there is a session. */
+export const ssoDiscoveryApi = {
+  discover: (email: string): Promise<{ sso: boolean; connectionId?: number; label?: string }> =>
+    request(`/api/auth/sso/discover?email=${encodeURIComponent(email)}`),
+};
+
+// ---------------------------------------------------------------------------
+// Gigs — a ticket, published as hireable work
+// ---------------------------------------------------------------------------
+
+/**
+ * A gig is published FROM AN EXISTING TICKET, not authored on a form.
+ *
+ * That is why the storefront's "Publish a listing" under Talent → Gigs opens a
+ * board picker rather than a slug/version/repo form: the server derives the
+ * scope, the title and the requirements from the work item, so there is nothing
+ * for a form to collect that the ticket does not already say better.
+ */
+export interface GigPosting {
+  id: string;
+  title: string;
+  status: string;
+  postingType: string;
+  engagementType: string | null;
+  visibility: string;
+  sourceTicketId: number | null;
+  projectId: number | null;
+  rateMinCents: number | null;
+  rateMaxCents: number | null;
+  createdAt: string | null;
+}
+
+export const gigMarketplaceApi = {
+  publish: (input: {
+    ticketId: number;
+    rateMinCents?: number | null;
+    rateMaxCents?: number | null;
+    currency?: string;
+    visibility?: 'public' | 'private';
+  }): Promise<{ jobId: string; posting: GigPosting | null; reused?: boolean }> =>
+    request('/api/marketplace/publish', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }),
+
+  unpublish: (ticketId: number): Promise<void> =>
+    request('/api/marketplace/unpublish', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticketId }),
+    }).then(() => undefined),
+};

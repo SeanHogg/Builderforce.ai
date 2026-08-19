@@ -41,7 +41,7 @@ const VIEWPORT_ICON: Record<CanvasViewport, () => React.ReactElement> = {
 export function CanvasViewportSwitcher({ value, onChange }: CanvasViewportSwitcherProps) {
   const t = useTranslations('creationCanvas');
   return (
-    <div className={styles.viewportSwitcher} role="group" aria-label={t('previewWidth')}>
+    <div className={styles.segmentedGroup} role="group" aria-label={t('previewWidth')}>
       {CANVAS_VIEWPORTS.map((option) => {
         const Glyph = VIEWPORT_ICON[option];
         const name = t(`viewportName.${option}` as 'viewportName.desktop');

@@ -6,10 +6,14 @@
  * user has to reformat by hand.
  *
  *   POST /docx   { markdown, title? }          → .docx  (Document capability)
+ *   POST /pdf    { markdown, title? }          → .pdf   (any document-shaped kind)
  *   POST /pptx   { markdown, title? }          → .pptx  (Slides capability)
  *   POST /xlsx   { columns, rows, title? }     → .xlsx  (Spreadsheet capability)
  *
- * CSV stays a client-side save with no round-trip — the model already emits a
+ * `.pdf` joined them once there was a writer for it: the board used to answer
+ * "Download PDF" by opening the browser's print dialog, which is not a file an
+ * agent can attach, store as a run artifact, or reproduce for two people the
+ * same way. CSV stays a client-side save with no round-trip — the model already emits a
  * ```csv fence and the browser can write those bytes itself. `.xlsx` is here
  * because it is a zip of XML parts, not a line of text: it is Excel's NATIVE
  * container, and CSV loses the header band, the column widths and every cell's
@@ -26,6 +30,7 @@ import { consumeGuestAllowance } from '../../application/guest/guestDailyCounter
 import { guestIdentityFromRequest } from '../../application/guest/guestToken';
 import { GUEST_EXPORT_LIMITS } from '../../domain/tenant/PlanLimits';
 import { markdownToDocx, type DocxTheme } from '../../application/office/docxWriter';
+import { markdownToPdf, type PdfTheme } from '../../application/office/pdfWriter';
 import { markdownToPptx } from '../../application/office/slidesRenderer';
 import { MAX_XLSX_COLUMNS, MAX_XLSX_ROWS, rowsToXlsx, type XlsxCell } from '../../application/office/xlsxWriter';
 import { slugify } from '../../domain/shared/strings';
@@ -33,11 +38,12 @@ import { slugify } from '../../domain/shared/strings';
 const DOCX_CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const PPTX_CT = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 const XLSX_CT = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const PDF_CT = 'application/pdf';
 
 /** Cap the payload so one chat message can't turn into an unbounded render. */
 const MAX_MARKDOWN_CHARS = 200_000;
 
-interface ExportBody { markdown?: string; title?: string; theme?: unknown }
+interface ExportBody { markdown?: string; title?: string; theme?: unknown; subtitle?: string; footer?: string }
 interface SheetBody { columns?: unknown; rows?: unknown; title?: string }
 
 /** Validate + normalize the shared request body (markdown + a filename-safe title). */
@@ -49,14 +55,29 @@ function readBody(body: ExportBody): { error: string } | { markdown: string; tit
   return { markdown, title, name: slugify(title || 'export', { maxLen: 60, fallback: 'export' }) };
 }
 
+const HEX6 = /^#?[0-9a-f]{6}$/i;
+
 function readDocxTheme(value: unknown): DocxTheme {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const row = value as Record<string, unknown>;
   return {
-    ...(typeof row.accent === 'string' && /^#?[0-9a-f]{6}$/i.test(row.accent) ? { accent: row.accent } : {}),
+    ...(typeof row.accent === 'string' && HEX6.test(row.accent) ? { accent: row.accent } : {}),
     ...(row.font === 'sans' || row.font === 'serif' || row.font === 'mono' ? { font: row.font } : {}),
     ...(row.density === 'compact' || row.density === 'comfortable' || row.density === 'spacious' ? { density: row.density } : {}),
     ...(row.columns === 1 || row.columns === 2 ? { columns: row.columns } : {}),
+  };
+}
+
+/** The PDF writer takes the same theme vocabulary as the .docx writer plus a
+ *  second brand colour, so one `theme` object drives both containers. */
+function readPdfTheme(value: unknown): PdfTheme {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const row = value as Record<string, unknown>;
+  return {
+    ...(typeof row.accent === 'string' && HEX6.test(row.accent) ? { accent: row.accent } : {}),
+    ...(typeof row.secondary === 'string' && HEX6.test(row.secondary) ? { secondary: row.secondary } : {}),
+    ...(row.font === 'sans' || row.font === 'serif' || row.font === 'mono' ? { font: row.font } : {}),
+    ...(row.density === 'compact' || row.density === 'comfortable' || row.density === 'spacious' ? { density: row.density } : {}),
   };
 }
 
@@ -139,6 +160,19 @@ export function createExportRoutes(): Hono<HonoEnv> {
     if ('error' in parsed) return c.json({ error: parsed.error }, 400);
     const bytes = markdownToDocx(parsed.markdown, parsed.title || undefined, readDocxTheme(body.theme));
     return fileResponse(bytes, `${parsed.name}.docx`, DOCX_CT);
+  });
+
+  router.post('/pdf', async (c) => {
+    const body = await c.req.json<ExportBody>();
+    const parsed = readBody(body);
+    if ('error' in parsed) return c.json({ error: parsed.error }, 400);
+    const subtitle = (body.subtitle ?? '').trim().slice(0, 200);
+    const footer = (body.footer ?? '').trim().slice(0, 200);
+    const bytes = markdownToPdf(parsed.markdown, parsed.title || undefined, readPdfTheme(body.theme), {
+      ...(subtitle ? { subtitle } : {}),
+      ...(footer ? { footer } : {}),
+    });
+    return fileResponse(bytes, `${parsed.name}.pdf`, PDF_CT);
   });
 
   router.post('/pptx', async (c) => {

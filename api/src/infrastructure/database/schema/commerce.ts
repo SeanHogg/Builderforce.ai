@@ -386,6 +386,11 @@ export const rfpResponses = pgTable('rfp_responses', {
   quotedPriceUsdCents: integer('quoted_price_usd_cents'),
   marginPct:          real('margin_pct'),
   scanRefreshed:      boolean('scan_refreshed').notNull().default(false),
+  /** The deep `architecture-analysis` run the freshness gate fired because the
+   *  DEEP artifacts were themselves stale (migration 0483). The state is never
+   *  copied here — it is read from `repo_analysis_runs` — so the response points
+   *  at the run and the detail view polls it. */
+  deepAnalysisRunId:  uuid('deep_analysis_run_id'),
   generatedBy:        jsonb('generated_by'),                  // { cto, productOwner } agent refs
   createdBy:          varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   createdAt:          timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -394,6 +399,44 @@ export const rfpResponses = pgTable('rfp_responses', {
   index('idx_rfp_responses_tenant').on(t.tenantId, t.updatedAt),
   index('idx_rfp_responses_request').on(t.requestId, t.createdAt),
   index('idx_rfp_responses_project').on(t.projectId),
+  index('idx_rfp_responses_deep_run').on(t.deepAnalysisRunId),
+]);
+
+
+/**
+ * The RFP risk / dependency REGISTER (migration 0483).
+ *
+ * Risks and dependencies used to exist only as JSON inside one proposal's body,
+ * which meant nothing could be asked ACROSS proposals — which risk we raise on
+ * every bid, how many open high risks live across the pipeline, who owns a
+ * dependency. One table rather than two: both are "a named thing that can stop
+ * the delivery, attached to one response", and `kind` picks which vocabulary
+ * grades it (`severity` for a risk, `dependencyType` for a dependency).
+ *
+ * The rows are a PROJECTION of `rfp_responses.body` at generation time, and then
+ * gain a lifecycle the document has no room for (`status`, `ownerUserId`).
+ */
+export const rfpRisks = pgTable('rfp_risks', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:      uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  responseId:     uuid('response_id').notNull().references(() => rfpResponses.id, { onDelete: 'cascade' }),
+  requestId:      uuid('request_id').notNull().references(() => rfpRequests.id, { onDelete: 'cascade' }),
+  kind:           varchar('kind', { length: 16 }).notNull().default('risk').$type<'risk' | 'dependency'>(),
+  title:          varchar('title', { length: 255 }).notNull(),
+  severity:       varchar('severity', { length: 16 }).$type<'low' | 'medium' | 'high' | null>(),
+  dependencyType: varchar('dependency_type', { length: 24 }).$type<'internal' | 'external' | 'third_party' | null>(),
+  detail:         text('detail'),
+  status:         varchar('status', { length: 16 }).notNull().default('open').$type<'open' | 'accepted' | 'mitigated' | 'closed'>(),
+  ownerUserId:    varchar('owner_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  position:       integer('position').notNull().default(0),
+  createdAt:      timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_rfp_risks_tenant').on(t.tenantId, t.kind, t.status),
+  index('idx_rfp_risks_response').on(t.responseId, t.position),
+  index('idx_rfp_risks_request').on(t.requestId),
+  index('idx_rfp_risks_owner').on(t.ownerUserId),
 ]);
 
 

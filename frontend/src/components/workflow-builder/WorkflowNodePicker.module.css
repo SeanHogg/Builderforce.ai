@@ -26,7 +26,7 @@
   background: var(--bg-deep);
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-small);
 }
 .pickerClose {
   flex: none;
@@ -60,7 +60,7 @@
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: var(--font-size-eyebrow);
   text-align: left;
   cursor: pointer;
 }
@@ -78,13 +78,13 @@
   background: transparent;
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: var(--font-size-small);
   text-align: left;
   cursor: pointer;
 }
 .pickerList button:hover, .pickerList button:focus-visible { background: var(--bg-hover); outline: none; }
 .pickerList b { font-weight: 600; }
-.pickerList small { display: block; color: var(--text-muted); font-size: 10px; }
+.pickerList small { display: block; color: var(--text-muted); font-size: var(--font-size-eyebrow); }
 .pickerIcon {
   flex: none;
   display: grid;
@@ -95,4 +95,4 @@
   background: var(--bg-deep);
   color: var(--text-primary);
 }
-.pickerEmpty { padding: 14px 12px; color: var(--text-muted); font-size: 12px; }
+.pickerEmpty { padding: 14px 12px; color: var(--text-muted); font-size: var(--font-size-small); }

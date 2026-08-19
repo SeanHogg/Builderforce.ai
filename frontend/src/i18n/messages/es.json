@@ -4883,7 +4883,8 @@
     "sev_high": "Alto",
     "sev_medium": "Medio",
     "sev_low": "Bajo",
-    "sev_info": "Información"
+    "sev_info": "Información",
+    "identityTab": "Identidad"
   },
   "catalogInsights": {
     "total": {
@@ -12402,7 +12403,9 @@
     "pillLora": "🧠 Entrenamiento LoRA",
     "pillRegistry": "🤖 Registro de agentes",
     "pillEval": "🔬 Evaluación de IA",
-    "emailPlaceholder": "tu@ejemplo.com"
+    "emailPlaceholder": "tu@ejemplo.com",
+    "continueWithSso": "Continuar con {organisation}",
+    "ssoHint": "Tu organización te autentica. Aquí no necesitarás contraseña."
   },
   "gigs": {
     "publish": {
@@ -17707,7 +17710,19 @@
       "reread": "Recargar y volver a leer la página",
       "inspectorHint": "La página se carga en vivo en el lienzo. Su texto también se lee en el lienzo para que Brain pueda responder preguntas sobre ella.",
       "mixedTitle": "{host} se sirve mediante http://",
-      "mixedHint": "Una página segura no puede incrustar una insegura. Se muestra el texto de la página en su lugar: ábrela en una pestaña nueva o consúltala desde la extensión de VS Code."
+      "mixedHint": "Una página segura no puede incrustar una insegura. Se muestra el texto de la página en su lugar: ábrela en una pestaña nueva o consúltala desde la extensión de VS Code.",
+      "reportRegion": "Lo que informó esta página",
+      "reportStatusFailed": "Esta dirección devolvió HTTP {status}",
+      "reportErrors": "{count, plural, one {# error informado por esta página} other {# errores informados por esta página}}",
+      "reportClean": "Sin errores informados ({requests, plural, one {# llamada} other {# llamadas}})",
+      "reportUnknown": "Esta página no informa de su consola",
+      "reportUnknownHint": "Una página dentro de un marco no se puede leer desde fuera. Las páginas creadas en este lienzo informan automáticamente; añade el SDK de calidad de Builderforce a tu propio sitio para ver aquí sus errores.",
+      "reportLevel": {
+        "log": "registro",
+        "warn": "aviso",
+        "error": "error",
+        "request": "llamada"
+      }
     },
     "expandPaletteGroup": "Expandir la sección {group}",
     "collapsePaletteGroup": "Contraer la sección {group}",
@@ -19667,6 +19682,7 @@
     "sessionActionCluster": {
       "history": "Historial del lienzo",
       "inspect": "Herramientas del lienzo",
+      "live": "Llamada",
       "session": "Compartir y publicar"
     },
     "moreMenuSessionActions": "Este lienzo",
@@ -19928,7 +19944,9 @@
       "mobile": "Móvil"
     },
     "cursorTyping": "· escribiendo…",
-    "sharedCallLabel": "Sesión compartida"
+    "sharedCallLabel": "Sesión compartida",
+    "startCall": "Iniciar llamada",
+    "startCallTitle": "Iniciar una llamada sobre este lienzo"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -20687,9 +20705,6 @@
     "youShort": "TÚ",
     "member": "Miembro",
     "onThisCanvas": "Este lienzo",
-    "startCall": "Iniciar llamada",
-    "startCallTitle": "Iniciar una llamada sobre este lienzo",
-    "startCallHint": "Cualquiera en este lienzo puede unirse",
     "onCall": "{count, plural, one {# en la llamada} other {# en la llamada}}",
     "mic": "Micrófono",
     "micOff": "Micrófono apagado",
@@ -22462,5 +22477,101 @@
       "workflow": "una automatización",
       "tasks": "trabajo en tu tablero"
     }
+  },
+  "identityProviders": {
+    "accessTokenUrlField": "Extremo de token",
+    "active": "Activa",
+    "addConnection": "Añadir conexión",
+    "addDomain": "Reclamar dominio",
+    "addRegistration": "Añadir plataforma",
+    "authLoginUrlField": "Extremo de autorización",
+    "authorizationField": "Extremo de autorización",
+    "clientIdField": "ID de cliente",
+    "clientSecretField": "Secreto de cliente",
+    "clientSecretHint": "Se guarda cifrado. Nunca se devuelve, así que un valor vacío al guardar significa «sin cambios».",
+    "clientSecretUnchanged": "Déjalo vacío para conservar el secreto guardado",
+    "defaultRoleField": "Rol de los nuevos miembros",
+    "deploymentIdsField": "IDs de despliegue",
+    "deploymentIdsHint": "Separados por comas. Un emisor aloja muchas instituciones, así que un registro sin despliegue aceptaría lanzamientos de todas ellas.",
+    "deployments": "{count} despliegue(s)",
+    "disable": "Desactivar",
+    "disabled": "Desactivada",
+    "discoveryField": "URL de descubrimiento",
+    "discoveryHint": "Opcional. Si se indica, los extremos de abajo se leen de ahí; lo que escribas sigue teniendo prioridad.",
+    "domainNotFound": "No se encontró ese registro en {record}. El DNS puede tardar unos minutos en propagarse.",
+    "domainPlaceholder": "physics.edu",
+    "domainProof": "Publica este registro TXT y luego verifica:",
+    "domains": "Dominios de correo",
+    "edit": "Editar",
+    "editConnection": "Editar conexión",
+    "editRegistration": "Editar plataforma",
+    "enable": "Activar",
+    "institutionHint": "La institución, p. ej. «Universidad de Melbourne (Canvas)».",
+    "issuerField": "Emisor",
+    "issuerHint": "La URL del emisor del proveedor, p. ej. https://login.example.edu.",
+    "jitHint": "Desactivado, el proveedor autentica a alguien y aun así lo rechazamos: para instituciones que asignan plazas a mano.",
+    "jitLabel": "Crear cuentas en el primer inicio de sesión",
+    "jwksField": "Extremo JWKS",
+    "keyGeneratedHint": "Al guardar se genera y sella una clave de firma RSA de 2048 bits. Su mitad pública se sirve en la URL JWKS de arriba.",
+    "keySetUrlField": "Extremo JWKS de la plataforma",
+    "labelField": "Nombre",
+    "labelHint": "Cómo lo reconocerás más adelante.",
+    "loading": "Cargando…",
+    "ltiSubtitle": "Las plataformas educativas autorizadas a lanzar un curso en este espacio de trabajo.",
+    "ltiTitle": "Plataformas LMS (LTI 1.3)",
+    "noConnections": "Todavía no hay proveedores de identidad conectados.",
+    "noDomains": "Ningún dominio reclamado. Hasta que uno se verifique, nadie se dirige a este proveedor.",
+    "noRegistrations": "Todavía no hay plataformas educativas registradas.",
+    "oidcInitiationUrl": "URL de inicio OIDC",
+    "platformIssuerField": "Emisor de la plataforma",
+    "platformIssuerHint": "El `iss` con el que el LMS firma sus lanzamientos, p. ej. https://canvas.instructure.com.",
+    "publicJwkUrl": "URL del JWKS público",
+    "redirectUri": "URI de redirección",
+    "redirectUriHint": "Registra este valor exacto en el proveedor de identidad. Una discrepancia falla con «redirect_uri_mismatch» y ningún detalle más.",
+    "registrationIntro": "Cópialos de la pantalla de configuración de la herramienta del propio LMS. La clave de firma la generamos nosotros: nunca se te pide pegar una clave privada.",
+    "remove": "Eliminar",
+    "removeConnectionMessage": "Las personas de {label} volverán a iniciar sesión con contraseña. Sus cuentas se conservan.",
+    "removeConnectionTitle": "¿Eliminar esta conexión?",
+    "role_developer": "Desarrollador",
+    "role_manager": "Gestor",
+    "role_owner": "Propietario",
+    "role_viewer": "Lector",
+    "rotate": "Rotar",
+    "rotateKey": "Rotar clave",
+    "rotateKeyMessage": "Los lanzamientos de {label} seguirán funcionando, pero la plataforma almacena en caché nuestro JWKS: pide a su administrador que lo vuelva a obtener o las llamadas de notas y listas empezarán a fallar con «invalid_client».",
+    "rotateKeyTitle": "¿Rotar la clave de firma?",
+    "samlNote": "SAML 2.0 se termina en un proveedor de identidad que ya lo habla. Apunta un IdP de Shibboleth, InCommon o Entra a una pasarela SSO (WorkOS, Auth0, Okta, Entra) y conecta esa pasarela aquí mediante OIDC: toda firma verificada internamente sigue siendo un token RS256.",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "scopesField": "Ámbitos",
+    "scopesHint": "Debe incluir `openid` o el proveedor no devuelve nada que verificar.",
+    "ssoSubtitle": "Permite que el proveedor de identidad de una institución autentique a su personal en este espacio de trabajo.",
+    "ssoTitle": "Inicio de sesión único",
+    "targetLinkUri": "URI de enlace de destino",
+    "tokenField": "Extremo de token",
+    "toolUrlsHint": "Pégalos en la configuración de la herramienta del LMS. Cada uno debe coincidir exactamente con este despliegue.",
+    "unverified": "Sin verificar",
+    "userinfoField": "Extremo userinfo",
+    "userinfoHint": "Opcional. Solo se usa cuando el propio token no trae correo ni nombre.",
+    "verified": "Verificado",
+    "verify": "Verificar"
+  },
+  "ltiLaunch": {
+    "genericReason": "El lanzamiento se verificó, pero desde aquí no abre ningún tablero.",
+    "openWorkspace": "Abrir mi espacio de trabajo",
+    "reviewRegistration": "Revisar el registro del LMS",
+    "title": "Este lanzamiento no abrió un tablero"
+  },
+  "publishGig": {
+    "empty": "No hay tickets abiertos en este tablero para publicar.",
+    "loading": "Cargando tickets…",
+    "openBoard": "Abrir el tablero",
+    "projectLabel": "Proyecto",
+    "publish": "Publicar como encargo",
+    "publishing": "Publicando…",
+    "reopenNote": "Un ticket tiene un único anuncio durante toda su vida. Publicar uno que ya estuvo listado reabre ese anuncio en vez de crear otro, así que las propuestas y el historial siguen adjuntos.",
+    "subtitle": "Un encargo se publica desde un ticket de uno de tus tableros: el anuncio toma su título, descripción y requisitos del propio trabajo, así que aquí no hay nada que volver a escribir.",
+    "title": "Publicar un encargo",
+    "viewListing": "Ver anuncio"
   }
 }

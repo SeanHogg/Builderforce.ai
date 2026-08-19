@@ -670,7 +670,7 @@ function TaskBody({ data }: { data: CreationNodeData }) {
   const prdSummary = textValue(data.prdSummary);
   const acceptance = textValue(data.acceptanceCriteria);
   return <div className={styles.taskBody}>
-    {data.isBlocked === true && <p role="status" style={{ margin: 0, padding: '3px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--tone-warning-bg)', color: 'var(--tone-warning-ink)', fontSize: 10, fontWeight: 600 }}>{t('blockedByDependency')}</p>}
+    {data.isBlocked === true && <p role="status" style={{ margin: 0, padding: '3px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--tone-warning-bg)', color: 'var(--tone-warning-ink)', fontSize: 'var(--font-size-eyebrow)', fontWeight: 600 }}>{t('blockedByDependency')}</p>}
     <div className={styles.taskFacts}>
       <span><small>{t('agent')}</small><b>{agent}</b></span>
       <span><small>{t('priority')}</small><b>{priority}</b></span>

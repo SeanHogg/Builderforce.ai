@@ -3,20 +3,15 @@
  * already declares the boundary, so a directive would mark a second entry point that does
  * not exist — and `check-frontend-architecture` counts directives, not components.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { CodeReadingIcon, ConsoleReadingIcon, PreviewReadingIcon } from '@/components/canvas/CanvasCommands';
-import {
-  CANVAS_APP_FRAME_SANDBOX,
-  CANVAS_APP_MESSAGE,
-  canvasApp,
-  type CanvasAppFile,
-  type CanvasAppLogEntry,
-} from '@/lib/canvasApp';
+import { CANVAS_APP_FRAME_SANDBOX, canvasApp, type CanvasAppFile } from '@/lib/canvasApp';
 import type { CanvasViewport } from '@/lib/canvasViewport';
 import { CanvasDeviceFrame } from './CanvasDeviceFrame';
 import { CanvasViewportSwitcher } from './CanvasViewportSwitcher';
 import { useCanvasSurfaceActions } from './canvasSurfaceActions';
+import { useCanvasPreviewLog } from './useCanvasPreviewLog';
 import styles from './CreationCanvas.module.css';
 import type { CreationNodeData } from './types';
 
@@ -72,10 +67,6 @@ const READING_ICON: Record<AppReading, () => React.ReactElement> = {
   console: ConsoleReadingIcon,
 };
 
-/** How many lines the console keeps. A runaway `console.log` in a render loop must not
- *  grow this array without bound while the user watches the frame. */
-const MAX_LOG_LINES = 200;
-
 export interface CanvasAppSurfaceProps {
   nodes: ReadonlyArray<{ id: string; data: CreationNodeData }>;
   /** Escape hands the board back. There is no exit BUTTON here, unlike the object
@@ -93,41 +84,27 @@ export function CanvasAppSurface({ nodes, onExit, onOpenObject }: CanvasAppSurfa
   const [reading, setReading] = useState<AppReading>('preview');
   const [viewport, setViewport] = useState<CanvasViewport>('desktop');
   const [running, setRunning] = useState(false);
-  const [log, setLog] = useState<CanvasAppLogEntry[]>([]);
   const [openFile, setOpenFile] = useState<string | null>(null);
   // Bumping this remounts the frame, which is what "restart" means for a document that
   // has no server to reload from.
   const [runNonce, setRunNonce] = useState(0);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+
+  // What the running document says about itself, over the ONE preview wire — scoped to
+  // this surface's own frame, which a listener of its own could not do.
+  const { log, summary, reset } = useCanvasPreviewLog(frameRef, running);
 
   // A rewritten card is a different app. Tearing the frame down rather than leaving it
   // is what stops the surface showing the previous build under the new file list.
-  useEffect(() => { setRunning(false); setLog([]); }, [app.document]);
-
-  useEffect(() => {
-    if (!running) return;
-    const onMessage = (event: MessageEvent) => {
-      const payload = event.data as { tag?: unknown; level?: unknown; text?: unknown; at?: unknown } | null;
-      if (!payload || payload.tag !== CANVAS_APP_MESSAGE) return;
-      const level = payload.level;
-      if (level !== 'log' && level !== 'warn' && level !== 'error' && level !== 'request') return;
-      const entry: CanvasAppLogEntry = {
-        level,
-        text: typeof payload.text === 'string' ? payload.text : '',
-        at: typeof payload.at === 'number' ? payload.at : 0,
-      };
-      setLog((current) => [...current, entry].slice(-MAX_LOG_LINES));
-    };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [running]);
+  useEffect(() => { setRunning(false); reset(); }, [app.document, reset]);
 
   const run = useCallback(() => {
-    setLog([]);
+    reset();
     setRunNonce((value) => value + 1);
     setRunning(true);
-  }, []);
+  }, [reset]);
 
-  const errors = log.filter((entry) => entry.level === 'error').length;
+  const errors = summary.errors;
   const entryPath = app.entry?.path ?? '';
   const selected = app.files.find((file) => file.path === openFile) ?? app.files[0] ?? null;
 
@@ -161,7 +138,7 @@ export function CanvasAppSurface({ nodes, onExit, onOpenObject }: CanvasAppSurfa
         {running ? t('stop') : t('run')}
       </button>
 
-      <div className={styles.appReadings} role="group" aria-label={t('readings')}>
+      <div className={styles.segmentedGroup} role="group" aria-label={t('readings')}>
         {READINGS.map((option) => {
           const Glyph = READING_ICON[option];
           const name = t(`reading.${option}` as 'reading.preview');
@@ -215,6 +192,7 @@ export function CanvasAppSurface({ nodes, onExit, onOpenObject }: CanvasAppSurfa
                      queries the stage's width and make all three readings identical.
                      See `CanvasDeviceFrame`; that was this surface's defect. */
                   <CanvasDeviceFrame
+                    frameRef={frameRef}
                     reloadKey={runNonce}
                     className={styles.appFrame}
                     viewport={viewport}

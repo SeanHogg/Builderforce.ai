@@ -99,6 +99,14 @@ describe('canvas session action registry', () => {
       expect(on(surface)).toEqual(expect.arrayContaining(['undo', 'redo', 'fullscreen', 'share', 'publish']));
     }
 
+    // THE CALL IS EVERY MODALITY'S. A conversation is as callable as a board, a 3D space
+    // or a running app — the room is anchored to the CANVAS, not to what you are reading
+    // it through — so it needs nothing from the surface and survives on all of them,
+    // including any added later.
+    for (const surface of CANVAS_SURFACES) {
+      expect(on(surface.id)).toContain('call');
+    }
+
     // Derived, not hand-listed: every action kept is one the surface can answer.
     for (const surface of CANVAS_SURFACES) {
       const def = canvasSurfaceDefinition(surface.id);
@@ -192,6 +200,29 @@ describe('the session actions on the canvas', () => {
     }
     // Sanity: the sheet carries the overflow, not a second copy of the whole bar.
     expect(within(sheet).queryByRole('button', { name: 'Undo canvas change' })).toBeNull();
+  });
+
+  /**
+   * THE CALL IS IN THE BAR, ON EVERY SURFACE — and its dock is not.
+   *
+   * Starting a call used to be a dormant band across the bottom of the shell: chrome of
+   * its own, on every canvas, for a call almost nobody was about to make, and the one
+   * canvas action that lived nowhere near the others. It is a registry action now, so it
+   * is wherever the rest of them are.
+   *
+   * A local board with no shared session has no room to open, so the control is drawn and
+   * inert rather than absent — "you cannot call from here yet" is a thing the bar should
+   * say, and a missing button says nothing.
+   */
+  it('offers the call from the ••• sheet on a canvas with no room, and draws no dock', () => {
+    render(<CreationCanvas sessionId="session-actions-call-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
+
+    const call = within(screen.getByTestId('canvas-more-menu')).getByRole('button', { name: 'Start call' });
+    expect(call).toBeDisabled();
+    // The dock belongs to a RUNNING call. Nothing about an idle canvas may reserve the
+    // band it occupies, which is the whole reason the dormant strip went.
+    expect(screen.queryByRole('region', { name: 'Live session' })).toBeNull();
   });
 
   /**

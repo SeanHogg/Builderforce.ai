@@ -335,6 +335,16 @@ export const tenants = pgTable('tenants', {
    */
   premiumOverride:        boolean('premium_override').notNull().default(false),
   /**
+   * The tenant's OWN brand palette (migration 0483) — a `BrandPalette`:
+   * `{ primary, secondary, accent, text, background, logoUrl }`.
+   *
+   * The responder half of RFP co-branding. Before this column there was no
+   * per-tenant brand-colour store anywhere in the platform, so every tenant's
+   * proposal blended the requesting org against the same hard-coded Builderforce
+   * accent set. NULL keeps that default; a stored palette replaces it.
+   */
+  brandPalette:           jsonb('brand_palette'),
+  /**
    * Per-tenant daily ceiling on PAID-OVERFLOW spend (premium-fallback / backstop
    * calls Builderforce funds on its own keys), in millicents (1/100000 USD) —
    * migration 0130.

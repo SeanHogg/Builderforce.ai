@@ -21,7 +21,7 @@ import { useTranslations } from 'next-intl';
 import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';
 import type { CreationNodeData } from './types';
-import { exportActionsFor, type CanvasExportAction } from '@/lib/canvasExports';
+import { exportActionsFor, pdfExportStrategy, type CanvasExportAction } from '@/lib/canvasExports';
 import { diagramNotation } from '@/lib/diagramNotations';
 import { canvasDiagram, canvasSlides } from '@/lib/canvasDocuments';
 import { canPrintCanvasObject } from '@/lib/printDocument';
@@ -42,7 +42,10 @@ const AVAILABILITY: Partial<Record<CanvasExportAction, (data: CreationNodeData) 
   diagram: (data) => !!canvasDiagram(data),
   svg: hasCanvasDrawing,
   pptx: (data) => canvasSlides(data).length > 0,
-  pdf: canPrintCanvasObject,
+  // A document-shaped kind is written by `/api/exports/pdf` from its own
+  // markdown, so it can always fill the format. Only a DRAWN kind depends on
+  // there being something on the board to print.
+  pdf: (data) => pdfExportStrategy(data.kind) === 'server' || canPrintCanvasObject(data),
   // A plan always offers its spec (it gathers its cases at export time, which this
   // per-object predicate cannot see); a case offers one once it has steps or source.
   spec: (data) => data.kind === 'testPlan'

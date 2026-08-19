@@ -1292,11 +1292,23 @@ describe('CreationCanvas', () => {
       ] }}
     />);
 
-    expect(screen.getByText('Turn operational data into confident decisions')).toBeInTheDocument();
-    expect(screen.getByText('Live signals')).toBeInTheDocument();
-    expect(screen.queryByText('Free shipping')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'About' }));
-    expect(screen.getByText('Built for operators')).toBeInTheDocument();
+    // The card frames the REAL document now — the same one the publisher serves — rather
+    // than the board's own React approximation of it, so the authored copy is read out of
+    // the document the frame runs. See `canvasWebsite.ts` for why there is only one
+    // rendering of a site, and `canvasDeviceFrame.test.tsx` for the rest of its contract.
+    const frame = document.querySelector('iframe')!;
+    const site = frame.getAttribute('srcdoc') ?? '';
+    expect(site).toContain('Turn operational data into confident decisions');
+    expect(site).toContain('Live signals');
+    expect(site).not.toContain('Free shipping');
+    // Both authored pages travel in the document, so its own nav has somewhere to go.
+    expect(site).toContain('Built for operators');
+
+    // The nav the reader clicks is INSIDE the frame; this is how the board hears about it.
+    fireEvent(window, new MessageEvent('message', {
+      data: { tag: 'builderforce:canvas-website-page', pageId: 'about' },
+      source: frame.contentWindow,
+    }));
     expect(onEditData).toHaveBeenCalledWith('acme-site', { activeWebsitePageId: 'about' });
   });
 

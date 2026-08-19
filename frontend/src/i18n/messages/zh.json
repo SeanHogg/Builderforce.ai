@@ -4883,7 +4883,8 @@
     "sev_high": "高",
     "sev_medium": "中",
     "sev_low": "低",
-    "sev_info": "信息"
+    "sev_info": "信息",
+    "identityTab": "身份"
   },
   "catalogInsights": {
     "total": {
@@ -12402,7 +12403,9 @@
     "pillLora": "🧠 LoRA 训练",
     "pillRegistry": "🤖 智能体注册库",
     "pillEval": "🔬 AI 评估",
-    "emailPlaceholder": "you@example.com"
+    "emailPlaceholder": "you@example.com",
+    "continueWithSso": "使用 {organisation} 继续",
+    "ssoHint": "由你的组织完成登录，无需在此输入密码。"
   },
   "gigs": {
     "publish": {
@@ -17707,7 +17710,19 @@
       "reread": "重新加载并重新读取页面",
       "inspectorHint": "页面在画布上实时加载，其文本也会读入画布，便于 Brain 回答与之相关的问题。",
       "mixedTitle": "{host} 通过 http:// 提供服务",
-      "mixedHint": "安全页面无法嵌入非安全页面。此处改为显示页面文本 — 请在新标签页中打开，或在 VS Code 扩展中查看。"
+      "mixedHint": "安全页面无法嵌入非安全页面。此处改为显示页面文本 — 请在新标签页中打开，或在 VS Code 扩展中查看。",
+      "reportRegion": "此页面报告的内容",
+      "reportStatusFailed": "该地址返回 HTTP {status}",
+      "reportErrors": "此页面报告了 {count} 个错误",
+      "reportClean": "未报告错误（{requests} 次请求）",
+      "reportUnknown": "此页面不报告其控制台",
+      "reportUnknownHint": "框架内的页面无法从外部读取。在此画布上构建的页面会自动报告；请在你自己的网站中加入 Builderforce 质量 SDK，以便在此查看其错误。",
+      "reportLevel": {
+        "log": "日志",
+        "warn": "警告",
+        "error": "错误",
+        "request": "请求"
+      }
     },
     "expandPaletteGroup": "展开「{group}」分组",
     "collapsePaletteGroup": "收起「{group}」分组",
@@ -19667,6 +19682,7 @@
     "sessionActionCluster": {
       "history": "画布历史",
       "inspect": "画布工具",
+      "live": "通话",
       "session": "共享与发布"
     },
     "moreMenuSessionActions": "此画布",
@@ -19928,7 +19944,9 @@
       "mobile": "手机"
     },
     "cursorTyping": "· 输入中…",
-    "sharedCallLabel": "共享会话"
+    "sharedCallLabel": "共享会话",
+    "startCall": "发起通话",
+    "startCallTitle": "就此画布发起通话"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -20687,9 +20705,6 @@
     "youShort": "我",
     "member": "成员",
     "onThisCanvas": "此画布",
-    "startCall": "发起通话",
-    "startCallTitle": "就此画布发起通话",
-    "startCallHint": "此画布上的所有人都可加入",
     "onCall": "{count, plural, other {# 人通话中}}",
     "mic": "麦克风",
     "micOff": "麦克风已关",
@@ -22462,5 +22477,101 @@
       "workflow": "一套自动化流程",
       "tasks": "看板上的待办事项"
     }
+  },
+  "identityProviders": {
+    "accessTokenUrlField": "令牌端点",
+    "active": "启用中",
+    "addConnection": "添加连接",
+    "addDomain": "认领域名",
+    "addRegistration": "添加平台",
+    "authLoginUrlField": "授权端点",
+    "authorizationField": "授权端点",
+    "clientIdField": "客户端 ID",
+    "clientSecretField": "客户端密钥",
+    "clientSecretHint": "加密存储。它永不返回，因此保存时留空表示“不修改”。",
+    "clientSecretUnchanged": "留空以保留已存密钥",
+    "defaultRoleField": "新成员的角色",
+    "deploymentIdsField": "部署 ID",
+    "deploymentIdsHint": "以逗号分隔。一个颁发者承载多所机构，因此没有部署 ID 的注册会接受来自所有机构的启动。",
+    "deployments": "{count} 个部署",
+    "disable": "停用",
+    "disabled": "已停用",
+    "discoveryField": "发现文档 URL",
+    "discoveryHint": "可选。填写后将从中读取下面的端点——你手动填写的值仍然优先。",
+    "domainNotFound": "在 {record} 未找到该记录。DNS 传播可能需要几分钟。",
+    "domainPlaceholder": "physics.edu",
+    "domainProof": "发布此 TXT 记录后再验证：",
+    "domains": "邮箱域名",
+    "edit": "编辑",
+    "editConnection": "编辑连接",
+    "editRegistration": "编辑平台",
+    "enable": "启用",
+    "institutionHint": "机构名称，例如“墨尔本大学（Canvas）”。",
+    "issuerField": "颁发者",
+    "issuerHint": "提供方的颁发者 URL，例如 https://login.example.edu。",
+    "jitHint": "关闭后，即使提供方完成验证我们仍会拒绝——适用于手动分配席位的机构。",
+    "jitLabel": "首次登录时创建账户",
+    "jwksField": "JWKS 端点",
+    "keyGeneratedHint": "保存时会生成并密封一个 2048 位 RSA 签名密钥，其公钥部分在上面的 JWKS URL 提供。",
+    "keySetUrlField": "平台 JWKS 端点",
+    "labelField": "名称",
+    "labelHint": "你之后用来识别它的名字。",
+    "loading": "加载中…",
+    "ltiSubtitle": "允许将课程启动到此工作区的学习平台。",
+    "ltiTitle": "学习平台（LTI 1.3）",
+    "noConnections": "尚未连接任何身份提供方。",
+    "noDomains": "尚未认领域名。在验证通过之前，不会有人被路由到此提供方。",
+    "noRegistrations": "尚未注册任何学习平台。",
+    "oidcInitiationUrl": "OIDC 发起 URL",
+    "platformIssuerField": "平台颁发者",
+    "platformIssuerHint": "LMS 为其启动签名所用的 `iss`，例如 https://canvas.instructure.com。",
+    "publicJwkUrl": "公开 JWKS URL",
+    "redirectUri": "重定向 URI",
+    "redirectUriHint": "请在身份提供方处登记这个完全一致的值。不匹配会以“redirect_uri_mismatch”失败且没有更多信息。",
+    "registrationIntro": "请从 LMS 自己的工具配置界面复制这些内容。签名密钥由我们生成，绝不会要求你粘贴私钥。",
+    "remove": "删除",
+    "removeConnectionMessage": "{label} 的成员将重新使用密码登录，其账户会保留。",
+    "removeConnectionTitle": "删除此连接？",
+    "role_developer": "开发者",
+    "role_manager": "管理者",
+    "role_owner": "拥有者",
+    "role_viewer": "查看者",
+    "rotate": "轮换",
+    "rotateKey": "轮换密钥",
+    "rotateKeyMessage": "来自 {label} 的启动仍可工作，但平台会缓存我们的 JWKS——请让其管理员重新获取，否则成绩与名册调用会开始以“invalid_client”失败。",
+    "rotateKeyTitle": "轮换签名密钥？",
+    "samlNote": "SAML 2.0 在已支持该协议的身份提供方处终结。请将 Shibboleth、InCommon 或 Entra IdP 指向 SSO 网关（WorkOS、Auth0、Okta、Entra），再通过 OIDC 在此连接该网关——本进程内验证的每个签名都保持为 RS256 令牌。",
+    "save": "保存",
+    "saving": "保存中…",
+    "scopesField": "授权范围",
+    "scopesHint": "必须包含 `openid`，否则提供方不会返回可验证的内容。",
+    "ssoSubtitle": "让机构自有的身份提供方为其人员验证并接入此工作区。",
+    "ssoTitle": "单点登录",
+    "targetLinkUri": "目标链接 URI",
+    "tokenField": "令牌端点",
+    "toolUrlsHint": "将这些粘贴到 LMS 的工具配置中。每一项都必须与本部署完全一致。",
+    "unverified": "未验证",
+    "userinfoField": "用户信息端点",
+    "userinfoHint": "可选。仅当令牌本身不含邮箱或姓名时使用。",
+    "verified": "已验证",
+    "verify": "验证"
+  },
+  "ltiLaunch": {
+    "genericReason": "启动已通过验证，但无法从这里打开看板。",
+    "openWorkspace": "打开我的工作区",
+    "reviewRegistration": "查看 LMS 注册",
+    "title": "此次启动未打开看板"
+  },
+  "publishGig": {
+    "empty": "此看板上没有可发布的进行中工单。",
+    "loading": "正在加载工单…",
+    "openBoard": "打开看板",
+    "projectLabel": "项目",
+    "publish": "发布为外包任务",
+    "publishing": "发布中…",
+    "reopenNote": "一个工单终身只拥有一条列表。重新发布曾上架过的工单会重新开启原列表，而不是新建一条，因此提案与历史记录都会保留。",
+    "subtitle": "外包任务由你看板上的工单发布——列表的标题、描述与要求都取自该工单本身，因此这里无需重新输入。",
+    "title": "发布外包任务",
+    "viewListing": "查看列表"
   }
 }

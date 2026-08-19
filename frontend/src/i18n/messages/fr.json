@@ -4883,7 +4883,8 @@
     "sev_high": "Élevé",
     "sev_medium": "Moyen",
     "sev_low": "Faible",
-    "sev_info": "Info"
+    "sev_info": "Info",
+    "identityTab": "Identité"
   },
   "catalogInsights": {
     "total": {
@@ -12402,7 +12403,9 @@
     "pillLora": "🧠 Entraînement LoRA",
     "pillRegistry": "🤖 Registre d’agents",
     "pillEval": "🔬 Évaluation IA",
-    "emailPlaceholder": "vous@exemple.com"
+    "emailPlaceholder": "vous@exemple.com",
+    "continueWithSso": "Continuer avec {organisation}",
+    "ssoHint": "Votre organisation vous connecte. Aucun mot de passe ne sera nécessaire ici."
   },
   "gigs": {
     "publish": {
@@ -17707,7 +17710,19 @@
       "reread": "Recharger et relire la page",
       "inspectorHint": "La page est chargée en direct sur le tableau. Son texte est également lu dans le canevas afin que Brain puisse répondre aux questions à son sujet.",
       "mixedTitle": "{host} est servi en http://",
-      "mixedHint": "Une page sécurisée ne peut pas intégrer une page non sécurisée. Le texte de la page est affiché à la place : ouvrez-la dans un nouvel onglet ou consultez-la depuis l’extension VS Code."
+      "mixedHint": "Une page sécurisée ne peut pas intégrer une page non sécurisée. Le texte de la page est affiché à la place : ouvrez-la dans un nouvel onglet ou consultez-la depuis l’extension VS Code.",
+      "reportRegion": "Ce que cette page a signalé",
+      "reportStatusFailed": "Cette adresse a renvoyé HTTP {status}",
+      "reportErrors": "{count, plural, one {# erreur signalée par cette page} other {# erreurs signalées par cette page}}",
+      "reportClean": "Aucune erreur signalée ({requests, plural, one {# appel} other {# appels}})",
+      "reportUnknown": "Cette page ne signale pas sa console",
+      "reportUnknownHint": "Une page dans un cadre ne peut pas être lue de l'extérieur. Les pages créées sur ce canevas signalent automatiquement ; ajoutez le SDK qualité Builderforce à votre propre site pour voir ses erreurs ici.",
+      "reportLevel": {
+        "log": "journal",
+        "warn": "alerte",
+        "error": "erreur",
+        "request": "appel"
+      }
     },
     "expandPaletteGroup": "Développer la section {group}",
     "collapsePaletteGroup": "Réduire la section {group}",
@@ -19667,6 +19682,7 @@
     "sessionActionCluster": {
       "history": "Historique de la toile",
       "inspect": "Outils de la toile",
+      "live": "Appel",
       "session": "Partager et publier"
     },
     "moreMenuSessionActions": "Cette toile",
@@ -19928,7 +19944,9 @@
       "mobile": "Mobile"
     },
     "cursorTyping": "· saisie…",
-    "sharedCallLabel": "Session partagée"
+    "sharedCallLabel": "Session partagée",
+    "startCall": "Démarrer un appel",
+    "startCallTitle": "Démarrer un appel à propos de ce canevas"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -20687,9 +20705,6 @@
     "youShort": "MOI",
     "member": "Membre",
     "onThisCanvas": "Ce canevas",
-    "startCall": "Démarrer un appel",
-    "startCallTitle": "Démarrer un appel à propos de ce canevas",
-    "startCallHint": "Tout le monde sur ce canevas peut rejoindre",
     "onCall": "{count, plural, one {# en appel} other {# en appel}}",
     "mic": "Micro",
     "micOff": "Micro coupé",
@@ -22462,5 +22477,101 @@
       "workflow": "une automatisation",
       "tasks": "du travail sur votre tableau"
     }
+  },
+  "identityProviders": {
+    "accessTokenUrlField": "Point de terminaison de jeton",
+    "active": "Active",
+    "addConnection": "Ajouter une connexion",
+    "addDomain": "Revendiquer le domaine",
+    "addRegistration": "Ajouter une plateforme",
+    "authLoginUrlField": "Point de terminaison d’autorisation",
+    "authorizationField": "Point de terminaison d’autorisation",
+    "clientIdField": "Identifiant client",
+    "clientSecretField": "Secret client",
+    "clientSecretHint": "Stocké chiffré. Il n’est jamais renvoyé : une valeur vide à l’enregistrement signifie « inchangé ».",
+    "clientSecretUnchanged": "Laissez vide pour conserver le secret enregistré",
+    "defaultRoleField": "Rôle des nouveaux membres",
+    "deploymentIdsField": "Identifiants de déploiement",
+    "deploymentIdsHint": "Séparés par des virgules. Un émetteur héberge de nombreux établissements : un enregistrement sans déploiement accepterait leurs lancements à tous.",
+    "deployments": "{count} déploiement(s)",
+    "disable": "Désactiver",
+    "disabled": "Désactivée",
+    "discoveryField": "URL de découverte",
+    "discoveryHint": "Facultatif. Si renseignée, les points de terminaison ci-dessous en sont lus ; ce que vous saisissez reste prioritaire.",
+    "domainNotFound": "Cet enregistrement est introuvable sur {record}. La propagation DNS peut prendre quelques minutes.",
+    "domainPlaceholder": "physics.edu",
+    "domainProof": "Publiez cet enregistrement TXT, puis vérifiez :",
+    "domains": "Domaines de messagerie",
+    "edit": "Modifier",
+    "editConnection": "Modifier la connexion",
+    "editRegistration": "Modifier la plateforme",
+    "enable": "Activer",
+    "institutionHint": "L’établissement, p. ex. « Université de Melbourne (Canvas) ».",
+    "issuerField": "Émetteur",
+    "issuerHint": "L’URL d’émetteur du fournisseur, p. ex. https://login.example.edu.",
+    "jitHint": "Désactivé, le fournisseur authentifie quelqu’un et nous refusons quand même — pour les établissements qui attribuent les places à la main.",
+    "jitLabel": "Créer les comptes à la première connexion",
+    "jwksField": "Point de terminaison JWKS",
+    "keyGeneratedHint": "Une clé de signature RSA 2048 bits est générée et scellée à l’enregistrement. Sa moitié publique est servie à l’URL JWKS ci-dessus.",
+    "keySetUrlField": "Point de terminaison JWKS de la plateforme",
+    "labelField": "Nom",
+    "labelHint": "Ce à quoi vous la reconnaîtrez plus tard.",
+    "loading": "Chargement…",
+    "ltiSubtitle": "Les plateformes pédagogiques autorisées à lancer un cours dans cet espace de travail.",
+    "ltiTitle": "Plateformes LMS (LTI 1.3)",
+    "noConnections": "Aucun fournisseur d’identité connecté pour l’instant.",
+    "noDomains": "Aucun domaine revendiqué. Tant qu’aucun n’est vérifié, personne n’est dirigé vers ce fournisseur.",
+    "noRegistrations": "Aucune plateforme pédagogique enregistrée pour l’instant.",
+    "oidcInitiationUrl": "URL d’initiation OIDC",
+    "platformIssuerField": "Émetteur de la plateforme",
+    "platformIssuerHint": "Le `iss` avec lequel le LMS signe ses lancements, p. ex. https://canvas.instructure.com.",
+    "publicJwkUrl": "URL du JWKS public",
+    "redirectUri": "URI de redirection",
+    "redirectUriHint": "Enregistrez cette valeur exacte côté fournisseur d’identité. Une divergence échoue avec « redirect_uri_mismatch » et sans autre détail.",
+    "registrationIntro": "Copiez-les depuis l’écran de configuration de l’outil du LMS. La clé de signature est générée par nous : on ne vous demande jamais de coller une clé privée.",
+    "remove": "Supprimer",
+    "removeConnectionMessage": "Les membres de {label} se connecteront de nouveau par mot de passe. Leurs comptes sont conservés.",
+    "removeConnectionTitle": "Supprimer cette connexion ?",
+    "role_developer": "Développeur",
+    "role_manager": "Responsable",
+    "role_owner": "Propriétaire",
+    "role_viewer": "Lecteur",
+    "rotate": "Renouveler",
+    "rotateKey": "Renouveler la clé",
+    "rotateKeyMessage": "Les lancements depuis {label} continuent de fonctionner, mais la plateforme met notre JWKS en cache : demandez à son administrateur de le récupérer à nouveau, sinon les appels de notes et de listes échoueront avec « invalid_client ».",
+    "rotateKeyTitle": "Renouveler la clé de signature ?",
+    "samlNote": "SAML 2.0 est terminé chez un fournisseur d’identité qui le parle déjà. Pointez un IdP Shibboleth, InCommon ou Entra vers une passerelle SSO (WorkOS, Auth0, Okta, Entra) et connectez cette passerelle ici en OIDC : toute signature vérifiée en interne reste un jeton RS256.",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "scopesField": "Portées",
+    "scopesHint": "Doit inclure `openid`, sinon le fournisseur ne renvoie rien à vérifier.",
+    "ssoSubtitle": "Laissez le fournisseur d’identité d’un établissement authentifier ses membres dans cet espace de travail.",
+    "ssoTitle": "Authentification unique",
+    "targetLinkUri": "URI de lien cible",
+    "tokenField": "Point de terminaison de jeton",
+    "toolUrlsHint": "Collez-les dans la configuration de l’outil du LMS. Chacune doit correspondre exactement à ce déploiement.",
+    "unverified": "Non vérifié",
+    "userinfoField": "Point de terminaison userinfo",
+    "userinfoHint": "Facultatif. Utilisé seulement quand le jeton lui-même ne porte ni e-mail ni nom.",
+    "verified": "Vérifié",
+    "verify": "Vérifier"
+  },
+  "ltiLaunch": {
+    "genericReason": "Le lancement a été vérifié, mais il n’ouvre pas de tableau depuis ici.",
+    "openWorkspace": "Ouvrir mon espace de travail",
+    "reviewRegistration": "Vérifier l’enregistrement du LMS",
+    "title": "Ce lancement n’a pas ouvert de tableau"
+  },
+  "publishGig": {
+    "empty": "Aucun ticket ouvert à publier sur ce tableau.",
+    "loading": "Chargement des tickets…",
+    "openBoard": "Ouvrir le tableau",
+    "projectLabel": "Projet",
+    "publish": "Publier comme mission",
+    "publishing": "Publication…",
+    "reopenNote": "Un ticket possède une seule annonce pour toute sa vie. Republier un ticket déjà listé rouvre cette annonce au lieu d’en créer une seconde : les propositions et l’historique restent attachés.",
+    "subtitle": "Une mission se publie depuis un ticket de l’un de vos tableaux : l’annonce reprend son titre, sa description et ses exigences du travail lui-même, il n’y a donc rien à ressaisir ici.",
+    "title": "Publier une mission",
+    "viewListing": "Voir l’annonce"
   }
 }

@@ -235,6 +235,16 @@ export function DiagnosticsIcon() {
   </svg>;
 }
 
+/** Start a call about this canvas: a headset, because the room is people talking about
+ *  the thing on screen — not a telephone, which names a number rather than a session. */
+export function StartCallIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M3.2 9.4V8a4.8 4.8 0 0 1 9.6 0v1.4" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+    <rect x="1.7" y="9" width="3" height="4.4" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    <rect x="11.3" y="9" width="3" height="4.4" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+  </svg>;
+}
+
 /** Everything else this session can do. */
 export function MoreActionsIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">

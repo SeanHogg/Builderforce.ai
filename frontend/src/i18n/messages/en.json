@@ -4883,7 +4883,8 @@
     "sev_high": "High",
     "sev_medium": "Medium",
     "sev_low": "Low",
-    "sev_info": "Info"
+    "sev_info": "Info",
+    "identityTab": "Identity"
   },
   "catalogInsights": {
     "total": {
@@ -12402,7 +12403,9 @@
     "pillLora": "🧠 LoRA Training",
     "pillRegistry": "🤖 Agent Registry",
     "pillEval": "🔬 AI Evaluation",
-    "emailPlaceholder": "you@example.com"
+    "emailPlaceholder": "you@example.com",
+    "continueWithSso": "Continue with {organisation}",
+    "ssoHint": "Your organisation signs you in. You will not need a password here."
   },
   "gigs": {
     "publish": {
@@ -17707,7 +17710,19 @@
       "reread": "Reload and re-read page",
       "inspectorHint": "The page is loaded live on the board. Its text is also read into the canvas so Brain can answer questions about it.",
       "mixedTitle": "{host} is served over http://",
-      "mixedHint": "A secure page cannot embed an insecure one. The page text is shown instead — open it in a new tab, or view it from the VS Code extension."
+      "mixedHint": "A secure page cannot embed an insecure one. The page text is shown instead — open it in a new tab, or view it from the VS Code extension.",
+      "reportRegion": "What this page reported",
+      "reportStatusFailed": "This address returned HTTP {status}",
+      "reportErrors": "{count, plural, one {# error reported by this page} other {# errors reported by this page}}",
+      "reportClean": "No errors reported ({requests, plural, one {# call} other {# calls}})",
+      "reportUnknown": "This page does not report its console",
+      "reportUnknownHint": "A page in a frame cannot be read from outside it. Pages built on this canvas report automatically; add the Builderforce quality SDK to your own site to see its errors here.",
+      "reportLevel": {
+        "log": "log",
+        "warn": "warn",
+        "error": "error",
+        "request": "call"
+      }
     },
     "expandPaletteGroup": "Expand {group} section",
     "collapsePaletteGroup": "Collapse {group} section",
@@ -19667,6 +19682,7 @@
     "sessionActionCluster": {
       "history": "Canvas history",
       "inspect": "Canvas tools",
+      "live": "Call",
       "session": "Share and publish"
     },
     "moreMenuSessionActions": "This canvas",
@@ -19928,7 +19944,9 @@
       "mobile": "Phone"
     },
     "cursorTyping": "· typing…",
-    "sharedCallLabel": "Shared session"
+    "sharedCallLabel": "Shared session",
+    "startCall": "Start call",
+    "startCallTitle": "Start a call about this canvas"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -20687,9 +20705,6 @@
     "youShort": "YOU",
     "member": "Member",
     "onThisCanvas": "This canvas",
-    "startCall": "Start call",
-    "startCallTitle": "Start a call about this canvas",
-    "startCallHint": "Everyone on this canvas can join",
     "onCall": "{count, plural, one {# on call} other {# on call}}",
     "mic": "Mic",
     "micOff": "Mic off",
@@ -22462,5 +22477,101 @@
       "workflow": "an automation",
       "tasks": "work on your board"
     }
+  },
+  "identityProviders": {
+    "accessTokenUrlField": "Token endpoint",
+    "active": "Active",
+    "addConnection": "Add a connection",
+    "addDomain": "Claim domain",
+    "addRegistration": "Add a platform",
+    "authLoginUrlField": "Authorization endpoint",
+    "authorizationField": "Authorization endpoint",
+    "clientIdField": "Client ID",
+    "clientSecretField": "Client secret",
+    "clientSecretHint": "Stored encrypted. It is never returned, so an empty value on save means “unchanged”.",
+    "clientSecretUnchanged": "Leave blank to keep the stored secret",
+    "defaultRoleField": "Role for new members",
+    "deploymentIdsField": "Deployment IDs",
+    "deploymentIdsHint": "Comma-separated. One issuer hosts many institutions, so a registration with no deployment would accept launches from all of them.",
+    "deployments": "{count} deployment(s)",
+    "disable": "Disable",
+    "disabled": "Disabled",
+    "discoveryField": "Discovery URL",
+    "discoveryHint": "Optional. When set, the endpoints below are read from it — anything you type still wins.",
+    "domainNotFound": "That record was not found at {record}. DNS can take a few minutes to propagate.",
+    "domainPlaceholder": "physics.edu",
+    "domainProof": "Publish this TXT record, then verify:",
+    "domains": "Email domains",
+    "edit": "Edit",
+    "editConnection": "Edit connection",
+    "editRegistration": "Edit platform",
+    "enable": "Enable",
+    "institutionHint": "The institution, e.g. “University of Melbourne (Canvas)”.",
+    "issuerField": "Issuer",
+    "issuerHint": "The provider’s issuer URL, e.g. https://login.example.edu.",
+    "jitHint": "Off means the provider authenticates somebody and we still refuse — for institutions that provision seats by hand.",
+    "jitLabel": "Create accounts on first sign-in",
+    "jwksField": "JWKS endpoint",
+    "keyGeneratedHint": "A 2048-bit RSA signing key is generated and sealed when you save. Its public half is served at the JWKS URL above.",
+    "keySetUrlField": "Platform JWKS endpoint",
+    "labelField": "Name",
+    "labelHint": "What you will recognise this by later.",
+    "loading": "Loading…",
+    "ltiSubtitle": "The learning platforms allowed to launch a course into this workspace.",
+    "ltiTitle": "LMS platforms (LTI 1.3)",
+    "noConnections": "No identity providers connected yet.",
+    "noDomains": "No domains claimed. Until one is verified, nobody is routed to this provider.",
+    "noRegistrations": "No learning platforms registered yet.",
+    "oidcInitiationUrl": "OIDC initiation URL",
+    "platformIssuerField": "Platform issuer",
+    "platformIssuerHint": "The `iss` the LMS signs its launches with, e.g. https://canvas.instructure.com.",
+    "publicJwkUrl": "Public JWKS URL",
+    "redirectUri": "Redirect URI",
+    "redirectUriHint": "Register this exact value on the identity provider’s side. A mismatch fails with “redirect_uri_mismatch” and no further detail.",
+    "registrationIntro": "Copy these from the LMS’s own tool configuration screen. We generate the signing key ourselves — you are never asked to paste a private key.",
+    "remove": "Remove",
+    "removeConnectionMessage": "People from {label} will sign in with a password again. Their accounts are kept.",
+    "removeConnectionTitle": "Remove this connection?",
+    "role_developer": "Developer",
+    "role_manager": "Manager",
+    "role_owner": "Owner",
+    "role_viewer": "Viewer",
+    "rotate": "Rotate",
+    "rotateKey": "Rotate key",
+    "rotateKeyMessage": "Launches from {label} keep working, but the platform caches our JWKS — ask their administrator to re-fetch it, or grade and roster calls will start failing with “invalid_client”.",
+    "rotateKeyTitle": "Rotate the signing key?",
+    "samlNote": "SAML 2.0 is terminated at an identity provider that already speaks it. Point a Shibboleth, InCommon or Entra IdP at an SSO gateway (WorkOS, Auth0, Okta, Entra) and connect that gateway here over OIDC — every signature verified in-process stays an RS256 token.",
+    "save": "Save",
+    "saving": "Saving…",
+    "scopesField": "Scopes",
+    "scopesHint": "Must include `openid`, or the provider returns nothing to verify.",
+    "ssoSubtitle": "Let an institution’s own identity provider authenticate its people into this workspace.",
+    "ssoTitle": "Single sign-on",
+    "targetLinkUri": "Target link URI",
+    "tokenField": "Token endpoint",
+    "toolUrlsHint": "Paste these into the LMS’s tool configuration. Every one must match this deployment exactly.",
+    "unverified": "Unverified",
+    "userinfoField": "Userinfo endpoint",
+    "userinfoHint": "Optional. Used only when the token itself carries no email or name.",
+    "verified": "Verified",
+    "verify": "Verify"
+  },
+  "ltiLaunch": {
+    "genericReason": "The launch was verified, but it does not open a board from here.",
+    "openWorkspace": "Open my workspace",
+    "reviewRegistration": "Review the LMS registration",
+    "title": "This launch did not open a board"
+  },
+  "publishGig": {
+    "empty": "No open tickets on this board to publish.",
+    "loading": "Loading tickets…",
+    "openBoard": "Open the board",
+    "projectLabel": "Project",
+    "publish": "Publish as a gig",
+    "publishing": "Publishing…",
+    "reopenNote": "A ticket owns one listing for its whole life. Publishing one that was listed before reopens that listing rather than creating a second, so proposals and history stay attached.",
+    "subtitle": "A gig is published from a ticket on one of your boards — the listing takes its title, description and requirements from the work itself, so there is nothing here to retype.",
+    "title": "Publish a gig",
+    "viewListing": "View listing"
   }
 }

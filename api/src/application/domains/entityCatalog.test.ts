@@ -88,7 +88,25 @@ describe('the entity catalog', () => {
     // may still have a bespoke one — `marketing_session_prompts` does — so this
     // reports what is uncovered rather than failing on a number.
     //
-    // Ceiling moved 5 → 6 (2026-08-17) after checking each of the 5 currently
+    // Ceiling moved 6 → 11 (2026-08-18) with the LTI-registrations and
+    // enterprise-SSO tables. Every one of the five ADDED here has a structural
+    // reason the generic path must not model it, and for three of them the
+    // reason is the point of the change rather than an omission:
+    //  - `lti_registrations` and `sso_connections` each hold a SEALED CREDENTIAL
+    //    (an RSA signing key; an OIDC client secret). The generic reader redacts
+    //    on column-name PATTERNS, and betting a signing key on a regex matching
+    //    `tool_private_key_enc` is the exact bet migration 0480 exists to avoid —
+    //    it moved these off a Cloudflare secret specifically by keeping them out
+    //    of any read path that could serve them. Registering them here would put
+    //    the hazard back.
+    //  - `sso_domains` is a credential-bearing child of a connection
+    //    (`verify_token` proves domain control) with no identity of its own; its
+    //    key IS the domain.
+    //  - `lti_context_bindings` / `lti_resource_bindings` are join rows between
+    //    an external LMS coordinate and a canvas object — no title, no status,
+    //    nothing a person opens. They are read through `ltiLaunchBridge.ts`.
+    //
+    // Ceiling moved 5 → 6 (2026-08-17) after checking each of the 5 then-current
     // uncovered tables rather than just the count: all 5 have a bespoke path
     // (`career/references.ts`, `marketplace/creationListings.hosted.ts`,
     // `workflow/workflowVariables.ts`, `marketplace/stageSandboxRuns.ts`) AND a
@@ -108,7 +126,7 @@ describe('the entity catalog', () => {
     //    no identity of its own to register.
     //  - `workflow_variables` is a raw scope/key/value store backing a workflow
     //    node, not a titled object.
-    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(6);
+    expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(11);
   });
 
   it('declares nothing that no migration creates', () => {

@@ -21,15 +21,20 @@
  * the entry page with its own stylesheets and scripts inlined, in an opaque-origin frame.
  *
  * That is a real preview, not a mock — and the half it cannot run is not hidden. Server
- * files are separated out by `role`, the instrumentation below reports every call the
+ * files are separated out by `role`, `CANVAS_PREVIEW_REPORTER` reports every call the
  * page makes to a host that is not there, and the surface says so in words. A preview
  * that silently swallowed those calls would be worse than no preview: the user would
  * conclude their Twilio credentials were wrong.
+ *
+ * That reporter is NOT declared here any more. It is the same wire a live `browser` card
+ * needs, so it lives in `canvasPreviewReport.ts` with the message contract both readers
+ * decode — see that module for why one framed page's console must not reach another's.
  */
 
 import { robloxScriptsFrom } from '@builderforce/creation-canvas-contract';
 import { gameDocumentFromUrl, robloxPlaceFromUrl } from './gameTargets';
 import { canvasWebsiteDocument } from './canvasWebsite';
+import { CANVAS_PREVIEW_REPORTER } from './canvasPreviewReport';
 
 export type CanvasAppFileRole = 'page' | 'style' | 'script' | 'server' | 'config' | 'other';
 
@@ -68,16 +73,6 @@ export interface CanvasApp {
  * origin and would quietly undo the isolation.
  */
 export const CANVAS_APP_FRAME_SANDBOX = 'allow-scripts allow-forms allow-modals';
-
-/** What the frame posts back to the surface. `null` origin — identified by this tag. */
-export const CANVAS_APP_MESSAGE = 'builderforce:canvas-app';
-
-export interface CanvasAppLogEntry {
-  level: 'log' | 'warn' | 'error' | 'request';
-  text: string;
-  /** Milliseconds since the frame booted, so the console reads as a run and not a clock. */
-  at: number;
-}
 
 const PAGE_EXT = /\.html?$/i;
 const STYLE_EXT = /\.(css|scss|sass|less)$/i;
@@ -246,43 +241,6 @@ function safeScript(source: string): string {
 }
 
 /**
- * Injected FIRST, before any authored code runs, so it patches the two things a preview
- * has to be honest about:
- *
- *   - `console.*`, because a page that fails silently inside an opaque-origin frame is a
- *     page nobody can debug from outside it;
- *   - `fetch`, because the front end will call a backend this frame does not have, and
- *     the browser's own "Failed to fetch" is indistinguishable from a bad credential.
- *
- * It reports through `postMessage` rather than anything that needs same-origin — which
- * is the whole point of the sandbox — and it re-throws nothing it did not already throw.
- */
-function instrumentation(): string {
-  return `<script>(function(){
-  var TAG=${JSON.stringify(CANVAS_APP_MESSAGE)},t0=Date.now();
-  function say(level,text){try{parent.postMessage({tag:TAG,level:level,text:String(text).slice(0,500),at:Date.now()-t0},'*');}catch(e){}}
-  ['log','warn','error'].forEach(function(level){
-    var original=console[level];
-    console[level]=function(){try{say(level,Array.prototype.map.call(arguments,function(v){
-      return typeof v==='string'?v:(function(){try{return JSON.stringify(v);}catch(e){return String(v);}})();
-    }).join(' '));}catch(e){}return original.apply(console,arguments);};
-  });
-  window.addEventListener('error',function(e){say('error',e.message);});
-  window.addEventListener('unhandledrejection',function(e){say('error','Unhandled rejection: '+(e.reason&&e.reason.message||e.reason));});
-  var nativeFetch=window.fetch;
-  window.fetch=function(input,init){
-    var url=typeof input==='string'?input:(input&&input.url)||'';
-    var method=(init&&init.method)||(input&&input.method)||'GET';
-    say('request',method.toUpperCase()+' '+url);
-    return nativeFetch.apply(window,arguments).catch(function(error){
-      say('error',method.toUpperCase()+' '+url+' — no host is attached to this preview');
-      throw error;
-    });
-  };
-})();</script>`;
-}
-
-/**
  * The one document the frame runs.
  *
  * Siblings are INLINED rather than left as relative references because the frame has no
@@ -324,8 +282,8 @@ export function canvasAppDocument(files: readonly CanvasAppFile[], entry: Canvas
   // First thing in the document, whatever the page's own shape is.
   const head = html.match(/<head[^>]*>/i);
   return head
-    ? html.replace(head[0], `${head[0]}${instrumentation()}`)
-    : `${instrumentation()}${html}`;
+    ? html.replace(head[0], `${head[0]}${CANVAS_PREVIEW_REPORTER}`)
+    : `${CANVAS_PREVIEW_REPORTER}${html}`;
 }
 
 /**

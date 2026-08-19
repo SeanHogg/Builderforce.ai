@@ -47,6 +47,7 @@ export type CanvasSessionActionId =
   | 'outcomes'
   | 'diagnostics'
   | 'fullscreen'
+  | 'call'
   | 'share'
   | 'publish';
 
@@ -55,7 +56,7 @@ export type CanvasSessionActionId =
  * trough — the same shape the surface switcher uses — because a trough is what says
  * "these are the same kind of thing" without a caption saying it.
  */
-export type CanvasSessionActionCluster = 'history' | 'inspect' | 'session';
+export type CanvasSessionActionCluster = 'history' | 'inspect' | 'live' | 'session';
 
 /**
  * What an action NEEDS from the surface it is drawn on.
@@ -157,7 +158,30 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // Share is the only worded action, and now the ONLY control that opens the invite
   // panel: the collaborator roster's `+` used to open the same sheet, which is one
   // decision with two controls — the thing the surface registry exists to prevent.
-  { id: 'share', cluster: 'session', order: 5, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
+  // THE CALL IS AN ACTION, NOT A STRIP OF ITS OWN.
+  //
+  // Starting a call used to be a dormant band across the bottom of the shell — a
+  // control and a line of explanation, occupying a measured band of the window on
+  // every canvas nobody was calling from, which is every canvas almost all of the
+  // time. And because the band was the room's own chrome, "start a call" lived in a
+  // different place from every other thing you can do to this canvas.
+  //
+  // So it is a registry action like the rest, which is what makes it apply to EVERY
+  // modality by construction: chat, board, 3D space and a running app all draw the
+  // same bar from this list, and a surface added later gets the call for free. It
+  // needs nothing from the surface — a conversation is as callable as a board — so
+  // it declares no requirement.
+  //
+  // Its own cluster: it is neither history nor a reading of the board, and the dock
+  // that appears once the call is running is a whole band of chrome rather than a
+  // panel, so grouping it into the inspect trough would have said the two are the
+  // same kind of thing.
+  //
+  // The host withdraws it (`available: false`) the moment a call is running: from
+  // then on the dock IS the control, and a second lit "call" button in the bar would
+  // be one decision with two homes — the failure this registry exists to prevent.
+  { id: 'call', cluster: 'live', order: 5, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'startCall', titleKey: 'startCallTitle' },
+  { id: 'share', cluster: 'session', order: 6, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
   // Publish sits beside Share because they are the two ways work leaves this canvas —
   // one brings a person IN, one puts the result where strangers can reach it.
   //
@@ -167,7 +191,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // three clicks deep, framed as commerce, and invisible until you had clicked the right
   // card. It opens the SAME release lifecycle that button does — one gate, two doors —
   // scoped to the whole board, which is the scope an application actually has.
-  { id: 'publish', cluster: 'session', order: 6, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
+  { id: 'publish', cluster: 'session', order: 7, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
 ];
 
 const BY_ID = new Map<CanvasSessionActionId, CanvasSessionActionDef>(

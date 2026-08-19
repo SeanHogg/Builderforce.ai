@@ -151,7 +151,7 @@ export function CanvasSiteSurface({ data, onExit, onEdit }: CanvasSiteSurfacePro
     : undefined;
 
   const actions = <span className={styles.siteMeta}>
-    <span className={styles.appReadings} role="group" aria-label={t('surface.site.readings')}>
+    <span className={styles.segmentedGroup} role="group" aria-label={t('surface.site.readings')}>
       {READINGS.map((option) => <button
         key={option}
         type="button"
@@ -162,7 +162,7 @@ export function CanvasSiteSurface({ data, onExit, onEdit }: CanvasSiteSurfacePro
 
     {/* The SITE's mode, not the app's — see the header. Only in the reading that shows
         the real document; the editor draws the author's own theme colours directly. */}
-    {reading === 'preview' && <span className={styles.siteScheme} role="group" aria-label={t('surface.site.scheme')}>
+    {reading === 'preview' && <span className={styles.segmentedGroup} role="group" aria-label={t('surface.site.scheme')}>
       {SCHEMES.map((option) => <button
         key={option}
         type="button"

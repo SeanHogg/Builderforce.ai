@@ -14,6 +14,7 @@
  */
 
 import { escapeHtml, markdownToHtml } from './richText';
+import { PICTURE_KINDS } from './canvasExports';
 import { canvasDiagram, canvasObjectMarkdown, canvasSlides, type CanvasSlide } from './canvasDocuments';
 import { creativePreviewImageUrl } from './creationDeliverables';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
@@ -186,10 +187,6 @@ export function printCanvasObject(data: CreationNodeData, svg: string | null): b
   if (PICTURE_KINDS.has(data.kind)) return false;
   return printMarkdownDocument(data.title, canvasObjectMarkdown(data));
 }
-
-/** Kinds whose artifact IS a picture, so printing the markdown brief that made
- * one would be printing the wrong thing entirely. */
-const PICTURE_KINDS = new Set(['diagram', 'comic', 'cad', 'image', 'animation', 'model3d']);
 
 /** Whether this object currently HAS something to print, asked before the button
  * is offered rather than after it fails. */

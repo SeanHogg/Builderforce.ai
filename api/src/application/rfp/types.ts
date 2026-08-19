@@ -80,6 +80,56 @@ export interface RfpScanFreshness {
   lastScanAt: string | null;
   ageDays: number | null;
   refreshed: boolean;
+  /**
+   * The DEEP architecture artifacts — the LLM `architecture-analysis` run —
+   * which age INDEPENDENTLY of the deterministic audits above. Re-running the
+   * audits refreshes the score and the file-tree signals; it does not rewrite
+   * the capability roster, which comes from these artifacts. When they are
+   * themselves stale the generator fires the architect run and reports
+   * `refreshing`, so the roster shown is honestly labelled last-known.
+   */
+  deep?: RfpDeepFreshness;
+}
+
+export interface RfpDeepFreshness {
+  lastArtifactAt: string | null;
+  ageDays: number | null;
+  /** `fresh` — the artifacts are current. `refreshing` — a run is in flight and
+   *  the roster below it is the last-known one. `unavailable` — no run could be
+   *  started (see `reason`), so the roster is last-known and will stay that way. */
+  state: 'fresh' | 'refreshing' | 'unavailable';
+  runId?: string | null;
+  reason?: string | null;
+}
+
+/** One row of the risk / dependency REGISTER (migration 0483) — the same fact as
+ *  the `risks` / `dependencies` arrays in the body, but queryable across
+ *  responses and carrying its own lifecycle. */
+export interface RfpRegisterEntry {
+  id: string;
+  responseId: string;
+  requestId: string;
+  kind: 'risk' | 'dependency';
+  title: string;
+  severity: 'low' | 'medium' | 'high' | null;
+  dependencyType: 'internal' | 'external' | 'third_party' | null;
+  detail: string | null;
+  status: 'open' | 'accepted' | 'mitigated' | 'closed';
+  ownerUserId: string | null;
+  position: number;
+  createdAt: string;
+}
+
+/** The cross-response roll-up the register exists to make possible. */
+export interface RfpRegisterRollup {
+  totalRisks: number;
+  totalDependencies: number;
+  openHighRisks: number;
+  bySeverity: Record<'low' | 'medium' | 'high', number>;
+  byStatus: Record<'open' | 'accepted' | 'mitigated' | 'closed', number>;
+  byDependencyType: Record<'internal' | 'external' | 'third_party', number>;
+  /** Titles raised on more than one response — what we ALWAYS carry. */
+  recurring: { title: string; kind: 'risk' | 'dependency'; responses: number; worstSeverity: 'low' | 'medium' | 'high' | null }[];
 }
 
 export interface RfpResponseBody {

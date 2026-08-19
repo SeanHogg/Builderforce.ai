@@ -125,7 +125,7 @@ const BASELINE = {
    * against a +15 drift, so the floor follows the work down instead of being
    * raised to meet it.
    */
-  offScaleFontSizes: 3778,
+  offScaleFontSizes: 3774,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.

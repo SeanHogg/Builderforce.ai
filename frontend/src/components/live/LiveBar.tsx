@@ -6,8 +6,6 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 import { useOptionalLiveSession, type LiveMember } from '@/lib/live/LiveSessionContext';
-import { useCanvasLiveRoom } from '@/lib/live/useCanvasLiveRoom';
-import { StartCallButton } from './StartCallButton';
 import styles from './LiveBar.module.css';
 
 /**
@@ -15,8 +13,7 @@ import styles from './LiveBar.module.css';
  *
  * It renders BELOW everything and outlives every navigation, which is the whole
  * point: the call is not a feature of the board, it is a feature of the session.
- * Self-gating — no canvas and no room, no dock — so no consumer needs a
- * `showLiveBar` prop.
+ * Self-gating — no call, no dock — so no consumer needs a `showLiveBar` prop.
  *
  * ── WHY IT MEASURES ITSELF ───────────────────────────────────────────────────
  * This was a `position: fixed` bar at `bottom: 0` with `z-index: 60`, plus a
@@ -39,13 +36,19 @@ import styles from './LiveBar.module.css';
  * row in the dock, so there is exactly one live surface and its footprint is the
  * number the shell reserves.
  *
- * ── WHY "START CALL" IS HERE AND NOT IN THE TOP BAR ──────────────────────────
- * It was a chip in the header, beside the workspace switcher. But the header
- * answers "who am I working as and what am I working on", and the room is not
- * that question — it is the one control whose ACTIVE state is a whole band of
- * chrome at the bottom of the window. Starting a call in one corner and then
- * operating it from the opposite corner is two homes for one thing. The dormant
- * strip and the live dock are the same element in two states, in one place.
+ * ── WHY THERE IS NO "START CALL" IN HERE ─────────────────────────────────────
+ * There was: the dock had a dormant state — a start button and a line of
+ * explanation — so that starting and operating a call happened in one place. It
+ * bought that at a price the rest of the app does not pay: a measured band of
+ * every window, on every canvas, for a call almost nobody was about to make, and
+ * a control that lived somewhere no other canvas action does.
+ *
+ * Starting one is a session ACTION now (`lib/canvasSessionActions.ts`, id
+ * `call`), which puts it in the same bar as undo, share and publish, on every
+ * surface, in both auth states. This dock is the call's own chrome and exists
+ * only while there IS a call — so nothing is reserved until something is
+ * happening, and the withdrawal of the bar's call button (see its handler in
+ * `CreationCanvas`) is what keeps exactly one control on screen at a time.
  *
  * Colours come from shell theme tokens, not the board's palette. The stage
  * declares its own light and dark ([[canvas-owns-its-palette]]); the dock is
@@ -94,7 +97,6 @@ function AvatarTile({ label, micOn }: { label: string; micOn: boolean }) {
 
 export function LiveBar() {
   const live = useOptionalLiveSession();
-  const room = useCanvasLiveRoom();
   const t = useTranslations('liveBar');
   const [collapsed, setCollapsed] = useState(false);
   const [dock, setDock] = useState<HTMLElement | null>(null);
@@ -120,19 +122,9 @@ export function LiveBar() {
 
   const toggleCollapsed = useCallback(() => setCollapsed((value) => !value), []);
 
-  // No room and nothing to open one on: the dock is absent and reserves nothing.
-  if (!room) return null;
-  if (!live?.live || !live.room) {
-    if (!room.canStart) return null;
-    return (
-      <div ref={setDock} className={styles.dock} data-state="idle" role="region" aria-label={t('region')}>
-        {/* Not an inline button: the invite panel on a logged-out board renders the
-            same control, and one label with one gate beats two that agree today. */}
-        <StartCallButton />
-        <span className={styles.hint}>{t('startCallHint')}</span>
-      </div>
-    );
-  }
+  // No call: no dock, and the effect above publishes a zero band, so an idle session
+  // reserves not one pixel of the window.
+  if (!live?.live || !live.room) return null;
 
   const following = live.members.filter((member) => !member.isSelf && member.userId === live.followingUserId).length;
   const onCall = live.members.filter((member) => member.onCall);

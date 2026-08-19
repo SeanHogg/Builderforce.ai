@@ -131,6 +131,15 @@ export type PublishAction =
 
 /** Chips whose thing is authored on a page of its own. */
 const PUBLISH_ROUTE: Record<string, { href: string; requiresAuth: boolean }> = {
+  // A freelancer is not "published" — they OPT IN, and the opt-in
+  // (`users.available_for_hire`) lives on their own profile. The skill form's
+  // slug/version/repo fields describe nothing about a person.
+  'talent:person': { href: '/freelancer/profile', requiresAuth: true },
+  // A gig is published FROM A TICKET (`POST /api/marketplace/publish` derives the
+  // title, description and requirements from the work item), so there is no "post
+  // a gig" form to point at and never was. The honest CTA is a board picker, and
+  // that is what this route is — see `marketplace/publish-gig`.
+  'talent:gig': { href: '/marketplace/publish-gig', requiresAuth: true },
   'asset:persona': { href: '/personas', requiresAuth: true },
   'asset:knowledge': { href: '/knowledge/new', requiresAuth: true },
   // A template is published from the gallery that owns it — the skill form's

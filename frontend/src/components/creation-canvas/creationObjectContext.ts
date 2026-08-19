@@ -26,6 +26,7 @@
 
 import type { CreationNodeData } from './types';
 import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
+import { CANVAS_PREVIEW_REPORT_LIMIT } from '@/lib/canvasPreviewReport';
 import { DATA_ARCHITECTURE_FIELD_NAMES } from '@/lib/dataArchitectureObjects';
 import { EMPTY_SPEC_BOARD, specDerivedValues, specFieldNames, type SpecDeriveBoard } from '@/lib/specObjects';
 // The vocabularies register themselves as an import SIDE EFFECT, and this module asks
@@ -53,6 +54,20 @@ const CONTEXT_FIELDS = [
   'definition', 'sourceObjectId', 'metricId',
   // A live data source: what it is bound to and what its schema looks like.
   'connectionId', 'sql', 'tables', 'relationships', 'scanned', 'sourceUri',
+  /**
+   * What a LIVE PREVIEW reported about itself.
+   *
+   * A `browser` / `service` / `url` card frames a real page, and the browser gives this
+   * document nothing from inside it — so before these fields existed, a preview that was
+   * throwing on every load looked to Brain exactly like one that worked, and "the page
+   * loads fine" was the only answer it could give. `httpStatus` is the half that needs no
+   * cooperation (a styled 404 frames as happily as the real page); the rest arrives over
+   * the preview wire from a page that reports. `previewReported` is load-bearing and is
+   * NOT inferrable from `previewErrorCount === 0`: a silent page and a clean page are
+   * different answers, and only one of them is worth saying out loud.
+   */
+  'httpStatus', 'previewLog', 'previewErrorCount', 'previewWarningCount',
+  'previewReported', 'previewReportedAt',
   'fileName', 'mimeType', 'fileSize', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues', 'widgets',
   // `mapOutline` is deliberately absent: a boundary polygon is thousands of coordinate
   // pairs, and the snapshot is the model's context budget. Brain needs to know WHAT is
@@ -234,6 +249,9 @@ const CONTEXT_ARRAY_LIMITS: Readonly<Partial<Record<string, number>>> = {
   // default 25 is how "add a foreign key to orders" ends up targeting a column
   // the model was never shown, so these get the wide-table budget.
   classifications: MAX_TABULAR_COLUMNS,
+  // Already bounded at the writing end by `canvasPreviewReportLog`, which keeps the
+  // failures rather than the tail; restated here so a hand-written log cannot widen it.
+  previewLog: CANVAS_PREVIEW_REPORT_LIMIT,
   checks: 60,
   results: 60,
   violations: 60,

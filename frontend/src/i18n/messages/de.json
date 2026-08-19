@@ -4883,7 +4883,8 @@
     "sev_high": "Hoch",
     "sev_medium": "Mittel",
     "sev_low": "Niedrig",
-    "sev_info": "Info"
+    "sev_info": "Info",
+    "identityTab": "Identität"
   },
   "catalogInsights": {
     "total": {
@@ -12402,7 +12403,9 @@
     "pillLora": "🧠 LoRA-Training",
     "pillRegistry": "🤖 Agenten-Registry",
     "pillEval": "🔬 KI-Bewertung",
-    "emailPlaceholder": "du@beispiel.com"
+    "emailPlaceholder": "du@beispiel.com",
+    "continueWithSso": "Mit {organisation} fortfahren",
+    "ssoHint": "Ihre Organisation meldet Sie an. Hier ist kein Passwort nötig."
   },
   "gigs": {
     "publish": {
@@ -17707,7 +17710,19 @@
       "reread": "Seite neu laden und erneut lesen",
       "inspectorHint": "Die Seite wird live auf dem Board geladen. Ihr Text wird zusätzlich in die Canvas eingelesen, damit Brain Fragen dazu beantworten kann.",
       "mixedTitle": "{host} wird über http:// ausgeliefert",
-      "mixedHint": "Eine sichere Seite kann keine unsichere einbetten. Stattdessen wird der Seitentext angezeigt — öffne sie in einem neuen Tab oder sieh sie dir in der VS-Code-Erweiterung an."
+      "mixedHint": "Eine sichere Seite kann keine unsichere einbetten. Stattdessen wird der Seitentext angezeigt — öffne sie in einem neuen Tab oder sieh sie dir in der VS-Code-Erweiterung an.",
+      "reportRegion": "Was diese Seite gemeldet hat",
+      "reportStatusFailed": "Diese Adresse lieferte HTTP {status}",
+      "reportErrors": "{count, plural, one {# Fehler von dieser Seite gemeldet} other {# Fehler von dieser Seite gemeldet}}",
+      "reportClean": "Keine Fehler gemeldet ({requests, plural, one {# Aufruf} other {# Aufrufe}})",
+      "reportUnknown": "Diese Seite meldet ihre Konsole nicht",
+      "reportUnknownHint": "Eine Seite in einem Frame kann von außen nicht gelesen werden. Auf dieser Canvas erstellte Seiten melden automatisch; binde das Builderforce-Quality-SDK in deine eigene Website ein, um ihre Fehler hier zu sehen.",
+      "reportLevel": {
+        "log": "Log",
+        "warn": "Warnung",
+        "error": "Fehler",
+        "request": "Aufruf"
+      }
     },
     "expandPaletteGroup": "Bereich {group} ausklappen",
     "collapsePaletteGroup": "Bereich {group} einklappen",
@@ -19667,6 +19682,7 @@
     "sessionActionCluster": {
       "history": "Leinwandverlauf",
       "inspect": "Leinwand-Werkzeuge",
+      "live": "Anruf",
       "session": "Teilen und veröffentlichen"
     },
     "moreMenuSessionActions": "Diese Leinwand",
@@ -19928,7 +19944,9 @@
       "mobile": "Handy"
     },
     "cursorTyping": "· tippt…",
-    "sharedCallLabel": "Geteilte Sitzung"
+    "sharedCallLabel": "Geteilte Sitzung",
+    "startCall": "Anruf starten",
+    "startCallTitle": "Einen Anruf zu dieser Canvas starten"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -20687,9 +20705,6 @@
     "youShort": "ICH",
     "member": "Mitglied",
     "onThisCanvas": "Diese Canvas",
-    "startCall": "Anruf starten",
-    "startCallTitle": "Einen Anruf zu dieser Canvas starten",
-    "startCallHint": "Alle auf dieser Canvas können beitreten",
     "onCall": "{count, plural, one {# im Anruf} other {# im Anruf}}",
     "mic": "Mikrofon",
     "micOff": "Mikrofon aus",
@@ -22462,5 +22477,101 @@
       "workflow": "eine Automatisierung",
       "tasks": "Aufgaben auf Ihrem Board"
     }
+  },
+  "identityProviders": {
+    "accessTokenUrlField": "Token-Endpunkt",
+    "active": "Aktiv",
+    "addConnection": "Verbindung hinzufügen",
+    "addDomain": "Domain beanspruchen",
+    "addRegistration": "Plattform hinzufügen",
+    "authLoginUrlField": "Authorization-Endpunkt",
+    "authorizationField": "Authorization-Endpunkt",
+    "clientIdField": "Client-ID",
+    "clientSecretField": "Client-Secret",
+    "clientSecretHint": "Verschlüsselt gespeichert. Es wird nie zurückgegeben — leer beim Speichern heißt „unverändert“.",
+    "clientSecretUnchanged": "Leer lassen, um das gespeicherte Secret zu behalten",
+    "defaultRoleField": "Rolle neuer Mitglieder",
+    "deploymentIdsField": "Deployment-IDs",
+    "deploymentIdsHint": "Kommagetrennt. Ein Aussteller beherbergt viele Einrichtungen — eine Registrierung ohne Deployment würde Starts von allen akzeptieren.",
+    "deployments": "{count} Deployment(s)",
+    "disable": "Deaktivieren",
+    "disabled": "Deaktiviert",
+    "discoveryField": "Discovery-URL",
+    "discoveryHint": "Optional. Wenn gesetzt, werden die Endpunkte unten daraus gelesen — selbst Eingetragenes hat weiterhin Vorrang.",
+    "domainNotFound": "Der Eintrag wurde unter {record} nicht gefunden. DNS braucht mitunter einige Minuten.",
+    "domainPlaceholder": "physics.edu",
+    "domainProof": "Diesen TXT-Eintrag veröffentlichen, dann verifizieren:",
+    "domains": "E-Mail-Domains",
+    "edit": "Bearbeiten",
+    "editConnection": "Verbindung bearbeiten",
+    "editRegistration": "Plattform bearbeiten",
+    "enable": "Aktivieren",
+    "institutionHint": "Die Einrichtung, z. B. „Universität Melbourne (Canvas)“.",
+    "issuerField": "Aussteller",
+    "issuerHint": "Die Issuer-URL des Anbieters, z. B. https://login.example.edu.",
+    "jitHint": "Aus heißt: Der Anbieter authentifiziert jemanden und wir lehnen trotzdem ab — für Einrichtungen, die Plätze von Hand vergeben.",
+    "jitLabel": "Konten bei der ersten Anmeldung anlegen",
+    "jwksField": "JWKS-Endpunkt",
+    "keyGeneratedHint": "Beim Speichern wird ein 2048-Bit-RSA-Signaturschlüssel erzeugt und versiegelt. Die öffentliche Hälfte wird unter der JWKS-URL oben ausgeliefert.",
+    "keySetUrlField": "JWKS-Endpunkt der Plattform",
+    "labelField": "Name",
+    "labelHint": "Woran Sie es später wiedererkennen.",
+    "loading": "Wird geladen…",
+    "ltiSubtitle": "Die Lernplattformen, die einen Kurs in diesen Workspace starten dürfen.",
+    "ltiTitle": "LMS-Plattformen (LTI 1.3)",
+    "noConnections": "Noch keine Identitätsanbieter verbunden.",
+    "noDomains": "Keine Domain beansprucht. Solange keine verifiziert ist, wird niemand zu diesem Anbieter geleitet.",
+    "noRegistrations": "Noch keine Lernplattform registriert.",
+    "oidcInitiationUrl": "OIDC-Initiations-URL",
+    "platformIssuerField": "Plattform-Aussteller",
+    "platformIssuerHint": "Das `iss`, mit dem das LMS seine Starts signiert, z. B. https://canvas.instructure.com.",
+    "publicJwkUrl": "Öffentliche JWKS-URL",
+    "redirectUri": "Redirect-URI",
+    "redirectUriHint": "Genau diesen Wert beim Identitätsanbieter eintragen. Eine Abweichung scheitert mit „redirect_uri_mismatch“ ohne weitere Angaben.",
+    "registrationIntro": "Aus dem Tool-Konfigurationsbildschirm des LMS kopieren. Den Signaturschlüssel erzeugen wir selbst — Sie werden nie gebeten, einen privaten Schlüssel einzufügen.",
+    "remove": "Entfernen",
+    "removeConnectionMessage": "Personen von {label} melden sich wieder mit Passwort an. Ihre Konten bleiben erhalten.",
+    "removeConnectionTitle": "Diese Verbindung entfernen?",
+    "role_developer": "Entwickler",
+    "role_manager": "Manager",
+    "role_owner": "Eigentümer",
+    "role_viewer": "Betrachter",
+    "rotate": "Rotieren",
+    "rotateKey": "Schlüssel rotieren",
+    "rotateKeyMessage": "Starts von {label} funktionieren weiter, aber die Plattform cached unser JWKS — bitten Sie deren Administration, es neu zu laden, sonst scheitern Noten- und Teilnehmeraufrufe mit „invalid_client“.",
+    "rotateKeyTitle": "Signaturschlüssel rotieren?",
+    "samlNote": "SAML 2.0 wird bei einem Identitätsanbieter terminiert, der es bereits spricht. Richten Sie einen Shibboleth-, InCommon- oder Entra-IdP auf ein SSO-Gateway (WorkOS, Auth0, Okta, Entra) und verbinden Sie dieses Gateway hier über OIDC — jede intern geprüfte Signatur bleibt ein RS256-Token.",
+    "save": "Speichern",
+    "saving": "Wird gespeichert…",
+    "scopesField": "Scopes",
+    "scopesHint": "Muss `openid` enthalten, sonst liefert der Anbieter nichts Prüfbares.",
+    "ssoSubtitle": "Lassen Sie den eigenen Identitätsanbieter einer Einrichtung deren Personen in diesen Workspace authentifizieren.",
+    "ssoTitle": "Single Sign-on",
+    "targetLinkUri": "Target-Link-URI",
+    "tokenField": "Token-Endpunkt",
+    "toolUrlsHint": "In die Tool-Konfiguration des LMS einfügen. Jeder Wert muss exakt zu diesem Deployment passen.",
+    "unverified": "Nicht verifiziert",
+    "userinfoField": "Userinfo-Endpunkt",
+    "userinfoHint": "Optional. Nur genutzt, wenn das Token selbst weder E-Mail noch Namen trägt.",
+    "verified": "Verifiziert",
+    "verify": "Verifizieren"
+  },
+  "ltiLaunch": {
+    "genericReason": "Der Start wurde geprüft, öffnet von hier aus aber kein Board.",
+    "openWorkspace": "Meinen Workspace öffnen",
+    "reviewRegistration": "LMS-Registrierung prüfen",
+    "title": "Dieser Start hat kein Board geöffnet"
+  },
+  "publishGig": {
+    "empty": "Keine offenen Tickets auf diesem Board zum Veröffentlichen.",
+    "loading": "Tickets werden geladen…",
+    "openBoard": "Board öffnen",
+    "projectLabel": "Projekt",
+    "publish": "Als Auftrag veröffentlichen",
+    "publishing": "Wird veröffentlicht…",
+    "reopenNote": "Ein Ticket besitzt lebenslang genau eine Anzeige. Ein früher gelistetes Ticket erneut zu veröffentlichen öffnet diese Anzeige wieder, statt eine zweite anzulegen — Angebote und Historie bleiben erhalten.",
+    "subtitle": "Ein Auftrag wird aus einem Ticket auf einem Ihrer Boards veröffentlicht — Titel, Beschreibung und Anforderungen stammen aus der Arbeit selbst, hier ist also nichts erneut einzutippen.",
+    "title": "Auftrag veröffentlichen",
+    "viewListing": "Anzeige ansehen"
   }
 }

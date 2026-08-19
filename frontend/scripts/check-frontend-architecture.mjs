@@ -182,6 +182,21 @@
  *   server-rendered page an empty document), so a guard that acts before
  *   `authReady` now bounces signed-in users to the login screen. One place owns
  *   that rule.
+ *
+ *   802 -> 804 (`useClientFiles`, 2026-08-18) -- two client ENTRY POINTS under
+ *   Server Component route roots, which is the one shape this ratchet's changelog
+ *   has consistently accepted (`ReferencesClient.tsx`,
+ *   `LegalDocumentShareViewer.tsx`). `app/lti/launch/LtiLaunchClient.tsx` reads
+ *   `?error=` from `useSearchParams` to say why a verified LMS launch did not open
+ *   a board; `app/marketplace/publish-gig/PublishGigClient.tsx` is the board picker
+ *   the storefront's Talent -> Gigs publish CTA now opens, and it fetches, filters
+ *   and publishes. Each is the sole client child of a `page.tsx` that stays a
+ *   Server Component, so the directive marks a boundary that genuinely begins there.
+ *
+ *   It is +2 and not +3 because the third file added in the same pass --
+ *   `components/security/IdentityProvidersPanel.tsx` -- deliberately does NOT take
+ *   one: `SecurityClient.tsx` is its only importer and is already a boundary, which
+ *   is exactly the shape the tightenings above kept finding.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';

@@ -10,13 +10,18 @@
 
 import type { CaptureContext, NormalizedErrorEvent, QualityClientOptions } from './types';
 import { toEvent, postEvents } from './core';
+import { installCanvasPreviewReporter } from './canvasPreview';
 
 export type { CaptureContext, NormalizedErrorEvent, QualityClientOptions, ErrorLevel, StackFrame } from './types';
+export {
+  installCanvasPreviewReporter, CANVAS_PREVIEW_MESSAGE,
+  type CanvasPreviewLevel, type CanvasPreviewMessage, type CanvasPreviewReporterOptions,
+} from './canvasPreview';
 
-const DEFAULTS = { maxBatch: 20, flushIntervalMs: 5000, autoCapture: true };
+const DEFAULTS = { maxBatch: 20, flushIntervalMs: 5000, autoCapture: true, framePreview: true };
 
 export class QualityClient {
-  private readonly opts: Required<Pick<QualityClientOptions, 'maxBatch' | 'flushIntervalMs' | 'autoCapture'>> & QualityClientOptions;
+  private readonly opts: Required<Pick<QualityClientOptions, 'maxBatch' | 'flushIntervalMs' | 'autoCapture' | 'framePreview'>> & QualityClientOptions;
   private buffer: NormalizedErrorEvent[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
   private detach: Array<() => void> = [];
@@ -26,6 +31,9 @@ export class QualityClient {
     if (!options.endpoint) throw new Error('builderforce-quality: `endpoint` is required');
     this.opts = { ...DEFAULTS, ...options };
     if (this.opts.autoCapture) this.installBrowserHooks();
+    // A framed page is opaque to whatever framed it, so a preview of this page cannot see
+    // it throw. This is how it can — a no-op, and not even a listener, when unframed.
+    if (this.opts.framePreview) this.detach.push(installCanvasPreviewReporter());
     if (typeof setInterval !== 'undefined') {
       this.timer = setInterval(() => void this.flush(), this.opts.flushIntervalMs);
       // Don't keep a Node process alive purely for the flush timer.

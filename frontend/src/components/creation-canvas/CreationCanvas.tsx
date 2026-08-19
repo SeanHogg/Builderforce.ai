@@ -94,7 +94,7 @@ export const CREATION_CANVAS_TOUR = { sectionId: 'creation-canvas', version: 2 }
 import { TEAMMATE_JOIN_EVENT, teammateFromDrag, type TeammatePayload } from '@/lib/team/teammate';
 import { useGuestRoom } from '@/lib/useGuestRoom';
 import { guestMediaTransport } from '@/lib/guestRoomApi';
-import { StartCallButton } from '@/components/live/StartCallButton';
+import { useCanvasLiveRoom } from '@/lib/live/useCanvasLiveRoom';
 import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
 import {
   createGuestRoom, leaveGuestRoom, fetchGuestRoomCanvas, pushGuestRoomCanvas,
@@ -141,7 +141,7 @@ import { analyzeDependencies, appendCanvasVideoSource, canvasGameToolRedirect, c
 import { getStoredTenantToken } from '@/lib/auth';
 import { claimLocalDraft } from '@/lib/pendingWork';
 import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
-import { OfficeExportUnavailableError, exportCsv, exportDocx, exportPptx, exportXlsx } from '@/lib/exportApi';
+import { OfficeExportUnavailableError, exportCsv, exportDocx, exportPdf, exportPptx, exportXlsx } from '@/lib/exportApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import {
   MAX_MATERIALIZED_ROWS, MAX_TABULAR_COLUMNS, TABULAR_AGGREGATE_OPERATORS, TABULAR_FILTER_OPERATORS,
@@ -253,7 +253,7 @@ import { NEW_CHAT_MODE, normalizeChatMode, useQueuedTurns, type ChatMode } from 
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
 import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativeBrief, creativeMeshGeometry, creativePreviewImageUrl, evermindMediaArtifact, generateEvermindMedia, generateServerCreativeArtifact, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, EVERMIND_CREATIVE_KINDS, SERVER_CREATIVE_KINDS, type CreationDeliverable, type CreativeArtifact } from '@/lib/creationDeliverables';
 import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
-import { EXPORT_EXTENSION, EXPORT_MIME, SERVER_RENDERED_ACTIONS, defaultExportAction, type CanvasExportAction } from '@/lib/canvasExports';
+import { EXPORT_EXTENSION, EXPORT_MIME, SERVER_RENDERED_ACTIONS, defaultExportAction, pdfExportStrategy, type CanvasExportAction } from '@/lib/canvasExports';
 import {
   PITCH_COMPETITIONS, PITCH_MAX_SCORE, formatPitchDuration, pitchApplicationAnswers,
   pitchApplicationReadiness, pitchBeats, pitchCompetitionFor, pitchCriteria, pitchEligibility, pitchQaCoverage,
@@ -1284,6 +1284,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, []);
 
   const liveSession = useOptionalLiveSession();
+  // "Is there a room here, may I open it, and is one already running" — one decision,
+  // owned by the hook, read by the session action below. The canvas never assembles a
+  // room out of auth and a session id itself.
+  const liveRoom = useCanvasLiveRoom();
   const [localPresentMode, setLocalPresentMode] = useState(initialPresent);
   const presentMode = liveSession ? liveSession.presentMode : localPresentMode;
   // A ref, because the functional-updater form (`setPresentMode(v => !v)`) has to
@@ -2454,7 +2458,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * since guest rooms shipped. Nothing on the canvas could reach it, so the free
    * board was the one surface where people could work on the same thing and had no
    * way to talk about it. Declaring the anchor is all it takes: `useCanvasLiveRoom`
-   * owns the decision and `StartCallButton` is the control.
+   * owns the decision and the bar's own `call` action is the control — the same one
+   * every signed-in canvas uses, so the free board gains a call rather than a second
+   * way of starting one.
    */
   const publishAnchor = liveSession?.publishAnchor;
   useEffect(() => {
@@ -9215,6 +9221,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // downloads. Decided by the attempt, not guessed from the session, because
       // a guest CAN render: the export surface takes a guest token.
       let degraded = false;
+      // Set when the PDF was opened in a print dialog rather than downloaded, so
+      // the deliverable records the provider that actually produced it.
+      let printed = false;
 
       if (action === 'markdown') downloadText(markdown, fileName, 'text/markdown');
       if (action === 'html') {
@@ -9267,10 +9276,26 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         }
       }
       if (action === 'pdf') {
-        // The browser's own print pipeline, where "Save as PDF" lives. It needs
-        // no server at all, and it prints each kind AS that kind: pages for a
-        // document, a slide per page for a deck, the drawing for anything drawn.
-        if (!printCanvasObject(target.data, canvasObjectSvg(target.data, nodeId))) throw new Error(t('printUnavailable'));
+        // A picture or a paged visual layout is DRAWN, so it goes through the
+        // browser's print pipeline — that is the only thing that can render what
+        // is on the board. A document is WRITTEN, so `/api/exports/pdf` produces
+        // the bytes: a print dialog is not an export, because it needs a human at
+        // a keyboard and gives each browser a different file.
+        if (pdfExportStrategy(target.data.kind) === 'print') {
+          if (!printCanvasObject(target.data, canvasObjectSvg(target.data, nodeId))) throw new Error(t('printUnavailable'));
+          printed = true;
+        } else {
+          try {
+            await exportPdf(markdown, target.data.title, { footer: target.data.title });
+          } catch (error) {
+            // Same rule as the Office renderers: only a credential/allowance
+            // refusal degrades — and here the degrade is the print pipeline,
+            // which still puts a PDF in the visitor's hands.
+            if (!(error instanceof OfficeExportUnavailableError)) throw error;
+            if (!printCanvasObject(target.data, canvasObjectSvg(target.data, nodeId))) throw new Error(t('printUnavailable'));
+            printed = true;
+          }
+        }
       }
       if (action === 'spec') {
         // The runnable file the whole "write me tests" request was for. A plan
@@ -9299,7 +9324,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const delivered: CreationDeliverable = {
         id: crypto.randomUUID(), action: 'export', artifactKind: action, status: 'delivered',
         createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
-        provider: degraded ? 'browser-office-fallback' : SERVER_RENDERED_ACTIONS.has(action) ? 'builderforce-office-export' : action === 'pdf' ? 'browser-print' : 'browser-download',
+        provider: degraded ? 'browser-office-fallback'
+          : printed ? 'browser-print'
+          : SERVER_RENDERED_ACTIONS.has(action) || action === 'pdf' ? 'builderforce-office-export'
+          : 'browser-download',
         fileName,
         mimeType: action === 'diagram'
           ? (diagram?.format === 'mermaid' ? 'text/vnd.mermaid' : 'application/vnd.jgraph.mxfile')
@@ -9307,7 +9335,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         validation: { status: 'passed', detail: 'Export generated and download started' },
       };
       setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, deliverables: withCreationDeliverable(node.data, delivered) } } : node));
-      if (action === 'pdf') return t('printOpened');
+      if (printed) return t('printOpened');
       // A guest session cannot reach the authenticated Office renderer, so say
       // what actually landed in Downloads and point at the export that DOES work
       // there, rather than reporting a Word file that was never produced.
@@ -10471,6 +10499,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       outcomes: act(openOutcomeMetrics, outcomeMetricsOpen),
       diagnostics: act(() => void openDiagnostics(), diagnosticsOpen),
       fullscreen: act(toggleFullscreen, fullscreen),
+      // The call is a session action like any other, so it is in the bar on every
+      // surface instead of in a band of chrome of its own. Two session facts decide how
+      // it is drawn, and neither is something the registry could know:
+      //   `disabled`  — there is no room to open here (a canvas that lives only on this
+      //                 device and has not been shared has nobody to call).
+      //   `available` — a call is ALREADY running, so the dock at the bottom of the
+      //                 shell is the control from now on and this one withdraws rather
+      //                 than sitting beside it lit up doing nothing.
+      call: { ...act(() => liveRoom?.start()), disabled: !liveRoom?.canStart, available: liveRoom?.live !== true },
       // A local canvas opens the SAME share sheet a saved one does. It used to open a
       // sign-up gate, which answered a question nobody asked: they wanted to show
       // someone the board, not to create an account.
@@ -10589,12 +10626,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 <button type="button" onClick={() => void leaveSharedSession()}>{t('sharedStopSharing')}</button>
                 <button type="button" onClick={() => requireAccount('save', t('gateSaveSessionTitle'), t('gateSaveBody'))}>{t('sharedSaveToKeep')}</button>
               </div>
-              {/* "Get someone in here" and "talk to them" are one errand, so the call
-                  starts from the panel that hands out the link rather than from a
-                  control a signed-out visitor would have to go looking for. Self-gating
-                  — it disappears the moment the call is running, because the dock at
-                  the bottom of the shell is the control from then on. */}
-              <StartCallButton variant="panel" />
+              {/* No call button here. "Get someone in here" and "talk to them" are one
+                  errand, but they are not one CONTROL: the call is a session action in
+                  the bar on every surface and in both auth states, and a second copy in
+                  this panel would be one decision with two homes. */}
             </> : <button disabled={roomBusy} onClick={() => void startSharedSession()}>{roomBusy ? t('sharedStarting') : t('sharedStart')}</button>) : <>
               <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder={t('emailPlaceholder')} /><select aria-label={t('invitationRole')} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${canvasWebOrigin()}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? t('invitationEmailed') : t('invitationSavedLinkCopied')); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? t('collaboratorInvitedEmail') : t('collaboratorInvited')); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : t('inviteFailed'))); }}>{t('invite')}</button></div>
               {sessionRole === 'owner' && <div aria-label={t('sessionMembers')}>{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>

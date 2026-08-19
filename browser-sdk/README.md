@@ -50,6 +50,27 @@ const quality = createServerCapture({
 try { await work(); } catch (e) { await quality.captureException(e); }
 ```
 
+## Canvas preview reporting
+
+A page inside an iframe is opaque to whatever framed it: the embedder cannot read your
+`console`, cannot receive your error events and cannot see your failed requests. So a
+[Builderforce Creation Canvas](https://builderforce.ai) preview of your site can look
+perfectly fine while the page is throwing on every load.
+
+`init()` fixes that for your own pages, on by default and **only when the page is
+framed** — an ordinary page pays nothing, not even a listener:
+
+```ts
+init({ key: 'bfq_xxx', endpoint: 'https://api.builderforce.ai/api/quality-ingest' });
+// framePreview: false to opt out; installCanvasPreviewReporter() to use it on its own.
+```
+
+Framed, the page posts each console line, thrown error, subresource that failed to load
+and request that failed or returned 4xx/5xx to the framing document, and the canvas shows
+them under the preview. Only a level, a truncated line of text and a millisecond offset
+are posted — never page content, request bodies or headers, because the document that
+framed you may be anyone's.
+
 ## Other sources
 
 Any source works: point an **OpenTelemetry** OTLP/HTTP exporter at

@@ -6,13 +6,8 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 vi.mock('next-intl', async () => (await import('@/test/realCatalogTranslations'))
   .realCatalogIntlMock((await import('@/i18n/messages/en.json')).default as Record<string, unknown>));
 
-import {
-  CANVAS_APP_FRAME_SANDBOX,
-  CANVAS_APP_MESSAGE,
-  canvasApp,
-  canvasAppEntry,
-  canvasAppFiles,
-} from '@/lib/canvasApp';
+import { CANVAS_APP_FRAME_SANDBOX, canvasApp, canvasAppEntry, canvasAppFiles } from '@/lib/canvasApp';
+import { CANVAS_PREVIEW_MESSAGE } from '@/lib/canvasPreviewReport';
 import type { CreationNodeData } from './types';
 import { CanvasAppSurface } from './CanvasAppSurface';
 import { CanvasSurfaceActionsProvider, useContributedSurfaceActions } from './canvasSurfaceActions';
@@ -151,9 +146,9 @@ describe('the app a canvas session is', () => {
 
   it('instruments the document before any authored code runs', () => {
     const document = canvasApp(SESSION).document ?? '';
-    expect(document).toContain(CANVAS_APP_MESSAGE);
+    expect(document).toContain(CANVAS_PREVIEW_MESSAGE);
     // Ahead of the page's own script, or a throw during boot goes unreported.
-    expect(document.indexOf(CANVAS_APP_MESSAGE)).toBeLessThan(document.indexOf('dataset.ready'));
+    expect(document.indexOf(CANVAS_PREVIEW_MESSAGE)).toBeLessThan(document.indexOf('dataset.ready'));
   });
 
   /** An inlined source containing `</script>` would otherwise close the element it is

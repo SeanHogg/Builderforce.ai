@@ -18,6 +18,7 @@ import EmailVerificationStep from '@/components/account/EmailVerificationStep';
 import MarketingVisual from '@/components/account/MarketingVisual';
 import { loginSchema } from '@/lib/structured-data';
 import { LOGIN_MARKETING } from '@/lib/content';
+import { ssoDiscoveryApi } from '@/lib/builderforceApi';
 
 export default function LoginPageClient() {
   const router = useRouter();
@@ -35,6 +36,40 @@ export default function LoginPageClient() {
   // email-OTP step (a fresh code is emailed by the login endpoint).
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [emailDeliveryFailed, setEmailDeliveryFailed] = useState(false);
+  /** The institution this address signs in through, when it has one. */
+  const [ssoLabel, setSsoLabel] = useState<string | null>(null);
+
+  /**
+   * Does this address belong to an institution with single sign-on?
+   *
+   * Asked as the address is typed, debounced, so the password field can be
+   * replaced by "Continue with <institution>" before somebody types a password
+   * their organisation does not hold. Failure is SILENT and falls back to the
+   * password form: a discovery call that cannot be made must never be the reason
+   * a person cannot sign in.
+   */
+  useEffect(() => {
+    const address = email.trim().toLowerCase();
+    if (!address.includes('@')) { setSsoLabel(null); return; }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      ssoDiscoveryApi.discover(address)
+        .then((result) => { if (!cancelled) setSsoLabel(result.sso ? (result.label ?? address.split('@')[1]!) : null); })
+        .catch(() => { if (!cancelled) setSsoLabel(null); });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [email]);
+
+  /**
+   * A failed federated sign-in comes back as `?error=`. Surfaced verbatim
+   * because the API's messages are written for the person reading them — "the
+   * identity provider released no email address" is actionable and
+   * "sso_failed" is not.
+   */
+  useEffect(() => {
+    const reason = searchParams.get('error');
+    if (reason) setError(reason.replace(/_/g, ' '));
+  }, [searchParams]);
 
   const finishAndRedirect = async () => {
     // Open-redirect guard (M5): only same-origin relative paths are honoured.
@@ -235,6 +270,32 @@ export default function LoginPageClient() {
                   onBlur={focusOut}
                 />
               </div>
+              {ssoLabel && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <a
+                    href={`/api/auth/sso/start?email=${encodeURIComponent(email.trim().toLowerCase())}&redirect=${encodeURIComponent(safeRedirectPath(searchParams.get('next')))}`}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      textAlign: 'center',
+                      background: 'var(--bg-elevated)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-lg)',
+                      padding: '13px',
+                      fontWeight: 700,
+                      fontSize: '0.95rem',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    {t('continueWithSso', { organisation: ssoLabel })}
+                  </a>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', margin: 0 }}>
+                    {t('ssoHint')}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label htmlFor="password" style={labelStyle}>{t('passwordLabel')}</label>
                 <PasswordInput

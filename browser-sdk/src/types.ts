@@ -51,6 +51,14 @@ export interface QualityClientOptions {
   flushIntervalMs?: number;
   /** Hook window error + unhandledrejection automatically (browser only, default true). */
   autoCapture?: boolean;
+  /**
+   * Also report this page's console, errors and failed requests to the document that
+   * FRAMED it, so a Builderforce canvas preview can say the page is broken instead of
+   * showing a frame that looks fine. Default true; ignored entirely when the page is not
+   * in a frame. Only a level, a truncated line and a timestamp are posted — never page
+   * content, request bodies or headers, because the framing document may be anyone's.
+   */
+  framePreview?: boolean;
   /** Injected fetch (tests / Node < 18). Defaults to global fetch. */
   fetchFn?: typeof fetch;
 }

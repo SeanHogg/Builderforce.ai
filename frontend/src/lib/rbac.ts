@@ -61,6 +61,13 @@ export const CAPABILITIES = {
   // PATCH /api/tenants/:id/spend-limits (+ the per-seat variant).
   'billing.spendLimits':  'owner',
   'integrations.manage':  'manager',
+  // Institutional identity — enterprise SSO connections and LTI 1.3 platform
+  // registrations. Mirrors requireRole(MANAGER) on /api/sso-connections and
+  // /api/lti-registrations. Manager rather than owner because connecting a
+  // university's IdP or LMS is the same class of act as connecting any other
+  // external system, and it is already bounded by domain verification on one
+  // side and a signed launch on the other.
+  'identity.manageProviders': 'manager',
 
   // Workforce
   'agents.create':        'manager',

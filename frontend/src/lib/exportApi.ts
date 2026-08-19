@@ -6,7 +6,13 @@
  * server-side (`/api/exports`, where the OOXML writers live), because all three
  * are zips of XML parts rather than text a browser can write out. CSV needs no
  * round-trip — the rows are already in hand — so it saves straight from the
- * browser, and PDF is the browser's own print pipeline (`printDocument.ts`).
+ * browser.
+ *
+ * PDF joined the server list for every DOCUMENT-shaped kind: the print pipeline
+ * cannot produce a file without a human at the dialog, and it produces a
+ * different one per browser. A picture or a deck still prints, because its PDF
+ * is a rendering of what is on the board — `pdfExportStrategy` in
+ * `canvasExports.ts` owns that split so both callers read one answer.
  */
 
 
@@ -15,8 +21,10 @@ import { downloadBlob, downloadText, filenameFromResponse } from './download';
 import { getStoredGuestToken } from './guestChatApi';
 import { ensureGuestToken } from './guestRoomApi';
 
-export type OfficeFormat = 'docx' | 'pptx' | 'xlsx';
+export type OfficeFormat = 'docx' | 'pptx' | 'xlsx' | 'pdf';
 export interface DocxTheme { accent?: string; font?: 'sans' | 'serif' | 'mono'; density?: 'compact' | 'comfortable' | 'spacious'; columns?: 1 | 2 }
+/** The PDF writer reads the same theme vocabulary plus a second brand colour. */
+export interface PdfTheme extends Omit<DocxTheme, 'columns'> { secondary?: string }
 
 /**
  * The renderer could not be reached FOR THIS CALLER — no credential at all, or a
@@ -62,6 +70,16 @@ async function exportOffice(format: OfficeFormat, body: Record<string, unknown>)
 
 /** Render markdown as a Word document and download it. */
 export const exportDocx = (markdown: string, title: string, theme?: DocxTheme) => exportOffice('docx', { markdown, title, ...(theme ? { theme } : {}) });
+
+/** Render markdown as a paginated PDF and download it. `subtitle` and `footer`
+ * ride the cover band and every page foot when the caller has them. */
+export const exportPdf = (markdown: string, title: string, opts: { theme?: PdfTheme; subtitle?: string; footer?: string } = {}) =>
+  exportOffice('pdf', {
+    markdown, title,
+    ...(opts.theme ? { theme: opts.theme } : {}),
+    ...(opts.subtitle ? { subtitle: opts.subtitle } : {}),
+    ...(opts.footer ? { footer: opts.footer } : {}),
+  });
 
 /** Render markdown slides (one `##` per slide) as a PowerPoint deck and download it. */
 export const exportPptx = (markdown: string, title: string) => exportOffice('pptx', { markdown, title });

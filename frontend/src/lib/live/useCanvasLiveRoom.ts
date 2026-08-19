@@ -1,6 +1,6 @@
-// No 'use client' directive: a hook is not a boundary. Every caller
-// (`LiveBar`, `StartCallButton`) is already a client component, so the directive here
-// marked an entry point that does not exist and spent a slot in the ratchet's tally.
+// No 'use client' directive: a hook is not a boundary. Its caller (`CreationCanvas`) is
+// already a client component, so the directive here marked an entry point that does not
+// exist and spent a slot in the ratchet's tally.
 import { useCallback, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -20,8 +20,10 @@ import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
  * and the invite panel on a logged-out board) that button would have had to be
  * imported for its logic, or the logic copied. Both are the same bug.
  *
- * So the decision is a hook and every affordance is a view of it — see
- * `components/live/StartCallButton`, which is the one control all of them render.
+ * So the decision is a hook, and the one control that reads it is the canvas
+ * session bar's `call` action — which is why starting a call needs no chrome of
+ * its own on any surface, and why the free board gets one on the same terms as a
+ * signed-in canvas. `LiveBar` renders only once a call is RUNNING.
  *
  * ── TWO KINDS OF ROOM, ONE DECISION ──────────────────────────────────────────
  * A signed-in canvas derives its room from auth: the board id is the room key,

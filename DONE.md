@@ -1,3 +1,83 @@
+## ✅ RESOLVED 2026-08-18 — The app canvas previewed a website that was not the website, at a width that was not a width
+
+Three complaints about the `app` canvas, one root cause. The board was drawing its own second
+rendering of an artifact it already knew how to render properly, and sizing it with a CSS cap
+instead of a device width.
+
+### Desktop / Tablet / Phone changed nothing you could see
+
+`.appFrame` carried `width:min(100%,var(--app-width))` **and** `flex:1`, inside a row flex stage.
+`flex:1` expands to `flex-basis:0%` + `flex-grow:1`, which beats `width` outright — so the frame
+filled the stage at every setting and the three viewport buttons were decoration. The site surface's
+frame was capped honestly, and was still wrong in a subtler way: a cap hands the framed document the
+SMALLER width, so its own media queries fire for the stage and the "Desktop" reading rendered the
+page's mobile collapse.
+
+A cap and a device width are not the same tool. `CanvasDeviceFrame` lays the document out at exactly
+`CANVAS_VIEWPORT_WIDTHS[viewport]` — 1280 / 834 / 390, real CSS pixels of the framed page — and
+`transform: scale()` puts the result back in the box. The three readings now differ the way they
+differ on three real machines.
+
+Three vocabularies became one. `CANVAS_APP_VIEWPORTS`, `WEB_PAGE_VIEWPORT_WIDTHS` (whose `desktop`
+was `null`, i.e. "whatever the panel is") and a third set of widths in the stylesheet are now
+`lib/canvasViewport.ts`, and the stylesheet reads `--device-width` written by the component rather
+than restating the numbers — a stylesheet's private copy of them is exactly how the CSS widths and
+the frame widths came to disagree.
+
+### The site rendered, but wearing the app's clothes
+
+`WebsiteBody` drew the site as React **inside the board's own DOM**, so it inherited the board:
+`var(--canvas-line)`, `var(--surface)` on its embedded frames, the app's fonts, and the operator's
+light/dark toggle. An author checking their landing page was shown it repainted by a theme their
+visitors will never touch.
+
+The preview is now the **same self-contained document the publisher serves** (`renderWebsiteDocument`),
+in a frame with no origin — a separate cascade nothing outside can reach. And because a published page
+answers `prefers-color-scheme` while a preview must not, `WebsiteDocumentOptions.colorScheme` pins the
+mode for previews (the published path keeps `auto`, unchanged) and the site surface hands the author
+their own Light/Dark switch: a question about the site, asked in the site's controls.
+
+### The full website did not render
+
+What the board drew was an approximation: a decorative block where the hero artwork goes, a heading
+and one line of prose where the real document lays out a features grid, a stats band or an embedded
+form — at a 6–9px type scale chosen to look like a thumbnail. The card and the `site` surface now
+frame the real document, every section included.
+
+`WebsiteBody` survives as the thing you **edit** in, which is the one job a frame genuinely cannot do,
+so the site surface reads a site two ways — Preview and Edit — the same split the app runtime already
+makes between Preview, Code and Console. The document's own page nav reports switches back through
+`pageMessageTag`, scoped to the frame that sent them, so the card and the surface still agree about
+which page is open.
+
+### Found on the way: the editor was set in 6px type at four times the width
+
+`WebsiteBody` survives as the Edit reading, and its `.wysiwyg*` type scale — 6–9px — was chosen
+for a 455px card. Opened at ~1180px on the surface that made it a structural MAP of the page
+rather than the page: you could see the order of the sections and not read them. Every one of
+those declarations is now `clamp(card, Ncqw, surface)` against the inline size `.websitePreview`
+already establishes (`container-type:inline-size`; its hero `h3` was the one rule that already did
+this). One rule set, two rooms: the card resolves to exactly the sizes it had, the surface scales
+up to something readable. `CreationCanvas.module.css` is `FONT_SIZE_EXEMPT` in the design-scale
+guard — the board's own art surface is not this product's UI ramp — so no baseline moved.
+
+### Duplicates removed in the same pass
+
+- `CanvasWebPage` no longer measures and scales its own frame — it wears `CanvasDeviceFrame`, so
+  "Desktop" means the same 1280px on the live page panel as everywhere else.
+- `canvasApp.ts` no longer assembles its own `renderWebsiteDocument` call; it and both previews go
+  through one `canvasWebsiteDocument`.
+- `.appReadings`, `.viewportSwitcher` and a scheme toggle about to be written as a third copy of the
+  same segmented trough collapsed into one `.segmentedGroup`.
+- Deleted with zero remaining references: `CANVAS_APP_VIEWPORTS`, `WEB_PAGE_VIEWPORT_WIDTHS`,
+  `webPageViewport`, `WebPageViewport`, `.webPageFrameWrap`, `.webPageFrame`, `--app-width`,
+  `--site-width`.
+
+Guards: `canvasDeviceFrame.test.tsx` asserts all three readings lay out at three different real
+widths (on the app runtime, the site surface and the card), that a preview emits one palette and no
+`prefers-color-scheme`, that the published document still answers it, that the frame never gets
+`allow-same-origin`, and that a page message from another card's frame is ignored.
+
 ## ✅ RESOLVED 2026-08-18 — Remote cursors now move at pointer speed: the canvas room relays peers, and three rooms stopped keeping their own copy of the relay
 
 Three Gap Register entries closed together: the canvas presence transport, the canvas hub-contention
@@ -61,6 +141,23 @@ announcements, and a full-SDP-sized frame — the cap has to clear a WebRTC offe
 calls silently stop connecting) and 15 new client assertions (frame narrowing, partial-frame merging,
 expiry, roster merge, self-exclusion). 48/48 api relay tests, 69/69 api relay+creation tests, the
 frontend guard chain 10/10, and api and frontend typechecks clean on every changed file.
+
+### Found on the way: every outcome message was wiped 300ms after it appeared
+
+Running the canvas suite surfaced a failing assertion — "Evaluation added to canvas" was not on screen
+when the test looked for it — and the cause was not the test. The session pill has ONE status line, and
+two kinds of message compete for it: an OUTCOME ("Evaluation added to canvas", "Sketch added", an
+error) and the routine SAVE STATE ("Saving…", "Saved on this device"). Autosave is debounced 300ms
+behind the edit that triggered it, so an outcome was always overwritten about a third of a second
+after it appeared — too fast to read, and it was the one message the person was waiting for. Nothing
+about it was specific to the test; the pill was showing "Saved on this device" instead.
+
+`setNotice` now stamps when an outcome was announced and `noteSaveState` declines to talk over one
+younger than four seconds. The five save-state call sites (session load, the local snapshot save, the
+server save, and the two "Saving…" announcements) use it; every outcome and every error still goes
+through `setNotice` unchanged, so an error can never be suppressed. A save that stays quiet is not a
+save that did not happen — the outcome already said the change landed, and the next edit's save says so
+again once the outcome has had its moment. The suite is green with no change to the test.
 
 ### The canvas hub-contention entry was a decision, not a task
 

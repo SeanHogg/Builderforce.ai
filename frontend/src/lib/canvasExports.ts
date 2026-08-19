@@ -47,6 +47,33 @@ export const EXPORT_EXTENSION: Readonly<Record<Exclude<CanvasExportAction, 'copy
 export const SERVER_RENDERED_ACTIONS: ReadonlySet<CanvasExportAction> = new Set<CanvasExportAction>(['docx', 'pptx', 'xlsx']);
 
 /**
+ * Kinds whose artifact IS a picture — printing the markdown brief that produced
+ * one would be printing the wrong thing entirely.
+ *
+ * Stated here, beside the export table, because two surfaces need the same
+ * answer: `printDocument.ts` uses it to decide what to draw on the page, and
+ * `pdfExportStrategy` uses it to decide whether the page is drawn at all.
+ */
+export const PICTURE_KINDS: ReadonlySet<CreationObjectKind> =
+  new Set<CreationObjectKind>(['diagram', 'comic', 'cad', 'image', 'animation', 'model3d']);
+
+/**
+ * How a kind's PDF is produced.
+ *
+ * `'print'` — the artifact is a picture or a paged visual layout (a deck, a
+ * typeset resume), so the PDF is a rendering of what is on the board and only
+ * the browser can draw it.
+ *
+ * `'server'` — the artifact is a document, so `/api/exports/pdf` writes the
+ * bytes. That is the case that used to open a print dialog instead, which is
+ * not an export: it needs a human at a keyboard, produces a different file per
+ * browser, and cannot be attached to something an agent sends.
+ */
+export function pdfExportStrategy(kind: CreationObjectKind): 'server' | 'print' {
+  return PICTURE_KINDS.has(kind) || kind === 'slides' || kind === 'resume' ? 'print' : 'server';
+}
+
+/**
  * Every format a kind offers, NATIVE FIRST.
  *
  * Order is the contract: the head of the list is what a one-click download

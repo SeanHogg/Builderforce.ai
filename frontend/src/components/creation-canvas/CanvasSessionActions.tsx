@@ -11,6 +11,7 @@ import {
   PublishCanvasIcon,
   RedoIcon,
   ShareCanvasIcon,
+  StartCallIcon,
   UndoIcon,
 } from '@/components/canvas/CanvasCommands';
 import {
@@ -53,6 +54,7 @@ const ACTION_ICON: Record<CanvasSessionActionId, () => React.JSX.Element> = {
   outcomes: OutcomeMetricsIcon,
   diagnostics: DiagnosticsIcon,
   fullscreen: FullscreenIcon,
+  call: StartCallIcon,
   share: ShareCanvasIcon,
   publish: PublishCanvasIcon,
 };
@@ -69,6 +71,21 @@ export interface CanvasSessionActionHandler {
   active?: boolean;
   /** True while the session forbids it (a read-only role, a lock). */
   disabled?: boolean;
+  /**
+   * False while this action has no meaning in the session's CURRENT state, as opposed to
+   * on this surface — so it is drawn nowhere at all rather than drawn dead.
+   *
+   * The registry answers "does this action mean anything on this surface" from what the
+   * surface declares, which is the right question for a scorecard over a board with no
+   * objects. It cannot answer "is a call already running": that is session state the
+   * host holds and no surface flag can see. Absent means available, so an action only
+   * ever disappears because the host said so.
+   *
+   * Not the same as `disabled`. Disabled says "you cannot do this right now and here is
+   * the button that would"; withdrawn says "this control has moved" — which is exactly
+   * the call once its dock is on screen and owns every control the room has.
+   */
+  available?: boolean;
 }
 
 export interface CanvasSessionActionsProps {
@@ -108,6 +125,14 @@ export function CanvasSessionActions({ handlers, variant, surface, collapsed = f
   const showsControls = canvasChromeShows('surfaceControls', collapsed);
   const showsActions = canvasChromeShows('actions', collapsed);
 
+  /**
+   * The actions this session is actually offering, in ONE place: the bar, the phone sheet
+   * and the top-right pair all ask it, so an action the host has withdrawn cannot survive
+   * in the one chrome somebody forgot to filter.
+   */
+  const offered = (defs: readonly CanvasSessionActionDef[]) =>
+    defs.filter((def) => handlers[def.id]?.available !== false);
+
   /** Name, hover text and ARIA state — decided once, for both chromes. */
   const describe = (def: CanvasSessionActionDef) => {
     const handler = handlers[def.id];
@@ -131,7 +156,7 @@ export function CanvasSessionActions({ handlers, variant, surface, collapsed = f
     // Words, always. The sheet has room for them and a phone user pressing ••• is
     // looking for a named thing, not scanning a second row of glyphs.
     return <>
-      {phoneOverflowActions(surface).map((def) => {
+      {offered(phoneOverflowActions(surface)).map((def) => {
         const { handler, active, label, title, ...aria } = describe(def);
         const Glyph = (active && ACTIVE_ACTION_ICON[def.id]) || ACTION_ICON[def.id];
         // No class of its own: chrome comes from `.moreMenu button`, so a session action
@@ -154,7 +179,7 @@ export function CanvasSessionActions({ handlers, variant, surface, collapsed = f
     // out of this canvas, and they are the whole contents of the corner they sit in.
     if (!canvasChromeShows('handoff', collapsed)) return null;
     return <>
-      {canvasSessionActionsFor(surface).filter((def) => def.chrome === 'labelled').map((def) => {
+      {offered(canvasSessionActionsFor(surface).filter((def) => def.chrome === 'labelled')).map((def) => {
         const { handler, active, label, title, ...aria } = describe(def);
         const Glyph = (active && ACTIVE_ACTION_ICON[def.id]) || ACTION_ICON[def.id];
         return <button
@@ -184,7 +209,7 @@ export function CanvasSessionActions({ handlers, variant, surface, collapsed = f
     {showsActions && canvasSessionClusters(surface).map(({ cluster, actions: all }) => {
       // The worded pair is drawn by the `handoff` variant in the other corner. Filtering
       // by chrome rather than by id is what keeps that true for an action added later.
-      const actions = all.filter((def) => def.chrome === 'icon');
+      const actions = offered(all.filter((def) => def.chrome === 'icon'));
       if (!actions.length) return null;
       const buttons = actions.map((def) => {
         const { handler, active, label, title, ...aria } = describe(def);
