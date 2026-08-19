@@ -1,3 +1,115 @@
+## ✅ RESOLVED 2026-08-19 — A stored alert that never ran, and fixed-price work nobody could transact
+
+Two Consolidated Gap Register items from the marketplace/freelance section, plus three entries that
+turned out to be stale and were verified closed rather than re-fixed.
+
+### 1 · Job alerts are stored but never evaluated — nothing runs them
+
+`POST/PATCH/DELETE /api/jobs/alerts` persisted a `saved_searches` row with `scope='listing'`, and
+`JobAlertsPanel` managed them, but nothing ever ran one. `last_run_at` and `result_count` were always
+null, which is the tell: two columns that exist to record an evaluation that never happened. Both
+primitives it needed already existed and had never been joined — `notify()` writes the durable in-app
+row, `cronWorkSignal.ts` lets a sweep run without waking Neon on idle ticks. What was missing was the
+evaluator between them.
+
+**`application/marketplace/jobFilters.ts` — what a job search MEANS, declared once.** The obvious
+implementation writes the match predicate a second time, and the second copy is the one that drifts,
+because the interesting behaviour is in the edges (a blank is not a filter; a skill match is exact and
+case-insensitive while a keyword is a substring that also sees the raw skills text). A seeker whose
+alert silently disagrees with the board they are looking at has an alert they will never trust again.
+So the SPEC is shared and each caller lowers it to its own machine: `jobFilterConditions()` for the
+browse route, which must push the work into indexed SQL, and `jobFilterMatches()` for the sweep, which
+evaluates many saved searches against one window of postings. `GET /api/jobs` was MIGRATED onto it in
+the same pass — the inline predicate is gone — and `jobFilters.test.ts` is the parity table that
+actually holds the two evaluators together, each case naming the SQL clause it mirrors.
+
+**`application/marketplace/jobAlerts.ts` — the sweep.** Registered as the daily `job-alerts` entry in
+`cronSweeps.ts`. Daily rather than frequent is a product decision, not a cost one: a standing search is
+a digest, and firing it every five minutes turns one useful notification into a stream of
+single-posting pings.
+
+The watermark is the whole anti-spam design. An alert notifies about postings created since it last
+ran, never about the open board; a NEW alert falls back to its own `created_at`, so it announces work
+posted after the seeker asked rather than the back catalogue they were already looking at; and the
+stamp advances even when nothing matched, or the day an alert finally matches it would sweep up a
+week at once. That makes the sweep idempotent in the way that matters — running it twice in a day
+sends nothing the second time.
+
+ONE query for the window, not one per alert: the postings window opens at the oldest watermark in the
+batch and every alert is matched against it in memory, so cost scales with new WORK rather than with
+the number of seekers. The cross-tenant read is declared through `acrossTenants(..., 'scheduled_sweep')`
+rather than left to a missing filter.
+
+### 2 · Fixed-price contracts + milestones + escrow (Upwork-parity P0)
+
+Only hourly work could be transacted. A freelancer could be hired on a fixed bid and there was nowhere
+to say what the deliverables were, no way to prove the money existed before work started, and no
+release event when a deliverable was accepted — both sides were asked to fully trust each other or not
+transact.
+
+**What this deliberately did NOT add.** The audit asked for `job_postings.job_type (hourly|fixed)`.
+That column already exists under its real name, `engagement_type` (`fixed_bid|hourly|fte`, migration
+0293), read by `gigMarketplaceRoutes`, the `jobs.create` MCP tool and the canvas publish path — adding
+`job_type` beside it would have been one fact in two places. The parity gap was never the column; it
+was that nothing downstream of it behaved differently. It also adds no balance column and no
+`escrow_accounts` table: PRD 20 is explicit that the finance domain holds no balances, and
+`ledger_entries.entry_kind` already includes `'hold'`, which IS escrow.
+
+**Migration 0924 · `engagement_milestones`.** The AGREEMENT only. `job_id` and `engagement_id` are
+both nullable under a CHECK that one is set, because a schedule legitimately exists at two moments:
+proposed against a JOB while bidding, and agreed on an ENGAGEMENT once the bid is accepted. Accepting
+STAMPS the rows forward rather than copying them, so the schedule the client agreed to is the same
+schedule they later fund.
+
+**`application/marketplace/escrow.ts` — the machine, pure.** It decides; it never writes. Two
+asymmetries are the design: only the CLIENT may fund, approve, reject, release and cancel, and only the
+FREELANCER may submit — so neither party can move the money alone. And `approved` and `released` are
+two states, not one: approval is the client's irreversible decision, release is money actually moving
+and can fail, and collapsing them would show a freelancer a failed payout as a withheld approval.
+Cancelling is refused once work has been submitted, which is what stops escrow becoming a way to take
+work for free. `disputed` has no automatic exit on purpose — there is no mediation flow yet (P2), and
+a machine that quietly times a dispute out in somebody's favour is worse than one that stops.
+
+**`application/marketplace/milestones.ts` — the only writer.** Money is written BEFORE status, and
+that order is the only interesting thing in it: the two are not in one transaction (neon-http has
+none), and ledger-then-status can leave a hold against a milestone that still reads `draft` — visible,
+reconcilable and retryable — while status-then-ledger leaves a milestone claiming funds nobody
+captured, which is the failure that tells a freelancer to start work nobody paid for. Idempotency is
+the database's job: `escrow:<milestoneId>:<action>` lands on the unique `ledger_entries.reference`, so
+a double-clicked release collides in Postgres. The status write carries the expected status in its
+WHERE, so two concurrent approvals produce one winner without a transaction.
+
+**Routes** are split by AUTHORITY, not convenience: the client acts with the tenant JWT and the
+freelancer with the web JWT, which makes "only the freelancer may submit" structural rather than a role
+check somebody could forget. The freelancer's routes resolve the tenant FROM the row via
+`milestoneTenantForFreelancer` rather than trusting a caller-supplied tenant, which would be an IDOR
+wearing a parameter.
+
+A release still succeeds when no payout provider is configured, and says so (`payoutConfigured:false`).
+The ledger entry is the platform's own record either way, and refusing would strand every self-hosted
+deployment.
+
+**44 new tests** across `escrow.test.ts` (26 — every cell of the transition table, in both directions,
+because a permissive bug here does not throw, it lets one party rob the other) and `milestones.test.ts`
+(18 — that a refusal writes nothing at all, that money precedes status, that a lost race reports a
+conflict rather than success).
+
+### 3 · Three entries verified stale and deleted rather than re-fixed
+
+- **The guest account-gate tests** — the tests now expect `'Create a free account'` / `'Sign In'`,
+  which is exactly what the five catalogs carry. Verified against a full frontend run: 302 files,
+  3195 tests, 0 failures.
+- **Four red canvas checks** — all four are closed. `funnel` is registered (via `SHARED_OBJECT_KINDS`),
+  and the `rows` leak is closed structurally by the `NEVER_IN_CONTEXT` deny-list in
+  `creationObjectContext.ts`, applied to the ASSEMBLED context list so a vocabulary may declare `rows`
+  and the snapshot boundary still holds.
+- **Publishing objects have no approval gate** — `lib/canvasApprovalGate.ts` ships it, with
+  `emailCampaign.send`, `socialCampaign.publish` and `website.publish` in `GATED_ACTIONS`. Already
+  recorded in this file; the ROADMAP copy was a duplicate.
+
+**Validation:** `tsgo --noEmit` clean in `api/`; 62 new tests green; full frontend suite green
+(302 files / 3195 tests).
+
 ## ✅ RESOLVED 2026-08-19 — The canvas could build anything and sell none of it
 
 **The report** (ROADMAP, "Canvas — the sell motion", added 2026-08-13): nine gaps from a
