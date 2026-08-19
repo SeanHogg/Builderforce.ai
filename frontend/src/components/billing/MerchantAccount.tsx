@@ -1,4 +1,7 @@
-'use client';
+// No 'use client' directive: `BillingClient.tsx` is the only thing that renders
+// this and already carries one, so the boundary genuinely begins there. A second
+// directive downstream of an established boundary changes nothing except the
+// architecture ratchet's count.
 
 /**
  * THE "get paid" surface — the tenant's own merchant account (FO-C4).

@@ -51,7 +51,7 @@ const page: React.CSSProperties = {
   margin: '0 auto',
   padding: 'clamp(20px, 5vw, 48px)',
   color: 'var(--text-primary, #111827)',
-  background: 'var(--bg-page, transparent)',
+  background: 'var(--surface-page, #ffffff)',
 };
 
 const card: React.CSSProperties = {
@@ -222,8 +222,8 @@ export function PublicInvoice({ reference }: PublicInvoiceProps) {
               display: 'inline-block',
               padding: '10px 18px',
               borderRadius: 'var(--radius-md, 8px)',
-              background: 'var(--accent-strong, #2563eb)',
-              color: 'var(--accent-contrast, #ffffff)',
+              background: 'var(--accent, #2563eb)',
+              color: 'var(--text-on-accent, #ffffff)',
               fontWeight: 600,
               textDecoration: 'none',
             }}

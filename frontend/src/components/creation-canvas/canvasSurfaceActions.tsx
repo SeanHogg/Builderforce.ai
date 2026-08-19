@@ -1,4 +1,7 @@
-'use client';
+// No 'use client' directive, for the reason `CanvasAppSurface.tsx`,
+// `CanvasCommandBar.tsx` and `CanvasSessionActions.tsx` each state at the top of
+// themselves: every importer sits inside the `CreationCanvas` client boundary
+// already, so the directive marks nothing that has not already begun.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 

@@ -2,6 +2,16 @@
 /**
  * Frontend architecture ratchets. Counts and sets that may shrink but not grow.
  *
+ * `oversizedProductionFiles` +2 (2026-08-19) — `lib/founderObjects.ts` (1162) and
+ * `lib/founderOpsApi.ts` (1007), the founder-operations pass. Both are the shape
+ * `creationObjectRegistry.ts` and `workflow-builder/nodeKinds.ts` were allowlisted
+ * for two entries down: a self-documented single source of truth whose whole value
+ * is that there is one of it. `founderObjects.ts` is the spec registry every founder
+ * card is DECLARED in — splitting it by domain would put `invoice` and `bill` in
+ * different files and make "which kinds exist" two greps. `founderOpsApi.ts` is the
+ * one typed client for the founder-ops routes, and the reason no component embeds a
+ * fetch. Splitting either would fight the DRY rule it exists to serve.
+ *
  * The baseline lives in `.frontend-architecture-baseline.json`, which is data
  * and therefore has nowhere to put a reason. So a raise is justified HERE, in
  * prose, and a raise with no entry below is a raise nobody argued for:
