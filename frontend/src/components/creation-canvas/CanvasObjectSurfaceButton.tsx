@@ -23,10 +23,10 @@ import type { CreationNodeData } from './types';
  * name is what changes. Three buttons would be three places to add a fourth runtime to.
  *
  * ── WHY IT IS A GLYPH AND NOT A WORD ─────────────────────────────────────────────
- * It renders into `.inspectorHeaderActions`, which is a row of 25×25 icon slots beside
- * the expand and close buttons. It used to draw its LABEL there — "Open the site" in a
- * 25px box — which overflowed the slot in every direction and printed itself across the
- * panel title, the close button and the tab strip underneath. It is a glyph now, from the
+ * It renders into `.anchoredPanelHeader`, which is a row of 24px icon slots beside the
+ * widen and close buttons. It used to draw its LABEL there — "Open the site" in a 24px
+ * box — which overflowed the slot in every direction and printed itself across the panel
+ * title, the close button and the tab strip underneath. It is a glyph now, from the
  * shared surface icon table, and the words survive as its accessible name and its
  * tooltip, so nothing is lost to a screen reader or to a hover.
  */
@@ -34,10 +34,10 @@ import type { CreationNodeData } from './types';
 export interface CanvasObjectSurfaceButtonProps {
   data: CreationNodeData;
   onOpen: (surface: CanvasSurfaceId) => void;
-  /** No class of its own by default: the chrome comes from `.inspectorHeaderActions
-   *  button`, so this and the expand/close buttons beside it read as one row of slots.
-   *  The card header — its OTHER caller — has no such ancestor rule and passes its own
-   *  icon-slot class instead. */
+  /** No class of its own by default: the chrome comes from `.anchoredPanelHeader button`,
+   *  so this and the widen/close buttons beside it read as one row of slots. The card
+   *  header — its OTHER caller — has no such ancestor rule and passes its own icon-slot
+   *  class instead. */
   className?: string;
 }
 

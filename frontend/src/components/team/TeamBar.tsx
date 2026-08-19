@@ -24,7 +24,7 @@
  * caller would have had to compute.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
@@ -37,7 +37,7 @@ import {
   serializeTeammate,
   type TeammatePayload,
 } from '@/lib/team/teammate';
-import { ButtonLink } from '@/components/ui';
+import { AnchoredPopover, ButtonLink } from '@/components/ui';
 import { isStageRoute } from '@/lib/workbenchPolicy';
 import styles from './TeamBar.module.css';
 
@@ -132,6 +132,8 @@ export function TeamBar({ variant = 'band' }: TeamBarProps) {
   const { members, loading } = useTeamRoster();
   const pathname = usePathname() || '';
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const moreRef = useRef<HTMLButtonElement | null>(null);
+  const closeOverflow = useCallback(() => setOverflowOpen(false), []);
 
   // Nothing to show and nothing to explain yet — the bar appears with its data
   // rather than reserving an empty strip of chrome.
@@ -167,16 +169,38 @@ export function TeamBar({ variant = 'band' }: TeamBarProps) {
           {/* Not a link and not a truncation: it opens the rest as the SAME chips, so a
               seat that did not fit is one press away rather than unreachable. */}
           <button
+            ref={moreRef}
             type="button"
             className={styles.compactMore}
             aria-expanded={overflowOpen}
+            aria-haspopup="true"
             aria-label={t('moreSeats', { count: rest.length })}
             title={t('moreSeats', { count: rest.length })}
             onClick={() => setOverflowOpen((open) => !open)}
           >{`+${rest.length}`}</button>
-          {overflowOpen && <div className={styles.compactOverflow} role="group" aria-label={t('moreSeats', { count: rest.length })}>
+          {/* PORTALLED, not absolutely positioned inside the strip. This strip lives in the
+              canvas command bar — a `z-index:20` floating card — and the panel opens upward
+              into the band the prompt composer (`z-index:21`) occupies. Nested inside, no
+              z-index could lift it out of the bar's stacking context, so the panel was drawn
+              and then painted over: pressing `+6` looked like it did nothing. The layer now
+              places itself against the viewport, above every float on the board.
+              `above` because the bar is at the bottom of the window. */}
+          <AnchoredPopover
+            open={overflowOpen}
+            anchorRef={moreRef}
+            onDismiss={closeOverflow}
+            placement="above"
+            align="end"
+            gap={10}
+            className={styles.compactOverflow}
+            role="group"
+            aria-label={t('moreSeats', { count: rest.length })}
+            /* Joining a teammate is what this panel is FOR, so it closes on the way out
+               rather than sitting over the board the seat was just dropped onto. */
+            onClick={closeOverflow}
+          >
             {rest.map((member) => <TeammateChip key={member.id} member={member} locallyAvailable />)}
-          </div>}
+          </AnchoredPopover>
         </>}
       </div>
     );

@@ -59,6 +59,11 @@ vi.mock('@xyflow/react', async () => {
     useEdgesState: (initial: unknown[]) => { const [edges, setEdges] = React.useState(initial); return [edges, setEdges, inert] as const; },
     addEdge: (edge: unknown, edges: unknown[]) => [...edges, edge],
     Background: inert,
+    // The board now draws remote cursors inside the viewport (`RemoteCursors`),
+    // so the mock has to offer the portal — rendering children in place is all a
+    // board test needs from it, and omitting it would crash any test that gives
+    // the canvas a collaborator with a live pointer.
+    ViewportPortal: ({ children }: { children?: React.ReactNode }) => React.createElement('div', { 'data-testid': 'viewport-portal' }, children),
     Controls: ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children),
     ControlButton: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => React.createElement('button', props, children),
     MiniMap: inert, Handle: inert, NodeResizer: inert,
@@ -669,32 +674,33 @@ describe('CreationCanvas', () => {
     expect(screen.queryByText('Maturity')).not.toBeInTheDocument();
   });
 
-  it('expands, restores, and keyboard-resizes the details panel', () => {
-    render(<CreationCanvas sessionId="inspector-resize-test" persistence="local" />);
+  /**
+   * The object's settings are never somewhere else. The panel that opens beside a card
+   * WIDENS to hold the whole inspector and narrows back, and the inspector is inside it
+   * both ways — there is no rail on the far side of the board to be sent to any more.
+   */
+  it('widens the anchored panel into the whole inspector and narrows it back', () => {
+    render(<CreationCanvas sessionId="inspector-width-test" persistence="local" />);
     fireEvent.click(screen.getByRole('button', { name: 'Project' }));
 
-    const inspector = screen.getByRole('complementary', { name: 'Details panel' });
-    const resizeHandle = screen.getByRole('separator', { name: 'Resize details panel' });
-    expect(inspector).toHaveStyle({ '--inspector-width': '270px' });
+    // A palette add opens the panel wide: adding an object is a request to configure it.
+    const panel = screen.getByRole('dialog', { name: /Everything/ });
+    expect(within(panel).getByRole('complementary', { name: 'Details panel' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand details panel' }));
-    expect(inspector).toHaveStyle({ '--inspector-width': '520px' });
-    expect(localStorage.getItem('builderforce:create:inspector-width')).toBe('520');
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the short panel' }));
+    expect(screen.queryByRole('complementary', { name: 'Details panel' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: /Settings/ })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Restore details panel width' }));
-    expect(inspector).toHaveStyle({ '--inspector-width': '270px' });
-
-    fireEvent.keyDown(resizeHandle, { key: 'ArrowLeft' });
-    expect(inspector).toHaveStyle({ '--inspector-width': '290px' });
-    expect(resizeHandle).toHaveAttribute('aria-valuenow', '290');
+    fireEvent.click(screen.getByRole('button', { name: 'Show everything about this object' }));
+    expect(screen.getByRole('complementary', { name: 'Details panel' })).toBeInTheDocument();
   });
 
   it('renders agent model, instructions, tools, and autonomy changes live', () => {
     render(<CreationCanvas sessionId="agent-settings-test" persistence="local" />);
-    // Selecting a card opens the panel anchored to it now; these fields are
-    // the full inspector's, one press further in.
+    // Selecting a card opens the panel anchored to it now; these fields are on the
+    // WIDE reading of that same panel, one press further in.
     fireEvent.click(screen.getAllByText('Campaign Strategist')[0]!);
-    fireEvent.click(screen.getByRole('button', { name: 'Open the full inspector' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show everything about this object' }));
 
     // Scoped to the `select`, exactly as the "Research" note below is scoped to the
     // agent card: the data-science vocabulary registered a `model` OBJECT KIND, so
@@ -758,7 +764,7 @@ describe('CreationCanvas', () => {
   it('renders workflow target and approval changes live', () => {
     render(<CreationCanvas sessionId="workflow-settings-test" persistence="local" />);
     fireEvent.click(screen.getByText('Fall campaign workflow'));
-    fireEvent.click(screen.getByRole('button', { name: 'Open the full inspector' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show everything about this object' }));
 
     fireEvent.change(screen.getByLabelText('Execution target'), { target: { value: 'campaign-strategist' } });
     fireEvent.change(screen.getByLabelText('Approval mode'), { target: { value: 'autonomous' } });
@@ -770,7 +776,7 @@ describe('CreationCanvas', () => {
   it('renders dashboard range and refresh changes live', () => {
     render(<CreationCanvas sessionId="dashboard-settings-test" persistence="local" />);
     fireEvent.click(screen.getByText('Campaign forecast'));
-    fireEvent.click(screen.getByRole('button', { name: 'Open the full inspector' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show everything about this object' }));
 
     fireEvent.change(screen.getByLabelText('Date range'), { target: { value: 'qtd' } });
     expect(screen.getAllByText('Quarter to date').length).toBeGreaterThan(1);
@@ -805,7 +811,7 @@ describe('CreationCanvas', () => {
   it('renders staff and task inspector edits live on their widgets', () => {
     render(<CreationCanvas sessionId="people-work-settings-test" persistence="local" />);
     fireEvent.click(screen.getByText('Sarah'));
-    fireEvent.click(screen.getByRole('button', { name: 'Open the full inspector' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show everything about this object' }));
     fireEvent.change(screen.getByDisplayValue('Marketing'), { target: { value: 'Product lead' } });
     fireEvent.change(screen.getByLabelText('Current focus'), { target: { value: 'Validate the launch scope.' } });
     expect(screen.getByText('Product lead')).toBeInTheDocument();
@@ -1185,7 +1191,7 @@ describe('CreationCanvas', () => {
   it('edits and runs a canonical workflow in an isolated Canvas focus editor', () => {
     render(<CreationCanvas sessionId="workflow-focus-test" persistence="local" />);
     fireEvent.click(screen.getByText('Fall campaign workflow'));
-    fireEvent.click(screen.getByRole('button', { name: 'Open the full inspector' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show everything about this object' }));
     fireEvent.click(screen.getByRole('button', { name: 'Edit Workflow on Canvas' }));
 
     expect(screen.getByRole('dialog', { name: 'Workflow focus editor' })).toBeInTheDocument();
@@ -1297,7 +1303,7 @@ describe('CreationCanvas', () => {
   it('resizes website viewport presets and renders supporting copy as Markdown', () => {
     render(<CreationCanvas sessionId="website-responsive-test" persistence="local" />);
     fireEvent.click(screen.getAllByText('Campaign landing page')[0]!);
-    fireEvent.click(screen.getByRole('button', { name: 'Open the full inspector' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show everything about this object' }));
     fireEvent.change(screen.getByLabelText('Supporting copy'), { target: { value: '**Secure banking** with transparent pricing.' } });
     expect(screen.getByText('Secure banking').tagName).toBe('STRONG');
     fireEvent.change(screen.getByLabelText('Viewport'), { target: { value: 'mobile' } });

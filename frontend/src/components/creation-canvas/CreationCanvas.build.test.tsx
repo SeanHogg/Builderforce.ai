@@ -40,6 +40,11 @@ vi.mock('@xyflow/react', async () => {
     useEdgesState: (initial: unknown[]) => { const [edges, setEdges] = React.useState(initial); return [edges, setEdges, inert] as const; },
     addEdge: (edge: unknown, edges: unknown[]) => [...edges, edge],
     Background: inert,
+    // The board now draws remote cursors inside the viewport (`RemoteCursors`),
+    // so the mock has to offer the portal — rendering children in place is all a
+    // board test needs from it, and omitting it would crash any test that gives
+    // the canvas a collaborator with a live pointer.
+    ViewportPortal: ({ children }: { children?: React.ReactNode }) => React.createElement('div', { 'data-testid': 'viewport-portal' }, children),
     Controls: ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children),
     ControlButton: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => React.createElement('button', props, children),
     MiniMap: inert, Handle: inert, NodeResizer: inert,

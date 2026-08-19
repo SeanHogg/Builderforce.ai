@@ -4,6 +4,7 @@ export type IconName =
   | 'activity' | 'admin' | 'alert' | 'apps' | 'arrow-up-right' | 'automation'
   | 'attachment' | 'billing' | 'brain' | 'briefcase' | 'calendar' | 'camera' | 'canvas'
   | 'check' | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'clock' | 'close' | 'code' | 'copy' | 'document' | 'edit' | 'external-link'
+  | 'expand-horizontal' | 'collapse-horizontal'
   | 'download' | 'flag' | 'folder' | 'growth' | 'heart' | 'home' | 'image' | 'info' | 'insights' | 'key' | 'knowledge'
   | 'link' | 'lock' | 'mail' | 'megaphone' | 'menu' | 'message' | 'mic' | 'mobile'
   | 'monitor' | 'more-horizontal' | 'pause' | 'people' | 'person' | 'pin' | 'play' | 'plus' | 'project' | 'quality' | 'search'
@@ -85,6 +86,11 @@ const PATHS: Record<IconName, ReactNode> = {
   download: <><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 20h16"/></>,
   edit: <><path d="m14.5 5.5 4 4L8 20H4v-4L14.5 5.5ZM12.5 7.5l4 4"/></>,
   'external-link': <><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 13v6H5V6h6"/></>,
+  /* Widen / narrow a panel in place. Two arrows pushing a pair of walls apart, and the
+     same pair pulling them together — the only pictogram people already read as "make
+     this wider" without a label. */
+  'expand-horizontal': <><path d="M4 5v14M20 5v14"/><path d="M8 12h8M11 9l-3 3 3 3M13 9l3 3-3 3"/></>,
+  'collapse-horizontal': <><path d="M4 5v14M20 5v14"/><path d="M6 12h5M13 12h5M8 9l3 3-3 3M16 9l-3 3 3 3"/></>,
   flag: <><path d="M5 21V4M5 5h12l-2 4 2 4H5"/></>,
   folder: <path d="M3 6h7l2 2h9v11H3V6Z"/>,
   growth: <><path d="M4 13.5v-3l14-5v13l-14-5Z"/><path d="M8 15v4h4v-2.5M18 10a3 3 0 0 1 0 4"/></>,

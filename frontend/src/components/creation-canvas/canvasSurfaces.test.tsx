@@ -291,10 +291,10 @@ describe('the chat surface on the canvas', () => {
 
     // Adding selects, which is what opens the details panel the control lives in.
     // The seeded board's own cards draw the SAME control on their own header now
-    // (it is no longer inspector-only), so this scopes to the panel deliberately.
+    // (it is no longer panel-only), so this scopes to the panel deliberately.
     fireEvent.click(screen.getByTestId('canvas-palette-resume'));
-    const inspector = screen.getByRole('complementary', { name: 'Details panel' });
-    const open = within(inspector).getByTestId('open-page-surface');
+    const panel = screen.getByRole('dialog', { name: /Everything/ });
+    const open = within(panel).getByTestId('open-page-surface');
     expect(open).toHaveAccessibleName('Open as a page');
 
     fireEvent.click(open);
@@ -317,14 +317,14 @@ describe('the chat surface on the canvas', () => {
   it('offers no full-size surface for a kind whose card is the whole object', () => {
     render(<CreationCanvas sessionId="surface-no-open-test" persistence="local" />);
     fireEvent.click(screen.getByTestId('canvas-palette-task'));
-    // Scoped to the task's OWN details panel and its OWN card — other seeded
+    // Scoped to the task's OWN object panel and its OWN card — other seeded
     // objects on this board (a website among them) draw this control on their
     // own header now, which is not what this assertion is about.
-    const inspector = screen.getByRole('complementary', { name: 'Details panel' });
-    expect(within(inspector).queryByTestId('open-page-surface')).not.toBeInTheDocument();
-    expect(within(inspector).queryByTestId('open-play-surface')).not.toBeInTheDocument();
-    expect(within(inspector).queryByTestId('open-site-surface')).not.toBeInTheDocument();
-    expect(within(inspector).queryByTestId('open-timeline-surface')).not.toBeInTheDocument();
+    const panel = screen.getByRole('dialog', { name: /Everything/ });
+    expect(within(panel).queryByTestId('open-page-surface')).not.toBeInTheDocument();
+    expect(within(panel).queryByTestId('open-play-surface')).not.toBeInTheDocument();
+    expect(within(panel).queryByTestId('open-site-surface')).not.toBeInTheDocument();
+    expect(within(panel).queryByTestId('open-timeline-surface')).not.toBeInTheDocument();
     const taskCard = screen.getByTestId('canvas-node-task');
     expect(within(taskCard).queryByTestId('open-page-surface')).not.toBeInTheDocument();
     expect(within(taskCard).queryByTestId('open-play-surface')).not.toBeInTheDocument();
@@ -341,11 +341,11 @@ describe('the chat surface on the canvas', () => {
     render(<CreationCanvas sessionId="surface-site-open-test" persistence="local" />);
     const board = () => document.querySelector<HTMLElement>('[data-view]')!;
 
-    // Scoped to the details panel — the seeded board already carries its own
+    // Scoped to the object panel — the seeded board already carries its own
     // website card, which draws this same control on its own header now.
     fireEvent.click(screen.getByTestId('canvas-palette-website'));
-    const inspector = screen.getByRole('complementary', { name: 'Details panel' });
-    const open = within(inspector).getByTestId('open-site-surface');
+    const panel = screen.getByRole('dialog', { name: /Everything/ });
+    const open = within(panel).getByTestId('open-site-surface');
     expect(open).toHaveAccessibleName('Open the site');
 
     fireEvent.click(open);
@@ -363,7 +363,7 @@ describe('the chat surface on the canvas', () => {
     // preview and any export still draw the site the author designed.
     fireEvent.click(within(surface).getByRole('button', { name: 'Back to the board' }));
     expect(board()).toHaveAttribute('data-view', 'graph');
-    fireEvent.click(within(screen.getByRole('complementary', { name: 'Details panel' })).getByTestId('open-site-surface'));
+    fireEvent.click(within(screen.getByRole('dialog', { name: /Everything/ })).getByTestId('open-site-surface'));
     expect(screen.getByTestId('canvas-site-surface').querySelector('[data-viewport]'))
       .toHaveAttribute('data-viewport', 'desktop');
   });

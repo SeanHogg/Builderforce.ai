@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { Select } from '@/components/Select';
-import { Button, Icon, Surface, TextField, type IconName } from '@/components/ui';
+import { AnchoredPopover, Button, Icon, Surface, TextField, type IconName } from '@/components/ui';
 import { useModalDismiss } from '@/hooks/useModalDismiss';
 import styles from './SessionManagementControls.module.css';
 
@@ -43,37 +43,21 @@ export function SessionManagementControls({ session, mergeCandidates = [], onRen
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [editor, setEditor] = useState<Editor>(null);
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useModalDismiss(editor !== null, () => setEditor(null));
 
+  // Placement and dismissal (outside press, Escape, reflow on scroll) belong to
+  // `AnchoredPopover`; this file only says WHEN the menu is open and WHAT is in it.
   const closeMenu = useCallback(() => setMenuOpen(false), []);
-  useEffect(() => {
-    if (!menuOpen) return;
-    const dismiss = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node) && !triggerRef.current?.contains(event.target as Node)) closeMenu();
-    };
-    const keyboard = (event: KeyboardEvent) => { if (event.key === 'Escape') closeMenu(); };
-    document.addEventListener('mousedown', dismiss);
-    document.addEventListener('keydown', keyboard);
-    return () => {
-      document.removeEventListener('mousedown', dismiss);
-      document.removeEventListener('keydown', keyboard);
-    };
-  }, [closeMenu, menuOpen]);
   useEffect(() => {
     if (!menuOpen) return;
     requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus());
   }, [menuOpen]);
 
-  const openMenu = () => {
-    const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) setMenuPosition({ top: rect.bottom + 4, left: Math.max(8, rect.right - 188) });
-    setMenuOpen(true);
-  };
+  const openMenu = () => setMenuOpen(true);
   const openEditor = (next: Exclude<Editor, null>) => {
     setValue(next === 'rename' ? session.title : next === 'move' ? session.folder ?? '' : mergeCandidates[0]?.id ?? '');
     setError('');
@@ -131,8 +115,7 @@ export function SessionManagementControls({ session, mergeCandidates = [], onRen
       <Button ref={triggerRef} type="button" variant="ghost" size="sm" className={styles.trigger} aria-label={t('actionsFor', { title: session.title })} aria-haspopup="menu" aria-expanded={menuOpen} onClick={() => menuOpen ? closeMenu() : openMenu()}>
         <Icon name="more-horizontal" size={18} />
       </Button>
-      {menuOpen && typeof document !== 'undefined' && createPortal(
-        <div ref={menuRef} role="menu" className={styles.menu} style={menuPosition} onKeyDown={(event) => {
+      <AnchoredPopover open={menuOpen} anchorRef={triggerRef} onDismiss={closeMenu} placement="auto" align="end" gap={4} layerRef={menuRef} role="menu" className={styles.menu} onKeyDown={(event) => {
           const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')];
           const current = items.indexOf(document.activeElement as HTMLButtonElement);
           const next = event.key === 'ArrowDown' ? (current + 1) % items.length : event.key === 'ArrowUp' ? (current - 1 + items.length) % items.length : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : -1;
@@ -142,9 +125,7 @@ export function SessionManagementControls({ session, mergeCandidates = [], onRen
             <Icon name={action.icon} size={16} />
             <span>{action.label}</span>
           </Button>)}
-        </div>,
-        document.body,
-      )}
+      </AnchoredPopover>
       {editor && typeof document !== 'undefined' && createPortal(
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby={`session-${editor}-title`} onMouseDown={(event) => { if (event.target === event.currentTarget) setEditor(null); }}>
           <Surface tone="raised" padding="md" className={styles.dialog}>

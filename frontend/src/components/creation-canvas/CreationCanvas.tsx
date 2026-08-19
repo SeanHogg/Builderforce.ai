@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type PointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties, type PointerEvent } from 'react';
 import dynamic from 'next/dynamic';
 import {
   addEdge,
@@ -26,7 +26,7 @@ import { canvasSurfaceDefinition, readCanvasSurface, writeCanvasSurface, type Ca
 import { canvasChromeShows, readCanvasBarCollapsed, writeCanvasBarCollapsed } from '@/lib/canvasChrome';
 import { canvasApp } from '@/lib/canvasApp';
 import { isTypingTarget } from '@/lib/keyboardTarget';
-import { canvasNodeMessages, canvasPersonOrigin, isCanvasPersonKind, type CanvasNodePanelId } from '@/lib/canvasNodeAffordances';
+import { canvasNodeMessages, canvasNodeSettingsPanel, canvasPersonOrigin, isCanvasPersonKind, type CanvasNodePanelId } from '@/lib/canvasNodeAffordances';
 import { memberAvatarClass, memberInitials } from './rosterAvatar';
 import {
   DEFAULT_CANVAS_PROMPT_PLACEMENT,
@@ -41,6 +41,7 @@ import { CanvasSurfaceRouter } from './CanvasSurfaceRouter';
 import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
 import { CanvasSessionPill } from './CanvasSessionPill';
+import { RemoteCursors } from './RemoteCursors';
 import { CanvasCommandBar } from './CanvasCommandBar';
 import { TeamBar } from '@/components/team/TeamBar';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
@@ -51,7 +52,6 @@ import { CanvasResumeEditor } from './CanvasResumeEditor';
 import { CanvasPlaySurface } from './CanvasPlaySurface';
 import { CanvasSiteSurface } from './CanvasSiteSurface';
 import { CanvasTimelineSurface } from './CanvasTimelineSurface';
-import { CanvasObjectSurfaceButton } from './CanvasObjectSurfaceButton';
 import { CanvasSurfaceProvider } from './canvasSurfaceContext';
 import { CanvasSurfaceActionsProvider } from './canvasSurfaceActions';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
@@ -91,6 +91,8 @@ import { answersComplete, defaultInput, questionIds, type ToolResult } from '@/l
 export const CREATION_CANVAS_TOUR = { sectionId: 'creation-canvas', version: 2 } as const;
 import { TEAMMATE_JOIN_EVENT, teammateFromDrag, type TeammatePayload } from '@/lib/team/teammate';
 import { useGuestRoom } from '@/lib/useGuestRoom';
+import { guestMediaTransport } from '@/lib/guestRoomApi';
+import { StartCallButton } from '@/components/live/StartCallButton';
 import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
 import {
   createGuestRoom, leaveGuestRoom, fetchGuestRoomCanvas, pushGuestRoomCanvas,
@@ -287,6 +289,7 @@ import {
   kindSettingsSellable,
 } from '@/lib/canvasKindSettings';
 import { SettingsFieldControl } from './SettingsFieldControl';
+import { TimingFields } from './TimingFields';
 import '@/lib/canvasKindSettings.people';
 import '@/lib/canvasKindSettings.simple';
 import '@/lib/canvasKindSettings.dispatch';
@@ -381,11 +384,18 @@ const GUIDED_TOUR_AUTHORING_SCHEMA = {
 } as const;
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
 const PALETTE_OPEN_STORAGE_KEY = 'builderforce:create:palette-open';
-const INSPECTOR_WIDTH_STORAGE_KEY = 'builderforce:create:inspector-width';
-const INSPECTOR_DEFAULT_WIDTH = 270;
-const INSPECTOR_MIN_WIDTH = 270;
-const INSPECTOR_WIDE_WIDTH = 520;
-const INSPECTOR_MAX_WIDTH = 720;
+/**
+ * The anchored panel's two widths.
+ *
+ * They live here because the ANCHOR has to be clamped against whichever one is in play
+ * (a card near the right edge must not open a 560px panel off the screen), and the same
+ * two numbers are declared in `.anchoredPanel` / `.anchoredPanel[data-expanded='true']`.
+ * There is no third width and no drag-resize: the panel used to be a rail you could size
+ * yourself, and a remembered rail width is meaningless for a thing that is anchored to a
+ * card wherever that card happens to be.
+ */
+const NODE_PANEL_WIDTH = 300;
+const NODE_PANEL_WIDE_WIDTH = 560;
 /** The air between the command bar and the prompt floating above it. The bar's HEIGHT is
  *  measured (see `useChromeSpace`); this is the only part of that band a number can
  *  honestly state, because it is a spacing decision rather than a fact about an element. */
@@ -963,29 +973,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   /**
-   * The full inspector rail is the ESCAPE HATCH now, not what clicking a card opens.
-   * Separate from `selectedId` on purpose: selection alone drives drag/copy/delete/frame
-   * exactly as it always has, and clicking a card opens the anchored `CanvasNodePanel`
-   * beside it instead. This tracks which node, if any, asked for the full rail — via the
-   * panel's "open full" button or an action that needs one of the inspector's specialized
-   * tabs (knowledge, test, evaluation, delivery) the anchored panel does not have.
+   * Which inspector section a wide panel was opened AT — the agent workbench, the test
+   * bench, the evaluation or the delivery checklist. Declared beside the panel state it
+   * belongs to rather than three hundred lines away, because the two are set together
+   * every time and read together every time.
    */
-  const [inspectorNodeId, setInspectorNodeId] = useState<string | null>(null);
-  /**
-   * While the full rail is open, it FOLLOWS selection rather than being left behind.
-   *
-   * Dozens of the inspector's own actions — deliver a mockup, visualize a dataset,
-   * compare projects, build a website with code, expand an Evermind pipeline — create
-   * a NEW object and select it, exactly the "just made something, look at it" moment
-   * the rail exists for. Requiring every one of those call sites to remember an extra
-   * `setInspectorNodeId` is the kind of thing one of them eventually forgets; this is
-   * the single place that keeps the rule instead. It does nothing while the rail is
-   * CLOSED (`current === null`): a plain click on a different card must still open
-   * only the anchored panel, never drag the full rail open behind it.
-   */
-  useEffect(() => {
-    setInspectorNodeId((current) => (current !== null && current !== selectedId ? selectedId : current));
-  }, [selectedId]);
+  const [inspectorFocus, setInspectorFocus] = useState<'knowledge' | 'test' | 'evaluation' | 'delivery' | null>(null);
   const [scopeMode, setScopeMode] = useState<'auto' | 'canvas' | 'selection' | 'connected' | 'frame'>('auto');
   const [connectionKind, setConnectionKind] = useState<CreationConnectionKind>('reference');
   const [title, setTitle] = useState('Untitled session');
@@ -1092,23 +1085,104 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * Flow's own maths and drifts the moment either changes. A fixed overlay anchored to
    * where the button actually is cannot drift, and both close on click-away anyway.
    */
-  const [nodePanel, setNodePanel] = useState<{ nodeId: string; panel: CanvasNodePanelId; anchor: { x: number; y: number } } | null>(null);
+  /**
+   * THE ONE PANEL, and how it is placed.
+   *
+   * `box` is the card's own screen rectangle, not a resolved anchor: the panel has two
+   * widths and the clamp that keeps it on screen depends on which one is showing, so the
+   * position is derived at render from the box rather than frozen when it opened.
+   * A `null` box means "read it off the card's element" — the board actions that open an
+   * object's inspector have a node id and no event to take a rectangle from.
+   *
+   * `panel` may be null for the same reason: an action that opens an object's whole
+   * inspector has no opinion about which SHORT panel it narrows back to, so the kind's
+   * own settings panel is chosen at render.
+   */
+  const [nodePanel, setNodePanel] = useState<{ nodeId: string; panel: CanvasNodePanelId | null; box: { top: number; right: number } | null; expanded: boolean } | null>(null);
   const [objectPicker, setObjectPicker] = useState<{ anchor: { x: number; y: number }; group?: CreationObjectGroup; fromNodeId?: string } | null>(null);
 
   /** Beside the badge, clamped so a card at the right edge does not open a panel off it. */
-  const anchorFrom = (rect: DOMRect, width: number) => ({
+  const anchorFrom = (rect: { top: number; right: number }, width: number) => ({
     x: Math.min(Math.max(12, rect.right + 12), Math.max(12, window.innerWidth - width - 12)),
     y: Math.min(Math.max(12, rect.top - 8), Math.max(12, window.innerHeight - 220)),
   });
 
+  const boxOf = (rect: DOMRect) => ({ top: rect.top, right: rect.right });
+
+  /**
+   * The card's box on screen, found through the card itself.
+   *
+   * The board actions that open an object's inspector — visualize a dataset, compare
+   * projects, expand a pipeline — have a node id and no event. A node's FLOW position
+   * would have to be projected through the viewport transform to become a screen box,
+   * which is a second copy of React Flow's own maths; its rendered element already is one.
+   * Null when the card has not painted yet (an object created in the same tick), and the
+   * render falls back to a sensible on-screen position until it has.
+   */
+  const nodeBoxOnScreen = useCallback((nodeId: string) => {
+    if (typeof document === 'undefined') return null;
+    const element = document.querySelector(`[data-node-id="${nodeId}"]`);
+    return element instanceof Element ? boxOf(element.getBoundingClientRect()) : null;
+  }, []);
+
+  /**
+   * Fills in the box for a panel that was opened without one.
+   *
+   * A LAYOUT effect and not a read during render: the card is often created in the same
+   * tick as the panel that describes it, so the element does not exist yet when the panel
+   * first renders. Measuring after paint is the only point at which the answer exists, and
+   * doing it here — rather than calling `getBoundingClientRect` from the render body —
+   * keeps the render a pure function of state. Until it resolves, the panel draws at the
+   * fallback position below, which is one frame.
+   */
+  useLayoutEffect(() => {
+    if (!nodePanel || nodePanel.box) return;
+    const box = nodeBoxOnScreen(nodePanel.nodeId);
+    if (!box) return;
+    setNodePanel((current) => (current && current.nodeId === nodePanel.nodeId && !current.box ? { ...current, box } : current));
+  }, [nodeBoxOnScreen, nodePanel]);
+
   const openNodePanel = useCallback((nodeId: string, panel: CanvasNodePanelId, rect: DOMRect) => {
     setObjectPicker(null);
-    setNodePanel({ nodeId, panel, anchor: anchorFrom(rect, 300) });
+    setNodePanel({ nodeId, panel, box: boxOf(rect), expanded: false });
   }, []);
+
+  /**
+   * "Show me everything about this object" — the same anchored panel, opened WIDE.
+   *
+   * This replaced `setInspectorNodeId`, which opened a separate full-height rail on the
+   * far side of the board. Every one of the eighteen board actions that used to reach for
+   * that rail lands here instead, so an object's values, its settings and its activity are
+   * always read beside the card they belong to.
+   */
+  const openNodeInspector = useCallback((nodeId: string, focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null = null, rect?: DOMRect) => {
+    setObjectPicker(null);
+    setInspectorFocus(focus);
+    setNodePanel({ nodeId, panel: null, box: rect ? boxOf(rect) : null, expanded: true });
+  }, []);
+
+  /**
+   * While the WIDE panel is open, it FOLLOWS selection rather than being left behind.
+   *
+   * Dozens of the inspector's own actions — deliver a mockup, visualize a dataset,
+   * compare projects, build a website with code, expand an Evermind pipeline — create
+   * a NEW object and select it, exactly the "just made something, look at it" moment
+   * the wide reading exists for. Requiring every one of those call sites to remember to
+   * retarget the panel is the kind of thing one of them eventually forgets; this is the
+   * single place that keeps the rule instead. It does nothing while the panel is COMPACT:
+   * a plain click on a different card opens that card's own short panel, which
+   * `onNodeClick` has already done by the time this runs.
+   */
+  useEffect(() => {
+    if (!selectedId) return;
+    setNodePanel((current) => (current && current.expanded && current.nodeId !== selectedId
+      ? { ...current, nodeId: selectedId, panel: null, box: null }
+      : current));
+  }, [selectedId]);
 
   const openInsertPicker = useCallback((nodeId: string, rect: DOMRect) => {
     setNodePanel(null);
-    setObjectPicker({ anchor: anchorFrom(rect, 400), fromNodeId: nodeId });
+    setObjectPicker({ anchor: anchorFrom(boxOf(rect), 400), fromNodeId: nodeId });
   }, []);
   /**
    * PRESENTATION AND FOLLOW ARE SHELL STATE NOW.
@@ -1443,7 +1517,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // ONE Brain surface: which side it is parked on, how wide, and whether the user
   // wants the step list. Read from storage after mount so SSR stays deterministic.
   const [brainDock, setBrainDock] = useState(DEFAULT_BRAIN_DOCK_PREFERENCES);
-  const [inspectorFocus, setInspectorFocus] = useState<'knowledge' | 'test' | 'evaluation' | 'delivery' | null>(null);
   const [outcomeMetricsOpen, setOutcomeMetricsOpen] = useState(false);
   const [outcomeMetrics, setOutcomeMetrics] = useState<CreationOutcomeMetrics | null>(null);
   const [outcomeMetricsLoading, setOutcomeMetricsLoading] = useState(false);
@@ -2218,6 +2291,28 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * keeping their own — and it is why a teammate who navigates away from the
    * board does not vanish from the call.
    */
+  /**
+   * A logged-out board that has started a shared free session IS a room — it has a
+   * guest room code and the guest media transport that `GuestRoomMeeting` has used
+   * since guest rooms shipped. Nothing on the canvas could reach it, so the free
+   * board was the one surface where people could work on the same thing and had no
+   * way to talk about it. Declaring the anchor is all it takes: `useCanvasLiveRoom`
+   * owns the decision and `StartCallButton` is the control.
+   */
+  const publishAnchor = liveSession?.publishAnchor;
+  useEffect(() => {
+    if (!publishAnchor) return undefined;
+    if (persistence !== 'local' || !inRoom || !roomCode) { publishAnchor(null); return undefined; }
+    publishAnchor({
+      roomKey: roomCode,
+      label: t('sharedCallLabel'),
+      tenantId: null,
+      participant: { name: guestName.current, ref: 'self' },
+      transport: guestMediaTransport,
+    });
+    return () => publishAnchor(null);
+  }, [inRoom, persistence, publishAnchor, roomCode, t]);
+
   const publishPresence = liveSession?.publishPresence;
   useEffect(() => {
     if (!publishPresence) return;
@@ -2332,17 +2427,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
   }, [cardsEditable, setNodes, syncSocialCampaign]);
 
-  const updateSelected = useCallback((patch: Partial<CreationNodeData>) => {
-    if (!selectedId) return;
-    updateNodeData(selectedId, patch);
-  }, [selectedId, updateNodeData]);
-
-  const updateWebsiteViewport = useCallback((viewport: 'desktop' | 'tablet' | 'mobile') => {
-    if (!selectedId || !canEdit || lockBlocked) return;
+  /* Takes the node it resizes rather than reading the selection: the panel that offers
+     this is anchored to ONE card, and "whichever card is selected" is exactly the
+     ambiguity anchoring the panel removed. */
+  const updateWebsiteViewport = useCallback((nodeId: string, viewport: 'desktop' | 'tablet' | 'mobile') => {
+    if (!canEdit || lockBlocked) return;
     const preset = viewport === 'mobile' ? { width: 340, height: 620 } : viewport === 'tablet' ? { width: 520, height: 560 } : { width: 720, height: 460 };
-    setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, style: { ...node.style, ...preset }, data: { ...node.data, viewport } } : node));
+    setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, style: { ...node.style, ...preset }, data: { ...node.data, viewport } } : node));
     setNotice(t('noticeViewportChanged', { viewport }));
-  }, [canEdit, lockBlocked, selectedId, setNodes]);
+  }, [canEdit, lockBlocked, setNodes]);
 
   // `clientMessageId` is annotated rather than inferred from the default:
   // `crypto.randomUUID()` is typed as the template literal `${string}-${string}…`
@@ -2654,9 +2747,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current, dashboard]);
     setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: dashboard.id, type: 'smoothstep', label: t('edgeVisualizes'), animated: true, data: { connectionKind: 'data' } }]);
     setSelectedId(dashboard.id);
-    setInspectorNodeId(dashboard.id);
+    openNodeInspector(dashboard.id);
     setNotice(t('datasetVisualizationAdded'));
-  }, [selectedNode, setEdges, setNodes, t]);
+  }, [openNodeInspector, selectedNode, setEdges, setNodes, t]);
 
   /**
    * "Plot on a map" — the direct counterpart to {@link visualizeDataset}.
@@ -2697,9 +2790,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current, map]);
     setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: map.id, type: 'smoothstep', label: t('edgePlots'), animated: true, data: { connectionKind: 'data' } }]);
     setSelectedId(map.id);
-    setInspectorNodeId(map.id);
+    openNodeInspector(map.id);
     setNotice(t('datasetMapAdded'));
-  }, [selectedNode, setEdges, setNodes, t]);
+  }, [openNodeInspector, selectedNode, setEdges, setNodes, t]);
 
   const profileDataset = useCallback((nodeId: string) => {
     const target = nodes.find((node) => node.id === nodeId);
@@ -2754,21 +2847,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
     setInspectorFocus(null); setSelectedId(node.id); if (!node.selected) setSelectedIds([node.id]);
     if (node.data.kind === 'chat') openBrainDock();
-    // Selecting a card opens the panel ANCHORED to it — the inspector rail is reached
-    // from there, not by clicking the card. A different card selected while the full
-    // rail is open for another one closes that rail rather than retargeting it: a
-    // person who clicked elsewhere asked to look at THAT card, not to keep editing the
-    // old one somewhere off-screen.
+    // Selecting a card opens the panel ANCHORED to it, SHORT. Everything else about the
+    // object is one press away in the same panel, which is the whole reason the short
+    // reading can afford to be short.
     //
-    // `resume` skips the anchored panel and opens the rail directly. The card now shows
-    // only the rendered document (no fields left to put in a compact panel at all — see
-    // `ResumeInspectorSection`), so the anchored panel would open on every click and have
-    // nothing in it but an "open full" link to the very rail this goes to in one step.
-    if (node.data.kind === 'resume') { setInspectorNodeId(node.id); return; }
+    // `resume` opens it WIDE instead. The card now shows only the rendered document (no
+    // fields left to put in a compact panel at all — see `ResumeInspectorSection`), so
+    // the short reading would open on every click with nothing in it but the control
+    // that widens it.
+    if (node.data.kind === 'resume') { openNodeInspector(node.id, null, event.currentTarget instanceof Element ? event.currentTarget.getBoundingClientRect() : undefined); return; }
     if (node.data.kind !== 'chat' && event.currentTarget instanceof Element) {
       openNodePanel(node.id, 'config', event.currentTarget.getBoundingClientRect());
     }
-  }, [openBrainDock, openNodePanel]);
+  }, [openBrainDock, openNodeInspector, openNodePanel]);
   // XYFlow subscribes to this callback through its Zustand store. An inline
   // callback is a new subscription every render; immediately writing a fresh
   // `[]` back to React from that subscription can create an update-depth loop
@@ -2920,13 +3011,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current, node]);
     setSelectedId(node.id); setSelectedIds([node.id]);
     // A deliberate "add a Project/Task/Website" from the palette is a request to
-    // configure it, not a glance at an existing card — the full inspector is the
-    // helpful answer here, where the anchored panel is for the OTHER case (looking
-    // at something already on the board).
-    if (node.data.kind !== 'chat') setInspectorNodeId(node.id);
+    // configure it, not a glance at an existing card — so the panel opens WIDE here,
+    // where a click on an existing card opens the short one.
+    if (node.data.kind !== 'chat') openNodeInspector(node.id);
     setNotice(t('objectAdded', { title: node.data.title }));
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
-  }, [canEdit, localizedTourDefaults, sessionId, setNodes, t, timeline]);
+  }, [canEdit, localizedTourDefaults, openNodeInspector, sessionId, setNodes, t, timeline]);
 
   /**
    * What choosing an object in the picker DOES.
@@ -2948,10 +3038,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current, node]);
     setEdges((current) => addEdge({ id: crypto.randomUUID(), source: fromNodeId, target: node.id, type: connectionKind }, current));
     setSelectedId(node.id); setSelectedIds([node.id]);
-    if (node.data.kind !== 'chat') setInspectorNodeId(node.id);
+    if (node.data.kind !== 'chat') openNodeInspector(node.id);
     setNotice(t('objectAdded', { title: node.data.title }));
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
-  }, [addAtCenter, canEdit, connectionKind, nodes, sessionId, setEdges, setNodes, t]);
+  }, [addAtCenter, canEdit, connectionKind, nodes, openNodeInspector, sessionId, setEdges, setNodes, t]);
 
   /**
    * ONE credential check in front of every social tool.
@@ -3477,11 +3567,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }), comparison]);
       setEdges((current) => [...current, ...projectNodes.map((project) => ({ id: crypto.randomUUID(), source: project.id, target: comparison.id, label: 'compared in', type: 'smoothstep', animated: true }))]);
       setSelectedId(comparison.id);
-      setInspectorNodeId(comparison.id);
+      openNodeInspector(comparison.id);
       setNotice(t('noticeComparisonAdded'));
       trackActivity('creation_projects_compared', { sessionId, metadata: { clientSurface: canvasSurface(), projectCount: projectNodes.length } });
     }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeCompareProjectsFailed')));
-  }, [nodes, persistence, requireAccount, setEdges, setNodes]);
+  }, [nodes, openNodeInspector, persistence, requireAccount, setEdges, setNodes]);
 
   const loadProjectQuality = useCallback(() => {
     const project = selectedNode?.data.kind === 'project' ? selectedNode : null;
@@ -3517,7 +3607,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         : [...current.map((node) => node.id === project.id ? { ...node, data: { ...node.data, ...qualityData } } : node), qualityNode]);
       if (!existing) setEdges((current) => [...current, { id: crypto.randomUUID(), source: project.id, target: qualityNode.id, label: 'quality evidence', type: 'smoothstep', animated: true }]);
       setSelectedId(qualityNode.id);
-      setInspectorNodeId(qualityNode.id);
+      openNodeInspector(qualityNode.id);
       setNotice(diagnostics.length ? `${diagnostics.length} quality diagnostics added to the canvas` : t('noticeQualityCardAdded'));
       void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'validated', projectId: Number(projectId), artifactId: project.id, durationMs: performance.now() - validationStartedAt, metricKey: 'validation_pass', metricValue: Number(quality.result.score ?? 0) >= 70 ? 1 : 0, unit: 'boolean', metadata: { score: quality.result.score, diagnosticCount: diagnostics.length } }).catch(() => undefined);
     }).catch((error) => {
@@ -3547,7 +3637,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNodes((current) => [...current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status } } : node), task]);
       setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: taskId, type: 'smoothstep', animated: true }]);
       setSelectedId(taskId);
-      setInspectorNodeId(taskId);
+      openNodeInspector(taskId);
       return taskId;
     };
     if (persistence === 'server' && Number.isInteger(projectId) && projectId > 0) {
@@ -3642,7 +3732,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const existing = nodes.filter((node) => node.data.modelPipelineFor === selectedNode.id);
     if (existing.length) {
       const start = existing.find((node) => node.data.pipelineStep === 1) ?? existing[0]!;
-      setSelectedId(start.id); setSelectedIds([start.id]); setInspectorNodeId(start.id);
+      setSelectedId(start.id); setSelectedIds([start.id]); openNodeInspector(start.id);
       window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...existing].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
       setNotice(t('noticeDatasetStepOne'));
       return;
@@ -3669,10 +3759,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     ];
     setNodes((current) => [...current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, pipelineExpanded: true } } : node), ...created]);
     setEdges((current) => [...current, ...sequence.map((edge) => ({ ...edge, id: crypto.randomUUID(), type: 'smoothstep', animated: true, markerEnd: { type: MarkerType.ArrowClosed } }))]);
-    setSelectedId(dataset!.id); setSelectedIds([dataset!.id]); setInspectorNodeId(dataset!.id);
+    setSelectedId(dataset!.id); setSelectedIds([dataset!.id]); openNodeInspector(dataset!.id);
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...created].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
     setNotice(t('noticeDatasetStepOne'));
-  }, [nodes, selectedNode, setEdges, setNodes]);
+  }, [nodes, openNodeInspector, selectedNode, setEdges, setNodes]);
 
   const openEvermindTraining = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'evermind') return;
@@ -3773,7 +3863,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const page = newNode('browser', point);
         page.data = { ...page.data, title: webPageHost(dropped), url: dropped, status: '' };
         setNodes((current) => [...current, page]);
-        setSelectedId(page.id); setSelectedIds([page.id]); setInspectorNodeId(page.id);
+        setSelectedId(page.id); setSelectedIds([page.id]); openNodeInspector(page.id);
         return;
       }
     }
@@ -3781,8 +3871,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const node = newNode(kind, point);
     if (kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
     setNodes((current) => [...current, node]);
-    setSelectedId(node.id); setSelectedIds([node.id]); setInspectorNodeId(node.id);
-  }, [addFilesToCanvas, canEdit, localizedTourDefaults, setNodes, t]);
+    setSelectedId(node.id); setSelectedIds([node.id]); openNodeInspector(node.id);
+  }, [addFilesToCanvas, canEdit, localizedTourDefaults, openNodeInspector, setNodes, t]);
 
   /**
    * Convert an object into a diagram, in any notation that can be written.
@@ -8260,7 +8350,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const lab: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1020, y: 230 }, data: { ...createDefaultCreationData('code'), title: 'LLM capstone lab', status: 'Practice workspace', language: 'python', code: '# Build your tokenizer, model, and training loop here\n' } };
         setNodes((current) => [...current, course, lab]);
         setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: course.id, target: lab.id, type: 'smoothstep', label: 'practice', animated: true, data: { connectionKind: 'reference' } }], brain?.id || '', [course.id], 'Created with Brain'));
-        setSelectedId(course.id); setInspectorNodeId(course.id); setThinking(false); clearComposer(); setNotice(t('noticeLlmCourseAdded')); return;
+        setSelectedId(course.id); openNodeInspector(course.id); setThinking(false); clearComposer(); setNotice(t('noticeLlmCourseAdded')); return;
       }
       if (request.includes('roadmap')) {
         const project = nodes.find((node) => node.data.kind === 'project');
@@ -8269,7 +8359,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const slides: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 315 }, data: { kind: 'slides', title: request.includes('executive') ? 'Executive team presentation' : 'Sales presentation', status: 'AI generated' } };
         setNodes((current) => [...current, roadmap, slides]);
         setEdges((current) => associateBrainWithArtifacts([...current, ...(project ? [{ id: crypto.randomUUID(), source: project.id, target: roadmap.id, type: 'smoothstep' as const }] : []), { id: crypto.randomUUID(), source: roadmap.id, target: slides.id, type: 'smoothstep', label: 'presents', animated: true }], brain?.id || '', [roadmap.id], 'Created with Brain'));
-        setSelectedId(roadmap.id); setInspectorNodeId(roadmap.id); setThinking(false); clearComposer(); setNotice(t('noticeRoadmapAdded')); return;
+        setSelectedId(roadmap.id); openNodeInspector(roadmap.id); setThinking(false); clearComposer(); setNotice(t('noticeRoadmapAdded')); return;
       }
       if (request.includes('top 10') || request.includes('requested features')) {
         const brain = nodes.find((node) => node.data.kind === 'chat');
@@ -8277,7 +8367,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const mockups: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 300 }, data: { kind: 'mockupSet', title: 'Top 10 feature mockups', status: 'Ready for review', subtitle: 'Ten linked high-fidelity concepts generated from user feedback.', items: ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'], sources: [{ label: 'Customer feedback evidence', resource: '/api/feedback' }] } };
         setNodes((current) => [...current, summary, mockups]);
         setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: summary.id, target: mockups.id, type: 'smoothstep', animated: true }], brain?.id || '', [summary.id], 'Created with Brain'));
-        setSelectedId(mockups.id); setInspectorNodeId(mockups.id); setThinking(false); clearComposer(); setNotice(t('noticeFeatureSummaryAdded')); return;
+        setSelectedId(mockups.id); openNodeInspector(mockups.id); setThinking(false); clearComposer(); setNotice(t('noticeFeatureSummaryAdded')); return;
       }
       const evaluationId = crypto.randomUUID();
       setNodes((current) => [...current, { id: evaluationId, type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'evaluation', title: 'Canvas evaluation', status: 'AI evaluation' } }]);
@@ -8286,12 +8376,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const brain = nodes.find((node) => node.data.kind === 'chat');
       setEdges((current) => associateBrainWithArtifacts([...current, ...[workflow, website].filter((node): node is CreationFlowNode => !!node).map((node) => ({ id: crypto.randomUUID(), source: node.id, target: evaluationId, type: 'smoothstep', animated: true }))], brain?.id || '', [evaluationId], 'Created with Brain'));
       setSelectedId(evaluationId);
-      setInspectorNodeId(evaluationId);
+      openNodeInspector(evaluationId);
       setThinking(false);
       clearComposer();
       setNotice(t('noticeEvaluationAdded'));
     }, 850);
-  }, [appendTimeline, canvasActions, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, persistence, prompt, recordBrainCompletion, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, t, thinking, timeline, title]);
+  }, [appendTimeline, canvasActions, confirm, currentUserId, describeTurnError, disableBrainModel, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, openNodeInspector, persistence, prompt, recordBrainCompletion, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, t, thinking, timeline, title]);
 
   useEffect(() => {
     if (!hydrated.current || modelComparisonStarted.current || comparisonModelIds.length < 2) return;
@@ -9788,11 +9878,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
     creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} onOpenSurface={(nodeId, surface) => setSurface(surface, nodeId)} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
-      // Asking for a specific tab (knowledge, test, evaluation, delivery) is asking for
-      // the full rail directly — the anchored panel has no such tab to route through.
-      setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]); setInspectorNodeId(nodeId);
+      // Asking for a specific section (knowledge, test, evaluation, delivery) is asking
+      // for the WIDE panel directly — the short one has no such section to scroll to.
+      setSelectedId(nodeId); setSelectedIds([nodeId]); openNodeInspector(nodeId, focus || null);
     }} />,
-  }), [canRun, cardsEditable, exportFromNode, openBuiltinAgentSurfaceFromNode, openInsertPicker, openNodePanel, runWorkflowFromNode, setSurface, updateNodeData]);
+  }), [canRun, cardsEditable, exportFromNode, openBuiltinAgentSurfaceFromNode, openInsertPicker, openNodeInspector, openNodePanel, runWorkflowFromNode, setSurface, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     // Objects are passed WHOLE: the report decides which fields explain whether
@@ -10340,6 +10430,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 <button type="button" onClick={() => void leaveSharedSession()}>{t('sharedStopSharing')}</button>
                 <button type="button" onClick={() => requireAccount('save', t('gateSaveSessionTitle'), t('gateSaveBody'))}>{t('sharedSaveToKeep')}</button>
               </div>
+              {/* "Get someone in here" and "talk to them" are one errand, so the call
+                  starts from the panel that hands out the link rather than from a
+                  control a signed-out visitor would have to go looking for. Self-gating
+                  — it disappears the moment the call is running, because the dock at
+                  the bottom of the shell is the control from then on. */}
+              <StartCallButton variant="panel" />
             </> : <button disabled={roomBusy} onClick={() => void startSharedSession()}>{roomBusy ? t('sharedStarting') : t('sharedStart')}</button>) : <>
               <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder={t('emailPlaceholder')} /><select aria-label={t('invitationRole')} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${canvasWebOrigin()}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? t('invitationEmailed') : t('invitationSavedLinkCopied')); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? t('collaboratorInvitedEmail') : t('collaboratorInvited')); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : t('inviteFailed'))); }}>{t('invite')}</button></div>
               {sessionRole === 'owner' && <div aria-label={t('sessionMembers')}>{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
@@ -10375,26 +10471,49 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>}
       </div>
 
-      {/* The panel that opens BESIDE the card it configures — config, schedule, messages
-          or persona, from one shell. The inspector rail is still one press away from its
-          header; this is the common case, which is why it is short. */}
-      {nodePanel && (() => {
+      {/* THE object panel — config, schedule, messages or persona short, or the object's
+          whole inspector wide, from one shell anchored to one card.
+
+          There is no second surface. The inspector used to be a full-height rail on the
+          far side of the board, and every value, every setting and the activity log lived
+          over there with nothing tying them to the card being edited. The panel widens in
+          place instead, so what you are editing is never in question.
+
+          The wide body is passed as CHILDREN rather than built inside the panel: its
+          actions (deliver a mockup, import a dataset, publish a site, compare projects)
+          are the board's, and handing the panel forty callbacks to forward would make it
+          a second copy of this component's surface area. */}
+      {nodePanel && !presentMode && (() => {
         const target = nodes.find((node) => node.id === nodePanel.nodeId);
         if (!target) return null;
+        // `chat` has its own surface and no inspector at all — it must never open wide.
+        const expanded = nodePanel.expanded && target.data.kind !== 'chat';
+        const panel = nodePanel.panel ?? canvasNodeSettingsPanel(target.data.kind);
+        // The anchor is DERIVED, not frozen when the panel opened: the clamp that keeps
+        // the panel on screen depends on which of the two widths is showing, and the width
+        // changes while it is open. A panel opened without a box (an action that had no
+        // event to take a rectangle from) draws at the fallback for one frame, until the
+        // layout effect above measures the card.
+        const width = expanded ? NODE_PANEL_WIDE_WIDTH : NODE_PANEL_WIDTH;
+        const anchor = nodePanel.box
+          ? anchorFrom(nodePanel.box, width)
+          : { x: Math.max(12, window.innerWidth - width - 24), y: 96 };
         return <CanvasNodePanel
-          panel={nodePanel.panel}
+          panel={panel}
           nodeId={nodePanel.nodeId}
           data={target.data}
-          anchor={nodePanel.anchor}
+          anchor={anchor}
           messages={canvasNodeMessages(target.data, { emptyShell: emptyShellProblem(target.data.kind, target.data as Record<string, unknown>) !== null })}
           editable={canEdit && !lockBlocked}
           onChange={(patch) => updateNodeData(nodePanel.nodeId, patch)}
-          onClose={() => setNodePanel(null)}
-          onOpenFull={() => { setNodePanel(null); setSelectedId(nodePanel.nodeId); setSelectedIds([nodePanel.nodeId]); setInspectorNodeId(nodePanel.nodeId); }}
-        />;
+          onClose={() => { setNodePanel(null); setInspectorFocus(null); }}
+          expanded={expanded}
+          onToggleExpanded={() => setNodePanel((current) => (current ? { ...current, expanded: !current.expanded } : current))}
+          onOpenSurface={(surface) => setSurface(surface, nodePanel.nodeId)}
+        >{expanded ? <Inspector node={target} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={(patch) => updateNodeData(target.id, patch)} onWebsiteViewportChange={(viewport) => updateWebsiteViewport(target.id, viewport)} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(target.id)} onOpenBuild={() => openBuild(target.id)} onAttachBuild={(ide) => attachBuild(target.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(target.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(target.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(target.id)} onRunCreativeAction={(action) => runCreativeAction(target.id, action)} onShipGame={() => openGamePanel(target.id)} onPublishListing={() => openPublishPanel(target.id)} onOpenReleases={() => openReleasesPanel(target.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: target.id, definitionId: target.data.resourceId?.startsWith('workflow:') ? target.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(target.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(target.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(target.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(target.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDiagram={async (format, diagramId) => { const result = await convertObjectToDiagram(target.id, format, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'diagramAddedStatus' : 'diagramCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(target.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onResumeShare={createResumeShare} onResumeSharesList={listResumeShares} onResumeShareRevoke={revokeResumeShare} /> : null}</CanvasNodePanel>;
       })()}
 
-      {/* ONE picker, two doors: a node's centre `+` (insert, connected) and the command
+      {/* ONE picker, two doors: a node's `+` (insert, connected) and the command
           bar's category circles (add). Contents from `CREATION_PALETTE_GROUPS`, so it can
           never fall behind the object registry. */}
       {objectPicker && <CanvasObjectPicker
@@ -10425,7 +10544,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // contributing its own Run: two Run buttons that can disagree about whether
         // something is running is worse than none.
         onRun={surface === 'graph' && runnableApp ? () => setSurface('app') : undefined}
-        // The circles open the PICKER — the same component a node's centre `+` opens, so
+        // The circles open the PICKER — the same component a node's `+` opens, so
         // "choose an object" is ONE interaction with one search and one contents, reached
         // from two places. It replaced a group-focus helper that drove the palette rail;
         // keeping both would have been two answers to one question.
@@ -10635,6 +10754,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onlyRenderVisibleElements
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color="var(--creation-dot)" />
+          {/* Inside the flow, so the pane's own transform moves them: a cursor
+              layer that lives outside the viewport is only ever correct until the
+              first pan. */}
+          <RemoteCursors members={members} currentUserId={currentUserId} />
           <CanvasCommands
             minimapOpen={minimapOpen}
             setMinimapOpen={setMinimapOpen}
@@ -10784,7 +10907,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           }}
         />
 
-        <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />
         {dockPanel === 'files' && <CanvasFilesPanel
           files={sessionFiles}
           onOpen={revealObject}
@@ -10860,12 +10982,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {/* The rail is the escape hatch now, not the default: it renders only for the
-            node that asked for it via `inspectorNodeId` (the anchored panel's "open
-            full" button, or an action naming one of its own specialized tabs), never
-            merely because a card is selected — selecting one opens the panel beside it
-            instead. */}
-        {!presentMode && selectedNode && selectedNode.id === inspectorNodeId && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); setInspectorNodeId(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onPublishListing={() => openPublishPanel(selectedNode.id)} onOpenReleases={() => openReleasesPanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onOpenBuiltinAgent={(intent) => openBuiltinAgentSurfaceFromNode(selectedNode.id, intent)} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDiagram={async (format, diagramId) => { const result = await convertObjectToDiagram(selectedNode.id, format, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'diagramAddedStatus' : 'diagramCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} onAskBrain={(request) => { openBrainDock(); evaluateCanvas(request); }} onOpenSurface={(next) => setSurface(next, selectedNode.id)} onResumeTailor={tailorResumeFromNode} onResumeDetach={detachResumeFromNode} onResumeShare={createResumeShare} onResumeSharesList={listResumeShares} onResumeShareRevoke={revokeResumeShare} />}
 
         {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
           <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>
@@ -11005,15 +11121,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   );
 }
 
-function RemoteCursors({ members, currentUserId, instance, container }: { members: CreationSessionDetail['members']; currentUserId: string | null; instance: ReactFlowInstance<CreationFlowNode, Edge> | null; container: HTMLDivElement | null }) {
-  if (!instance || !container) return null;
-  const rect = container.getBoundingClientRect();
-  return <div className={styles.remoteCursors} aria-live="polite">{members.filter((member) => member.userId !== currentUserId && typeof member.cursor?.x === 'number' && typeof member.cursor?.y === 'number').map((member, index) => {
-    const screen = instance.flowToScreenPosition({ x: member.cursor!.x!, y: member.cursor!.y! });
-    return <span key={member.userId} style={{ left: screen.x - rect.left, top: screen.y - rect.top, color: ['var(--canvas-presence-1)', 'var(--canvas-presence-2)', 'var(--canvas-presence-3)', 'var(--canvas-presence-4)'][index % 4] }}><i>◢</i><b>{member.displayName || 'Collaborator'}{member.typing ? ' · …' : ''}</b></span>;
-  })}</div>;
-}
-
 function GuidedTourInspector({ node, nodes, onChange }: { node: CreationFlowNode; nodes: CreationFlowNode[]; onChange: (patch: Partial<CreationNodeData>) => void }) {
   const t = useTranslations('creationCanvas.tourBuilder');
   const objectT = useTranslations('creationCanvas.object');
@@ -11047,7 +11154,7 @@ function GuidedTourInspector({ node, nodes, onChange }: { node: CreationFlowNode
   </section>;
 }
 
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onPublishListing, onOpenReleases, onEditWorkflow, onBuildWorkflow, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDiagram, onExportArtifact, onAskBrain, onOpenSurface, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onPublishListing: () => void; onOpenReleases: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDiagram: (format: string, diagramId?: string) => Promise<string>; onExportArtifact: (action: CanvasExportAction) => Promise<string>; onOpenSurface: (surface: CanvasSurfaceId) => void;
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onPublishListing, onOpenReleases, onEditWorkflow, onBuildWorkflow, onSaveAgent, onOpenBuiltinAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDiagram, onExportArtifact, onAskBrain, onResumeTailor, onResumeDetach, onResumeShare, onResumeSharesList, onResumeShareRevoke }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onPublishListing: () => void; onOpenReleases: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onOpenBuiltinAgent: (intent: BuiltinAgentSurfaceIntent) => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDiagram: (format: string, diagramId?: string) => Promise<string>; onExportArtifact: (action: CanvasExportAction) => Promise<string>;
   /** The ONE route from the inspector back to Brain. Learning controls compose
    *  their own request text (see LearningControls.tsx) rather than each adding a
    *  callback to a panel that already takes forty. */
@@ -11066,16 +11173,9 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
   const [accessStatus, setAccessStatus] = useState('');
   const [actionStatus, setActionStatus] = useState('');
   const [knowledgeDraft, setKnowledgeDraft] = useState('');
-  const [inspectorWidth, setInspectorWidth] = useState(() => {
-    if (typeof window === 'undefined') return INSPECTOR_DEFAULT_WIDTH;
-    const saved = Number(window.localStorage.getItem(INSPECTOR_WIDTH_STORAGE_KEY));
-    return Number.isFinite(saved) ? Math.min(INSPECTOR_MAX_WIDTH, Math.max(INSPECTOR_MIN_WIDTH, saved)) : INSPECTOR_DEFAULT_WIDTH;
-  });
-  const [expandedInspector, setExpandedInspector] = useState(false);
-  const inspectorRef = useRef<HTMLElement>(null);
-  const inspectorWidthRef = useRef(inspectorWidth);
-  const restoreInspectorWidth = useRef(INSPECTOR_DEFAULT_WIDTH);
-  const resizeStart = useRef({ pointerX: 0, width: INSPECTOR_DEFAULT_WIDTH });
+  /* Only for scrolling a named section into view. The panel around this owns the width
+     and the two readings it comes in — see `CanvasNodePanel`. */
+  const inspectorRef = useRef<HTMLDivElement>(null);
   // The human half of the unified assignee picker — `tasksApi.assignees()` already
   // existed for this exact purpose (see its own doc comment) and was never called from
   // here, so a task could only ever be assigned to an agent even though `assignedUserId`
@@ -11104,39 +11204,6 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     const frame = window.requestAnimationFrame(() => inspectorRef.current?.querySelector<HTMLElement>(`[data-inspector-section="${focus}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
     return () => window.cancelAnimationFrame(frame);
   }, [focus, node.id]);
-  const maxInspectorWidth = useCallback(() => {
-    const available = inspectorRef.current?.parentElement?.getBoundingClientRect().width;
-    return available && available > INSPECTOR_MIN_WIDTH
-      ? Math.max(INSPECTOR_MIN_WIDTH, Math.min(INSPECTOR_MAX_WIDTH, available - 40))
-      : INSPECTOR_MAX_WIDTH;
-  }, []);
-  const applyInspectorWidth = useCallback((width: number, persist = false) => {
-    const next = Math.round(Math.min(maxInspectorWidth(), Math.max(INSPECTOR_MIN_WIDTH, width)));
-    inspectorWidthRef.current = next;
-    setInspectorWidth(next);
-    if (persist) window.localStorage.setItem(INSPECTOR_WIDTH_STORAGE_KEY, String(next));
-  }, [maxInspectorWidth]);
-  const toggleInspectorWidth = () => {
-    if (expandedInspector) {
-      applyInspectorWidth(restoreInspectorWidth.current, true);
-      setExpandedInspector(false);
-      return;
-    }
-    restoreInspectorWidth.current = inspectorWidth;
-    applyInspectorWidth(INSPECTOR_WIDE_WIDTH, true);
-    setExpandedInspector(true);
-  };
-  const resizeInspectorWithKeyboard = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    let next: number | null = null;
-    if (event.key === 'ArrowLeft') next = inspectorWidth + (event.shiftKey ? 50 : 20);
-    if (event.key === 'ArrowRight') next = inspectorWidth - (event.shiftKey ? 50 : 20);
-    if (event.key === 'Home') next = INSPECTOR_MIN_WIDTH;
-    if (event.key === 'End') next = maxInspectorWidth();
-    if (next == null) return;
-    event.preventDefault();
-    setExpandedInspector(false);
-    applyInspectorWidth(next, true);
-  };
   const deliverables = creationDeliverables(node.data);
   const taskId = kind === 'task' && /^task:\d+$/.test(node.data.resourceId || '') ? Number(node.data.resourceId!.slice(5)) : null;
   const taskAgents = nodes.filter((candidate) => candidate.data.kind === 'agent');
@@ -11245,42 +11312,26 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     },
   };
   const kindCustomSection = KIND_DETAIL_SECTIONS[kindSettingsManifest(kind)?.custom?.component ?? ''];
-  return <aside ref={inspectorRef} className={styles.inspector} aria-label="Details panel" style={{ '--inspector-width': `${inspectorWidth}px` } as CSSProperties}>
-    <div
-      className={styles.inspectorResizeHandle}
-      role="separator"
-      aria-label={t('resizeDetailsPanel')}
-      aria-orientation="vertical"
-      aria-valuemin={INSPECTOR_MIN_WIDTH}
-      aria-valuemax={maxInspectorWidth()}
-      aria-valuenow={inspectorWidth}
-      tabIndex={0}
-      onKeyDown={resizeInspectorWithKeyboard}
-      onPointerDown={(event) => {
-        resizeStart.current = { pointerX: event.clientX, width: inspectorWidth };
-        event.currentTarget.setPointerCapture(event.pointerId);
-        setExpandedInspector(false);
-      }}
-      onPointerMove={(event) => {
-        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-        applyInspectorWidth(resizeStart.current.width + resizeStart.current.pointerX - event.clientX);
-      }}
-      onPointerUp={(event) => {
-        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
-        event.currentTarget.releasePointerCapture(event.pointerId);
-        window.localStorage.setItem(INSPECTOR_WIDTH_STORAGE_KEY, String(inspectorWidthRef.current));
-      }}
-    />
-    <header><div className={styles.inspectorTitle}><span>{kind === 'agent' ? '✦' : kind === 'website' ? '◎' : kind === 'workflow' ? '⌘' : '◇'}</span><strong>{node.data.title}</strong><small>{t('liveKind', { kind })}</small></div><div className={styles.inspectorHeaderActions}>{/* Renders only for a kind whose medium has an axis a card cannot draw — it
-                reads the registry, so a new runtime needs nothing here. */}<CanvasObjectSurfaceButton data={node.data} onOpen={onOpenSurface} /><button type="button" onClick={toggleInspectorWidth} aria-label={expandedInspector ? t('restoreDetailsWidth') : t('expandDetailsPanel')} title={expandedInspector ? t('restorePanelWidth') : t('expandPanel')}>{expandedInspector ? '⇥' : <Icon source="↔" size="1em" />}</button><button type="button" onClick={onClose} aria-label={t('closeInspector')}>×</button></div></header>
+  /**
+   * The object's whole inspector, drawn INSIDE the panel anchored to its card.
+   *
+   * It keeps `aria-label="Details panel"` and the `.inspector` class — the class because
+   * every field, label and footer rule in the stylesheet is written against it, the label
+   * because this is still the details of one object and a screen reader should be told
+   * which region it has entered. What it no longer has is a shell of its own: no fixed
+   * position, no resize handle, no title bar and no close button, because the panel around
+   * it already carries all four for the same object. Two headers naming the same card,
+   * with two different closes, is how the old rail read next to the compact panel.
+   */
+  return <aside ref={inspectorRef} className={styles.inspector} aria-label="Details panel">
     <div className={styles.inspectorTabs}><button className={tab === 'details' ? styles.activeTab : ''} onClick={() => setTab('details')}>{t('details')}</button><button className={tab === 'activity' ? styles.activeTab : ''} onClick={() => setTab('activity')}>{t('activity')}</button></div>
     <div className={styles.inspectorBody}>
       {tab === 'details' ? <fieldset className={styles.inspectorFields} disabled={!editable}>
       {node.data.redacted === true && <><p className={styles.inspectorHint}>{t('redactedObject')}</p><button type="button" className={styles.fullButton} disabled={persistence !== 'server' || !!accessStatus} onClick={() => { setAccessStatus(t('requesting')); void creationSessionsApi.requestObjectAccess(sessionId, node.id).then(() => setAccessStatus(t('accessRequested'))).catch((error) => setAccessStatus(error instanceof Error ? error.message : t('requestFailed'))); }}>{accessStatus || t('requestAccess')}</button></>}
-      {/* A built-in seat's name is locked here too, not only in the anchored Persona
-          panel — the same object edited from two surfaces must agree on what is
-          actually editable, or renaming it from the full inspector would silently
-          undo the lock the compact panel promised. */}
+      {/* A built-in seat's name is locked here too, not only on the compact Persona
+          panel — the object edited at either width must agree on what is actually
+          editable, or renaming it from the wide reading would silently undo the lock
+          the short one promised. */}
       <label>{t('name')}<input value={node.data.title} disabled={isCanvasPersonKind(kind) && canvasPersonOrigin(kind) === 'builtin'} onChange={(event) => onChange({ title: event.target.value })} /></label>
       {typeof node.data.pipelineStep === 'number' && <section className={styles.pipelineInspectorGuide} aria-label={t('evermindSetupStep', { step: node.data.pipelineStep })}><span>{t('evermindSetupOf5', { step: node.data.pipelineStep })}</span><strong>{node.data.pipelineStart === true ? t('startHere') : node.data.title}</strong><p>{String(node.data.pipelineInstruction || t('pipelineStageHint'))}</p>{node.data.pipelineStep === 1 && node.data.status !== 'Imported' && <small>{t('useFilePicker')}</small>}{node.data.pipelineStep === 1 && node.data.status === 'Imported' && <small>{t('dataReadyNext')}</small>}</section>}
       {/* Every kind below used to be its own `kind === 'x'` branch in this fieldset —
@@ -11295,6 +11346,12 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
           through to the same "this object lives on the board" hint every kind without
           settings always showed. */}
       <KindDetailsFields kind={kind} data={node.data} editable={editable} onChange={onChange} />
+      {/* "Run on its own" belongs to EVERY object — the clock badge on the card says so.
+          It is drawn here as well as in the compact panel's Advanced section because the
+          wide reading of that panel REPLACES the compact one: without this, widening to
+          see everything about an object would be the one action that hides its schedule.
+          Same component both ways, so the two cannot drift on what an interval means. */}
+      <TimingFields data={node.data} editable={editable} onChange={onChange} />
       {kindCustomSection && kindCustomSection(kindSectionProps)}
       {/* The panel decides for itself whether this object has anything to
           convert, and to which notations — so no kind list is maintained here. */}
@@ -11349,7 +11406,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
 }
 
 /**
- * Everything a kind's FULL-inspector `custom.component` section might need. One shape
+ * Everything a kind's wide-panel `custom.component` section might need. One shape
  * for all eleven, because the alternative — eleven different call signatures — is what
  * the dispatch table in `KIND_DETAIL_SECTIONS` exists to avoid: `Inspector` already
  * computes every one of these once, so handing the whole bag to whichever section is

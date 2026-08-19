@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 import { useOptionalLiveSession, type LiveMember } from '@/lib/live/LiveSessionContext';
 import { useCanvasLiveRoom } from '@/lib/live/useCanvasLiveRoom';
+import { StartCallButton } from './StartCallButton';
 import styles from './LiveBar.module.css';
 
 /**
@@ -125,9 +126,9 @@ export function LiveBar() {
     if (!room.canStart) return null;
     return (
       <div ref={setDock} className={styles.dock} data-state="idle" role="region" aria-label={t('region')}>
-        <button type="button" className={styles.start} onClick={room.start} title={t('startCallTitle')}>
-          <span aria-hidden="true"><Icon source="🎧" size="1em" /></span>{t('startCall')}
-        </button>
+        {/* Not an inline button: the invite panel on a logged-out board renders the
+            same control, and one label with one gate beats two that agree today. */}
+        <StartCallButton />
         <span className={styles.hint}>{t('startCallHint')}</span>
       </div>
     );

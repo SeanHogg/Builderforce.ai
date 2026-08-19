@@ -16,7 +16,7 @@ import type { CanvasSurfaceId } from '@/lib/canvasSurfaces';
  * ── WHY THIS MOVED OUT OF THE SWITCHER ───────────────────────────────────────────
  * The switcher owned a private map keyed by surface id, and it covered the three BOARD
  * surfaces because that is all a rail offers. Then a second consumer appeared:
- * `CanvasObjectSurfaceButton`, which opens an OBJECT surface from the inspector header —
+ * `CanvasObjectSurfaceButton`, which opens an OBJECT surface from the object panel header —
  * a row of 25×25 icon slots. Having no glyph for `page`, `play`, `site` or `timeline`, it
  * rendered its LABEL instead, and "Open the site" in a 25px box overflowed across the
  * panel title, the close button and the tab strip beneath it. A worded control in an icon

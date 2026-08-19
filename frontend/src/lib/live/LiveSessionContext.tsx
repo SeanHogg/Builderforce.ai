@@ -119,6 +119,23 @@ export interface LiveSessionValue {
    * tick; the live bar reads the merged result.
    */
   publishPresence: (members: Array<{ userId: string; displayName: string | null }>, currentUserId: string | null) => void;
+  /**
+   * The room the surface on screen WOULD open, when that is not the default
+   * "a call about the signed-in canvas".
+   *
+   * A logged-out board is the case this exists for. It has no tenant and no
+   * `creation_sessions` row, so nothing about it can be derived from auth — but
+   * once it has started a shared free session it has a guest room code and a
+   * guest media transport, which is a perfectly good room. The surface knows
+   * that; `useCanvasLiveRoom` does not. So the surface declares the anchor and
+   * the hook stays the one place that decides whether a call can be started.
+   *
+   * Null clears it. Published anchors are NOT the live room — starting is still
+   * an explicit act.
+   */
+  publishAnchor: (anchor: LiveRoomTarget | null) => void;
+  /** The declared anchor, or null when the default canvas room applies. */
+  anchor: LiveRoomTarget | null;
 }
 
 const LiveSessionContext = createContext<LiveSessionValue | null>(null);
@@ -173,6 +190,7 @@ export function LiveSessionProvider({ children }: { children: React.ReactNode })
   const [shareError, setShareError] = useState<string | null>(null);
   const [boardMembers, setBoardMembers] = useState<Array<{ userId: string; displayName: string | null }>>([]);
   const [boardUserId, setBoardUserId] = useState<string | null>(null);
+  const [anchor, setAnchor] = useState<LiveRoomTarget | null>(null);
 
   const authenticatedMe = useMemo(
     () => ({ name: user?.name || user?.email || 'You', ref: user?.id != null ? String(user.id) : 'me' }),
@@ -261,6 +279,12 @@ export function LiveSessionProvider({ children }: { children: React.ReactNode })
     [],
   );
 
+  const publishAnchor = useCallback((next: LiveRoomTarget | null) => {
+    // Identity is the room key: republishing the same anchor on every render of a
+    // surface that rebuilds its object literal must not restart the room.
+    setAnchor((current) => (current?.roomKey === next?.roomKey ? current : next));
+  }, []);
+
   const setPresentMode = useCallback((on: boolean) => setPresentModeState(on), []);
   const setFollowing = useCallback((userId: string | null) => setFollowingUserId(userId), []);
 
@@ -315,11 +339,13 @@ export function LiveSessionProvider({ children }: { children: React.ReactNode })
     setPresentMode,
     setFollowing,
     publishPresence,
+    publishAnchor,
+    anchor,
   }), [
     display.active, display.supported, followingUserId, leave, media.camOn, media.connected, media.localStream,
     media.captions, media.mediaError, media.mediaPaths, media.micOn, media.speaking, media.tiles, media.toggleCam, media.toggleMic, members, presentMode,
     recorder.error, recorder.recording, recorder.saving, recorder.supported,
-    publishPresence, room, setFollowing, setPresentMode, shareError, start, toggleRecording, toggleShare,
+    anchor, publishAnchor, publishPresence, room, setFollowing, setPresentMode, shareError, start, toggleRecording, toggleShare,
   ]);
 
   return <LiveSessionContext.Provider value={value}>{children}</LiveSessionContext.Provider>;

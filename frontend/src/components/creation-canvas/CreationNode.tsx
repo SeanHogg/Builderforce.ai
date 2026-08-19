@@ -2280,10 +2280,10 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
    * through the viewport transform and it lands where the badge is regardless of zoom.
    */
   onOpenPanel?: (nodeId: string, panel: CanvasNodePanelId, anchor: DOMRect) => void;
-  /** The centre `+`: choose what comes after this object, connected to it. */
+  /** The `+`: choose what comes after this object, connected to it. */
   onInsertFrom?: (nodeId: string, anchor: DOMRect) => void;
   /** "Open this at full size" — reachable from the card's own header, not only from
-   *  the inspector's. `CanvasObjectSurfaceButton` decides for itself whether this
+   *  the object panel's. `CanvasObjectSurfaceButton` decides for itself whether this
    *  kind even has a surface, so a note or a task simply draws nothing here. */
   onOpenSurface?: (nodeId: string, surface: CanvasSurfaceId) => void;
 };

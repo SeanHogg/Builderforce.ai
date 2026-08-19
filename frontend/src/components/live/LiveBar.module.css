@@ -40,33 +40,6 @@
   padding-block: 5px;
 }
 
-.start {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--border-accent);
-  border-radius: var(--radius-full);
-  background: var(--accent-subtle);
-  color: var(--text-primary);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background var(--duration-fast, 0.14s), border-color var(--duration-fast, 0.14s);
-}
-
-.start:hover {
-  background: var(--surface-interactive-hover);
-  border-color: var(--border-accent);
-}
-
-.start:focus-visible {
-  outline: 2px solid var(--focus-color);
-  outline-offset: 2px;
-}
-
 .hint {
   color: var(--text-muted);
   font-size: var(--font-size-eyebrow);

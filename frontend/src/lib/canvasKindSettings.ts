@@ -180,13 +180,14 @@ export function kindSettingsSellable(kind: string, data: CreationNodeData): bool
 }
 
 /**
- * Whether the full inspector holds something for this kind the compact panel does not
- * — a custom section, an action button, or a field not already offered on `compact`.
- * What the Advanced "open the full inspector" link reads to decide whether it has
- * anything to send someone TO: a kind with no manifest at all (every spec-object kind)
+ * Whether this kind has more than the compact panel shows — a custom section, an action
+ * button, or a field not already offered on `compact`.
+ *
+ * What the Advanced "there is more" control reads to decide whether widening the panel
+ * would actually reveal anything: a kind with no manifest at all (every spec-object kind)
  * always does, since that hint predates this registry and nothing here narrows it.
  */
-export function kindSettingsHasMoreInFullInspector(kind: string): boolean {
+export function kindSettingsHasMoreThanCompact(kind: string): boolean {
   const manifest = kindSettingsManifest(kind);
   if (!manifest) return true;
   return !!manifest.custom || manifest.actions.length > 0 || manifest.fields.some((field) => field.surface !== 'compact');

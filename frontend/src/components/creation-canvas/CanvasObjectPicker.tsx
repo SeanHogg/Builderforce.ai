@@ -32,7 +32,7 @@ export interface CanvasObjectPickerProps {
   /** The group it opens on. Absent = every group, which is the bar's "all" circle. */
   group?: CreationObjectGroup;
   /**
-   * The node this insert hangs off. Present when the centre `+` opened it: the chosen
+   * The node this insert hangs off. Present when the node's `+` opened it: the chosen
    * object is created beside that node AND connected to it, which is the difference
    * between "add a step" and "add an object".
    */

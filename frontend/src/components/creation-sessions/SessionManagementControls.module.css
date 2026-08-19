@@ -8,9 +8,8 @@
   padding-inline: 0;
 }
 
+/* Look only — `AnchoredPopover` owns the placement and the layer height. */
 .menu {
-  position: fixed;
-  z-index: 10001;
   width: 188px;
   display: flex;
   flex-direction: column;

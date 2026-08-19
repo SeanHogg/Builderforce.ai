@@ -149,7 +149,6 @@
    job titles. The band's `.chip` keeps its own chrome untouched — this is a second
    drawing of one component, not a second component. */
 .compact {
-  position: relative;
   display: flex;
   align-items: center;
   flex: none;
@@ -197,18 +196,14 @@
 .compactMore:hover { background: var(--surface-coral-soft); color: var(--coral-bright); }
 .compactMore:focus-visible { outline: 2px solid var(--coral-bright); outline-offset: 2px; }
 
-/* Upward, because this strip lives at the bottom of the window. Full chips, so a seat
-   that did not fit is read exactly as it is in the band. */
+/* LOOK ONLY. Placement belongs to `AnchoredPopover`, which portals this panel to <body>
+   and positions it against the viewport — because nested in the canvas command bar it was
+   trapped in that card's stacking context and painted over by the prompt composer. Full
+   chips, so a seat that did not fit is read exactly as it is in the band. */
 .compactOverflow {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 10px);
-  z-index: 30;
   display: grid;
   gap: 2px;
   min-width: 190px;
-  max-height: 46vh;
-  overflow-y: auto;
   padding: var(--space-2);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);

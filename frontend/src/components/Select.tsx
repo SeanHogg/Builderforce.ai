@@ -12,7 +12,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
-import { createPortal } from 'react-dom';
+import { AnchoredPopover } from '@/components/ui/AnchoredPopover';
 
 /**
  * Drop-in replacement for a native `<select>`.
@@ -131,10 +131,8 @@ export function Select({
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState<number>(-1);
   const listboxId = useId();
-  const containerRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const [rect, setRect] = useState<{ left: number; top: number; width: number } | null>(null);
   // Type-ahead buffer: accumulates printable keystrokes, cleared after a short idle.
   const typeahead = useRef<{ query: string; timer: ReturnType<typeof setTimeout> | null }>({
     query: '',
@@ -159,19 +157,15 @@ export function Select({
   const selected = options.find((o) => o.value === current);
   const displayLabel = selected ? selected.label : options[0]?.label ?? '';
 
-  const reposition = useCallback(() => {
-    const el = buttonRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    setRect({ left: r.left, top: r.bottom + 2, width: r.width });
-  }, []);
-
+  // Placement, reflow and outside-press dismissal are `AnchoredPopover`'s; what stays here
+  // is what a LISTBOX has that a menu does not — type-ahead, the active option, commit.
   const openMenu = useCallback(() => {
     if (disabled) return;
-    reposition();
     setActiveIdx(options.findIndex((o) => o.value === current));
     setOpen(true);
-  }, [disabled, reposition, options, current]);
+  }, [disabled, options, current]);
+
+  const closeMenu = useCallback(() => setOpen(false), []);
 
   const commit = useCallback(
     (val: string) => {
@@ -181,28 +175,6 @@ export function Select({
     },
     [isControlled, onChange],
   );
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocMouseDown = (e: MouseEvent) => {
-      if (
-        containerRef.current?.contains(e.target as Node) ||
-        popupRef.current?.contains(e.target as Node)
-      ) {
-        return;
-      }
-      setOpen(false);
-    };
-    const onReflow = () => reposition();
-    document.addEventListener('mousedown', onDocMouseDown);
-    window.addEventListener('resize', onReflow);
-    window.addEventListener('scroll', onReflow, true);
-    return () => {
-      document.removeEventListener('mousedown', onDocMouseDown);
-      window.removeEventListener('resize', onReflow);
-      window.removeEventListener('scroll', onReflow, true);
-    };
-  }, [open, reposition]);
 
   const moveActive = useCallback(
     (dir: 1 | -1) => {
@@ -303,7 +275,7 @@ export function Select({
   };
 
   return (
-    <div ref={containerRef} style={{ display: 'contents' }}>
+    <div style={{ display: 'contents' }}>
       <button
         ref={buttonRef}
         type="button"
@@ -332,80 +304,76 @@ export function Select({
         </svg>
       </button>
       {name && <input type="hidden" name={name} value={current} required={required} readOnly />}
-      {open && rect &&
-        createPortal(
-          <div
-            ref={popupRef}
-            id={listboxId}
-            role="listbox"
-            // Keep focus on the trigger so an inline-edit `onBlur` (commit-on-blur
-            // pattern) doesn't fire and close the editor before the option click lands.
-            onMouseDown={(e) => e.preventDefault()}
-            style={{
-              position: 'fixed',
-              left: rect.left,
-              top: rect.top,
-              minWidth: rect.width,
-              maxHeight: 280,
-              overflowY: 'auto',
-              background: 'var(--panel-drawer-bg, var(--bg-elevated))',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
-              zIndex: 100000,
-              padding: 4,
-            }}
-          >
-            {rows.map((row, i) => {
-              if (row.kind === 'group') {
-                return (
-                  <div
-                    key={`g-${i}`}
-                    style={{ padding: '6px 10px 2px', fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}
-                  >
-                    {row.label}
-                  </div>
-                );
-              }
-              const opt = options[row.index];
-              const isSel = opt.value === current;
-              const isActive = row.index === activeIdx;
-              return (
-                <div
-                  key={`o-${row.index}`}
-                  role="option"
-                  aria-selected={isSel}
-                  aria-disabled={opt.disabled}
-                  onMouseEnter={() => !opt.disabled && setActiveIdx(row.index)}
-                  onClick={(e) => {
-                    if (opt.disabled) return;
-                    // Portaled clicks bubble through the React tree to ancestor
-                    // card handlers — stop so selecting doesn't trigger them.
-                    e.stopPropagation();
-                    commit(opt.value);
-                  }}
-                  style={{
-                    padding: '7px 10px',
-                    fontSize: 'var(--font-size-small)',
-                    borderRadius: 'var(--radius-sm)',
-                    cursor: opt.disabled ? 'not-allowed' : 'pointer',
-                    color: opt.disabled ? 'var(--text-muted)' : 'var(--text-primary)',
-                    background: isSel
-                      ? 'var(--surface-coral-soft)'
-                      : isActive
-                        ? 'var(--surface-interactive)'
-                        : 'transparent',
-                    fontWeight: isSel ? 600 : 400,
-                  }}
-                >
-                  {opt.label}
-                </div>
-              );
-            })}
-          </div>,
-          document.body,
-        )}
+      <AnchoredPopover
+        open={open}
+        anchorRef={buttonRef}
+        onDismiss={closeMenu}
+        placement="auto"
+        align="stretch"
+        gap={2}
+        maxHeight={280}
+        layerRef={popupRef}
+        id={listboxId}
+        role="listbox"
+        // Keep focus on the trigger so an inline-edit `onBlur` (commit-on-blur
+        // pattern) doesn't fire and close the editor before the option click lands.
+        onMouseDown={(e) => e.preventDefault()}
+        style={{
+          background: 'var(--panel-drawer-bg, var(--bg-elevated))',
+          color: 'var(--text-primary)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+          padding: 4,
+        }}
+      >
+        {rows.map((row, i) => {
+          if (row.kind === 'group') {
+            return (
+              <div
+                key={`g-${i}`}
+                style={{ padding: '6px 10px 2px', fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}
+              >
+                {row.label}
+              </div>
+            );
+          }
+          const opt = options[row.index];
+          const isSel = opt.value === current;
+          const isActive = row.index === activeIdx;
+          return (
+            <div
+              key={`o-${row.index}`}
+              role="option"
+              aria-selected={isSel}
+              aria-disabled={opt.disabled}
+              onMouseEnter={() => !opt.disabled && setActiveIdx(row.index)}
+              onClick={(e) => {
+                if (opt.disabled) return;
+                // Portaled clicks bubble through the React tree to ancestor
+                // card handlers — stop so selecting doesn't trigger them.
+                e.stopPropagation();
+                commit(opt.value);
+              }}
+              style={{
+                padding: '7px 10px',
+                fontSize: 'var(--font-size-small)',
+                borderRadius: 'var(--radius-sm)',
+                cursor: opt.disabled ? 'not-allowed' : 'pointer',
+                color: opt.disabled ? 'var(--text-muted)' : 'var(--text-primary)',
+                background: isSel
+                  ? 'var(--surface-coral-soft)'
+                  : isActive
+                    ? 'var(--surface-interactive)'
+                    : 'transparent',
+                fontWeight: isSel ? 600 : 400,
+              }}
+            >
+              {opt.label}
+            </div>
+          );
+        })}
+      </AnchoredPopover>
     </div>
   );
 }

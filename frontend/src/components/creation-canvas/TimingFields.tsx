@@ -1,6 +1,6 @@
 /**
- * The timing/schedule controls — "run on its own" — shared by the compact panel's
- * Advanced section and the full inspector.
+ * The timing/schedule controls — "run on its own" — shared by the panel's Advanced
+ * section and its wide reading.
  *
  * Extracted out of `CanvasNodePanel`'s old standalone `'schedule'` panel rather than
  * kept as a fifth anchored-panel id: a schedule nobody can find because it lives behind

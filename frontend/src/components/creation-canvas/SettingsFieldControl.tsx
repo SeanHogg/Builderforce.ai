@@ -1,9 +1,9 @@
 /**
  * One settings field, drawn once for whichever surface asked for it.
  *
- * The compact anchored panel and the full inspector used to hand-write the same five
- * controls (text, textarea, select, number, color) twice, in two files, with two
- * chances to drift on what "disabled" means. This is the ONE place a `SettingsField`
+ * The panel's short reading and its wide one used to hand-write the same five controls
+ * (text, textarea, select, number, color) twice, in two files, with two chances to drift
+ * on what "disabled" means. This is the ONE place a `SettingsField`
  * becomes a control — see `lib/canvasKindSettings.ts` for why the field vocabulary is
  * its own thing and not a reuse of `SpecField`.
  */
@@ -29,8 +29,8 @@ export function SettingsFieldControl({
   variant: 'compact' | 'full';
   /**
    * Resolves a `labelKey`/`placeholderKey`/`fallbackKey` to display text. Injected
-   * rather than called internally with a fixed namespace, because the compact panel's
-   * labels live under `creationCanvas.nodePanel` and the full inspector's under plain
+   * rather than called internally with a fixed namespace, because the short reading's
+   * labels live under `creationCanvas.nodePanel` and the wide one's under plain
    * `creationCanvas` — the SAME field name (`name`, `role`, `model`…) resolving through
    * two different catalogs is exactly why this is the caller's `t`, not this file's.
    */

@@ -1,0 +1,47 @@
+/*
+ * Shell-themed, like the dock it belongs to. Two placements, one control: the
+ * dock's dormant strip wants a compact pill on its own line, the invite panel
+ * wants a full-width action that sits with the panel's other buttons.
+ */
+
+.start {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-full);
+  background: var(--accent-subtle);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-small);
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--duration-fast, 0.14s), border-color var(--duration-fast, 0.14s);
+}
+
+.start:hover {
+  background: var(--surface-interactive-hover);
+}
+
+.start:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+/* In the invite panel it is one of the panel's actions, so it takes the panel's
+   width and its squarer corner rather than reading as a stray pill. */
+.start[data-variant='panel'] {
+  width: 100%;
+  border-radius: var(--radius-md);
+  min-height: 38px;
+}
+
+@media (max-width: 720px) {
+  .start {
+    min-height: 40px;
+  }
+}

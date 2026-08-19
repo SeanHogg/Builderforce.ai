@@ -1,3 +1,124 @@
+## ✅ RESOLVED 2026-08-18 — The `+` covered the connector, and the object's settings lived on the far side of the board
+
+Two reports about the same card. Neither was cosmetic: one made a whole gesture unreachable, the
+other put an object's settings somewhere that no longer pointed at the object.
+
+### The `+` sat exactly on top of the connector
+
+`.nodeInsert` was placed at `top: 50%` with `z-index: 4`. That is exactly where React Flow puts a
+node's source handle, and the button (28px) is larger than the capsule underneath it (26px, 32px
+on hover). So the control that says "what comes after this object" physically covered the only
+place you can START a connection: you could add a step after a card and never join two cards you
+already had. It now clears the handle by an offset derived from the two heights it has to pass
+— half the handle at hover size, an 8px gap, and its own height — rather than an eyeballed number,
+and the minimised orb form got the same treatment.
+
+### The full inspector was a rail with nothing tying it to the card
+
+The anchored panel carried an "open the full inspector" button that CLOSED it and opened a
+full-height rail pinned to the right of the board. Every value, every setting, the kind's own
+actions and the activity log lived over there, with nothing saying which of fifteen cards was
+being edited — the exact problem anchoring the panel had been introduced to solve, undone one
+press in.
+
+There is no second surface now. The same panel gets WIDER: the header's `⧉` became a
+widen/narrow toggle, and wide it renders the object's whole inspector in place, still anchored to
+its card. The Advanced hint that used to name the rail takes the same route, so the two cannot
+disagree. All eighteen board actions that reached for the rail (`setInspectorNodeId` — visualize a
+dataset, compare projects, expand a pipeline, add from the palette, drop a file…) call one
+`openNodeInspector`, which opens that panel wide beside the card. "Open at full size" moved into
+the one header the object now has, so there is one title, one close and one row of actions instead
+of two headers disagreeing about the same object.
+
+Details that came with it, because widening must never HIDE something narrowing showed:
+`TimingFields` ("run on its own") is drawn in the wide body as well as in compact Advanced — same
+component both ways. Click-away closes the short panel but not the wide one: an expanded inspector
+opens file pickers, convert dialogs and confirmations that mount outside the panel element, and a
+popover that vanished on the first of those would be unusable. Escape and the close button still
+work at either width. The anchor is derived per render from the card's box and the width in play,
+so a card near the right edge cannot open a 560px panel off the screen, and a panel opened by an
+action with no event measures its card in a layout effect rather than reading the DOM during
+render.
+
+Deleted with the rail: its width state and remembered localStorage width, the drag-resize handle
+and its keyboard resizer, the duplicate title bar, `updateSelected` (one caller, which no longer
+exists), and seven now-dead catalog keys across all five locales. `kindSettingsHasMoreInFullInspector`
+is `kindSettingsHasMoreThanCompact` — it was never about a rail, it was about what the short reading
+leaves out.
+
+This also closes the Gap Register entry from 2026-08-16 reporting `CreationCanvas.test.tsx`
+"imports tabular data and creates a connected visualization" as red: it was red because that
+in-flight panel-routing change was half-landed. The routing is settled and all 86 tests in the file
+pass.
+
+## ✅ RESOLVED 2026-08-18 — Remote cursors drew once and never moved, and a free board had no way to start a call
+
+Two reports from the same session: collaborators' cursors and names were not appearing on the
+canvas, and on the logged-out board there was no way to start a meeting.
+
+### Cursors: correct arithmetic, run at the wrong time
+
+`RemoteCursors` was a sibling of `<ReactFlow>` that took the flow instance and the board element
+AS PROPS — `instance={flowRef.current} container={flowWrapRef.current}` — read off two refs
+**during the parent's render**, and converted each cursor with `flowToScreenPosition()` minus the
+board's bounding box.
+
+That arithmetic is correct exactly once: at the instant it runs. Assigning a ref does not
+re-render, and panning or zooming a React Flow board does not re-render its parent either, so the
+only thing that ever moved a remote cursor was the 8-second `/presence` poll. Between two ticks
+the board could be panned anywhere and every cursor stayed nailed to the pixel it was last drawn
+at — pointing at whatever happened to be underneath and, after any real pan, sitting outside the
+layer's `overflow: hidden` where it could not be seen at all. "The cursors don't show" and "the
+cursors are in the wrong place" were one defect.
+
+The layer now lives INSIDE the viewport via `ViewportPortal`, positioned in plain flow
+coordinates, so React Flow's own pane transform carries it — right *during* a pan rather than
+after one, and at no re-render cost. The label counter-scales by the live zoom so a name is
+readable at 20% and is not a billboard at 400%. Two more things went with it: the fallback name
+was the hardcoded English string `'Collaborator'` (now `creationCanvas.collaborator`), and colour
+was assigned by the member's INDEX in the filtered roster — so a person's colour changed whenever
+somebody above them joined or left, and the same person was a different colour on two screens at
+once. `lib/canvas/presenceColor.ts` hashes it from the user id instead, which is the only way a
+colour can mean a person.
+
+### A free board could be shared but not spoken on
+
+`useCanvasLiveRoom` gated on `hasTenant`, so a logged-out board never got the dock and never got
+a call — even though the guest media room has existed since guest rooms shipped
+(`guestMediaTransport` + `GuestRoomDO`'s media channel, used by `GuestRoomMeeting`). A free board
+that had started a shared session already had a room code and a transport; nothing on the canvas
+could reach them. It was the one surface where people could work on the same thing and had no way
+to talk about it.
+
+`LiveSessionValue.publishAnchor(target | null)` lets a surface declare the room it would open, and
+a published anchor wins over the default assembled from auth. `CreationCanvas` publishes the guest
+anchor while a shared session is running, so `useCanvasLiveRoom` stays the ONE place that decides
+whether a call can start. The control itself is `components/live/StartCallButton` — self-gating on
+that hook — rendered by the dock's dormant strip AND by the invite panel, because "get someone in
+here" and "talk to them" are one errand and a signed-out visitor should not have to hunt for the
+second half. The dock's own inline start button and its now-dead `.start` styles were removed
+rather than left as a second copy.
+
+**Files.** `components/creation-canvas/RemoteCursors.tsx` (new, extracted from a 11k-line file and
+unit-tested), `lib/canvas/presenceColor.ts` (new), `components/live/StartCallButton.tsx` +
+`.module.css` (new), `lib/live/LiveSessionContext.tsx` (`publishAnchor`/`anchor`),
+`lib/live/useCanvasLiveRoom.ts`, `components/live/LiveBar.tsx` + `.module.css`,
+`components/creation-canvas/CreationCanvas.tsx` + `.module.css`,
+`components/creation-canvas/remoteCursors.test.tsx` (new, 10 cases),
+`i18n/messages/{en,zh,es,fr,de}.json`. The `@xyflow/react` mock in the two canvas suites gained
+`ViewportPortal`, which it would otherwise have crashed on the first time a test gave the board a
+collaborator with a live pointer. Two redundant `'use client'` directives were dropped so the
+architecture ratchet stayed at its floor rather than being raised.
+
+**Verified.** `tsgo --noEmit` clean; 10/10 frontend guards; `remoteCursors` 10/10; the canvas and
+live suites green.
+
+**Still open (logged, not fixed).** Cursor POSITION still rides the 8s `/presence` REST poll —
+placement is now exact but freshness is bounded by that cadence. Blocked on a server capability
+that does not exist: `SessionRoomDO` is deliberately a domain-free `{type:"changed"}` fan-out, so
+live cursors need a client→client relay with its own per-peer auth, of the kind `CeremonyRoomDO`
+implements for ceremonies. See the Gap Register entry under group 10.
+
 ## ✅ RESOLVED 2026-08-18 — The homepage threw a hydration error on half the planet, and every unknown URL 500'd
 
 Two defects reported from the live site once the server actually started rendering: React #418 in the

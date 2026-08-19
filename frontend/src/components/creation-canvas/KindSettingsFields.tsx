@@ -4,7 +4,7 @@
  *
  * A kind with a registered `KindSettingsManifest` draws its declared fields; a kind
  * without one still gets the baseline every object had before this existed — a name and
- * a status, Advanced holding the subtitle and a link to the full inspector. Timing is
+ * a status, Advanced holding the subtitle and the way to the object's remaining settings. Timing is
  * neither: every object can run on its own schedule (`CreationNode`'s clock badge says
  * so for a reason — "not conditional on there being a schedule"), so Advanced always
  * offers it here too, which is the direct fix for a Persona panel whose Advanced
@@ -12,7 +12,7 @@
  */
 
 import { useTranslations } from 'next-intl';
-import { kindSettingsFields, kindSettingsHasMoreInFullInspector } from '@/lib/canvasKindSettings';
+import { kindSettingsFields, kindSettingsHasMoreThanCompact } from '@/lib/canvasKindSettings';
 import { canvasPersonOrigin, isCanvasPersonKind } from '@/lib/canvasNodeAffordances';
 import { SettingsFieldControl } from './SettingsFieldControl';
 import { TimingFields } from './TimingFields';
@@ -24,13 +24,15 @@ export function KindSettingsFields({
   editable,
   advancedOpen,
   onChange,
-  onOpenFull,
+  onExpand,
 }: {
   data: CreationNodeData;
   editable: boolean;
   advancedOpen: boolean;
   onChange: (patch: Partial<CreationNodeData>) => void;
-  onOpenFull: () => void;
+  /** Widens the panel this renders in, which is where the rest of the kind's settings
+   *  are. Not a route to a second surface — see `CanvasNodePanel`. */
+  onExpand: () => void;
 }) {
   const t = useTranslations('creationCanvas.nodePanel');
   const fields = kindSettingsFields(data.kind, data, 'compact');
@@ -59,12 +61,13 @@ export function KindSettingsFields({
           <span>{t('subtitle')}</span>
           <input value={data.subtitle ?? ''} disabled={!editable} onChange={(event) => onChange({ subtitle: event.target.value })} />
         </label>
-        {/* Naming the inspector and then not going there is what a dead end reads like:
+        {/* Saying there is more and then not offering it is what a dead end reads like:
             somebody who opens Advanced looking for their object's OWN settings — a
-            dashboard's date range, a dataset's import — is told where those live and
-            left to find the door themselves. The sentence IS the door. */}
-        {kindSettingsHasMoreInFullInspector(data.kind) && (
-          <button type="button" className={styles.anchoredHintAction} onClick={onOpenFull}>{t('configAdvancedHint')}</button>
+            dashboard's date range, a dataset's import — is told they exist and left to
+            find them. The sentence IS the control, and it widens THIS panel rather than
+            sending anyone to a rail that no longer points at their card. */}
+        {kindSettingsHasMoreThanCompact(data.kind) && (
+          <button type="button" className={styles.anchoredHintAction} onClick={onExpand}>{t('configAdvancedHint')}</button>
         )}
       </>}
       {advanced.map((field) => <SettingsFieldControl key={field.name} field={field} data={data} editable={editable} variant="compact" translate={(key) => t(key as never)} onChange={onChange} />)}
