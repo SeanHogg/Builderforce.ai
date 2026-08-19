@@ -143,3 +143,31 @@
   color: var(--text-primary);
   font-size: var(--font-size-small);
 }
+
+/* ── The paperwork half (FO-D5) ─────────────────────────────────────────────
+   Each party is a stacked block rather than a table row: a five-column table in a
+   360px viewport is a horizontal scroll trap, and the fields a founders' agreement
+   asks for are exactly the ones nobody should have to scroll to find. */
+.partyList { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.party {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+.partyGrid {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+/* The draft, exactly as it will be sent. Pre-wrapped rather than pre, so a long
+   clause wraps instead of pushing the page sideways; the box scrolls vertically
+   because a founders' agreement is longer than a card. */
+.document {
+  margin: 14px 0 0; padding: 14px;
+  max-height: 420px; overflow: auto; overscroll-behavior: contain;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface-raised); color: var(--text-primary);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: var(--font-size-small); line-height: 1.6;
+  white-space: pre-wrap; word-break: break-word;
+}

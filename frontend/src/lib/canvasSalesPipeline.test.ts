@@ -78,3 +78,45 @@ describe('canvas sales pipeline', () => {
     expect(cardsAt(orphaned, 1, 'new')).toEqual([]);
   });
 });
+
+/**
+ * The card's handle on the deal behind it.
+ *
+ * FO-F1 gave every projected card a `dealId` and named itself after "a deal dragged
+ * on the board" — and this model dropped the field on the way in, so the renderer had
+ * nothing to drag with and nothing to send back. The null case is just as
+ * load-bearing as the number: a hand-authored card has no row to move, and drawing a
+ * grab handle on one would promise a write that cannot happen.
+ */
+describe('a projected card carries its deal id', () => {
+  it('reads the id the projection wrote', () => {
+    const model = readPipelineModel({
+      stages: ['new'],
+      cards: [{ id: 'deal-7', dealId: 7, stage: 'new', title: 'Northwind' }],
+    });
+    expect(model.cards[0]?.dealId).toBe(7);
+  });
+
+  it('leaves a hand-authored card with no id at all', () => {
+    const model = readPipelineModel({ stages: ['new'], cards: [{ id: 'x', stage: 'new', title: 'Typed by hand' }] });
+    expect(model.cards[0]?.dealId).toBeNull();
+  });
+
+  it('refuses an id that is not a positive whole row reference', () => {
+    const model = readPipelineModel({
+      stages: ['new'],
+      cards: [
+        { id: 'a', dealId: 0, stage: 'new', title: 'Zero' },
+        { id: 'b', dealId: -4, stage: 'new', title: 'Negative' },
+        { id: 'c', dealId: 2.5, stage: 'new', title: 'Fractional' },
+        { id: 'd', dealId: 'nonsense', stage: 'new', title: 'Text' },
+      ],
+    });
+    expect(model.cards.map((card) => card.dealId)).toEqual([null, null, null, null]);
+  });
+
+  it('accepts the id as a string, which is what a saved board round-trips', () => {
+    const model = readPipelineModel({ stages: ['new'], cards: [{ id: 'a', dealId: '12', stage: 'new', title: 'Acme' }] });
+    expect(model.cards[0]?.dealId).toBe(12);
+  });
+});

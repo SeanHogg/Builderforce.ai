@@ -289,6 +289,8 @@ import * as qaApi from '@/lib/qa/api';
 import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
 import { canvasBuildActions, type BoundCanvasBuild } from '@/lib/canvasBuildTools';
 import { canvasFounderOpsActions, pipelineFieldsFrom, type CanvasFounderOpsContext } from '@/lib/canvasFounderOpsTools';
+import { canvasDataRoomActions } from '@/lib/canvasDataRoomTools';
+import { canvasDocumentTemplateActions } from '@/lib/canvasDocumentTemplateTools';
 import { canvasEquityActions } from '@/lib/canvasEquityTools';
 import { canvasLegalDocumentActions } from '@/lib/canvasLegalDocumentTools';
 import { canvasSellMotionActions } from '@/lib/canvasSellMotionTools';
@@ -486,20 +488,51 @@ const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly stri
   // grid for outcomes and columns that do not resolve on the board.
   assignment: ['distribute'], gradebook: ['compute'], submission: ['mark'],
   cohort: ['import'], curriculumMap: ['validate'], bibliography: ['import'],
-  // FO-B3: the five consumers routed through the form/signature primitives (0469).
-  // `contract.sign` and `dataRoom.share` stay GATED in `canvasApprovalGate` — what
-  // changed is that a human who approves either now gets a real signature request
-  // instead of "no delivery adapter is connected". `offer.send` is gated the same
-  // way; `offer.sign` is not, because it only re-reads the request it created and
-  // asserts nothing new. `policy.acknowledge` is open: sending a roster its own
-  // reviewer a nudge to sign is reversible and not attested.
-  contract: ['sign'], policy: ['acknowledge'], offer: ['send', 'sign'], dataRoom: ['share'],
+  // FO-B3's five consumers are NOT here, deliberately — see DEDICATED_ACTION_TOOLS
+  // below. Each is performed by a tool that takes arguments this generic seam cannot
+  // carry, and listing them here made `canvas_invoke_object_action` stage a proposal
+  // the pending-action dispatcher had no branch for: an approved `contract.sign` ended
+  // in "no delivery adapter is connected" while the adapter it named sat one tool away.
   // FO-D1..FO-D4: the ownership acts, each of which reaches the real ledger.
   // `capTable.sync` FOLDS it onto the card and `model` prices a round against it;
   // `equityGrant.issue` and `convertible.record` WRITE it, and both stay GATED in
   // `canvasApprovalGate` — what changed is that a human who approves either now
   // gets a real event instead of a number typed onto a card.
   capTable: ['sync', 'model'], equityGrant: ['issue', 'sync'], convertible: ['record', 'model'],
+};
+
+/**
+ * Acts performed by a DEDICATED tool rather than by the generic action seam.
+ *
+ * ── WHY THIS EXISTS AND IS NOT A THIRD STATE ────────────────────────────────
+ * `canvas_invoke_object_action` takes an object id and a verb. Sharing a data room
+ * takes a named recipient, a real address, an expiry and a purpose; requesting a
+ * signature takes the parties. Neither fits, so both are tools of their own — the
+ * same shape `canvas_sync_account` already is — and the kinds they serve are absent
+ * from `CONNECTED_CANVAS_ACTIONS` by design (`legalObjects.ts` says so in as many
+ * words for `legalDocument`).
+ *
+ * What was missing was the REDIRECT. Absence alone made the generic tool answer "no
+ * real Canvas delivery adapter is connected yet" — a sentence that is false, and false
+ * in the direction that makes a model tell a user the product cannot do something it
+ * can. Presence made it worse: the proposal was staged, approved by a human, and then
+ * met a dispatcher with no branch for it, so the act ended in a notice rather than in
+ * a signature request.
+ *
+ * So the seam NAMES the tool instead. One map, consulted before either path.
+ */
+const DEDICATED_ACTION_TOOLS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  contract: { sign: 'canvas_request_signature' },
+  offer: { send: 'canvas_request_signature', sign: 'canvas_request_signature' },
+  policy: { acknowledge: 'canvas_request_signature' },
+  dataRoom: { share: 'canvas_share_data_room', assemble: 'canvas_sync_data_room' },
+  legalDocument: {
+    share: 'canvas_legal_document_share',
+    'request-signature': 'canvas_legal_document_request_signature',
+    sync: 'canvas_legal_document_sync',
+  },
+  salesPipeline: { sync: 'canvas_sync_sales_pipeline' },
+  fundingRound: { track: 'canvas_sync_funding_round' },
 };
 const WEBSITE_SECTION_SCHEMA = {
   type: 'object', required: ['id', 'kind'], additionalProperties: false,
@@ -4346,6 +4379,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   /** The secure legal-document vocabulary — share, revoke, request signature, sync.
    *  See `canvasLegalDocumentTools.ts` for why these are dedicated tools rather than
    *  routed through `canvas_invoke_object_action`. */
+  /** The data room, actually sent — sync it, share it with one named firm behind an
+   *  NDA, revoke that firm's access. The three columns `data_rooms` has always carried
+   *  and nothing ever read (FO-E2). */
+  const canvasDataRoomActionList = useMemo<BrainAction[]>(() => canvasDataRoomActions(canvasOpsContext), [canvasOpsContext]);
+  /** The founders' agreement and its siblings, drafted from the ONE template registry
+   *  onto a `contract` card — then signed through the signature tool that already
+   *  existed, so there is no second signature path (FO-D5). */
+  const canvasDocumentTemplateActionList = useMemo<BrainAction[]>(() => canvasDocumentTemplateActions(canvasOpsContext), [canvasOpsContext]);
   const canvasLegalDocumentActionList = useMemo<BrainAction[]>(() => canvasLegalDocumentActions(canvasOpsContext), [canvasOpsContext]);
   /** The generic e-signature request for authored (non-file) objects — closes the
    *  `contract.sign` gap; see `canvasSignatureTools.ts`. */
@@ -7823,6 +7864,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!args.action || !definition.actions.includes(args.action)) return { error: `Unsupported action. Available actions: ${definition.actions.join(', ')}` };
       if (args.action === 'inspect') return { object: { id: target.id, ...definition.contextAdapter(target.data, specBoardOf(nodes)) }, actions: definition.actions, mutableFields: definition.mutableFields };
       if (args.action === 'edit') return { objectId: target.id, kind: target.data.kind, mutableFields: definition.mutableFields, instruction: 'Call canvas_update_object with the desired fields.' };
+      // The redirect FIRST: an act with a dedicated tool is not an unimplemented act,
+      // and answering "no delivery adapter" for one is how a model comes to tell a
+      // user the product cannot do something it can.
+      const dedicated = DEDICATED_ACTION_TOOLS[target.data.kind]?.[args.action];
+      if (dedicated) {
+        return {
+          error: `${args.action} on a ${definition.label} is performed by ${dedicated}, which takes the details this action cannot carry. Call ${dedicated} instead — do not claim this ran.`,
+          useTool: dedicated, objectId: target.id, action: args.action,
+        };
+      }
       if (!canInvokeCreationObjectAction(target.data.kind, args.action)) {
         return { error: `${args.action} is declared for ${definition.label}, but no real Canvas delivery adapter is connected yet. Do not claim that it ran.` };
       }
@@ -8371,8 +8422,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(projectId == null ? { note: 'Published without a project. Add a project object to the canvas to file these under it, which is what gives them a run target and a persona.' } : {}),
       };
     },
-  }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasEquityActionList, ...canvasLegalDocumentActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
-  [canEdit, canvasBuildActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasLegalDocumentActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
+  }, ...canvasBuildActionList, ...canvasFounderOpsActionList, ...canvasEquityActionList, ...canvasDataRoomActionList, ...canvasDocumentTemplateActionList, ...canvasLegalDocumentActionList, ...canvasSignatureActionList, ...canvasSellMotionActionList].filter((action) => persistence === 'server' || !canvasToolRequiresAccount(action.name))),
+  [canEdit, canvasBuildActionList, canvasDataRoomActionList, canvasDocumentTemplateActionList, canvasEquityActionList, canvasFounderOpsActionList, canvasLegalDocumentActionList, canvasSellMotionActionList, canvasSignatureActionList, convertObjectToDiagram, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolveTabularTarget, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, socialAccountGate, tSocial]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');

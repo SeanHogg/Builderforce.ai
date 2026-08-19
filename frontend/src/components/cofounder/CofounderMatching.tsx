@@ -30,6 +30,7 @@ import {
   type CofounderMatch,
   type CofounderProfile,
 } from '@/lib/founderOpsApi';
+import { FounderPaperwork } from './FounderPaperwork';
 import styles from './CofounderMatching.module.css';
 
 const EMPTY_PROFILE = {
@@ -173,6 +174,13 @@ export function CofounderMatching() {
           </ul>
         </section>
       )}
+
+      {/* The paperwork half (FO-D5). Shown once a profile exists rather than gated on
+          an ACCEPTED introduction, deliberately: a founders' agreement is just as often
+          written with somebody you already know as with somebody this page found you,
+          and hiding it behind a match would make the document reachable only through
+          the one route that happens to be newest. */}
+      {!editing && profile && <FounderPaperwork />}
     </main>
   );
 }

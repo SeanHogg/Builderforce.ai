@@ -84,6 +84,169 @@ engagement routes and the job surface only authors drafts.
 pass, including 11 new ones that pin the closed hole — a fixed-price engagement with an
 empty schedule is now REFUSED where it was previously waved through.
 
+## ✅ RESOLVED 2026-08-19 — FO-D5 (paperwork), FO-E1, FO-E2, FO-E4 and FO-F2 · migration 0925
+
+Five register items and one residual, closed together because they are one story: a company
+now has the document that comes before every other document, the raise is a board rather than
+a spreadsheet, the data room's safety columns mean something, and the deal the whole feature is
+named after can be dragged with a pointer.
+
+### FO-D5 (paperwork half) — the founders' agreement has a template and a signature flow
+
+The matching half shipped on 2026-08-15; two founders could find each other and had nowhere to
+record what they agreed. The register was precise about the shape of the fix — "a TEMPLATE plus
+a `contract` routed through it" — and that is exactly what landed.
+
+- **`api/src/application/legal/documentTemplates.ts`** — ONE registry. A template is a title, a
+  category, a declared variable list and a renderer, so "which documents exist" is one array to
+  read and adding one is one entry. Four to start: **founders' agreement**, **founder IP
+  assignment**, **founder vesting schedule**, **mutual NDA**. Nothing branches on the key.
+- **A missing required variable is refused BY NAME**, with a 400 and the variable list. Rendering
+  `—` into a founders' agreement and letting somebody sign it is worse than an error, because it
+  produces a document that looks finished.
+- **The equity split is checked in the document itself.** When the declared holdings do not total
+  100, the rendered agreement says so in a callout rather than hiding it in prose — the one defect
+  a founders' agreement must not conceal.
+- **`api/src/application/legal/templateSigning.ts`** composes render → `createSignatureRequest` →
+  `deliverSignatureInvitations` once, for every consumer. The signers DEFAULT to the parties the
+  document names, so who signs cannot disagree with the text.
+- **Three endpoints** (`documentTemplateRoutes.ts`): the catalogue, `render` (writes nothing) and
+  `send`. The split is the design — a founders' agreement is the document people argue about
+  BEFORE they sign it, and `contract.sign` is approval-gated precisely so a human reads it first.
+- **`canvas_draft_legal_document`** drafts onto a `contract` card as a new `documentBody` field,
+  which `canvas_request_signature` then sends VERBATIM — so the signer sees the agreement, not a
+  one-line summary of it. `defaultDocumentBody` now prefers `documentBody` over `summary`, which
+  is the fix that makes the whole path honest.
+- **`/cofounder` gained `FounderPaperwork`** — a form BUILT FROM the template's declared variables
+  (so a template that gains a clause cannot leave the form behind), with preview-then-send and the
+  draft rendered exactly as it will be sent. Localized in all five catalogs.
+
+### FO-E1 — the fundraise pipeline is a board, and an investor is an object
+
+`fundingRound.investors` was a rows table with no investor as an object, no warm-intro path and no
+per-investor thread. All three already existed one layer down. This is a projection, not a schema.
+
+- **`api/src/application/revenue/pipelineFamilies.ts`** — a pipeline FAMILY is DATA: its
+  `deals.kind` values, its fallback ladder, its two terminal stages, what a lane means and which
+  `party_roles` role its counterparty holds. `sales` and `raise`; `placement` deliberately belongs
+  to neither, because projecting a recruiter fee onto a sales board would inflate the one number
+  that board exists to show. Nothing in the engine branches on which board it is drawing.
+- **`pipelineProjection.ts` serves both.** The raise ladder is a raise ladder — `committed` (a soft
+  circle) and `closed` (the wire) are separate stages, because a founder who counts commitments as
+  cash is the failure the board exists to make visible.
+- **`openDeal()` writes the `party_roles` row**, which is what turns "Northwind Ventures" from a
+  string in a cell into an object every other board joins to. Idempotent on both the party and the
+  deal, so asking twice does not produce two cards for one conversation.
+- **The warm intro is an EVENT**, not just a field: `deals.attrs.introVia` plus an `intro`
+  touchpoint, because "who introduced us" is half the answer and "when, and what came of it" is
+  the half a founder actually chases.
+- **`pipeline_touchpoints` is the per-investor thread**, with `GET`/`POST
+  /api/pipeline/deals/:id/touchpoints` and `canvas_log_deal_touch`. A card's note IS its latest
+  touch and its `touches` count is on the row, so a firm with a stage and no conversations is
+  visibly a name somebody typed.
+- **The card is redrawn from the response that performed the write**, onto the kind the response's
+  own family names — one `writeBoard` helper for four tools, because four copies of that rule
+  would be four chances to redraw the wrong card.
+- The projection now also carries `probabilityPercent` (it was being dropped, so a projected board
+  weighted by stage only) and `partyRef`.
+
+### FO-E2 — the data room's three safety columns are enforced
+
+`nda_required`, `watermark` and `expires_at` had existed since migration 0422 with NO reader
+anywhere in the codebase, and `dataRoom.share` was a gated act with nothing behind the gate.
+
+- **`data_room_shares`** (migration 0925) — a revocable, hashed-token grant per firm, with a real
+  FK to the room. Not folded into `legal_document_shares`: that grants ONE file, this grants a
+  negotiated relationship, and merging them would trade two real foreign keys for a string
+  discriminator. What IS shared is the credential mechanics, and those already live in one place.
+- **All three columns are enforced in `resolveDataRoomShare`, and only there.** `expires_at`: both
+  the share's clock and the ROOM's, so shortening the room shortens every link into it.
+  `nda_required`: the link resolves to `nda-pending` and opens nothing until the bound
+  `signature_requests` row reports `completed` — and the NDA is the `mutual-nda` entry in the ONE
+  template registry above, not a second body written inside the data-room module. `watermark`: a
+  watermarked room cannot mint a `download` share at all, and text documents are stamped with the
+  recipient and the instant on the way out.
+- **No `nda_state` column.** Derived from the signature request's own status, which is why a room
+  cannot report "signed" for an NDA that was declined.
+- **No access-log table.** Every open and every document read is an `activity_log` row (THE audit
+  store, migration 0295) under `data_room.share_viewed` / `data_room.document_viewed`, and
+  `dataRoomAnalytics` is three GROUP BYs over the index that already existed for exactly this
+  access path — per-recipient and per-document, most-read first.
+- **`readiness` became DERIVED.** It was an authored number on the card under a hint describing a
+  computation nobody performed; it is now required-versus-provided, and a room with nothing
+  required reads 0 rather than 100.
+- **`/data-rooms/shared/<token>`** — the recipient's page, unauthenticated by construction like
+  `/sign/<token>`. It lists MISSING documents too, because a room that showed only what exists
+  would hide the gap it was built to close, and it states the watermark in as many words.
+  Localized in all five catalogs.
+- **`canvas_sync_data_room` / `canvas_share_data_room` / `canvas_revoke_data_room_share`**, each
+  re-evaluating the same approval gate `canvas_invoke_object_action` would have.
+
+### FO-E4 — ANSWERED: one table, the raise is a projection
+
+Put to the operator once FO-E1 was buildable. The decision: `investor` is genuinely both sides of
+one table. `deals.kind='investment'` plus `party_roles role='investor'` carry the raise, the
+`fundingRound` card is a projection of those allocations, and the `investor` domain stays the
+CEO's evaluating side. No second domain, no `raise_*` tables, no second stage ladder.
+
+### FO-F2 — the mirroring instruction is gone
+
+The paragraph FO-F1 replaced with a mechanism ("after a successful sales mutation, mirror the
+returned canonical id and current values into the matching … canvas object") is deleted from the
+largest system prompt on the platform. Two things took its place:
+
+- In the always-on block, the mirroring rule now applies ONLY to `salesContact`, `salesCampaign`
+  and `salesGoal` — the three kinds that still have no projection — and says explicitly never to
+  do it for a `salesPipeline` or a `fundingRound`.
+- A new **tenant-gated** block names the projection tools. `check-canvas-tool-contract` caught the
+  first attempt, which named two account-required tools in the always-on block: on an anonymous
+  board that is an instruction to call tools the gateway had already stripped. The guard doing its
+  job is why this shipped correct.
+
+### The residual of FO-F1 — a deal can be dragged
+
+- `PipelineCard.dealId` was being DROPPED by `readPipelineModel`, so FO-F1 could truthfully say
+  "each card carries its dealId" while the renderer had nothing to drag with. It is read now, and
+  a card with no id is deliberately not draggable — a hand-authored card has no row to move.
+- `PipelineBoardBody` (renamed, because it now draws both boards) has HTML5 drag with drop targets
+  per stage, and the same kanban renders a `fundingRound` that has been synced.
+- **No optimistic reorder.** The board that comes back from `moveDeal` is the board; painting a
+  guess first would reintroduce, for a few hundred milliseconds, exactly the disagreement the
+  projection exists to remove.
+
+### Found and fixed in the same pass
+
+- **`activity_log.object_id` had no writer.** The column has existed since PRD 20 §6.3 — "what
+  makes `/api/objects/:id/activity` ONE endpoint" — and `ActivityInput` could not set it, so that
+  endpoint answered empty for every event `recordActivity` has ever appended. It is now settable
+  and set.
+- **`canvas_invoke_object_action` answered "no real Canvas delivery adapter is connected yet" for
+  acts that HAVE one.** `contract.sign`, `offer.send`/`sign`, `policy.acknowledge`,
+  `dataRoom.share` and every `legalDocument` act are performed by dedicated tools that take
+  arguments the generic seam cannot carry. Listing them in `CONNECTED_CANVAS_ACTIONS` was worse
+  than omitting them: the proposal was staged, approved by a human, and met a dispatcher with no
+  branch for it. A `DEDICATED_ACTION_TOOLS` map now NAMES the tool instead.
+- **`policy` declared `signatureRequestId` and not `signatureState`**, so the generic signature
+  tool — which discovers the kinds it serves from that pair — refused it, and `policy.acknowledge`
+  was an advertised act with nothing behind it. The field is declared; the roster write-back is
+  logged as a residual.
+- **`shareGrantState()`** — revoked-or-lapsed was four hand-written copies of the same two
+  questions in the same order. One predicate now, and `resolveLegalDocumentShare` was migrated to
+  it in the same pass.
+- **`deals.kind`'s own comment never listed `investment`**, the value the raise rides on.
+
+### Tests
+
+`pipelineFamilies.test.ts` (7) proves the families are disjoint, that every terminal stage is in
+its own ladder, and that `placement` belongs to no board. `documentTemplates.test.ts` (12) renders
+every template, proves the refusal names the missing variable, and proves the equity callout fires
+at 80% and stays silent at 100%. `canvasSalesPipeline.test.ts` gained four cases for `dealId`,
+including the null that makes a hand-authored card undraggable. Full API suite and full frontend
+suite green; 22/23 API guards pass (the one failure, `check:tenant-scope` on
+`application/quality/ingestEngine.ts`, is another session's in-flight file and untouched here).
+
+---
+
 ## ✅ RESOLVED — 2026-08-19 · Canvas confidentiality enforcement, the dataset-use gate, and eleven verified-stale DS/HR entries
 
 Two things happened in this pass: one real vertical slice was built (confidentiality, enforced at every

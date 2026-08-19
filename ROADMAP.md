@@ -915,13 +915,15 @@ FO-D5's matching half. **FO-A2 and FO-A3 are CLOSED too** — 2026-08-16, Track 
 `contract` object itself, and support load was evaluated and left out — see the
 entry for why). **The whole FO-C money track is CLOSED** — 2026-08-19, migration 0926: FO-C2's
 three receivable acts, FO-C4's per-tenant merchant account, FO-C5's collections ladder and the
-pay-run residual of FO-C6. What remains is unblocked in the same way:
-**FO-B3** now has both primitives to route through. FO-E1 has the
-`investor` role it needed (`parties.ts`), and FO-D used the `equity_holder` half of the same
-pair — `recordGrant` writes that role, so a cap-table holder and an `account` are one party.
-FO-F2 is unblocked and
-should be taken with care — it deletes the mirroring paragraph that FO-F1 replaced.
-**FO-D1..FO-D4 are CLOSED** (2026-08-19, migration 0927 — see [DONE.md](./DONE.md)); FO-G2/FO-G3 are unblocked now that Track 1 has landed.
+pay-run residual of FO-C6. **FO-D5's paperwork half, FO-E1, FO-E2, FO-E4 and FO-F2 are CLOSED too** — 2026-08-19,
+migration 0925, see [DONE.md](./DONE.md): the document-template registry and the four founding
+documents, the raise as a pipeline FAMILY over `deals.kind='investment'`, the data room's three
+safety columns enforced at the one place a token resolves, the operator's answer to FO-E4 (one
+table — the raise is a projection, not a second domain), the mirroring paragraph deleted from the
+canvas system prompt, and a deal you can drag with a pointer.
+**FO-D1..FO-D4 are CLOSED** (2026-08-19, migration 0927 — see [DONE.md](./DONE.md)).
+What remains: **FO-B3** now has both primitives to route through, and FO-G2 plus FO-G3's
+commercial half are unblocked now that Track 1 has landed.
 
 **The tighter constraint is still file collision, not logical dependency.** The remaining
 items edit the same coordination files, so dispatching them at once produces conflicts even
@@ -945,7 +947,8 @@ file-disjoint and must be serialized and rebased before merge:
   landed. **FO-B3 mostly CLOSED 2026-08-16** — see DONE.md; `jobPosting` applications is blocked
   on a decision (see FO-B3's own entry). FO-B4 unaffected.
 **Track 3 — money:** closed 2026-08-19 (FO-C2, FO-C4, FO-C5 and the pay-run residual).
-**Track 4 — the disjoint singles:** FO-F2 (one prompt deletion), FO-E2 (over FO-B2).
+**Track 4 — the disjoint singles:** CLOSED 2026-08-19 — FO-F2 (the prompt deletion) and
+  FO-E2 (the data room, over FO-B2) both landed with migration 0925.
 
 FO-G2/FO-G3 should not start until Tracks 1–3 land.
 
@@ -1012,33 +1015,43 @@ FO-G2/FO-G3 should not start until Tracks 1–3 land.
 > [DONE.md](./DONE.md). What is left below is the paperwork half.
 
 
-- **FO-D5 (paperwork half) — a co-founder agreement still has no template and no signature flow.**
-  *(matching half landed 2026-08-15 — `cofounder_profiles`, the scorer and `/cofounder`; see
-  [DONE.md](./DONE.md).)* Two founders can now find each other and have nowhere to record what they
-  agreed: no founders' agreement, no IP assignment, no founder vesting. The signature engine exists as
-  of the same pass, so this is a TEMPLATE plus a `contract` routed through it — i.e. it is FO-B3 and
-  FO-G3 applied to the one document that comes before every other document. **Not blocked.** Unblocks:
-  the first artifact a company produces having a home.
 
 #### FO-E · Raising — four cards and an unenforced data room
 
-- **FO-E1 — The fundraise pipeline is a spreadsheet inside a card.** `fundingRound.investors` is a rows
-  table `{investor, stage, amount, nextStep}` with no investor as an object, no warm-intro path and no
-  per-investor thread. Fix = project it over `revenue.deals`, which ALREADY carries the `kind` column
-  PRD 20 §3.3 adjudicated for exactly this — "a sales deal, a recruiter placement fee and an investor
-  allocation are one shape with three kinds" — plus `pipeline_stages` and `pipeline_touchpoints`. An
-  investor is a `party_roles` row with `role='investor'`, per FO-A1. This is a projection, not a schema.
-- **FO-E2 — The data room's own safety columns are unenforced.** `investor.data_rooms` carries
-  `nda_required`, `watermark` and `expires_at`, and there is no share flow, no access log and no view
-  analytics to enforce or report any of the three — so the properties that make a data room safe to send
-  are decoration. `dataRoom.share` is gated with nothing behind the gate. Needs FO-B2 for the NDA.
-  Unblocks: sending a data room to a firm and knowing what they actually read.
-- **FO-E4 — QUESTION, not a task: the seat asymmetry itself.** The `investor` domain belongs to the CEO
-  EVALUATING deals — root `company`, with `products`, `due_diligence_checklists`,
-  `investment_opportunities` and `investor_peer_comparables`. The founder RAISING gets `funding_rounds`
-  in finance and four canvas cards. Worth an explicit decision once FO-E1..E3 land: does the raising
-  founder get their own surface, or is `investor` genuinely both sides of one table? Recorded as a
-  question because building either answer before FO-E1 exists would be guessing.
+> **FO-E1, FO-E2 and FO-E4 closed 2026-08-19 (0925)** — the raise is the sales board read through a
+> different pipeline FAMILY (`deals.kind='investment'`), and the data room's three safety columns are
+> enforced at the one place a token resolves. **FO-E4 was answered by the operator: one table, the raise
+> is a projection** — no second domain, no `raise_*` tables. See [DONE.md](./DONE.md).
+
+- **FO-E5 — QUESTION, not a task: `funding_rounds` still has no writer, and one of its columns is a
+  stored total.** *(new 2026-08-19, the residual of FO-E1.)* The raise is now projected from the
+  allocations, so `committed` is DERIVED and correct. The round's own header — instrument, pre/post
+  money, lead investor, close status — lives in `finance.funding_rounds`, which `grep` shows has no
+  application writer at all: the `fundingRound` card's `roundType`, `targetAmount` and `valuation` are
+  typed onto board JSON beside an empty table. Projecting the header is a small read. What is NOT small
+  is `funding_rounds.amount_raised`: it is a stored total the allocations can contradict, which is
+  exactly what the "no stored totals" rule (0464, `work_estimates.lines`) forbids — so the choice is to
+  DROP that column and derive it, or to declare the table the system of record for closed money and make
+  the projection defer to it. Recorded as a question for the same reason FO-E4 was: building either
+  answer before somebody decides is guessing, and the wrong answer produces two numbers for "how much
+  have we raised". **Blocked on that decision.** Unblocks: the round header being a record rather than
+  four fields typed onto a card.
+- **A data room can only hold a diligence obligation, not a legal FILE.** *(new 2026-08-19, the residual
+  of FO-E2.)* `resolveDataRoomShare` reads the room's contents from `due_diligence_documents` joined
+  through its checklists, so an encrypted `legal_document_files` row — the formation certificate, the
+  executed IP assignment, the thing a fund actually asks for first — cannot be put in a data room at
+  all. Both already resolve to a `kernel.artifacts` row, so the fix is a join and not a second store:
+  either a `data_room_id` on `legal_document_files`, or a `due_diligence_documents` row that points at
+  the legal file's current artifact. **Not blocked.** Unblocks: the diligence list and the document
+  vault being one room rather than two.
+- **A watermarked BINARY is served inline and is not actually stamped.** *(new 2026-08-19, the residual
+  of FO-E2.)* `readDataRoomDocument` stamps text-shaped documents with the recipient and the instant, and
+  a PDF or spreadsheet cannot be stamped in a Worker — so for those the column is enforced as "no
+  download, view only", the viewer says so in as many words, and the response carries
+  `x-data-room-watermark: view-only`. That is an honest bound, not the promise the column makes. Fix = a
+  WASM PDF stamper at the read seam (the bytes are already decrypted there), applied on the way out so no
+  stamped copy is ever stored. **Not blocked.** Unblocks: `watermark` meaning the same thing for the file
+  format a data room is mostly made of.
 
 #### FO-F · One pipeline — independent of everything above
 
@@ -1046,20 +1059,10 @@ FO-G2/FO-G3 should not start until Tracks 1–3 land.
 > the exact shape the card already renders, and `canvas_move_deal` writes the deal and rewrites the
 > board from the same response — one call, no mirroring step to forget.
 
-- **FO-F2 — Then DELETE the mirroring instruction.** *(unblocked 2026-08-15 — FO-F1 has replaced what
-  it does.)* It is a long paragraph in the largest system prompt on the platform ("after a successful
-  sales mutation, mirror the returned canonical id and current values into the matching salesContact,
-  salesCampaign, salesGoal, or salesPipeline canvas object", `creationCanvasAi.ts`), and leaving it now
-  tells the model to write back over a projection. Replace it with the two sentences the tools already
-  carry: sync the pipeline to READ it, and `canvas_move_deal` to CHANGE it. Named as its own item
-  because a prompt deletion is exactly the step that gets forgotten, and the cost of forgetting it is
-  the same drift running in the opposite direction.
-- **The pipeline card is still read-only, so a deal cannot literally be dragged.** *(new 2026-08-15,
-  the residual of FO-F1.)* `SalesPipelineBody` draws the kanban and has no drag handler, so the "deal
-  dragged on the board" in FO-F1's own title is now possible through the MODEL (`canvas_move_deal`) and
-  not through a pointer. Every piece is in place — each card carries its `dealId`, and one call both
-  moves the deal and returns the redrawn board — so this is a drag-and-drop affordance over an existing
-  write, not new plumbing. **Not blocked.** Unblocks: the gesture the feature is named after.
+> **FO-F2 and the drag both landed 2026-08-19 (0925)**: the mirroring paragraph is gone from the canvas
+> system prompt, replaced by a tenant-gated block that names the projection tools; and a deal is now
+> dragged with a pointer on both boards, through the same one-call `moveDeal` the tool uses. See
+> [DONE.md](./DONE.md).
 
 #### FO-G · Legal — a company's first ninety days are canvas cards
 
@@ -1079,6 +1082,16 @@ FO-G2/FO-G3 should not start until Tracks 1–3 land.
   vocabulary is where they belong, and the spec-object primitive makes each one a declaration rather
   than a render branch. **Not blocked.** Unblocks: a formation checklist that is objects rather than a
   document.
+- **`policy.acknowledge` can now be SENT and its roster is still never written back.** *(new 2026-08-19,
+  found while closing the `canvas_invoke_object_action` redirect.)* `policy` declared
+  `signatureRequestId` and not `signatureState`, so the generic `canvas_request_signature` — which
+  discovers the kinds it serves from THAT pair — refused it, and `policy.acknowledge` was an advertised
+  act with nothing behind it. The field is now declared, so an acknowledgement round is really sent. What
+  is still unwritten is the return leg: `policy.roster` and `acknowledgementRate` are declared as
+  "written by the signature subsystem" and nothing projects `signatureProgress()` back onto the card, so
+  a policy shows who was ASKED and never who answered. Fix = the same shape the pipeline projection uses
+  — read the progress, write the card from that response. **Not blocked.** Unblocks: "who has not signed
+  the handbook" being answerable from the object that asks.
 - **FO-G2 — A contract repository with live obligations.** `contract.obligations` is
   `{obligation, owner, due}` prose, and nothing binds a contract to the invoices it should generate or a
   `bill` to the contract it should be checked against. *(Unblocked 2026-08-16 — FO-A2 gave
@@ -1086,10 +1099,16 @@ FO-G2/FO-G3 should not start until Tracks 1–3 land.
   invoices now resolve to the same account instead of matching by name.)* FO-C1 landed 2026-08-15. The
   renewal-warning half is already done: `contract.renewsAt` is a declared deadline and the `due-within`
   comparator shipped 2026-08-15.
-- **FO-G3 — A template library.** *(unblocked 2026-08-15 — the signature engine now exists.)* Formation
-  documents, NDAs, MSAs, SOWs, offer letters, IP assignments. A template you cannot get signed is a
-  `document`; with `signature_requests` live it is mostly content, and the founders' agreement
-  (FO-D5's paperwork half) is the one to write first because it comes before every other document.
+- **FO-G3 — A template library, half written.** *(narrowed 2026-08-19 — the registry and its first four
+  entries landed with FO-D5; see DONE.md.)* `application/legal/documentTemplates.ts` is the ONE registry,
+  each entry declaring its own variables and its own renderer, and it holds the founders' agreement, the
+  founder IP assignment, the founder vesting schedule and the mutual NDA the data room sends. What it
+  does not hold is the COMMERCIAL half — MSA, SOW, offer letter — and those are content, not
+  engineering: adding one is a single entry, and `canvas_draft_legal_document` picks it up with no
+  change. The offer letter is the one with a dependency: `offer` already declares the signature
+  bookkeeping pair, so its template should render FROM the offer card's own fields rather than asking
+  for them again. **Not blocked.** Unblocks: the paperwork a company signs with somebody who is not a
+  founder.
 
 ### Marketplace, talent, freelance
 

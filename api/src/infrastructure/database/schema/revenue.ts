@@ -51,7 +51,11 @@ export const deals = pgTable('deals', {
   id:           serial('id').primaryKey(),
   tenantId:     integer('tenant_id').notNull(),
   objectId:     uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
-  /** 'sales' | 'placement' | 'renewal' | 'expansion' | 'partner'. */
+  /** 'sales' | 'placement' | 'investment' | 'renewal' | 'expansion' | 'partner'.
+   *  PRD 20 §3.3: "a sales deal, a recruiter placement fee and an investor allocation
+   *  are one shape with three kinds". Which BOARD a kind belongs to is declared once,
+   *  in `application/revenue/pipelineFamilies.ts` — `placement` deliberately belongs
+   *  to none of them yet. */
   kind:         varchar('kind', { length: 24 }).notNull().default('sales'),
   name:         varchar('name', { length: 300 }).notNull(),
   pipelineRef:  varchar('pipeline_ref', { length: 64 }),

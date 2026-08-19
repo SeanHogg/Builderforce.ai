@@ -296,6 +296,24 @@ export const ACCOUNT_REQUIRED_CANVAS_TOOLS = [
   'canvas_sync_account',
   'canvas_sync_sales_pipeline',
   'canvas_move_deal',
+  // The RAISE is the same board through a different family (FO-E1): `deals.kind =
+  // 'investment'`, `party_roles role='investor'`, and `pipeline_touchpoints` as the
+  // thread. `canvas_open_deal` is the one that makes a firm an OBJECT rather than a
+  // string in a cell, which is what `fundingRound.investors` never was.
+  'canvas_sync_funding_round',
+  'canvas_open_deal',
+  'canvas_log_deal_touch',
+  // ── The data room, actually sent (FO-E2) ─────────────────────────────────────
+  // Account-required for the sharpest version of the reason: sharing one sends
+  // diligence material to a named party outside the workspace, behind an NDA, with
+  // every open logged. A guest board has no room, no recipient and no NDA.
+  'canvas_sync_data_room',
+  'canvas_share_data_room',
+  'canvas_revoke_data_room_share',
+  // The founders' agreement and its siblings, drafted from the one template registry
+  // (FO-D5). Account-required because it renders a real workspace's formation
+  // paperwork and lands it on a `contract` card that is then SENT for signature.
+  'canvas_draft_legal_document',
   // Reads the pay runs a connected payroll provider actually ran, onto a `payRun`
   // card. Account-required for the plainest possible reason: it makes an
   // authenticated call to the tenant's own Gusto, Rippling, ADP or Deel account. A

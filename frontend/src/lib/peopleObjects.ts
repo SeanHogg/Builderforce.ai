@@ -245,6 +245,13 @@ export const PEOPLE_OBJECT_SPECS: readonly SpecObjectSpec[] = [
         hint: 'Who must acknowledge and who has: {person, requiredBy, status, acknowledgedAt}. Written by the signature subsystem, never by hand — an acknowledgement typed by the person chasing it is exactly the record that proves nothing.',
         derived: true,
       },
+      {
+        name: 'signatureState',
+        render: 'stat',
+        label: 'signatureState',
+        hint: 'unsent | sent | completed | declined | expired. Written by the acknowledgement flow over `signature_requests` — never asserted, because an acknowledgement is a recorded event with its own audit trail. Declared alongside `signatureRequestId` because the generic signature tool discovers the kinds it serves from THIS pair: without it, `policy.acknowledge` was an advertised act with nothing behind it.',
+        bookkeeping: true,
+      },
       { name: 'signatureRequestId', render: 'stat', label: 'signatureRequestId', hint: 'The signature_requests row this acknowledgement round created.', bookkeeping: true },
       SUMMARY_FIELD,
       CONFIDENTIALITY_FIELD,
