@@ -16288,7 +16288,8 @@
       "gameRobloxFormat": ".rbxlx 地图文件",
       "gamePlayIn3d": "以 3D 游玩",
       "gameDetails": "详情",
-      "gameHideDetails": "隐藏详情"
+      "gameHideDetails": "隐藏详情",
+      "websiteFrameTitle": "{title} — 访问者看到的网站"
     },
     "editor": {
       "toolbar": "格式",
@@ -19525,7 +19526,15 @@
           "stats": "数据",
           "testimonial": "引言",
           "cta": "行动号召"
-        }
+        },
+        "readings": "查看此网站的方式",
+        "reading": {
+          "preview": "预览",
+          "edit": "编辑"
+        },
+        "scheme": "网站自身的浅色与深色",
+        "schemeLight": "浅色",
+        "schemeDark": "深色"
       },
       "timeline": {
         "label": "时间轴",

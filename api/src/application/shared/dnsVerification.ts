@@ -1,9 +1,10 @@
 /**
  * Domain-ownership proof over DNS-over-HTTPS — the ONE verifier.
  *
- * Two features need to know "does this tenant actually control this domain?":
- * custom-domain hosting (`application/ide/customDomain.ts`) and marketing sender
- * identities (`application/marketing/campaignEngine.ts`). Both prove it the same
+ * Three features need to know "does this tenant actually control this domain?":
+ * custom-domain hosting (`application/ide/customDomain.ts`), marketing sender
+ * identities (`application/marketing/campaignEngine.ts`) and enterprise SSO
+ * routing (`application/auth/enterpriseSso.ts`). All three prove it the same
  * way — the tenant publishes a TXT record containing a token we issued — so the
  * resolver, the token format, the record name and the comparison live here once.
  * A second copy would drift into a second security model.
@@ -26,6 +27,11 @@ export const CHALLENGE_PREFIX = {
   site: '_builderforce-challenge',
   /** Marketing sender domain: `_builderforce-sender.<domain>` */
   sender: '_builderforce-sender',
+  /** Enterprise SSO routing domain: `_builderforce-sso.<domain>` — the proof that
+   *  lets `sso_domains` route every sign-in from an address to one connection.
+   *  Its own record name, not `site`'s, because the three grant different things
+   *  and one published token must not silently satisfy all of them. */
+  sso: '_builderforce-sso',
 } as const;
 
 export type ChallengePurpose = keyof typeof CHALLENGE_PREFIX;

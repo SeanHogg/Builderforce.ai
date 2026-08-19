@@ -3,7 +3,7 @@
  * the website card and the live web page panel — is already inside `CreationCanvas.tsx`'s
  * client boundary, and `check-frontend-architecture` counts directives, not components.
  */
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 import { CANVAS_VIEWPORT_WIDTHS, type CanvasViewport } from '@/lib/canvasViewport';
 import styles from './CreationCanvas.module.css';
@@ -90,7 +90,14 @@ export function CanvasDeviceFrame({
   }, [width]);
 
   return (
-    <div ref={wrapRef} className={`${styles.deviceFrameWrap} ${className ?? ''}`} data-viewport={viewport}>
+    <div
+      ref={wrapRef}
+      className={`${styles.deviceFrameWrap} ${className ?? ''}`}
+      data-viewport={viewport}
+      // Published to the stylesheet so a surface can size the DEVICE (and centre it)
+      // without restating the widths — one source of truth, `CANVAS_VIEWPORT_WIDTHS`.
+      style={{ '--device-width': `${width}px` } as CSSProperties}
+    >
       <iframe
         key={reloadKey}
         ref={frameRef ?? null}

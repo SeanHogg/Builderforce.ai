@@ -16288,7 +16288,8 @@
       "gameRobloxFormat": ".rbxlx place",
       "gamePlayIn3d": "Play in 3D",
       "gameDetails": "Details",
-      "gameHideDetails": "Hide details"
+      "gameHideDetails": "Hide details",
+      "websiteFrameTitle": "{title} — the site as its visitors see it"
     },
     "editor": {
       "toolbar": "Formatting",
@@ -19525,7 +19526,15 @@
           "stats": "Numbers",
           "testimonial": "Quote",
           "cta": "Call to action"
-        }
+        },
+        "readings": "Ways to read this site",
+        "reading": {
+          "preview": "Preview",
+          "edit": "Edit"
+        },
+        "scheme": "The site's own light and dark",
+        "schemeLight": "Light",
+        "schemeDark": "Dark"
       },
       "timeline": {
         "label": "Timeline",

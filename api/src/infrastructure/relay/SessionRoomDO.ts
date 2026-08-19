@@ -95,10 +95,11 @@ export class SessionRoomDO implements DurableObject {
     server.addEventListener('error', () => this.drop(server));
     if (peer) server.addEventListener('message', (event: MessageEvent) => this.onPeerFrame(peer, event));
 
+    // The same `connected` frame for both kinds of connection. A peer does NOT get
+    // a roster here: identity and membership are the presence poll's to answer, and
+    // a second answer from the relay is a second thing that can disagree with it.
     try {
-      server.send(peer
-        ? JSON.stringify({ type: 'connected', id: peer.id, userId: peer.ref, peers: this.relay.roster() })
-        : '{"type":"connected"}');
+      server.send('{"type":"connected"}');
     } catch (error) { /* ignore */
       reportCaughtError(error, { source: "infrastructure/relay/SessionRoomDO.ts", operation: "fetch" }, { env: this.env, waitUntil: (task) => this.state.waitUntil(task) });
     }

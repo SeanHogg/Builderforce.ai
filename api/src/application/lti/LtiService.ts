@@ -29,6 +29,9 @@
 
 import { eq } from 'drizzle-orm';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import {
+  bytesToBase64Url, encodeJwsSegment, parseJws, randomUrlToken, verifyJwsWithJwks,
+} from '../../infrastructure/auth/jws';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { ltiRegistrations } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -282,61 +285,20 @@ export async function registrationFor(
 // ---------------------------------------------------------------------------
 // Encoding
 // ---------------------------------------------------------------------------
-
-function base64UrlToBytes(value: string): Uint8Array {
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/');
-  const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-}
-
-function bytesToBase64Url(bytes: Uint8Array): string {
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-const encodeSegment = (value: unknown): string =>
-  bytesToBase64Url(new TextEncoder().encode(JSON.stringify(value)));
-
-function decodeSegment(segment: string): Record<string, unknown> {
-  return JSON.parse(new TextDecoder().decode(base64UrlToBytes(segment))) as Record<string, unknown>;
-}
+//
+// base64url, segment encoding and `randomToken` all moved to
+// `infrastructure/auth/jws.ts`. They were written here, in `githubOidc.ts` and
+// (when it was added) in the SSO service, three times over — and the copies had
+// already drifted: only this one retried a JWKS fetch after a key rotation. One
+// definition, so an authentication boundary cannot be subtly different depending
+// on which protocol reached it.
 
 /** Cryptographically random, URL-safe. Used for both `state` and `nonce`. */
-export function randomToken(bytes = 32): string {
-  const buffer = new Uint8Array(bytes);
-  crypto.getRandomValues(buffer);
-  return bytesToBase64Url(buffer);
-}
+export const randomToken = randomUrlToken;
 
 // ---------------------------------------------------------------------------
 // Launch verification
 // ---------------------------------------------------------------------------
-
-interface Jwks { keys: Array<JsonWebKey & { kid?: string; alg?: string }> }
-
-async function fetchJwks(env: Env, url: string, force: boolean): Promise<Jwks | null> {
-  if (force) await invalidateCached(env, jwksCacheKey(url));
-  return getOrSetCached<Jwks | null>(env, jwksCacheKey(url), async () => {
-    const response = await fetch(url, { headers: { accept: 'application/json' } });
-    if (!response.ok) return null;
-    const body = await response.json() as Jwks;
-    return Array.isArray(body?.keys) ? { keys: body.keys.slice(0, 20) } : null;
-  }, { kvTtlSeconds: JWKS_TTL_SECONDS });
-}
-
-async function verifyRs256(key: JsonWebKey, signingInput: string, signature: Uint8Array): Promise<boolean> {
-  const imported = await crypto.subtle.importKey(
-    'jwk',
-    { ...key, alg: 'RS256', ext: true, key_ops: ['verify'] },
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['verify'],
-  );
-  return crypto.subtle.verify('RSASSA-PKCS1-v1_5', imported, signature as BufferSource, new TextEncoder().encode(signingInput));
-}
 
 export type LaunchResult =
   | { ok: true; context: LtiLaunchContext }
@@ -354,23 +316,9 @@ export async function verifyLaunch(
   registration: LtiRegistration,
   expectedNonce: string | null,
 ): Promise<LaunchResult> {
-  const [headerSeg, payloadSeg, signatureSeg] = idToken.split('.');
-  if (!headerSeg || !payloadSeg || !signatureSeg) return { ok: false, error: 'Malformed id_token.' };
-
-  let header: Record<string, unknown>;
-  let payload: Record<string, unknown>;
-  try {
-    header = decodeSegment(headerSeg);
-    payload = decodeSegment(payloadSeg);
-  } catch {
-    return { ok: false, error: 'id_token is not valid JSON.' };
-  }
-
-  if (header.alg !== 'RS256') {
-    // An `alg` the caller controls is the algorithm-confusion attack; only RS256 is
-    // accepted, and `none` is rejected here rather than by the absence of a key.
-    return { ok: false, error: 'id_token must be signed with RS256.' };
-  }
+  const parsed = parseJws(idToken);
+  if (!parsed) return { ok: false, error: 'Malformed id_token.' };
+  const { payload } = parsed;
 
   if (payload.iss !== registration.issuer) {
     return { ok: false, error: 'id_token issuer does not match the registration.' };
@@ -396,23 +344,15 @@ export async function verifyLaunch(
     if (!burned) return { ok: false, error: 'id_token nonce has already been used.' };
   }
 
-  const kid = typeof header.kid === 'string' ? header.kid : '';
-  if (!kid) return { ok: false, error: 'id_token header has no key id.' };
-
-  const signature = base64UrlToBytes(signatureSeg);
-  const signingInput = `${headerSeg}.${payloadSeg}`;
-
-  // Cached keys first, then one forced refresh — that covers a platform rotating to a
-  // key newer than our cache without hammering their JWKS on every launch.
-  let verified = false;
-  for (const force of [false, true]) {
-    const jwks = await fetchJwks(env, registration.keySetUrl, force).catch(() => null);
-    const key = jwks?.keys.find((candidate) => candidate.kid === kid);
-    if (!key) continue;
-    verified = await verifyRs256(key, signingInput, signature).catch(() => false);
-    if (verified) break;
-  }
-  if (!verified) return { ok: false, error: 'id_token signature is not valid.' };
+  // The `alg`/`kid` checks, the cached-then-forced-refresh JWKS fetch and the RSA
+  // verify are all the shared verifier's. An `alg` the token itself chooses is the
+  // algorithm-confusion attack, and it is refused there for every protocol at once.
+  const signature = await verifyJwsWithJwks(env, {
+    url: registration.keySetUrl,
+    cacheKey: jwksCacheKey(registration.keySetUrl),
+    ttlSeconds: JWKS_TTL_SECONDS,
+  }, parsed);
+  if (!signature.ok) return { ok: false, error: `id_token ${signature.error.replace(/^Token /, '')}` };
 
   const claims = readLaunchClaims(payload);
   if (!claims.ok) return claims;
@@ -533,7 +473,7 @@ async function signClientAssertion(
     exp: now + 300,
     jti: randomToken(16),
   };
-  const signingInput = `${encodeSegment(header)}.${encodeSegment(payload)}`;
+  const signingInput = `${encodeJwsSegment(header)}.${encodeJwsSegment(payload)}`;
   const signature = await crypto.subtle.sign(
     'RSASSA-PKCS1-v1_5',
     key,

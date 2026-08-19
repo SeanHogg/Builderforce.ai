@@ -743,8 +743,17 @@
 .webPageBar input:focus-visible { border-color:var(--canvas-accent); outline:none; }
 .webPageBar input:read-only { background:transparent; color:var(--canvas-muted); }
 
-.webPageFrameWrap { position:relative; flex:1; min-height:110px; overflow:hidden; border:1px solid var(--canvas-widget-border); border-radius:var(--radius-md); background:var(--canvas-widget-surface); }
-.webPageFrame { width:100%; height:100%; border:0; display:block; transform-origin:top left; background:#fff; }
+/* THE framed document — see `CanvasDeviceFrame`. The live page panel, the app runtime,
+   the site surface and the website card all wear this pair; it used to be the panel's
+   alone while the two surfaces sized their frames with `min(100%,…)` caps that the
+   framed page then laid itself out against, which is why "Desktop" and "Phone" looked
+   the same. The WIDTH is set inline by the component, in real device pixels, and the
+   `scale()` puts it back in the box — so nothing here may cap it.
+   `background:#fff` and not a token on purpose: this is the browser's own default
+   canvas for a document, and a themed one would tint any page that paints transparently
+   with the app's light/dark choice — the leak the frame exists to stop. */
+.deviceFrameWrap { position:relative; flex:1; min-width:0; min-height:110px; overflow:hidden; border:1px solid var(--canvas-widget-border); border-radius:var(--radius-md); background:var(--canvas-widget-surface); }
+.deviceFrame { height:100%; border:0; display:block; transform-origin:top left; background:#fff; }
 .webPageLoading,.webPageStatus { color:var(--canvas-muted); font:500 9px/1.4 var(--font-sans); }
 .webPageLoading { position:absolute; inset:0; display:grid; place-items:center; padding:10px; text-align:center; background:var(--canvas-widget-surface); }
 .webPageStatus { padding:0 2px; overflow-wrap:anywhere; }
@@ -2002,11 +2011,19 @@
 .appAddress[data-running='true'] { color:var(--tone-success-ink); font-weight:650; }
 
 /* Preview. Same three measures the site surface uses, same reasoning. */
-.appStage { min-height:0; flex:1; display:flex; justify-content:center; padding:16px; background:var(--canvas-board-background); overflow:auto; overscroll-behavior:contain; }
-.appStage[data-viewport='desktop'] { --app-width:1180px; }
-.appStage[data-viewport='tablet'] { --app-width:820px; }
-.appStage[data-viewport='mobile'] { --app-width:390px; }
-.appFrame { width:min(100%,var(--app-width,1180px)); min-height:0; flex:1; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); box-shadow:0 10px 34px var(--canvas-shadow); }
+/* No `--app-width` here any more, and no cap on the frame. The stage is only the room;
+   `CanvasDeviceFrame` lays the document out at the chosen device width and scales it in.
+   The bug that lived here: `.appFrame` carried `width:min(100%,var(--app-width))` AND
+   `flex:1` inside a row — `flex-basis:0%` beat the width outright, so the frame filled
+   the stage at every setting and the three viewport buttons changed nothing visible. */
+.appStage { min-height:0; flex:1; display:flex; justify-content:center; padding:16px; background:var(--canvas-board-background); overflow:hidden; }
+.appFrame { max-width:100%; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); box-shadow:0 10px 34px var(--canvas-shadow); }
+/* A phone-width document scaled 1:1 must not stretch across a 1400px stage: the wrapper
+   IS the device, so it takes the device's width and the stage centres it. `--device-width`
+   is written onto the wrapper by `CanvasDeviceFrame` from `CANVAS_VIEWPORT_WIDTHS` — the
+   numbers are never restated here, because a stylesheet's copy of them is precisely what
+   let the CSS widths and the frame widths disagree in the first place. */
+.appStage .appFrame,.siteStage .siteFrame { flex:0 1 auto; width:var(--device-width,100%); }
 .appIdle,.appEmpty { display:grid; place-content:center; justify-items:center; gap:6px; flex:1; padding:32px 24px; text-align:center; }
 .appIdle strong,.appEmpty strong { color:var(--canvas-ink); font-size:13px; }
 .appIdle p,.appEmpty p { max-width:44ch; margin:0; color:var(--canvas-muted); font-size:11.5px; line-height:1.6; }
@@ -2086,11 +2103,24 @@
    The three widths are the real device measures the site was authored against, capped at
    the room available so a phone viewing a desktop site still scrolls in one direction
    only. `--site-width` is the one number the three states change. */
-.siteStage { min-height:0; flex:1; display:flex; justify-content:center; padding:16px 16px 24px; background:var(--canvas-board-background); overflow:auto; overscroll-behavior:contain; }
-.siteStage[data-viewport='desktop'] { --site-width:1180px; }
-.siteStage[data-viewport='tablet'] { --site-width:820px; }
-.siteStage[data-viewport='mobile'] { --site-width:390px; }
-.siteFrame { align-self:flex-start; width:min(100%,var(--site-width,1180px)); border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); box-shadow:0 10px 34px var(--canvas-shadow); overflow:hidden; }
+/* Same story as `.appStage`: the widths are the frame's, in real device pixels, and this
+   is only the room they are centred in. The `edit` reading has no frame — it is markup in
+   this document — so it keeps a scrolling stage and a width cap of its own, below. */
+.siteStage { min-height:0; flex:1; display:flex; justify-content:center; padding:16px 16px 24px; background:var(--canvas-board-background); overflow:hidden; }
+.siteStage[data-reading='edit'] { overflow:auto; overscroll-behavior:contain; }
+.siteFrame { max-width:100%; border:1px solid var(--canvas-line); border-radius:var(--radius-lg); background:var(--canvas-panel); box-shadow:0 10px 34px var(--canvas-shadow); overflow:hidden; }
+/* The editor is markup in THIS document, not a framed page, so it has no device width to
+   scale — it takes a plain cap, and the cap is a reading measure rather than a device. */
+.siteStage[data-reading='edit'] .siteFrame { align-self:flex-start; flex:0 1 auto; width:min(100%,var(--edit-width,1180px)); }
+.siteStage[data-reading='edit'][data-viewport='tablet'] { --edit-width:820px; }
+.siteStage[data-reading='edit'][data-viewport='mobile'] { --edit-width:390px; }
+.siteScheme { display:flex; flex:none; align-items:center; gap:2px; padding:2px; border:1px solid var(--canvas-line); border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
+.siteScheme button {
+  min-width:26px; height:24px; padding:0 8px; border:0; border-radius:var(--radius-sm);
+  background:transparent; color:var(--canvas-muted); font-family:inherit; font-size:11px; font-weight:650; cursor:pointer;
+}
+.siteScheme button:hover,.siteScheme button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.siteScheme button[aria-pressed='true'] { background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 1px 2px var(--canvas-shadow); }
 /* One renderer, two hosts. On the board the preview draws its own edge because the card
    around it has none to spare; here the frame IS the edge, so the inner border and radius
    stand down rather than drawing a second rounded box 1px inside the first. Height goes

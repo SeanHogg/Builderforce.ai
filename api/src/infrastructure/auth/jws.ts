@@ -27,11 +27,7 @@
  */
 
 import { getOrSetCached, invalidateCached } from '../cache/readThroughCache';
-
-export interface JwsEnv {
-  AUTH_CACHE_KV?: unknown;
-  [key: string]: unknown;
-}
+import type { Env } from '../../env';
 
 export interface Jwks {
   keys: Array<JsonWebKey & { kid?: string; alg?: string }>;
@@ -132,7 +128,7 @@ const DEFAULT_JWKS_TTL_SECONDS = 3_600;
  *  either way we do not want to import all of them looking for a `kid`. */
 const MAX_KEYS = 20;
 
-async function fetchJwks(env: JwsEnv, source: JwksSource, force: boolean): Promise<Jwks | null> {
+async function fetchJwks(env: Env, source: JwksSource, force: boolean): Promise<Jwks | null> {
   if (force) await invalidateCached(env, source.cacheKey);
   return getOrSetCached<Jwks | null>(env, source.cacheKey, async () => {
     const response = await fetch(source.url, { headers: { accept: 'application/json' } });
@@ -160,7 +156,7 @@ export type JwsVerification =
  * hand-written copies this replaces and absent from the others.
  */
 export async function verifyJwsWithJwks(
-  env: JwsEnv,
+  env: Env,
   source: JwksSource,
   parsed: ParsedJws,
 ): Promise<JwsVerification> {

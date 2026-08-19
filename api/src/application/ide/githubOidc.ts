@@ -18,7 +18,7 @@
  */
 
 import type { Env } from '../../env';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { parseJws, verifyJwsWithJwks } from '../../infrastructure/auth/jws';
 
 /** GitHub's OIDC issuer. Tokens claiming any other issuer are rejected. */
 export const GITHUB_OIDC_ISSUER = 'https://token.actions.githubusercontent.com';
@@ -41,52 +41,6 @@ export interface GitHubOidcClaims {
   sha: string;
   workflowRef: string;
   runId: string | null;
-}
-
-interface Jwks { keys: Array<JsonWebKey & { kid?: string; alg?: string }> }
-
-function base64UrlToBytes(input: string): Uint8Array {
-  const padded = input.replace(/-/g, '+').replace(/_/g, '/');
-  const binary = atob(padded + '='.repeat((4 - (padded.length % 4)) % 4));
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-function decodeSegment(segment: string): Record<string, unknown> {
-  return JSON.parse(new TextDecoder().decode(base64UrlToBytes(segment))) as Record<string, unknown>;
-}
-
-/** Fetch GitHub's signing keys, cached. `force` bypasses the cache for the
- *  key-rotation case (a `kid` we've never seen). */
-async function fetchJwks(env: Env, force: boolean): Promise<Jwks> {
-  const load = async (): Promise<Jwks> => {
-    const res = await fetch(`${GITHUB_OIDC_ISSUER}/.well-known/jwks`);
-    if (!res.ok) throw new Error(`GitHub JWKS fetch failed: ${res.status}`);
-    return await res.json() as Jwks;
-  };
-  if (force) return load();
-  return getOrSetCached(env, 'github:oidc:jwks', load, { kvTtlSeconds: JWKS_TTL_SECONDS });
-}
-
-async function verifySignature(
-  key: JsonWebKey,
-  signingInput: string,
-  signature: Uint8Array,
-): Promise<boolean> {
-  const cryptoKey = await crypto.subtle.importKey(
-    'jwk',
-    key,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['verify'],
-  );
-  return crypto.subtle.verify(
-    'RSASSA-PKCS1-v1_5',
-    cryptoKey,
-    signature,
-    new TextEncoder().encode(signingInput),
-  );
 }
 
 export type OidcVerification =
@@ -116,19 +70,9 @@ export async function verifyGitHubOidcToken(
    */
   expectedAudience: string = BUILDERFORCE_OIDC_AUDIENCE,
 ): Promise<OidcVerification> {
-  const [headerSeg, payloadSeg, signatureSeg] = token.split('.');
-  if (!headerSeg || !payloadSeg || !signatureSeg) {
-    return { ok: false, error: 'Malformed token.' };
-  }
-
-  let header: Record<string, unknown>;
-  let payload: Record<string, unknown>;
-  try {
-    header = decodeSegment(headerSeg);
-    payload = decodeSegment(payloadSeg);
-  } catch {
-    return { ok: false, error: 'Token is not valid JSON.' };
-  }
+  const parsed = parseJws(token);
+  if (!parsed) return { ok: false, error: 'Malformed token.' };
+  const { payload } = parsed;
 
   if (payload.iss !== GITHUB_OIDC_ISSUER) {
     return { ok: false, error: 'Token was not issued by GitHub Actions.' };
@@ -147,23 +91,18 @@ export async function verifyGitHubOidcToken(
   if (exp && now > exp + 60) return { ok: false, error: 'Token has expired.' };
   if (nbf && now < nbf - 60) return { ok: false, error: 'Token is not yet valid.' };
 
-  const kid = typeof header.kid === 'string' ? header.kid : null;
-  if (!kid) return { ok: false, error: 'Token header has no key id.' };
-
-  const signature = base64UrlToBytes(signatureSeg);
-  const signingInput = `${headerSeg}.${payloadSeg}`;
-
-  // Try the cached keys, then force a refresh once — that covers a rotation
-  // where GitHub signs with a key newer than our cache.
-  let verified = false;
-  for (const force of [false, true]) {
-    const jwks = await fetchJwks(env, force).catch(() => null);
-    const key = jwks?.keys.find((k) => k.kid === kid);
-    if (!key) continue;
-    verified = await verifySignature(key, signingInput, signature).catch(() => false);
-    break;
-  }
-  if (!verified) return { ok: false, error: 'Token signature is not valid.' };
+  // `alg`, `kid`, the cached-then-forced-refresh JWKS fetch and the RSA verify are
+  // the shared verifier's now. The copy that used to live here differed from the
+  // LTI one by a misplaced `break`: a cached key that FAILED to verify ended the
+  // loop instead of retrying after a refresh, so a token signed with a rotated key
+  // whose id happened to still be in cache was rejected outright. One definition
+  // removes that class of divergence rather than fixing it twice.
+  const signature = await verifyJwsWithJwks(env, {
+    url: `${GITHUB_OIDC_ISSUER}/.well-known/jwks`,
+    cacheKey: 'github:oidc:jwks',
+    ttlSeconds: JWKS_TTL_SECONDS,
+  }, parsed);
+  if (!signature.ok) return { ok: false, error: signature.error };
 
   const repository = typeof payload.repository === 'string' ? payload.repository : '';
   if (!repository.includes('/')) return { ok: false, error: 'Token has no repository claim.' };

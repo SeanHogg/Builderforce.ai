@@ -16288,7 +16288,8 @@
       "gameRobloxFormat": ".rbxlx-Place",
       "gamePlayIn3d": "In 3D spielen",
       "gameDetails": "Details",
-      "gameHideDetails": "Details ausblenden"
+      "gameHideDetails": "Details ausblenden",
+      "websiteFrameTitle": "{title} – die Website, wie Besucher sie sehen"
     },
     "editor": {
       "toolbar": "Formatierung",
@@ -19525,7 +19526,15 @@
           "stats": "Zahlen",
           "testimonial": "Zitat",
           "cta": "Handlungsaufruf"
-        }
+        },
+        "readings": "Ansichten dieser Website",
+        "reading": {
+          "preview": "Vorschau",
+          "edit": "Bearbeiten"
+        },
+        "scheme": "Heller und dunkler Modus der Website",
+        "schemeLight": "Hell",
+        "schemeDark": "Dunkel"
       },
       "timeline": {
         "label": "Zeitleiste",
