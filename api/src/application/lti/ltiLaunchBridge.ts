@@ -314,7 +314,7 @@ async function resolveBoard(
 
   // Lost the race. Adopt the winner's board and drop ours — an orphan board with
   // one cohort object is worse than a wasted uuid.
-  await db.delete(creationSessions).where(eq(creationSessions.id, created.sessionId));
+  await db.delete(creationSessions).where(scopedToTenant(creationSessions, registration.tenantId, eq(creationSessions.id, created.sessionId)));
   const [winner] = await db
     .select({ id: ltiContextBindings.id, sessionId: ltiContextBindings.sessionId, cohortObjectId: ltiContextBindings.cohortObjectId })
     .from(ltiContextBindings)

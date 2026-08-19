@@ -21,10 +21,10 @@
  * refactor away from serving `tool_private_key_enc` to a screen.
  */
 
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { ltiRegistrations } from '../../infrastructure/database/schema';
-import { scopedToTenant } from '../../infrastructure/database/tenantScope';
+import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { credentialSecret, encryptCredentials } from '../integrations/credentialCrypto';
 import type { Env } from '../../env';
 import { invalidateRegistrations, publicHalfOf } from './LtiService';
@@ -179,7 +179,7 @@ export async function createRegistration(
   const [existing] = await db
     .select({ id: ltiRegistrations.id })
     .from(ltiRegistrations)
-    .where(and(eq(ltiRegistrations.issuer, clean.issuer), eq(ltiRegistrations.clientId, clean.clientId)))
+    .where(acrossTenants(ltiRegistrations, 'global_uniqueness', eq(ltiRegistrations.issuer, clean.issuer), eq(ltiRegistrations.clientId, clean.clientId)))
     .limit(1);
   if (existing) {
     throw new LtiAdminError('That issuer and client id are already registered. Edit the existing registration rather than adding a second one — the pair is its identity.', 409);

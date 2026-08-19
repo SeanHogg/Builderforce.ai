@@ -55,10 +55,12 @@ have stopped writing one. So the durable cursor stays, at no extra cost, and the
 the live entry when there is one. The win is freshness, not fewer writes. "Follow" works the same way:
 it tracks the relayed viewport live, and the poll's copy of that move only runs when there is no socket.
 
-**Verification.** 12 new relay assertions (identity spoofing, the frame allow-list, the sanitizer
+**Verification.** 13 new relay assertions (identity spoofing, the frame allow-list, the sanitizer
 against a frame carrying board contents, the rate limit and its refill, channel isolation, join/leave
-announcements) and 15 new client assertions (frame narrowing, partial-frame merging, expiry, roster
-merge, self-exclusion). api and frontend typechecks clean on every changed file.
+announcements, and a full-SDP-sized frame — the cap has to clear a WebRTC offer or the shared rooms'
+calls silently stop connecting) and 15 new client assertions (frame narrowing, partial-frame merging,
+expiry, roster merge, self-exclusion). 48/48 api relay tests, 69/69 api relay+creation tests, the
+frontend guard chain 10/10, and api and frontend typechecks clean on every changed file.
 
 ### The canvas hub-contention entry was a decision, not a task
 

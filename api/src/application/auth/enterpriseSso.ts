@@ -38,7 +38,7 @@
  * one and `verifyDomain` exists.
  */
 
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { eq, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { ssoConnections, ssoDomains } from '../../infrastructure/database/schema';
 import { acrossTenants, scopedToTenant } from '../../infrastructure/database/tenantScope';
@@ -509,18 +509,15 @@ export interface SsoStart {
 /**
  * Where to send somebody to authenticate.
  *
- * `state` is minted and signed by the CALLER (the route, using the same HMAC
- * envelope the OAuth routes use) rather than here, so this module never has to
- * know about `JWT_SECRET` or about what a callback URL looks like. The `nonce` is
- * minted here and returned for the caller to bind into that state: it must come
- * back inside the id_token, and checking it is what stops a token captured
- * elsewhere being replayed into this login.
+ * The returned URL deliberately carries NO `state`. The nonce is minted here and
+ * has to be signed INTO the state, so the state cannot exist until this has run —
+ * the caller adds it. That also keeps `JWT_SECRET` and the shape of a callback URL
+ * out of this module entirely, which is the layer line.
  */
 export async function startSsoLogin(
   env: Env,
   connection: ConnectionRow,
   redirectUri: string,
-  state: string,
 ): Promise<SsoStart> {
   const endpoints = await resolveEndpoints(env, connection);
   if (!endpoints) {
@@ -533,7 +530,6 @@ export async function startSsoLogin(
     client_id: connection.clientId,
     redirect_uri: redirectUri,
     scope: connection.scopes,
-    state,
     nonce,
   })) url.searchParams.set(key, value);
   return { url: url.toString(), nonce };
@@ -681,7 +677,9 @@ export async function identityIsInScope(db: Db, connection: ConnectionRow, email
   const [row] = await db
     .select({ id: ssoDomains.id })
     .from(ssoDomains)
-    .where(and(
+    .where(scopedToTenant(
+      ssoDomains,
+      connection.tenantId,
       eq(ssoDomains.connectionId, connection.id),
       eq(ssoDomains.domain, domain),
       isNotNull(ssoDomains.verifiedAt),

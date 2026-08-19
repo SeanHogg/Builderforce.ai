@@ -206,6 +206,8 @@ import { createDeployRoutes }          from './presentation/routes/deployRoutes'
 import { createGitLabWebhookRoutes }   from './presentation/routes/gitlabWebhookRoutes';
 import { createBitbucketWebhookRoutes } from './presentation/routes/bitbucketWebhookRoutes';
 import { createLtiRoutes } from './presentation/routes/ltiRoutes';
+import { createLtiRegistrationRoutes } from './presentation/routes/ltiRegistrationRoutes';
+import { createSsoAdminRoutes, createSsoLoginRoutes } from './presentation/routes/ssoRoutes';
 import { createCostForecastRoutes }    from './presentation/routes/costForecastRoutes';
 import { createDashboardRoutes }       from './presentation/routes/dashboardRoutes';
 import { createConsumptionRoutes }     from './presentation/routes/consumptionRoutes';
@@ -538,7 +540,12 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // roster coming in through NRPS and marks going back through AGS. Unauthenticated
   // by design: every endpoint authenticates the PLATFORM cryptographically rather
   // than carrying a Builderforce session, which is what an LMS launch is.
+  // The authenticated admin surface sits on its OWN path, not under /api/lti:
+  // that tree takes signed launches from a platform with no session, and hanging
+  // a manager-gated CRUD off the same mount is one middleware-ordering mistake
+  // away from either breaking launches or exposing registrations.
   app.route('/api/lti', createLtiRoutes());
+  app.route('/api/lti-registrations', createLtiRegistrationRoutes(db));
 
   // Anonymous guest routes must precede the generic `/api/:domain/...` router
   // below. That router installs auth middleware at its mount root, so registering
@@ -684,6 +691,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Public endpoints (no JWT required)
   app.route('/api/auth',    createAuthRoutes(authService, db));
   app.route('/api/auth',    createOAuthRoutes(db));
+  // Institutional single sign-on. The login half is unauthenticated by
+  // construction — that is what signing in means — and the admin half is
+  // manager-gated on its own path. See `ssoRoutes.ts` for the SAML decision.
+  app.route('/api/auth/sso', createSsoLoginRoutes(db));
+  app.route('/api/sso-connections', createSsoAdminRoutes(db));
 
   // BuilderForce Agents instances + skill assignments (tenant JWT inside each router)
   app.route('/api/agent-hosts',            createAgentHostRoutes(db, agentHostService));

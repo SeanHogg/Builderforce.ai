@@ -83,6 +83,7 @@ security_audits
 service_assets
 source_control_integrations
 spec_versions
+sso_connections
 team_members
 tenant_members
 tenant_openrouter_connections

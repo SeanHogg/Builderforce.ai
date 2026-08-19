@@ -1585,6 +1585,23 @@ export const emailOtpChallenges = pgTable('email_otp_challenges', {
  *
  * `protocol` exists so that decision is legible in the data rather than implied
  * by the absence of code. Only 'oidc' is accepted, and the refusal says why.
+ *
+ * ── WHY THIS IS NOT A ROW IN `connections` ──────────────────────────────────
+ * The name matches the kernel `connection` shape and `check-shape-lint.mjs` asks
+ * about it, correctly. It is a different noun, and the direction is what
+ * separates them. A kernel `connections` row is a PERSON's OUTBOUND grant — it
+ * is keyed `(tenant, user, vendor, capability, external_account)` so the platform
+ * can call Gmail or Jira as that user, and its whole reason to exist is that two
+ * colleagues connecting the same workspace must not overwrite one another.
+ *
+ * This is the WORKSPACE's INBOUND identity provider. It has no user (it is what
+ * decides who a user IS), no vendor manifest key (the IdP is the customer's, not
+ * one we integrate against), and no capability. Its identity is
+ * `(issuer, client_id)`, unique platform-wide, and `sso_domains` carries a
+ * foreign key to it. Folding it in would mean a connection row with a null user,
+ * an invented vendor and capability, the endpoints buried in `config` jsonb, and
+ * the `(issuer, client_id)` uniqueness downgraded from a constraint to a
+ * convention — strictly worse on the 3NF grounds the kernel exists to serve.
  */
 export const ssoConnections = pgTable('sso_connections', {
   id:               serial('id').primaryKey(),
