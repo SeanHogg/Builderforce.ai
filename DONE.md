@@ -1,3 +1,328 @@
+## ✅ RESOLVED 2026-08-19 — The escrow gate was reading a signal it should never have had
+
+Follow-up to the milestones + escrow slice landed earlier the same day. Three guard
+failures and two Gap Register entries, all with one root cause: 0924 shipped a
+funded-before-work gate that had no reliable way to tell what shape an engagement was.
+
+### 1 · Three unscoped queries on tenant-owned tables
+
+`check:tenant-scope` caught three statements the escrow work introduced. All three are
+now declared rather than baselined — the baseline is frozen debt and may only shrink:
+
+- `jobAlerts.stamp()` wrote `lastRunAt`/`resultCount` with a bare `IN (ids)`. It is
+  legitimately cross-tenant (the batch spans every tenant with a due alert) and is now
+  `acrossTenants(..., 'scheduled_sweep', ...)`, matching how the sweep's READ was already
+  declared. The ids are not caller input — they came from `dueAlerts` in the same sweep —
+  so the `IN` is the access predicate.
+- `readJobSchedule` filtered on `job_id` alone. Now `scopedToTenant`: a bare id predicate
+  on a tenant-owned table is the shape that becomes an IDOR the moment somebody can
+  enumerate one.
+- `readFreelancerMilestones` and `milestoneTenantForFreelancer` filter by the acting
+  freelancer. Genuinely cross-tenant — see below.
+
+**A seventh cross-tenant reason: `subject_own_rows`.** The reason set is deliberately
+closed, and none of the six covered the freelance marketplace's actual shape: a for-hire
+account works for many client workspaces and is a member of none, so "my engagements",
+"my proposals", "my milestones" are questions whose answer spans every tenant that has
+ever hired them. There is no tenant on the web JWT to filter by, and asking the caller to
+supply one would be an IDOR wearing a parameter. The access control is the predicate
+itself and it is strictly STRONGER than a tenant filter — `subject = <the authenticated
+caller>` returns rows for exactly one person, where a tenant filter returns rows for
+everyone in a workspace. Constrained in the docblock to identities the SERVER established;
+never a value from a body, query or path segment, which is the one way it would become the
+leak the closed set exists to prevent. Several such reads sit in the frozen baseline today
+(`freelancerRoutes.ts`, `jobRoutes.ts`) and can now be paid down.
+
+### 2 · `freelancer_engagements` could not say whether it was fixed-price
+
+`evaluateWorkGate` was being handed `'fixed_bid'` when a schedule existed and `null` when
+it did not. That is honest about what the row knew and wrong in exactly the case the gate
+exists for: **a fixed-price engagement whose schedule was never written read as hourly and
+was never gated** — the state where a freelancer is most likely to start work nobody has
+funded.
+
+**Migration 0930** adds `freelancer_engagements.engagement_type`. It is a copy of
+`job_postings.engagement_type` and is declared as one under the 3NF rule's escape clause —
+a denormalisation with a written reason and a single writer. The reason: the direct-hire
+path (`POST /api/engagements`) takes no job, so there is nothing to join back to and the
+question would be unanswerable for exactly the engagements a person created by hand. The
+single writer is `application/marketplace/engagementShape.ts`, and the value is FROZEN AT
+HIRE: repointing it later from a posting that has since been edited would retroactively
+change whether work already done was authorised, which is the one thing a gate must never
+do.
+
+Nullable and unconstrained on purpose — every existing engagement predates the column and
+its shape is unrecoverable. NULL reads as not-fixed-price, which is exactly how those rows
+behaved before, so applying the migration changes no existing engagement's behaviour. The
+backfill writes only unambiguous matches: a freelancer hired by one workspace against two
+postings of different shapes is left null rather than guessed at.
+
+**DRY:** `ENGAGEMENT_TYPES = ['fixed_bid','hourly','fte']` existed inline in BOTH
+`jobRoutes.ts` and `gigMarketplaceRoutes.ts`. Both are migrated onto `hireShape()`, which
+validates and normalises in one place; the gig path keeps its posting-type fallback so a
+gig published from a ticket is never left shapeless.
+
+### 3 · Nothing carried a bid's schedule onto the engagement that accepted it
+
+`bindScheduleToEngagement` existed, was tested, and was called by nobody — so a payment
+schedule published with a posting was silently dropped at the moment it was agreed. It is
+now called from the accept path INSIDE the same transaction that creates the engagement:
+a commit that hires somebody but leaves the schedule on the job is an engagement whose
+agreed deliverables vanished, and accepting a proposal is a one-shot concurrency-gated
+move with no second request that would repair it. Its signature took `Db` and now takes
+`Pick<Db,'update'>` so the transaction can be passed.
+
+`readJobSchedule` also had no caller. Both are now reachable through two new employer
+routes — `GET`/`POST /api/jobs/:id/milestones` — so a fixed-price posting can say what it
+will pay FOR before anybody bids, which is what a freelancer needs in order to decide
+whether to. The escrow ACTIONS are deliberately not on that surface: a job-level milestone
+has no engagement and therefore no counterparty, so the whole state machine stays on the
+engagement routes and the job surface only authors drafts.
+
+**Validation:** 22/23 guards green (the one failure is another session's in-flight
+`ingestEngine.ts`); `tsgo --noEmit` clean across every file touched; 235 marketplace tests
+pass, including 11 new ones that pin the closed hole — a fixed-price engagement with an
+empty schedule is now REFUSED where it was previously waved through.
+
+## ✅ RESOLVED — 2026-08-19 · Canvas confidentiality enforcement, the dataset-use gate, and eleven verified-stale DS/HR entries
+
+Two things happened in this pass: one real vertical slice was built (confidentiality, enforced at every
+boundary a canvas object can cross, plus the retention rule that points the opposite way), one half-slice
+was built (purpose / lawful basis / retention on a dataset classification, with the export path consulting
+it), and eleven Gap Register entries were re-validated against the code and found already closed by earlier
+passes that never updated the register. They are moved here rather than left implying work that does not
+exist.
+
+### Built this pass
+
+**Confidentiality is now enforced, at four boundaries and a fifth that was mis-named.**
+`CONFIDENTIALITY_LEVELS`, `RESTRICTED_BY_DEFAULT_KINDS`, `defaultConfidentialityForKind` and
+`confidentialityAtMost` had been declared in `packages/creation-canvas-contract/src/people.ts` since the
+People vocabulary shipped, and **no caller read any of it** — the `confidentiality` field sat on every people
+spec displaying a label that implied an enforcement that did not exist, which is worse than having no model
+at all.
+
+- The contract now names the boundaries (`CANVAS_BOUNDARIES`) and states each one's ceiling
+  (`BOUNDARY_CEILING`), so "do these agree" is a question with an answer instead of five inline `if`s.
+- `frontend/src/lib/canvasConfidentiality.ts` owns the decision: `fieldsConfidentiality` /
+  `objectConfidentiality` resolve the level (authored wins, else the kind default, and an **unparseable value
+  falls back to the kind default rather than to `public`** — a typo must never be the thing that opens a
+  boundary), and `partitionForBoundary` returns `allowed` **and** `withheld`. The partition is deliberately
+  not a filter: silently dropping a card is how an export comes to be missing a page nobody notices.
+- **The ceiling table's line is "did a member decide, object by object", not "does this leave the
+  workspace".** Export, share and publicMedia are deliberate acts by a signed-in member against a card they
+  picked, so they admit `internal` — a ceiling of `public` would have left the sell-motion share link able to
+  carry almost nothing, since `internal` is the default for everything unlabelled. `guest` is the one
+  boundary nobody chooses card by card, so it admits `public` only, which is the distinction `public` exists
+  to draw. `restricted` crosses nothing, anywhere, which is what `restricted` was defined to mean.
+- **The fifth boundary was wrong in the original finding.** It named "the Drive push"; `driveRoutes` exposes
+  list and download only and there is no canvas→Drive write path anywhere in the repo, so a `drive` ceiling
+  would have been a ceiling with nothing to stop — the same declared-contract-with-no-caller the whole module
+  exists to end. The real fifth boundary is `publicMedia`: `canvasMediaSource()` re-hosts a card's pixels at a
+  URL a social network fetches with no session, and it is the most irreversible of the five because a network
+  that has fetched it has a copy. It is gated at that one function, which is the only door from a board object
+  to a publishable source, so the model's campaign tool and the social panel's picker are both covered by one
+  edit.
+
+Where each boundary is enforced:
+
+| Boundary | Enforcement point | Note |
+|---|---|---|
+| `aiContext` | `aiContextGate()` in `canvasContextSnapshot.ts`, read by the turn snapshot, `canvas_read_snapshot` and `canvas_read_object` | A withheld object **keeps its inventory row**. Dropping it would resurrect the bug that file was written to kill — the model telling a user a card is missing and asking them to upload it again. The note makes the model say "restricted", not "absent". |
+| `export` | `exportArtifact()` in `CreationCanvas.tsx`, plus `canvasExportActionsFor()` | The runner refuses, not just the button row: the AI tool path and drag-to-desktop call the runner directly with `defaultExportAction`. |
+| `share` | `projectCard()` and the mint path in `api/.../prospectShare.ts` | Server-side, and the level is read from the **stored row**, never the request body — a client that could name its own confidentiality could name `public` for a grievance. Refused at MINT as well as at render, so a seller never sends a link that resolves to an empty page. |
+| `guest` | `creationPaletteGroupsFor()` in `creationObjectRegistry.ts` | A signed-out board has no access control, so it does not advertise the restricted-by-default kinds. **Derived from the contract, not hand-listed**, so a kind added to `RESTRICTED_BY_DEFAULT_KINDS` next quarter drops out without anybody remembering the function exists. `CanvasObjectPicker` decides for itself from `useAuth()` rather than taking a prop-drilled boolean. |
+| `publicMedia` | `canvasMediaSource()` in `canvasPublicMedia.ts` | See above. |
+
+**Retention landed with it, because it is the rule that points the opposite way on the same board.**
+`RETENTION_RULES` / `retentionForKind` / `mayErase` in the contract, `erasureDecision` in the helper: a
+`candidate` has an erasure right *and* a retention floor (the same records are the employer's evidence in a
+discrimination claim, so "delete on request" and "delete immediately" are not the same instruction), while an
+`employee` carries a statutory minimum no erasure request overrides. Days rather than dates, because hiring
+records run from the DECISION and employment records run from the end of the RELATIONSHIP — `clock` says
+which. 20 tests in `canvasConfidentiality.test.ts`.
+
+**The dataset-use gate — purpose, lawful basis, retention, and a path that consults them.**
+`canvas_classify_dataset` found the personal columns and `dataContract` carried governance tags, and neither
+ever RESTRAINED anything: the tag was documentation, and documentation does not refuse.
+`canvasDataGovernance.ts` now declares `DATASET_USES`, `LAWFUL_BASES`, `DatasetUsePolicy` and
+`evaluateDatasetUse()`, and `exportArtifact` consults it beside the confidentiality gate — a different
+question asked in the same place: confidentiality asks whether this CARD may leave, the use policy asks
+whether these ROWS may be used this way.
+
+The gate's shape is an asymmetry, and the asymmetry is the point. Data with no personal columns is not gated
+at all — refusing to export a CSV of server latencies because nobody filled in a lawful basis would make the
+product unusable and teach people to tick boxes. Once personal data is present, export/publish/share default
+OPEN (they produce a copy somebody can later delete) and **training defaults SHUT** (it produces weights
+nobody can delete, that cannot honour an erasure request, and that cannot be un-learned), so training must be
+affirmatively permitted rather than merely not-forbidden, and special categories cannot reach it on
+legitimate interests. Retention is checked ahead of everything, because expired rows have no lawful use left
+— not even the reversible ones. 17 tests in `canvasDatasetUse.test.ts`.
+
+**`experiment.significance` — the orphaned inference module, wired.**
+`canvasInference.ts` had `twoProportionTest`, `proportionInterval` and `scoreExperiment` written and tested,
+and a grep for its importers returned only its own test file. The founder `experiment` kind meanwhile stored
+`{variant, exposure, conversion, lift}` as a table somebody typed, with nothing anywhere asking whether the
+lift was real. It now carries a computed `significance` field via `SpecField.derive`, so it is arithmetic
+over the rows printed directly beneath it and cannot disagree with them. It reports **power and required
+sample size on a non-significant result**, because "no effect" and "not enough data" are opposite conclusions
+and a bare p-value cannot tell them apart.
+
+### Re-validated against the code and found already closed
+
+Eleven register entries described gaps that earlier passes had already filled without updating the register.
+Each was verified by locating the module **and a non-test consumer** — a module with only a test importing it
+is a seam, not a feature, and two such modules were found and are recorded as still-open rather than moved
+here.
+
+| Entry | Closed by |
+|---|---|
+| No cell to compute in — `code` is text with no execution | `canvasNotebook.ts` (the kernel) + the `notebook` kind, consumed by `CreationCanvas.tsx` |
+| Statistics stop at `avg` | `TABULAR_AGGREGATE_OPERATORS` now carries median, percentile, stddev, variance, mode, corr; windows gained `zScore` and `ntile`; `profileTabular()` gained the moments and null rate, computed in `canvasStatistics.ts` |
+| `MAX_MATERIALIZED_ROWS = 500` never surfaced | `DerivedProvenance.tsx` renders `truncated`/`totalRows` as provenance |
+| Fine-tune runner unreachable from the board | `canvasTrainingRun.ts` + the `trainingRun` kind + the canvas tools over `/api/ide/training/*` |
+| `evaluation` grades one response | `canvasEvaluationGate.ts`, consumed by `DerivedProvenance.tsx` |
+| Nothing recomputes unwatched — no monitor stage | `api/src/application/canvas/runTriggerSweep.ts`, scheduled from `cronSweeps.ts` |
+| No reproducibility envelope | `canvasDatasetVersion.ts` (content hash + immutable snapshot), consumed by `canvasFileImport.ts` and the canvas |
+| No uncertainty vocabulary | `canvasInference.ts` + `ciLow`/`ciHigh` rendering in `CreationNode.tsx`; the last unwired half closed this pass (above) |
+| Forecast engine hardwired to four DevEx metrics | `canvasForecast.ts`, consumed by `CreationCanvas.tsx` |
+| Two spec-object engines both live | `objectSpec.ts` is deleted and `restricted` is folded into `SpecField`, exactly the merge the entry specified |
+| `interview` means a CUSTOMER interview | Founder kind renamed `customerInterview`, with the old name aliased in `RENAMED_OBJECT_KINDS` |
+
+### Decisions recorded
+
+- **The Miro parity set** was blocked on "an explicit product decision on which of these we chase and which we
+  deliberately cede". Decided: chase the ordered presentation sequence, board version history + restore, and
+  the `shape` renderer; **cede** the public canvas API + webhooks + widget runtime, Enterprise-Guard-scale
+  content governance, and Spaces. The three chased items are not yet built and stay in the register with the
+  concurrent-writer blocker; the three ceded ones are recorded as declined so they are not re-opened as
+  though merely unbuilt.
+- **A personal, non-tenant mailbox connection IS in scope** for the `MailboxProvider` port — an individual
+  account may hold a provider credential outside a tenant. The tenancy-model question is settled; the
+  implementation is ordinary engineering and remains in the register.
+
+
+## ✅ RESOLVED 2026-08-19 — FO-C2/C4/C5 + the pay-run residual: the money coming IN
+
+**What was wrong.** The finance seat was one-directional by construction. `payoutProviders` could
+already send money OUT; nothing could bring any in. `invoice.issue`, `record-payment` and `chase`
+were named by `canvasApprovalGate.GATED_ACTIONS` as irreversible or attested, advertised by
+`founderObjects.ts`, and a grep for the handlers returned the gate and its own test — the identical
+shape 0469 found on the payable side, where the gate was working perfectly and there was nothing
+behind it. `PaymentProvider.ts` stated there is exactly one flow and it is Builderforce's own hosted
+subscription checkout, so "charge my customer" had no path at all. `invoice.collection` was authored
+prose under a hint that says *"collections work with no record is collections work that gets done
+twice or not at all"*, and there was no record. And `ageingDays`, documented as *"computed from
+`dueAt` — never authored, because a stale ageing is worse than none"*, was computed by nothing: the
+number on the card was whatever the model last typed.
+
+### 1 · Migration 0926 — two tables, six columns, and three tables deliberately not created
+
+`collection_actions` (one rung of the ladder, `(tenant, invoice_ref, step)` **unique**) and
+`pay_runs` (what payroll cost, `(tenant, source, external_ref)` **unique**), plus the columns issuing
+needs on `invoices`: `issued_by`, `sent_to`/`sent_at`, `document_token_hash`, `payment_link_url`,
+`payment_session_id` and `collection_mode`.
+
+**No `merchant_accounts` table.** A tenant's connected processor is a connected third party with an
+account id, a status and a reconnect story — the kernel `connections` primitive exactly, and the same
+one `PayoutAccountService` uses for money going the other way, with `capability = 'merchant'` instead
+of `'payout'`. **No `invoice_payments` table**: money that moved is a `ledger_entries` row, and
+`entry_kind = 'receipt'` is a new VALUE in an existing column, which is what "denomination is a
+column" buys. **No `pay_run_line_items` table**: `invoice_line_items` already serves two directions
+through a `document_kind` discriminator on the argument that a billed line has no invariant that
+differs by direction — an employee's gross for a period does not either, so the discriminator gained
+a third value.
+
+### 2 · `application/finance/receivables.ts` — the three acts
+
+**An invoice is issued ONCE.** That is this file's equivalent of `payables.ts`'s separation-of-duties
+rule: issuing is what makes a document a legal record of what was sent, so re-issuing the same
+reference with different figures would put two disagreeing papers in one customer's hands and they
+would reasonably pay the smaller. `issueInvoice` refuses anything that is not a draft, freezes the
+figures, mints the customer's own share token (only the hash stored — the `mintShareToken` primitive
+the signature parties and form recipients already use), asks for a payment link, and delivers.
+Delivery failure does **not** undo the issue: the state that matters became true the moment we
+decided to send it, and rolling back would leave an editable draft whose number a customer may
+already have been quoted.
+
+**A payment is recorded once, and this file does not enforce it** — the unique index on
+`ledger_entries (tenant, denomination, reference)` does. The ledger row is written FIRST and its
+absence from the `returning` is the whole idempotency check, so a retried webhook, a double-clicked
+button and a refreshed redirect all collide in the database rather than in a check somebody
+remembered to write. `paidAmount` is then RE-SUMMED from the ledger rather than incremented, because
+an increment is only correct if every prior write happened exactly once, which is the property being
+defended.
+
+`chase` is one rung, climbed by a person — through the same function the sweep calls, so there is one
+collections history and not two.
+
+### 3 · `application/finance/merchantAccount.ts` + Connect on the provider (FO-C4)
+
+Four methods on `PaymentProvider`, implemented against Stripe: create a connected account, mint an
+onboarding link, read the account back, and create an invoice payment link.
+
+**Destination charges, not direct ones.** The session is created on the PLATFORM account with
+`transfer_data[destination]` and `on_behalf_of` pointing at the tenant's connected account, so the
+money settles to the tenant and they are the merchant of record — while
+`retrieveCheckoutSession` and the single signed webhook endpoint keep working unchanged. A direct
+charge would have needed a second webhook endpoint with a second secret and a second verification
+path, for no behaviour a tenant can perceive. **No `application_fee_amount`**: Builderforce is not a
+party to a tenant invoicing their own customer.
+
+`chargeableMerchantId` returns null both when there is no account and when the processor says it
+cannot take charges yet, so a caller cannot mint a link against a restricted account by checking only
+for presence — the check they would forget is not theirs to make. The four hand-written Stripe
+`fetch` blocks became one `stripePost`.
+
+### 4 · `application/finance/collectionsLadder.ts` (FO-C5) + the ageing recompute
+
+Five rungs as DATA: −3 days, +1, +14, +30, then **escalate to a person** rather than to a harsher
+email — an automated final demand is where a ladder starts doing damage a human would not have done,
+to a customer who is disputing an amount or about to sign a renewal.
+
+**One rung per pass.** An invoice imported ninety days overdue is eligible for every rung at once, and
+"climb everything due" would send that customer four escalating emails inside one minute, in the wrong
+order, ending at a final notice.
+
+**`notify` is the default**, and `auto` is the tenant explicitly delegating the send per invoice. That
+is the line `runTriggerSweep` already draws when it refuses to perform a trigger's `thenDo`: a sweep
+that emails somebody else's customers unattended is an agent acting outside the building on a
+threshold nobody re-read. A `notify` rung is recorded `pending` — a worklist entry rather than a
+claim — so turning the ladder up later does not skip the rungs recorded while it was quiet.
+
+The same sweep rewrites `ageingDays` on every canvas `invoice` card from its own `dueAt`, via
+`jsonb_set` rather than a read-modify-write, because the board is edited concurrently.
+
+### 5 · `application/finance/payRuns.ts` — the residual of FO-C6
+
+`hydratePayRuns` asks the FIRST connected payroll provider (Gusto, Rippling, ADP, Deel) for its runs
+and normalises the response — the one place that knows a Gusto `totals.company_debit` is the same
+fact as a Rippling `total_cost`. A run with no identifiable total is **dropped, not imported as
+zero**: a zero-cost pay run quietly reduces the burn on a forecast, and a missing run is visible
+where a wrong one is not. `payRunBurnByMonth` groups processed runs by the date the money left.
+
+Nothing calculates a salary or a tax — see `connectors/defaults/payroll.ts` for why that must stay
+true. A `source: 'manual'` door exists for the bureau that sends a PDF, which is how most companies
+outside the US actually receive one.
+
+### 6 · The surfaces
+
+`invoice: ['issue', 'record-payment', 'chase']` is now CONNECTED on the canvas — the card is
+materialised into a real row by the act itself, and the result is stamped back onto it, because an
+act that ends at a toast is the same defect as one that ends at a card. The approval gate gained the
+two acts it was missing: only `issue` was listed, so `record-payment` (attested — somebody will rely
+on "this was paid") and `chase` (outbound — it emails a real customer) could be fired by a model with
+no reviewer.
+
+A new `payRun` canvas kind, hydrated by `canvas_sync_pay_run`. `/billing/get-paid` — the mirror of
+`/billing/payouts`, filed as its own view because a payout destination is where WE send money and a
+merchant account is where a CUSTOMER sends it. And `/invoice/<reference>?t=<token>`, the page the
+emailed link opens: no session, the token is the credential, and the redirect back from the processor
+settles through a route that re-reads the session from the processor rather than trusting the address
+bar. All five locales.
+
+---
+
 ## ✅ RESOLVED 2026-08-19 — FO-D1..FO-D4: ownership, and the end of the typed cap table
 
 **What was wrong.** `grep cap_table` across the schema returned nothing. The canvas `capTable` was
