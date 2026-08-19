@@ -7,6 +7,7 @@ import { membersApi, empMetricsApi, type DisciplineRollup, type DoraRollup, type
 import { MemberProfileEditor } from './MemberProfileEditor';
 import { EngagementSection } from './EngagementSection';
 import { fmtHrs, fmtScore, scoreColor, MEMBER_KIND_LABEL } from './workforceFormat';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 const DISCIPLINE_OPTIONS = ['engineering', 'product', 'design', 'qa', 'devops', 'data', 'other'] as const;
 
@@ -48,19 +49,24 @@ export function WorkforceMetricsContent() {
   const [editing, setEditing] = useState<MemberScorecard | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [exporting, setExporting] = useState(false);
+  // The global project scope now reaches the server (it takes `projectId` on all
+  // three of these). Until it did, selecting a project moved the switcher and
+  // changed nothing on this page.
+  const { currentProjectId } = useProjectScope();
 
   const doExport = async () => {
     setExporting(true);
-    try { await empMetricsApi.exportMetrics(days, 'csv'); } catch { /* surfaced via global toast */ }
+    // Export the scope on screen, not a workspace file that merely resembles it.
+    try { await empMetricsApi.exportMetrics(days, 'csv', currentProjectId); } catch { /* surfaced via global toast */ }
     finally { setExporting(false); }
   };
 
   useEffect(() => {
-    membersApi.metrics(days, discipline || undefined)
+    membersApi.metrics(days, discipline || undefined, currentProjectId)
       .then((r) => { setMembers(r.members); setByDiscipline(r.byDiscipline); })
       .catch((e: Error) => setError(e.message));
-    membersApi.dora(Math.max(days, 30)).then(setDora).catch(() => { /* optional */ });
-  }, [days, discipline, reloadKey]);
+    membersApi.dora(Math.max(days, 30), currentProjectId).then(setDora).catch(() => { /* optional */ });
+  }, [days, discipline, reloadKey, currentProjectId]);
 
   // Localized label for a discipline value (falls back to the raw value / unassigned).
   const disciplineLabel = (d: string | null): string => {

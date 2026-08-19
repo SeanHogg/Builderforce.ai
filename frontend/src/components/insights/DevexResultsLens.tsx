@@ -11,6 +11,7 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
 import { pct, score2, int } from './format';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 import {
   DevexIndexCard, TopicTable, SegmentHeatmap, ParticipationChart,
   ParticipationBySegment, PrioritiesSlope, BenchmarkModal, fmtDuration,
@@ -40,7 +41,8 @@ export function DevexResultsLens() {
 
   useEffect(() => { setPercentile(loadPercentile()); }, []);
 
-  const { data, error } = usePmData<DevexInsights>(() => devexApi.insights(days, percentile), [days, percentile]);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<DevexInsights>(() => devexApi.insights(days, percentile, currentProjectId), [days, percentile, currentProjectId]);
 
   const dimLabel = useMemo(() => (d: DevexDimension) => t(`devex.dim.${d}`), [t]);
 

@@ -34,6 +34,7 @@ import { memberMetricsToCsv } from '../../application/metrics/metricsCsv';
 import { coachingNotes } from '../../infrastructure/database/schema';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { positiveIntParam } from './queryParams';
 
 const MEMBER_KINDS = new Set(['human', 'cloud_agent', 'host_agent']);
 const clampDays = (raw: number, def: number, max: number) =>
@@ -143,15 +144,20 @@ export function createEmpMetricsRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const days = parseDays(c.req.query('days'), 30, 180);
     const format = c.req.query('format') === 'json' ? 'json' : 'csv';
-    const members = await computeMemberMetrics(db, tenantId, days);
+    // The export has to honour the SAME project scope the page it was clicked from
+    // is showing, or a manager downloads a workspace file believing it is the
+    // project they were looking at. The filename says which, for the same reason.
+    const projectId = positiveIntParam(c.req.query('projectId'));
+    const members = await computeMemberMetrics(db, tenantId, days, projectId);
     const stamp = new Date().toISOString().slice(0, 10);
     if (format === 'json') {
-      return c.json({ generatedAt: new Date().toISOString(), windowDays: days, members });
+      return c.json({ generatedAt: new Date().toISOString(), windowDays: days, projectId: projectId ?? null, members });
     }
+    const scopeTag = projectId == null ? '' : `-project-${projectId}`;
     return new Response(memberMetricsToCsv(members), {
       headers: {
         'content-type': 'text/csv; charset=utf-8',
-        'content-disposition': `attachment; filename="member-metrics-${days}d-${stamp}.csv"`,
+        'content-disposition': `attachment; filename="member-metrics-${days}d${scopeTag}-${stamp}.csv"`,
       },
     });
   });

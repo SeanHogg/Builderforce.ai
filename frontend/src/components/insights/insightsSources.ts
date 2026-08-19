@@ -138,7 +138,13 @@ export function useAiOverview(days: number): SharedAsync<AiOverview> {
 
 /** AI effectiveness by work type and model. */
 export function useEngineering(days: number): SharedAsync<EngineeringInsights> {
-  return useSharedSource<EngineeringInsights>(`engineering:${days}`, () => insightsApi.engineering(days));
+  const { currentProjectId } = useProjectScope();
+  // The project is part of the shared-source KEY, not just the request: two
+  // projects sharing one cached source would serve each other's numbers.
+  return useSharedSource<EngineeringInsights>(
+    `engineering:${days}:p:${scopeKey(currentProjectId)}`,
+    () => insightsApi.engineering(days, currentProjectId),
+  );
 }
 
 /** Ranked prescriptive actions and anomalies. */

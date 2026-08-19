@@ -45,6 +45,7 @@ import { buildRoleRunPayload, requestRoleRun, type RoleRunRequest } from '../kan
 import { composeDispatcherLabel } from '../runtime/dispatcherLabel';
 import { roleDisplayName } from '../kanban/roleCatalog';
 import { signalPendingWork } from '../runtime/cronWorkSignal';
+import { createExecutionReadMemo } from '../runtime/executionReadMemo';
 
 /**
  * Board "autonomous trigger" — the SERVER-SIDE source of truth. When a ticket
@@ -109,7 +110,13 @@ export async function maybeAutoRunOnLaneEntry(
     // board/lane/gate resolution, the owner-fallback, the capability guardrail, the
     // same-lane loop guard, the per-ticket re-run cooldown, the live-run idempotency
     // check and the workspace token gate.
+    // ONE read of this ticket's executions for the whole attempt: the evaluation
+    // below and the dispatch further down both need the list, and without the memo
+    // a lane-trigger dispatch queried it twice (DISP-R1). Created here and dropped
+    // when this call returns — it is a memo for one attempt, never a cache.
+    const execMemo = createExecutionReadMemo(runtimeService);
     const evaln = await evaluateTaskAutoRun(db, runtimeService, {
+      execMemo,
       tenantId:     args.tenantId,
       projectId:    args.projectId,
       taskId:       args.taskId,
@@ -355,6 +362,9 @@ export async function maybeAutoRunOnLaneEntry(
         tenantId: args.tenantId,
         payload,
         submittedBy: args.submittedBy,
+        // The rows the evaluation above already loaded. The dispatcher still runs
+        // the breaker on them itself — this only spares it the second query.
+        execMemo,
       });
       await Promise.allSettled(deferred);
     }

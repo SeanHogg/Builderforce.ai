@@ -2265,7 +2265,9 @@
       "allEpics": "All",
       "noEpics": "No epics with activity in this window.",
       "epic": "Epic",
-      "project": "Project"
+      "project": "Project",
+      "exportCsv": "Download CSV",
+      "exporting": "Preparing…"
     },
     "deliv": {
       "title": "Delivery",
@@ -2536,7 +2538,12 @@
       "tableTitle": "Your metrics vs cohort",
       "footnote": "Percentiles are interpolated against seeded industry cohort distributions (p10–p90). For metrics where lower is better (lead time, change failure rate, MTTR, cost), a smaller value ranks higher.",
       "industries": {
-        "software_saas": "Software / SaaS"
+        "software_saas": "Software / SaaS",
+        "fintech": "Fintech / Financial services",
+        "ecommerce": "E-commerce / Retail",
+        "healthtech": "Healthtech / Life sciences",
+        "agency_services": "Agency / Professional services",
+        "enterprise_it": "Enterprise IT"
       },
       "sizeBands": {
         "small": "Small (1–20)",
@@ -2604,7 +2611,10 @@
         "performance": "Deployment success rate",
         "activity": "Output throughput",
         "communication": "Collaboration breadth × flow",
-        "efficiency": "Low rework + fast cycle"
+        "efficiency": "Low rework + fast cycle",
+        "satisfactionSurvey": "DevEx survey responses",
+        "satisfactionEngagement": "Member engagement proxy — no survey answers yet",
+        "satisfactionNone": "No satisfaction signal yet"
       }
     },
     "bottleneck": {
@@ -3832,6 +3842,22 @@
         "op_equals": "equals",
         "op_contains": "contains",
         "op_prefix": "starts with"
+      },
+      "rotate": {
+        "action": "Rotate key",
+        "rotating": "Rotating…",
+        "confirmGrace": "Mint a new ingest key? The current key keeps working for {hours} more hours so you can redeploy.",
+        "confirmNow": "Revoke the previous ingest key immediately? Anything still sending it will stop being accepted at once.",
+        "failed": "Could not rotate the ingest key",
+        "shownOnce": "New ingest key issued — copy it from the snippet below. It is shown once and cannot be retrieved again.",
+        "graceOpen": "The previous key is still accepted until {at}. Redeploy anything using it before then.",
+        "revokeNow": "Revoke now"
+      },
+      "unmapped": {
+        "title": "{count} events discarded — nothing routes them",
+        "lastAt": "last {at}",
+        "fixTenant": "No mapping rule matched these events and no default project is set. Add a mapping rule or pick a default project below.",
+        "fixProject": "These events could not be routed to this collector’s project. Check the collector is still attached to a live project."
       }
     },
     "stats": {
@@ -4034,7 +4060,9 @@
       "placeholder": "e.g. How much are we spending this month?",
       "button": "Ask",
       "asking": "Asking…",
-      "matched": "Matched metric"
+      "matched": "Matched metric",
+      "notUnderstood": "I could not tell which metric that question is about — showing the default metric instead.",
+      "viaModel": "chosen by the model"
     },
     "create": {
       "placeholder": "New dashboard name",
@@ -8590,7 +8618,13 @@
       "flaggedTitle": "This ticket skipped a required role or diagnostic — review needed",
       "participantsTitle": "Required-role participation: complete of required"
     },
-    "prdBadgeTitle": "{count, plural, one {# linked PRD} other {# linked PRDs}}"
+    "prdBadgeTitle": "{count, plural, one {# linked PRD} other {# linked PRDs}}",
+    "allowance": {
+      "title": "This workspace is over its cloud-run allowance.",
+      "detail": "{used} of {limit} runs used this month on the {plan} plan. Agents will not start new cloud runs until the allowance resets or you upgrade.",
+      "onPremNote": "On-prem and VS Code runs are unaffected.",
+      "upgrade": "Upgrade"
+    }
   },
   "projectsContent": {
     "errLoad": "Failed to load projects. Check your connection and try again.",

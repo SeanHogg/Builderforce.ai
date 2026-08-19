@@ -2265,7 +2265,9 @@
       "allEpics": "Alle",
       "noEpics": "Keine Epics mit Aktivität in diesem Zeitraum.",
       "epic": "Epic",
-      "project": "Projekt"
+      "project": "Projekt",
+      "exportCsv": "CSV herunterladen",
+      "exporting": "Wird vorbereitet…"
     },
     "deliv": {
       "title": "Lieferung",
@@ -2536,7 +2538,12 @@
       "tableTitle": "Ihre Kennzahlen vs. Kohorte",
       "footnote": "Perzentile werden gegen vordefinierte Branchenkohorten-Verteilungen (p10–p90) interpoliert. Bei Kennzahlen, bei denen niedriger besser ist (Lead Time, Change-Failure-Rate, MTTR, Kosten), schneidet ein kleinerer Wert höher ab.",
       "industries": {
-        "software_saas": "Software / SaaS"
+        "software_saas": "Software / SaaS",
+        "fintech": "Fintech / Finanzdienstleistungen",
+        "ecommerce": "E-Commerce / Handel",
+        "healthtech": "Healthtech / Life Sciences",
+        "agency_services": "Agentur / Professional Services",
+        "enterprise_it": "Enterprise IT"
       },
       "sizeBands": {
         "small": "Klein (1–20)",
@@ -2604,7 +2611,10 @@
         "performance": "Deployment-Erfolgsrate",
         "activity": "Output-Durchsatz",
         "communication": "Kollaborationsbreite × Flow",
-        "efficiency": "Wenig Nacharbeit + schneller Zyklus"
+        "efficiency": "Wenig Nacharbeit + schneller Zyklus",
+        "satisfactionSurvey": "Antworten aus der DevEx-Umfrage",
+        "satisfactionEngagement": "Ersatzwert aus dem Mitglieder-Engagement — noch keine Umfrageantworten",
+        "satisfactionNone": "Noch kein Zufriedenheitssignal"
       }
     },
     "bottleneck": {
@@ -3832,6 +3842,22 @@
         "op_equals": "gleich",
         "op_contains": "enthält",
         "op_prefix": "beginnt mit"
+      },
+      "rotate": {
+        "action": "Schlüssel rotieren",
+        "rotating": "Wird rotiert…",
+        "confirmGrace": "Neuen Ingest-Schlüssel erzeugen? Der aktuelle Schlüssel bleibt noch {hours} Stunden gültig, damit du neu ausrollen kannst.",
+        "confirmNow": "Den vorherigen Ingest-Schlüssel sofort widerrufen? Alles, was ihn noch sendet, wird ab sofort abgelehnt.",
+        "failed": "Der Ingest-Schlüssel konnte nicht rotiert werden",
+        "shownOnce": "Neuer Ingest-Schlüssel ausgestellt — kopiere ihn aus dem Snippet unten. Er wird nur einmal angezeigt und ist danach nicht mehr abrufbar.",
+        "graceOpen": "Der vorherige Schlüssel wird noch bis {at} akzeptiert. Rolle bis dahin alles neu aus, das ihn verwendet.",
+        "revokeNow": "Jetzt widerrufen"
+      },
+      "unmapped": {
+        "title": "{count} Ereignisse verworfen — nichts leitet sie weiter",
+        "lastAt": "zuletzt {at}",
+        "fixTenant": "Keine Zuordnungsregel passte auf diese Ereignisse und es ist kein Standardprojekt gesetzt. Füge unten eine Regel hinzu oder wähle ein Standardprojekt.",
+        "fixProject": "Diese Ereignisse konnten nicht an das Projekt dieses Collectors geleitet werden. Prüfe, ob der Collector noch an einem aktiven Projekt hängt."
       }
     },
     "stats": {
@@ -4034,7 +4060,9 @@
       "placeholder": "z. B. Wie viel geben wir diesen Monat aus?",
       "button": "Fragen",
       "asking": "Wird abgefragt…",
-      "matched": "Zugeordnete Kennzahl"
+      "matched": "Zugeordnete Kennzahl",
+      "notUnderstood": "Ich konnte nicht erkennen, um welche Kennzahl es in dieser Frage geht — stattdessen wird die Standardkennzahl angezeigt.",
+      "viaModel": "vom Modell gewählt"
     },
     "create": {
       "placeholder": "Name des neuen Dashboards",
@@ -8590,7 +8618,13 @@
       "flaggedTitle": "Dieses Ticket hat eine erforderliche Rolle oder Diagnose übersprungen – Prüfung nötig",
       "participantsTitle": "Beteiligung erforderlicher Rollen: abgeschlossen von erforderlich"
     },
-    "prdBadgeTitle": "{count, plural, one {# verknüpftes PRD} other {# verknüpfte PRDs}}"
+    "prdBadgeTitle": "{count, plural, one {# verknüpftes PRD} other {# verknüpfte PRDs}}",
+    "allowance": {
+      "title": "Dieser Workspace hat sein Cloud-Run-Kontingent überschritten.",
+      "detail": "{used} von {limit} Läufen in diesem Monat im {plan}-Tarif verbraucht. Agenten starten keine neuen Cloud-Läufe, bis das Kontingent zurückgesetzt wird oder du upgradest.",
+      "onPremNote": "On-Prem- und VS-Code-Läufe sind nicht betroffen.",
+      "upgrade": "Upgrade"
+    }
   },
   "projectsContent": {
     "errLoad": "Projekte konnten nicht geladen werden. Prüfe deine Verbindung und versuche es erneut.",

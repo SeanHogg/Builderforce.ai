@@ -863,7 +863,7 @@ export const swimlanes = pgTable('swimlanes', {
   gate:          varchar('gate', { length: 16 }).notNull().default('auto'),              // 'auto' | 'human'
   /**
    * Whether {@link swimlanes.gate} was SEEDED by a board template or CHOSEN by a
-   * person: 'seed' | 'operator' (migration 0931).
+   * person: 'seed' | 'operator' (migration 0933).
    *
    * It exists because migration 0369 needed exactly this and did not have it. It
    * had to flip every seeded `in_review` human gate to `auto` — the default was

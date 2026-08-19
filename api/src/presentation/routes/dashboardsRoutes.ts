@@ -31,6 +31,10 @@ import { METRIC_REGISTRY, isMetricKey, listMetricKeys } from '../../application/
 import { answerQuery } from '../../application/dashboards/nlQuery';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { positiveIntOrNull } from './queryParams';
+import { gatewayIntentRefiner } from '../../application/dashboards/gatewayIntentRefiner';
+import { resolveTenantPlan } from './llmRoutes';
+import type { IntentRefiner } from '../../application/dashboards/nlQuery';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -40,11 +44,6 @@ function parseDays(raw: string | undefined, def = 30): number {
   return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
 }
 
-/** Parse a positive-integer route param, else null. */
-function parseIntParam(raw: string | undefined): number | null {
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
 
 const ALLOWED_VIZ = new Set(['stat', 'bar', 'line', 'gauge', 'widget']);
 
@@ -70,13 +69,26 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ── AI-Powered Query (deterministic NL → whitelisted metric) ───────────────
+  //
+  // The keyword mapper answers first and answers alone whenever it recognises the
+  // question. Only a question it does NOT recognise reaches the gateway refiner,
+  // which may pick a different WHITELISTED key and nothing else — so this stays a
+  // deterministic feature that an LLM sometimes improves, not an LLM feature with
+  // a deterministic fallback. `refine: false` opts out entirely.
   router.post('/query', async (c) => {
     const { tenantId } = scope(c);
-    const body = await c.req.json<{ question?: string }>().catch(() => ({}) as { question?: string });
+    const body = await c.req.json<{ question?: string; refine?: boolean }>().catch(() => ({}) as { question?: string; refine?: boolean });
     const question = (body.question ?? '').toString().trim();
     if (!question) return c.json({ error: 'question is required' }, 400);
 
-    const answer = await answerQuery(db, tenantId, question);
+    let refiner: IntentRefiner | undefined;
+    if (body.refine !== false) {
+      // A plan lookup failure means no refiner, not a failed query.
+      const plan = await resolveTenantPlan(c.env as Env, tenantId).catch(() => null);
+      if (plan) refiner = gatewayIntentRefiner(c.env as Env, plan.effectivePlan, plan.premiumOverride);
+    }
+
+    const answer = await answerQuery(db, tenantId, question, refiner);
 
     // Record the question + matched metric for history/audit (best-effort).
     const createdBy = c.get('userId') as string | undefined;
@@ -135,7 +147,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
 
   router.patch('/dashboards/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const id = parseIntParam(c.req.param('id'));
+    const id = positiveIntOrNull(c.req.param('id'));
     if (id == null) return c.json({ error: 'invalid id' }, 400);
     const body = await c.req.json<{ name?: string; isDefault?: boolean }>().catch(() => ({}) as { name?: string; isDefault?: boolean });
     const patch: Record<string, unknown> = { updatedAt: new Date() };
@@ -152,7 +164,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
 
   router.delete('/dashboards/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
-    const id = parseIntParam(c.req.param('id'));
+    const id = positiveIntOrNull(c.req.param('id'));
     if (id == null) return c.json({ error: 'invalid id' }, 400);
     const [row] = await db
       .delete(savedDashboards)
@@ -173,7 +185,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
 
   router.post('/dashboards/:id/widgets', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const dashboardId = parseIntParam(c.req.param('id'));
+    const dashboardId = positiveIntOrNull(c.req.param('id'));
     if (dashboardId == null) return c.json({ error: 'invalid id' }, 400);
     if (!(await ownsDashboard(tenantId, dashboardId))) return c.json({ error: 'not found' }, 404);
 
@@ -204,8 +216,8 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
 
   router.patch('/dashboards/:id/widgets/:wid', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const dashboardId = parseIntParam(c.req.param('id'));
-    const widgetId = parseIntParam(c.req.param('wid'));
+    const dashboardId = positiveIntOrNull(c.req.param('id'));
+    const widgetId = positiveIntOrNull(c.req.param('wid'));
     if (dashboardId == null || widgetId == null) return c.json({ error: 'invalid id' }, 400);
 
     const body = await c.req.json<{ metricKey?: string; viz?: string; title?: string; config?: unknown; position?: number }>().catch(() => ({}) as { metricKey?: string; viz?: string; title?: string; config?: unknown; position?: number });
@@ -231,8 +243,8 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
 
   router.delete('/dashboards/:id/widgets/:wid', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const dashboardId = parseIntParam(c.req.param('id'));
-    const widgetId = parseIntParam(c.req.param('wid'));
+    const dashboardId = positiveIntOrNull(c.req.param('id'));
+    const widgetId = positiveIntOrNull(c.req.param('wid'));
     if (dashboardId == null || widgetId == null) return c.json({ error: 'invalid id' }, 400);
     const [row] = await db
       .delete(dashboardWidgets)
@@ -245,7 +257,7 @@ export function createDashboardsRoutes(db: Db): Hono<HonoEnv> {
   // ── Resolve every widget's metric to a value (short-TTL cached) ────────────
   router.get('/dashboards/:id/data', async (c) => {
     const { tenantId } = scope(c);
-    const dashboardId = parseIntParam(c.req.param('id'));
+    const dashboardId = positiveIntOrNull(c.req.param('id'));
     if (dashboardId == null) return c.json({ error: 'invalid id' }, 400);
     if (!(await ownsDashboard(tenantId, dashboardId))) return c.json({ error: 'not found' }, 404);
 

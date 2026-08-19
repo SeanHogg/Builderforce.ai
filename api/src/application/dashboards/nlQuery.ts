@@ -4,20 +4,53 @@
  * A question NEVER becomes SQL. {@link parseIntent} maps the question to ONE
  * whitelisted {@link METRIC_REGISTRY} key + a time window using keyword matching.
  * This mapper is fully standalone — the feature is functional with NO LLM wired.
- * (A gateway LLM may LATER refine the parse, but only ever to pick another
- * whitelisted key; it can never widen the surface.)
+ *
+ * ── THE LLM REFINEMENT (AIIMP-3) ────────────────────────────────────────────
+ * The keyword rules cover the phrasings we anticipated; a question they do not
+ * recognise used to fall through to `finance.spend` and answer CONFIDENTLY about
+ * spend. "How is uptime looking?" returned a dollar figure. That is worse than
+ * refusing, because nothing in the response said the question had not been
+ * understood.
+ *
+ * So the parse now reports whether it MATCHED or defaulted, and an optional
+ * gateway LLM is consulted only in the defaulted case. Three properties make it
+ * safe to add:
+ *
+ *   1. IT CANNOT WIDEN THE SURFACE. The model returns a metric KEY, which is
+ *      validated against {@link isMetricKey} before use. An invented key, prose,
+ *      an injected instruction — all fail the same check and are discarded. The
+ *      question never becomes a query; it selects from a fixed list, exactly as
+ *      the keyword rules do.
+ *   2. IT IS NEVER ON THE CRITICAL PATH. No refiner, an error, a timeout, an
+ *      unusable answer — every one of them keeps the deterministic result. The
+ *      feature works with no LLM wired, which is how it shipped.
+ *   3. IT COSTS NOTHING ON THE HAPPY PATH. A question the keywords match never
+ *      reaches it.
  *
  * {@link answerQuery} then resolves the matched key through the registry and
- * returns a structured, explainable answer.
+ * returns a structured, explainable answer that names how the metric was chosen.
  */
 
 import type { Db } from '../../infrastructure/database/connection';
-import { METRIC_REGISTRY, isMetricKey } from './metricRegistry';
+import { METRIC_REGISTRY, isMetricKey, listMetricKeys } from './metricRegistry';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
+
+/** How the metric was chosen — reported so a guess is never read as a match. */
+export type IntentSource = 'keyword' | 'llm' | 'default';
 
 export interface Intent {
   metricKey: string;
   days: number;
+  source: IntentSource;
 }
+
+/**
+ * A constrained refiner: given the question and the allowed keys, return ONE of
+ * those keys, or anything else to decline. Returning junk is not an error case
+ * to handle — it is the ordinary way to decline, and it is discarded by the same
+ * validation that discards a hallucinated key.
+ */
+export type IntentRefiner = (question: string, allowedKeys: string[]) => Promise<string | null>;
 
 export interface QueryAnswer {
   matchedMetric: string;
@@ -26,6 +59,12 @@ export interface QueryAnswer {
   unit: string;
   days: number;
   explanation: string;
+  /**
+   * How `matchedMetric` was chosen. 'default' means the question was NOT
+   * understood and the answer is about the fallback metric — the UI says so
+   * rather than presenting it as the answer to what was asked.
+   */
+  source: IntentSource;
 }
 
 /** Default window when the question names no period. */
@@ -63,6 +102,28 @@ const RULES: Rule[] = [
 
   // Allocation / capex.
   { metricKey: 'allocation.capexPct', any: ['capex', 'capitaliz', 'capitalis', 'capitalizable'] },
+
+  // Reliability / quality. These rules cover registry keys the rule list never
+  // reached: every question about uptime, incidents, attrition, tokens or alerts
+  // fell through to `finance.spend` and was answered — confidently — with a
+  // dollar figure. Ordered after the finance rules on purpose: "incident cost" is
+  // a spend question, "how many incidents" is not.
+  { metricKey: 'quality.uptime', any: ['uptime', 'availability', 'downtime', 'sla'] },
+  { metricKey: 'quality.mttr', any: ['mttr', 'time to restore', 'time to recover', 'recovery time', 'restore time'] },
+  { metricKey: 'quality.incidents', any: ['incident', 'outage', 'sev1', 'sev 1', 'pager'] },
+  { metricKey: 'quality.errorEvents', any: ['error event', 'errors', 'exception', 'crash', 'error volume'] },
+
+  // People.
+  { metricKey: 'people.attrition', any: ['attrition', 'turnover', 'people leaving', 'retention'] },
+  { metricKey: 'people.devSatisfaction', any: ['satisfaction', 'morale', 'happiness', 'enps', 'how do people feel', 'developer experience', 'devex'] },
+
+  // Platform consumption.
+  { metricKey: 'delivery.agentRuns', any: ['agent run', 'how many runs', 'run volume', 'runs per'] },
+  { metricKey: 'ai.tokens', any: ['token', 'context usage', 'tokens used'] },
+  { metricKey: 'alerts.fires', any: ['alert', 'alerts fired', 'how many alerts'] },
+
+  // R&D.
+  { metricKey: 'rdFinancials.rdToRevenue', any: ['r&d to revenue', 'rd to revenue', 'r&d ratio', 'research spend ratio'] },
 ];
 
 /**
@@ -99,10 +160,14 @@ function clampDays(n: number): number {
   return Math.min(365, Math.floor(n));
 }
 
+/** The metric a question falls back to when nothing recognises it. */
+const DEFAULT_METRIC_KEY = 'finance.spend';
+
 /**
  * Deterministic intent: map the question to a whitelisted metric key + window.
- * Defaults to 'finance.spend' (the most-asked manager metric) when nothing else
- * matches, so the feature always returns a real, answerable result.
+ * Falls back to {@link DEFAULT_METRIC_KEY} when nothing matches, so the feature
+ * always returns a real, answerable result — but reports `source: 'default'` so
+ * the caller knows the question was not understood rather than answered.
  */
 export function parseIntent(question: string): Intent {
   const q = (question || '').toLowerCase();
@@ -112,11 +177,43 @@ export function parseIntent(question: string): Intent {
     const allOk = !rule.all || rule.all.every((t) => q.includes(t));
     const anyOk = !rule.any || rule.any.some((t) => q.includes(t));
     if (allOk && anyOk && isMetricKey(rule.metricKey)) {
-      return { metricKey: rule.metricKey, days };
+      return { metricKey: rule.metricKey, days, source: 'keyword' };
     }
   }
 
-  return { metricKey: 'finance.spend', days };
+  return { metricKey: DEFAULT_METRIC_KEY, days, source: 'default' };
+}
+
+/**
+ * Give an unmatched question one more chance, through a refiner that may ONLY
+ * return a whitelisted key.
+ *
+ * Every escape route lands on the deterministic intent: a matched question skips
+ * the refiner entirely, and an absent / throwing / declining / hallucinating
+ * refiner is indistinguishable from having none. That is what keeps this an
+ * enhancement rather than a dependency — the property the original mapper was
+ * written to have and this must not spend.
+ */
+export async function refineIntent(intent: Intent, question: string, refiner?: IntentRefiner): Promise<Intent> {
+  if (!refiner || intent.source !== 'default') return intent;
+  try {
+    const picked = (await refiner(question, listMetricKeys()))?.trim();
+    // THE GATE. Whatever came back is a candidate string and nothing more: it is
+    // a metric key only if the registry says so. Prose, an invented key, or an
+    // instruction smuggled through the question all fail here identically.
+    if (picked && isMetricKey(picked)) return { ...intent, metricKey: picked, source: 'llm' };
+  } catch (error) {
+    // A refiner failure is not a query failure — the deterministic answer stands.
+    // Reported rather than swallowed so a refiner that is failing EVERY question
+    // is visible; silently degrading to the keyword parse would look identical to
+    // a model that simply never had a better answer.
+    reportCaughtError(error, {
+      source: 'application/dashboards/nlQuery.ts',
+      operation: 'refineIntent',
+      context: { logMessage: '[nl-query] intent refinement failed; keeping the keyword parse' },
+    });
+  }
+  return intent;
 }
 
 /** Format a resolved value for the explanation sentence. */
@@ -136,17 +233,29 @@ function formatValue(value: number | null, unit: string): string {
  * through the registry, and return a structured + human-readable result. Never runs
  * SQL from the question — only the registry's pre-declared compute path.
  */
-export async function answerQuery(db: Db, tenantId: number, question: string): Promise<QueryAnswer> {
-  const { metricKey, days } = parseIntent(question);
+export async function answerQuery(
+  db: Db,
+  tenantId: number,
+  question: string,
+  refiner?: IntentRefiner,
+): Promise<QueryAnswer> {
+  const { metricKey, days, source } = await refineIntent(parseIntent(question), question, refiner);
   const def = METRIC_REGISTRY[metricKey];
   if (!def) {
-    return { matchedMetric: metricKey, label: metricKey, value: null, unit: '', days, explanation: `No metric is registered for "${metricKey}".` };
+    return { matchedMetric: metricKey, label: metricKey, value: null, unit: '', days, explanation: `No metric is registered for "${metricKey}".`, source };
   }
   const value = await def.compute(db, tenantId, days);
 
-  const explanation = value == null
+  const reading = value == null
     ? `${def.label}: no data for the last ${days} days. ${def.description}`
     : `${def.label} over the last ${days} days is ${formatValue(value, def.unit)}. ${def.description}`;
 
-  return { matchedMetric: metricKey, label: def.label, value, unit: def.unit, days, explanation };
+  // A defaulted match SAYS it defaulted. The old sentence read identically whether
+  // the question had been understood or silently replaced with "spend", which made
+  // an unanswered question look like an answered one.
+  const explanation = source === 'default'
+    ? `I could not tell which metric that question is about, so this is ${def.label}, the default. ${reading}`
+    : reading;
+
+  return { matchedMetric: metricKey, label: def.label, value, unit: def.unit, days, explanation, source };
 }

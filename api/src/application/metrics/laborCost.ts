@@ -20,23 +20,27 @@ import {
 import { notSystemTask } from '../task/taskScope';
 import { loggedMinutesByTask, isoDay } from '../timeTracking/timeTracking';
 import { identityOf, type MemberIdentityFields, type MemberKind } from './workforceMetrics';
+import { taskEffortHours as sharedTaskEffortHours } from './effortHours';
 
 const HOUR_MS = 3_600_000;
 /** Cap a single task's cycle-time estimate at one work-day (matches planningSpine). */
 export const HUMAN_HOURS_CAP = 8;
 
 /**
- * Pure: effort hours for one task. REAL logged time wins; else the capped
- * cycle-time estimate once the task is done; else 0. The single effort definition
- * shared by cost attribution (EMP-19) and initiative allocation (EMP-13).
+ * Effort hours for one task, priced for LABOUR: real logged time wins; else the
+ * capped cycle-time estimate once the task is done; else 0.
+ *
+ * A thin binding of the shared rule ({@link taskEffort}) to this caller's two
+ * choices — cap a single task at one work-day, and price nothing that has not
+ * finished. It used to be a second, independent implementation that happened to
+ * share a NAME with `allocationInsights.taskEffortHours` while disagreeing with it
+ * about whether timesheets exist. See `metrics/effortHours.ts`.
  */
 export function taskEffortHours(loggedMinutes: number, createdAt: Date, completedAt: Date | null): number {
-  if (loggedMinutes > 0) return loggedMinutes / 60;
-  if (completedAt) {
-    const cycleHours = (completedAt.getTime() - createdAt.getTime()) / HOUR_MS;
-    return Math.max(0, Math.min(cycleHours, HUMAN_HOURS_CAP));
-  }
-  return 0;
+  return sharedTaskEffortHours(
+    { loggedMinutes, createdAt, completedAt },
+    { capHours: HUMAN_HOURS_CAP, includeInFlight: false, now: Date.now() },
+  );
 }
 
 /**

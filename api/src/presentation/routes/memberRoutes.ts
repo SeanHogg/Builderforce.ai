@@ -39,6 +39,7 @@ import { getTenantEngagement, persistTenantEngagement } from '../../application/
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { positiveIntParam } from './queryParams';
 
 const MEMBER_KINDS = new Set(['human', 'cloud_agent', 'host_agent']);
 const clampDays = (raw: number, def: number, max: number) =>
@@ -208,28 +209,42 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     return c.json(result, result.ok ? 200 : 502);
   });
 
-  // ── GET /api/members/metrics?days=7[&discipline=] — all scorecards (MANAGER+) ─
+  // ── GET /api/members/metrics?days=7[&discipline=][&projectId=] — scorecards ──
   // Optional ?discipline= filters the returned members to one builder discipline
   // (the Jellyfish "beyond engineers" lens). The cache stays discipline-agnostic
   // (filter applied after load); byDiscipline is computed from the FULL unfiltered
   // set so the rollup is stable regardless of the active filter.
+  //
+  // ?projectId= narrows the whole computation to one project. `computeMemberMetrics`
+  // has always taken the argument; this route simply never passed it, which is what
+  // made the Workforce page's project scope a no-op — the selector moved and the
+  // numbers did not.
   router.get('/metrics', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const days = clampDays(parseInt(c.req.query('days') ?? '7', 10), 7, 180);
     const discipline = (c.req.query('discipline') ?? '').trim() || null;
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const version = await readWorkforceMetricsVersion(env, tenantId);
-    const scorecards = await getOrSetCached(env, memberMetricsCacheKey(tenantId, version, days), () =>
-      computeMemberMetrics(db, tenantId, days),
+    const scorecards = await getOrSetCached(env, memberMetricsCacheKey(tenantId, version, days, projectId), () =>
+      computeMemberMetrics(db, tenantId, days, projectId),
     );
     // Snapshot into member_metrics_period (best-effort) so the table is the
     // queryable history behind sprint retros, not just an on-the-fly read.
-    c.executionCtx.waitUntil(snapshotMetrics(db, tenantId, days, scorecards).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
-    }));
+    //
+    // ONLY for the workspace-wide read. `member_metrics_period` is tenant-grained
+    // by definition, so snapshotting a project-narrowed set would overwrite each
+    // member's workspace history with one project's slice of it — every consumer
+    // of that table (retros, SPACE efficiency, the engagement proxy) would then be
+    // reading whichever project happened to be selected last.
+    if (projectId == null) {
+      c.executionCtx.waitUntil(snapshotMetrics(db, tenantId, days, scorecards).catch((error) => {
+        reportCaughtError(error, { source: "presentation/routes/memberRoutes.ts", operation: "createMemberRoutes" });
+      }));
+    }
     const byDiscipline = rollupByDiscipline(scorecards);
     const members = discipline ? scorecards.filter((m) => (m.discipline ?? null) === discipline) : scorecards;
-    return c.json({ windowDays: days, members, byDiscipline });
+    return c.json({ windowDays: days, projectId: projectId ?? null, members, byDiscipline });
   });
 
   // ── GET /api/members/:kind/:ref/metrics?days=7 — one member ────────────────
@@ -239,23 +254,25 @@ export function createMemberRoutes(db: Db): Hono<HonoEnv> {
     if (!MEMBER_KINDS.has(kind)) return c.json({ error: 'invalid member kind' }, 400);
     const tenantId = c.get('tenantId') as number;
     const days = clampDays(parseInt(c.req.query('days') ?? '7', 10), 7, 180);
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const version = await readWorkforceMetricsVersion(env, tenantId);
-    const all = await getOrSetCached(env, memberMetricsCacheKey(tenantId, version, days), () =>
-      computeMemberMetrics(db, tenantId, days),
+    const all = await getOrSetCached(env, memberMetricsCacheKey(tenantId, version, days, projectId), () =>
+      computeMemberMetrics(db, tenantId, days, projectId),
     );
     const one = all.find((m) => m.memberKind === kind && m.memberRef === ref) ?? null;
     return c.json({ windowDays: days, member: one });
   });
 
-  // ── GET /api/members/dora?days=30 — DORA rollup (MANAGER+) ─────────────────
+  // ── GET /api/members/dora?days=30[&projectId=] — DORA rollup (MANAGER+) ────
   router.get('/dora', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const days = clampDays(parseInt(c.req.query('days') ?? '30', 10), 30, 365);
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const version = await readWorkforceMetricsVersion(env, tenantId);
-    const dora = await getOrSetCached(env, doraCacheKey(tenantId, version, days), () =>
-      computeDora(db, tenantId, days),
+    const dora = await getOrSetCached(env, doraCacheKey(tenantId, version, days, projectId), () =>
+      computeDora(db, tenantId, days, projectId),
     );
     return c.json(dora);
   });

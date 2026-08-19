@@ -27,16 +27,8 @@
  */
 
 import { and, eq } from 'drizzle-orm';
-import {
-  integer,
-  pgTable,
-  serial,
-  timestamp,
-  unique,
-  varchar,
-} from 'drizzle-orm/pg-core';
 import type { Db } from '../../infrastructure/database/connection';
-import { tenants } from '../../infrastructure/database/schema';
+import { recommendationDismissals } from '../../infrastructure/database/schema';
 import { computeFinanceInsights, type FinanceInsights } from './financeInsights';
 import { clampScore } from '../../domain/shared/numbers';
 import { computeEngineeringInsights, type EngineeringInsights } from './engineeringInsights';
@@ -76,21 +68,6 @@ export interface RecDataTrace {
   value: string;
   source: string;
 }
-
-/**
- * Persisted dismissals only (recommendations themselves are computed live).
- * Defined here — not in the shared schema.ts — because this feature owns the
- * table; mirrors migration 0232 exactly.
- */
-export const recommendationDismissals = pgTable('recommendation_dismissals', {
-  id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  recKey:      varchar('rec_key', { length: 120 }).notNull(),
-  dismissedBy: varchar('dismissed_by', { length: 36 }),
-  dismissedAt: timestamp('dismissed_at').notNull().defaultNow(),
-}, (t) => [
-  unique('recommendation_dismissals_tenant_id_rec_key_key').on(t.tenantId, t.recKey),
-]);
 
 const HOUR_MS = 3_600_000;
 

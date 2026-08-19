@@ -17,7 +17,7 @@
 import { and, asc, eq, lt } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { headcountEvents, openPositions, memberProfiles } from '../../infrastructure/database/schema';
-import { computeDevexInsights } from './devexInsights';
+import { computeDevexInsights, devexSatisfaction } from './devexInsights';
 
 const DAY_MS = 86_400_000;
 const MAX_EVENT_ROWS = 10_000;
@@ -155,12 +155,7 @@ export async function computePeopleInsights(db: Db, tenantId: number, months = 6
     computeDevexInsights(db, tenantId, months * 30),
   ]);
 
-  const satScores = devex.byDimension.map((d) => d.avgScore);
-  const devSatisfaction = {
-    score: satScores.length ? Math.round((satScores.reduce((a, b) => a + b, 0) / satScores.length) * 10) / 10 : null,
-    enps: devex.enps,
-    responses: devex.totalResponses,
-  };
-
-  return summarizePeople(allEvents, positions, ramps, months, now, devSatisfaction);
+  // The SAME reduction SPACE reads, so "developer satisfaction" cannot mean one
+  // thing here and another on the SPACE lens. See {@link devexSatisfaction}.
+  return summarizePeople(allEvents, positions, ramps, months, now, devexSatisfaction(devex));
 }

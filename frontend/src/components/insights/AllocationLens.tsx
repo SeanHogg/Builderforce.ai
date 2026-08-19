@@ -103,6 +103,14 @@ export function AllocationLens() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [metric, setMetric] = useState<'fte' | 'cost'>('fte');
   const [epicFilter, setEpicFilter] = useState<'all' | CapitalizationStatus>('all');
+  const [exporting, setExporting] = useState(false);
+
+  const downloadReport = async () => {
+    setExporting(true);
+    try { await insightsApi.capitalizationExport({ months: 12, projectId }); }
+    catch { /* surfaced via the global API-error toast */ }
+    finally { setExporting(false); }
+  };
 
   useEffect(() => { let alive = true; fetchProjects().then((p) => { if (alive) setProjects(p); }).catch(() => {}); return () => { alive = false; }; }, []);
 
@@ -227,7 +235,28 @@ export function AllocationLens() {
       </div>
 
       {/* Historical months — capitalized FTE-months + cost trend */}
-      <PmCard title={t('alloc.historyTitle')} action={history ? <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{t('alloc.dataAsOf', { d: new Date(history.dataAsOf).toLocaleString() })}</span> : undefined}>
+      <PmCard
+        title={t('alloc.historyTitle')}
+        action={history ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{t('alloc.dataAsOf', { d: new Date(history.dataAsOf).toLocaleString() })}</span>
+            {/* The report is what finance hands an auditor; until now it could only
+                be read on screen. Honours the project scope currently applied. */}
+            <button
+              type="button"
+              onClick={() => { void downloadReport(); }}
+              disabled={exporting}
+              style={{
+                padding: '4px 10px', fontSize: '0.74rem', fontWeight: 600, cursor: exporting ? 'default' : 'pointer',
+                background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+                border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
+              }}
+            >
+              {exporting ? t('alloc.exporting') : t('alloc.exportCsv')}
+            </button>
+          </span>
+        ) : undefined}
+      >
         {!history ? (
           <span style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>{t('loading')}</span>
         ) : history.months.every((m) => m.taskCount === 0) ? (

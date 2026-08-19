@@ -24,6 +24,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import {
   agentHosts,
   llmUsageLog,
+  memberProfiles,
   projects,
   tasks,
   users,
@@ -40,6 +41,8 @@ import {
 } from '../llm/allocationCategories';
 import { loadTaskCostClassMap } from '../pmo/planningSpine';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
+import { taskEffortHours as sharedTaskEffortHours } from '../metrics/effortHours';
+import { loggedMinutesByTask, isoDay } from '../timeTracking/timeTracking';
 
 const HOUR_MS = 3_600_000;
 /** Bound on tasks scanned per window (mirrors workforceMetrics.MAX_METRIC_ROWS). */
@@ -107,12 +110,24 @@ export function capitalizationSource(r: AllocationTaskRow, lineage?: Map<number,
   return 'derived';
 }
 
-/** Estimated active effort-hours for a task: cycle time for completed work, else
- *  age-to-now for in-flight work, clamped to [0, MAX_TASK_HOURS]. */
-export function taskEffortHours(r: AllocationTaskRow, now: number): number {
-  const end = r.completedAt ? r.completedAt.getTime() : Math.min(now, r.updatedAt.getTime());
-  const hrs = (end - r.createdAt.getTime()) / HOUR_MS;
-  return Math.max(0, Math.min(MAX_TASK_HOURS, hrs));
+/**
+ * Effort-hours for a task in the ALLOCATION mix: real logged time when any was
+ * recorded, else cycle time for completed work / age-to-now for in-flight work,
+ * clamped to [0, MAX_TASK_HOURS].
+ *
+ * `loggedMinutes` is the correction that closes AIIMP-5. This function used to be
+ * a pure cycle-time estimate that never consulted `time_entries`, so the numbers
+ * built on top of it — the investment mix, the capitalization report's FTE-months
+ * and the R&D tax-credit QRE base — were derived from ticket open/close times even
+ * on tenants who had logged every hour. It is now the SAME rule labour
+ * attribution uses ({@link taskEffort}), parameterised for this caller's cap and
+ * for counting work in flight.
+ */
+export function taskEffortHours(r: AllocationTaskRow, now: number, loggedMinutes = 0): number {
+  return sharedTaskEffortHours(
+    { loggedMinutes, createdAt: r.createdAt, completedAt: r.completedAt, updatedAt: r.updatedAt },
+    { capHours: MAX_TASK_HOURS, includeInFlight: true, now },
+  );
 }
 
 /** The task's effective investment category — stored override wins, else derived. */
@@ -142,6 +157,22 @@ export interface CategoryAllocation {
   costUsd: number;      // attributed LLM spend
   capexUsd: number;
   opexUsd: number;
+  /** Effort priced at each member's OWN modelled rate — real labour dollars, not
+   *  a workspace blended rate applied to everyone. 0 when no rates are set. */
+  laborUsd: number;
+  /**
+   * Of `hours`, how many belong to a member who HAS a modelled rate — i.e. the
+   * hours `laborUsd` actually prices.
+   *
+   * Carried explicitly rather than inferred from `laborUsd / hours`, because the
+   * one consumer that needs it (the R&D credit's blended-rate fallback) needs the
+   * hours the tenant has NO compensation data for, and dividing dollars by an
+   * unknown blend of rates cannot recover that. `hours - ratedHours` can.
+   */
+  ratedHours: number;
+  /** Of `hours`, the share that came from RECORDED time (`time_entries`) rather
+   *  than a cycle-time estimate. Lets a report state how much of it was measured. */
+  loggedHours: number;
   /** Goal target for this category in this scope/period, if set (EMP-2). */
   targetPct?: number;
   /** actual pct − target pct (signed); only present when a target is set. */
@@ -166,9 +197,20 @@ export interface StatusBucket {
   fteMonths: number;
   costUsd: number;
   taskCount: number;
+  /**
+   * Real labour dollars — effort priced at each member's OWN modelled rate, not a
+   * workspace-wide blended guess. 0 when no member on the slice has a rate set.
+   */
+  laborUsd: number;
+  /** Of `hours`, those belonging to a member with a modelled rate. */
+  ratedHours: number;
+  /** Of `hours`, how many came from RECORDED time rather than a cycle-time
+   *  estimate. A capitalization figure carried into an accounting system needs to
+   *  state how much of it was measured; this is that number. */
+  loggedHours: number;
 }
 function emptyStatusBucket(): StatusBucket {
-  return { hours: 0, fteMonths: 0, costUsd: 0, taskCount: 0 };
+  return { hours: 0, fteMonths: 0, costUsd: 0, taskCount: 0, laborUsd: 0, ratedHours: 0, loggedHours: 0 };
 }
 
 /** An epic in the capitalization browser (Jellyfish "Work Capitalization" tab). */
@@ -180,6 +222,12 @@ export interface EpicCapitalization {
   hours: number;
   fteMonths: number;
   costUsd: number;
+  /** Effort priced at each member's own rate (0 when no rate is modelled). */
+  laborUsd: number;
+  /** Of `hours`, those belonging to a member with a modelled rate. */
+  ratedHours: number;
+  /** Of `hours`, the share that came from recorded time rather than an estimate. */
+  loggedHours: number;
   /** Tasks rolled into this epic (the epic itself + its child tasks in window). */
   taskCount: number;
   projectName: string | null;
@@ -195,6 +243,25 @@ export interface AllocationInsights {
     opexUsd: number;
     /** capex / (capex + opex) × 100 — the capitalizable share of spend (EMP-18). */
     capitalizablePct: number;
+    /**
+     * Effort priced at each member's OWN rate (`member_profiles.cost_rate_usd_cents`).
+     * This is the number an R&D-credit or capitalization filing needs — the AI/LLM
+     * `costUsd` above is compute spend, not what the people cost.
+     */
+    laborUsd: number;
+    /** Of `hours`, those belonging to a member with a modelled rate — the hours
+     *  `laborUsd` prices. `hours - ratedHours` is what a blended fallback covers. */
+    ratedHours: number;
+    /**
+     * Of `hours`, how many came from RECORDED time (`time_entries`) rather than a
+     * cycle-time estimate, and that share as a percentage.
+     *
+     * It is reported rather than assumed because the two are not interchangeable
+     * evidence. A capitalization number that is 90% measured and one that is 0%
+     * measured can print identically; only this says which you are holding.
+     */
+    loggedHours: number;
+    measuredEffortPct: number;
     /** Capitalized / Not Capitalized / Uncategorized split by effort + cost — the
      *  cost-report donut (FTE | Cost toggle). */
     byStatus: Record<CapitalizationStatus, StatusBucket>;
@@ -211,6 +278,11 @@ export type AllocationGoalMap = Map<AllocationCategory, number>;
 /**
  * Pure: turn fetched task rows + per-task cost into the allocation rollup. Costs
  * are passed as a taskId → millicents map so the function stays DB-free.
+ *
+ * `loggedByTask` and `rateByMember` are what make the LABOUR half of this report
+ * real rather than modelled (AIIMP-5). Both are optional and both default to
+ * empty, so a caller that has neither gets exactly the previous behaviour — an
+ * estimate, correctly labelled as one.
  */
 export function summarizeAllocation(
   rows: AllocationTaskRow[],
@@ -220,10 +292,14 @@ export function summarizeAllocation(
   goals: AllocationGoalMap = new Map(),
   /** task id → lineage-resolved CAPEX/OPEX (closes SPINE-2; omit = category default). */
   lineage?: Map<number, 'capex' | 'opex'>,
+  /** task id → REAL minutes recorded against it in the window (`time_entries`). */
+  loggedByTask: Map<number, number> = new Map(),
+  /** 'kind:ref' → the member's own $/hour (`member_profiles.cost_rate_usd_cents`). */
+  rateByMember: Map<string, number> = new Map(),
 ): AllocationInsights {
   const cat = (c: AllocationCategory) => ({
     category: c, label: allocationCategoryLabel(c),
-    hours: 0, pct: 0, taskCount: 0, costUsd: 0, capexUsd: 0, opexUsd: 0,
+    hours: 0, pct: 0, taskCount: 0, costUsd: 0, capexUsd: 0, opexUsd: 0, laborUsd: 0, ratedHours: 0, loggedHours: 0,
   } as CategoryAllocation);
   const byCat = new Map<AllocationCategory, CategoryAllocation>(
     ALLOCATION_CATEGORIES.map((c) => [c, cat(c)]),
@@ -247,46 +323,65 @@ export function summarizeAllocation(
       title: r.title ?? `#${r.taskId}`,
       status: capitalizationStatus(r, lineage),
       source: capitalizationSource(r, lineage),
-      hours: 0, fteMonths: 0, costUsd: 0, taskCount: 0,
+      hours: 0, fteMonths: 0, costUsd: 0, laborUsd: 0, ratedHours: 0, loggedHours: 0, taskCount: 0,
       projectName: r.projectName ?? null,
     });
   }
 
   let totalHours = 0, totalCost = 0, capex = 0, opex = 0;
 
+  let totalLaborUsd = 0, totalRatedHours = 0, totalLoggedHours = 0;
+
   for (const r of rows) {
     const c = effectiveCategory(r);
-    const hrs = taskEffortHours(r, now);
+    const loggedMinutes = loggedByTask.get(r.taskId) ?? 0;
+    const hrs = taskEffortHours(r, now, loggedMinutes);
     const costUsd = (costByTask.get(r.taskId) ?? 0) / MILLICENTS_PER_USD;
     const klass = effectiveCostClass(r, lineage);
+
+    const id = identityOf(r);
+    const memberKey = id ? `${id.kind}:${id.ref}` : null;
+    // Priced at the OWNER's rate. A member with no modelled rate contributes 0
+    // labour dollars while still contributing hours — the alternative, spreading a
+    // workspace average over them, would invent salary data.
+    const rate = memberKey ? rateByMember.get(memberKey) ?? null : null;
+    const laborUsd = rate == null ? 0 : rate * hrs;
+    const ratedHours = rate == null ? 0 : hrs;
+    const loggedHours = loggedMinutes > 0 ? hrs : 0;
 
     const bucket = byCat.get(c)!;
     bucket.hours += hrs;
     bucket.taskCount += 1;
     bucket.costUsd += costUsd;
+    bucket.laborUsd += laborUsd;
+    bucket.ratedHours += ratedHours;
+    bucket.loggedHours += loggedHours;
     if (klass === 'capex') bucket.capexUsd += costUsd; else bucket.opexUsd += costUsd;
 
     const sb = byStatus[capitalizationStatus(r, lineage)];
     sb.hours += hrs; sb.costUsd += costUsd; sb.taskCount += 1;
+    sb.laborUsd += laborUsd; sb.ratedHours += ratedHours; sb.loggedHours += loggedHours;
 
     const epicId = r.taskType === 'epic' ? r.taskId
       : (r.parentTaskId != null && epicAgg.has(r.parentTaskId) ? r.parentTaskId : null);
     if (epicId != null) {
       const e = epicAgg.get(epicId)!;
       e.hours += hrs; e.costUsd += costUsd; e.taskCount += 1;
+      e.laborUsd += laborUsd; e.ratedHours += ratedHours; e.loggedHours += loggedHours;
     }
 
     totalHours += hrs;
     totalCost += costUsd;
+    totalLaborUsd += laborUsd;
+    totalRatedHours += ratedHours;
+    totalLoggedHours += loggedHours;
     if (klass === 'capex') capex += costUsd; else opex += costUsd;
 
-    const id = identityOf(r);
-    if (id) {
-      const key = `${id.kind}:${id.ref}`;
-      const m = memberAgg.get(key) ?? { kind: id.kind, ref: id.ref, name: id.name, total: 0, cats: new Map() };
+    if (id && memberKey) {
+      const m = memberAgg.get(memberKey) ?? { kind: id.kind, ref: id.ref, name: id.name, total: 0, cats: new Map() };
       m.total += hrs;
       m.cats.set(c, (m.cats.get(c) ?? 0) + hrs);
-      memberAgg.set(key, m);
+      memberAgg.set(memberKey, m);
     }
   }
 
@@ -328,6 +423,10 @@ export function summarizeAllocation(
       capexUsd: capex,
       opexUsd: opex,
       capitalizablePct: capex + opex > 0 ? (capex / (capex + opex)) * 100 : 0,
+      laborUsd: totalLaborUsd,
+      ratedHours: totalRatedHours,
+      loggedHours: totalLoggedHours,
+      measuredEffortPct: totalHours > 0 ? (totalLoggedHours / totalHours) * 100 : 0,
       byStatus,
     },
     byCategory,
@@ -422,8 +521,36 @@ export async function computeAllocationInsights(
     }
   }
 
-  const lineage = opts.lineage ? await loadTaskCostClassMap(db, tenantId) : undefined;
-  return summarizeAllocation(scoped, costByTask, days, now, goals, lineage);
+  // REAL recorded time for the same window, and each member's own rate. Both are
+  // already-collected data this report simply never asked for (AIIMP-5): a tenant
+  // could fill in every timesheet and set every salary band, and the investment
+  // mix, the capitalization FTE-months and the R&D credit base would still have
+  // been derived from ticket open/close timestamps.
+  const [loggedByTask, rateByMember, lineage] = await Promise.all([
+    loggedMinutesByTask(db, tenantId, taskIds, { from: isoDay(since), to: isoDay(new Date(now)) }),
+    loadMemberHourlyRates(db, tenantId),
+    opts.lineage ? loadTaskCostClassMap(db, tenantId) : Promise.resolve(undefined),
+  ]);
+
+  return summarizeAllocation(scoped, costByTask, days, now, goals, lineage, loggedByTask, rateByMember);
+}
+
+/**
+ * 'kind:ref' → the member's hourly rate in dollars, from the modelled cost rate.
+ *
+ * One query, no join: the map is applied in memory against rows already loaded.
+ * Members with no rate are simply absent, which the caller reads as "no salary
+ * data for this person" — deliberately NOT as zero and NOT as the workspace
+ * average, either of which would be inventing compensation data.
+ */
+export async function loadMemberHourlyRates(db: Db, tenantId: number): Promise<Map<string, number>> {
+  const rows = await db
+    .select({ memberKind: memberProfiles.memberKind, memberRef: memberProfiles.memberRef, cents: memberProfiles.costRateUsdCents })
+    .from(memberProfiles)
+    .where(eq(memberProfiles.tenantId, tenantId));
+  const out = new Map<string, number>();
+  for (const r of rows) if (r.cents != null) out.set(`${r.memberKind}:${r.memberRef}`, r.cents / 100);
+  return out;
 }
 
 // ── Historical months (cost-report time series) ──────────────────────────────

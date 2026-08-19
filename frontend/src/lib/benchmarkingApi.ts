@@ -32,15 +32,28 @@ export interface BenchmarkProfile {
   sizeBand: string;
 }
 
-/** Industry options offered in the profile selector (matches seeded cohorts). */
-export const BENCHMARK_INDUSTRIES = ['software_saas'] as const;
-
-/** Team-size bands offered in the profile selector (matches seeded cohorts). */
-export const BENCHMARK_SIZE_BANDS = ['small', 'mid', 'large'] as const;
+/**
+ * The cohorts a tenant may select.
+ *
+ * SERVER-DERIVED, from the seeded `industry_benchmarks` rows. It was a hardcoded
+ * `['software_saas']`, which had to be edited in lockstep with every cohort
+ * migration — and was not: 0930 seeded five more industries that this list would
+ * still have hidden. A constant here can also drift the other way and offer a
+ * cohort with no distribution, after which every metric ranks against nothing.
+ * The rows are the single source; this is a projection of them.
+ */
+export interface BenchmarkCohorts {
+  industries: string[];
+  sizeBands: string[];
+}
 
 export const benchmarkingApi = {
   get: (days = 30, projectId?: number | null): Promise<BenchmarkingResult> =>
     apiRequest<BenchmarkingResult>(`/api/insights/benchmarking?days=${days}${projectId != null ? `&projectId=${projectId}` : ''}`),
+
+  /** The selectable cohorts, derived from the seeded distributions. */
+  cohorts: (): Promise<BenchmarkCohorts> =>
+    apiRequest<BenchmarkCohorts>('/api/insights/benchmarking/cohorts'),
 
   getProfile: (): Promise<BenchmarkProfile> =>
     apiRequest<BenchmarkProfile>('/api/insights/benchmarking/profile'),

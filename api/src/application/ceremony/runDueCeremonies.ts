@@ -202,7 +202,7 @@ async function openScheduledCeremony(
     const version = await readWorkforceMetricsVersion(env, s.tenantId);
     cards = await getOrSetCached(
       env,
-      `${memberMetricsCacheKey(s.tenantId, version, ROSTER_METRICS_DAYS)}:p:${s.projectId}`,
+      memberMetricsCacheKey(s.tenantId, version, ROSTER_METRICS_DAYS, s.projectId),
       () => computeMemberMetrics(db, s.tenantId, ROSTER_METRICS_DAYS, s.projectId),
       { kvTtlSeconds: 300, l1TtlMs: 30_000 },
     );

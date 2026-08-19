@@ -2265,7 +2265,9 @@
       "allEpics": "Toutes",
       "noEpics": "Aucune épopée active sur cette période.",
       "epic": "Épopée",
-      "project": "Projet"
+      "project": "Projet",
+      "exportCsv": "Télécharger le CSV",
+      "exporting": "Préparation…"
     },
     "deliv": {
       "title": "Livraison",
@@ -2536,7 +2538,12 @@
       "tableTitle": "Vos métriques vs cohorte",
       "footnote": "Les percentiles sont interpolés à partir de distributions de cohortes sectorielles préchargées (p10–p90). Pour les métriques où plus bas est meilleur (lead time, taux d’échec des changements, MTTR, coût), une valeur plus faible se classe plus haut.",
       "industries": {
-        "software_saas": "Software / SaaS"
+        "software_saas": "Software / SaaS",
+        "fintech": "Fintech / Services financiers",
+        "ecommerce": "E-commerce / Distribution",
+        "healthtech": "Healthtech / Sciences de la vie",
+        "agency_services": "Agence / Services professionnels",
+        "enterprise_it": "Informatique d’entreprise"
       },
       "sizeBands": {
         "small": "Petite (1–20)",
@@ -2604,7 +2611,10 @@
         "performance": "Taux de réussite des déploiements",
         "activity": "Débit de production",
         "communication": "Étendue de collaboration × flux",
-        "efficiency": "Peu de reprises + cycle rapide"
+        "efficiency": "Peu de reprises + cycle rapide",
+        "satisfactionSurvey": "Réponses à l’enquête DevEx",
+        "satisfactionEngagement": "Indicateur de substitution basé sur l’engagement — aucune réponse d’enquête pour l’instant",
+        "satisfactionNone": "Aucun signal de satisfaction pour l’instant"
       }
     },
     "bottleneck": {
@@ -3832,6 +3842,22 @@
         "op_equals": "est égal à",
         "op_contains": "contient",
         "op_prefix": "commence par"
+      },
+      "rotate": {
+        "action": "Renouveler la clé",
+        "rotating": "Renouvellement…",
+        "confirmGrace": "Générer une nouvelle clé d’ingestion ? La clé actuelle reste valide {hours} heures de plus, le temps de redéployer.",
+        "confirmNow": "Révoquer immédiatement la clé d’ingestion précédente ? Tout ce qui l’envoie encore sera aussitôt refusé.",
+        "failed": "Impossible de renouveler la clé d’ingestion",
+        "shownOnce": "Nouvelle clé d’ingestion émise — copiez-la depuis l’extrait ci-dessous. Elle n’est affichée qu’une fois et ne peut plus être récupérée.",
+        "graceOpen": "La clé précédente reste acceptée jusqu’au {at}. Redéployez tout ce qui l’utilise avant cette date.",
+        "revokeNow": "Révoquer maintenant"
+      },
+      "unmapped": {
+        "title": "{count} événements écartés — aucune règle ne les achemine",
+        "lastAt": "dernier le {at}",
+        "fixTenant": "Aucune règle de routage ne correspondait à ces événements et aucun projet par défaut n’est défini. Ajoutez une règle ou choisissez un projet par défaut ci-dessous.",
+        "fixProject": "Ces événements n’ont pas pu être acheminés vers le projet de ce collecteur. Vérifiez que le collecteur est toujours rattaché à un projet actif."
       }
     },
     "stats": {
@@ -4034,7 +4060,9 @@
       "placeholder": "p. ex. Combien dépensons-nous ce mois-ci ?",
       "button": "Demander",
       "asking": "Interrogation…",
-      "matched": "Métrique correspondante"
+      "matched": "Métrique correspondante",
+      "notUnderstood": "Je n’ai pas pu déterminer de quelle métrique il s’agit — la métrique par défaut est affichée.",
+      "viaModel": "choisie par le modèle"
     },
     "create": {
       "placeholder": "Nom du nouveau tableau de bord",
@@ -8590,7 +8618,13 @@
       "flaggedTitle": "Ce ticket a sauté un rôle ou diagnostic requis — révision nécessaire",
       "participantsTitle": "Participation des rôles requis : terminés sur requis"
     },
-    "prdBadgeTitle": "{count, plural, one {# PRD lié} other {# PRD liés}}"
+    "prdBadgeTitle": "{count, plural, one {# PRD lié} other {# PRD liés}}",
+    "allowance": {
+      "title": "Cet espace de travail a dépassé son quota d’exécutions cloud.",
+      "detail": "{used} exécutions sur {limit} utilisées ce mois-ci avec l’offre {plan}. Les agents ne lanceront pas de nouvelles exécutions cloud avant la réinitialisation du quota ou une montée en gamme.",
+      "onPremNote": "Les exécutions locales et VS Code ne sont pas concernées.",
+      "upgrade": "Passer à l’offre supérieure"
+    }
   },
   "projectsContent": {
     "errLoad": "Échec du chargement des projets. Vérifiez votre connexion et réessayez.",

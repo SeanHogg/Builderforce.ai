@@ -8,6 +8,7 @@ import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
 import { usd, pct, score2 } from './format';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 /**
  * LENS #1 — AI effectiveness over run_model_outcomes. The "which approach
@@ -16,7 +17,8 @@ import { usd, pct, score2 } from './format';
 export function EngineeringLens() {
   const t = useTranslations('insights');
   const [days, setDays] = useState(30);
-  const { data, error } = usePmData<EngineeringInsights>(() => insightsApi.engineering(days), [days]);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<EngineeringInsights>(() => insightsApi.engineering(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;

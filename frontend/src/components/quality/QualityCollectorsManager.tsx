@@ -12,6 +12,7 @@ import {
   type QualityCollector,
   type QualitySourceCatalogEntry,
   type CreateQualityCollectorResult,
+  type RotateQualityKeyResult,
   type QualityIntegration,
   type QualityMappingRule,
 } from '@/lib/builderforceApi';
@@ -132,13 +133,35 @@ function CollectorPanel({
   const isTenant = collector.projectId == null;
   const [testing, setTesting] = useState(false);
   const [testMessage, setTestMessage] = useState<string | null>(null);
-  const keyLabel = createdKey ?? '<YOUR_INGEST_KEY>';
+  const [rotating, setRotating] = useState(false);
+  // The rotated key is held in component state for the same reason the created
+  // one is: the server returns it once and never again.
+  const [rotated, setRotated] = useState<RotateQualityKeyResult | null>(null);
+  const keyLabel = rotated?.ingestKey ?? createdKey ?? '<YOUR_INGEST_KEY>';
+  // A grace window still open means old and new keys are BOTH live — the state
+  // an operator has to see, because it is the window they have to redeploy in.
+  const graceOpen = rotated?.previousKeyExpiresAt
+    ?? (collector.previousKeyExpiresAt && new Date(collector.previousKeyExpiresAt) > new Date()
+      ? collector.previousKeyExpiresAt
+      : null);
   const sdkSnippet = `<script src="https://unpkg.com/@seanhogg/builderforce-quality"></script>
 <script>
   BuilderforceQuality.init({ key: '${keyLabel}', endpoint: '${ingestBase}' });
 </script>`;
 
   const toggle = async () => { await qualityApi.collectors.update(collector.id, { enabled: !collector.enabled }); onChanged(); };
+  const rotate = async (graceHours: number) => {
+    if (!(await confirm(graceHours > 0 ? t('setup.rotate.confirmGrace', { hours: graceHours }) : t('setup.rotate.confirmNow')))) return;
+    setRotating(true); setError(null);
+    try {
+      setRotated(await qualityApi.collectors.rotateKey(collector.id, graceHours));
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('setup.rotate.failed'));
+    } finally {
+      setRotating(false);
+    }
+  };
   const remove = async () => { if (await confirm(t('setup.confirmDelete'))) { await qualityApi.collectors.remove(collector.id); onChanged(); } };
   const test = async () => {
     setTesting(true); setTestMessage(null); setError(null);
@@ -170,11 +193,53 @@ function CollectorPanel({
               {testing ? t('setup.testing') : t('setup.test')}
             </button>
             <button type="button" style={btnSubtle} onClick={toggle}>{collector.enabled ? t('setup.pause') : t('setup.resume')}</button>
+            <button type="button" style={btnSubtle} disabled={rotating} onClick={() => rotate(72)}>
+              {rotating ? t('setup.rotate.rotating') : t('setup.rotate.action')}
+            </button>
             <button type="button" style={{ ...btnSubtle, color: 'var(--danger)' }} onClick={remove}>{t('setup.delete')}</button>
           </RoleGate>
         </div>
 
         {testMessage && <div role="status" style={{ fontSize: 12, color: 'var(--success)', marginTop: 10 }}>{testMessage}</div>}
+
+        {/* QUAL-8 — the discard counter. Only rendered when it is non-zero: a
+            collector that routes everything should say nothing here, and one
+            that is binning its stream should say so loudly. */}
+        {collector.unmappedEventCount > 0 && (
+          <div
+            role="status"
+            style={{
+              marginTop: 10, padding: '8px 10px', borderRadius: 8,
+              border: '1px solid var(--warning-border, var(--border))',
+              background: 'var(--warning-bg, var(--surface-2))',
+              color: 'var(--text-primary)', fontSize: 12, lineHeight: 1.5,
+            }}
+          >
+            <strong>{t('setup.unmapped.title', { count: collector.unmappedEventCount })}</strong>
+            {collector.lastUnmappedAt ? ` · ${t('setup.unmapped.lastAt', { at: new Date(collector.lastUnmappedAt).toLocaleString() })}` : ''}
+            <div style={{ color: 'var(--text-muted)', marginTop: 4 }}>
+              {isTenant ? t('setup.unmapped.fixTenant') : t('setup.unmapped.fixProject')}
+            </div>
+          </div>
+        )}
+
+        {/* QUAL-7 — the rotation grace window. While it is open BOTH keys work,
+            which is the only moment the operator can redeploy without loss. */}
+        {graceOpen && (
+          <div role="status" style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+            {t('setup.rotate.graceOpen', { at: new Date(graceOpen).toLocaleString() })}
+            <RoleGate capability="quality.manageSources">
+              <button type="button" style={{ ...btnSubtle, marginLeft: 8 }} disabled={rotating} onClick={() => rotate(0)}>
+                {t('setup.rotate.revokeNow')}
+              </button>
+            </RoleGate>
+          </div>
+        )}
+        {rotated && (
+          <div role="status" style={{ marginTop: 10, fontSize: 12, color: 'var(--success)' }}>
+            {t('setup.rotate.shownOnce')}
+          </div>
+        )}
 
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>{t('setup.snippetNote')}</div>
         <CopyBlock label={t('setup.sdkSnippet')} value={sdkSnippet} />

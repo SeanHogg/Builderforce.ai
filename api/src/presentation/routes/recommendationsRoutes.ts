@@ -23,6 +23,7 @@ import { computeRecommendations, dismissRecommendation } from '../../application
 import { computeSpaceMetrics } from '../../application/insights/spaceMetrics';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { positiveIntParam } from './queryParams';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -32,10 +33,6 @@ function parseDays(raw: string | undefined, def = 30): number {
   return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
 }
 
-function parseProjectId(raw: string | undefined): number | undefined {
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : undefined;
-}
 
 /** Per-tenant version token bumped on every dismissal so the cached list ages out.
  *  Exported so the bundled /ai-overview read shares the exact same cache key (and
@@ -81,7 +78,7 @@ export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/space', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
-    const projectId = parseProjectId(c.req.query('projectId'));
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const key = `insights:space:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
     return c.json(await getOrSetCached(env, key, () => computeSpaceMetrics(db, tenantId, days, projectId), SHORT_TTL));

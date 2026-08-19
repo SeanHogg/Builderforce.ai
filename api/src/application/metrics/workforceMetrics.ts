@@ -40,11 +40,22 @@ const MAX_METRIC_ROWS = 5_000;
 //    per-tenant token on every status/deploy write rather than deleting each
 //    window — mirrors reportRoutes' completed-by-assignee cache convention) ────
 function versionKey(tenantId: number): string { return `workforce-metrics:ver:tenant:${tenantId}`; }
-export function memberMetricsCacheKey(tenantId: number, version: number, days: number): string {
-  return `workforce-metrics:members:tenant:${tenantId}:v:${version}:days:${days}`;
+/**
+ * The project dimension of a metrics cache key. `0` is the workspace-wide read,
+ * so a tenant-scoped entry and a project-scoped one can never collide.
+ *
+ * It lives IN the key builders rather than beside them because it already leaked:
+ * `runDueCeremonies` was appending its own `:p:${projectId}` suffix to
+ * `memberMetricsCacheKey`'s output, which worked only for as long as that one
+ * caller remembered to. The moment a second project-scoped reader forgot — which
+ * is what the /api/members routes were about to become — two different projects
+ * would have shared one cache entry and served each other's scorecards.
+ */
+export function memberMetricsCacheKey(tenantId: number, version: number, days: number, projectId?: number): string {
+  return `workforce-metrics:members:tenant:${tenantId}:v:${version}:days:${days}:p:${projectId ?? 0}`;
 }
-export function doraCacheKey(tenantId: number, version: number, days: number): string {
-  return `workforce-metrics:dora:tenant:${tenantId}:v:${version}:days:${days}`;
+export function doraCacheKey(tenantId: number, version: number, days: number, projectId?: number): string {
+  return `workforce-metrics:dora:tenant:${tenantId}:v:${version}:days:${days}:p:${projectId ?? 0}`;
 }
 export async function readWorkforceMetricsVersion(env: Env, tenantId: number): Promise<number> {
   return getOrSetCached(env, versionKey(tenantId), async () => 0, { kvTtlSeconds: 86_400 });

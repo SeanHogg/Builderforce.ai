@@ -39,20 +39,30 @@ export function getApiBaseUrl(): string {
   return AUTH_API_URL;
 }
 
-/** Builderforce worker URL for projects + files. When set, IDE uses worker for project/file APIs. */
+/** Builderforce worker URL for IDE FILE storage. Projects no longer route here. */
 export function getWorkerUrl(): string | undefined {
   return process.env.NEXT_PUBLIC_WORKER_URL;
 }
 
-/** Base URL for project and file APIs: worker if set, else auth API. */
+/**
+ * Base URL for project reads/writes: ALWAYS the auth API.
+ *
+ * It used to be the worker when `NEXT_PUBLIC_WORKER_URL` was set, which meant a
+ * second implementation of project CRUD served those deployments — one that read
+ * projects with no tenant predicate, dropped `dueDate` on save, and returned no
+ * health breakdown. That router is retired (see `worker/src/routes/projects.ts`);
+ * projects have one implementation now.
+ *
+ * IDE FILES still follow the worker when it is configured — see
+ * {@link isWorkerForFiles}. That path is R2 storage, which is genuinely the
+ * worker's job and is not duplicated anywhere.
+ */
 export function getProjectsBaseUrl(): string {
-  const w = getWorkerUrl();
-  if (w) return w.replace(/\/$/, '');
   return getApiBaseUrl();
 }
 
-/** True if project/file requests should go to the worker (different path shape). */
-export function isWorkerForProjects(): boolean {
+/** True if IDE FILE requests should go to the worker (different path shape). */
+export function isWorkerForFiles(): boolean {
   return !!getWorkerUrl();
 }
 

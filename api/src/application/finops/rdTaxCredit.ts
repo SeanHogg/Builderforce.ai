@@ -6,13 +6,27 @@
  * (and optionally which action types) count as Qualified Research, plus a blended
  * labor rate; we then DERIVE:
  *   - qualified hours     — effort-in-TIME for qualified categories (allocation lens),
- *   - qualified labor $   — qualified hours × blended rate (the wage QRE proxy),
+ *   - qualified labor $   — see below,
  *   - qualified AI/cloud $ — attributed llm_usage_log spend on qualified categories
  *                            (the "supplies / cloud compute" QRE leg),
  *   - qualified base $    — labor + AI spend (the credit base before the % rate).
  *
- * Reuses {@link computeAllocationInsights} (effort hours + per-category cost) so
- * there is exactly one effort/cost engine.
+ * ── THE WAGE LEG IS MEASURED WHERE IT CAN BE (AIIMP-5) ──────────────────────
+ * It used to be `qualifiedHours × oneBlendedRate` and nothing else: one rate for
+ * an intern and a principal, applied to hours derived from ticket open/close
+ * timestamps. Both halves of that are now real where the tenant has supplied the
+ * data — the allocation lens prices effort at each member's OWN modelled rate
+ * (`member_profiles.cost_rate_usd_cents`) over REAL logged time (`time_entries`)
+ * — and the blended rate survives only as the fallback for effort whose owner has
+ * no rate on file.
+ *
+ * The report SAYS which it used. `laborBasis` names the mix and `measuredEffortPct`
+ * gives the share of hours that came from recorded time, because a credit base
+ * built from timesheets and salary bands and one built from two estimates print
+ * the same number and are not the same evidence.
+ *
+ * Reuses {@link computeAllocationInsights} (effort hours + per-category cost +
+ * per-category labour) so there is exactly one effort/cost engine.
  */
 
 import { eq } from 'drizzle-orm';
@@ -35,11 +49,20 @@ export interface RdCategoryLine {
   category: string;
   label: string;
   hours: number;
+  /** Measured labour where member rates exist, blended-rate estimate for the rest. */
   laborUsd: number;
   /** Attributed AI/cloud spend for this category over the window. */
   aiSpendUsd: number;
   qualified: boolean;
 }
+
+/**
+ * How the wage leg was arrived at.
+ *   'measured'  — every qualified hour was priced at a member's own modelled rate.
+ *   'mixed'     — some was; the remainder used the blended fallback.
+ *   'estimated' — no member rates at all; the whole leg is the blended rate.
+ */
+export type LaborBasis = 'measured' | 'mixed' | 'estimated';
 
 export interface RdTaxCreditReport {
   period: string;
@@ -51,6 +74,12 @@ export interface RdTaxCreditReport {
   qualifiedBaseUsd: number;
   qualifiedCategories: string[];
   byCategory: RdCategoryLine[];
+  /** Which evidence the wage leg rests on — never inferred by the reader. */
+  laborBasis: LaborBasis;
+  /** Of the qualified labour dollars, how many came from real member rates. */
+  measuredLaborUsd: number;
+  /** Of the qualified HOURS, the share recorded in timesheets rather than estimated. */
+  measuredEffortPct: number;
 }
 
 /** Fetch the tenant's QRE config, or the built-in default when none is stored. */
@@ -98,12 +127,22 @@ export async function computeRdTaxCredit(
 
   let qualifiedHours = 0;
   let qualifiedAiSpendUsd = 0;
+  let qualifiedLaborUsd = 0;
+  let measuredLaborUsd = 0;
+
   const byCategory: RdCategoryLine[] = allocation.byCategory.map((b) => {
     const qualified = qualifiedSet.has(b.category);
-    const laborUsd = b.hours * rate;
+    // MEASURED dollars first: `b.laborUsd` is this category's effort priced at each
+    // member's own rate, and is 0 only for effort whose owner has no rate on file.
+    // The blended rate then covers exactly that residue — the hours the tenant has
+    // no compensation data for — instead of overwriting the hours it does.
+    const unratedHours = Math.max(0, b.hours - b.ratedHours);
+    const laborUsd = b.laborUsd + unratedHours * rate;
     if (qualified) {
       qualifiedHours += b.hours;
       qualifiedAiSpendUsd += b.costUsd;
+      qualifiedLaborUsd += laborUsd;
+      measuredLaborUsd += b.laborUsd;
     }
     return {
       category: b.category,
@@ -115,8 +154,10 @@ export async function computeRdTaxCredit(
     };
   });
 
-  const qualifiedLaborUsd = qualifiedHours * rate;
   const qualifiedBaseUsd = qualifiedLaborUsd + qualifiedAiSpendUsd;
+  const laborBasis: LaborBasis = measuredLaborUsd <= 0
+    ? 'estimated'
+    : measuredLaborUsd >= qualifiedLaborUsd - 0.005 ? 'measured' : 'mixed';
 
   return {
     period,
@@ -128,5 +169,8 @@ export async function computeRdTaxCredit(
     qualifiedBaseUsd,
     qualifiedCategories: [...qualifiedSet],
     byCategory,
+    laborBasis,
+    measuredLaborUsd,
+    measuredEffortPct: allocation.totals.measuredEffortPct,
   };
 }

@@ -74,6 +74,7 @@ import {
   taskStatusBadgeClass,
 } from '@/lib/taskStatus';
 import { TASK_PRIORITIES, taskPriorityBadgeClass } from '@/lib/taskPriority';
+import { WorkspaceAllowanceBanner } from '@/components/board/WorkspaceAllowanceBanner';
 
 type TaskView = 'board' | 'table' | 'calendar' | 'gantt';
 
@@ -503,7 +504,7 @@ export function TaskMgmtContent({
 
   // Swimlanes + their configured agents for the selected board, shown discretely
   // in each column header. Only fetched for the board view of a single project.
-  const { board, lanes, agentsByLane } = useBoardConfig(
+  const { board, lanes, agentsByLane, cloudRunAllowance } = useBoardConfig(
     effectiveProjectId,
     effectiveProjectId != null && view === 'board' && !compact,
   );
@@ -1139,6 +1140,11 @@ export function TaskMgmtContent({
           </span>
         </div>
       )}
+
+      {/* One workspace-level condition, said once — not repeated on every stalled
+          card. The banner hides itself when the workspace is inside its allowance
+          or when the meter could not be read (DISP-R3). */}
+      {!compact && <WorkspaceAllowanceBanner allowance={cloudRunAllowance} />}
 
       {!compact && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>

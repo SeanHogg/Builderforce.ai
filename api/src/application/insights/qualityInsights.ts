@@ -41,6 +41,19 @@ export interface DefectAgingBucket { bucket: string; count: number; }
 
 export interface QualityInsights {
   windowDays: number;
+  /**
+   * The project this lens was narrowed to, or null for the workspace.
+   *
+   * Reported because the narrowing is PARTIAL and pretending otherwise would be
+   * the lie: `prod_incidents` and `qa_findings` carry a project, `support_tickets`
+   * and `uptime_samples` do not — support is customer-grained and uptime is
+   * sampled per tenant, so neither has a project to be filtered by. At project
+   * scope the incident and defect figures are that project's; the support and
+   * uptime figures stay workspace-wide. {@link workspaceWideFigures} names them
+   * so the UI can label them rather than letting a reader assume otherwise.
+   */
+  projectId: number | null;
+  workspaceWideFigures: string[];
   uptimePct: number | null;
   alertsCount: number;
   prodIncidents: {
@@ -73,7 +86,10 @@ export function summarizeQuality(
   defects: DefectRow[],
   windowDays: number,
   now: number,
-): QualityInsights {
+  // The scope fields are stamped by the I/O caller, which is the only layer that
+  // knows what was filtered — the pure summarizer only ever sees the rows it is
+  // handed and must not claim a scope it cannot verify.
+): Omit<QualityInsights, 'projectId' | 'workspaceWideFigures'> {
   const alerts = incidents.filter((i) => i.isAlertOnly);
   const realIncidents = incidents.filter((i) => !i.isAlertOnly);
   const incidentDurationsHrs = realIncidents
@@ -139,15 +155,27 @@ export function summarizeQuality(
   };
 }
 
-/** I/O: fetch the window and assemble the Quality lens. */
-export async function computeQualityInsights(db: Db, tenantId: number, days: number): Promise<QualityInsights> {
+/**
+ * I/O: fetch the window and assemble the Quality lens.
+ *
+ * `projectId` narrows the two sources that HAVE a project (incidents, defects).
+ * Support tickets and uptime samples are not project-grained in the data model,
+ * so they stay workspace-wide and say so in the payload. Inventing a project
+ * association for them — routing by the ticket's linked task, say — would be a
+ * guess presented as a measurement.
+ */
+export async function computeQualityInsights(db: Db, tenantId: number, days: number, projectId?: number): Promise<QualityInsights> {
   const now = Date.now();
   const since = new Date(now - days * DAY_MS);
 
   const [incidents, tickets, uptime, defects] = await Promise.all([
     db.select({ isAlertOnly: prodIncidents.isAlertOnly, startedAt: prodIncidents.startedAt, resolvedAt: prodIncidents.resolvedAt })
       .from(prodIncidents)
-      .where(and(eq(prodIncidents.tenantId, tenantId), gte(prodIncidents.startedAt, since))) as Promise<IncidentRow[]>,
+      .where(and(
+        eq(prodIncidents.tenantId, tenantId),
+        gte(prodIncidents.startedAt, since),
+        ...(projectId != null ? [eq(prodIncidents.projectId, projectId)] : []),
+      )) as Promise<IncidentRow[]>,
     db.select({ isBug: supportTickets.isBug, customerRef: supportTickets.customerRef, openedAt: supportTickets.openedAt })
       .from(supportTickets)
       .where(and(eq(supportTickets.tenantId, tenantId), gte(supportTickets.openedAt, since))) as Promise<TicketRow[]>,
@@ -156,8 +184,16 @@ export async function computeQualityInsights(db: Db, tenantId: number, days: num
       .where(and(eq(uptimeSamples.tenantId, tenantId), gte(uptimeSamples.periodDay, since.toISOString().slice(0, 10)))) as Promise<UptimeRow[]>,
     db.select({ status: qaFindings.status, createdAt: qaFindings.createdAt })
       .from(qaFindings)
-      .where(eq(qaFindings.tenantId, tenantId)) as Promise<DefectRow[]>,
+      .where(and(
+        eq(qaFindings.tenantId, tenantId),
+        ...(projectId != null ? [eq(qaFindings.projectId, projectId)] : []),
+      )) as Promise<DefectRow[]>,
   ]);
 
-  return summarizeQuality(incidents, tickets, uptime, defects, days, now);
+  return {
+    ...summarizeQuality(incidents, tickets, uptime, defects, days, now),
+    projectId: projectId ?? null,
+    // Empty at workspace scope: nothing is "workspace-wide" when everything is.
+    workspaceWideFigures: projectId == null ? [] : ['support', 'uptimePct'],
+  };
 }

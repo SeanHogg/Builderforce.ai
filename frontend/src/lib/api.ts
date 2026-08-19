@@ -9,7 +9,7 @@ import {
   apiRequestText,
   apiRequestStream,
   getProjectsBaseUrl,
-  isWorkerForProjects,
+  isWorkerForFiles,
   type RequestOptions,
 } from './apiClient';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
@@ -55,10 +55,7 @@ const PROJECTS_CACHE_KEY = 'projects:list';
 
 export async function fetchProjects(): Promise<Project[]> {
   return getOrSetClientCached(PROJECTS_CACHE_KEY, async () => {
-    if (isWorkerForProjects()) {
-      const arr = await projectsRequest<Project[]>('/api/projects');
-      return Array.isArray(arr) ? arr : [];
-    }
+    // ONE shape now: the worker's bare-array variant went with its router.
     const res = await apiRequest<{ projects: Project[] }>('/api/projects');
     return res?.projects ?? [];
   }, { ttlMs: 0 });
@@ -101,17 +98,13 @@ export async function updateProject(
   id: number | string,
   data: Partial<Pick<Project, 'name' | 'description' | 'template' | 'key' | 'status' | 'governance' | 'modality' | 'dueDate'>>
 ): Promise<Project> {
-  const res = isWorkerForProjects()
-    ? await projectsRequest<Project>(`/api/projects/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-    : await apiRequest<Project>(`/api/projects/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
+  // PATCH, always. The worker's PUT variant dropped `dueDate` — a save that
+  // reported success and changed nothing — and it is retired.
+  const res = await apiRequest<Project>(`/api/projects/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
   invalidateClientCache(PROJECTS_CACHE_KEY);
   return res as Project;
 }
@@ -193,7 +186,7 @@ export async function deleteIdeProject(id: number | string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function filesBase(projectId: number | string): string {
-  return isWorkerForProjects()
+  return isWorkerForFiles()
     ? `/api/projects/${projectId}/files`
     : `${IDE}/projects/${projectId}/files`;
 }
@@ -258,7 +251,7 @@ export async function deleteFile(
 
 /** Project-scoped IDE base (mirrors filesBase, minus the /files segment). */
 function ideProjectBase(projectId: number | string): string {
-  return isWorkerForProjects() ? `/api/projects/${projectId}` : `${IDE}/projects/${projectId}`;
+  return isWorkerForFiles() ? `/api/projects/${projectId}` : `${IDE}/projects/${projectId}`;
 }
 
 export interface RepoSyncStatus {

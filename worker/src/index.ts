@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import projectsRouter from './routes/projects';
 import filesRouter from './routes/files';
 import datasetsRouter from './routes/datasets';
 import trainingRouter from './routes/training';
@@ -49,7 +48,9 @@ app.onError((err, c) => {
   return c.json({ error: 'Internal Server Error', details: errorDetails }, 500);
 });
 
-app.route('/api/projects', projectsRouter);
+// NOTE: there is no worker `/api/projects` CRUD router any more — it was a
+// drifted duplicate of the API's (unscoped reads, dropped `dueDate`, no health
+// aggregate) and is retired. Only the FILES sub-path below is served here.
 app.route('/api/projects/:projectId/files', filesRouter);
 app.route('/api/datasets', datasetsRouter);
 app.route('/api/training', trainingRouter);

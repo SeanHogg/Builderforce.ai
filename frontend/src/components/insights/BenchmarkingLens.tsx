@@ -1,12 +1,11 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import {
   benchmarkingApi,
-  BENCHMARK_INDUSTRIES,
-  BENCHMARK_SIZE_BANDS,
+  type BenchmarkCohorts,
   type BenchmarkingResult,
   type BenchmarkMetric,
   type BenchmarkRating,
@@ -16,6 +15,18 @@ import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmCard, PmEmpty, PmError } from '@/components/pm/pmShared';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { DaysWindowSelect } from './LensShell';
+
+/**
+ * Label a cohort id. The catalogues carry a name for every SEEDED cohort, but the
+ * list is now server-derived — a migration can seed a cohort before the
+ * catalogues name it, and a missing key must not render as a raw `benchmarking.
+ * industries.foo` in the picker. Falls back to the id, humanised.
+ */
+function industryLabel(t: ReturnType<typeof useTranslations>, id: string): string {
+  const key = `benchmarking.industries.${id}`;
+  const label = t.has(key) ? t(key) : '';
+  return label || id.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
 
 /** Format a percentile (e.g. 72 → "72nd"). */
 function ordinal(n: number | null): string {
@@ -90,6 +101,17 @@ export function BenchmarkingLens() {
   const [days, setDays] = useState(30);
   const [profileTick, setProfileTick] = useState(0);
   const [saving, setSaving] = useState(false);
+  // The selectable cohorts come from the seeded rows, not a constant — see
+  // `BenchmarkCohorts`. Until they arrive the picker shows only what the tenant
+  // already has, which is always valid, rather than an empty select.
+  const [cohorts, setCohorts] = useState<BenchmarkCohorts | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    benchmarkingApi.cohorts()
+      .then((c) => { if (!cancelled) setCohorts(c); })
+      .catch(() => { /* picker falls back to the current profile's own values */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const { data, error } = usePmData<BenchmarkingResult>(
     () => benchmarkingApi.get(days, currentProjectId),
@@ -122,8 +144,8 @@ export function BenchmarkingLens() {
               onChange={(e) => saveProfile({ industry: e.target.value })}
               aria-label={t('benchmarking.industry')}
             >
-              {BENCHMARK_INDUSTRIES.map((id) => (
-                <option key={id} value={id}>{t(`benchmarking.industries.${id}`)}</option>
+              {(cohorts?.industries ?? [data.industry]).map((id) => (
+                <option key={id} value={id}>{industryLabel(t, id)}</option>
               ))}
             </Select>
           </label>
@@ -136,7 +158,7 @@ export function BenchmarkingLens() {
               onChange={(e) => saveProfile({ sizeBand: e.target.value })}
               aria-label={t('benchmarking.sizeBand')}
             >
-              {BENCHMARK_SIZE_BANDS.map((b) => (
+              {(cohorts?.sizeBands ?? [data.sizeBand]).map((b) => (
                 <option key={b} value={b}>{t(`benchmarking.sizeBands.${b}`)}</option>
               ))}
             </Select>

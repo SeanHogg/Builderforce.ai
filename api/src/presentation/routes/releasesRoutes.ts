@@ -21,12 +21,8 @@ import { scope } from './segmentTrackerRoutes';
 import { productReleases } from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { positiveIntParam } from './queryParams';
 
-/** Parse an optional positive-integer query/body value. */
-function parseId(raw: unknown): number | undefined {
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : undefined;
-}
 
 /** Coerce an ISO date string/number to a Date, or null. */
 function parseDate(raw: unknown): Date | null {
@@ -45,7 +41,7 @@ export function createReleasesRoutes(db: Db): Hono<HonoEnv> {
   // project" mode). Newest target/release date first.
   router.get('/', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
-    const projectId = parseId(c.req.query('projectId'));
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const where = projectId != null
       ? and(eq(productReleases.tenantId, tenantId), eq(productReleases.projectId, projectId))
       : eq(productReleases.tenantId, tenantId);
@@ -75,7 +71,7 @@ export function createReleasesRoutes(db: Db): Hono<HonoEnv> {
       .values({
         tenantId, name,
         version: typeof body.version === 'string' ? body.version.trim().slice(0, 50) : null,
-        projectId: parseId(body.projectId) ?? null,
+        projectId: positiveIntParam(body.projectId) ?? null,
         status,
         targetDate: parseDate(body.targetDate),
         releasedAt: parseDate(body.releasedAt),
@@ -93,7 +89,7 @@ export function createReleasesRoutes(db: Db): Hono<HonoEnv> {
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (typeof body.name === 'string' && body.name.trim()) set.name = body.name.trim().slice(0, 255);
     if (typeof body.version === 'string') set.version = body.version.trim().slice(0, 50);
-    if ('projectId' in body) set.projectId = parseId(body.projectId) ?? null;
+    if ('projectId' in body) set.projectId = positiveIntParam(body.projectId) ?? null;
     if (RELEASE_STATUSES.includes(body.status as never)) set.status = body.status;
     if ('targetDate' in body) set.targetDate = parseDate(body.targetDate);
     if ('releasedAt' in body) set.releasedAt = parseDate(body.releasedAt);

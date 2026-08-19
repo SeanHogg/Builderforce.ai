@@ -13,7 +13,7 @@
  */
 
 import { Hono } from 'hono';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, or, sql } from 'drizzle-orm';
 import { errorCollectors, errorCollectorIntegrations, errorMappingRules, projects } from '../../infrastructure/database/schema';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { decryptCredentials } from '../../application/integrations/credentialCrypto';
@@ -32,6 +32,20 @@ function readIngestKey(c: { req: { header: (n: string) => string | undefined; qu
   return c.req.query('key')?.trim() || null;
 }
 
+/**
+ * Resolve the collector a raw ingest key belongs to.
+ *
+ * Accepts the CURRENT key, or a rotated-out key whose grace window is still open
+ * (QUAL-7). The grace window exists because an ingest key lives inside software
+ * that is already deployed — a browser bundle, a container image, an OTLP
+ * exporter config — so a rotation that took effect instantly would silently drop
+ * every event from every one of them until each redeploys, which is the failure
+ * mode that makes operators never rotate at all.
+ *
+ * The expiry is a PREDICATE on this read, not a swept column: an expired grace
+ * hash simply stops matching, so no cron has to run for the old key to die, and
+ * a sweep that failed to run could never leave a retired key working.
+ */
 async function resolveCollectorByKey(db: Db, key: string): Promise<CollectorRef | null> {
   const keyHash = await hashSecret(key);
   const [row] = await db
@@ -40,7 +54,13 @@ async function resolveCollectorByKey(db: Db, key: string): Promise<CollectorRef 
       defaultProjectId: errorCollectors.defaultProjectId, enabled: errorCollectors.enabled,
     })
     .from(errorCollectors)
-    .where(eq(errorCollectors.keyHash, keyHash))
+    .where(or(
+      eq(errorCollectors.keyHash, keyHash),
+      and(
+        eq(errorCollectors.previousKeyHash, keyHash),
+        gt(errorCollectors.previousKeyExpiresAt, new Date()),
+      ),
+    ))
     .limit(1);
   if (!row || !row.enabled) return null;
   return { id: row.id, tenantId: row.tenantId, projectId: row.projectId, defaultProjectId: row.defaultProjectId };

@@ -31,8 +31,24 @@ export function SpaceLens() {
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
 
-  const dims: Array<{ id: string; score: number | null; figures: Record<string, number | null> }> = [
-    { id: 'satisfaction', score: data.satisfaction.score, figures: { members: data.satisfaction.n } },
+  // Satisfaction names its own provenance. A survey score and an engagement proxy
+  // are different measurements wearing one label, so the card says which it is and
+  // the figures change with it — respondents + eNPS for a survey, scored members
+  // for the proxy. Anything else invites reading a throughput number as a mood.
+  const satIsSurvey = data.satisfaction.source === 'survey';
+  const satSub = data.satisfaction.source == null
+    ? t('space.sub.satisfactionNone')
+    : satIsSurvey ? t('space.sub.satisfactionSurvey') : t('space.sub.satisfactionEngagement');
+
+  const dims: Array<{ id: string; score: number | null; figures: Record<string, number | null>; sub?: string }> = [
+    {
+      id: 'satisfaction',
+      score: data.satisfaction.score,
+      figures: satIsSurvey
+        ? { respondents: data.satisfaction.n, enps: data.satisfaction.enps }
+        : { members: data.satisfaction.n },
+      sub: satSub,
+    },
     { id: 'performance', score: data.performance.score, figures: data.performance.figures },
     { id: 'activity', score: data.activity.score, figures: data.activity.figures },
     { id: 'communication', score: data.communication.score, figures: data.communication.figures },
@@ -48,7 +64,7 @@ export function SpaceLens() {
             key={d.id}
             label={t(`space.dim.${d.id}`)}
             value={fmtScore(d.score)}
-            sub={t(`space.sub.${d.id}`)}
+            sub={d.sub ?? t(`space.sub.${d.id}`)}
           />
         ))}
       </KpiGrid>

@@ -3159,15 +3159,16 @@ export const membersApi = {
 
   /** Effectiveness/engagement scorecards for every member over a window (MANAGER+).
    *  Optional `discipline` filters to one builder discipline; `byDiscipline` is the
-   *  full (unfiltered) rollup by discipline. */
-  metrics: (days = 7, discipline?: string): Promise<{ windowDays: number; members: MemberScorecard[]; byDiscipline: DisciplineRollup[] }> =>
-    request<{ windowDays: number; members: MemberScorecard[]; byDiscipline: DisciplineRollup[] }>(
-      `/api/members/metrics?days=${days}${discipline ? `&discipline=${encodeURIComponent(discipline)}` : ''}`,
+   *  full (unfiltered) rollup by discipline. `projectId` narrows the whole
+   *  computation to one project — the global project scope, honoured server-side. */
+  metrics: (days = 7, discipline?: string, projectId?: number | null): Promise<{ windowDays: number; projectId: number | null; members: MemberScorecard[]; byDiscipline: DisciplineRollup[] }> =>
+    request<{ windowDays: number; projectId: number | null; members: MemberScorecard[]; byDiscipline: DisciplineRollup[] }>(
+      `/api/members/metrics?days=${days}${discipline ? `&discipline=${encodeURIComponent(discipline)}` : ''}${projectId != null ? `&projectId=${projectId}` : ''}`,
     ),
 
-  /** The four DORA metrics for the tenant over a window (MANAGER+). */
-  dora: (days = 30): Promise<DoraRollup> =>
-    request<DoraRollup>(`/api/members/dora?days=${days}`),
+  /** The four DORA metrics over a window (MANAGER+), workspace-wide or per project. */
+  dora: (days = 30, projectId?: number | null): Promise<DoraRollup> =>
+    request<DoraRollup>(`/api/members/dora?days=${days}${projectId != null ? `&projectId=${projectId}` : ''}`),
 
   /** Unified engagement (external activity + platform usage + VS Code + delivery)
    *  per human member over a window (MANAGER+). */
@@ -3343,11 +3344,15 @@ export const empMetricsApi = {
     request<MemberInitiativeAllocResult>(`/api/members/initiative-allocation?days=${days}`),
 
   /** EMP-20 — download the member metrics as CSV/JSON (auth'd blob → browser save). */
-  exportMetrics: async (days = 30, format: 'csv' | 'json' = 'csv'): Promise<void> => {
-    const res = await apiRequestStream(`/api/members/metrics/export?days=${days}&format=${format}`);
+  exportMetrics: async (days = 30, format: 'csv' | 'json' = 'csv', projectId?: number | null): Promise<void> => {
+    const scope = projectId != null ? `&projectId=${projectId}` : '';
+    const res = await apiRequestStream(`/api/members/metrics/export?days=${days}&format=${format}${scope}`);
     if (!res.ok) throw new Error(`Export failed (${res.status})`);
     const blob = await res.blob();
-    downloadBlob(blob, `member-metrics-${days}d-${new Date().toISOString().slice(0, 10)}.${format}`);
+    // The filename carries the scope too — a workspace export and a project export
+    // otherwise land in Downloads under the same name on the same day.
+    const tag = projectId != null ? `-project-${projectId}` : '';
+    downloadBlob(blob, `member-metrics-${days}d${tag}-${new Date().toISOString().slice(0, 10)}.${format}`);
   },
 };
 
@@ -7238,8 +7243,27 @@ export interface QualityCollector {
   status: string;
   lastEventAt: string | null;
   createdAt: string;
+  /**
+   * Events this collector received and BINNED because nothing routes them —
+   * no mapping rule matched and no default project is set (QUAL-8). A collector
+   * discarding its whole stream reads exactly like a quiet one without this.
+   */
+  unmappedEventCount: number;
+  lastUnmappedAt: string | null;
+  /** When the ingest key was last rotated, and until when the retired key is
+   *  still accepted — a future date means the cutover is not finished (QUAL-7). */
+  keyRotatedAt: string | null;
+  previousKeyExpiresAt: string | null;
   /** Attached provider-webhook integrations. */
   providers: string[];
+}
+
+export interface RotateQualityKeyResult {
+  /** Plaintext ingest key — shown ONCE, never retrievable again. */
+  ingestKey: string;
+  rotatedAt: string;
+  /** When the PREVIOUS key stops being accepted; null when revoked immediately. */
+  previousKeyExpiresAt: string | null;
 }
 
 export interface CreateQualityCollectorResult {
@@ -7347,8 +7371,14 @@ export const qualityApi = {
       request('/api/quality/collectors', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: { name?: string; enabled?: boolean; status?: string; defaultProjectId?: number | null }): Promise<{ ok: true }> =>
       request(`/api/quality/collectors/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
-    test: (id: string): Promise<{ ok: true; accepted: number; dropped: number }> =>
+    test: (id: string): Promise<{ ok: true; accepted: number; dropped: number; unmapped: number }> =>
       request(`/api/quality/collectors/${id}/test`, { method: 'POST' }),
+    /** Mint a new ingest key. `graceHours: 0` revokes the old one immediately. */
+    rotateKey: (id: string, graceHours?: number): Promise<RotateQualityKeyResult> =>
+      request(`/api/quality/collectors/${id}/rotate-key`, {
+        method: 'POST',
+        body: JSON.stringify(graceHours === undefined ? {} : { graceHours }),
+      }),
     consumption: (id: string): Promise<QualityCollectorConsumption> =>
       request(`/api/quality/collectors/${id}/consumption`),
     remove: (id: string): Promise<void> =>
@@ -7501,9 +7531,28 @@ export interface BoardDispatch {
   updatedAt: string;
 }
 
+/**
+ * The workspace's monthly cloud-run allowance — ONE fact about the workspace, not
+ * about any board or card.
+ *
+ * Being over it stops autonomy on every ticket everywhere, identically. It used to
+ * surface only as a per-ticket refusal in each card's telemetry, so a board with
+ * 200 stalled cards showed 200 unrelated-looking problems. `null` means the meter
+ * could not be read — which is not the same as being over, and must not be shown
+ * as though it were.
+ */
+export type CloudRunAllowance =
+  | { overAllowance: false }
+  | { overAllowance: true; used: number; limit: number; plan: string };
+
 export const boardsApi = {
   list: (): Promise<Board[]> =>
     request<{ boards: Board[] }>('/api/boards').then((r) => r.boards ?? []),
+
+  /** The board list PLUS the workspace-level allowance the header states once. */
+  listWithAllowance: (): Promise<{ boards: Board[]; cloudRunAllowance: CloudRunAllowance | null }> =>
+    request<{ boards: Board[]; cloudRunAllowance: CloudRunAllowance | null }>('/api/boards')
+      .then((r) => ({ boards: r.boards ?? [], cloudRunAllowance: r.cloudRunAllowance ?? null })),
 
   get: (boardId: string): Promise<Board> =>
     request(`/api/boards/${boardId}`),
@@ -8007,7 +8056,7 @@ function insightScopeQuery(days: number, projectId?: number | null): string {
 }
 
 export const insightsApi = {
-  engineering: (days = 30): Promise<EngineeringInsights> => request<EngineeringInsights>(`/api/insights/engineering?days=${days}`),
+  engineering: (days = 30, projectId?: number | null): Promise<EngineeringInsights> => request<EngineeringInsights>(`/api/insights/engineering?${insightScopeQuery(days, projectId)}`),
   dora: (days = 30, projectId?: number | null): Promise<DoraInsights> => request<DoraInsights>(`/api/insights/dora?${insightScopeQuery(days, projectId)}`),
   bottlenecks: (days = 30, projectId?: number | null): Promise<BottleneckInsights> => request<BottleneckInsights>(`/api/insights/bottlenecks?${insightScopeQuery(days, projectId)}`),
   finance: (period?: string): Promise<FinanceInsights> => request<FinanceInsights>(`/api/insights/finance${period ? `?period=${period}` : ''}`),
@@ -8029,6 +8078,27 @@ export const insightsApi = {
     const qs = p.toString();
     return request<AllocationHistory>(`/api/insights/allocation/history${qs ? `?${qs}` : ''}`);
   },
+  /**
+   * Download the capitalization report (monthly series + the epic evidence behind
+   * it) as CSV or JSON.
+   *
+   * Not cached anywhere: what finance hands to an auditor has to be the numbers as
+   * they are now, and it comes from the same two collectors the on-screen report
+   * renders from, so a downloaded file cannot disagree with the page it came from.
+   */
+  capitalizationExport: async (q: { months?: number; projectId?: number | null; format?: 'csv' | 'json' } = {}): Promise<void> => {
+    const p = new URLSearchParams();
+    if (q.months) p.set('months', String(q.months));
+    if (q.projectId != null) p.set('projectId', String(q.projectId));
+    p.set('format', q.format ?? 'csv');
+    const res = await apiRequestStream(`/api/insights/allocation/history/export?${p.toString()}`);
+    if (!res.ok) throw new Error(`Export failed (${res.status})`);
+    const blob = await res.blob();
+    // The server names the file (it knows the scope + as-of date); the fallback
+    // only matters when a proxy strips content-disposition.
+    downloadBlob(blob, filenameFromResponse(res, `capitalization-${new Date().toISOString().slice(0, 10)}.${q.format ?? 'csv'}`));
+  },
+
   delivery: (scope: DeliverableScope, id: string): Promise<DeliveryInsights> =>
     request<DeliveryInsights>(`/api/insights/delivery?scope=${scope}&id=${encodeURIComponent(id)}`),
   /** What-if completion modelling for a deliverable under team/focus/scope changes. */

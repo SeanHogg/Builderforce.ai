@@ -28,6 +28,7 @@ import { computeBenchmarking } from '../../application/insights/benchmarkingInsi
 import { toCsv, toHtmlTable, exportContentMeta, type ExportRow } from '../../application/export/tabularExport';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { positiveIntParam } from './queryParams';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -36,10 +37,6 @@ function parseDays(raw: string | undefined, def = 30): number {
   return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
 }
 
-function parseProjectId(raw: string | undefined): number | undefined {
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : undefined;
-}
 
 /** Read a userId off the Hono context (set by authMiddleware) without a cast dance. */
 function userIdOf(c: unknown): string | null {
@@ -100,7 +97,7 @@ export function createEmpFeatureRoutes(db: Db): Hono<HonoEnv> {
   router.get('/benchmarking/cross-team', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
-    const projectId = parseProjectId(c.req.query('projectId'));
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const key = `insights:xteam:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
     return c.json(await getOrSetCached(env, key, () => computeCrossTeamBenchmark(db, tenantId, days, projectId), SHORT_TTL));
@@ -112,7 +109,7 @@ export function createEmpFeatureRoutes(db: Db): Hono<HonoEnv> {
   router.get('/delay-taxonomy', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'), 90);
-    const projectId = parseProjectId(c.req.query('projectId'));
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const key = `insights:delaytax:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
     return c.json(await getOrSetCached(env, key, () => computeDelayTaxonomy(db, tenantId, days, projectId), SHORT_TTL));
@@ -162,7 +159,7 @@ export function createEmpFeatureRoutes(db: Db): Hono<HonoEnv> {
     }
     const format = c.req.query('format') === 'html' ? 'html' : 'csv';
     const days = parseDays(c.req.query('days'));
-    const projectId = parseProjectId(c.req.query('projectId'));
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const rows = await buildDatasetRows(db, dataset, tenantId, segmentId, days, projectId);
     const { contentType, ext } = exportContentMeta(format);
     const stamp = new Date().toISOString().slice(0, 10);

@@ -1,0 +1,34 @@
+-- 0933 — Record whether a lane's gate was SEEDED or CHOSEN (ROADMAP DISP-R2).
+--
+-- ── WHAT 0369 COULD NOT KNOW ────────────────────────────────────────────────
+-- 0369 flipped every `key = 'in_review' AND gate = 'human'` lane to `auto`,
+-- because the seeded default had switched autonomy off one lane short of Done on
+-- every board ever created (0.7% of tickets reached Done autonomously). That was
+-- the right call for the overwhelming majority — but the migration's own header
+-- had to admit it could not tell a seeded default from a deliberate choice, so a
+-- team that genuinely wanted a human approval point there was flipped too, and
+-- had to notice and set it back.
+--
+-- Nothing in the row said which. `gate` held the VALUE and no provenance, and a
+-- value alone cannot answer "did anyone decide this?".
+--
+-- ── THE MARKER ──────────────────────────────────────────────────────────────
+-- `gate_source` is written 'operator' the moment a person changes a lane's gate
+-- through the board configuration API, and stays 'seed' otherwise. A future
+-- default change can then leave explicit choices alone — the decision 0369 wanted
+-- to make and could not.
+--
+-- Existing rows default to 'seed', which is the honest reading: for every lane
+-- that exists today we genuinely do not know, and 'seed' is the value that lets a
+-- later default change treat them the way 0369 already treated them rather than
+-- silently promoting historical rows to "deliberate". Provenance starts
+-- accumulating from the next operator edit; it cannot be backfilled, because the
+-- information was never recorded.
+--
+-- Deliberately about the GATE only, not the whole row. "Someone renamed this lane"
+-- says nothing about whether they thought about its gate, and a marker that meant
+-- "this row was touched" would make the next default change no more decidable than
+-- this one was.
+
+ALTER TABLE swimlanes
+  ADD COLUMN IF NOT EXISTS gate_source VARCHAR(16) NOT NULL DEFAULT 'seed';

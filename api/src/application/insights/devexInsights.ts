@@ -590,6 +590,14 @@ export async function computeDevexInsights(
   tenantId: number,
   days: number,
   benchmark?: DevexBenchmark | null,
+  /**
+   * Narrow to campaigns run FOR one project. Strict, not additive: a workspace-wide
+   * campaign is evidence about the workspace, not about this project, so folding it
+   * in would let one team's survey answer for another's. Absent project campaigns
+   * the result is simply empty — which the consumer reports as "no signal", never as
+   * a borrowed number.
+   */
+  projectId?: number,
 ): Promise<DevexInsights> {
   const since = new Date(Date.now() - days * DAY_MS);
 
@@ -604,7 +612,11 @@ export async function computeDevexInsights(
       openedAt: devexCampaigns.openedAt,
     })
     .from(devexCampaigns)
-    .where(and(eq(devexCampaigns.tenantId, tenantId), gte(devexCampaigns.openedAt, since)))) as Array<{
+    .where(and(
+      eq(devexCampaigns.tenantId, tenantId),
+      gte(devexCampaigns.openedAt, since),
+      ...(projectId != null ? [eq(devexCampaigns.projectId, projectId)] : []),
+    ))) as Array<{
       id: number; title: string; periodMonth: string | null; status: string;
       templateId: number | null; recipientCount: number | null; openedAt: Date | null;
     }>;
@@ -628,4 +640,32 @@ export async function computeDevexInsights(
 
   const insights = summarizeDevex(campaigns, responses, days);
   return benchmark ? applyBenchmark(insights, benchmark) : insights;
+}
+
+/**
+ * The one reduction of a DevEx lens to a SATISFACTION reading: the mean of the
+ * per-dimension scores, its eNPS, and how many responses stand behind it.
+ *
+ * Extracted because two lenses need exactly this and were about to disagree about
+ * it. The People lens computed the mean of `byDimension` inline; SPACE was about
+ * to compute its own. Two inline reductions of the same rows is how "developer
+ * satisfaction" ends up meaning one thing on the People page and another on the
+ * SPACE page, with no way to tell which is right.
+ *
+ * `score` is null when nothing was answered — the caller decides what to do with
+ * an absent signal, and neither of them may invent a zero.
+ */
+export interface DevexSatisfaction {
+  score: number | null;
+  enps: number;
+  responses: number;
+}
+
+export function devexSatisfaction(devex: DevexInsights): DevexSatisfaction {
+  const scores = devex.byDimension.map((d) => d.avgScore);
+  return {
+    score: scores.length ? round1(scores.reduce((a, b) => a + b, 0) / scores.length) : null,
+    enps: devex.enps,
+    responses: devex.totalResponses,
+  };
 }

@@ -2265,7 +2265,9 @@
       "allEpics": "Todas",
       "noEpics": "No hay épicas con actividad en esta ventana.",
       "epic": "Épica",
-      "project": "Proyecto"
+      "project": "Proyecto",
+      "exportCsv": "Descargar CSV",
+      "exporting": "Preparando…"
     },
     "deliv": {
       "title": "Entrega",
@@ -2536,7 +2538,12 @@
       "tableTitle": "Tus métricas vs grupo",
       "footnote": "Los percentiles se interpolan frente a distribuciones de grupos del sector predefinidas (p10–p90). Para métricas donde menos es mejor (lead time, tasa de fallos de cambio, MTTR, coste), un valor menor se posiciona más alto.",
       "industries": {
-        "software_saas": "Software / SaaS"
+        "software_saas": "Software / SaaS",
+        "fintech": "Fintech / Servicios financieros",
+        "ecommerce": "Comercio electrónico / Retail",
+        "healthtech": "Healthtech / Ciencias de la vida",
+        "agency_services": "Agencia / Servicios profesionales",
+        "enterprise_it": "TI empresarial"
       },
       "sizeBands": {
         "small": "Pequeño (1–20)",
@@ -2604,7 +2611,10 @@
         "performance": "Tasa de éxito de despliegues",
         "activity": "Volumen de producción",
         "communication": "Amplitud de colaboración × flujo",
-        "efficiency": "Poco retrabajo + ciclo rápido"
+        "efficiency": "Poco retrabajo + ciclo rápido",
+        "satisfactionSurvey": "Respuestas de la encuesta DevEx",
+        "satisfactionEngagement": "Indicador sustituto de participación — aún sin respuestas de encuesta",
+        "satisfactionNone": "Aún no hay señal de satisfacción"
       }
     },
     "bottleneck": {
@@ -3832,6 +3842,22 @@
         "op_equals": "es igual a",
         "op_contains": "contiene",
         "op_prefix": "empieza por"
+      },
+      "rotate": {
+        "action": "Rotar clave",
+        "rotating": "Rotando…",
+        "confirmGrace": "¿Generar una nueva clave de ingesta? La clave actual seguirá funcionando {hours} horas más para que puedas volver a desplegar.",
+        "confirmNow": "¿Revocar la clave de ingesta anterior de inmediato? Todo lo que aún la envíe dejará de aceptarse al instante.",
+        "failed": "No se pudo rotar la clave de ingesta",
+        "shownOnce": "Nueva clave de ingesta emitida: cópiala del fragmento de abajo. Se muestra una sola vez y no se puede recuperar.",
+        "graceOpen": "La clave anterior sigue aceptándose hasta el {at}. Vuelve a desplegar todo lo que la use antes de esa fecha.",
+        "revokeNow": "Revocar ahora"
+      },
+      "unmapped": {
+        "title": "{count} eventos descartados: nada los enruta",
+        "lastAt": "último el {at}",
+        "fixTenant": "Ninguna regla de asignación coincidió con estos eventos y no hay proyecto predeterminado. Añade una regla o elige un proyecto predeterminado abajo.",
+        "fixProject": "Estos eventos no se pudieron enrutar al proyecto de este colector. Comprueba que el colector siga asociado a un proyecto activo."
       }
     },
     "stats": {
@@ -4034,7 +4060,9 @@
       "placeholder": "p. ej. ¿Cuánto estamos gastando este mes?",
       "button": "Preguntar",
       "asking": "Preguntando…",
-      "matched": "Métrica coincidente"
+      "matched": "Métrica coincidente",
+      "notUnderstood": "No pude determinar a qué métrica se refiere esa pregunta; se muestra la métrica predeterminada.",
+      "viaModel": "elegida por el modelo"
     },
     "create": {
       "placeholder": "Nombre del nuevo panel",
@@ -8590,7 +8618,13 @@
       "flaggedTitle": "Este ticket omitió un rol o diagnóstico requerido: requiere revisión",
       "participantsTitle": "Participación de roles requeridos: completados de requeridos"
     },
-    "prdBadgeTitle": "{count, plural, one {# PRD vinculado} other {# PRD vinculados}}"
+    "prdBadgeTitle": "{count, plural, one {# PRD vinculado} other {# PRD vinculados}}",
+    "allowance": {
+      "title": "Este espacio de trabajo superó su cuota de ejecuciones en la nube.",
+      "detail": "Se usaron {used} de {limit} ejecuciones este mes en el plan {plan}. Los agentes no iniciarán nuevas ejecuciones en la nube hasta que la cuota se restablezca o mejores tu plan.",
+      "onPremNote": "Las ejecuciones locales y de VS Code no se ven afectadas.",
+      "upgrade": "Mejorar plan"
+    }
   },
   "projectsContent": {
     "errLoad": "Error al cargar los proyectos. Comprueba tu conexión e inténtalo de nuevo.",

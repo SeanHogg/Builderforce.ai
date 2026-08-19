@@ -50,6 +50,8 @@ import { computeRdFinancials } from '../../application/insights/rdFinancialsInsi
 import { importBoardRows, isImportDataset, IMPORT_DATASETS } from '../../application/insights/boardImport';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { positiveIntParam } from './queryParams';
+import { capitalizationToCsv } from '../../application/metrics/metricsCsv';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 
@@ -96,11 +98,6 @@ function parseFiscalYear(raw: string | undefined, now: number): number {
   return Number.isInteger(n) && n >= 2000 && n <= 2100 ? n : new Date(now).getUTCFullYear();
 }
 
-/** Parse an optional positive-integer query param (projectId / teamId). */
-function parseId(raw: string | undefined): number | undefined {
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : undefined;
-}
 
 export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -110,16 +107,21 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/engineering', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
+    // `computeEngineeringInsights` has taken a projectId since it was written; the
+    // route dropped it, so selecting a project changed nothing on this lens. The
+    // project is part of the cache key too — without it the first read would have
+    // pinned one project's numbers for every other.
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
-    const key = `insights:eng:t:${tenantId}:d:${days}`;
-    return c.json(await getOrSetCached(env, key, () => computeEngineeringInsights(db, tenantId, days), SHORT_TTL));
+    const key = `insights:eng:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
+    return c.json(await getOrSetCached(env, key, () => computeEngineeringInsights(db, tenantId, days, projectId), SHORT_TTL));
   });
 
   // LENS #2 — DORA (developer+; reuses the shared DORA rollup)
   router.get('/dora', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
-    const projectId = parseId(c.req.query('projectId'));
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const key = `insights:dora:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
     return c.json(await getOrSetCached(env, key, () => computeDora(db, tenantId, days, projectId), SHORT_TTL));
@@ -145,8 +147,8 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const days = parseDays(c.req.query('days'));
     const now = Date.now();
     const period = parsePeriod(c.req.query('period'), now);
-    const projectId = parseId(c.req.query('projectId'));
-    const teamId = parseId(c.req.query('teamId'));
+    const projectId = positiveIntParam(c.req.query('projectId'));
+    const teamId = positiveIntParam(c.req.query('teamId'));
     const env = c.env as Env;
 
     // Resolve the team's member identities (kind:ref) for the team grain.
@@ -189,8 +191,8 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const now = Date.now();
     const months = Math.min(24, Math.max(1, Number(c.req.query('months')) || 12));
-    const projectId = parseId(c.req.query('projectId'));
-    const teamId = parseId(c.req.query('teamId'));
+    const projectId = positiveIntParam(c.req.query('projectId'));
+    const teamId = positiveIntParam(c.req.query('teamId'));
     const env = c.env as Env;
 
     let memberKeys: Set<string> | undefined;
@@ -209,6 +211,36 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
       () => computeAllocationHistory(db, tenantId, months, now, { projectId, memberKeys }, { lineage: true }),
       SHORT_TTL,
     ));
+  });
+
+  // Capitalization report DOWNLOAD (csv | json). A point-in-time snapshot handed
+  // to finance or an auditor, so it is deliberately NOT cached — a download must
+  // be what the numbers are now, not what they were up to a TTL ago — and it
+  // reuses the exact same two collectors the on-screen report renders from, so a
+  // downloaded file can never disagree with the page it was downloaded from.
+  router.get('/allocation/history/export', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
+    const { tenantId } = scope(c);
+    const now = Date.now();
+    const months = Math.min(24, Math.max(1, Number(c.req.query('months')) || 12));
+    const projectId = positiveIntParam(c.req.query('projectId'));
+    const format = c.req.query('format') === 'json' ? 'json' : 'csv';
+
+    const [history, current] = await Promise.all([
+      computeAllocationHistory(db, tenantId, months, now, { projectId }, { lineage: true }),
+      computeAllocationInsights(db, tenantId, 30 * months, now, { projectId }, new Map(), { lineage: true }),
+    ]);
+
+    if (format === 'json') {
+      return c.json({ generatedAt: new Date(now).toISOString(), months, projectId: projectId ?? null, history, current });
+    }
+    const stamp = new Date(now).toISOString().slice(0, 10);
+    const scopeTag = projectId == null ? '' : `-project-${projectId}`;
+    return new Response(capitalizationToCsv(history, current), {
+      headers: {
+        'content-type': 'text/csv; charset=utf-8',
+        'content-disposition': `attachment; filename="capitalization-${months}m${scopeTag}-${stamp}.csv"`,
+      },
+    });
   });
 
   // LENS — delivery: burnup/burndown + completion forecast + scope creep for a
@@ -322,7 +354,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/bottlenecks', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
-    const projectId = parseId(c.req.query('projectId'));
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const key = `insights:bottlenecks:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
     return c.json(await getOrSetCached(env, key, () => computeBottleneckInsights(db, tenantId, days, projectId), SHORT_TTL));
@@ -334,7 +366,7 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/delivery/lifecycle', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
-    const projectId = parseId(c.req.query('projectId'));
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const key = `insights:lifecycle:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
     return c.json(await getOrSetCached(env, key, () => computeLifecycleInsights(db, tenantId, days, projectId), SHORT_TTL));
@@ -346,10 +378,11 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
   router.get('/quality', requireRole(TenantRole.MANAGER), requirePlanFeature(PREMIUM_INSIGHTS), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'), 90);
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
     const ver = await getCacheVersion(env, qualityVersionKey(tenantId));
-    const key = `insights:quality:t:${tenantId}:d:${days}:v:${ver}`;
-    return c.json(await getOrSetCached(env, key, () => computeQualityInsights(db, tenantId, days), SHORT_TTL));
+    const key = `insights:quality:t:${tenantId}:d:${days}:v:${ver}:p:${projectId ?? 0}`;
+    return c.json(await getOrSetCached(env, key, () => computeQualityInsights(db, tenantId, days, projectId), SHORT_TTL));
   });
 
   // LENS — People (board People slide): headcount waterfall / attrition / ramp /

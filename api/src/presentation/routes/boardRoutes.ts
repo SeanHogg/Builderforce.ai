@@ -66,6 +66,8 @@ import {
 import type { WorkflowStatus } from '../../application/swimlane/transitions';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { enforceCloudRunCap } from '../../application/runtime/cloudRunLedger';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 
 const WORKFLOW_STATUSES: WorkflowStatus[] = ['pending', 'running', 'completed', 'failed', 'cancelled'];
 
@@ -87,6 +89,40 @@ interface LaneWriteBody {
   successThreshold?: number;
   /** How strictly this lane's requirements gate entry (migration 0274): off|soft|hard. */
   requirementGate?: string;
+}
+
+/**
+ * The workspace's cloud-run allowance, as ONE fact (DISP-R3).
+ *
+ * Being over the monthly cap stops autonomy on every ticket on every board,
+ * identically. It used to surface only as a per-ticket refusal buried in each
+ * card's telemetry, so a board with 200 stalled cards showed 200 unrelated-looking
+ * problems and no way to see the single cause. This is the workspace-level answer
+ * the board header states once.
+ *
+ * Cached: a month-to-date aggregate moves slowly relative to a board poll, and one
+ * read serves every board in the workspace. A metering hiccup returns null — "we
+ * could not tell" is not "you are over", and the enforcement point is the
+ * dispatcher, never this display read.
+ */
+export type CloudRunAllowance =
+  | { overAllowance: false }
+  | { overAllowance: true; used: number; limit: number; plan: string };
+
+async function readCloudRunAllowance(db: Db, env: Env, tenantId: number): Promise<CloudRunAllowance | null> {
+  return getOrSetCached(
+    env,
+    `board:cloud-run-allowance:t:${tenantId}`,
+    async (): Promise<CloudRunAllowance> => {
+      const cap = await enforceCloudRunCap(db, tenantId, env);
+      // Under allowance the gate returns only `{ allowed: true }` — an unlimited
+      // plan has no usage figures, and inventing zeroes would render as "0 of 0".
+      return cap.allowed
+        ? { overAllowance: false }
+        : { overAllowance: true, used: cap.used, limit: cap.limit, plan: cap.effectivePlan };
+    },
+    { kvTtlSeconds: 60, l1TtlMs: 15_000 },
+  ).catch(() => null);
 }
 
 export function createBoardRoutes(db: Db): Hono<HonoEnv> {
@@ -149,7 +185,9 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .from(boards)
       .where(eq(boards.tenantId, tenantId))
       .orderBy(desc(boards.lifecycleManaged), desc(boards.updatedAt), desc(boards.createdAt), desc(boards.id));
-    return c.json({ boards: rows });
+    // Alongside the list, not on each row: it is one workspace fact, and repeating
+    // it per board would invite a per-board reading of a per-workspace condition.
+    return c.json({ boards: rows, cloudRunAllowance: await readCloudRunAllowance(db, c.env as Env, tenantId) });
   });
 
   router.get('/:boardId', async (c) => {
@@ -166,7 +204,12 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .from(swimlanes)
       .where(and(eq(swimlanes.boardId, boardId), eq(swimlanes.tenantId, tenantId)))
       .orderBy(asc(swimlanes.position));
-    return c.json({ ...board, swimlanes: lanes });
+
+    return c.json({
+      ...board,
+      swimlanes: lanes,
+      cloudRunAllowance: await readCloudRunAllowance(db, c.env as Env, tenantId),
+    });
   });
 
   router.patch('/:boardId', async (c) => {
@@ -305,6 +348,9 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         position: nextPosition,
         isTerminal: body.isTerminal ?? false,
         gate: body.gate ?? 'auto',
+        // A lane a person CREATED with an explicit gate carries their choice; one
+        // that took the default did not choose anything (DISP-R2).
+        gateSource: body.gate !== undefined ? 'operator' : 'seed',
         executionMode: body.executionMode ?? 'sequential',
         failurePolicy: body.failurePolicy ?? 'needs_attention',
         actionType: body.actionType ?? null,
@@ -331,7 +377,10 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
         ...(body.name !== undefined ? { name: body.name.trim() } : {}),
         ...(body.position !== undefined ? { position: body.position } : {}),
         ...(body.isTerminal !== undefined ? { isTerminal: body.isTerminal } : {}),
-        ...(body.gate !== undefined ? { gate: body.gate } : {}),
+        // The gate AND its provenance move together: an operator editing the gate is
+        // the only event that can ever produce 'operator', which is what makes a
+        // later default change able to leave deliberate choices alone (DISP-R2).
+        ...(body.gate !== undefined ? { gate: body.gate, gateSource: 'operator' } : {}),
         ...(body.executionMode !== undefined ? { executionMode: body.executionMode } : {}),
         ...(body.failurePolicy !== undefined ? { failurePolicy: body.failurePolicy } : {}),
         ...(body.actionType !== undefined ? { actionType: body.actionType || null } : {}),

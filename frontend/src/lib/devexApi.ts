@@ -183,9 +183,10 @@ export interface CreateCampaignInput {
 // ---------------------------------------------------------------------------
 
 export const devexApi = {
-  /** The insights lens / "AI DevEx Analysis" rollup. */
-  insights: (days = 90, percentile: BenchmarkPercentile = 75): Promise<DevexInsights> =>
-    apiRequest<DevexInsights>(`/api/devex/insights?days=${days}&percentile=${percentile}`),
+  /** The insights lens / "AI DevEx Analysis" rollup. `projectId` narrows to the
+   *  campaigns run FOR that project; absent, the workspace rollup. */
+  insights: (days = 90, percentile: BenchmarkPercentile = 75, projectId?: number | null): Promise<DevexInsights> =>
+    apiRequest<DevexInsights>(`/api/devex/insights?days=${days}&percentile=${percentile}${projectId != null ? `&projectId=${projectId}` : ''}`),
 
   templates: {
     list: (): Promise<DevexTemplate[]> => apiRequest<DevexTemplate[]>('/api/devex/templates'),

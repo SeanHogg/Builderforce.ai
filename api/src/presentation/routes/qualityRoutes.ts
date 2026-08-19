@@ -47,6 +47,11 @@ function isUniqueViolation(e: unknown): boolean {
   return /duplicate key|unique constraint|23505/i.test(s);
 }
 
+/** Default grace window a rotated-out ingest key keeps working for (QUAL-7). */
+const DEFAULT_KEY_GRACE_HOURS = 72;
+/** Ceiling on the grace window — a "temporary" key that outlives a month is not one. */
+const MAX_KEY_GRACE_HOURS = 24 * 30;
+
 const MAPPING_FIELDS = ['service', 'release', 'environment', 'url'];
 const MAPPING_OPS = ['equals', 'contains', 'prefix'];
 /** Valid match field: a known top-level field or a `tag:<key>`. */
@@ -134,6 +139,16 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
         id: errorCollectors.id, name: errorCollectors.name, projectId: errorCollectors.projectId,
         defaultProjectId: errorCollectors.defaultProjectId, enabled: errorCollectors.enabled,
         status: errorCollectors.status, lastEventAt: errorCollectors.lastEventAt, createdAt: errorCollectors.createdAt,
+        // QUAL-8 — how much of this collector's stream is being binned for want
+        // of a route, and when it last happened. Without these two on the LIST,
+        // a collector discarding everything reads exactly like a quiet one.
+        unmappedEventCount: errorCollectors.unmappedEventCount,
+        lastUnmappedAt: errorCollectors.lastUnmappedAt,
+        // QUAL-7 — rotation state. `previousKeyExpiresAt` in the future means the
+        // retired key is still being accepted, which is the thing an operator has
+        // to see to know the cutover is not finished.
+        keyRotatedAt: errorCollectors.keyRotatedAt,
+        previousKeyExpiresAt: errorCollectors.previousKeyExpiresAt,
       })
       .from(errorCollectors)
       .where(eq(errorCollectors.tenantId, tenantId))
@@ -193,6 +208,61 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
       otlpEndpoint: `/api/quality-ingest/otlp`,
       webhookBase: `/api/quality-ingest/webhooks/${row.id}`,
     }, 201);
+  });
+
+  // ── Rotate the ingest key (QUAL-7) ────────────────────────────────────────
+  //
+  // Mints a NEW key and demotes the current hash to a grace slot that keeps
+  // working for `graceHours` (default 72, 0 = immediate revoke, capped at 30
+  // days). The grace window is the feature, not a softener: the key is compiled
+  // into deployed artefacts, so an instant cutover drops the tenant's entire
+  // error stream until every one of them redeploys — which is why an
+  // un-rotatable key stayed un-rotated instead of being replaced.
+  //
+  // `graceHours: 0` is the leaked-credential path and is exact: it writes no
+  // grace hash at all, so the old key is dead on the next request rather than
+  // "expired a moment ago".
+  router.post('/collectors/:id/rotate-key', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const body = await c.req.json<{ graceHours?: number }>().catch(() => ({} as { graceHours?: number }));
+    const requested = typeof body.graceHours === 'number' && Number.isFinite(body.graceHours)
+      ? body.graceHours
+      : DEFAULT_KEY_GRACE_HOURS;
+    const graceHours = Math.min(Math.max(Math.floor(requested), 0), MAX_KEY_GRACE_HOURS);
+
+    const [existing] = await db
+      .select({ keyHash: errorCollectors.keyHash })
+      .from(errorCollectors)
+      .where(and(eq(errorCollectors.id, id), eq(errorCollectors.tenantId, tenantId)))
+      .limit(1);
+    if (!existing) return c.json({ error: 'Collector not found' }, 404);
+
+    const rawKey = generateApiKey('bfq');
+    const now = new Date();
+    const [row] = await db
+      .update(errorCollectors)
+      .set({
+        keyHash: await hashSecret(rawKey),
+        // A collector minted before this column existed can have a null hash;
+        // there is then nothing to keep alive, so the grace slot stays empty.
+        previousKeyHash: graceHours > 0 ? existing.keyHash : null,
+        previousKeyExpiresAt: graceHours > 0 && existing.keyHash
+          ? new Date(now.getTime() + graceHours * 3_600_000)
+          : null,
+        keyRotatedAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(errorCollectors.id, id), eq(errorCollectors.tenantId, tenantId)))
+      .returning({ id: errorCollectors.id, previousKeyExpiresAt: errorCollectors.previousKeyExpiresAt });
+    if (!row) return c.json({ error: 'Collector not found' }, 404);
+
+    return c.json({
+      // Shown ONCE, exactly like creation — the raw key is never stored.
+      ingestKey: rawKey,
+      rotatedAt: now.toISOString(),
+      previousKeyExpiresAt: row.previousKeyExpiresAt?.toISOString() ?? null,
+    });
   });
 
   // ── Update a collector (rename / enable / pause / default project) ─────────

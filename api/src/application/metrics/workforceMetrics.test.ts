@@ -191,7 +191,11 @@ describe('rollupByDiscipline', () => {
 
 describe('cache keys', () => {
   it('namespace member vs dora and fold tenant/version/window', () => {
-    expect(memberMetricsCacheKey(7, 3, 14)).toBe('workforce-metrics:members:tenant:7:v:3:days:14');
-    expect(doraCacheKey(7, 3, 30)).toBe('workforce-metrics:dora:tenant:7:v:3:days:30');
+    expect(memberMetricsCacheKey(7, 3, 14)).toBe('workforce-metrics:members:tenant:7:v:3:days:14:p:0');
+    // The project dimension is part of the key, not a suffix a caller remembers
+    // to append — two projects must never share one cached scorecard set.
+    expect(memberMetricsCacheKey(7, 3, 14, 9)).toBe('workforce-metrics:members:tenant:7:v:3:days:14:p:9');
+    expect(doraCacheKey(7, 3, 30)).toBe('workforce-metrics:dora:tenant:7:v:3:days:30:p:0');
+    expect(doraCacheKey(7, 3, 30, 9)).toBe('workforce-metrics:dora:tenant:7:v:3:days:30:p:9');
   });
 });

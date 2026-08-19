@@ -125,6 +125,56 @@ export async function recordAutoRunSkip(env: Env, db: Db, args: AutoRunSkipArgs)
  *  multi-row caller cannot drift from the single-row one on separator or lane handling. */
 export { skipState as autoRunSkipState };
 
+/** Marker id standing for "the tenant, not a ticket". Serial task ids start at 1,
+ *  so 0 can never collide with a real ticket's suppression marker. */
+const TENANT_SCOPE_MARKER_ID = 0;
+
+/**
+ * Record a WORKSPACE-WIDE refusal — one row for a condition that is true of the
+ * whole tenant, not of any one ticket (DISP-R3).
+ *
+ * WHY IT IS NOT `recordAutoRunSkip`. The cloud-run cap is a tenant fact: the
+ * allowance is exhausted, and it is exhausted identically for every ticket on
+ * every board. Discovering it inside the per-ticket dispatcher meant an over-cap
+ * tenant with 200 active tickets wrote 200 rows per tick — each with its own
+ * suppression marker on its own 6h re-affirm schedule — to say one thing once, on
+ * a database held deliberately under $5/month. It also could not be READ as one
+ * thing: a board showed 200 stalled cards with no way to see that a single
+ * workspace condition explained all of them.
+ *
+ * The session key is `tenant:<id>`, so these rows do not land on any ticket's
+ * timeline and cannot be mistaken for a fact about a ticket. The suppression gate
+ * is the same one the per-ticket ledger uses, keyed on the TENANT — a tenant that
+ * stays over cap re-affirms at most once per TTL rather than once per ticket per
+ * tick.
+ */
+export async function recordTenantAutoRunSkip(env: Env, db: Db, args: {
+  tenantId: number;
+  /** MUST be a real `AutoRunReason` — the lifecycle ledger resolves stalls from it. */
+  reason: string;
+  detail: Record<string, unknown>;
+  result: string;
+}): Promise<boolean> {
+  if (!(await claimAutoRunSkipState(env, args.tenantId, TENANT_SCOPE_MARKER_ID, skipState(null, args.reason)))) return false;
+  await recordCloudToolEvent(db, {
+    tenantId: args.tenantId,
+    cloudAgentRef: 'system:auto-exec',
+    executionId: null,
+    sessionKey: `tenant:${args.tenantId}`,
+    toolName: 'auto_run_skipped',
+    category: 'planning',
+    detail: args.detail,
+    result: args.result.slice(0, 300),
+  }).catch((error) => reportCaughtError(error, { source: 'application/runtime/autoRunSkipLedger.ts', operation: 'recordTenantAutoRunSkip', context: { logMessage: '[auto-run-skip] tenant-scoped telemetry append failed', details: { tenantId: args.tenantId, error } } }));
+  return true;
+}
+
+/** Clear the tenant-scoped marker so the NEXT workspace-wide refusal is recorded
+ *  in full — called when the condition lifts and dispatching resumes. */
+export async function clearTenantAutoRunSkip(env: Env, tenantId: number): Promise<void> {
+  await clearAutoRunSkip(env, tenantId, TENANT_SCOPE_MARKER_ID);
+}
+
 /**
  * Drop a ticket's suppression marker so its NEXT refusal is recorded in full.
  *

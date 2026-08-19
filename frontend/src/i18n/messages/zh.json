@@ -2265,7 +2265,9 @@
       "allEpics": "全部",
       "noEpics": "此时间窗口内没有有活动的史诗。",
       "epic": "史诗",
-      "project": "项目"
+      "project": "项目",
+      "exportCsv": "下载 CSV",
+      "exporting": "正在准备…"
     },
     "deliv": {
       "title": "交付",
@@ -2536,7 +2538,12 @@
       "tableTitle": "你的指标 vs 群体",
       "footnote": "百分位是基于预置的行业群体分布（p10–p90）插值得出。对于越低越好的指标（前置时间、变更失败率、MTTR、成本），数值越小排名越高。",
       "industries": {
-        "software_saas": "Software / SaaS"
+        "software_saas": "Software / SaaS",
+        "fintech": "金融科技 / 金融服务",
+        "ecommerce": "电子商务 / 零售",
+        "healthtech": "医疗科技 / 生命科学",
+        "agency_services": "代理机构 / 专业服务",
+        "enterprise_it": "企业 IT"
       },
       "sizeBands": {
         "small": "小型（1–20）",
@@ -2604,7 +2611,10 @@
         "performance": "部署成功率",
         "activity": "产出吞吐量",
         "communication": "协作广度 × 心流",
-        "efficiency": "低返工 + 快速周期"
+        "efficiency": "低返工 + 快速周期",
+        "satisfactionSurvey": "开发者体验调研反馈",
+        "satisfactionEngagement": "成员参与度替代指标 — 尚无调研反馈",
+        "satisfactionNone": "暂无满意度信号"
       }
     },
     "bottleneck": {
@@ -3832,6 +3842,22 @@
         "op_equals": "等于",
         "op_contains": "包含",
         "op_prefix": "开头为"
+      },
+      "rotate": {
+        "action": "轮换密钥",
+        "rotating": "正在轮换…",
+        "confirmGrace": "生成新的接入密钥？当前密钥将继续有效 {hours} 小时，便于你重新部署。",
+        "confirmNow": "立即吊销旧的接入密钥？仍在使用它发送数据的服务将立刻被拒绝。",
+        "failed": "无法轮换接入密钥",
+        "shownOnce": "已签发新的接入密钥 — 请从下方代码片段复制。它只显示一次，之后无法再次获取。",
+        "graceOpen": "旧密钥在 {at} 之前仍然有效。请在此之前重新部署所有使用它的服务。",
+        "revokeNow": "立即吊销"
+      },
+      "unmapped": {
+        "title": "已丢弃 {count} 条事件 — 没有任何路由规则匹配",
+        "lastAt": "最近一次 {at}",
+        "fixTenant": "这些事件没有匹配到任何映射规则，也没有设置默认项目。请在下方添加映射规则或选择默认项目。",
+        "fixProject": "这些事件无法路由到该采集器所属的项目。请确认采集器仍关联到一个有效项目。"
       }
     },
     "stats": {
@@ -4034,7 +4060,9 @@
       "placeholder": "例如：我们本月花了多少？",
       "button": "提问",
       "asking": "提问中…",
-      "matched": "匹配到的指标"
+      "matched": "匹配到的指标",
+      "notUnderstood": "无法判断该问题对应哪个指标 — 已改为显示默认指标。",
+      "viaModel": "由模型选择"
     },
     "create": {
       "placeholder": "新仪表板名称",
@@ -8590,7 +8618,13 @@
       "flaggedTitle": "此工单跳过了必需的角色或诊断——需要复核",
       "participantsTitle": "必需角色参与情况：已完成 & 必需"
     },
-    "prdBadgeTitle": "{count, plural, other {# 个关联的 PRD}}"
+    "prdBadgeTitle": "{count, plural, other {# 个关联的 PRD}}",
+    "allowance": {
+      "title": "此工作区已超出云端运行额度。",
+      "detail": "本月在 {plan} 方案下已使用 {used}/{limit} 次运行。在额度重置或升级之前，智能体不会启动新的云端运行。",
+      "onPremNote": "本地部署与 VS Code 运行不受影响。",
+      "upgrade": "升级"
+    }
   },
   "projectsContent": {
     "errLoad": "加载项目失败。请检查连接后重试。",

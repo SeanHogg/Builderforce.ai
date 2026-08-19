@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   boardsApi,
   type Board,
+  type CloudRunAllowance,
   type Swimlane,
   type SwimlaneAgent,
 } from '@/lib/builderforceApi';
@@ -13,6 +14,12 @@ export interface BoardConfig {
   lanes: Swimlane[];
   /** Agent assignments keyed by swimlane id. */
   agentsByLane: Record<string, SwimlaneAgent[]>;
+  /**
+   * The WORKSPACE's cloud-run allowance, carried on the same request that loads
+   * the boards (DISP-R3). Null when the meter could not be read — which is not
+   * "over allowance" and must not render as one.
+   */
+  cloudRunAllowance: CloudRunAllowance | null;
   loading: boolean;
   error: string | null;
   reload: () => Promise<void>;
@@ -30,6 +37,7 @@ export function useBoardConfig(
   const [board, setBoard] = useState<Board | null>(null);
   const [lanes, setLanes] = useState<Swimlane[]>([]);
   const [agentsByLane, setAgentsByLane] = useState<Record<string, SwimlaneAgent[]>>({});
+  const [cloudRunAllowance, setCloudRunAllowance] = useState<CloudRunAllowance | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +51,10 @@ export function useBoardConfig(
     setLoading(true);
     setError(null);
     try {
-      const boards = await boardsApi.list();
+      // The allowance rides the SAME request the boards do — a workspace-level
+      // condition should not cost a second round trip to display.
+      const { boards, cloudRunAllowance: allowance } = await boardsApi.listWithAllowance();
+      setCloudRunAllowance(allowance);
       const mine = boards.find((b) => b.projectId === projectId) ?? null;
       setBoard(mine);
       if (mine) {
@@ -68,5 +79,5 @@ export function useBoardConfig(
     if (enabled) reload();
   }, [enabled, reload]);
 
-  return { board, lanes, agentsByLane, loading, error, reload };
+  return { board, lanes, agentsByLane, cloudRunAllowance, loading, error, reload };
 }

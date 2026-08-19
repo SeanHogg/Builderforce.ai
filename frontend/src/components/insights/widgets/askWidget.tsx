@@ -87,10 +87,19 @@ function AskCard() {
 
       {answer && (
         <div style={{ marginTop: 12, padding: 12, borderRadius: 'var(--radius-md)', background: 'var(--bg-base)' }}>
+          {/* A question nothing recognised is announced BEFORE the number, not
+              footnoted after it: the figure below is about the fallback metric,
+              not about what was asked. */}
+          {answer.source === 'default' && (
+            <div role="status" style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-warning, var(--text-secondary))', marginBottom: 6 }}>
+              {t('ask.notUnderstood')}
+            </div>
+          )}
           <div style={{ fontSize: 'var(--font-size-section)', fontWeight: 700, color: 'var(--text-primary)' }}>{formatAnswer(answer)}</div>
           <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginTop: 4 }}>{answer.explanation}</div>
           <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', marginTop: 4 }}>
             {t('ask.matched')}: <code>{answer.matchedMetric}</code>
+            {answer.source === 'llm' && <> · {t('ask.viaModel')}</>}
           </div>
         </div>
       )}

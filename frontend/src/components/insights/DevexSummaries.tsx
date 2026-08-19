@@ -8,6 +8,7 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { KpiGrid } from './LensShell';
 import { pct, score2, int } from './format';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 /**
  * Compact "at-a-glance" summaries for the DevEx hub dashboard.
@@ -22,7 +23,8 @@ import { pct, score2, int } from './format';
 
 export function DevexResultsSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<DevexInsights>(() => devexApi.insights(days, 75), [days]);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<DevexInsights>(() => devexApi.insights(days, 75, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;

@@ -39,6 +39,9 @@ import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
 import { sendPendingAgentsUpgradeEmail } from './pendingAgentsUpgradeEmail';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import type { Env } from '../../env';
+import { enforceCloudRunCap } from './cloudRunLedger';
+import { recordTenantAutoRunSkip, clearTenantAutoRunSkip } from './autoRunSkipLedger';
+import type { AutoRunReason } from '../swimlane/evaluateAutoRun';
 
 /** The non-terminal statuses whose lane an agent could work — the candidate scan
  *  is bounded to these (Done/Blocked are excluded up front; the lane evaluator
@@ -84,6 +87,11 @@ export interface AutonomousSweepResult {
   /** Total agent-owned tickets sitting pending under token-blocked tenants. */
   pendingUnderBlockedTenants: number;
   upgradeEmailsSent: number;
+  /** Tenants skipped because their monthly cloud-run allowance is exhausted. */
+  capBlockedTenants: number;
+  /** Tickets sitting pending under those tenants — the "workspace over allowance"
+   *  count a board can show once, globally, instead of per card. */
+  pendingUnderCapBlockedTenants: number;
 }
 
 interface CandidateTask {
@@ -254,6 +262,8 @@ export async function runAutonomousExecutionSweep(
     tokenBlockedTenants: 0,
     pendingUnderBlockedTenants: 0,
     upgradeEmailsSent: 0,
+    capBlockedTenants: 0,
+    pendingUnderCapBlockedTenants: 0,
   };
 
   for (const [tenantId, tenantCandidates] of byTenant) {
@@ -293,6 +303,44 @@ export async function runAutonomousExecutionSweep(
         }
         continue;
       }
+
+      // CLOUD-RUN ALLOWANCE — checked ONCE for the tenant, before fanning out
+      // (DISP-R3). The cap is a workspace fact: exhausted is exhausted, identically
+      // for every ticket on every board. Discovering it per ticket inside
+      // `dispatchCloudRunForTask` meant an over-cap tenant with 200 active tickets
+      // wrote 200 `auto_run_skipped` rows per tick to say one thing — and gave the
+      // board no way to show it as one thing either.
+      //
+      // Deliberately HERE and not in `evaluateTaskAutoRun`: the evaluator runs per
+      // ticket on a sweep that looks at hundreds, and the cap costs two queries. At
+      // this level it costs two queries per TENANT per tick, and the per-dispatch
+      // check inside the dispatcher stays exactly where it is — this gate is an
+      // optimisation and a telemetry fix, never the enforcement point. A cap read
+      // that throws falls through and lets the dispatcher decide, as before.
+      let capBlocked = false;
+      try {
+        const cap = await enforceCloudRunCap(db, tenantId, env);
+        capBlocked = !cap.allowed;
+        if (!cap.allowed) {
+          result.capBlockedTenants += 1;
+          result.pendingUnderCapBlockedTenants += tenantCandidates.length;
+          // ONE tenant-scoped event for the whole workspace, state-gated so a tenant
+          // that stays over cap re-affirms at most once per TTL.
+          await recordTenantAutoRunSkip(env, db, {
+            tenantId,
+            reason: 'cloud_run_limit' satisfies AutoRunReason,
+            detail: {
+              reason: 'cloud_run_limit' satisfies AutoRunReason, retryable: false, scope: 'tenant',
+              used: cap.used, limit: cap.limit, plan: cap.effectivePlan,
+              pendingTickets: tenantCandidates.length,
+            },
+            result: `Workspace over allowance: monthly cloud-run limit reached (${cap.used}/${cap.limit} on the ${cap.effectivePlan} plan). ${tenantCandidates.length} ticket(s) are waiting. Retrying will not clear this — upgrade at builderforce.ai/pricing. On-prem and VS Code runs stay unlimited.`,
+          });
+        }
+      } catch (err) {
+        reportCaughtError(err, { source: "application/runtime/autonomousExecutionSweep.ts", operation: "runAutonomousExecutionSweep", context: { logMessage: `[cron:auto-exec] cloud-run cap check failed tenant=${tenantId}; falling through to per-dispatch enforcement`, details: err } });
+      }
+      if (capBlocked) continue;
 
       // Dispatch the tenant's oldest-waiting tickets, bounded per tick. Each fires the
       // canonical lane trigger, which re-evaluates gate/capability/live-run and starts
@@ -348,6 +396,10 @@ export async function runAutonomousExecutionSweep(
         }
       }
       result.dispatched += dispatchedForTenant;
+      // A dispatch got through, so the workspace is under allowance again — drop the
+      // tenant marker so the NEXT time it fills up is recorded in full rather than
+      // suppressed as a repeat of a condition that has since lifted.
+      if (dispatchedForTenant > 0) await clearTenantAutoRunSkip(env, tenantId);
     } catch (err) {
       reportCaughtError(err, { source: "application/runtime/autonomousExecutionSweep.ts", operation: "runAutonomousExecutionSweep", context: { logMessage: `[cron:auto-exec] tenant=${tenantId} failed`, details: err } });
     }

@@ -133,6 +133,22 @@ describe('the entity catalog', () => {
     //    no identity of its own to register.
     //  - `workflow_variables` is a raw scope/key/value store backing a workflow
     //    node, not a titled object.
+    //
+    // 2026-08-19: the count held at 12 rather than moving, because the four
+    // tables that had accumulated since were adjudicated rather than counted:
+    //  - `pay_runs` was already registering into the kernel `objects` table via
+    //    its own `object_id` while having NO entity definition — navigable by id
+    //    and invisible to the generic layer, the exact halfway state this test
+    //    exists to catch. It is now a read-only entity.
+    //  - `engagement_milestones` is a titled, dated, priced object a person opens
+    //    and acts on; the escrow work simply landed the table ahead of its entry.
+    //    Now a read-only entity (its status moves money, so not through a PATCH).
+    //  - `collection_actions` is an append-only (invoice, rung) log — the invoice
+    //    is the object; this is a fact about what was sent chasing it.
+    //  - `repo_delivery_status` is a 1:1 derived-state extension of
+    //    `project_repositories`, keyed by the repo it describes, with no identity
+    //    of its own — the same structural reason as `hosted_listing_lifecycle`
+    //    directly above, and it takes the same exemption.
     expect(missing.length, `uncovered: ${missing.join(', ')}`).toBeLessThan(12);
   });
 

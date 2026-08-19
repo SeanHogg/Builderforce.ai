@@ -79,6 +79,14 @@ export interface QueryAnswer {
   unit: string;
   days: number;
   explanation: string;
+  /**
+   * How the metric was chosen: 'keyword' = the deterministic mapper recognised
+   * the question, 'llm' = the gateway refiner picked it from the same whitelist,
+   * 'default' = NOTHING recognised the question and this is the fallback metric.
+   * The last case must be shown as such — a defaulted answer that looks like a
+   * match is the failure this field exists to prevent.
+   */
+  source: 'keyword' | 'llm' | 'default';
 }
 
 export const dashboardsApi = {

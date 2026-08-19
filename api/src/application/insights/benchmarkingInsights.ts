@@ -7,9 +7,14 @@
  * (elite | high | medium | low).
  *
  * The tenant's current values reuse the existing collectors — {@link computeDora}
- * for the DORA four-keys and {@link computeEngineeringInsights} for the AI
- * effectiveness signals (merge rate, cost-per-merged-PR, adoption) — so there is
- * no new collection and the figures match the other lenses exactly.
+ * for the DORA four-keys, {@link computeEngineeringInsights} for merge rate and
+ * cost-per-merged-PR, and {@link computeAiAdoption} for adoption — so the figures
+ * match the other lenses exactly.
+ *
+ * COHORTS. `industry_benchmarks` seeds six industries (0230 + 0932) across three
+ * size bands. The pickable list is derived from the seeded ROWS rather than from
+ * a constant, so a cohort cannot be selected that has no distribution to rank
+ * against — which is how the lens would produce a rating with nothing behind it.
  *
  * {@link rankPercentile} is a pure helper (interpolated against the five seeded
  * percentile anchors, direction-aware via higherIsBetter) so it is unit-testable
@@ -22,6 +27,7 @@ import { industryBenchmarks, tenantBenchmarkProfiles } from '../../infrastructur
 import { clampScore } from '../../domain/shared/numbers';
 import { computeDora } from '../metrics/workforceMetrics';
 import { computeEngineeringInsights } from './engineeringInsights';
+import { computeAiAdoption } from '../metrics/aiAdoption';
 
 export const DEFAULT_INDUSTRY = 'software_saas';
 export const DEFAULT_SIZE_BAND = 'mid';
@@ -189,6 +195,30 @@ export async function getBenchmarkProfile(
  * computeEngineeringInsights) ranked against the seeded cohort distribution for
  * the tenant's chosen (industry, size_band).
  */
+/**
+ * The (industry, size band) pairs that actually HAVE a seeded distribution.
+ *
+ * Derived from the rows, not from a constant list, because the two drift in the
+ * one direction that hurts: a constant naming a cohort with no rows lets an
+ * operator select it, after which every metric ranks against nothing and the lens
+ * shows a table of dashes with a confident cohort label above it. Deriving it
+ * means the picker offers exactly what can be ranked.
+ */
+export async function listBenchmarkCohorts(db: Db): Promise<{ industries: string[]; sizeBands: string[] }> {
+  const rows = await db
+    .selectDistinct({ industry: industryBenchmarks.industry, sizeBand: industryBenchmarks.sizeBand })
+    .from(industryBenchmarks);
+  const industries = [...new Set(rows.map((r) => r.industry))].sort();
+  const sizeBands = [...new Set(rows.map((r) => r.sizeBand))];
+  // Size bands are ordinal, not alphabetical — 'large' must not lead the list.
+  const order = ['small', 'mid', 'large'];
+  sizeBands.sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
+  return {
+    industries: industries.length ? industries : [DEFAULT_INDUSTRY],
+    sizeBands: sizeBands.length ? sizeBands : [DEFAULT_SIZE_BAND],
+  };
+}
+
 export async function computeBenchmarking(
   db: Db,
   tenantId: number,
@@ -214,19 +244,21 @@ export async function computeBenchmarking(
   const byMetric = new Map(benchRows.map((r) => [r.metric, r]));
 
   // Live tenant values from the existing collectors.
-  const [dora, eng] = await Promise.all([
+  const [dora, eng, aiAdoption] = await Promise.all([
     computeDora(db, tenantId, days, projectId),
     computeEngineeringInsights(db, tenantId, days, projectId),
+    computeAiAdoption(db, tenantId, days, projectId),
   ]);
 
-  // AI adoption proxy: share of DORA lead-time deliveries that ran through an AI
-  // approach is not directly available, so use the merged-run evidence as the
-  // adoption signal — fraction of runs that merged is the merge rate; adoption is
-  // the fraction of runs producing CI-green (touched) work over total runs. We
-  // model adoption as the merged share scaled by run volume presence: when runs
-  // exist, adoption = ciGreenRate (work AI actually carried through CI).
   const merged = eng.totals.mergedRatePct;
-  const adoption = eng.totals.runs > 0 ? eng.totals.ciGreenRatePct : null;
+  // AI adoption is now MEASURED, not proxied: the share of tickets completed in
+  // the window that had at least one live agent run — which is the definition the
+  // 0230 cohort percentiles were seeded against ("% of delivered work touched by
+  // AI"). It used to be `ciGreenRatePct`, the share of AI runs that came out of
+  // CI green, which answers a different question and moves the wrong way: a team
+  // rolling AI out across more of its board while shaking out CI scored LOWER
+  // adoption than a team with one flawless agent on one ticket. See aiAdoption.ts.
+  const adoption = aiAdoption.adoptionPct;
   // Cost per merged PR: total spend / number of merged runs.
   const mergedRuns = eng.totals.runs * (eng.totals.mergedRatePct / 100);
   const costPerMergedPr = mergedRuns > 0 ? eng.totals.costUsd / mergedRuns : null;

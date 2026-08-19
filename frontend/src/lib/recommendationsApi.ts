@@ -58,7 +58,19 @@ export interface SpaceDimension {
 
 export interface SpaceMetrics {
   windowDays: number;
-  satisfaction: { score: number | null; n: number };
+  /**
+   * `source` names which signal produced the score: 'survey' = people's own DevEx
+   * answers, 'engagement' = the member-engagement stand-in used only when nobody
+   * answered. Null exactly when `score` is. `n` counts respondents or scored
+   * members to match. Rendered on the card, because a proxy shown as a survey
+   * result is the one way this number can mislead.
+   */
+  satisfaction: {
+    score: number | null;
+    n: number;
+    source: 'survey' | 'engagement' | null;
+    enps: number | null;
+  };
   performance: SpaceDimension;
   activity: SpaceDimension;
   communication: SpaceDimension;

@@ -7,9 +7,14 @@
  * each dimension (productivity is multi-dimensional; these proxies are the best
  * available signal in our data model, not a definition of the dimension):
  *
- *   S — Satisfaction & well-being:  member engagement score (member_metrics_period
- *       engagement_score, human board-health) as a satisfaction proxy. DevEx survey
- *       data, when present, would override this — absent it the score is null.
+ *   S — Satisfaction & well-being:  the DevEx SURVEY — people's own answers about
+ *       how the work feels — whenever any exist in the window, falling back to the
+ *       member engagement score (member_metrics_period engagement_score) as a proxy
+ *       only when nobody has answered. Which of the two produced the number is
+ *       reported on the dimension (`source`), because a proxy presented as a survey
+ *       result is worse than no number: a team could report falling satisfaction in
+ *       a survey while this lens showed it rising, and nothing on the page would
+ *       say why. Null when neither signal exists.
  *   P — Performance:                deployment success rate (1 − change-failure-rate)
  *       from deployment_events — outcome quality of the work shipped.
  *   A — Activity:                   AI-run + task-completion volume normalised to the
@@ -36,6 +41,7 @@ import {
 } from '../../infrastructure/database/schema';
 import { clampScore as clamp } from '../../domain/shared/numbers';
 import { notSystemTask } from '../task/taskScope';
+import { computeDevexInsights, devexSatisfaction } from './devexInsights';
 
 const HOUR_MS = 3_600_000;
 
@@ -46,10 +52,23 @@ export interface SpaceDimension {
   figures: Record<string, number | null>;
 }
 
+/**
+ * Where the Satisfaction score came from. Reported so the reader can tell a
+ * DIRECT measurement from a stand-in — the two answer different questions and
+ * only one of them is what SPACE's S actually means.
+ *   'survey'     — DevEx survey answers in the window (the real signal).
+ *   'engagement' — the member-engagement proxy, used only when nobody answered.
+ */
+export type SatisfactionSource = 'survey' | 'engagement';
+
 export interface SpaceMetrics {
   windowDays: number;
-  /** Satisfaction & well-being. null when no engagement signal exists. */
-  satisfaction: { score: number | null; n: number };
+  /**
+   * Satisfaction & well-being. `n` is respondents when `source` is 'survey' and
+   * scored members when it is 'engagement'; `source` is null exactly when
+   * `score` is, so a consumer can never label a number with the wrong origin.
+   */
+  satisfaction: { score: number | null; n: number; source: SatisfactionSource | null; enps: number | null };
   performance: SpaceDimension;
   activity: SpaceDimension;
   communication: SpaceDimension;
@@ -61,6 +80,13 @@ export interface SpaceAggregates {
   windowDays: number;
   /** member_metrics_period (human members) — engagement, cycle, rework. */
   engagementScores: number[];      // 0..100 per member (humans only)
+  /**
+   * DevEx survey satisfaction for the window, when anyone answered. PREFERRED
+   * over `engagementScores`: it is people reporting on their own experience,
+   * which is the dimension, rather than a throughput-derived number correlated
+   * with it. Absent (null score / 0 responses) the proxy is used instead.
+   */
+  survey?: { score: number | null; enps: number; responses: number };
   avgCycleTimeHours: number | null; // weighted avg across members
   reworkRate: number | null;        // (redo + reopen) / completed
   /** distinct members active in the window (any kind) — collaboration breadth. */
@@ -80,8 +106,15 @@ const avg = (xs: number[]): number | null => (xs.length ? xs.reduce((a, b) => a 
 
 /** Pure: turn fetched aggregates into the five SPACE dimension scores. */
 export function summarizeSpace(a: SpaceAggregates): SpaceMetrics {
-  // S — Satisfaction: mean human engagement score (already 0..100). Null = no signal.
-  const satScore = avg(a.engagementScores);
+  // S — Satisfaction: the survey when anyone answered, else the engagement proxy.
+  // The ORDER is the whole point: a real answer always beats a stand-in, and the
+  // stand-in is never silently presented as the real thing (see `source`).
+  const surveyAnswered = a.survey != null && a.survey.responses > 0 && a.survey.score != null;
+  const engagementScore = avg(a.engagementScores);
+  const satScore = surveyAnswered ? a.survey!.score! : engagementScore;
+  const satSource: SatisfactionSource | null = satScore == null
+    ? null
+    : surveyAnswered ? 'survey' : 'engagement';
 
   // P — Performance: deployment success rate. Null when nothing shipped.
   const perfScore = a.totalDeployments > 0
@@ -114,7 +147,12 @@ export function summarizeSpace(a: SpaceAggregates): SpaceMetrics {
 
   return {
     windowDays: a.windowDays,
-    satisfaction: { score: satScore, n: a.engagementScores.length },
+    satisfaction: {
+      score: satScore,
+      n: surveyAnswered ? a.survey!.responses : a.engagementScores.length,
+      source: satSource,
+      enps: surveyAnswered ? a.survey!.enps : null,
+    },
     performance: { score: perfScore, figures: { deployments: a.totalDeployments, failures: a.failedDeployments } },
     activity: { score: activityScore, figures: { runs: a.totalRuns, completedTasks: a.completedTasks, perDay: Number(perDay.toFixed(2)) } },
     communication: { score: commScore, figures: { activeMembers: a.activeMembers, mergeRatePct: mergeRate == null ? null : Number(mergeRate.toFixed(1)) } },
@@ -131,10 +169,17 @@ function num(v: unknown): number {
 export async function computeSpaceMetrics(db: Db, tenantId: number, days: number, projectId?: number): Promise<SpaceMetrics> {
   const since = new Date(Date.now() - days * 24 * HOUR_MS);
 
+  // The DevEx survey — the REAL satisfaction signal, and the reason this lens no
+  // longer has to score its S from throughput. Scoped to the same grain as the
+  // rest of the read: at project grain only campaigns run FOR that project count
+  // (0929 added `devex_campaigns.project_id`), so a workspace-wide survey can
+  // never answer on one team's behalf. Absent any answers this yields no score
+  // and the engagement proxy takes over inside `summarizeSpace`.
+  const survey = devexSatisfaction(await computeDevexInsights(db, tenantId, days, null, projectId));
+
   // member_metrics_period is tenant-grained, so it must not be reused for a
   // selected project. At project grain derive the same flow inputs directly
-  // from that project's tasks; Satisfaction remains unknown until project-
-  // grained survey data exists.
+  // from that project's tasks.
   const projectTaskRows = projectId == null ? [] : await db
     .select({
       createdAt: tasks.createdAt,
@@ -250,6 +295,7 @@ export async function computeSpaceMetrics(db: Db, tenantId: number, days: number
   return summarizeSpace({
     windowDays: days,
     engagementScores,
+    survey,
     avgCycleTimeHours,
     reworkRate,
     activeMembers,

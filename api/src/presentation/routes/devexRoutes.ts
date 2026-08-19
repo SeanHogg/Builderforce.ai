@@ -25,13 +25,15 @@ import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrast
 import {
   computeDevexInsights, computeDevexBenchmark, type BenchmarkPercentile,
 } from '../../application/insights/devexInsights';
-import { devexSurveyTemplates, devexCampaigns, devexResponses } from '../../infrastructure/database/schema';
+import { devexSurveyTemplates, devexCampaigns, devexResponses, projects } from '../../infrastructure/database/schema';
 import {
   normalizeQuestions, validateAnswers, respondentHash, normalizeSegments,
 } from '../../domain/devex/surveys';
 import { deriveSegments } from '../../application/devex/deriveSegments';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
+import { positiveIntOrNull } from './queryParams';
+import { positiveIntParam } from './queryParams';
 
 const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 // The cross-tenant benchmark is the same for everyone and expensive to compute,
@@ -50,10 +52,6 @@ function parsePercentile(raw: string | undefined): BenchmarkPercentile {
   return n === 50 || n === 90 ? n : 75;
 }
 
-function parseIntId(raw: string | undefined): number | null {
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
 
 export function createDevexRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -64,6 +62,8 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
     const percentile = parsePercentile(c.req.query('percentile'));
+    // Narrow to one project's campaigns (0929). Absent, the workspace rollup.
+    const projectId = positiveIntParam(c.req.query('projectId'));
     const env = c.env as Env;
 
     // Cross-tenant benchmark: global, expensive — cache once per percentile and
@@ -77,8 +77,10 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
     // Tenant rollup: version-token key so a new response invalidates every
     // (days × percentile) variant at once via bumpCacheVersion on respond.
     const ver = await getCacheVersion(env, `devex:t:${tenantId}`);
-    const key = `devex:insights:t:${tenantId}:v:${ver}:d:${days}:p:${percentile}`;
-    return c.json(await getOrSetCached(env, key, () => computeDevexInsights(db, tenantId, days, benchmark), SHORT_TTL));
+    // `proj` is its own key segment: `p:` was already taken by the percentile, and
+    // reusing it would have made project 75 and the 75th percentile collide.
+    const key = `devex:insights:t:${tenantId}:v:${ver}:d:${days}:p:${percentile}:proj:${projectId ?? 0}`;
+    return c.json(await getOrSetCached(env, key, () => computeDevexInsights(db, tenantId, days, benchmark, projectId), SHORT_TTL));
   });
 
   // ---- Templates ----------------------------------------------------------
@@ -108,7 +110,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
 
   router.patch('/templates/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const id = parseIntId(c.req.param('id'));
+    const id = positiveIntOrNull(c.req.param('id'));
     if (id == null) return c.json({ error: 'invalid id' }, 400);
     const body = await c.req.json<Record<string, unknown>>();
     const patch: Record<string, unknown> = { updatedAt: new Date() };
@@ -125,7 +127,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
 
   router.delete('/templates/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const id = parseIntId(c.req.param('id'));
+    const id = positiveIntOrNull(c.req.param('id'));
     if (id == null) return c.json({ error: 'invalid id' }, 400);
     const [row] = await db.delete(devexSurveyTemplates)
       .where(and(eq(devexSurveyTemplates.id, id), eq(devexSurveyTemplates.tenantId, tenantId)))
@@ -137,12 +139,14 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
   // ---- Campaigns ----------------------------------------------------------
   router.get('/campaigns', async (c) => {
     const { tenantId } = scope(c);
+    const projectFilter = positiveIntOrNull(c.req.query('projectId'));
     // Campaigns + their response counts (LEFT JOIN aggregate).
     const rows = await db
       .select({
         id: devexCampaigns.id,
         tenantId: devexCampaigns.tenantId,
         segmentId: devexCampaigns.segmentId,
+        projectId: devexCampaigns.projectId,
         templateId: devexCampaigns.templateId,
         title: devexCampaigns.title,
         periodMonth: devexCampaigns.periodMonth,
@@ -156,7 +160,13 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
       })
       .from(devexCampaigns)
       .leftJoin(devexResponses, eq(devexResponses.campaignId, devexCampaigns.id))
-      .where(eq(devexCampaigns.tenantId, tenantId))
+      .where(and(
+        eq(devexCampaigns.tenantId, tenantId),
+        // `?projectId=` narrows to one project's campaigns; absent, every campaign
+        // is listed (workspace-wide and project-scoped alike), which is what the
+        // survey admin screen wants.
+        ...(projectFilter != null ? [eq(devexCampaigns.projectId, projectFilter)] : []),
+      ))
       .groupBy(devexCampaigns.id);
     return c.json(rows);
   });
@@ -166,12 +176,24 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
     const body = await c.req.json<Record<string, unknown>>();
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     if (!title) return c.json({ error: 'title is required' }, 400);
-    const templateId = parseIntId(typeof body.templateId === 'number' ? String(body.templateId) : (body.templateId as string | undefined));
+    const templateId = positiveIntOrNull(typeof body.templateId === 'number' ? String(body.templateId) : (body.templateId as string | undefined));
     const periodMonth = typeof body.periodMonth === 'string' && /^\d{4}-\d{2}$/.test(body.periodMonth) ? body.periodMonth : null;
     const recipientCount = Number.isInteger(body.recipientCount) && (body.recipientCount as number) >= 0 ? (body.recipientCount as number) : null;
+    // A campaign may target ONE project's team (0929). Omitted / null keeps the
+    // original meaning — workspace-wide — so nothing about the existing flow
+    // changes; supplied, it is what lets the project-grained SPACE lens report a
+    // real Satisfaction score instead of an engagement stand-in. Ownership is
+    // verified here: a campaign must not be able to name another tenant's project.
+    const projectId = positiveIntOrNull(typeof body.projectId === 'number' ? String(body.projectId) : (body.projectId as string | undefined));
+    if (projectId != null) {
+      const [owned] = await db.select({ id: projects.id }).from(projects)
+        .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
+      if (!owned) return c.json({ error: 'project not found' }, 404);
+    }
     const [row] = await db.insert(devexCampaigns).values({
       tenantId,
       segmentId: segmentId ?? null,
+      projectId: projectId ?? null,
       templateId: templateId ?? null,
       title: title.slice(0, 200),
       periodMonth,
@@ -184,7 +206,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
 
   router.patch('/campaigns/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
-    const id = parseIntId(c.req.param('id'));
+    const id = positiveIntOrNull(c.req.param('id'));
     if (id == null) return c.json({ error: 'invalid id' }, 400);
     const body = await c.req.json<Record<string, unknown>>();
     const patch: Record<string, unknown> = {};
@@ -209,7 +231,7 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
   router.post('/campaigns/:id/respond', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
     const userId = c.get('userId');
-    const id = parseIntId(c.req.param('id'));
+    const id = positiveIntOrNull(c.req.param('id'));
     if (id == null) return c.json({ error: 'invalid id' }, 400);
 
     const [campaign] = await db.select().from(devexCampaigns)

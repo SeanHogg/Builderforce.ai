@@ -53,6 +53,7 @@ import { authorizeManagedTaskExecution } from '../../application/kanban/managedE
 import { getTicketCoordination } from '../../application/coordination/coordinationCapability';
 import { executeGitProxy } from '../../application/repos/gitProxy';
 import { authorizeExecutionPrincipal } from '../../application/agentIdentity/agentRunIdentity';
+import type { ExecutionReadMemo } from '../../application/runtime/executionReadMemo';
 
 /**
  * Runtime routes – task execution lifecycle.
@@ -331,6 +332,19 @@ export async function dispatchCloudRunForTask(
     /** HUMAN-initiated dispatch: skip the failure breaker + re-run cooldown (never
      *  the cloud-run cap). Autonomous callers must leave this unset. */
     force?: boolean;
+    /**
+     * A request-scoped memo of the ticket's execution rows (DISP-R1). Supplying it
+     * saves ONE query on a path that just read the same list — the lane trigger,
+     * which loads it in `evaluateTaskAutoRun` microseconds earlier.
+     *
+     * It carries ROWS, never a verdict. The breaker below still calls
+     * `assessRerunBackoff` on them itself, so a caller can spare the dispatcher a
+     * round trip but cannot talk it out of refusing. Handing in a precomputed
+     * verdict is the one thing this deliberately does not allow: it would let a
+     * dispatch path opt out of the breaker, which is the bug the choke point
+     * exists to make impossible.
+     */
+    execMemo?: ExecutionReadMemo;
   },
 ): Promise<number | null> {
   const [taskRow] = await db
@@ -418,7 +432,10 @@ export async function dispatchCloudRunForTask(
   // trigger. A human dispatch (`force`) overrides, exactly as it always did.
   if (!params.force) {
     const backoff = assessRerunBackoff(
-      (await runtimeService.listByTask(params.taskId)).map((e) => e.toPlain()),
+      // Same rows either way — the memo only decides whether they cost a query.
+      params.execMemo
+        ? await params.execMemo.listByTask(params.taskId)
+        : (await runtimeService.listByTask(params.taskId)).map((e) => e.toPlain()),
       Date.now(),
     );
     if (backoff.blockedBy) {

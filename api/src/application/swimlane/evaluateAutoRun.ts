@@ -27,6 +27,7 @@ import { isUnapprovedFeedbackTask } from '../feedback/feedbackSpec';
 import { isReviewLane } from '../task/taskLifecycle';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
+import type { ExecutionReadMemo } from '../runtime/executionReadMemo';
 
 /** Parse a swimlane assignment's `required_capabilities` JSON-text column. */
 export function parseRequiredCapabilities(raw: string | null | undefined): string[] {
@@ -562,6 +563,13 @@ export async function evaluateTaskAutoRun(
     tenantTokens?: TenantTokenVerdict;
     /** Serves the token gate's tenant-stable lookups through the read-through cache. */
     env?: Env;
+    /**
+     * Request-scoped memo of the ticket's execution rows (DISP-R1). When the caller
+     * will dispatch straight after this evaluation, passing one makes the two share
+     * a single query instead of issuing the same one twice. It shares ROWS only —
+     * the dispatcher re-derives the breaker verdict from them itself.
+     */
+    execMemo?: ExecutionReadMemo;
   },
 ): Promise<AutoRunEvaluation> {
   const [taskRow] = await db
@@ -752,7 +760,7 @@ export async function evaluateTaskAutoRun(
       db, runtimeService, args, status, assignedAgentRef, gate, staffedAgentRefs,
       agents: managedAgents, managedNoRole: !managedRole,
       managedLaneUnconfigured: !managedRole && managedLaneTier === 'none',
-      lifecycleManaged: true, managedRole, unfilledRoleKeys,
+      lifecycleManaged: true, managedRole, unfilledRoleKeys, execMemo: args.execMemo,
     });
   }
 
@@ -778,7 +786,7 @@ export async function evaluateTaskAutoRun(
     db, runtimeService, args, status, assignedAgentRef, gate, staffedAgentRefs,
     agents: withOwnerAgentFallback(qualifiedLaneAgents, { agentRef: ownerFallbackRef }),
     managedNoRole: false, managedLaneUnconfigured: false,
-    lifecycleManaged: false, managedRole: null, unfilledRoleKeys: [],
+    lifecycleManaged: false, managedRole: null, unfilledRoleKeys: [], execMemo: args.execMemo,
   });
 }
 
@@ -807,6 +815,8 @@ async function finishEvaluation(input: {
   lifecycleManaged: boolean;
   managedRole: ManagedRoleAttribution | null;
   unfilledRoleKeys: string[];
+  /** Request-scoped execution-row memo shared with the dispatch that follows. */
+  execMemo?: ExecutionReadMemo;
 }): Promise<AutoRunEvaluation> {
   const { db, runtimeService, args, status, gate, agents } = input;
 
@@ -819,10 +829,15 @@ async function finishEvaluation(input: {
     ? { agentRef: forced.agentRef, ...(forced.model ? { model: forced.model } : {}) }
     : null;
 
-  const execs = await runtimeService.listByTask(args.taskId);
   // Newest-first (findByTask orders createdAt DESC) — reused for the live-run check
   // AND the consecutive-failure streak that drives the run_cap_exhausted breaker.
-  const plainExecs = execs.map((e) => e.toPlain());
+  //
+  // Read through the caller's memo when there is one, so the dispatch that follows
+  // this evaluation reuses these exact rows rather than issuing the identical query
+  // again (DISP-R1). Absent a memo this is the same single query it always was.
+  const plainExecs = input.execMemo
+    ? await input.execMemo.listByTask(args.taskId)
+    : (await runtimeService.listByTask(args.taskId)).map((e) => e.toPlain());
   const liveRow = plainExecs.find((e) => ACTIVE_STATUSES.has(e.status));
   const liveExecution = liveRow ? { id: liveRow.id, status: liveRow.status } : null;
 

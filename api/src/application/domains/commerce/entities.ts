@@ -28,6 +28,10 @@ import {
   templateLicenses,
   whitelabelTenants,
 } from '../../../infrastructure/database/schema/commerce';
+// `engagement_milestones` is declared in the canvas context (it hangs off the
+// freelance engagement there) but it is a COMMERCE object — what was sold, and
+// what has to be delivered for the money to move.
+import { engagementMilestones } from '../../../infrastructure/database/schema/canvas';
 import { defineDomainEntities, entity } from '../entityDefinition';
 
 export const COMMERCE_ENTITIES = defineDomainEntities('commerce', [
@@ -63,4 +67,16 @@ export const COMMERCE_ENTITIES = defineDomainEntities('commerce', [
    *  those invariants. Not registered: a register entry is read on the proposal
    *  it belongs to, not navigated to as an object of its own. */
   entity(rfpRisks, { readOnly: true }),
+  /**
+   * A fixed-price milestone on a freelance engagement (migration 0924).
+   *
+   * A real object: it has a title, an amount, a due date and a lifecycle a person
+   * navigates to and acts on — the reason it was uncovered is that the escrow work
+   * landed the table before the catalog entry, not that it resists the generic
+   * path. READ-ONLY here because the milestone's state IS the escrow's state:
+   * `status` moves only through submit / approve / release, each of which moves
+   * money. A generic PATCH that could set `status = 'released'` would release a
+   * payment with no release behind it.
+   */
+  entity(engagementMilestones, { kind: 'milestone', readOnly: true }),
 ]);

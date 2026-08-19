@@ -1,3 +1,289 @@
+## ✅ RESOLVED 2026-08-19 — §7 Insights & Audits: AI-Impact parity (AIIMP-1..5, INS-HUB-1, QUAL-7/8, project scope) and the three dispatch-backpressure residuals
+
+Two whole roadmap blocks, worked end to end. They shared a shape worth naming: in almost
+every case the DATA already existed and the thing reading it had quietly substituted
+something else — an engagement score standing in for a survey, CI-green standing in for
+adoption, a cycle-time estimate standing in for the timesheets sitting right there. The
+work was mostly deleting substitutions, not adding collection.
+
+### AIIMP-1 · Seven tables declared inside the features that queried them
+
+`devex_survey_templates` / `devex_campaigns` / `devex_responses`
+(`application/devex/devexSurveys.ts`), `rd_tax_credit_config` / `finops_soc_controls` /
+`audit_report_runs` (`application/finops/finopsTables.ts`) and `recommendation_dismissals`
+(`application/insights/recommendationsEngine.ts`) each declared their own `pgTable` on the
+reasoning that a feature owns its table. The cost was concrete: the application layer
+declared DDL and imported the infrastructure barrel to reference `tenants`;
+`schema.tables.test.ts` — which renders SQL for every exported table and is what keeps the
+circular context imports honest — never saw them; `drizzle-kit` did not generate their DDL;
+and a table name could collide with a canonical one unnoticed, which is exactly what
+`finops_soc_controls` did against `soc_controls` and what migration 0254 had to repair.
+
+All seven now live in `schema/governance.ts` beside `ai_tool_adoption`,
+`industry_benchmarks` and `saved_queries` — the insights/analytics cluster. The DevEx
+vocabulary they are typed against moved to `domain/devex/surveys.ts`, so a question type
+means the same thing to the validator and to the column it is stored in. The finops
+`socControls` export is now `finopsSocControls`, which is what the barrel's
+duplicate-name test would have demanded anyway. No DDL changed — the tables were always
+real; only the declarations moved.
+
+### AIIMP-2 · SPACE Satisfaction was measuring throughput and calling it well-being
+
+`spaceMetrics.ts` scored the **S** of SPACE from `member_metrics_period.engagement_score`,
+and its own header admitted the substitution: *"DevEx survey data, when present, would
+override this"*. It never did. The survey framework shipped in 0229, tenants answered real
+questions about how the work feels, and the one lens whose entire subject is that
+dimension kept reading a throughput-derived number. A team could report falling
+satisfaction in a survey while SPACE showed it rising, because the two were measuring
+unrelated things under one name.
+
+The survey now wins whenever anyone has answered, and the proxy survives only as the
+fallback for when nobody has. Critically, the dimension **says which it used**: `source`
+is `'survey' | 'engagement' | null`, the card's subtitle changes with it, and the figures
+change too (respondents + eNPS for a survey, scored members for the proxy). A proxy shown
+as a survey result is worse than no number.
+
+Project grain needed schema (**migration 0929**): `devex_campaigns.project_id`, NULL
+keeping the existing workspace-wide meaning. `computeDevexInsights` takes a strict project
+filter — a workspace-wide campaign is evidence about the workspace, not about one team, so
+it is never folded in — and absent project campaigns the lens reports no signal rather
+than a borrowed one. The reduction of a DevEx lens to a satisfaction reading is now ONE
+function (`devexSatisfaction`), because the People lens was computing it inline and SPACE
+was about to compute its own.
+
+### AIIMP-3 · The query mapper answered questions it had not understood
+
+`parseIntent` mapped a question to one whitelisted metric by keyword, and anything it did
+not recognise fell through to `finance.spend` — and was then answered, confidently, with a
+dollar figure. *"How is uptime looking?"* returned money. Nine of the twenty registered
+metrics had no rule at all, so every question about uptime, MTTR, incidents, attrition,
+satisfaction, tokens, alerts or the R&D ratio hit that path.
+
+Three changes, in order of how much they matter:
+
+1. **The parse now reports whether it matched.** `source: 'keyword' | 'llm' | 'default'`,
+   and a `'default'` answer says so — in the explanation sentence and above the number in
+   the Ask box — instead of presenting the fallback as the answer.
+2. **Nine new keyword rules** cover the metrics that had none, ordered after the finance
+   rules so *"what did incidents cost us"* stays a spend question while *"how many
+   incidents"* is not.
+3. **An optional gateway-LLM refinement**, consulted ONLY for a question the keywords
+   missed. It returns a metric KEY, validated against `isMetricKey` before use — prose, an
+   invented key and an instruction smuggled through the question all fail the same check —
+   so it can pick a different whitelisted metric and can never widen the surface. Absent,
+   erroring or declining, the deterministic answer stands. `nlQuery.test.ts` pins all
+   three properties, including that a matched question never reaches the model.
+
+### AIIMP-4 · One cohort, and an adoption metric that moved the wrong way
+
+The Industry Benchmarking lens was cohort-aware everywhere except where it mattered:
+`BENCHMARK_INDUSTRIES` held a single entry, so a fintech, an agency and an enterprise IT
+group were all ranked against SaaS norms — as a percentile, with a rating attached.
+**Migration 0932** seeds five more cohorts (fintech, ecommerce, healthtech,
+agency_services, enterprise_it) across three size bands, scaled from the 0230 anchors along
+the axes those industries are known to differ on, with `source` saying so on every row.
+The pickable list is now DERIVED from the seeded rows (`/benchmarking/cohorts`), not a
+constant that has to be edited in lockstep with each migration and was not; and the profile
+PATCH rejects a cohort with no distribution, which otherwise renders a table of dashes
+under a confident cohort heading.
+
+`ai_adoption_pct` was `ciGreenRatePct` — the share of AI runs that came out of CI green —
+while the cohort percentiles it was ranked against were seeded for *"% of delivered work
+touched by AI"*. Those move in opposite directions in the case that matters: a team rolling
+AI out across half its board while shaking out CI scored LOWER than a team with one
+flawless agent on one ticket. `metrics/aiAdoption.ts` measures the definition the cohort
+expects — of the tickets completed in the window, how many had at least one live agent run
+— in one aggregate, with rehearsal runs excluded and `null` (never 0) when nothing shipped.
+
+Also fixed in passing: the profile PATCH's invalidation loop deleted
+`insights:bench:t:<id>:d:<7|30|90>`, keys that stopped existing when the project scope
+joined the read key. Changing cohort left the OLD cohort's rankings cached for the full
+TTL. A window × project keyspace cannot be enumerated for deletion, so it is a version
+token now, like finance and workforce-metrics.
+
+### AIIMP-5 · Two functions named `taskEffortHours` that disagreed about timesheets
+
+`metrics/laborCost.ts` preferred REAL logged time (`time_entries`, 0245) and fell back to a
+cycle-time estimate. `insights/allocationInsights.ts` was cycle time and nothing else — it
+never looked at `time_entries` at all. Same name, contradictory answers, and everything
+downstream of the second one ignored the timesheets tenants had actually filled in: the
+investment-allocation mix, the capitalization report's FTE-months, and the R&D tax-credit
+QRE base. The three numbers most likely to end up in front of an accountant were built
+from *"when was the ticket opened, when was it closed"*.
+
+`metrics/effortHours.ts` is now the one rule. The two callers differ in ways that are real,
+so those are parameters rather than forks — labour attribution caps a task at one work-day
+and prices only finished work; the allocation mix caps at 30 days and counts work in
+flight. A logged-time answer ignores both, because minutes someone recorded are not an
+estimate to be clamped.
+
+With that, the allocation engine also prices effort at each member's OWN rate
+(`member_profiles.cost_rate_usd_cents`) rather than one blended number for an intern and a
+principal, and carries `ratedHours` / `loggedHours` so the R&D report's blended rate covers
+exactly the residue the tenant has no compensation data for instead of overwriting the data
+it does. `RdTaxCreditReport` reports `laborBasis` (`measured | mixed | estimated`) and
+`measuredEffortPct`, because a credit base built from timesheets and salary bands and one
+built from two estimates print the same number and are not the same evidence.
+
+### INS-HUB-1 · Verified, not implemented
+
+`deliveryLenses.ts` no longer exists anywhere in the repo — the Delivery-hub migration
+settled and split it — and the frontend typecheck is clean. There were no sibling-import
+TS2307s to fix.
+
+### QUAL-7 · The ingest key could not be rotated
+
+`error_collectors.key_hash` was written once, at creation, and the raw `bfq_…` key shown
+once. Right for minting, and it left no way to REPLACE a key: one pasted into a public repo
+or mailed to a contractor could only be retired by deleting the collector, which cascades
+away its integrations, mapping rules and error groups. The credential could not be changed
+without destroying the data it collected.
+
+**Migration 0928** adds a grace slot (`previous_key_hash`, `previous_key_expires_at`,
+`key_rotated_at`) because an ingest key lives inside already-deployed software — a browser
+bundle, a container image, an OTLP exporter config — so an instant cutover would silently
+drop every event until each of those redeploys, which is why an un-rotatable key stays
+un-rotated rather than being replaced. `POST /collectors/:id/rotate-key` mints a new key
+and demotes the old hash for `graceHours` (default 72, `0` = immediate revoke for the
+leaked-credential case, capped at 30 days). The expiry is a PREDICATE on the resolver's
+read, not a swept column: no cron has to run for the old key to die.
+
+### QUAL-8 · Unroutable events were dropped in silence
+
+`ingestErrorEvents` returned `{ accepted, dropped }`, and `dropped` folded together an
+event that threw mid-upsert and an event a tenant-level collector could not route anywhere.
+The second is a CONFIGURATION defect with a fix the operator can perform, and its only
+trace was an HTTP 202 body that no browser, SDK or OTLP exporter surfaces — so a collector
+binning its entire stream looked exactly like a quiet one.
+
+`unmapped` is now its own counter, persisted onto the collector
+(`unmapped_event_count`, `last_unmapped_at`, migration 0928) because the events themselves
+are never stored — there is no project to store them against — so this is the only durable
+evidence they arrived. The collector list surfaces it with the fix that applies.
+
+While in there, all three of that file's tenant-owned writes moved onto `scopedToTenant`,
+taking `ingestEngine.ts` from 2 unscoped statements to 0 in the ratchet.
+
+### Project scope · Endpoints that took only `days`
+
+`computeMemberMetrics`, `computeDora` and `computeEngineeringInsights` had ALL taken a
+`projectId` since they were written. The routes never passed it, so selecting a project
+moved the switcher and changed nothing on the Workforce and AI-effectiveness surfaces.
+Now wired through `/api/members/metrics`, `/api/members/:kind/:ref/metrics`,
+`/api/members/dora`, `/api/emp-metrics/metrics/export`, `/api/insights/engineering`,
+`/api/devex/insights` and `/api/insights/quality`, with the project folded into every cache
+key — without it the first read would have pinned one project's numbers for every other.
+
+Two things fell out of doing it properly:
+
+* `memberMetricsCacheKey`/`doraCacheKey` now take the project. `runDueCeremonies` had been
+  appending its own `:p:${projectId}` suffix to the key builder's output, which worked
+  only for as long as that one caller remembered to.
+* The metrics SNAPSHOT (`member_metrics_period`) is written only for the workspace-wide
+  read. That table is tenant-grained by definition; snapshotting a project-narrowed set
+  would have overwritten each member's workspace history with one project's slice of it,
+  and every consumer — retros, SPACE efficiency, the engagement proxy — would then be
+  reading whichever project happened to be selected last.
+* `computeQualityInsights` narrows the two sources that HAVE a project (incidents,
+  defects) and REPORTS that support tickets and uptime samples stay workspace-wide, rather
+  than inventing a project association for them.
+
+Also: ten copies of `Number.isInteger(n) && n > 0` across the route layer, under six
+different names, collapsed into `presentation/routes/queryParams.ts`.
+
+### DISP-R1 · The breaker cost a second `listByTask` per lane-trigger dispatch
+
+`evaluateTaskAutoRun` loads the ticket's executions to check for a live run and to report
+the breaker state; `dispatchCloudRunForTask` then loaded the same list again to enforce it.
+The obvious fix — let the caller hand in the verdict it already computed — reintroduces
+exactly the defect the choke point removed: a dispatch path could then supply "not blocked"
+and the breaker would believe it (measured cost of that class of bug on task 467: 134 runs,
+all dying on the same cap message, on a five-minute cadence).
+
+`runtime/executionReadMemo.ts` shares the ROWS instead. The dispatcher still calls
+`assessRerunBackoff` on them itself, every time, so a caller can spare it a round trip but
+cannot change its mind. It is not a cache — no TTL, no store, a fresh Map per dispatch
+attempt, and no way to make one that outlives its request.
+
+### DISP-R2 · Migration 0369 could not tell a default from a decision
+
+0369 flipped every `key='in_review' AND gate='human'` lane to `auto` — the seeded default
+had switched autonomy off one lane short of Done on every board ever created — and its own
+header had to admit it could not spare the teams who had chosen that gate deliberately.
+Nothing recorded which.
+
+**Migration 0933** adds `swimlanes.gate_source`, written `'operator'` by every path where a
+person's choice reaches the gate: the board-configuration PATCH, a lane CREATED with an
+explicit gate, and applying a kanban template (someone picked that template for that
+board). Existing rows default to `'seed'`, which is the honest reading — for every lane
+that exists today we genuinely do not know, and provenance cannot be backfilled because
+the information was never recorded.
+
+### DISP-R3 · Per-ticket telemetry for a workspace-wide condition
+
+Being over the monthly cloud-run cap stops autonomy on every ticket on every board,
+identically. Discovering it per ticket inside `dispatchCloudRunForTask` meant an over-cap
+tenant with 200 active tickets wrote 200 `auto_run_skipped` rows per tick — each with its
+own 6h re-affirm marker — to say one thing once, on a database held deliberately under
+$5/month. It also could not be READ as one thing: a board showed 200 stalled cards with no
+way to see the single cause.
+
+`runAutonomousExecutionSweep` now checks the cap ONCE per tenant per tick, before fanning
+out, and emits ONE tenant-scoped event (`recordTenantAutoRunSkip`, session key
+`tenant:<id>`, so it lands on no ticket's timeline). Deliberately in the sweep and not in
+`evaluateTaskAutoRun`, which runs per ticket on a sweep that evaluates hundreds; the
+per-dispatch check inside the dispatcher stays exactly where it is, because this gate is an
+optimisation and a telemetry fix, never the enforcement point. A cap read that throws falls
+through to the dispatcher, as before.
+
+The surface that unblocks: `GET /api/boards` and `GET /api/boards/:id` carry the workspace
+allowance through one shared cached reader, and `WorkspaceAllowanceBanner` states it once
+above the board. It hides itself when the workspace is inside its allowance AND when the
+meter could not be read — "we could not tell" is not "you are over".
+
+### Data-driven surfaces · The worker's `/api/projects` was retired, not repaired
+
+The roadmap offered "add the `FILTER` aggregate or retire the worker path" for the missing
+health breakdown, and separately noted that its PUT ignored `dueDate`. Reading it settled
+the choice: `GET /` was `SELECT * FROM projects` with **no tenant predicate** — every
+authenticated caller could read every workspace's projects — and `GET/PUT/DELETE /:id`
+matched on id alone with no ownership check. It was a drifted copy of a route the API
+already serves correctly, reached only when `NEXT_PUBLIC_WORKER_URL` is set. Rebuilding
+tenant scoping, health aggregates and field coverage a second time would only re-create the
+drift, so the CRUD is gone, the frontend sends every project call to the API, and the
+worker module is now just the scaffold helper the files router uses. IDE **files** still
+follow the worker — that path is R2 storage, which is genuinely its job.
+
+Also closed there: the capitalization report downloads as CSV
+(`GET /api/insights/allocation/history/export`) — the monthly claim and the epic evidence
+behind it in one file, carrying `labor_usd` and `logged_hours` per epic so a reader can
+tell a figure built from timesheets from one built from estimates. Deliberately uncached: a
+download handed to an auditor has to be the numbers as they are now.
+
+**Verified stale:** "health visuals are `ProjectCard`-only (add a compact cell to
+`ProjectTable`)" — `ProjectHealthBadge` has been in `ProjectTable`'s health column for some
+time, reading the same `computeProjectHealth` the gauges do.
+
+### Two pre-existing red tests, fixed on the way past
+
+`entityCatalog.test.ts` was failing on `main` for reasons unrelated to this work. `finance`
+registered `shareClass`, `equityGrant` and `convertible` while its seat manifest listed
+none of them — a seat that could not route to objects it had already made navigable — and
+four tables had accumulated past the coverage ceiling. Each was adjudicated rather than
+counted: `pay_runs` was already registering into the kernel `objects` table via its own
+`object_id` while having no entity definition (navigable by id, invisible to the generic
+layer — the exact halfway state that test exists to catch) and `engagement_milestones` is a
+titled, dated, priced object, so both are now read-only entities; `collection_actions` is
+an append-only (invoice, rung) log and `repo_delivery_status` is a 1:1 derived-state
+extension of `project_repositories`, so both take documented exemptions.
+
+**Migrations:** 0928 (collector key rotation + unmapped counter), 0929 (devex campaign
+project scope), 0932 (benchmark cohorts), 0933 (swimlane gate provenance).
+**Verification:** 24/24 API guards, 6,716 API tests, 59 worker tests, API + frontend
+typechecks all green.
+
+---
+
 ## ✅ RESOLVED 2026-08-19 — Four residuals closed: real Codex streaming, activatable board/marketing triggers, a swept build verdict, and a self-serve publisher domain
 
 Four Gap Register sections, worked end to end. Each had the same shape: a control the

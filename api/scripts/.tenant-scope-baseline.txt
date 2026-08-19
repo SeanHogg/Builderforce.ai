@@ -73,7 +73,6 @@ application/project/computeProject360.ts:2
 application/qa/QaFindingRouter.ts:4
 application/qa/QaQualityService.ts:10
 application/qa/runQaExplorationSweep.ts:2
-application/quality/ingestEngine.ts:2
 application/reports/runDueReports.ts:2
 application/repos/recordPullRequestRow.ts:4
 application/runtime/autonomousExecutionSweep.ts:1

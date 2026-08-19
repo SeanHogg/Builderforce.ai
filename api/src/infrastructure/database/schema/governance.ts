@@ -778,6 +778,10 @@ export const devexCampaigns = pgTable('devex_campaigns', {
   id:          serial('id').primaryKey(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  /** NULL = a workspace-wide campaign (the original and still the default). Set =
+   *  the campaign asks ONE project's team, which is what lets the project-grained
+   *  SPACE lens report a real Satisfaction score instead of an engagement proxy. */
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   templateId:  integer('template_id').references(() => devexSurveyTemplates.id, { onDelete: 'set null' }),
   title:       varchar('title', { length: 200 }).notNull(),
   periodMonth: varchar('period_month', { length: 7 }),

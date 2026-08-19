@@ -21,6 +21,7 @@ import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { computeFingerprint, eventTitle, type NormalizedErrorEvent } from './errorSpec';
 import { enforceErrorEventsCap } from './errorEventsLedger';
 import { resolveEventProjectId, type CollectorRef, type MappingRule } from './errorMapping';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 /** Version key for a project's cached error-group lists (folded into list cache keys). */
 export function qualityGroupsVersionKey(projectId: number): string {
@@ -35,6 +36,18 @@ export function qualityGroupsTenantVersionKey(tenantId: number): string {
 export interface IngestResult {
   accepted: number;
   dropped: number;
+  /**
+   * The subset of `dropped` that was UNROUTABLE — a tenant-level collector saw
+   * the event, no mapping rule matched it and no `defaultProjectId` is set.
+   *
+   * Reported separately because it is a different KIND of fact from the rest of
+   * `dropped` (an event that threw mid-upsert): it names a configuration the
+   * operator can fix, it is not transient, and it is invisible everywhere else —
+   * the caller's HTTP response is the only place the old lumped number appeared,
+   * and no operator reads an ingest 202 body. It is also persisted onto the
+   * collector (`unmapped_event_count`) so the collector list can say it.
+   */
+  unmapped: number;
   /** Set when the monthly cap rejected the batch. */
   capExceeded?: boolean;
 }
@@ -52,7 +65,7 @@ export async function ingestErrorEvents(
   events: NormalizedErrorEvent[],
   rules: MappingRule[] = [],
 ): Promise<IngestResult> {
-  if (events.length === 0) return { accepted: 0, dropped: 0 };
+  if (events.length === 0) return { accepted: 0, dropped: 0, unmapped: 0 };
 
   // Monthly allowance gate — graceful backpressure: stored data stays usable,
   // only NEW ingestion stops. Fails open on a metering error (see the ledger).
@@ -60,7 +73,7 @@ export async function ingestErrorEvents(
   // 5-min read-through cache. Without it this ingest path — the hottest one in the
   // system — ran an extra uncached membership query per batch on every capped tenant.
   const cap = await enforceErrorEventsCap(db, collector.tenantId, env);
-  if (!cap.allowed) return { accepted: 0, dropped: events.length, capExceeded: true };
+  if (!cap.allowed) return { accepted: 0, dropped: events.length, unmapped: 0, capExceeded: true };
 
   const now = new Date();
   const eventRows: Array<typeof errorEvents.$inferInsert> = [];
@@ -70,11 +83,13 @@ export async function ingestErrorEvents(
   // Projects touched this batch (a tenant collector can fan across several).
   const touchedProjects = new Set<number>();
   let dropped = 0;
+  // Dropped BECAUSE nothing routes it, as opposed to dropped because it threw.
+  let unmapped = 0;
 
   for (const e of events) {
     try {
       const projectId = resolveEventProjectId(e, collector, rules);
-      if (projectId == null) { dropped++; continue; } // unmappable tenant-level event
+      if (projectId == null) { dropped++; unmapped++; continue; } // unmappable tenant-level event
       const fingerprint = await computeFingerprint(e);
       const seenAt = parseTs(e.timestamp) ?? now;
       const level = e.level;
@@ -147,6 +162,33 @@ export async function ingestErrorEvents(
     }
   }
 
+  // QUAL-8 — the discard is recorded ON THE COLLECTOR, not only in the response
+  // body. This is the ONLY durable trace an unroutable event leaves: the event
+  // itself is never stored (there is no project to store it against), so without
+  // this the operator's evidence is an HTTP 202 payload that no browser, SDK or
+  // OTLP exporter surfaces. A collector quietly binning its whole stream and a
+  // collector nobody is sending to look identical otherwise.
+  //
+  // Its own statement, outside the `eventRows.length` branch: a batch can be
+  // 100% unroutable, which is precisely the case worth reporting and precisely
+  // the case where no event row exists to hang the write off. Best-effort — a
+  // failed counter must never fail an ingest.
+  if (unmapped > 0 && collector.id != null) {
+    await db
+      .update(errorCollectors)
+      .set({
+        unmappedEventCount: sql`${errorCollectors.unmappedEventCount} + ${unmapped}`,
+        lastUnmappedAt: now,
+      })
+      // Tenant-scoped even though the id is a uuid: the predicate is what makes
+      // "this collector belongs to this tenant" checkable rather than assumed, and
+      // `collector` arrives from a public ingest route.
+      .where(scopedToTenant(errorCollectors, collector.tenantId, eq(errorCollectors.id, collector.id)))
+      .catch((error) => {
+        reportCaughtError(error, { source: 'application/quality/ingestEngine.ts', operation: 'ingestErrorEvents', context: { logMessage: '[quality-ingest] unmapped counter bump failed', details: { collectorId: collector.id, unmapped } } });
+      });
+  }
+
   if (eventRows.length > 0) {
     try {
       await db.insert(errorEvents).values(eventRows);
@@ -156,11 +198,13 @@ export async function ingestErrorEvents(
     
       reportCaughtError(error, { source: "application/quality/ingestEngine.ts", operation: "ingestErrorEvents" });
     }
-    await bumpGroupUserCounts(db, userPairs, now);
+    await bumpGroupUserCounts(db, collector.tenantId, userPairs, now);
     // A collector-less source (id: null — e.g. a manual "Report error") has no
     // collector row whose last-event timestamp to touch.
     if (collector.id != null) {
-      await db.update(errorCollectors).set({ lastEventAt: now }).where(eq(errorCollectors.id, collector.id)).catch((error) => {
+      await db.update(errorCollectors).set({ lastEventAt: now })
+        .where(scopedToTenant(errorCollectors, collector.tenantId, eq(errorCollectors.id, collector.id)))
+        .catch((error) => {
         reportCaughtError(error, { source: "application/quality/ingestEngine.ts", operation: "ingestErrorEvents" });
       });
     }
@@ -168,7 +212,7 @@ export async function ingestErrorEvents(
     await bumpCacheVersion(env, qualityGroupsTenantVersionKey(collector.tenantId));
   }
 
-  return { accepted: eventRows.length, dropped };
+  return { accepted: eventRows.length, dropped, unmapped };
 }
 
 /**
@@ -179,6 +223,7 @@ export async function ingestErrorEvents(
  */
 async function bumpGroupUserCounts(
   db: Db,
+  tenantId: number,
   pairs: Array<{ groupId: string; userKey: string }>,
   now: Date,
 ): Promise<void> {
@@ -197,7 +242,7 @@ async function bumpGroupUserCounts(
       await db
         .update(errorGroups)
         .set({ userCount: sql`${errorGroups.userCount} + ${delta}` })
-        .where(eq(errorGroups.id, groupId));
+        .where(scopedToTenant(errorGroups, tenantId, eq(errorGroups.id, groupId)));
     }
   } catch (error) {
     // Affected-user count is non-critical; never fail the ingest over it.

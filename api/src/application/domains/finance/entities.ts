@@ -31,6 +31,8 @@ import {
   roiTimelineEntries,
   savedCalculations,
   scenarioAssumptions,
+  collectionActions,
+  payRuns,
   shareClasses,
   timesheets,
 } from '../../../infrastructure/database/schema/finance';
@@ -74,6 +76,22 @@ export const FINANCE_ENTITIES = defineDomainEntities('finance', [
    * because a person navigates to it.
    */
   entity(shareClasses, { kind: 'shareClass', registers: true }),
+  /**
+   * A payroll run (0926). It already carries an `object_id` — it was registering
+   * into the kernel's `objects` table while having no entity definition, which is
+   * the halfway state the catalog exists to prevent: navigable by id, invisible to
+   * the generic layer. READ-ONLY because the bureau or connector owns the figures;
+   * the one thing a person legitimately does to a run here is look at it, and a
+   * generic PATCH over a pay run edits what somebody was paid.
+   */
+  entity(payRuns, { kind: 'payRun', registers: true, readOnly: true }),
+  /**
+   * A dunning-ladder action is an APPEND-ONLY log entry keyed by (invoice, rung),
+   * not an object: it has no title, no lifecycle of its own, and nothing a person
+   * opens. It is deliberately NOT registered — the invoice is the object, and this
+   * is a fact about what was sent chasing it.
+   */
+  collectionActions,
   /**
    * A grant, a convertible and an event are READ-ONLY here, and the reason is not
    * symmetry with `bills` — it is that a generic PATCH over any of the three

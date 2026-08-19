@@ -341,7 +341,12 @@ export class KanbanTemplateService {
           .update(swimlanes)
           .set({
             name: lane.name, position: lane.position, isTerminal: lane.isTerminal,
-            gate: lane.gate, requirementGate: lane.requirementGate, updatedAt: now,
+            // APPLYING A TEMPLATE IS AN OPERATOR CHOICE (DISP-R2). Someone picked
+            // this template for this board; its gates are as deliberate as one set
+            // by hand, and a future default change must not overwrite them the way
+            // 0369 had to overwrite the seeded ones.
+            gate: lane.gate, gateSource: 'operator',
+            requirementGate: lane.requirementGate, updatedAt: now,
           })
           .where(eq(swimlanes.id, laneId));
       } else {
@@ -349,7 +354,7 @@ export class KanbanTemplateService {
         await this.db.insert(swimlanes).values({
           id: laneId, tenantId, segmentId: realBoard.segmentId ?? null, boardId,
           key: lane.key, name: lane.name, position: lane.position, isTerminal: lane.isTerminal,
-          gate: lane.gate, requirementGate: lane.requirementGate,
+          gate: lane.gate, gateSource: 'operator', requirementGate: lane.requirementGate,
           executionMode: 'sequential', failurePolicy: 'needs_attention',
           createdAt: now, updatedAt: now,
         });
