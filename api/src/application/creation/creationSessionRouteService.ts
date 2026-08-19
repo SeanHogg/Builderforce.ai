@@ -263,7 +263,7 @@ export function describeClaimBatchFailure(
     statementTable: index >= 0 ? planned[index]!.table : null,
     statementRows: index >= 0 ? planned[index]!.rows : null,
     statementCount: planned.length,
-    plan: planned.map((write) => `${write.table}x${write.rows}`),
+    plan: planned.map((write) => `${write.table}:${write.rows}`),
   };
 }
 

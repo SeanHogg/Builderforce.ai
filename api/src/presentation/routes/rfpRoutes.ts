@@ -17,7 +17,7 @@
  *   GET    /risks                     risk/dependency register + roll-up        [viewer]
  *   PATCH  /risks/:id                 register lifecycle (status/owner/detail)  [developer]
  *   GET    /brand                     the responder tenant's own palette        [viewer]
- *   PUT    /brand                     set it                                    [admin]
+ *   PUT    /brand                     set it                                    [manager]
  *   POST   /brand/extract             derive a palette from a website URL       [developer]
  *   POST   /portfolio-match           rank similar projects for requirements    [viewer]
  */
@@ -288,7 +288,7 @@ export function createRfpRoutes(db: Db, toolService: ToolService, auditRunner: A
     return c.json({ palette: normalizePalette(row?.brandPalette ?? null, DEFAULT_TENANT_PALETTE), isDefault: !row?.brandPalette });
   });
 
-  router.put('/brand', requireRole(TenantRole.ADMIN), async (c) => {
+  router.put('/brand', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const body = await c.req.json<{ palette?: unknown }>().catch(() => ({} as { palette?: unknown }));
     // Normalised on the way in, so an invalid hex can never reach a rendered

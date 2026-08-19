@@ -64,13 +64,23 @@ export interface CanvasDeviceFrameProps {
    * `window` would otherwise each act on the other's page switch.
    */
   frameRef?: RefObject<HTMLIFrameElement | null>;
+  /**
+   * Render at the container's own size instead of at a device width.
+   *
+   * For an embed whose content is a PLAYER rather than a responsive layout — a
+   * video, a map — device scaling is the wrong reading: the point of the device
+   * width is to make a page's own media queries fire, and a player has none.
+   * It exists so those embeds still go through this one sandboxed frame rather
+   * than each surface hand-rolling an `<iframe>` with its own security policy.
+   */
+  fill?: boolean;
   /** Overlays positioned against the wrapper — a loading note, a status strip. */
   children?: ReactNode;
 }
 
 export function CanvasDeviceFrame({
   title, viewport, srcDoc, src, sandbox, allow, referrerPolicy, loading,
-  reloadKey, onLoad, frameClassName, className, frameRef, children,
+  reloadKey, onLoad, frameClassName, className, frameRef, fill, children,
 }: CanvasDeviceFrameProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -82,12 +92,13 @@ export function CanvasDeviceFrame({
   // height is `100 / scale`, so a zero would resolve to an infinite height.
   useEffect(() => {
     const wrap = wrapRef.current;
+    if (fill) { setScale(1); return; }
     if (!wrap || typeof ResizeObserver === 'undefined') { setScale(1); return; }
     const measure = () => setScale(Math.min(1, wrap.clientWidth / width) || 1);
     const stop = observeResizeOnAnimationFrame(wrap, measure);
     measure();
     return stop;
-  }, [width]);
+  }, [width, fill]);
 
   return (
     <div
@@ -104,7 +115,7 @@ export function CanvasDeviceFrame({
         className={`${styles.deviceFrame} ${frameClassName ?? ''}`}
         title={title}
         sandbox={sandbox}
-        style={{ width, height: `${100 / scale}%`, transform: `scale(${scale})` }}
+        style={fill ? { width: '100%', height: '100%' } : { width, height: `${100 / scale}%`, transform: `scale(${scale})` }}
         {...(srcDoc === undefined ? {} : { srcDoc })}
         {...(src === undefined ? {} : { src })}
         {...(allow === undefined ? {} : { allow })}

@@ -3693,7 +3693,9 @@
       "peopleStatement": "Sie wird bereits genutzt.",
       "peopleNobodyYet": "Es war noch niemand da.",
       "peopleApproximate": "Die Zahlen sind Näherungswerte – sie werden gepuffert, bevor sie geschrieben werden."
-    }
+    },
+    "add_webpage": "Webseite",
+    "type_webpage": "Webseite"
   },
   "quality": {
     "title": "Produktqualität",
@@ -13860,7 +13862,6 @@
       "third_party": "Drittanbieter"
     },
     "downloadDoc": "Herunterladen",
-    "needAdmin": "Erfordert Administratorrolle",
     "downloadPdf": "PDF herunterladen",
     "preparingPdf": "PDF wird erstellt…",
     "registerStatusLabel": "Status im Register",
@@ -13897,7 +13898,8 @@
       "readFromLogoDone": "Farben aus dem Logo gelesen.",
       "readFailed": "Diese Farben konnten nicht gelesen werden – bitte manuell eingeben.",
       "candidates": "Weitere gefundene Farben – klicken Sie eine an, um sie als Primärfarbe zu setzen:"
-    }
+    },
+    "needManager": "Erfordert Manager-Rolle"
   },
   "planBadge": {
     "tier": {

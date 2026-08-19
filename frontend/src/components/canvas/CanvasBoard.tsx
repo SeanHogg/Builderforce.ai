@@ -1,28 +1,42 @@
 'use client';
 
 import { Icon } from '@/components/ui/Icon';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import {
   type CanvasModel,
   type CanvasBlock,
   type CanvasBlockType,
+  type WebPageBlock,
   defaultBlock,
   elapsedMs,
   remainingMs,
   STICKY_COLORS,
 } from './canvasModel';
+import { CanvasWebPage } from '@/components/creation-canvas/CanvasWebPage';
+import { CanvasDeviceFrame } from '@/components/creation-canvas/CanvasDeviceFrame';
+import type { CreationNodeData } from '@/components/creation-canvas/types';
 
 /**
  * Reusable, self-contained canvas board. Free-form, absolutely-positioned blocks
- * you can drag, resize, edit and delete — text, sticky notes, images, embedded
- * knowledge docs, and collaborative timer/stopwatch widgets.
+ * you can drag, resize, edit and delete — text, sticky notes, images, live web
+ * pages, embedded knowledge docs, and collaborative timer/stopwatch widgets.
  *
  * Fully controlled: it renders `value` and calls `onChange` with the next model
  * on every committed mutation (drag end, edit, widget control). The parent owns
  * persistence + realtime sync, so the SAME component backs the Knowledge editor's
  * canvas mode AND the Brain/Brainstorm slide-out without modification.
+ *
+ * ── NO IFRAME IS WRITTEN HERE ────────────────────────────────────────────────
+ * Both blocks that hold a remote document — `webpage` and an embeddable `video`
+ * URL — render through the creation canvas's own framing components rather than
+ * an `<iframe src>` written in this file. That is not tidiness: an iframe on a
+ * board is a security decision (which sandbox tokens, which `allow` features,
+ * which referrer policy), and this board had been making that decision a second
+ * time, differently, with no probe and no fallback for a page that refuses to be
+ * framed. `CanvasWebPage` owns the whole answer; `CanvasDeviceFrame` owns the
+ * element. This board only says WHICH of the two a block is.
  */
 export interface CanvasBoardProps {
   value: CanvasModel;
@@ -44,7 +58,7 @@ function fmt(ms: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-const ADD_TYPES: CanvasBlockType[] = ['text', 'sticky', 'image', 'video', 'file', 'embed', 'timer', 'stopwatch'];
+const ADD_TYPES: CanvasBlockType[] = ['text', 'sticky', 'image', 'video', 'webpage', 'file', 'embed', 'timer', 'stopwatch'];
 
 /** Treat a URL as a direct video file (use <video>) vs an embeddable page (<iframe>). */
 function isDirectVideo(url: string): boolean {
@@ -341,12 +355,19 @@ function BlockBody({
           // eslint-disable-next-line jsx-a11y/media-has-caption
           <video src={block.url} controls style={{ maxWidth: '100%', maxHeight: '100%', margin: 'auto' }} />
         ) : (
-          <iframe
-            src={block.url}
+          // An embeddable player, through the canvas's ONE frame element. `fill`
+          // rather than a device width because a player has no media queries to
+          // exercise — the device reading would only shrink the picture.
+          <CanvasDeviceFrame
             title={t('type_video')}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            style={{ width: '100%', height: '100%', border: 'none' }}
+            viewport="desktop"
+            fill
+            src={block.url}
+            sandbox="allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            referrerPolicy="no-referrer"
+            loading="lazy"
+            frameClassName="nodrag nowheel"
           />
         )
       ) : readOnly ? (
@@ -354,6 +375,9 @@ function BlockBody({
       ) : (
         <input value={block.url} placeholder={t('videoUrlPlaceholder')} onChange={(e) => onUpdate({ url: e.target.value.trim() })} style={inlineInput} />
       );
+
+    case 'webpage':
+      return <WebPageBody block={block} readOnly={readOnly} onUpdate={onUpdate} />;
 
     case 'file':
       return block.url ? (
@@ -497,6 +521,57 @@ const iconBtn: React.CSSProperties = {
   lineHeight: 1,
   padding: 0,
 };
+/**
+ * The live page block, rendered by the SAME panel the Creation Canvas uses.
+ *
+ * The panel is written against a creation-canvas object (`CreationNodeData`),
+ * because that is the model it writes its probe results back into. A block is a
+ * flatter shape with the same field NAMES, so the adapter is a projection in and
+ * a filtered patch out — not a second implementation of framing, probing, the
+ * reader fallback for a page that refuses to be framed, or the console strip.
+ *
+ * `kind: 'browser'` is what makes the panel treat the object as a live page; it
+ * is the vocabulary `canvasWebPage.ts` already owns, not a value invented here.
+ */
+function WebPageBody({ block, readOnly, onUpdate }: {
+  block: WebPageBlock;
+  readOnly: boolean;
+  onUpdate: (patch: Partial<CanvasBlock>) => void;
+}) {
+  const data = useMemo<CreationNodeData>(() => ({
+    kind: 'browser',
+    title: block.pageTitle || block.url || '',
+    url: block.url,
+    viewport: block.viewport,
+    content: block.content,
+    frameCheckedUrl: block.frameCheckedUrl,
+    frameable: block.frameable,
+    frameBlockedBy: block.frameBlockedBy,
+    pageTitle: block.pageTitle,
+    httpStatus: block.httpStatus,
+    fetchedAt: block.fetchedAt,
+  }), [block]);
+
+  // Only the fields the block actually stores are written back. The panel also
+  // emits its console report, which belongs to a preview of something the canvas
+  // BUILT — a pinned reference page has no build to report on.
+  const apply = useCallback((patch: Partial<CreationNodeData>) => {
+    const next: Partial<WebPageBlock> = {};
+    if (typeof patch.url === 'string') next.url = patch.url;
+    if (typeof patch.viewport === 'string') next.viewport = patch.viewport;
+    if (typeof patch.content === 'string') next.content = patch.content;
+    if (typeof patch.frameCheckedUrl === 'string') next.frameCheckedUrl = patch.frameCheckedUrl;
+    if (typeof patch.frameable === 'boolean') next.frameable = patch.frameable;
+    if (patch.frameBlockedBy === null || typeof patch.frameBlockedBy === 'string') next.frameBlockedBy = patch.frameBlockedBy;
+    if (patch.pageTitle === null || typeof patch.pageTitle === 'string') next.pageTitle = patch.pageTitle;
+    if (typeof patch.httpStatus === 'number') next.httpStatus = patch.httpStatus;
+    if (typeof patch.fetchedAt === 'string') next.fetchedAt = patch.fetchedAt;
+    if (Object.keys(next).length > 0) onUpdate(next as Partial<CanvasBlock>);
+  }, [onUpdate]);
+
+  return <CanvasWebPage data={data} {...(readOnly ? {} : { onEdit: apply })} />;
+}
+
 const inlineInput: React.CSSProperties = {
   width: '100%',
   margin: 'auto 0',

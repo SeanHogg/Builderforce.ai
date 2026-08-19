@@ -3693,7 +3693,9 @@
       "peopleStatement": "已经有人在使用它了。",
       "peopleNobodyYet": "还没有人来过。",
       "peopleApproximate": "数字为近似值——它们在写入前会先做缓冲。"
-    }
+    },
+    "add_webpage": "网页",
+    "type_webpage": "网页"
   },
   "quality": {
     "title": "产品质量",
@@ -13860,7 +13862,6 @@
       "third_party": "第三方"
     },
     "downloadDoc": "下载",
-    "needAdmin": "需要管理员角色",
     "downloadPdf": "下载 PDF",
     "preparingPdf": "正在生成 PDF…",
     "registerStatusLabel": "登记状态",
@@ -13897,7 +13898,8 @@
       "readFromLogoDone": "已从徽标读取配色。",
       "readFailed": "无法读取这些配色 — 请手动输入。",
       "candidates": "找到的其他颜色 — 点击其一设为主色："
-    }
+    },
+    "needManager": "需要经理角色"
   },
   "planBadge": {
     "tier": {

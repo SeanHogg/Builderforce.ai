@@ -3693,7 +3693,9 @@
       "peopleStatement": "Des gens l’utilisent.",
       "peopleNobodyYet": "Personne n’est encore venu.",
       "peopleApproximate": "Les chiffres sont approximatifs : ils sont tamponnés avant d’être écrits."
-    }
+    },
+    "add_webpage": "Page web",
+    "type_webpage": "Page web"
   },
   "quality": {
     "title": "Qualité produit",
@@ -13860,7 +13862,6 @@
       "third_party": "Tierce partie"
     },
     "downloadDoc": "Télécharger",
-    "needAdmin": "Rôle Administrateur requis",
     "downloadPdf": "Télécharger le PDF",
     "preparingPdf": "Préparation du PDF…",
     "registerStatusLabel": "Statut au registre",
@@ -13897,7 +13898,8 @@
       "readFromLogoDone": "Couleurs lues sur le logo.",
       "readFailed": "Ces couleurs n’ont pas pu être lues — saisissez-les à la main.",
       "candidates": "Autres couleurs trouvées — cliquez pour en faire la couleur principale :"
-    }
+    },
+    "needManager": "Rôle Manager requis"
   },
   "planBadge": {
     "tier": {

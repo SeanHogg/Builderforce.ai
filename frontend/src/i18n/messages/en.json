@@ -3693,7 +3693,9 @@
       "peopleStatement": "People are using it.",
       "peopleNobodyYet": "Nobody has been here yet.",
       "peopleApproximate": "Counts are approximate — they are buffered before they are written."
-    }
+    },
+    "add_webpage": "Web page",
+    "type_webpage": "Web page"
   },
   "quality": {
     "title": "Product Quality",
@@ -13860,7 +13862,6 @@
       "third_party": "Third-party"
     },
     "downloadDoc": "Download",
-    "needAdmin": "Requires Admin role",
     "downloadPdf": "Download PDF",
     "preparingPdf": "Preparing PDF…",
     "registerStatusLabel": "Register status",
@@ -13897,7 +13898,8 @@
       "readFromLogoDone": "Colours read from the logo.",
       "readFailed": "Those colours could not be read — enter them by hand.",
       "candidates": "Other colours found — click one to make it the primary:"
-    }
+    },
+    "needManager": "Requires Manager role"
   },
   "planBadge": {
     "tier": {

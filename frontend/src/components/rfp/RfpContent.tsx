@@ -24,7 +24,7 @@ import type { Project } from '@/lib/types';
  * instead of asking someone to eyedrop a screenshot.
  *
  * Writes are gated to developer+ (mirrors the server requireRole); the tenant
- * palette is admin+. Localized + themed.
+ * palette is manager+. Localized + themed.
  */
 
 const card: React.CSSProperties = {
@@ -74,7 +74,7 @@ export default function RfpContent() {
   const [draft, setDraft] = useState<RfpRequestInput>(EMPTY);
   const [saving, setSaving] = useState(false);
 
-  const canBrand = hasMinRole(role, 'admin');
+  const canBrand = hasMinRole(role, 'manager');
   const [brandOpen, setBrandOpen] = useState(false);
   const [brand, setBrand] = useState<BrandPalette | null>(null);
   const [brandIsDefault, setBrandIsDefault] = useState(true);
@@ -143,7 +143,7 @@ export default function RfpContent() {
           <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0, maxWidth: 640 }}>{t('subtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-secondary" onClick={() => setBrandOpen(true)} disabled={!canBrand} title={canBrand ? undefined : t('needAdmin')}>
+          <button type="button" className="btn btn-secondary" onClick={() => setBrandOpen(true)} disabled={!canBrand} title={canBrand ? undefined : t('needManager')}>
             {brandIsDefault ? t('brand.setYours') : t('brand.yours')}
           </button>
           <button type="button" className="btn btn-primary" onClick={openCreate} disabled={!canManage} title={canManage ? undefined : t('needDeveloper')}>

@@ -3693,7 +3693,9 @@
       "peopleStatement": "Hay gente usándola.",
       "peopleNobodyYet": "Todavía no ha venido nadie.",
       "peopleApproximate": "Las cifras son aproximadas: se acumulan antes de escribirse."
-    }
+    },
+    "add_webpage": "Página web",
+    "type_webpage": "Página web"
   },
   "quality": {
     "title": "Calidad del producto",
@@ -13860,7 +13862,6 @@
       "third_party": "Terceros"
     },
     "downloadDoc": "Descargar",
-    "needAdmin": "Requiere rol de administrador",
     "downloadPdf": "Descargar PDF",
     "preparingPdf": "Preparando el PDF…",
     "registerStatusLabel": "Estado en el registro",
@@ -13897,7 +13898,8 @@
       "readFromLogoDone": "Colores leídos del logotipo.",
       "readFailed": "No se pudieron leer esos colores: introdúcelos a mano.",
       "candidates": "Otros colores encontrados: haz clic en uno para usarlo como principal:"
-    }
+    },
+    "needManager": "Requiere rol de gestor"
   },
   "planBadge": {
     "tier": {

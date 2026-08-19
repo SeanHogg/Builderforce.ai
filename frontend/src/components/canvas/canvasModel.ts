@@ -1,8 +1,8 @@
 /**
  * Canvas document model — the shared, serialisable shape behind the reusable
  * <CanvasBoard>. A canvas is a free-form board of absolutely-positioned blocks
- * (text, sticky notes, images, embedded knowledge docs, and collaborative
- * timer/stopwatch widgets), à la Miro/Mural.
+ * (text, sticky notes, images, LIVE WEB PAGES, embedded knowledge docs, and
+ * collaborative timer/stopwatch widgets), à la Miro/Mural.
  *
  * It is stored INSIDE the existing knowledge `content` string (prefixed with a
  * sentinel) so versioning, publishing and the realtime collab transport keep
@@ -15,7 +15,7 @@
  * the SAME elapsed value from the shared model instead of a private local clock.
  */
 
-export type CanvasBlockType = 'text' | 'sticky' | 'image' | 'video' | 'file' | 'embed' | 'timer' | 'stopwatch';
+export type CanvasBlockType = 'text' | 'sticky' | 'image' | 'video' | 'file' | 'embed' | 'webpage' | 'timer' | 'stopwatch';
 
 export interface CanvasBlockBase {
   id: string;
@@ -57,6 +57,31 @@ export interface EmbedBlock extends CanvasBlockBase {
   documentId: string;
   title?: string;
 }
+/**
+ * A live web page pinned to the board.
+ *
+ * `embed` was never this: it transcludes a knowledge DOCUMENT by id, so a
+ * research board could hold everything about a source except the source. The
+ * fields below the address are the probe write-back the shared `CanvasWebPage`
+ * panel produces — whether the page allows framing, the readable text it
+ * returned, and the status the gateway saw — stored on the block so a reopened
+ * board does not re-probe every page it holds.
+ */
+export interface WebPageBlock extends CanvasBlockBase {
+  type: 'webpage';
+  url: string;
+  /** The address the frameability verdict below was measured against. */
+  frameCheckedUrl?: string;
+  frameable?: boolean;
+  frameBlockedBy?: string | null;
+  /** The page's own title, and its readable text for the blocked-page fallback. */
+  pageTitle?: string | null;
+  content?: string;
+  httpStatus?: number;
+  fetchedAt?: string;
+  /** Which device width the page is being read at ('desktop' | 'tablet' | 'mobile'). */
+  viewport?: string;
+}
 export interface TimerBlock extends CanvasBlockBase {
   type: 'timer';
   /** Configured countdown length. */
@@ -74,7 +99,7 @@ export interface StopwatchBlock extends CanvasBlockBase {
   label?: string;
 }
 
-export type CanvasBlock = TextBlock | StickyBlock | ImageBlock | VideoBlock | FileBlock | EmbedBlock | TimerBlock | StopwatchBlock;
+export type CanvasBlock = TextBlock | StickyBlock | ImageBlock | VideoBlock | FileBlock | EmbedBlock | WebPageBlock | TimerBlock | StopwatchBlock;
 
 export interface CanvasModel {
   version: 1;
@@ -153,6 +178,10 @@ export function defaultBlock(type: CanvasBlockType, at: { x: number; y: number }
       return { ...base, type, w: 240, h: 96, url: '', name: '' };
     case 'embed':
       return { ...base, type, w: 280, h: 160, documentId: '' };
+    case 'webpage':
+      // Wider and taller than the other blocks by default: a page laid out at a
+      // device width and scaled down is unreadable in a 280px card.
+      return { ...base, type, w: 520, h: 380, url: '' };
     case 'timer':
       return { ...base, type, w: 200, h: 130, durationMs: 5 * 60 * 1000, startedAt: null, baseElapsedMs: 0 };
     case 'stopwatch':
