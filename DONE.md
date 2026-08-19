@@ -1,3 +1,51 @@
+## ✅ RESOLVED 2026-08-19 — Dragging a connection onto the right-hand side of a card did nothing
+
+Every card on the Creation Canvas and in the Workflow Builder carries exactly two connection
+points: a React Flow `target` handle on the left and a `source` handle on the right. Neither
+board set `connectionMode`, so both ran on React Flow's default `ConnectionMode.Strict`, which
+reads those handle types literally:
+
+```
+isValid = (fromTarget && droppedOn === 'source') || (!fromTarget && droppedOn === 'target')
+```
+
+Drag out of one card's RIGHT handle and release on the next card's RIGHT handle and that
+predicate is false. Nothing is disabled, nothing errors, no notice is raised — the connection
+line simply disappears on release. From the outside a handle is a handle, so this reads as
+"connections are broken", and the only working gesture (right handle → the *other* card's left
+handle) was never advertised anywhere in the UI.
+
+**The fix is one shared contract, not two board-local patches.** `frontend/src/lib/flowConnection.ts`
+owns `flowConnectionProps(pointer)` and is spread into BOTH `CreationCanvas.tsx` and
+`WorkflowBuilder.tsx` — the same shape `canvasPointerMode.ts` already uses for the pan/select
+contract, and for the same reason: the rule is pure data, so it is asserted in
+`flowConnection.test.ts` without mounting a board.
+
+- **`ConnectionMode.Loose`** — the honest description of what these boards mean. A handle is a
+  connection point; DIRECTION comes from the drag (where you started is the source), not from
+  which side of the card you released on. Either handle now accepts a release.
+- **`isValidConnection` refuses a self-connection.** Loose mode already rejects a release back
+  onto the handle the drag began from, but not the other handle of the same card, and a card
+  that references itself says nothing.
+- **A wider drop radius** — 32px fine / 52px coarse, against React Flow's 20px default, which
+  asked a pointer to land inside a target roughly the size of the dot itself.
+
+Edges still RENDER right-to-left: with no handle ids in play React Flow resolves an edge's
+target end to the node's first `target` handle, so arrows keep entering cards on the left
+however the connection was drawn — the visual grammar of the board is unchanged, only the
+gestures it accepts.
+
+The two canvas test files that stub `@xyflow/react` gained a `ConnectionMode` stub alongside
+the `MarkerType` / `Position` / `BackgroundVariant` ones they already carried.
+
+Files: `frontend/src/lib/flowConnection.ts` (new), `frontend/src/lib/flowConnection.test.ts` (new),
+`frontend/src/components/creation-canvas/CreationCanvas.tsx`,
+`frontend/src/components/workflow-builder/WorkflowBuilder.tsx`,
+`frontend/src/components/creation-canvas/CreationCanvas.test.tsx`,
+`frontend/src/components/creation-canvas/CreationCanvas.build.test.tsx`.
+
+---
+
 ## ✅ RESOLVED 2026-08-19 — 91% of runs were dying on provider 429s, and every layer that should have noticed was measuring the wrong thing
 
 Three seams, one measured fact. On project 11, 2026-07-31, **150 of 164 terminal runs in a

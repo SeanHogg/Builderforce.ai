@@ -27,7 +27,10 @@ export default function ProductUpdatesTrigger({
   apiVersion,
   className,
 }: {
-  appVersion: string;
+  /** Null until the host has mounted — see `useLegalDocs`. Rendered as the same
+   *  ellipsis the API version already uses, so a version that is not known YET and
+   *  one that is not known AT ALL look alike, which is what they are. */
+  appVersion: string | null;
   apiVersion: string | null;
   className: string;
 }) {
@@ -41,7 +44,7 @@ export default function ProductUpdatesTrigger({
       className={`${className} ${styles.trigger}`}
       title={unread > 0 ? t('whatsNewUnread', { count: unread }) : t('whatsNewHint')}
     >
-      UI {appVersion} · API {apiVersion ?? '…'}
+      UI {appVersion ?? '…'} · API {apiVersion ?? '…'}
       {unread > 0 && (
         // The number is capped for LAYOUT, not for truth: a two-digit badge in a
         // version strip pushes the legal links onto a second row at narrow

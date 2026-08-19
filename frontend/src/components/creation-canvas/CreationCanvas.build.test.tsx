@@ -49,6 +49,7 @@ vi.mock('@xyflow/react', async () => {
     ControlButton: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => React.createElement('button', props, children),
     MiniMap: inert, Handle: inert, NodeResizer: inert,
     BackgroundVariant: { Dots: 'dots' }, MarkerType: { ArrowClosed: 'arrowclosed' }, Position: { Left: 'left', Right: 'right' },
+    ConnectionMode: { Strict: 'strict', Loose: 'loose' },
   };
 });
 
