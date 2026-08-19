@@ -23,9 +23,13 @@ export interface Soc2AuditVisualLabels {
 }
 
 const STATE_COLORS: Record<'pass' | 'partial' | 'gap', { fg: string; bg: string; border: string }> = {
-  pass: { fg: 'var(--success)', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.4)' },
-  partial: { fg: 'var(--warning)', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.4)' },
-  gap: { fg: 'var(--error)', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.4)' },
+  // The soft ground and edge of each status come from the SAME family as the ink
+  // above them. They were hand-mixed alphas of the dark-theme hue, so on paper a
+  // "pass" chip printed a green wash that the darkened light-mode green no longer
+  // matched — a chip whose border and its text were different greens.
+  pass: { fg: 'var(--success)', bg: 'var(--success-bg)', border: 'var(--success-border)' },
+  partial: { fg: 'var(--warning)', bg: 'var(--warning-bg)', border: 'var(--warning-border)' },
+  gap: { fg: 'var(--error)', bg: 'var(--error-bg)', border: 'var(--error-border)' },
 };
 
 export function Soc2AuditVisual({ labels }: { labels: Soc2AuditVisualLabels }) {
@@ -75,7 +79,7 @@ export function Soc2AuditVisual({ labels }: { labels: Soc2AuditVisualLabels }) {
         </div>
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', fontWeight: 600,
-          color: 'var(--success-text)', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.4)',
+          color: 'var(--success-text)', background: 'var(--success-bg)', border: '1px solid var(--success-border)',
           borderRadius: 'var(--radius-full)', padding: '5px 12px',
         }}><Icon name="check" size={14} /> {labels.prBadge}</span>
       </div>

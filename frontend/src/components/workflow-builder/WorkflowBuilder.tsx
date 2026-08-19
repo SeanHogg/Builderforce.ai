@@ -37,7 +37,7 @@ import { EvermindBuildPanel } from './EvermindBuildPanel';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { WorkflowRunHistoryPanel } from '@/components/WorkflowRunHistoryPanel';
 import { WorkflowNodePicker } from './WorkflowNodePicker';
-import { NODE_GROUP_KEYS, NODE_KIND_MAP, type NodeGroup } from './nodeKinds';
+import { NODE_GROUP_KEYS, NODE_KIND_MAP, nodeKindLabel, type NodeGroup, type NodeKindMeta } from './nodeKinds';
 import { hasBuildNodes, loadTemplateGraph, EVERMIND_BUILD_TEMPLATES } from '@/lib/evermindBuild';
 import { presetConfig, type Integration } from './integrations';
 import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
@@ -66,13 +66,21 @@ function staggerPos(index: number): XY {
   return { x: 120 + (index % 4) * 60, y: 80 + (index % 6) * 70 };
 }
 
-function makeNode(kind: WorkflowNodeKind, position: XY): Node<BuilderNodeData> {
+/**
+ * A dropped node is named in the AUTHOR'S language.
+ *
+ * The label is workflow data a person then edits, not UI chrome, so it is
+ * resolved once at creation rather than re-translated on every render — an
+ * author who renames a step must not have that rename reverted, and a
+ * definition shared between two locales must not silently rewrite itself.
+ */
+function makeNode(kind: WorkflowNodeKind, position: XY, name: (meta: NodeKindMeta) => string): Node<BuilderNodeData> {
   const meta = NODE_KIND_MAP[kind];
   return {
     id: crypto.randomUUID(),
     type: 'builder',
     position,
-    data: { kind, label: meta.label, config: { ...meta.defaultConfig } },
+    data: { kind, label: name(meta), config: { ...meta.defaultConfig } },
   };
 }
 
@@ -203,7 +211,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
   const describeThreeD = useCallback((node: Node<BuilderNodeData>): Canvas3DDescriptor => {
     const meta = NODE_KIND_MAP[node.data.kind];
     return {
-      label: node.data.label || meta?.label || node.data.kind,
+      label: node.data.label || (meta ? nodeKindLabel(meta, t) : node.data.kind),
       sublabel: configSummary(node.data.kind, node.data.config ?? {}),
       group: nodeGroupLabel(meta?.group ?? 'Integrations'),
       icon: meta?.icon,
@@ -222,8 +230,8 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
   );
 
   const addNode = useCallback(
-    (kind: WorkflowNodeKind) => setNodes((nds) => [...nds, makeNode(kind, staggerPos(nds.length))]),
-    [setNodes],
+    (kind: WorkflowNodeKind) => setNodes((nds) => [...nds, makeNode(kind, staggerPos(nds.length), (meta) => nodeKindLabel(meta, t))]),
+    [setNodes, t],
   );
 
   const addIntegration = useCallback(

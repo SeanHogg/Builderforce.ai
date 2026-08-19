@@ -18,6 +18,17 @@
  * proposal that changes colour between two generations looks broken.
  */
 
+/**
+ * What a native `<input type="color">` shows for a value it cannot parse.
+ *
+ * The control accepts `#rrggbb` and nothing else, so a half-typed draft has to
+ * be coerced to something before it reaches the DOM. It is NOT a theme colour —
+ * it is the initial position of a picker whose output is then persisted as the
+ * author's own choice and rendered into a document outside this app's CSS,
+ * which is the same reason the drawing tray keeps its own fallback hex.
+ */
+export const FALLBACK_SWATCH_HEX = '#000000';
+
 export interface ImagePalette {
   primary: string;
   secondary: string;

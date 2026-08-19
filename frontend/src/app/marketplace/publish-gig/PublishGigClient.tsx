@@ -31,7 +31,6 @@ import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 import { tasksApi, gigMarketplaceApi, type Task } from '@/lib/builderforceApi';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
-import { RoleGate } from '@/components/RoleGate';
 import PageContainer from '@/components/PageContainer';
 
 const cardStyle: React.CSSProperties = {
@@ -189,16 +188,19 @@ export default function PublishGigClient() {
                   {t('viewListing')}
                 </Link>
               ) : (
-                <RoleGate capability="members.invite">
-                  <button
-                    type="button"
-                    style={primaryButton}
-                    disabled={publishing === task.id}
-                    onClick={() => void publish(task)}
-                  >
-                    {publishing === task.id ? t('publishing') : t('publish')}
-                  </button>
-                </RoleGate>
+                // No RoleGate: `POST /api/marketplace/publish` carries
+                // `authMiddleware` and no `requireRole`, so any member of the
+                // workspace may publish a ticket they can already see. A gate here
+                // would disable a control the server accepts, which is the mirror
+                // of the bug RoleGate exists to prevent.
+                <button
+                  type="button"
+                  style={primaryButton}
+                  disabled={publishing === task.id}
+                  onClick={() => void publish(task)}
+                >
+                  {publishing === task.id ? t('publishing') : t('publish')}
+                </button>
               )}
             </div>
           ))}

@@ -118,7 +118,6 @@
 
   position: relative;
   overflow: visible;
-  height: var(--board-resting-height);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
   background-color: var(--bg-surface);
@@ -127,11 +126,33 @@
   box-shadow: 0 24px 60px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
 }
 
+/*
+ * ── The board is a COLUMN below 900px and a PLANE above it ───────────────────
+ *
+ * Mobile-first, because the phone layout is the one that has to survive 360px.
+ * Everything positional in this file lives inside the `min-width: 900px` block
+ * below; what is left up here is the stacked reading — the same objects, the
+ * same roster, the same composer, in normal flow inside a scrolling board.
+ *
+ * The board used to be REMOVED from the DOM below 900px, which meant the
+ * homepage argued for the canvas everywhere except the device most visitors
+ * arrive on. The reason was honest — five percentage-placed cards overlap at
+ * 360px — and the answer to it is this stack, not the absence of a board.
+ */
+.board {
+  height: auto;
+  max-height: min(74vh, 620px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* ── Session bar: live dot, what this board is, who is on it ── */
 .chrome {
-  position: absolute;
-  inset: 0 0 auto;
-  z-index: 0;
+  position: sticky;
+  top: 0;
+  inset: auto;
+  z-index: 3;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -186,8 +207,7 @@
 
 /* ── Team roster: the always-on agents, where the product puts them ── */
 .team {
-  position: absolute;
-  inset: auto 0 0;
+  position: relative;
   z-index: 0;
   display: flex;
   align-items: center;
@@ -196,7 +216,10 @@
   padding: 0 14px;
   border-top: 1px solid var(--border-subtle);
   background: var(--surface-sunken);
-  overflow: hidden;
+  /* Stacked, the roster scrolls sideways rather than clipping teammates off the
+     end — on a phone the whole point is that the C-suite is reachable. */
+  overflow-x: auto;
+  overflow-y: hidden;
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
 }
 .teamLabel {
@@ -254,6 +277,10 @@
 .blurVeil {
   --lens-x: 50%;
   --lens-y: 50%;
+  /* A blur that lifts under the pointer is a plane affordance: there is no
+     pointer to track on a phone, and a permanently-blurred stack is just an
+     unreadable list. */
+  display: none;
   position: absolute;
   z-index: 1;
   inset: 0;
@@ -280,11 +307,18 @@
  * 390px floor, board-relative percentages put the lower nodes under the composer.
  */
 .field {
-  position: absolute;
-  inset: var(--board-chrome) 0 calc(var(--board-team) + var(--board-composer-lane));
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
 }
 
+/* The wires map ABSOLUTE positions, so they mean nothing over a stack — a fixed
+   viewBox stretched over a column of cards draws lines between the wrong two
+   things. They come back with the plane. */
 .wires {
+  display: none;
   position: absolute;
   inset: 0;
   width: 100%;
@@ -307,10 +341,13 @@
 /* ── Seeded objects. Real buttons: clicking one seeds the composer, so the
       board is an invitation rather than a screenshot. ── */
 .node {
-  position: absolute;
+  position: relative;
   display: block;
-  width: clamp(150px, 15vw, 196px);
-  padding: 11px 13px;
+  width: 100%;
+  /* 44px is the tap target floor; the stacked card is well past it, but the
+     padding is what guarantees it at the shortest copy. */
+  min-height: 44px;
+  padding: 12px 14px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   /* --bg-elevated, not --surface-card-strong: the board ground is --bg-surface,
@@ -417,14 +454,10 @@
 
 /* ── Composer — bottom-centre ON the board, per the canvas convention ── */
 .promptWrap {
-  position: absolute;
-  left: 50%;
-  /* Anchor the resting top edge, not the changing bottom edge. Otherwise opening
-     the catalog adds height above the prompt and can push it out of the viewport. */
-  top: calc(var(--board-resting-height) - var(--board-team) - var(--board-composer-lane) + 20px);
-  transform: translateX(-50%);
+  position: relative;
   z-index: 10;
-  width: min(600px, calc(100% - 40px));
+  width: min(600px, calc(100% - 24px));
+  margin: 0 auto 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -453,94 +486,80 @@
   font-weight: 600;
 }
 /*
- * ── Narrow viewports ──
- * The board is removed from the DOM by the component below 900px, so this only
- * has to return the composer to normal flow and give the copy its full length.
+ * ── Before the board mounts ──
+ * The composer paints first, in normal flow, so the hero is usable on the very
+ * first frame rather than after the board has laid itself out.
  */
-.stageNarrow .promptWrap {
-  position: static;
-  transform: none;
-  width: 100%;
-  max-width: 600px;
+.stagePending .promptWrap {
   margin: 0 auto;
 }
-.stageNarrow .prompt {
+.stagePending .prompt {
   --prompt-panel-bg: var(--surface-card);
   --prompt-panel-shadow: 0 12px 34px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
 }
-.narrowNote {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--font-size-small);
-  line-height: 1.5;
-}
 
 /*
- * ── The brain scene (narrow only) ──
+ * ── 900px and up: the board becomes a plane ──
  *
- * The wide hero argues with the board; the narrow hero argues with the Evermind
- * brain, which is what stood here before the board existed. The scene is a fixed
- * dark artwork — `.wb-scene` paints its own near-black ground and the canvas
- * render loop composites in `lighter`, which is invisible over white — so this
- * hero DECLARES its palette for both themes instead of inheriting the shell's.
- * The values below are the dark theme's own tokens, so nothing here is a new
- * colour; a light-theme visitor sees the same hero a dark-theme visitor sees,
- * and `.wb-fade` still fades into whichever `--bg` the page actually uses.
+ * Everything positional is here. The object coordinates arrive as custom
+ * properties from `OBJECT_LAYOUT` and are consumed ONLY in this block, which is
+ * what lets the same markup be a column below it — an inline `left: 52%` could
+ * not be undone by any media query.
  */
-.heroBrain {
-  overflow: hidden; /* the aura is 116vw wide — never let it scroll the page */
-  /* Clears the scene's bottom fade (below) so no light-on-dark copy ever lands
-     in the band where the scene has already blended into the page's own --bg —
-     which in the light theme is very nearly white. */
-  padding-bottom: 88px;
+@media (min-width: 900px) {
+  .board {
+    height: var(--board-resting-height);
+    max-height: none;
+    overflow: visible;
+  }
 
-  /* The scene is lit in BOTH themes, so it re-declares the ink it needs rather
-     than inheriting the shell's. These are overrides: `--text-primary:
-     var(--text-primary)` is a CYCLE, which makes the property invalid at
-     computed-value time and strips the token from every descendant — the whole
-     hero loses its ink. It has to be a value. */
-  --text-primary: #f0f4ff;
-  --text-secondary: #b9c4de;
-  --text-muted: var(--text-secondary);
-  --border-subtle: rgba(136, 146, 176, 0.28);
-  --border-accent: rgba(77, 158, 255, 0.42);
-  --surface-card: rgba(10, 15, 26, 0.72);
-  --surface-card-strong: rgba(10, 15, 26, 0.88);
-  --surface-interactive: rgba(255, 255, 255, 0.1);
-  --surface-interactive-hover: rgba(255, 255, 255, 0.16);
-  --surface-inset-highlight: rgba(255, 255, 255, 0.06);
-  --bg-elevated: rgba(17, 24, 39, 0.82);
-  --chat-input-bg: rgba(255, 255, 255, 0.08);
+  .chrome {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 0;
+  }
+
+  .team {
+    position: absolute;
+    inset: auto 0 0;
+    overflow: hidden;
+  }
+
+  .field {
+    position: absolute;
+    inset: var(--board-chrome) 0 calc(var(--board-team) + var(--board-composer-lane));
+    display: block;
+    padding: 0;
+  }
+
+  .wires { display: block; }
+  .blurVeil { display: block; }
+
+  .node {
+    position: absolute;
+    left: var(--n-left, auto);
+    right: var(--n-right, auto);
+    top: var(--n-top, auto);
+    width: clamp(150px, 15vw, 196px);
+    min-height: 0;
+    padding: 11px 13px;
+  }
+
+  .promptWrap {
+    position: absolute;
+    left: 50%;
+    /* Anchor the resting top edge, not the changing bottom edge. Otherwise opening
+       the catalog adds height above the prompt and can push it out of the viewport. */
+    top: calc(var(--board-resting-height) - var(--board-team) - var(--board-composer-lane) + 20px);
+    transform: translateX(-50%);
+    width: min(600px, calc(100% - 40px));
+    margin: 0;
+  }
 }
-/* The shared scene fades over its last 150px, sized for the full-height
-   /evermind hero. That is most of a phone hero, so shorten it here and let the
-   hero's own bottom padding be the lane it fades through. */
-.brain :global(.wb-fade) {
-  height: 80px;
-}
+
 /*
- * /evermind gives the cortex a tall hero to itself and sets its copy well above
- * it. A phone hero is short enough that the headline and lede land ON the
- * brightest part of the render, so the text-safe vignette is pulled up and
- * deepened over the copy band, and the cortex is dimmed under it — the animation
- * still reads, the sentence still passes contrast.
+ * The Evermind brain scene used to stand here INSTEAD of the board below 900px.
+ * It is gone with the width gate: the hero's argument is the board, and the
+ * scene (with its own light-on-dark palette, which this hero had to re-declare
+ * wholesale) now lives only where it is the subject — `/evermind`.
  */
-.brain :global(.wb-veil) {
-  background: radial-gradient(
-    ellipse 82% 40% at 50% 24%,
-    rgba(3, 7, 17, 0.88) 0%,
-    rgba(3, 7, 17, 0.7) 46%,
-    rgba(3, 7, 17, 0.24) 76%,
-    transparent 100%
-  );
-}
-.brain :global(.wb-brain-shell) {
-  opacity: 0.82;
-}
-/* The composer is the hero's job on a phone — float it clear of the cortex. */
-.heroBrain .prompt {
-  --prompt-panel-bg: rgba(8, 13, 24, 0.86);
-  --prompt-panel-border: var(--border-accent);
-  --prompt-panel-shadow: 0 18px 44px rgba(0, 0, 0, 0.45), inset 0 1px 0 var(--surface-inset-highlight);
-  backdrop-filter: blur(14px);
-}

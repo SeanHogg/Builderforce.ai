@@ -73,9 +73,12 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
     return d.gapCount > 0 ? { label: gapText(d), tone: 'warn' } : { label: `✓ ${t('noGaps')}`, tone: 'good' };
   };
   const BADGE_TONE: Record<BadgeTone, { fg: string; bg: string; border: string }> = {
-    good: { fg: 'var(--success)', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.4)' },
-    progress: { fg: 'var(--coral-bright)', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.4)' },
-    warn: { fg: 'var(--warning)', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.4)' },
+    // One family per status, ground and edge included. The alphas here were mixed
+    // against the DARK hue, so each chip kept its near-black wash on warm paper
+    // while its ink darkened — the border and the label were two different greens.
+    good: { fg: 'var(--success)', bg: 'var(--success-bg)', border: 'var(--success-border)' },
+    progress: { fg: 'var(--coral-bright)', bg: 'var(--info-bg)', border: 'var(--info-border)' },
+    warn: { fg: 'var(--warning)', bg: 'var(--warning-bg)', border: 'var(--warning-border)' },
   };
 
   // ── chips: dense score pills for the project card / list row ────────────────

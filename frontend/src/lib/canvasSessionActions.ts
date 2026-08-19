@@ -45,6 +45,7 @@ export type CanvasSessionActionId =
   | 'undo'
   | 'redo'
   | 'outcomes'
+  | 'prove'
   | 'diagnostics'
   | 'fullscreen'
   | 'call'
@@ -181,7 +182,23 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // then on the dock IS the control, and a second lit "call" button in the bar would
   // be one decision with two homes — the failure this registry exists to prevent.
   { id: 'call', cluster: 'live', order: 5, chrome: 'icon', state: 'none', phone: 'menu', labelKey: 'startCall', titleKey: 'startCallTitle' },
-  { id: 'share', cluster: 'session', order: 6, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
+  //
+  // PROVE IT — the act the whole method turns on, and the one the product had no
+  // door for from a board.
+  //
+  // Reading an idea is cheap and building is not, so choosing WHICH proof is worth
+  // running is the most consequential decision in the first month of anything. That
+  // choice lived only on `/realize`, reachable from the nav and from nowhere a person
+  // is actually having the idea — so a board full of an idea had no way to become a
+  // proof, and the loop's outcome events had no session to attach to. Both halves of
+  // that are fixed by one door: this hands the board's own idea to the proof picker
+  // and names the session, which is what lets Read, Prove, Build and Measure be
+  // recorded against it and the north-star metric be computed at all.
+  //
+  // It needs OBJECTS for the same reason the scorecard does: "make this real" over a
+  // conversation with nothing on it has nothing to make real.
+  { id: 'prove', cluster: 'session', order: 6, chrome: 'labelled', state: 'none', phone: 'menu', labelKey: 'proveThisIdea', titleKey: 'proveThisIdeaTitle', needs: 'objects' },
+  { id: 'share', cluster: 'session', order: 7, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'share', titleKey: 'inviteCollaborators' },
   // Publish sits beside Share because they are the two ways work leaves this canvas —
   // one brings a person IN, one puts the result where strangers can reach it.
   //
@@ -191,7 +208,7 @@ export const CANVAS_SESSION_ACTIONS: readonly CanvasSessionActionDef[] = [
   // three clicks deep, framed as commerce, and invisible until you had clicked the right
   // card. It opens the SAME release lifecycle that button does — one gate, two doors —
   // scoped to the whole board, which is the scope an application actually has.
-  { id: 'publish', cluster: 'session', order: 7, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
+  { id: 'publish', cluster: 'session', order: 8, chrome: 'labelled', state: 'expanded', phone: 'menu', labelKey: 'publishCanvas', titleKey: 'publishCanvasTitle' },
 ];
 
 const BY_ID = new Map<CanvasSessionActionId, CanvasSessionActionDef>(

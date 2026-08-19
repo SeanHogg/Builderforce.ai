@@ -8,6 +8,7 @@ import {
   FullscreenIcon,
   ExitFullscreenIcon,
   OutcomeMetricsIcon,
+  ProveIdeaIcon,
   PublishCanvasIcon,
   RedoIcon,
   ShareCanvasIcon,
@@ -55,6 +56,7 @@ const ACTION_ICON: Record<CanvasSessionActionId, () => React.JSX.Element> = {
   diagnostics: DiagnosticsIcon,
   fullscreen: FullscreenIcon,
   call: StartCallIcon,
+  prove: ProveIdeaIcon,
   share: ShareCanvasIcon,
   publish: PublishCanvasIcon,
 };

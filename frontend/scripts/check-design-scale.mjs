@@ -71,6 +71,20 @@ const BASELINE = {
   /** Not a budget any more — see COLOUR_EXEMPT. Every literal outside it fails. */
   literalHexFiles: 0,
   /**
+   * Colours written as `rgba()` / `hsl()` in an ink, ground or edge slot — the
+   * OTHER spelling of the literal-hex defect, and the one the hex ratchet could
+   * never see. Measured at 273 across 108 files when the ratchet landed, after
+   * the three surfaces the design-system audit named (`Soc2AuditVisual`,
+   * `ProjectDiagnosticsStrip`, `RfpDetailClient`) were migrated onto the status
+   * families they were hand-mixing.
+   *
+   * A high-water mark, not a budget: the number comes DOWN as call sites name a
+   * family. The two biggest holders are the palette itself (`globals.css`, where
+   * a value has to be written somewhere) and the board's own stylesheet, and
+   * both are the honest next targets rather than exemptions.
+   */
+  themeLockedColours: 195,
+  /**
    * ONE, and it is `UnreadBadge`'s `borderRadius: size` — a live expression, not a
    * literal, so there is no scale step to name. Came down from 6 when the résumé
    * editor landed on the board: `CreationCanvas.module.css` had accumulated 22
@@ -125,7 +139,7 @@ const BASELINE = {
    * against a +15 drift, so the floor follows the work down instead of being
    * raised to meet it.
    */
-  offScaleFontSizes: 3774,
+  offScaleFontSizes: 3767,
   /**
    * Page-column literals on the PUBLIC surface — a `max-width` (or `width`)
    * typed as a number between 900px and 1500px on a marketing file.
@@ -286,6 +300,13 @@ const COLOUR_EXEMPT = [
   // The two candidate inks of a luminance test — arguments to arithmetic, not
   // a styling choice.
   /^lib\/contrastText\.ts$/,
+  // BRAND-COLOUR CAPTURE, on both sides of the same seam. Every hex here is a
+  // colour the AUTHOR picks and we persist — read off their logo's pixels, or
+  // typed into a native `<input type="color">`, which accepts `#rrggbb` and
+  // nothing else. The value is then rendered into a co-branded proposal opened
+  // OUTSIDE this app, where no token of ours resolves. Same reason as the
+  // drawing tray's fallback hex two entries up.
+  /^lib\/brandPalette\.ts$/,
 ];
 
 const BLOCK_COMMENT = /\/\*[\s\S]*?\*\//g;
@@ -293,6 +314,42 @@ const LINE_COMMENT = /^\s*\/\/.*$/gm;
 
 /** A 3-, 4-, 6- or 8-digit hex colour, not part of a longer identifier. */
 const LITERAL_HEX = /(?<![\w&])#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g;
+
+/**
+ * A colour written as a FUNCTION rather than a hex — `rgba(34,197,94,0.12)`,
+ * `hsl(210 90% 60%)` — in a slot that carries ink, ground or edge.
+ *
+ * The hex ratchet above closed one spelling of one defect. This closes the other
+ * spelling of the SAME defect, and it is the one that had been quietly winning:
+ * a status chip written as `background: rgba(34,197,94,0.12)` is a mix of the
+ * DARK theme's green at 12%, so when the light theme darkened its green for
+ * paper the chip kept the near-black wash and its border and its label became
+ * two different greens. Every status family already declares the pair
+ * (`--success-bg` / `--success-border`, and the same for warning/error/info), so
+ * the fix at every call site is to name the family instead of mixing it.
+ *
+ * SCOPE — deliberately narrower than "any rgba() anywhere", because three uses
+ * are legitimate and flagging them would make the ratchet noise:
+ *
+ *   • a `var(--token, rgba(…))` FALLBACK never paints when the token exists, and
+ *     when it does not, `check-design-tokens.mjs` already fails the build on it.
+ *     That guard owns undeclared tokens; this one owns declared colour.
+ *   • a GRADIENT or scrim (`linear-gradient(…, rgba(0,0,0,.5))`) is a wash over
+ *     whatever is beneath it, and a black scrim is black on both stocks.
+ *   • `box-shadow` / `text-shadow` are not in the slot list at all, for the same
+ *     reason: a shadow is a depth cue, not a hue.
+ *
+ * A file that genuinely cannot reach a token goes in COLOUR_EXEMPT with its
+ * reason, exactly like the hex ratchet — one list, one review, both spellings.
+ */
+const COLOUR_SLOT =
+  /(?<![\w-])(?:color|background|background-color|backgroundColor|borderColor|border-color|border|border-(?:top|right|bottom|left)(?:-color)?|border(?:Top|Right|Bottom|Left)(?:Color)?|fill|stroke)\s*:\s*([^;}\n]*)/g;
+/** The functional colour notations, at the start of their argument list. */
+const COLOUR_FUNCTION = /(?<![\w-])(?:rgba?|hsla?)\(\s*[0-9]/;
+/** A `var(--x, …)` fallback — see the note above. */
+const VAR_FALLBACK = /var\(\s*--[a-zA-Z0-9_-]+\s*,[^)]*\)/g;
+/** A gradient or wash — see the note above. */
+const GRADIENT = /(?:linear|radial|conic)-gradient\([^)]*\)?/g;
 
 /**
  * A NUMERIC CHARACTER REFERENCE, which is not a colour and never was.
@@ -431,6 +488,7 @@ function radiusParts(value) {
 
 const files = collect(srcDir);
 const hexFiles = [];
+const lockedColours = [];
 const offScale = [];
 const offScaleType = [];
 const columnLiterals = [];
@@ -442,10 +500,20 @@ for (const file of files) {
   // Blank character references before looking for colours — see CHARACTER_REFERENCE.
   const colourText = text.replace(CHARACTER_REFERENCE, ' ');
 
-  if (!COLOUR_EXEMPT.some((pattern) => pattern.test(rel)) && LITERAL_HEX.test(colourText)) {
+  const colourExempt = COLOUR_EXEMPT.some((pattern) => pattern.test(rel));
+  if (!colourExempt && LITERAL_HEX.test(colourText)) {
     hexFiles.push(rel);
   }
   LITERAL_HEX.lastIndex = 0;
+
+  if (!colourExempt) {
+    for (const match of colourText.matchAll(COLOUR_SLOT)) {
+      const value = match[1].replace(VAR_FALLBACK, '').replace(GRADIENT, '');
+      if (!COLOUR_FUNCTION.test(value)) continue;
+      const line = colourText.slice(0, match.index).split('\n').length;
+      lockedColours.push(`${rel}:${line}  ${match[0].trim().slice(0, 90)}`);
+    }
+  }
 
   if (!FONT_SIZE_EXEMPT.some((pattern) => pattern.test(rel))) {
     for (const match of text.matchAll(FONT_SIZE)) {
@@ -486,6 +554,7 @@ for (const file of files) {
 
 const measured = {
   literalHexFiles: hexFiles.length,
+  themeLockedColours: lockedColours.length,
   offScaleRadii: offScale.length,
   offScaleFontSizes: offScaleType.length,
   publicColumnLiterals: columnLiterals.length,
@@ -493,6 +562,7 @@ const measured = {
 /** Per-file tallies for the same four ratchets, keyed identically to `measured`. */
 const tallies = {
   literalHexFiles: tallyByFile(hexFiles),
+  themeLockedColours: tallyByFile(lockedColours),
   offScaleRadii: tallyByFile(offScale),
   offScaleFontSizes: tallyByFile(offScaleType),
   publicColumnLiterals: tallyByFile(columnLiterals),
@@ -523,6 +593,24 @@ if (failures.length > 0) {
     console.error('    into a document opened elsewhere, it is a vendor brand mark, or it');
     console.error('    is a colour the AUTHOR picks and we persist — add the file to');
     console.error('    COLOUR_EXEMPT above WITH ITS REASON. The list is the review.');
+  }
+  if (measured.themeLockedColours > BASELINE.themeLockedColours) {
+    printDelta('themeLockedColours', recorded.themeLockedColours, tallies.themeLockedColours);
+    console.error('');
+    console.error('    An `rgba()` in a colour slot is a hardcoded single-theme colour with');
+    console.error('    an alpha on it. Mixed against the dark hue, it keeps that wash on');
+    console.error('    paper while the ink above it darkens — so the border and the label');
+    console.error('    end up two different greens.');
+    console.error('');
+    console.error('    Every status family already declares the pair: --success-bg /');
+    console.error('    --success-border, and the same for warning / error / info. Name the');
+    console.error('    family. If the name you want does not exist, declare it in');
+    console.error("    globals.css under BOTH :root and html[data-theme='light'].");
+    console.error('');
+    console.error('    A var() fallback, a gradient and a box-shadow are NOT counted here —');
+    console.error('    see COLOUR_SLOT. If a file genuinely cannot reach a token, add it to');
+    console.error('    COLOUR_EXEMPT above WITH ITS REASON, the same list the hex ratchet');
+    console.error('    reads.');
   }
   if (measured.offScaleRadii > BASELINE.offScaleRadii) {
     printDelta('offScaleRadii', recorded.offScaleRadii, tallies.offScaleRadii);
@@ -578,7 +666,8 @@ if (writeTallies(TALLY_PATH, tallies)) {
 }
 
 console.log(
-  `✅  Design-scale ratchets held — ${measured.literalHexFiles} files with a literal hex, `
+  `✅  Design-scale ratchets held — ${measured.literalHexFiles} files with a literal hex, ` +
+    `${measured.themeLockedColours} theme-locked rgba()/hsl() colours, `
   + `${measured.offScaleRadii} off-scale radii, ${measured.offScaleFontSizes} literal font sizes, `
-  + `${measured.publicColumnLiterals} public page-column literals (all four at baseline).`,
+  + `${measured.publicColumnLiterals} public page-column literals (all five at baseline).`,
 );

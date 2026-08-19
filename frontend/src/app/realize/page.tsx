@@ -382,6 +382,16 @@ export default function RealizePage() {
    * challenge page is showing next to it.
    */
   const [challengeId, setChallengeId] = useState<string | null>(null);
+  /**
+   * Set when this page was opened FROM a Creation Session ("make this real").
+   *
+   * It is what makes the loop measurable: the outcome ledger's grain is the
+   * session, so a proof that names its board records Read, Prove, Build and
+   * Measure against it, and the platform's north-star metric — the share of
+   * ideas that reached a graded proof — has something to count. A proof started
+   * without one still works; it simply never enters the ledger.
+   */
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [buildResult, setBuildResult] = useState<RealizationBuildResult | null>(null);
   const [history, setHistory] = useState<Realization[]>([]);
   const [reading, setReading] = useState(false);
@@ -411,6 +421,17 @@ export default function RealizePage() {
       })
       .catch(() => undefined);
   }, [refresh]);
+
+  // Opened from a Creation Session: prove that board's idea, and record the
+  // loop against it. The idea text is seeded from the board so the visitor
+  // lands on a filled box rather than retyping what they already wrote.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const session = params.get('session');
+    if (session) setSessionId(session);
+    const seeded = params.get('idea');
+    if (seeded) setIdea(seeded.slice(0, 20_000));
+  }, []);
 
   // Opened from a challenge: reuse the spec the brief was already read into.
   useEffect(() => {
@@ -442,7 +463,7 @@ export default function RealizePage() {
     // reading would ignore the edit.
     setChallengeId(null);
     try {
-      const result = await realizationApi.plan(idea.trim());
+      const result = await realizationApi.plan(idea.trim(), sessionId);
       setSpec(result.spec);
       setTargets(result.targets);
       setRecommendations(result.recommendations);
@@ -469,6 +490,7 @@ export default function RealizePage() {
             // and re-reading the same words would risk a proof planned against a
             // different interpretation than the one on screen.
             ...(challengeId ? { challengeId } : { idea: idea.trim() }),
+            ...(sessionId ? { sessionId } : {}),
             targetKey: chosen,
             ...(chosenTarget?.allowsStrategyChoice ? { strategy } : {}),
           });

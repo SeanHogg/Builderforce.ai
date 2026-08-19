@@ -823,13 +823,21 @@ export const NODE_GROUP_KEYS: Record<NodeGroup, string> = {
 };
 
 /**
- * i18n slug for each node kind ADDED alongside Flow Control / Tools / Text
- * Parser / Diagnostics — deliberately NOT a full retrofit of the ~30
- * pre-existing kinds above (their `label`/`blurb`/field labels predate i18n
- * entirely; see ROADMAP.md's tracked gap). Only kinds present here have a
- * `evermindBuild.nodeKind.<slug>.{label,blurb}` translation; every other kind
- * keeps rendering its catalog literal, unchanged, via the `??` fallback in
- * {@link nodeKindLabel} / {@link nodeKindBlurb}.
+ * The i18n slug for EVERY node kind.
+ *
+ * It used to cover only the kinds added alongside Flow Control / Tools / Text
+ * Parser / Diagnostics, and the ~30 older kinds rendered their catalog literal
+ * through a `??` fallback — so a French operator's palette named half its steps
+ * in French and the other half in English, and the 3D card sublabel and the
+ * config panel inherited the same split.
+ *
+ * The map is now TOTAL, which is the point: the fallback in
+ * {@link nodeKindLabel} / {@link nodeKindBlurb} is unreachable, so a kind added
+ * without a translation shows a raw key (visible, fixable) rather than silently
+ * shipping English into four locales.
+ *
+ * The catalog keeps its English `label` / `blurb` as the DEFAULT node title a
+ * dropped node is created with — that is stored workflow data, not UI copy.
  */
 export const I18N_NODE_KIND_SLUG: Partial<Record<WorkflowNodeKind, string>> = {
   router: 'router',
@@ -863,21 +871,48 @@ export const I18N_NODE_KIND_SLUG: Partial<Record<WorkflowNodeKind, string>> = {
   'analyze-image': 'analyzeImage',
   'extract-document-data': 'extractDocumentData',
   'transcribe-audio': 'transcribeAudio',
+  trigger: 'trigger',
+  agent: 'agent',
+  memory: 'memory',
+  knowledge: 'knowledge',
+  llm: 'llm',
+  mcp: 'mcp',
+  connector: 'connector',
+  gmail: 'gmail',
+  train: 'train',
+  'train-tokenizer': 'trainTokenizer',
+  'dataset-quality': 'datasetQuality',
+  'train-model': 'trainModel',
+  convergence: 'convergence',
+  evaluate: 'evaluate',
+  'generate-check': 'generateCheck',
+  benchmark: 'benchmark',
+  roundtrip: 'roundtrip',
+  export: 'export',
+  'distill-corpus': 'distillCorpus',
+  'code-parse-check': 'codeParseCheck',
+  'code-eval': 'codeEval',
+  'code-benchmark': 'codeBenchmark',
+  transform: 'transform',
+  filter: 'filter',
+  branch: 'branch',
+  output: 'output',
 };
 
 /** A translator over the `evermindBuild` namespace — `useTranslations('evermindBuild')`'s
  *  return type, accepting an arbitrary key (the catalog builds keys dynamically). */
 type EvermindBuildTranslator = (key: string) => string;
 
-/** The label to show for a node kind — translated for newly-added kinds, the
- *  catalog literal for every kind that predates i18n. */
+/** The label to show for a node kind, in the reader's locale. THE accessor —
+ *  the palette, the flat node, the 3D card and the config panel all read here,
+ *  so a step is named the same thing on every surface and in every language. */
 export function nodeKindLabel(meta: NodeKindMeta, t: EvermindBuildTranslator): string {
   const slug = I18N_NODE_KIND_SLUG[meta.kind];
   return slug ? t(`nodeKind.${slug}.label`) : meta.label;
 }
 
-/** The blurb (tooltip / inspector subtitle) to show for a node kind — same
- *  translated-if-new, literal-otherwise rule as {@link nodeKindLabel}. */
+/** The blurb (tooltip / inspector subtitle) for a node kind — same accessor
+ *  rule as {@link nodeKindLabel}. */
 export function nodeKindBlurb(meta: NodeKindMeta, t: EvermindBuildTranslator): string {
   const slug = I18N_NODE_KIND_SLUG[meta.kind];
   return slug ? t(`nodeKind.${slug}.blurb`) : meta.blurb;

@@ -84,12 +84,39 @@ const meetingsTransport: MediaRoomTransport = {
   ice: (mode) => meetingsApi.ice(mode),
 };
 
+/**
+ * What the signaling socket is DOING — the one thing a permanent "Connecting…" could
+ * never say.
+ *
+ * The hook used to report a single `connected` boolean and bail out of its connect
+ * effect entirely when the transport had no credential (`if (!token) return`). Both
+ * failures — "there is no token for this room" and "the relay refused or dropped the
+ * upgrade" — then looked exactly like the half-second before a healthy call: a bar that
+ * says "Connecting…" and never stops, with nothing to press and nothing to read. That is
+ * the state a person reports as "it never connects", and it was unreachable by any
+ * diagnosis short of a network tab.
+ *
+ *  `idle`            — no room; nothing is being attempted.
+ *  `connecting`      — first attempt at the socket is in flight.
+ *  `connected`       — the relay accepted us; frames are flowing.
+ *  `retrying`        — it opened and dropped, or the upgrade was refused. The loop keeps
+ *                      trying (every 2s) and the surface can finally SAY so.
+ *  `unauthenticated` — the transport has no credential right now. Also retried, because
+ *                      a token that is minted a moment later (a guest room being opened,
+ *                      a session being refreshed) must heal the call rather than leave it
+ *                      stuck behind an effect that already gave up.
+ */
+export type MediaRoomConnection = 'idle' | 'connecting' | 'connected' | 'retrying' | 'unauthenticated';
+
 export interface UseMediaRoom {
   localStream: MediaStream | null;
   tiles: RemoteTile[];
   camOn: boolean;
   micOn: boolean;
+  /** True only in `connected`. Kept because most callers only ask "is it up". */
   connected: boolean;
+  /** Why it is not up, when it is not. */
+  connection: MediaRoomConnection;
   /** getUserMedia failed / was denied (null = fine). */
   mediaError: string | null;
   /** Live caption text keyed by member ref (STT lines + agent spoken lines). */
@@ -145,7 +172,7 @@ export function useMediaRoom(
 ): UseMediaRoom {
   const { enabled, audioOnly = false, privacyMode = 'relay-fallback', transport = meetingsTransport } = opts;
   const [tiles, setTiles] = useState<RemoteTile[]>(EMPTY);
-  const [connected, setConnected] = useState(false);
+  const [connection, setConnection] = useState<MediaRoomConnection>('idle');
   const [camOn, setCamOn] = useState(!audioOnly);
   const [micOn, setMicOn] = useState(true);
   const [mediaError, setMediaError] = useState<string | null>(null);
@@ -333,9 +360,8 @@ export function useMediaRoom(
 
   // Acquire media + open the socket while enabled.
   useEffect(() => {
-    if (!enabled || !roomKey) return;
-    const token = transport.getToken();
-    if (!token) return;
+    if (!enabled || !roomKey) { setConnection('idle'); return; }
+    setConnection('connecting');
     let cancelled = false;
     let ws: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
@@ -361,13 +387,30 @@ export function useMediaRoom(
       } catch { /* keep default STUN */ }
 
       // 3) Signaling socket.
-      const url = transport.signalingUrl(roomKey, token);
+      //
+      // THE CREDENTIAL IS READ PER ATTEMPT, not once outside the effect. Reading it
+      // once meant a room opened a beat before its token existed — a guest room being
+      // minted, a session being refreshed — could never connect at all: the effect
+      // returned, nothing in its dependency list ever changed again, and the surface sat
+      // on "Connecting…" until the page was reloaded. Now the same 2s loop that survives
+      // a dropped socket also survives a late token, and says which of the two it is
+      // waiting on.
       const connect = () => {
         if (cancelled) return;
-        try { ws = new WebSocket(url); } catch { retry = setTimeout(connect, 2000); return; }
+        const token = transport.getToken();
+        if (!token) {
+          setConnection('unauthenticated');
+          retry = setTimeout(connect, 2000);
+          return;
+        }
+        try { ws = new WebSocket(transport.signalingUrl(roomKey, token)); } catch {
+          setConnection('retrying');
+          retry = setTimeout(connect, 2000);
+          return;
+        }
         wsRef.current = ws;
         ws.onopen = () => {
-          setConnected(true);
+          setConnection('connected');
           send({ type: 'join', name: meRef.current.name, kind: 'human', ref: meRef.current.ref });
         };
         ws.onmessage = (ev) => {
@@ -375,7 +418,10 @@ export function useMediaRoom(
           try { msg = JSON.parse(typeof ev.data === 'string' ? ev.data : ''); } catch { return; }
           if (msg && typeof msg.type === 'string') handleFrame(msg);
         };
-        ws.onclose = () => { setConnected(false); if (!cancelled) retry = setTimeout(connect, 2000); };
+        // A refused upgrade and a dropped call both land here — the relay closes the
+        // socket either way — so both are `retrying`, which is the honest word for what
+        // the loop below is about to do.
+        ws.onclose = () => { if (!cancelled) { setConnection('retrying'); retry = setTimeout(connect, 2000); } };
         ws.onerror = () => { try { ws?.close(); } catch { /* ignore */ } };
       };
       connect();
@@ -394,7 +440,7 @@ export function useMediaRoom(
       publishedRef.current = null;
       setLocalStream(null);
       setTiles(EMPTY);
-      setConnected(false);
+      setConnection('idle');
       setSharing(false);
       myIdRef.current = '';
       for (const [, timer] of captionTimers.current) clearTimeout(timer);
@@ -459,5 +505,5 @@ export function useMediaRoom(
     send({ type: 'm-share', on: false });
   }, [send]);
 
-  return { localStream, tiles, camOn, micOn, connected, mediaError, captions, speaking, privacyMode, mediaPaths, toggleCam, toggleMic, publishDisplay, unpublishDisplay, sharing };
+  return { localStream, tiles, camOn, micOn, connected: connection === 'connected', connection, mediaError, captions, speaking, privacyMode, mediaPaths, toggleCam, toggleMic, publishDisplay, unpublishDisplay, sharing };
 }

@@ -76,7 +76,17 @@ import type { CreationNodeData, CreationObjectKind } from './types';
 import { AUTHORED_DRAWING_STROKE, AUTHORED_WEBSITE_ACCENT } from './authoredColors';
 import { DiagramConvertPanel } from './DiagramConvertPanel';
 import styles from './CreationCanvas.module.css';
-import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, llmApi, pmoApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CanvasResumeShare, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage, type PmoScopeKind } from '@/lib/builderforceApi';
+import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, llmApi, pmoApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CanvasResumeShare, type CreationOutcomeMetric, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage, type PmoScopeKind } from '@/lib/builderforceApi';
+import {
+  compareOutcomeMetric,
+  formatOutcomeMetric,
+  groupOutcomeMetrics,
+  northStarMetric,
+  outcomeFamilyLabel,
+  outcomeMetricDefinition,
+  outcomeMetricLabel,
+  type OutcomeTranslator,
+} from '@/lib/outcomeMetrics';
 import { creationGraphFromSnapshot, creationStorageKey, localCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { answersComplete, defaultInput, questionIds, type ToolResult } from '@/lib/tools';
 
@@ -907,6 +917,9 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
 
 function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
   const t = useTranslations('creationCanvas');
+  /** The shared metric vocabulary — labels, units and comparisons, identical to
+   *  the superadmin Value outcomes panel. See `lib/outcomeMetrics.ts`. */
+  const outcomeText = useTranslations('outcomeMetrics') as unknown as OutcomeTranslator;
   /**
    * A turn's runtime notices, already in the viewer's language. Built here because the
    * turn runner is not a component and cannot translate for itself, and memoized so the
@@ -10063,7 +10076,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} onOpenSurface={(nodeId, surface) => setSurface(surface, nodeId)} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={runWorkflowFromNode} onExport={exportFromNode} onOpenBuiltinAgent={openBuiltinAgentSurfaceFromNode} onOpenPanel={openNodePanel} onInsertFrom={openInsertPicker} onOpenSurface={(nodeId, surface) => setSurface(surface, nodeId)} onRevealObject={revealObject} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       // Asking for a specific section (knowledge, test, evaluation, delivery) is asking
       // for the WIDE panel directly — the short one has no such section to scroll to.
@@ -10155,14 +10168,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       .finally(() => setOutcomeMetricsLoading(false));
   }, [persistence, sessionId]);
 
-  const formatOutcomeValue = useCallback((value: number | null, unit: string) => {
-    if (value == null) return 'Not measured';
-    if (unit === 'percent') return `${Math.round(value * 100)}%`;
-    if (unit === 'usd') return `$${value.toFixed(2)}`;
-    if (unit === 'seconds') return value >= 60 ? `${(value / 60).toFixed(value >= 600 ? 0 : 1)} min` : `${Math.round(value)} sec`;
-    if (unit === 'agents') return `${value.toFixed(value % 1 ? 1 : 0)} agent${value === 1 ? '' : 's'}`;
-    return value.toFixed(value % 1 ? 1 : 0);
-  }, []);
 
   const brainNode = nodes.find((node) => node.data.kind === 'chat') ?? null;
   /**
@@ -10517,6 +10522,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // under "Sell in the marketplace". Same lifecycle, same gate — `openReleasesPanel`
       // already refuses a board with nothing on a server and says why.
       publish: act(() => openReleasesPanel(), releaseFocus !== null),
+      // PROVE. Hands this board's own idea to the proof picker and names the
+      // session, which is what lets the loop — Read, Prove, Build, Measure — be
+      // recorded against it. A local-only board has no server session to name,
+      // so it is offered the same account gate the scorecard uses rather than
+      // silently starting a proof nothing could ever measure.
+      prove: act(() => {
+        if (persistence === 'local') {
+          requireAccount('prove', t('gateProveTitle'), t('gateProveBody'));
+          return;
+        }
+        const seed = timeline.find((message) => message.messageRole === 'user')?.body?.trim() || title;
+        router.push(`/realize?session=${encodeURIComponent(sessionId)}&idea=${encodeURIComponent(seed.slice(0, 2_000))}`);
+      }),
     };
   })();
 
@@ -11221,16 +11239,35 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {historyOpen && <aside className={styles.historyPanel}><header><div><strong>{t('versionHistory')}</strong><small>{t('versionHistoryHint')}</small></div><button onClick={() => setHistoryOpen(false)} aria-label={t('closeHistory')}>×</button></header>{persistence === 'local' ? <p>{t('historyLocalOnly')}</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>{t('nameCheckpoint')}</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || t('revisionLabel', { revision: snapshot.revision })}</b><span>{t('revisionMeta', { revision: snapshot.revision, at: new Date(snapshot.createdAt).toLocaleString() })}</span></button>) : <p>{t('noRevisions')}</p>}</div></>}</aside>}
         {outcomeMetricsOpen && <aside className={`${styles.historyPanel} ${styles.outcomeMetricsPanel}`} aria-label={t('sessionOutcomeMetrics')}>
           <header><div><strong>{t('ideaToDelivery')}</strong><small>{outcomeMetrics ? t('sessionVsTenant', { count: outcomeMetrics.sampleSize }) : t('valueGenerated')}</small></div><button onClick={() => setOutcomeMetricsOpen(false)} aria-label={t('closeOutcomeMetrics')}>×</button></header>
-          {persistence === 'local' ? <div className={styles.outcomeEmpty}><span aria-hidden><Icon source="↗" size="1em" /></span><strong>{t('saveForBaseline')}</strong><p>{t('saveForBaselineHint')}</p><button className={styles.primaryButton} onClick={() => requireAccount('metrics', t('gateMetricsTitle'), t('gateMetricsBody'))}>{t('saveAndMeasure')}</button></div> : outcomeMetricsLoading ? <p role="status">{t('calculatingValue')}</p> : outcomeMetricsError ? <div className={styles.outcomeEmpty}><strong>{t('metricsUnavailable')}</strong><p>{outcomeMetricsError}</p><button className={styles.secondaryButton} onClick={openOutcomeMetrics}>{t('retry')}</button></div> : outcomeMetrics ? <div className={styles.outcomeMetricList}>{outcomeMetrics.metrics.map((metric) => {
-            const comparable = metric.current != null && metric.baseline != null;
-            const delta = comparable ? metric.current! - metric.baseline! : null;
-            const improving = delta == null ? null : metric.direction === 'higher' ? delta >= 0 : false;
-            const favorable = improving == null ? null : improving || (metric.direction !== 'higher' && delta! <= 0);
-            return <article key={metric.key} className={styles.outcomeMetric}>
-              <div><strong>{metric.label}</strong><span>{formatOutcomeValue(metric.current, metric.unit)}</span></div>
-              <small>{metric.baseline == null ? t('baselineGathering') : t('typicalValue', { value: formatOutcomeValue(metric.baseline, metric.unit) })}{delta != null && Math.abs(delta) > .0001 ? <em data-positive={favorable}>{favorable ? <Icon source="↗" size="1em" /> : <Icon source="↘" size="1em" />}</em> : null}</small>
-            </article>;
-          })}</div> : null}
+          {persistence === 'local' ? <div className={styles.outcomeEmpty}><span aria-hidden><Icon source="↗" size="1em" /></span><strong>{t('saveForBaseline')}</strong><p>{t('saveForBaselineHint')}</p><button className={styles.primaryButton} onClick={() => requireAccount('metrics', t('gateMetricsTitle'), t('gateMetricsBody'))}>{t('saveAndMeasure')}</button></div> : outcomeMetricsLoading ? <p role="status">{t('calculatingValue')}</p> : outcomeMetricsError ? <div className={styles.outcomeEmpty}><strong>{t('metricsUnavailable')}</strong><p>{outcomeMetricsError}</p><button className={styles.secondaryButton} onClick={openOutcomeMetrics}>{t('retry')}</button></div> : outcomeMetrics ? <div className={styles.outcomeMetricList}>
+            {(() => {
+              // The north star leads, then the acts of the method in order. A flat
+              // list said "graded a kill condition" and "published something" were
+              // the same kind of news, which is the one claim this method denies.
+              const northStar = northStarMetric(outcomeMetrics.metrics, outcomeMetrics.northStarKey);
+              const groups = groupOutcomeMetrics(outcomeMetrics.metrics, outcomeMetrics.families ?? []);
+              const renderMetric = (metric: CreationOutcomeMetric) => {
+                const change = compareOutcomeMetric(outcomeText, metric);
+                return <article key={metric.key} className={styles.outcomeMetric}>
+                  <div><strong title={outcomeMetricDefinition(outcomeText, metric)}>{outcomeMetricLabel(outcomeText, metric)}</strong><span>{formatOutcomeMetric(outcomeText, metric.current, metric.unit)}</span></div>
+                  <small>{metric.baseline == null ? t('baselineGathering') : t('typicalValue', { value: formatOutcomeMetric(outcomeText, metric.baseline, metric.unit) })}{change.delta != null && change.delta !== 0 ? <em data-positive={change.favorable}>{change.favorable ? <Icon source="↗" size="1em" /> : <Icon source="↘" size="1em" />}</em> : null}</small>
+                </article>;
+              };
+              return <>
+                {northStar && <div className={styles.outcomeNorthStar}>
+                  <b>{t('northStar')}</b>
+                  <strong>{outcomeMetricLabel(outcomeText, northStar)}</strong>
+                  <span>{formatOutcomeMetric(outcomeText, northStar.current, northStar.unit)}</span>
+                  <small>{outcomeMetricDefinition(outcomeText, northStar)}</small>
+                  <small>{compareOutcomeMetric(outcomeText, northStar).label}</small>
+                </div>}
+                {groups.map((group) => <section key={group.family.key}>
+                  <h3 className={styles.outcomeFamily}>{outcomeFamilyLabel(outcomeText, group.family)}</h3>
+                  {group.metrics.map(renderMetric)}
+                </section>)}
+              </>;
+            })()}
+          </div> : null}
           <footer><span>{t('correlationCoverage')}</span><small>{t('aggregatesScoped')}</small></footer>
         </aside>}
         {conversationOpen && <aside className={styles.historyPanel} aria-label={t('sessionConversation')}><header><div><strong>{t('sessionConversation')}</strong><small>{t('sessionConversationHint')}</small></div><span className={styles.panelHeaderActions}><CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyChatDiagnostics')} getText={buildDiagnostics} /><button onClick={() => setConversationOpen(false)} aria-label={t('closeConversation')}>×</button></span></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.metadata?.authoredBy?.name || (message.messageRole === 'assistant' ? 'Brain' : message.messageRole)}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article>) : <p>{t('brainEmpty')}</p>}</div></aside>}

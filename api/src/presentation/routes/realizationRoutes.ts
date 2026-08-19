@@ -10,6 +10,13 @@
  *   PATCH  /api/realizations/:id/verdict      park it — the one verdict a person sets
  *   DELETE /api/realizations/:id
  *
+ * ── THE LOOP RECORDS ITSELF ─────────────────────────────────────────────────
+ * Read, Prove, Build and Measure each write a correlated event to the outcome
+ * ledger when the proof names the Creation Session whose idea it is proving
+ * (`sessionId`). That is what makes the platform's north-star metric — the
+ * share of ideas that reached a proof whose kill condition was actually graded
+ * — computable at all. See `application/realization/proofOutcomes.ts`.
+ *
  * Plan and BUILD are separate calls, for the same reason they are on challenges:
  * planning is a model reading an idea, and that reading is exactly what a human
  * should check before a project, a canvas full of files and a board of tickets
@@ -17,7 +24,7 @@
  * proof to run costs a request and leaves no rows behind.
  */
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { DbHandle as Db } from '../../application/shared/dbHandle';
 import type { Env, HonoEnv } from '../../env';
@@ -37,6 +44,8 @@ import {
   toRealizationView,
 } from '../../application/realization/realizationStore';
 import { syncRealizationVerdict } from '../../application/realization/realizationVerdict';
+import { proofReachable, recordProofOutcome } from '../../application/realization/proofOutcomes';
+import { resolveOutcomeSession } from '../../application/outcomes/outcomeLedger';
 import { ingressForPlanning, realize } from '../../application/realization/realizeService';
 import { REALIZATION_TARGETS, realizationTargetByKey, recommendRealizations } from '../../application/realization/targets';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
@@ -69,6 +78,25 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
   router.use('*', authMiddleware);
 
   /**
+   * Who this proof is for, as the outcome ledger needs it.
+   *
+   * The session is RESOLVED rather than believed: `resolveOutcomeSession`
+   * accepts it only when it is a live board in this tenant that this user is a
+   * member of. Everything else is derived from the proven request, so nothing a
+   * client sends can attribute a proof to another workspace's numbers.
+   */
+  const proofSubject = async (c: Context<HonoEnv>, sessionId: unknown, projectId?: number | null) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = (c.get('userId') as string) ?? null;
+    return {
+      tenantId,
+      userId,
+      projectId: projectId ?? null,
+      sessionId: await resolveOutcomeSession(db, { tenantId, userId, sessionId }),
+    };
+  };
+
+  /**
    * The catalog. Declared BEFORE `/:id` — Hono matches in registration order, and
    * a later literal route loses to an earlier parameterised one.
    */
@@ -83,20 +111,42 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
       })),
     }));
 
-  /** Read an idea and rank the proofs. Writes nothing. */
+  /**
+   * Read an idea and rank the proofs. Writes nothing — except, when the idea
+   * belongs to a board, the one thing worth keeping: that a READ happened, and
+   * when. `readBeforeBuildRate` is the difference between a team that chose a
+   * proof and a team that started building, and it cannot be told apart after
+   * the fact from a call that left no trace.
+   */
   router.post('/plan', async (c) => {
-    const body = await c.req.json<{ idea?: unknown }>().catch(() => ({}) as never);
+    const body = await c.req.json<{ idea?: unknown; sessionId?: unknown }>().catch(() => ({}) as never);
     const idea = typeof body.idea === 'string' ? body.idea.trim() : '';
     if (!idea) return c.json({ error: 'idea is required' }, 400);
     if (idea.length > MAX_IDEA_CHARS) {
       return c.json({ error: `idea exceeds ${MAX_IDEA_CHARS} characters` }, 400);
     }
 
+    const subject = await proofSubject(c, body.sessionId);
+    const correlationId = `read:${crypto.randomUUID()}`;
+    const startedAt = Date.now();
+    await recordProofOutcome(db, { ...subject, correlationId, action: 'idea.read', phase: 'started' });
     try {
       const spec = await readIdea(c.env as Env, idea);
-      return c.json({ spec, recommendations: recommendRealizations(spec), targets: targetCatalog() });
+      const recommendations = recommendRealizations(spec);
+      await recordProofOutcome(db, {
+        ...subject,
+        correlationId,
+        action: 'idea.read',
+        phase: 'succeeded',
+        durationMs: Date.now() - startedAt,
+        metricKey: 'proofs_ranked',
+        metricValue: recommendations.length,
+        unit: 'count',
+      });
+      return c.json({ spec, recommendations, targets: targetCatalog() });
     } catch (error) {
       reportCaughtError(error, { source: 'presentation/routes/realizationRoutes.ts', operation: 'plan' });
+      await recordProofOutcome(db, { ...subject, correlationId, action: 'idea.read', phase: 'failed', durationMs: Date.now() - startedAt });
       return c.json({ error: error instanceof Error ? error.message : 'Could not read the idea' }, 502);
     }
   });
@@ -116,7 +166,7 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
   router.post('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const body = await c.req
-      .json<{ idea?: unknown; challengeId?: unknown; projectId?: unknown; targetKey?: unknown; strategy?: unknown }>()
+      .json<{ idea?: unknown; challengeId?: unknown; projectId?: unknown; targetKey?: unknown; strategy?: unknown; sessionId?: unknown }>()
       .catch(() => ({}) as never);
 
     const target = realizationTargetByKey(typeof body.targetKey === 'string' ? body.targetKey : null);
@@ -158,16 +208,35 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
       briefPlan,
     });
 
+    const subject = await proofSubject(c, body.sessionId, projectId);
     const row = await createRealization(db, {
       tenantId,
       challengeId,
       projectId,
+      sessionId: subject.sessionId,
       targetKey: target.key,
       title: spec.title,
       strategy: plan.strategy,
       spec,
       plan,
-      userId: (c.get('userId') as string) ?? null,
+      userId: subject.userId,
+    });
+    // PROVE. The single most consequential decision in the first month of an
+    // idea is which proof is worth running, so it is recorded as an act in its
+    // own right rather than inferred later from whatever got built.
+    const correlationId = `choose:${row.id}`;
+    await recordProofOutcome(db, { ...subject, correlationId, action: 'proof.choose', phase: 'started', realizationId: row.id, targetKey: target.key });
+    await recordProofOutcome(db, {
+      ...subject,
+      correlationId,
+      action: 'proof.choose',
+      phase: 'succeeded',
+      realizationId: row.id,
+      targetKey: target.key,
+      metricKey: 'proof_effort',
+      metricValue: target.effort,
+      unit: 'count',
+      metadata: { fidelity: target.fidelity, fromChallenge: !!challengeId },
     });
     return c.json({ realization: toRealizationView(row) }, 201);
   });
@@ -200,6 +269,21 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
     const note = typeof body.note === 'string' ? body.note : undefined;
     const updated = await abandonRealization(db, tenantId, c.req.param('id'), note);
     if (!updated) return c.json({ error: 'Realization not found' }, 404);
+    // Terminates the grade correlation as FAILED, never validated: parking an
+    // idea is a judgement with no number behind it, and counting it as graded
+    // would let the north-star metric be satisfied by giving up.
+    await recordProofOutcome(db, {
+      tenantId,
+      userId: (c.get('userId') as string) ?? null,
+      projectId: updated.projectId,
+      sessionId: updated.sessionId,
+      correlationId: `grade:${updated.id}`,
+      action: 'proof.grade',
+      phase: 'failed',
+      realizationId: updated.id,
+      targetKey: updated.targetKey,
+      metadata: { verdict: 'abandoned' },
+    });
     return c.json({ realization: toRealizationView(updated) });
   });
 
@@ -231,6 +315,13 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
 
     await setRealizationOutcome(db, tenantId, row.id, { status: 'building' });
 
+    // BUILD. Correlated on the realization, so a rebuild converges on the same
+    // pair rather than counting as a second attempt nobody made.
+    const subject = { tenantId, userId: (c.get('userId') as string) ?? null, projectId: row.projectId, sessionId: row.sessionId };
+    const buildCorrelation = `build:${row.id}`;
+    const buildStartedAt = Date.now();
+    await recordProofOutcome(db, { ...subject, correlationId: buildCorrelation, action: 'proof.build', phase: 'started', realizationId: row.id, targetKey: row.targetKey });
+
     try {
       // Re-derived rather than stored: `requiredCollections` is a property of the
       // TARGET, and a realization planned before a target learned it needs one
@@ -257,11 +348,41 @@ export function createRealizationRoutes(db: Db, runtimeService: RuntimeService):
         liveUrl: result.liveUrl,
         result: result as unknown as Record<string, unknown>,
       });
+      const reachable = proofReachable(result.liveUrl);
+      const built = { ...subject, projectId: result.projectId ?? row.projectId, realizationId: row.id, targetKey: row.targetKey };
+      await recordProofOutcome(db, {
+        ...built,
+        correlationId: buildCorrelation,
+        action: 'proof.build',
+        phase: 'succeeded',
+        durationMs: Date.now() - buildStartedAt,
+        metricKey: 'reachable_proofs',
+        metricValue: reachable ? 1 : 0,
+        unit: 'count',
+        // `reachable` is what separates a built proof from one a person can
+        // open. The Build family counts this key and nothing else.
+        metadata: { reachable, publishedAssets: result.publishedAssets },
+      });
+      // MEASURE starts the moment the proof is live: the clock on "did anyone
+      // grade this?" runs from now, and the terminal arrives when the proof's
+      // own console reports what its kill condition decided.
+      if (reachable) {
+        await recordProofOutcome(db, { ...built, correlationId: `grade:${row.id}`, action: 'proof.grade', phase: 'started' });
+      }
       return c.json({ realization: updated ? toRealizationView(updated) : null, result });
     } catch (error) {
       reportCaughtError(error, { source: 'presentation/routes/realizationRoutes.ts', operation: 'build' });
       const message = error instanceof Error ? error.message : 'Build failed';
       await setRealizationOutcome(db, tenantId, row.id, { status: 'failed', error: message });
+      await recordProofOutcome(db, {
+        ...subject,
+        correlationId: buildCorrelation,
+        action: 'proof.build',
+        phase: 'failed',
+        realizationId: row.id,
+        targetKey: row.targetKey,
+        durationMs: Date.now() - buildStartedAt,
+      });
       return c.json({ error: message }, 500);
     }
   });

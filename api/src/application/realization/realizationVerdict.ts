@@ -27,6 +27,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { siteCollections, siteRecords } from '../../infrastructure/database/schema';
 import { setRealizationVerdict, isRealizationVerdict, type RealizationVerdict, type Row } from './realizationStore';
+import { recordProofOutcome } from './proofOutcomes';
 import { VERDICT_COLLECTION } from './targets/shared';
 
 interface DecidedRecord {
@@ -90,6 +91,32 @@ export async function syncRealizationVerdict(db: Db, tenantId: number, row: Row)
     verdict: found.verdict,
     verdictMetric: found.metric,
     decidedAt: found.decidedAt,
+  });
+
+  /**
+   * MEASURE — the terminal that makes this method more than shipping.
+   *
+   * `validated` with 1 for met and 0 for missed, because BOTH are grades: an
+   * idea whose kill condition fired and was believed is the most valuable
+   * outcome this platform produces, and a metric that only counted successes
+   * would quietly reward teams for never running a proof they might fail.
+   * Idempotent through the ledger's own `(session, correlation, action, phase)`
+   * key, which matters because this rolls up on every read of the realization.
+   */
+  await recordProofOutcome(db, {
+    tenantId,
+    userId: null,
+    projectId: row.projectId,
+    sessionId: (updated ?? row).sessionId,
+    correlationId: `grade:${row.id}`,
+    action: 'proof.grade',
+    phase: 'validated',
+    realizationId: row.id,
+    targetKey: row.targetKey,
+    metricKey: 'kill_condition_met',
+    metricValue: found.verdict === 'met' ? 1 : 0,
+    unit: 'count',
+    metadata: { verdict: found.verdict },
   });
   return updated ?? row;
 }

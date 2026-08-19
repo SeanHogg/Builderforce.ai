@@ -24,6 +24,7 @@ import {
   orderLineItems,
   orders,
   partnerProgramOptIns,
+  rfpRisks,
   templateLicenses,
   whitelabelTenants,
 } from '../../../infrastructure/database/schema/commerce';
@@ -52,4 +53,14 @@ export const COMMERCE_ENTITIES = defineDomainEntities('commerce', [
   communityResources,
   partnerProgramOptIns,
   inboxSeatAddons,
+  /** The RFP risk / dependency register (migration 0483). PROJECTED from the
+   *  proposal document — `projectRiskRegister` replaces a response's entries on
+   *  every regeneration, carrying decided ones over by title — and its lifecycle
+   *  is moved by `updateRegisterEntry`, which is what validates a status. A
+   *  generic PATCH could repoint `response_id` or rewrite the `title` the carry
+   *  matches on, silently reopening a risk the team accepted; so the rows read
+   *  through the generic path and are written only by the service that owns
+   *  those invariants. Not registered: a register entry is read on the proposal
+   *  it belongs to, not navigated to as an object of its own. */
+  entity(rfpRisks, { readOnly: true }),
 ]);

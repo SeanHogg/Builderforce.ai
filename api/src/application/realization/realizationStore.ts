@@ -28,6 +28,8 @@ export interface RealizationView {
   id: string;
   challengeId: string | null;
   projectId: number | null;
+  /** The Creation Session whose idea this proof is of, when it had one. */
+  sessionId: string | null;
   targetKey: RealizationKey | string;
   title: string;
   strategy: string;
@@ -55,6 +57,7 @@ export function toRealizationView(row: Row): RealizationView {
     id: row.id,
     challengeId: row.challengeId,
     projectId: row.projectId,
+    sessionId: row.sessionId,
     targetKey: row.targetKey,
     title: row.title,
     strategy: row.strategy,
@@ -97,6 +100,8 @@ export async function createRealization(
     tenantId: number;
     challengeId: string | null;
     projectId: number | null;
+    /** The board whose idea this proof is of, when it was started from one. */
+    sessionId?: string | null;
     targetKey: string;
     title: string;
     strategy: string;
@@ -111,6 +116,7 @@ export async function createRealization(
       tenantId: args.tenantId,
       challengeId: args.challengeId,
       projectId: args.projectId,
+      sessionId: args.sessionId ?? null,
       targetKey: args.targetKey.slice(0, 48),
       title: args.title.slice(0, 255),
       strategy: args.strategy,

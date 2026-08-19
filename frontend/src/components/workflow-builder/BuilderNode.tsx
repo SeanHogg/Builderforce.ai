@@ -1,9 +1,10 @@
 'use client';
 
 import { memo } from 'react';
+import { useTranslations } from 'next-intl';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { WorkflowNodeKind } from '@/lib/builderforceApi';
-import { NODE_KIND_MAP } from './nodeKinds';
+import { NODE_KIND_MAP, nodeKindLabel } from './nodeKinds';
 import { integrationAccent, integrationForConfig, integrationIcon } from './integrations';
 import { Icon } from '@/components/ui/Icon';
 
@@ -103,6 +104,7 @@ export function configSummary(kind: WorkflowNodeKind, config: Record<string, unk
 /** Single renderer for every builder node, styled by kind. `trigger` has no
  *  target handle (it starts a flow); `output` has no source handle (terminal). */
 function BuilderNodeImpl({ data, selected }: NodeProps) {
+  const t = useTranslations('evermindBuild');
   const d = data as BuilderNodeData;
   const meta = NODE_KIND_MAP[d.kind];
   const accent = meta?.accent ?? 'var(--text-muted)';
@@ -128,7 +130,7 @@ function BuilderNodeImpl({ data, selected }: NodeProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <span><Icon source={meta?.icon ?? 'template'} size={16} /></span>
           <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>
-            {d.label || meta?.label || d.kind}
+            {d.label || (meta ? nodeKindLabel(meta, t) : d.kind)}
           </span>
         </div>
         <div

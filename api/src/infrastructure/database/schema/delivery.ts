@@ -55,7 +55,7 @@ import {
   workflowDefinitions,
   workflows,
 } from './agents';
-import { brainChats, facts, teams } from './canvas';
+import { brainChats, creationSessions, facts, teams } from './canvas';
 import { budgets } from './finance';
 import { securityAudits, sourceControlIntegrations, ticketAudits } from './governance';
 import { onCallMembers, segments, tenants, users } from './identity';
@@ -1627,6 +1627,15 @@ export const realizations = pgTable('realizations', {
   /** When the verdict was recorded. Distinct from `updatedAt`, which a rebuild
    *  also bumps without touching the verdict. */
   decidedAt:     timestamp('decided_at'),
+  /**
+   * The Creation Session whose idea this proof is of.
+   *
+   * The outcome ledger's grain is the session, so this link is what lets the
+   * loop — read the idea, choose a proof, build it, grade its kill condition —
+   * be MEASURED rather than merely performed. Nullable because a proof can be
+   * started outside a board; such a proof simply never enters the ledger.
+   */
+  sessionId:     uuid('session_id').references(() => creationSessions.id, { onDelete: 'set null' }),
   createdByUserId: varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
@@ -1634,6 +1643,7 @@ export const realizations = pgTable('realizations', {
   index('idx_realizations_tenant_time').on(t.tenantId, t.createdAt),
   index('idx_realizations_challenge').on(t.challengeId),
   index('idx_realizations_project').on(t.projectId),
+  index('idx_realizations_session').on(t.sessionId),
 ]);
 
 

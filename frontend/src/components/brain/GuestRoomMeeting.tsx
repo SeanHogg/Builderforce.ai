@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useLiveSession } from '@/lib/live/LiveSessionContext';
 import { VideoGrid } from '@/components/video/VideoGrid';
+import { CallConnectionNotice } from '@/components/live/CallConnectionNotice';
 import { guestMediaTransport } from '@/lib/guestRoomApi';
 
 /**
@@ -44,7 +45,11 @@ export function GuestRoomMeeting({ code, name, onLeave }: { code: string; name: 
       <div className="gr-meeting-head">
         <span className="gr-meeting-title">
           {t('meetingTitle')}
-          <small>{media.connected ? t('meetingLive') : t('meetingConnecting')}</small>
+          {/* "Live" is this panel's own word for a call that is up; everything else the
+              connection can be doing is said by the shared notice, so the free room and
+              the shell dock cannot disagree about what "connecting" means or how long it
+              is honest to keep saying it. */}
+          {media.connected ? <small>{t('meetingLive')}</small> : <small><CallConnectionNotice /></small>}
         </span>
         <div className="gr-meeting-actions">
           <button

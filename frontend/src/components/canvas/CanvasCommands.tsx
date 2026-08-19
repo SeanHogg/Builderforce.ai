@@ -268,6 +268,17 @@ export function ShareCanvasIcon() {
 /** Send it out: a box with something leaving the top of it. Distinct from
  *  {@link ShareCanvasIcon}, which brings a person IN to this board — this one puts the
  *  work somewhere strangers can reach, and the two are opposite directions on purpose. */
+/** PROVE: a target, because choosing a proof is choosing which question you are
+ *  willing to spend money answering — and every proof states the number that
+ *  would stop it. */
+export function ProveIdeaIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" strokeWidth="1.25" />
+    <circle cx="8" cy="8" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.25" />
+    <circle cx="8" cy="8" r="1" fill="currentColor" />
+  </svg>;
+}
+
 export function PublishCanvasIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M2.4 9.9v2.7a1.4 1.4 0 0 0 1.4 1.4h8.4a1.4 1.4 0 0 0 1.4-1.4V9.9" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />

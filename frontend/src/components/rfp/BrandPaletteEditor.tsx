@@ -1,4 +1,9 @@
-'use client';
+/*
+ * No `'use client'` here on purpose. `RfpContent.tsx` is this component's only
+ * importer and already declares the boundary, so a directive here would mark a
+ * second entry point that does not exist — the shape the architecture ratchet's
+ * changelog has removed six times already.
+ */
 
 /**
  * One brand-colour editor, for BOTH halves of the co-branding.
@@ -23,7 +28,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { rfpApi, type BrandPalette } from '@/lib/builderforceApi';
-import { extractPaletteFromImage } from '@/lib/brandPalette';
+import { FALLBACK_SWATCH_HEX, extractPaletteFromImage } from '@/lib/brandPalette';
 
 export interface BrandPaletteEditorProps {
   value: BrandPalette;
@@ -87,7 +92,7 @@ export function BrandPaletteEditor({ value, onChange, hint, disabled }: BrandPal
 
   return (
     <div>
-      {hint && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 8px' }}>{hint}</p>}
+      {hint && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '2px 0 8px' }}>{hint}</p>}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 10 }}>
         <ColorField label={t('field.primary')} value={value.primary} disabled={disabled} onChange={(v) => onChange({ primary: v })} />
@@ -96,14 +101,14 @@ export function BrandPaletteEditor({ value, onChange, hint, disabled }: BrandPal
       </div>
 
       <label style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 10 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('field.logoUrl')}</span>
+        <span style={{ fontSize: 'var(--font-size-field-label)', fontWeight: 700, color: 'var(--text-secondary)' }}>{t('field.logoUrl')}</span>
         <input className="input" disabled={disabled} value={value.logoUrl ?? ''} onChange={(e) => onChange({ logoUrl: e.target.value })} placeholder="https://…/logo.png" />
       </label>
 
       {/* The two ways of not typing hex by hand. */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginTop: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 200px', minWidth: 0 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('brand.fromSite')}</span>
+          <span style={{ fontSize: 'var(--font-size-field-label)', fontWeight: 700, color: 'var(--text-secondary)' }}>{t('brand.fromSite')}</span>
           <input
             className="input"
             disabled={disabled || busy !== null}
@@ -132,11 +137,11 @@ export function BrandPaletteEditor({ value, onChange, hint, disabled }: BrandPal
         />
       </div>
 
-      {notice && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '8px 0 0' }}>{notice}</p>}
+      {notice && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '8px 0 0' }}>{notice}</p>}
 
       {candidates.length > 0 && (
         <div style={{ marginTop: 8 }}>
-          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 4px' }}>{t('brand.candidates')}</p>
+          <p style={{ fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)', margin: '0 0 4px' }}>{t('brand.candidates')}</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {candidates.map((hex) => (
               <button
@@ -159,11 +164,11 @@ export function BrandPaletteEditor({ value, onChange, hint, disabled }: BrandPal
 function ColorField({ label, value, onChange, disabled }: { label: string; value: string; onChange: (v: string) => void; disabled?: boolean }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{label}</span>
+      <span style={{ fontSize: 'var(--font-size-field-label)', fontWeight: 700, color: 'var(--text-secondary)' }}>{label}</span>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <input
           type="color"
-          value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#000000'}
+          value={/^#[0-9a-f]{6}$/i.test(value) ? value : FALLBACK_SWATCH_HEX}
           disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
           style={{ width: 34, height: 34, padding: 0, border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', background: 'transparent' }}

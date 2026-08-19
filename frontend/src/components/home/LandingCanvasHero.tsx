@@ -3,13 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import BrainBackdrop from '@/components/BrainBackdrop';
 import { ChatInput } from '@/components/ChatInput';
 import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
 import { applyTemplateEntry } from '@/lib/templates/apply';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { NEW_CHAT_MODE, type ChatMode } from '@/lib/brain';
-import { useIsMobile } from '@/lib/useIsMobile';
 import styles from './LandingCanvasHero.module.css';
 
 /**
@@ -27,31 +25,43 @@ import styles from './LandingCanvasHero.module.css';
  *    ~4,400 lines plus a flow engine, and putting it above the fold would trade
  *    the homepage's first paint for a surface whose test suite cannot currently
  *    give a verdict. The preview paints instantly and hands off on first intent.
- * 2. The board is not rendered at all on narrow viewports — an infinite pan/zoom
- *    surface is the wrong first touch on a phone. Narrow gets the same copy and
- *    the same composer in normal flow, over the Evermind brain animation that
- *    the wide hero trades away for the board. The scene is a dark art surface in
- *    both themes (like the canvas board), so the narrow hero declares its own
- *    light-on-dark palette rather than inheriting the app shell's tokens.
+ * 2. The board LAYS OUT differently on a phone; it is not withheld from one.
+ *    It used to be: below 900px the board was removed from the DOM entirely and
+ *    the visitor got copy over a brain animation, so the homepage argued for the
+ *    canvas everywhere except the device most people arrive on. The original
+ *    reason was real — five absolutely-positioned percentage-placed cards
+ *    overlap at 360px — so the fix is the LAYOUT, not the gate: the positions
+ *    are published as custom properties and only consumed above 900px, and
+ *    below it the same objects stack in normal flow inside a scrollable board.
  *
- * Neither the board nor the brain is rendered on the server or the first client
- * paint, so the headline and composer are painted before any of it is laid out.
+ *    That is a pure-CSS decision, which matters twice: there is no width branch
+ *    to get wrong, and no hydration seam between what the server rendered and
+ *    what the first client paint decides.
+ *
+ * The board is not rendered on the server or the first client paint, so the
+ * headline and composer are painted before any of it is laid out.
  */
 
 /**
  * Non-translatable geometry for the seeded objects, paired with the localized
  * `home.canvas.objects` array BY INDEX — the same convention the landing page
  * already uses for FEATURES icons. Keep both arrays the same length and order.
+ *
+ * Published as CUSTOM PROPERTIES rather than as `left` / `top` directly, because
+ * an inline style beats a media query and there is no `@media` that can undo
+ * one. The stylesheet consumes them only above 900px; below it the same cards
+ * stack in normal flow, which is what makes the board work on a phone without a
+ * JS width branch or a second markup tree.
  */
 const OBJECT_LAYOUT: { style: React.CSSProperties }[] = [
-  { style: { left: '52%', top: '10%' } },
-  { style: { left: '27%', top: '3%' } },
-  { style: { right: '2%', top: '10%' } },
-  { style: { left: '28%', top: '60%' } },
-  { style: { right: '2%', top: '58%' } },
-  { style: { left: '2%', top: '10%' } },
-  { style: { left: '3%', top: '58%' } },
-  { style: { left: '53%', top: '58%' } },
+  { style: { '--n-left': '52%', '--n-top': '10%' } as React.CSSProperties },
+  { style: { '--n-left': '27%', '--n-top': '3%' } as React.CSSProperties },
+  { style: { '--n-right': '2%', '--n-top': '10%' } as React.CSSProperties },
+  { style: { '--n-left': '28%', '--n-top': '60%' } as React.CSSProperties },
+  { style: { '--n-right': '2%', '--n-top': '58%' } as React.CSSProperties },
+  { style: { '--n-left': '2%', '--n-top': '10%' } as React.CSSProperties },
+  { style: { '--n-left': '3%', '--n-top': '58%' } as React.CSSProperties },
+  { style: { '--n-left': '53%', '--n-top': '58%' } as React.CSSProperties },
 ];
 
 /** Index of the object that renders a chart preview, and of the live agent. */
@@ -91,15 +101,12 @@ export function LandingCanvasHero() {
   // rides into the guest session rather than being a control that did nothing.
   const [chatMode, setChatMode] = useState<ChatMode>(NEW_CHAT_MODE);
 
-  // The board mounts only after the copy has painted, and only when the viewport
-  // is wide enough to pan a board on. `useIsMobile` reports false on the server
-  // and the first paint, so `mounted` is what actually gates the board.
-  const isNarrow = useIsMobile(899);
+  // The board mounts after the copy has painted, on every viewport. There is no
+  // width test here on purpose: how the board LAYS OUT is the stylesheet's
+  // decision (see OBJECT_LAYOUT), so this is only about first paint.
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
-  const showBoard = mounted && !isNarrow;
-  // Narrow gets the brain instead of the board — one of the two, never neither.
-  const showBrain = mounted && isNarrow;
+  const showBoard = mounted;
 
   const objects = t.raw('canvas.objects') as CanvasObjectCopy[];
   const teammates = t.raw('canvas.team') as CanvasTeammateCopy[];
@@ -168,9 +175,7 @@ export function LandingCanvasHero() {
   );
 
   return (
-    <section className={`${styles.hero}${showBrain ? ` ${styles.heroBrain}` : ''}`}>
-      {showBrain && <BrainBackdrop className={styles.brain} />}
-
+    <section className={styles.hero}>
       {/* `mkt-in` = THE marketing column (globals.css): the hero board starts
           under the logo and ends under "Open the canvas", like every other band. */}
       <div className={`mkt-in ${styles.inner}`}>
@@ -184,7 +189,7 @@ export function LandingCanvasHero() {
         </h1>
         <p className={styles.lede}>{t('heroSub')}</p>
 
-        <div className={`${styles.stage} ${showBoard ? '' : styles.stageNarrow}`}>
+        <div className={`${styles.stage}${showBoard ? '' : ` ${styles.stagePending}`}`}>
           {showBoard && (
             <div
               ref={boardRef}
@@ -296,7 +301,6 @@ export function LandingCanvasHero() {
 
         <p className={styles.footRow}>
           <strong>{t('canvas.guestNote')}</strong>
-          {!showBoard && mounted && <span className={styles.narrowNote}>{t('canvas.narrowNote')}</span>}
         </p>
       </div>
     </section>
@@ -304,9 +308,9 @@ export function LandingCanvasHero() {
 }
 
 /**
- * The one composer. Rendered inside the board on wide viewports and in normal
- * flow on narrow ones — same state, same submit, so the "start creating" path
- * can never drift between the two layouts.
+ * The one composer. Bottom-centre ON the board where the board is a plane, and
+ * under the stacked cards where it is a column — same state, same submit, so
+ * the "start creating" path can never drift between the two layouts.
  *
  * It is the SAME `ChatInput` the canvas uses, with the same `/` menu, so the first
  * prompt a visitor types is typed into the control they will keep using. What it

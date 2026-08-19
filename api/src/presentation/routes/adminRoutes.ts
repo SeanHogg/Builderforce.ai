@@ -1372,7 +1372,16 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const tenantId = Number.isInteger(tenantValue) && tenantValue > 0 ? tenantValue : undefined;
     const projectId = Number.isInteger(projectValue) && projectValue > 0 ? projectValue : undefined;
     const db = buildDatabase(c.env);
-    return c.json(await getOutcomeValueRollup(db, { days, tenantId, projectId }));
+    // Read-through cached: five cohort queries over every session in the window,
+    // on a panel that re-polls on every filter change. Value rollups move on the
+    // scale of hours, not seconds, so a minute of staleness costs nothing and a
+    // superadmin flipping between workspaces stops re-running the whole sweep.
+    return c.json(await getOrSetCached(
+      c.env,
+      `admin:outcome-metrics:${days}:${tenantId ?? 'all'}:${projectId ?? 'all'}`,
+      () => getOutcomeValueRollup(db, { days, tenantId, projectId }),
+      { kvTtlSeconds: 60 },
+    ));
   });
 
   // -------------------------------------------------------------------------

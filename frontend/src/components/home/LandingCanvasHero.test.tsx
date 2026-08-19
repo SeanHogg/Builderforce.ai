@@ -179,15 +179,38 @@ describe('LandingCanvasHero', () => {
     expect(board).toHaveAttribute('data-revealed', 'false');
   });
 
-  it('renders no board on a narrow viewport but keeps the composer usable', async () => {
+  /**
+   * The board used to be withheld below 900px, so the homepage argued for the
+   * canvas everywhere except the device most visitors arrive on. It is now the
+   * same board on every viewport, laid out by the STYLESHEET — which is what
+   * this asserts: the same markup, no width branch, and no inline coordinate
+   * that a media query could not undo.
+   */
+  it('renders the same board on a narrow viewport, positioned by the stylesheet', async () => {
     stubViewport(true);
     render(<LandingCanvasHero />);
 
-    await waitFor(() => expect(screen.getByText('canvas.narrowNote')).toBeInTheDocument());
-    expect(screen.queryByText('Q3 pipeline.csv')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Q3 pipeline.csv')).toBeInTheDocument());
+    for (const object of OBJECTS) expect(screen.getByText(object.title)).toBeInTheDocument();
+    // The roster is reachable on a phone too — the C-suite is always on.
+    for (const mate of TEAM) expect(screen.getByText(mate.name)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('heroPromptPlaceholder'), { target: { value: 'A campaign' } });
     fireEvent.click(screen.getByText('send'));
     expect(push).toHaveBeenCalledWith('/create/local-session-1');
+  });
+
+  it('publishes object coordinates as custom properties, never as inline left/top', async () => {
+    render(<LandingCanvasHero />);
+    await waitFor(() => expect(screen.getByText('Q3 pipeline.csv')).toBeInTheDocument());
+
+    // An inline `left: 52%` beats every media query, which is exactly why the
+    // board could not be laid out twice from one markup tree.
+    const card = screen.getByText('Q3 pipeline.csv').closest('button');
+    expect(card).toBeTruthy();
+    const style = card!.getAttribute('style') ?? '';
+    expect(style).toContain('--n-left');
+    expect(style).not.toMatch(/(^|;)\s*left:/);
+    expect(style).not.toMatch(/(^|;)\s*top:/);
   });
 });

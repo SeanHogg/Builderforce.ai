@@ -15,7 +15,6 @@ import {
   brainChats,
   brainChatMessages,
   creationSessionEvents,
-  creationOutcomeEvents,
   creationSessionMembers,
   creationSessionObjects,
   creationSessionProjectLinks,
@@ -66,6 +65,20 @@ import { relayToRoom } from '../../presentation/routes/realtimeRelay';
 import { sendTransactionalEmail } from '../email/sendEmail';
 import { sendCreationSessionInviteEmail } from '../../infrastructure/email/EmailService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { isOutcomePhase, normalizeOutcomeAction, recordOutcomeEvent } from '../outcomes/outcomeLedger';
+import {
+  NORTH_STAR_METRIC_KEY,
+  OUTCOME_BASELINE_COHORT,
+  OUTCOME_DEFINITION_VERSION,
+  OUTCOME_FAMILY_LABELS,
+  OUTCOME_METRIC_FAMILIES,
+  aggregateMetricValue,
+  outcomeAggregateSql,
+  outcomeFactsSql,
+  toOutcomeMetricValues,
+  type OutcomeFact,
+} from '../outcomes/outcomeMetricContract';
 import { normalizeChatMode } from '../brain/chatMode';
 import { sha256Hex } from '../../domain/shared/hash';
 import {
@@ -1145,14 +1158,23 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ session: access.session, role: access.role, currentUserId: c.get('userId'), objects: graph.objects, connections: graph.connections, projectIds: projectLinks.map((p) => p.projectId), app, members, personalViewport: currentMember?.viewport ?? access.session.viewport });
   });
 
+  /**
+   * Record one correlated outcome.
+   *
+   * The ledger insert itself belongs to `application/outcomes/outcomeLedger.ts`
+   * — the proof lifecycle writes through the same port — so what stays here is
+   * the part that is genuinely about THIS session: who is allowed to record
+   * what, and the rule that a project id is accepted only when it is actually
+   * linked to the board. Tenant and user identity are derived from the proven
+   * session, never read off the body.
+   */
   router.post('/:id/outcomes', async (c) => {
     const access = await requireSession(c, 'viewer');
     if (!access) return c.json({ error: 'Session not found' }, 404);
     const body = await c.req.json<OutcomeBody>().catch(() => ({} as OutcomeBody));
     const correlationId = typeof body.correlationId === 'string' ? body.correlationId.trim().slice(0, 128) : '';
-    const action = typeof body.action === 'string' ? body.action.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '_').slice(0, 64) : '';
-    const phases = new Set(['started', 'succeeded', 'failed', 'validated', 'reused']);
-    if (!correlationId || !action || !body.phase || !phases.has(body.phase)) return c.json({ error: 'correlationId, action, and a valid phase are required' }, 400);
+    const action = normalizeOutcomeAction(body.action);
+    if (!correlationId || !action || !isOutcomePhase(body.phase)) return c.json({ error: 'correlationId, action, and a valid phase are required' }, 400);
     if (action !== 'session.open' && ROLE_RANK[access.role as SessionRole] < ROLE_RANK.editor) return c.json({ error: 'Session role cannot record this outcome' }, 403);
     const actorType = action === 'session.open' ? 'user' : body.actorType === 'agent' || body.actorType === 'brain' || body.actorType === 'system' ? body.actorType : 'user';
     const projectId = Number.isInteger(body.projectId) && Number(body.projectId) > 0 ? Number(body.projectId) : null;
@@ -1162,130 +1184,96 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       )).limit(1);
       if (!linked) return c.json({ error: 'Project is not linked to this session' }, 400);
     }
-    const rawMetadata = body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata : {};
-    let metadata: unknown = rawMetadata;
-    try { if (JSON.stringify(rawMetadata).length > 4_000) metadata = { truncated: true }; } catch { metadata = {}; }
-    const [event] = await db.insert(creationOutcomeEvents).values({
+    const recorded = await recordOutcomeEvent(db, {
       correlationId,
       sessionId: access.session.id,
       tenantId: access.session.tenantId,
       projectId,
       actorType,
-      actorRef: actorType === 'user' ? c.get('userId') as string : typeof body.actorRef === 'string' ? body.actorRef.slice(0, 128) : actorType,
+      actorRef: actorType === 'user' ? c.get('userId') as string : typeof body.actorRef === 'string' ? body.actorRef : null,
       action,
       phase: body.phase,
-      metricKey: typeof body.metricKey === 'string' ? body.metricKey.slice(0, 80) : null,
-      metricValue: Number.isFinite(body.metricValue) ? Number(body.metricValue) : null,
-      unit: typeof body.unit === 'string' ? body.unit.slice(0, 24) : null,
-      artifactId: typeof body.artifactId === 'string' ? body.artifactId.slice(0, 128) : null,
-      durationMs: Number.isFinite(body.durationMs) ? Math.max(0, Math.round(Number(body.durationMs))) : null,
-      costUsdMillicents: Number.isFinite(body.costUsdMillicents) ? Math.max(0, Math.round(Number(body.costUsdMillicents))) : null,
-      metadata,
-    }).onConflictDoNothing().returning({ id: creationOutcomeEvents.id });
-    return c.json({ recorded: !!event, duplicate: !event }, event ? 201 : 200);
+      metricKey: body.metricKey ?? null,
+      metricValue: body.metricValue ?? null,
+      unit: body.unit ?? null,
+      artifactId: body.artifactId ?? null,
+      durationMs: body.durationMs ?? null,
+      costUsdMillicents: body.costUsdMillicents ?? null,
+      metadata: body.metadata,
+    });
+    return c.json({ recorded, duplicate: !recorded }, recorded ? 201 : 200);
   });
 
+  /**
+   * The session scorecard: this board's numbers against an aggregate baseline
+   * of its workspace.
+   *
+   * Both halves come from `application/outcomes/outcomeMetricContract.ts`, and
+   * that is the whole point of the module existing. This route used to carry
+   * its own copy of every metric and averaged the PER-SESSION RATES of its
+   * peers to make a baseline, while the admin rollup computed a RATIO OVER THE
+   * COHORT from a second copy of the same SQL — so a board could be told it was
+   * beating a baseline that the sales deck computed differently. Now the facts
+   * CTE, the session value and the cohort aggregate each exist once.
+   *
+   * The baseline deliberately EXCLUDES this session: a cohort of one compared
+   * against itself always reads "average", which is the least useful thing a
+   * scorecard can say.
+   */
   router.get('/:id/outcome-metrics', async (c) => {
     const access = await requireSession(c, 'viewer');
     if (!access) return c.json({ error: 'Session not found' }, 404);
-    const result = await db.execute(sql`
-      WITH scoped AS (
-        SELECT id, created_at
-        FROM creation_sessions
-        WHERE tenant_id = ${access.session.tenantId} AND status <> 'deleted'
-        ORDER BY last_activity_at DESC
-        LIMIT 500
-      ), facts AS (
-        SELECT s.id,
-          EXTRACT(EPOCH FROM (
-            (SELECT MIN(o.created_at) FROM creation_session_objects o WHERE o.session_id = s.id AND o.kind <> 'chat') -
-            COALESCE((SELECT MIN(t.created_at) FROM creation_session_timeline t WHERE t.session_id = s.id AND t.message_role = 'user'), s.created_at)
-          )) AS time_to_artifact_seconds,
-          (SELECT COUNT(*) FROM creation_session_objects o WHERE o.session_id = s.id AND o.kind <> 'chat') AS artifact_count,
-          (SELECT COUNT(*) FROM creation_session_members m WHERE m.session_id = s.id) AS member_count,
-          (SELECT COUNT(DISTINCT t.metadata #>> '{authoredBy,ref}') FROM creation_session_timeline t WHERE t.session_id = s.id AND t.metadata #>> '{authoredBy,kind}' = 'agent') AS agent_participants,
-          EXISTS (
-            SELECT 1 FROM creation_session_timeline brain_event
-            WHERE brain_event.session_id = s.id AND brain_event.metadata #>> '{authoredBy,kind}' = 'brain'
-              AND brain_event.created_at > COALESCE((SELECT MAX(agent.created_at) FROM creation_session_timeline agent WHERE agent.session_id = s.id AND agent.metadata #>> '{authoredBy,kind}' = 'agent'), 'infinity'::timestamp)
-          ) AS synthesized,
-          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'started') AS delivery_attempts,
-          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'succeeded') AS delivery_successes,
-          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'failed') AS delivery_failures,
-          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action = 'delivery.retry' AND e.phase = 'succeeded') AS delivery_retries,
-          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.phase = 'validated') AS validations,
-          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.phase = 'validated' AND COALESCE(e.metric_value, 1) > 0) AS validation_passes,
-          EXISTS (SELECT 1 FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action = 'session.open' AND e.phase = 'succeeded' AND e.occurred_at > s.created_at + interval '1 hour' AND e.occurred_at <= s.created_at + interval '7 days') AS resumed_7d,
-          EXISTS (SELECT 1 FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action = 'session.open' AND e.phase = 'succeeded' AND e.occurred_at > s.created_at + interval '1 hour' AND e.occurred_at <= s.created_at + interval '30 days') AS resumed_30d,
-          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.phase = 'reused') AS reused_outputs,
-          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.actor_type = 'user' AND e.action IN ('agent.approve','artifact.revise','delivery.retry') AND e.phase = 'succeeded') AS human_interventions,
-          (SELECT SUM(e.cost_usd_millicents) FROM creation_outcome_events e WHERE e.session_id = s.id) AS cost_millicents,
-          (SELECT AVG(e.duration_ms) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'succeeded' AND e.duration_ms IS NOT NULL) AS avg_latency_ms,
-          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.phase <> 'started') AS terminal_events,
-          (SELECT COUNT(*) FROM creation_outcome_events terminal WHERE terminal.session_id = s.id AND terminal.phase <> 'started' AND EXISTS (
-            SELECT 1 FROM creation_outcome_events started WHERE started.session_id = terminal.session_id AND started.correlation_id = terminal.correlation_id AND started.action = terminal.action AND started.phase = 'started'
-          )) AS correlated_events
-        FROM scoped s
-      ) SELECT * FROM facts
-    `);
-    type Fact = Record<string, unknown> & { id: string };
-    const facts = result.rows as unknown as Fact[];
-    const current = facts.find((fact) => fact.id === access.session.id);
-    if (!current) return c.json({ error: 'Session metrics unavailable' }, 404);
-    const peers = facts.filter((fact) => fact.id !== access.session.id);
-    const num = (value: unknown): number => Number(value ?? 0);
-    const nullableNum = (value: unknown): number | null => value == null ? null : Number(value);
-    const rate = (part: number, total: number): number | null => total > 0 ? part / total : null;
-    const mean = (values: Array<number | null>): number | null => {
-      const available = values.filter((value): value is number => value != null && Number.isFinite(value));
-      return available.length ? available.reduce((sum, value) => sum + value, 0) / available.length : null;
-    };
-    const bool = (value: unknown): number => value === true || value === 'true' ? 1 : 0;
-    const valueFor = (fact: Fact, key: string): number | null => {
-      const attempts = num(fact.delivery_attempts);
-      const successes = num(fact.delivery_successes);
-      switch (key) {
-        case 'time_to_artifact': return nullableNum(fact.time_to_artifact_seconds);
-        case 'deliverable_rate': return successes > 0 ? 1 : 0;
-        case 'collaboration_rate': return num(fact.member_count) > 1 || num(fact.agent_participants) > 0 ? 1 : 0;
-        case 'agent_participation': return num(fact.agent_participants);
-        case 'synthesis_rate': return num(fact.agent_participants) > 0 ? bool(fact.synthesized) : null;
-        case 'validation_rate': return rate(num(fact.validation_passes), num(fact.validations));
-        case 'delivery_success_rate': return rate(successes, attempts);
-        case 'delivery_retry_rate': return attempts > 0 && nullableNum(fact.delivery_retries) != null ? num(fact.delivery_retries) / attempts : null;
-        case 'resumed_7d': return bool(fact.resumed_7d);
-        case 'resumed_30d': return bool(fact.resumed_30d);
-        case 'output_reuse': return num(fact.reused_outputs);
-        case 'human_intervention': return successes > 0 ? num(fact.human_interventions) / successes : null;
-        case 'cost_per_delivery': return successes > 0 && nullableNum(fact.cost_millicents) != null ? num(fact.cost_millicents) / 100000 / successes : null;
-        case 'latency_per_outcome': return nullableNum(fact.avg_latency_ms) == null ? null : num(fact.avg_latency_ms) / 1000;
-        case 'correlation_coverage': return rate(num(fact.correlated_events), num(fact.terminal_events));
-        default: return null;
-      }
-    };
-    const definitions = [
-      ['time_to_artifact', 'Time to first artifact', 'seconds', 'lower'],
-      ['deliverable_rate', 'Reached a real deliverable', 'percent', 'higher'],
-      ['collaboration_rate', 'Invited a human or agent', 'percent', 'higher'],
-      ['agent_participation', 'Agent group-chat participation', 'agents', 'higher'],
-      ['synthesis_rate', 'Successful agent synthesis', 'percent', 'higher'],
-      ['validation_rate', 'Artifact validation pass rate', 'percent', 'higher'],
-      ['delivery_success_rate', 'Delivery success rate', 'percent', 'higher'],
-      ['delivery_retry_rate', 'Delivery retry rate', 'percent', 'lower'],
-      ['resumed_7d', 'Resumed within 7 days', 'percent', 'higher'],
-      ['resumed_30d', 'Resumed within 30 days', 'percent', 'higher'],
-      ['output_reuse', 'Outputs reused as inputs', 'count', 'higher'],
-      ['human_intervention', 'Human interventions per delivery', 'count', 'lower'],
-      ['cost_per_delivery', 'Cost per delivered outcome', 'usd', 'lower'],
-      ['latency_per_outcome', 'Latency per successful outcome', 'seconds', 'lower'],
-      ['correlation_coverage', 'Actions with correlated outcomes', 'percent', 'higher'],
-    ] as const;
-    return c.json({
-      sessionId: access.session.id,
-      scope: 'tenant',
-      sampleSize: peers.length,
-      metrics: definitions.map(([key, label, unit, direction]) => ({ key, label, unit, direction, current: valueFor(current, key), baseline: mean(peers.map((fact) => valueFor(fact, key))) })),
-    });
+    // Read-through cached: the panel re-polls on every open, the cohort query
+    // touches up to 500 sessions' worth of subqueries, and a board's own
+    // numbers do not meaningfully move inside a minute.
+    const payload = await getOrSetCached(
+      c.env as Env,
+      `creation:outcome-metrics:${access.session.tenantId}:${access.session.id}`,
+      async () => {
+        // The workspace's most recently active boards, PLUS this one.
+        //
+        // Bounded because a scorecard is a comparison, not a census — and the
+        // bound is stated on the payload as `sampleSize` rather than left for a
+        // reader to assume. The union is not cosmetic: without it, a board that
+        // had fallen outside the most-recent 500 was absent from its own
+        // scorecard and the panel answered 404 — the sessions least likely to be
+        // in that window being precisely the older ones somebody has come back
+        // to ask "what did this ever produce?".
+        const cohort = sql`
+          SELECT id, tenant_id, created_at FROM (
+            SELECT id, tenant_id, created_at, last_activity_at FROM creation_sessions
+            WHERE tenant_id = ${access.session.tenantId} AND status <> 'deleted'
+            ORDER BY last_activity_at DESC
+            LIMIT ${OUTCOME_BASELINE_COHORT}
+          ) recent
+          UNION
+          SELECT id, tenant_id, created_at FROM creation_sessions WHERE id = ${access.session.id}
+        `;
+        const facts = sql`WITH facts AS (${outcomeFactsSql(cohort)})`;
+        const [own, baseline] = await Promise.all([
+          db.execute(sql`${facts} SELECT * FROM facts WHERE id = ${access.session.id}`),
+          db.execute(sql`${facts} SELECT ${outcomeAggregateSql()} FROM facts WHERE id <> ${access.session.id}`),
+        ]);
+        const fact = own.rows[0] as OutcomeFact | undefined;
+        if (!fact) return null;
+        const baselineRow = baseline.rows[0] as Record<string, unknown> | undefined;
+        return {
+          sessionId: access.session.id,
+          scope: 'tenant' as const,
+          definitionVersion: OUTCOME_DEFINITION_VERSION,
+          northStarKey: NORTH_STAR_METRIC_KEY,
+          families: OUTCOME_METRIC_FAMILIES.map((key) => ({ key, label: OUTCOME_FAMILY_LABELS[key] })),
+          sampleSize: Number(baselineRow?.sessionCount ?? 0),
+          metrics: toOutcomeMetricValues(
+            (metric) => metric.session(fact),
+            (metric) => aggregateMetricValue(baselineRow, metric.key),
+          ),
+        };
+      },
+      { kvTtlSeconds: 60 },
+    );
+    if (!payload) return c.json({ error: 'Session metrics unavailable' }, 404);
+    return c.json(payload);
   });
 
   router.get('/:id/events', async (c) => {

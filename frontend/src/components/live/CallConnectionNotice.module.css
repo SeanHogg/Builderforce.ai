@@ -1,0 +1,33 @@
+/*
+ * Shell-themed, like the dock it usually sits in: every colour is a token, so both
+ * themes are covered by construction and neither host has to restyle it.
+ *
+ * Two tones, because "still connecting" and "it is not connecting" are not the same
+ * news: waiting is muted, trouble is the error colour. The wrap rules are here rather
+ * than in each host so the sentence shortens instead of pushing the dock's controls
+ * off a 360px screen.
+ */
+
+.notice {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-eyebrow);
+  color: var(--text-muted, var(--text-secondary));
+}
+
+.notice[data-tone='error'] {
+  color: var(--error, var(--text-primary));
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .notice {
+    /* On a phone the dock is two rows and the controls own the second one; the
+       notice takes what is left of the first rather than a fixed slice of it. */
+    max-width: 100%;
+    font-size: var(--font-size-eyebrow);
+  }
+}

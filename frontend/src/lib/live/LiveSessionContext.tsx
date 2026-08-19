@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { useMediaRoom, type MediaPathEvidence, type MediaRoomTransport, type RemoteTile } from '@/lib/useMediaRoom';
+import { useMediaRoom, type MediaPathEvidence, type MediaRoomConnection, type MediaRoomTransport, type RemoteTile } from '@/lib/useMediaRoom';
 import { useDisplayCapture } from '@/lib/useDisplayCapture';
 import { useMediaRecorderSink, type SavedMediaRecording } from '@/lib/useMediaRecorder';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
@@ -77,6 +77,12 @@ export interface LiveSessionValue {
   room: LiveRoomTarget | null;
   live: boolean;
   connected: boolean;
+  /**
+   * WHY it is not connected, when it is not. The dock used to read `connected` alone and
+   * print one word for every reason a call can fail to come up, which is how "it says
+   * connecting and never connects" became a report with nothing behind it.
+   */
+  connection: MediaRoomConnection;
   members: LiveMember[];
   /** Media tiles for the filmstrip. */
   tiles: RemoteTile[];
@@ -312,6 +318,7 @@ export function LiveSessionProvider({ children }: { children: React.ReactNode })
     room,
     live: room != null,
     connected: media.connected,
+    connection: media.connection,
     members,
     tiles: media.tiles,
     localStream: media.localStream,
@@ -342,7 +349,7 @@ export function LiveSessionProvider({ children }: { children: React.ReactNode })
     publishAnchor,
     anchor,
   }), [
-    display.active, display.supported, followingUserId, leave, media.camOn, media.connected, media.localStream,
+    display.active, display.supported, followingUserId, leave, media.camOn, media.connected, media.connection, media.localStream,
     media.captions, media.mediaError, media.mediaPaths, media.micOn, media.speaking, media.tiles, media.toggleCam, media.toggleMic, members, presentMode,
     recorder.error, recorder.recording, recorder.saving, recorder.supported,
     anchor, publishAnchor, publishPresence, room, setFollowing, setPresentMode, shareError, start, toggleRecording, toggleShare,

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { observeResizeOnAnimationFrame } from '@/lib/observeResize';
 import { useOptionalLiveSession, type LiveMember } from '@/lib/live/LiveSessionContext';
+import { CallConnectionNotice } from './CallConnectionNotice';
 import styles from './LiveBar.module.css';
 
 /**
@@ -188,7 +189,10 @@ export function LiveBar() {
       {live.shareError && <span className={styles.error} role="status">{t(`shareError.${live.shareError}`)}</span>}
       {live.mediaError && !live.shareError && <span className={styles.error} role="status">{t('mediaUnavailable')}</span>}
       {live.recordingError && <span className={styles.error} role="status">{t('recordingFailed')}</span>}
-      {!live.connected && <span className={styles.error} role="status">{t('connecting')}</span>}
+      {/* WHAT IS WRONG, not merely "not yet" — and the same sentence the free room's
+          meeting panel shows, because it is the same component reading the same state.
+          `Leave` beside it is always a way out of a call that will not come up. */}
+      <CallConnectionNotice />
 
       {/* Two troughs, the way the canvas command bar groups its clusters: the
           trough is what says "these belong together", which loose buttons in a

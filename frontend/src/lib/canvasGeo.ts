@@ -256,6 +256,97 @@ export function projectMap(
   return { width, height, bounds, points: projected, graticule: { verticals, horizontals }, project };
 }
 
+/**
+ * ── The map's own viewport ──────────────────────────────────────────────────
+ *
+ * A projection fitted to the data is the right FIRST reading and the wrong only
+ * one: a plot of every district in a metro is a legible dot cloud at the state
+ * level and an unreadable smudge at the one place the reader cares about. Zoom
+ * and centre are therefore state ON THE OBJECT (`mapZoom` / `mapCenter`), not
+ * component state — so the reading survives a re-render, rides the session
+ * snapshot, and is something Brain can read and set.
+ *
+ * They are stored as a FACTOR and a POINT rather than as explicit bounds because
+ * the base extent moves when the data does: a dataset that gains rows re-fits,
+ * and a stored `[south, north, west, east]` would then be showing a window onto
+ * the old extent. A centre and a zoom keep meaning the same thing.
+ */
+
+/** How far in the map may be taken. 1 = the fitted extent; 24 ≈ a city block. */
+export const MAP_ZOOM_RANGE = { min: 1, max: 24 } as const;
+
+/** A latitude/longitude the viewport is centred on. */
+export type GeoCenter = [number, number];
+
+/** Coerce a stored zoom to the supported range. */
+export function sanitizeMapZoom(value: unknown): number {
+  const zoom = Number(value);
+  if (!Number.isFinite(zoom)) return MAP_ZOOM_RANGE.min;
+  return Math.min(MAP_ZOOM_RANGE.max, Math.max(MAP_ZOOM_RANGE.min, zoom));
+}
+
+/** Coerce a stored centre, or null when it is not a usable coordinate. */
+export function sanitizeMapCenter(value: unknown): GeoCenter | null {
+  if (!Array.isArray(value) || value.length < 2) return null;
+  const lat = Number(value[0]);
+  const lng = Number(value[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return [lat, lng];
+}
+
+/**
+ * The window the map is currently looking through.
+ *
+ * Derived from the base extent, so at `zoom === 1` with no centre it IS the base
+ * extent — the reading nothing has touched is exactly the reading that was there
+ * before this existed. Panning is CLAMPED to the base extent: a map that can be
+ * dragged into empty ocean looks broken, and there is nothing out there to see.
+ */
+export function mapViewportBounds(base: GeoBounds, zoom: unknown, center: unknown): GeoBounds {
+  const factor = sanitizeMapZoom(zoom);
+  const [south, north, west, east] = base;
+  const latSpan = (north - south) || 1;
+  const lngSpan = (east - west) || 1;
+  if (factor <= MAP_ZOOM_RANGE.min) return base;
+
+  const halfLat = latSpan / factor / 2;
+  const halfLng = lngSpan / factor / 2;
+  const requested = sanitizeMapCenter(center) ?? [(south + north) / 2, (west + east) / 2];
+  // Clamp the CENTRE so the window stays inside the extent, rather than clamping
+  // the edges — clamping edges independently would silently change the zoom.
+  const lat = Math.min(north - halfLat, Math.max(south + halfLat, requested[0]));
+  const lng = Math.min(east - halfLng, Math.max(west + halfLng, requested[1]));
+  return [lat - halfLat, lat + halfLat, lng - halfLng, lng + halfLng];
+}
+
+/** The centre of a window — what a pan starts from when nothing is stored yet. */
+export function boundsCenter(bounds: GeoBounds): GeoCenter {
+  const [south, north, west, east] = bounds;
+  return [(south + north) / 2, (west + east) / 2];
+}
+
+/**
+ * Move the centre by a drag measured in SCREEN pixels.
+ *
+ * The projection is Mercator in y, but over the span of one viewport at any
+ * usable zoom the error from treating the drag as linear in latitude is far
+ * below one pixel — and doing it linearly means a drag tracks the pointer
+ * exactly, which is the only thing a person can judge.
+ */
+export function panCenter(
+  view: GeoBounds,
+  center: GeoCenter,
+  dx: number,
+  dy: number,
+  size: { width: number; height: number },
+): GeoCenter {
+  const [south, north, west, east] = view;
+  const lngPerPx = (east - west) / Math.max(1, size.width);
+  const latPerPx = (north - south) / Math.max(1, size.height);
+  return [center[0] + dy * latPerPx, center[1] - dx * lngPerPx];
+}
+
 /** A boundary as flat rings of `[longitude, latitude]` pairs — the FLAT form, and the
  *  form an outline is stored in on a canvas object. */
 export type OutlineRings = number[][][];

@@ -178,9 +178,12 @@ export default function RfpDetailClient() {
                   <span style={{
                     fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
                     padding: '3px 9px', borderRadius: 'var(--radius-full)',
-                    background: latest.scanRefreshed ? 'rgba(34,197,94,0.15)' : 'rgba(139,92,246,0.15)',
-                    color: latest.scanRefreshed ? 'var(--success)' : 'var(--violet-bright)',
-                    border: `1px solid ${latest.scanRefreshed ? 'rgba(34,197,94,0.3)' : 'rgba(139,92,246,0.3)'}`,
+                    // A refreshed scan is a SUCCESS and a current one is INFORMATION,
+                    // so both take a declared status family rather than a hand-mixed
+                    // alpha of a dark-theme hue that never darkened for paper.
+                    background: latest.scanRefreshed ? 'var(--success-bg)' : 'var(--info-bg)',
+                    color: latest.scanRefreshed ? 'var(--success)' : 'var(--info-text)',
+                    border: `1px solid ${latest.scanRefreshed ? 'var(--success-border)' : 'var(--info-border)'}`,
                   }}>
                     {latest.scanRefreshed ? t('scanRefreshed') : t('scanCurrent')}
                   </span>

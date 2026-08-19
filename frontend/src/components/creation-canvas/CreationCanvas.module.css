@@ -589,7 +589,17 @@
 .outcomeMetric strong { color:var(--canvas-ink); font-size:10px; font-weight:650; }
 .outcomeMetric span { flex:none; color:var(--canvas-ink); font-size:11px; font-weight:760; }
 .outcomeMetric small { color:var(--canvas-muted); font-size:8px; }
-.outcomeMetric em { color:#b14f45; font-style:normal; font-weight:800; }.outcomeMetric em[data-positive='true'] { color:#16856f; }
+.outcomeMetric em { color:var(--tone-danger-ink); font-style:normal; font-weight:800; }.outcomeMetric em[data-positive='true'] { color:var(--tone-success-ink); }
+/* The one number the whole method is steered by, given the room to say so. */
+.outcomeNorthStar { display:grid; gap:4px; padding:14px 13px; border-bottom:1px solid var(--canvas-line); background:color-mix(in srgb,var(--canvas-accent) 8%,var(--canvas-panel)); }
+.outcomeNorthStar > b { color:var(--canvas-accent-ink); font-size:8px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; }
+.outcomeNorthStar > strong { color:var(--canvas-ink); font-size:11px; font-weight:700; }
+.outcomeNorthStar > span { color:var(--canvas-ink); font-size:26px; font-weight:800; line-height:1.1; }
+.outcomeNorthStar > small { color:var(--canvas-muted); font-size:8px; line-height:1.5; }
+.outcomeNorthStar em { color:var(--tone-danger-ink); font-style:normal; font-weight:800; }.outcomeNorthStar em[data-positive='true'] { color:var(--tone-success-ink); }
+/* Metrics group by the act of the method they measure; the heading is what
+   stops "delivery success" and "was it graded?" reading as equal rows. */
+.outcomeFamily { padding:9px 13px 3px; color:var(--canvas-muted); font-size:8px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; background:var(--canvas-panel-muted); border-bottom:1px solid var(--canvas-line); }
 .outcomeMetricsPanel > .outcomeEmpty { display:grid; justify-items:center; gap:8px; padding:28px 20px; text-align:center; }
 .outcomeEmpty > span { width:42px; height:42px; display:grid; place-items:center; border-radius:var(--radius-lg); background:color-mix(in srgb,var(--canvas-accent) 13%,var(--canvas-panel)); color:var(--canvas-accent); font-size:21px; }
 .outcomeEmpty strong { font-size:12px; }.outcomeEmpty p { margin:0; padding:0!important; font-size:10px; line-height:1.5; }
@@ -686,6 +696,37 @@
    a marker or an outline instead of needing an opaque plate that hides the map. */
 .mapLabels text { fill:var(--canvas-ink); stroke:var(--canvas-panel-muted); stroke-width:2.4px; paint-order:stroke fill; font:7px var(--font-sans); font-weight:650; }
 .mapEmpty { margin:0; color:var(--canvas-ink-soft); font-size:9px; line-height:1.45; }
+/* A map that can be interrogated says so with the cursor before anything is
+   clicked; a static one keeps the default arrow so it does not promise a
+   gesture it will not honour. `touch-action:none` is what makes a one-finger
+   drag pan the MAP instead of scrolling the board on a phone. */
+.mapSurfaceLive { cursor:grab; touch-action:none; }
+.mapSurfaceLive:active { cursor:grabbing; }
+.mapMarkers circle[data-selected='true'] { stroke:var(--canvas-accent-ink); stroke-width:1.8; }
+.mapSurfaceLive .mapMarkers circle { cursor:pointer; }
+.mapControls { display:flex; gap:4px; margin-top:4px; }
+.mapControls button {
+  min-width:20px; height:20px; padding:0 6px;
+  border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel); color:var(--canvas-ink);
+  font:8px var(--font-sans); font-weight:650; cursor:pointer;
+}
+.mapControls button:disabled { opacity:.45; cursor:default; }
+.mapControls button:not(:disabled):hover { border-color:var(--canvas-accent-ink); }
+/* What the reader clicked, spelled out — a marker's `<title>` is a hover tooltip
+   and a phone has no hover, so the selection needs somewhere to live on screen. */
+.mapSelection {
+  display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin-top:4px;
+  padding:4px 6px; border:1px solid var(--canvas-line); border-radius:var(--radius-sm);
+  background:var(--canvas-panel-muted); font-size:7px; color:var(--canvas-muted);
+}
+.mapSelection b { color:var(--canvas-ink); font-size:8px; }
+.mapSelection button {
+  margin-left:auto; padding:2px 6px;
+  border:1px solid var(--canvas-accent-ink); border-radius:var(--radius-sm);
+  background:transparent; color:var(--canvas-accent-ink);
+  font:7px var(--font-sans); font-weight:650; cursor:pointer;
+}
 .mapFooter { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 10px; }
 .mapFooter small { color:var(--canvas-muted); font-size:6px; }
 .node_map { width:340px; }

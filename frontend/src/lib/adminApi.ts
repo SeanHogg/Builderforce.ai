@@ -10,6 +10,7 @@ import type { PsychometricProfile } from './psychometric';
 import type { FeedbackQueue, FeedbackStatus } from './feedbackApi';
 import type { ReleaseNoteStage } from './releaseNotesApi';
 import type { PublicPricingContract, PublicPricingPlan } from './publicPricing';
+import type { OutcomeMetric, OutcomeMetricFamilyRef } from './outcomeMetrics';
 
 export type { LlmModelStatus, VendorId };
 
@@ -234,14 +235,8 @@ export interface AdminCreationSession {
   invitations: AdminCreationSessionInvitation[];
 }
 
-export interface AdminOutcomeMetric {
-  key: string;
-  label: string;
-  unit: 'seconds' | 'percent' | 'agents' | 'count' | 'usd';
-  direction: 'higher' | 'lower';
-  current: number | null;
-  baseline: number | null;
-}
+/** One shape for every surface that renders a value metric. */
+export type AdminOutcomeMetric = OutcomeMetric;
 
 export interface AdminOutcomeRollup {
   scope: 'platform' | 'tenant' | 'project';
@@ -250,10 +245,16 @@ export interface AdminOutcomeRollup {
   previousPeriod: { start: string; end: string };
   sampleSize: number;
   deliveredSessions: number;
+  /** Sessions whose proof had its kill condition graded — the north star's numerator. */
+  gradedSessions: number;
+  /** Which definition set produced these numbers; quoted by any deck that uses them. */
+  definitionVersion: string;
+  northStarKey: string;
+  families: OutcomeMetricFamilyRef[];
   metrics: AdminOutcomeMetric[];
-  trends: Array<{ day: string; sessions: number; deliveries: number }>;
-  tenants: Array<{ tenantId: number; tenantName: string; sessions: number; deliveries: number }>;
-  projects: Array<{ projectId: number; projectName: string; tenantId: number; tenantName: string; sessions: number; deliveries: number }>;
+  trends: Array<{ day: string; sessions: number; deliveries: number; graded: number }>;
+  tenants: Array<{ tenantId: number; tenantName: string; sessions: number; deliveries: number; graded: number }>;
+  projects: Array<{ projectId: number; projectName: string; tenantId: number; tenantName: string; sessions: number; deliveries: number; graded: number }>;
   generatedAt: string;
   privacy: { contentFree: true; minimumExternalCohort: number; externalClaimsEligible: boolean };
 }
