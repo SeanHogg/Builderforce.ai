@@ -11464,6 +11464,47 @@
       "publish": "Publish",
       "publishing": "Publishing…",
       "draftSaved": "Draft saved."
+    },
+    "outcomes": {
+      "briefTitle": "Value outcomes brief",
+      "briefPeriod": "Period: {start} – {end}",
+      "briefCohort": "Cohort: {sessions} sessions · {delivered} delivered · {graded} graded",
+      "briefPrior": "prior",
+      "briefFooter": "Generated {generated} · minimum external cohort {cohort} · definitions {version}",
+      "briefCopied": "Brief copied",
+      "title": "Value outcomes",
+      "subtitle": "What the platform actually produced — the north star first, then the method.",
+      "cohortCount": "{count} sessions",
+      "periodLabel": "Period",
+      "period30": "Last 30 days",
+      "period90": "Last 90 days",
+      "period180": "Last 180 days",
+      "period365": "Last 365 days",
+      "workspaceLabel": "Workspace",
+      "allWorkspaces": "All workspaces",
+      "projectLabel": "Project",
+      "allProjects": "All projects",
+      "northStarLabel": "North star",
+      "gradedOf": "{graded} graded of {sessions} sessions",
+      "trendTitle": "Sessions, deliveries and grades",
+      "trendHint": "One bar group per day.",
+      "trendLegend": "{delivered} delivered · {graded} graded",
+      "trendPoint": "{day}: {sessions} sessions · {deliveries} deliveries · {graded} graded",
+      "prior": "Prior",
+      "workspaceValue": "Value by workspace",
+      "workspaceColumn": "Workspace",
+      "projectValue": "Value by project",
+      "projectColumn": "Project",
+      "deckTitle": "External claims",
+      "deckEligible": "{sessions} sessions clears the {threshold}-session minimum, so these numbers may be quoted externally.",
+      "deckIneligible": "Below the {threshold}-session minimum. These numbers stay internal until the cohort is large enough.",
+      "definitionVersion": "Definitions {version}",
+      "copyBrief": "Copy brief",
+      "sessionsColumn": "Sessions",
+      "deliveredColumn": "Delivered",
+      "gradedColumn": "Graded",
+      "gradedRateColumn": "Graded rate",
+      "noData": "No sessions in this period."
     }
   },
   "providerKeys": {
@@ -16366,7 +16407,12 @@
       "gamePlayIn3d": "Play in 3D",
       "gameDetails": "Details",
       "gameHideDetails": "Hide details",
-      "websiteFrameTitle": "{title} — the site as its visitors see it"
+      "websiteFrameTitle": "{title} — the site as its visitors see it",
+      "mapZoomIn": "Zoom in",
+      "mapZoomOut": "Zoom out",
+      "mapReset": "Reset view",
+      "mapAt": "At {lat}, {lng}",
+      "mapOpenSource": "Show source dataset"
     },
     "editor": {
       "toolbar": "Formatting",
@@ -20020,7 +20066,12 @@
     "cursorTyping": "· typing…",
     "sharedCallLabel": "Shared session",
     "startCall": "Start call",
-    "startCallTitle": "Start a call about this canvas"
+    "startCallTitle": "Start a call about this canvas",
+    "gateProveTitle": "Create an account to make this real",
+    "gateProveBody": "Choosing a proof form names this session, so Read, Prove, Build and Measure can be recorded against it and its outcome numbers can be computed. Your objects, conversation and layout come with you.",
+    "northStar": "North star",
+    "proveThisIdea": "Make it real",
+    "proveThisIdeaTitle": "Hand this board's idea to the proof picker and start measuring it"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -22647,5 +22698,108 @@
     "subtitle": "A gig is published from a ticket on one of your boards — the listing takes its title, description and requirements from the work itself, so there is nothing here to retype.",
     "title": "Publish a gig",
     "viewListing": "View listing"
+  },
+  "outcomeMetrics": {
+    "notMeasured": "Not measured",
+    "baselineGathering": "Baseline gathering",
+    "noChange": "No change",
+    "unitSeconds": "{value} sec",
+    "unitMinutes": "{value} min",
+    "unitAgent": "{value} agent",
+    "unitAgents": "{value} agents",
+    "unitPoints": "{value} pts",
+    "vsBaseline": "{magnitude} vs baseline",
+    "family": {
+      "read-prove": "Read → Prove",
+      "build": "Build",
+      "measure": "Measure",
+      "collaboration": "Collaboration",
+      "compounding": "Compounding value",
+      "efficiency": "Efficiency",
+      "integrity": "Measurement integrity",
+      "unfiled": "Outcome metrics"
+    },
+    "metric": {
+      "gradedProofRate": {
+        "label": "Ideas reaching a graded proof",
+        "definition": "Ideas whose proof had its kill condition measured. A deliverable nobody graded does not qualify."
+      },
+      "timeToProofChoice": {
+        "label": "Time to a chosen proof form",
+        "definition": "First prompt to the moment a proof form was chosen. Measures the decision, not the build."
+      },
+      "readBeforeBuildRate": {
+        "label": "Ideas that Read before they Build",
+        "definition": "Of ideas that started a build, those whose idea was read and its proofs ranked first. Not measured until something is built."
+      },
+      "timeToArtifact": {
+        "label": "Time to first meaningful artifact",
+        "definition": "First prompt to the first non-chat artifact on the board."
+      },
+      "reachableProofRate": {
+        "label": "Proofs reaching a real, reachable artifact",
+        "definition": "Build attempts that produced an address a person can open. A built proof with no address does not qualify."
+      },
+      "deliverableRate": {
+        "label": "Sessions reaching a real deliverable",
+        "definition": "A successful publish, project handoff or workflow execution. A draft canvas object does not qualify."
+      },
+      "validationRate": {
+        "label": "Artifact validation pass rate",
+        "definition": "Validations that passed. Proof grading is excluded — a missed kill condition is a finding, not a defect."
+      },
+      "deliverySuccessRate": {
+        "label": "Delivery success rate",
+        "definition": "Successful deliveries over delivery attempts."
+      },
+      "deliveryRetryRate": {
+        "label": "Delivery retry rate",
+        "definition": "Failed attempts that were followed by another attempt, over attempts."
+      },
+      "proofGradingRate": {
+        "label": "Proofs whose kill condition was graded",
+        "definition": "Built proofs that got a measured verdict. The one metric separating this method from a launch with extra steps."
+      },
+      "collaborationRate": {
+        "label": "Sessions inviting a human or agent",
+        "definition": "Sessions with a second member or at least one contributing agent."
+      },
+      "agentParticipation": {
+        "label": "Agent group-chat participation",
+        "definition": "Distinct agents that contributed a turn. Counted only where agents took part at all."
+      },
+      "synthesisRate": {
+        "label": "Successful agent synthesis",
+        "definition": "Group sessions closed by an explicit Brain synthesis after the agent turns. Message volume alone does not qualify."
+      },
+      "resumed7d": {
+        "label": "Sessions resumed within 7 days",
+        "definition": "Reopened more than an hour after creation and inside 7 days. Only sessions old enough to have had the chance count."
+      },
+      "resumed30d": {
+        "label": "Sessions resumed within 30 days",
+        "definition": "Reopened more than an hour after creation and inside 30 days. Only sessions old enough to have had the chance count."
+      },
+      "outputReuse": {
+        "label": "Created outputs reused as inputs",
+        "definition": "Reuse events — a created output fed back in as the input to something else."
+      },
+      "humanIntervention": {
+        "label": "Human interventions per delivery",
+        "definition": "Approvals, revisions and retries a person performed, per successful delivery. Lower is better only while quality holds."
+      },
+      "costPerDelivery": {
+        "label": "Cost per delivered outcome",
+        "definition": "Attributed cost per successful delivery. Not measured until authoritative cost telemetry is attached."
+      },
+      "latencyPerDelivery": {
+        "label": "Latency per delivered outcome",
+        "definition": "Mean wall-clock duration of a successful delivery. Not measured until durations are recorded."
+      },
+      "correlationCoverage": {
+        "label": "Actions with a correlated outcome",
+        "definition": "Terminal events that have a matching started event. A feature is not fully instrumented below 100%."
+      }
+    }
   }
 }

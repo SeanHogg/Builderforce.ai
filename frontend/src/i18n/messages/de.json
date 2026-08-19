@@ -11464,6 +11464,47 @@
       "publish": "Veröffentlichen",
       "publishing": "Wird veröffentlicht…",
       "draftSaved": "Entwurf gespeichert."
+    },
+    "outcomes": {
+      "briefTitle": "Kurzbericht zu Wertergebnissen",
+      "briefPeriod": "Zeitraum: {start} – {end}",
+      "briefCohort": "Kohorte: {sessions} Sitzungen · {delivered} geliefert · {graded} bewertet",
+      "briefPrior": "zuvor",
+      "briefFooter": "Erstellt am {generated} · Mindestkohorte für externe Angaben {cohort} · Definitionen {version}",
+      "briefCopied": "Kurzbericht kopiert",
+      "title": "Wertergebnisse",
+      "subtitle": "Was die Plattform tatsächlich hervorgebracht hat — zuerst der Nordstern, dann die Methode.",
+      "cohortCount": "{count} Sitzungen",
+      "periodLabel": "Zeitraum",
+      "period30": "Letzte 30 Tage",
+      "period90": "Letzte 90 Tage",
+      "period180": "Letzte 180 Tage",
+      "period365": "Letzte 365 Tage",
+      "workspaceLabel": "Arbeitsbereich",
+      "allWorkspaces": "Alle Arbeitsbereiche",
+      "projectLabel": "Projekt",
+      "allProjects": "Alle Projekte",
+      "northStarLabel": "Nordstern",
+      "gradedOf": "{graded} von {sessions} Sitzungen bewertet",
+      "trendTitle": "Sitzungen, Auslieferungen und Bewertungen",
+      "trendHint": "Eine Balkengruppe pro Tag.",
+      "trendLegend": "{delivered} geliefert · {graded} bewertet",
+      "trendPoint": "{day}: {sessions} Sitzungen · {deliveries} Auslieferungen · {graded} bewertet",
+      "prior": "Zuvor",
+      "workspaceValue": "Wert nach Arbeitsbereich",
+      "workspaceColumn": "Arbeitsbereich",
+      "projectValue": "Wert nach Projekt",
+      "projectColumn": "Projekt",
+      "deckTitle": "Externe Aussagen",
+      "deckEligible": "{sessions} Sitzungen überschreiten das Minimum von {threshold} Sitzungen, daher dürfen diese Zahlen extern zitiert werden.",
+      "deckIneligible": "Unter dem Minimum von {threshold} Sitzungen. Diese Zahlen bleiben intern, bis die Kohorte groß genug ist.",
+      "definitionVersion": "Definitionen {version}",
+      "copyBrief": "Kurzbericht kopieren",
+      "sessionsColumn": "Sitzungen",
+      "deliveredColumn": "Geliefert",
+      "gradedColumn": "Bewertet",
+      "gradedRateColumn": "Bewertungsquote",
+      "noData": "Keine Sitzungen in diesem Zeitraum."
     }
   },
   "providerKeys": {
@@ -16366,7 +16407,12 @@
       "gamePlayIn3d": "In 3D spielen",
       "gameDetails": "Details",
       "gameHideDetails": "Details ausblenden",
-      "websiteFrameTitle": "{title} – die Website, wie Besucher sie sehen"
+      "websiteFrameTitle": "{title} – die Website, wie Besucher sie sehen",
+      "mapZoomIn": "Vergrößern",
+      "mapZoomOut": "Verkleinern",
+      "mapReset": "Ansicht zurücksetzen",
+      "mapAt": "Bei {lat}, {lng}",
+      "mapOpenSource": "Quelldatensatz anzeigen"
     },
     "editor": {
       "toolbar": "Formatierung",
@@ -20020,7 +20066,12 @@
     "cursorTyping": "· tippt…",
     "sharedCallLabel": "Geteilte Sitzung",
     "startCall": "Anruf starten",
-    "startCallTitle": "Einen Anruf zu dieser Canvas starten"
+    "startCallTitle": "Einen Anruf zu dieser Canvas starten",
+    "gateProveTitle": "Konto erstellen, um dies real zu machen",
+    "gateProveBody": "Die Wahl einer Beweisform benennt diese Sitzung, sodass Lesen, Beweisen, Bauen und Messen darauf verbucht und ihre Ergebniszahlen berechnet werden können. Ihre Objekte, das Gespräch und das Layout kommen mit.",
+    "northStar": "Nordstern",
+    "proveThisIdea": "Real machen",
+    "proveThisIdeaTitle": "Die Idee dieses Boards an die Beweisauswahl übergeben und mit dem Messen beginnen"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -22647,5 +22698,108 @@
     "subtitle": "Ein Auftrag wird aus einem Ticket auf einem Ihrer Boards veröffentlicht — Titel, Beschreibung und Anforderungen stammen aus der Arbeit selbst, hier ist also nichts erneut einzutippen.",
     "title": "Auftrag veröffentlichen",
     "viewListing": "Anzeige ansehen"
+  },
+  "outcomeMetrics": {
+    "notMeasured": "Nicht gemessen",
+    "baselineGathering": "Basiswert wird erhoben",
+    "noChange": "Keine Änderung",
+    "unitSeconds": "{value} Sek.",
+    "unitMinutes": "{value} Min.",
+    "unitAgent": "{value} Agent",
+    "unitAgents": "{value} Agenten",
+    "unitPoints": "{value} Pkt.",
+    "vsBaseline": "{magnitude} gegenüber Basiswert",
+    "family": {
+      "read-prove": "Lesen → Beweisen",
+      "build": "Bauen",
+      "measure": "Messen",
+      "collaboration": "Zusammenarbeit",
+      "compounding": "Kumulierter Wert",
+      "efficiency": "Effizienz",
+      "integrity": "Messintegrität",
+      "unfiled": "Ergebnismetriken"
+    },
+    "metric": {
+      "gradedProofRate": {
+        "label": "Ideen mit bewerteter Beweisführung",
+        "definition": "Ideen, deren Abbruchbedingung tatsächlich gemessen wurde. Ein Ergebnis, das niemand bewertet hat, zählt nicht."
+      },
+      "timeToProofChoice": {
+        "label": "Zeit bis zur gewählten Beweisform",
+        "definition": "Von der ersten Eingabe bis zur Wahl einer Beweisform. Gemessen wird die Entscheidung, nicht der Bau."
+      },
+      "readBeforeBuildRate": {
+        "label": "Ideen, die vor dem Bauen Lesen",
+        "definition": "Von den Ideen mit gestartetem Bau jene, deren Idee zuerst gelesen und deren Beweisformen zuerst bewertet wurden. Wird erst gemessen, wenn etwas gebaut wird."
+      },
+      "timeToArtifact": {
+        "label": "Zeit bis zum ersten echten Artefakt",
+        "definition": "Von der ersten Eingabe bis zum ersten Nicht-Chat-Artefakt auf dem Board."
+      },
+      "reachableProofRate": {
+        "label": "Beweise mit echtem, erreichbarem Artefakt",
+        "definition": "Bauversuche, die eine Adresse erzeugt haben, die jemand öffnen kann. Ein gebauter Beweis ohne Adresse zählt nicht."
+      },
+      "deliverableRate": {
+        "label": "Sitzungen mit echtem Ergebnis",
+        "definition": "Eine erfolgreiche Veröffentlichung, Projektübergabe oder Workflow-Ausführung. Ein Canvas-Objekt im Entwurf zählt nicht."
+      },
+      "validationRate": {
+        "label": "Bestehensquote der Artefakt-Prüfungen",
+        "definition": "Bestandene Prüfungen. Die Beweisbewertung bleibt ausgenommen — eine verfehlte Abbruchbedingung ist ein Befund, kein Defekt."
+      },
+      "deliverySuccessRate": {
+        "label": "Erfolgsquote der Auslieferungen",
+        "definition": "Erfolgreiche Auslieferungen im Verhältnis zu den Versuchen."
+      },
+      "deliveryRetryRate": {
+        "label": "Wiederholungsquote bei Auslieferungen",
+        "definition": "Fehlgeschlagene Versuche, auf die ein weiterer Versuch folgte, im Verhältnis zu allen Versuchen."
+      },
+      "proofGradingRate": {
+        "label": "Beweise mit bewerteter Abbruchbedingung",
+        "definition": "Gebaute Beweise mit gemessenem Urteil. Die eine Kennzahl, die diese Methode von einem Launch mit Zusatzschritten trennt."
+      },
+      "collaborationRate": {
+        "label": "Sitzungen mit eingeladener Person oder Agent",
+        "definition": "Sitzungen mit einem zweiten Mitglied oder mindestens einem beitragenden Agenten."
+      },
+      "agentParticipation": {
+        "label": "Agentenbeteiligung im Gruppenchat",
+        "definition": "Verschiedene Agenten mit einem eigenen Beitrag. Nur dort gezählt, wo Agenten überhaupt mitgewirkt haben."
+      },
+      "synthesisRate": {
+        "label": "Erfolgreiche Agenten-Synthese",
+        "definition": "Gruppensitzungen, die nach den Agentenbeiträgen mit einer ausdrücklichen Brain-Synthese abgeschlossen wurden. Reines Nachrichtenaufkommen zählt nicht."
+      },
+      "resumed7d": {
+        "label": "Innerhalb von 7 Tagen fortgesetzte Sitzungen",
+        "definition": "Mehr als eine Stunde nach Erstellung und innerhalb von 7 Tagen erneut geöffnet. Nur Sitzungen, die alt genug für diese Gelegenheit sind, zählen."
+      },
+      "resumed30d": {
+        "label": "Innerhalb von 30 Tagen fortgesetzte Sitzungen",
+        "definition": "Mehr als eine Stunde nach Erstellung und innerhalb von 30 Tagen erneut geöffnet. Nur Sitzungen, die alt genug für diese Gelegenheit sind, zählen."
+      },
+      "outputReuse": {
+        "label": "Erzeugte Ergebnisse, die wieder als Eingabe dienen",
+        "definition": "Wiederverwendungen — ein erzeugtes Ergebnis fließt als Eingabe in etwas anderes zurück."
+      },
+      "humanIntervention": {
+        "label": "Menschliche Eingriffe je Auslieferung",
+        "definition": "Freigaben, Überarbeitungen und Wiederholungen durch eine Person je erfolgreicher Auslieferung. Weniger ist nur so lange besser, wie die Qualität hält."
+      },
+      "costPerDelivery": {
+        "label": "Kosten je geliefertem Ergebnis",
+        "definition": "Zugeordnete Kosten je erfolgreicher Auslieferung. Wird erst gemessen, wenn verlässliche Kostentelemetrie angebunden ist."
+      },
+      "latencyPerDelivery": {
+        "label": "Laufzeit je geliefertem Ergebnis",
+        "definition": "Mittlere tatsächliche Dauer einer erfolgreichen Auslieferung. Wird erst gemessen, wenn Dauern erfasst werden."
+      },
+      "correlationCoverage": {
+        "label": "Aktionen mit zugeordnetem Ergebnis",
+        "definition": "Abschlussereignisse mit passendem Startereignis. Unter 100% ist eine Funktion nicht vollständig instrumentiert."
+      }
+    }
   }
 }

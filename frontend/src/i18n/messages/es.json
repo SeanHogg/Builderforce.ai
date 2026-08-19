@@ -11464,6 +11464,47 @@
       "publish": "Publicar",
       "publishing": "Publicando…",
       "draftSaved": "Borrador guardado."
+    },
+    "outcomes": {
+      "briefTitle": "Informe de resultados de valor",
+      "briefPeriod": "Periodo: {start} – {end}",
+      "briefCohort": "Cohorte: {sessions} sesiones · {delivered} entregadas · {graded} calificadas",
+      "briefPrior": "anterior",
+      "briefFooter": "Generado el {generated} · cohorte externa mínima {cohort} · definiciones {version}",
+      "briefCopied": "Informe copiado",
+      "title": "Resultados de valor",
+      "subtitle": "Lo que la plataforma produjo realmente: primero la estrella polar, después el método.",
+      "cohortCount": "{count} sesiones",
+      "periodLabel": "Periodo",
+      "period30": "Últimos 30 días",
+      "period90": "Últimos 90 días",
+      "period180": "Últimos 180 días",
+      "period365": "Últimos 365 días",
+      "workspaceLabel": "Espacio de trabajo",
+      "allWorkspaces": "Todos los espacios",
+      "projectLabel": "Proyecto",
+      "allProjects": "Todos los proyectos",
+      "northStarLabel": "Estrella polar",
+      "gradedOf": "{graded} calificadas de {sessions} sesiones",
+      "trendTitle": "Sesiones, entregas y calificaciones",
+      "trendHint": "Un grupo de barras por día.",
+      "trendLegend": "{delivered} entregadas · {graded} calificadas",
+      "trendPoint": "{day}: {sessions} sesiones · {deliveries} entregas · {graded} calificadas",
+      "prior": "Anterior",
+      "workspaceValue": "Valor por espacio de trabajo",
+      "workspaceColumn": "Espacio de trabajo",
+      "projectValue": "Valor por proyecto",
+      "projectColumn": "Proyecto",
+      "deckTitle": "Afirmaciones externas",
+      "deckEligible": "{sessions} sesiones superan el mínimo de {threshold} sesiones, por lo que estas cifras pueden citarse externamente.",
+      "deckIneligible": "Por debajo del mínimo de {threshold} sesiones. Estas cifras son internas hasta que la cohorte sea suficiente.",
+      "definitionVersion": "Definiciones {version}",
+      "copyBrief": "Copiar informe",
+      "sessionsColumn": "Sesiones",
+      "deliveredColumn": "Entregadas",
+      "gradedColumn": "Calificadas",
+      "gradedRateColumn": "Tasa calificada",
+      "noData": "No hay sesiones en este periodo."
     }
   },
   "providerKeys": {
@@ -16366,7 +16407,12 @@
       "gamePlayIn3d": "Jugar en 3D",
       "gameDetails": "Detalles",
       "gameHideDetails": "Ocultar detalles",
-      "websiteFrameTitle": "{title}: el sitio tal como lo ven sus visitantes"
+      "websiteFrameTitle": "{title}: el sitio tal como lo ven sus visitantes",
+      "mapZoomIn": "Acercar",
+      "mapZoomOut": "Alejar",
+      "mapReset": "Restablecer vista",
+      "mapAt": "En {lat}, {lng}",
+      "mapOpenSource": "Ver el conjunto de datos de origen"
     },
     "editor": {
       "toolbar": "Formato",
@@ -20020,7 +20066,12 @@
     "cursorTyping": "· escribiendo…",
     "sharedCallLabel": "Sesión compartida",
     "startCall": "Iniciar llamada",
-    "startCallTitle": "Iniciar una llamada sobre este lienzo"
+    "startCallTitle": "Iniciar una llamada sobre este lienzo",
+    "gateProveTitle": "Crea una cuenta para hacerlo real",
+    "gateProveBody": "Elegir una forma de prueba da nombre a esta sesión, para que Leer, Probar, Construir y Medir queden registrados en ella y sus cifras de resultado puedan calcularse. Tus objetos, conversación y disposición te acompañan.",
+    "northStar": "Estrella polar",
+    "proveThisIdea": "Hazlo real",
+    "proveThisIdeaTitle": "Entrega la idea de este tablero al selector de pruebas y empieza a medirla"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -22647,5 +22698,108 @@
     "subtitle": "Un encargo se publica desde un ticket de uno de tus tableros: el anuncio toma su título, descripción y requisitos del propio trabajo, así que aquí no hay nada que volver a escribir.",
     "title": "Publicar un encargo",
     "viewListing": "Ver anuncio"
+  },
+  "outcomeMetrics": {
+    "notMeasured": "Sin medir",
+    "baselineGathering": "Recopilando la línea base",
+    "noChange": "Sin cambios",
+    "unitSeconds": "{value} s",
+    "unitMinutes": "{value} min",
+    "unitAgent": "{value} agente",
+    "unitAgents": "{value} agentes",
+    "unitPoints": "{value} pts",
+    "vsBaseline": "{magnitude} frente a la línea base",
+    "family": {
+      "read-prove": "Leer → Probar",
+      "build": "Construir",
+      "measure": "Medir",
+      "collaboration": "Colaboración",
+      "compounding": "Valor acumulado",
+      "efficiency": "Eficiencia",
+      "integrity": "Integridad de la medición",
+      "unfiled": "Métricas de resultado"
+    },
+    "metric": {
+      "gradedProofRate": {
+        "label": "Ideas que llegan a una prueba calificada",
+        "definition": "Ideas cuya prueba tuvo su condición de descarte medida. Un entregable que nadie calificó no cuenta."
+      },
+      "timeToProofChoice": {
+        "label": "Tiempo hasta elegir una forma de prueba",
+        "definition": "Desde la primera indicación hasta el momento en que se eligió una forma de prueba. Mide la decisión, no la construcción."
+      },
+      "readBeforeBuildRate": {
+        "label": "Ideas que Leen antes de Construir",
+        "definition": "De las ideas que iniciaron una construcción, aquellas cuya idea se leyó y cuyas pruebas se ordenaron primero. No se mide hasta que se construye algo."
+      },
+      "timeToArtifact": {
+        "label": "Tiempo hasta el primer artefacto real",
+        "definition": "Desde la primera indicación hasta el primer artefacto del tablero que no es una conversación."
+      },
+      "reachableProofRate": {
+        "label": "Pruebas que llegan a un artefacto real y accesible",
+        "definition": "Intentos de construcción que produjeron una dirección que una persona puede abrir. Una prueba construida sin dirección no cuenta."
+      },
+      "deliverableRate": {
+        "label": "Sesiones que llegan a un entregable real",
+        "definition": "Una publicación, entrega a proyecto o ejecución de flujo exitosa. Un objeto de lienzo en borrador no cuenta."
+      },
+      "validationRate": {
+        "label": "Tasa de validaciones superadas",
+        "definition": "Validaciones que pasaron. La calificación de pruebas queda excluida: una condición de descarte no alcanzada es un hallazgo, no un defecto."
+      },
+      "deliverySuccessRate": {
+        "label": "Tasa de éxito de entrega",
+        "definition": "Entregas exitosas sobre intentos de entrega."
+      },
+      "deliveryRetryRate": {
+        "label": "Tasa de reintentos de entrega",
+        "definition": "Intentos fallidos seguidos de otro intento, sobre el total de intentos."
+      },
+      "proofGradingRate": {
+        "label": "Pruebas cuya condición de descarte se calificó",
+        "definition": "Pruebas construidas que obtuvieron un veredicto medido. La métrica que separa este método de un lanzamiento con pasos extra."
+      },
+      "collaborationRate": {
+        "label": "Sesiones que invitan a una persona o agente",
+        "definition": "Sesiones con un segundo miembro o al menos un agente que contribuye."
+      },
+      "agentParticipation": {
+        "label": "Participación de agentes en el chat grupal",
+        "definition": "Agentes distintos que aportaron un turno. Solo se cuenta donde hubo participación de agentes."
+      },
+      "synthesisRate": {
+        "label": "Síntesis exitosa de agentes",
+        "definition": "Sesiones grupales cerradas con una síntesis explícita del Brain tras los turnos de los agentes. El volumen de mensajes por sí solo no cuenta."
+      },
+      "resumed7d": {
+        "label": "Sesiones retomadas en 7 días",
+        "definition": "Reabiertas más de una hora después de su creación y dentro de 7 días. Solo cuentan las sesiones con antigüedad suficiente para haber tenido la oportunidad."
+      },
+      "resumed30d": {
+        "label": "Sesiones retomadas en 30 días",
+        "definition": "Reabiertas más de una hora después de su creación y dentro de 30 días. Solo cuentan las sesiones con antigüedad suficiente para haber tenido la oportunidad."
+      },
+      "outputReuse": {
+        "label": "Resultados creados reutilizados como entradas",
+        "definition": "Eventos de reutilización: un resultado creado que vuelve a entrar como insumo de otra cosa."
+      },
+      "humanIntervention": {
+        "label": "Intervenciones humanas por entrega",
+        "definition": "Aprobaciones, revisiones y reintentos realizados por una persona, por entrega exitosa. Menos es mejor solo mientras la calidad se mantenga."
+      },
+      "costPerDelivery": {
+        "label": "Coste por resultado entregado",
+        "definition": "Coste atribuido por entrega exitosa. No se mide hasta que se conecta telemetría de coste fiable."
+      },
+      "latencyPerDelivery": {
+        "label": "Latencia por resultado entregado",
+        "definition": "Duración real media de una entrega exitosa. No se mide hasta que se registran las duraciones."
+      },
+      "correlationCoverage": {
+        "label": "Acciones con un resultado correlacionado",
+        "definition": "Eventos terminales que tienen un evento de inicio correspondiente. Por debajo del 100% una función no está instrumentada del todo."
+      }
+    }
   }
 }

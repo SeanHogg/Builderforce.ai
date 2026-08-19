@@ -11464,6 +11464,47 @@
       "publish": "发布",
       "publishing": "正在发布…",
       "draftSaved": "草稿已保存。"
+    },
+    "outcomes": {
+      "briefTitle": "价值成果简报",
+      "briefPeriod": "周期：{start} – {end}",
+      "briefCohort": "样本：{sessions} 个会话 · {delivered} 个已交付 · {graded} 个已评定",
+      "briefPrior": "前期",
+      "briefFooter": "生成于 {generated} · 对外发布最小样本量 {cohort} · 定义版本 {version}",
+      "briefCopied": "简报已复制",
+      "title": "价值成果",
+      "subtitle": "平台真正产出了什么——先看北极星指标，再按方法逐步展开。",
+      "cohortCount": "{count} 个会话",
+      "periodLabel": "周期",
+      "period30": "最近 30 天",
+      "period90": "最近 90 天",
+      "period180": "最近 180 天",
+      "period365": "最近 365 天",
+      "workspaceLabel": "工作区",
+      "allWorkspaces": "全部工作区",
+      "projectLabel": "项目",
+      "allProjects": "全部项目",
+      "northStarLabel": "北极星指标",
+      "gradedOf": "{sessions} 个会话中有 {graded} 个已评定",
+      "trendTitle": "会话、交付与评定",
+      "trendHint": "每天一组柱状图。",
+      "trendLegend": "{delivered} 个已交付 · {graded} 个已评定",
+      "trendPoint": "{day}：{sessions} 个会话 · {deliveries} 次交付 · {graded} 个已评定",
+      "prior": "前期",
+      "workspaceValue": "按工作区划分的价值",
+      "workspaceColumn": "工作区",
+      "projectValue": "按项目划分的价值",
+      "projectColumn": "项目",
+      "deckTitle": "对外引用",
+      "deckEligible": "{sessions} 个会话已达到 {threshold} 个会话的最低要求，因此这些数字可对外引用。",
+      "deckIneligible": "尚未达到 {threshold} 个会话的最低要求。在样本量足够之前，这些数字仅供内部使用。",
+      "definitionVersion": "定义版本 {version}",
+      "copyBrief": "复制简报",
+      "sessionsColumn": "会话",
+      "deliveredColumn": "已交付",
+      "gradedColumn": "已评定",
+      "gradedRateColumn": "评定率",
+      "noData": "该周期内没有会话。"
     }
   },
   "providerKeys": {
@@ -16366,7 +16407,12 @@
       "gamePlayIn3d": "以 3D 游玩",
       "gameDetails": "详情",
       "gameHideDetails": "隐藏详情",
-      "websiteFrameTitle": "{title} — 访问者看到的网站"
+      "websiteFrameTitle": "{title} — 访问者看到的网站",
+      "mapZoomIn": "放大",
+      "mapZoomOut": "缩小",
+      "mapReset": "重置视图",
+      "mapAt": "位于 {lat}, {lng}",
+      "mapOpenSource": "查看来源数据集"
     },
     "editor": {
       "toolbar": "格式",
@@ -20020,7 +20066,12 @@
     "cursorTyping": "· 输入中…",
     "sharedCallLabel": "共享会话",
     "startCall": "发起通话",
-    "startCallTitle": "就此画布发起通话"
+    "startCallTitle": "就此画布发起通话",
+    "gateProveTitle": "创建账户，把它变为现实",
+    "gateProveBody": "选择验证形式会为该会话命名，从而把读取、验证、构建与度量记录在其名下，并据此计算成果指标。你的对象、对话与布局都会一并保留。",
+    "northStar": "北极星指标",
+    "proveThisIdea": "变为现实",
+    "proveThisIdeaTitle": "把这块画布上的想法交给验证形式选择器，并开始度量它"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -22647,5 +22698,108 @@
     "subtitle": "外包任务由你看板上的工单发布——列表的标题、描述与要求都取自该工单本身，因此这里无需重新输入。",
     "title": "发布外包任务",
     "viewListing": "查看列表"
+  },
+  "outcomeMetrics": {
+    "notMeasured": "未度量",
+    "baselineGathering": "正在采集基线",
+    "noChange": "无变化",
+    "unitSeconds": "{value} 秒",
+    "unitMinutes": "{value} 分钟",
+    "unitAgent": "{value} 个智能体",
+    "unitAgents": "{value} 个智能体",
+    "unitPoints": "{value} 个百分点",
+    "vsBaseline": "{magnitude}（对比基线）",
+    "family": {
+      "read-prove": "读取 → 验证",
+      "build": "构建",
+      "measure": "度量",
+      "collaboration": "协作",
+      "compounding": "复利价值",
+      "efficiency": "效率",
+      "integrity": "度量可信度",
+      "unfiled": "成果指标"
+    },
+    "metric": {
+      "gradedProofRate": {
+        "label": "进入已评定验证的想法",
+        "definition": "其验证的终止条件已被度量的想法。无人评定的交付物不计入。"
+      },
+      "timeToProofChoice": {
+        "label": "选定验证形式所需时间",
+        "definition": "从首次提示到选定验证形式的时间。度量的是决策，而非构建。"
+      },
+      "readBeforeBuildRate": {
+        "label": "先读取后构建的想法",
+        "definition": "在已开始构建的想法中，先完成读取并对验证方式排序的比例。未开始构建前不计入。"
+      },
+      "timeToArtifact": {
+        "label": "产出首个实质产物所需时间",
+        "definition": "从首次提示到画布上出现首个非对话产物的时间。"
+      },
+      "reachableProofRate": {
+        "label": "产出可实际访问产物的验证",
+        "definition": "产生了他人可打开地址的构建尝试。没有地址的验证不计入。"
+      },
+      "deliverableRate": {
+        "label": "产出真实交付物的会话",
+        "definition": "成功的发布、项目移交或工作流执行。草稿状态的画布对象不计入。"
+      },
+      "validationRate": {
+        "label": "产物校验通过率",
+        "definition": "通过的校验占比。验证评定不计入其中——未达成的终止条件是发现，而非缺陷。"
+      },
+      "deliverySuccessRate": {
+        "label": "交付成功率",
+        "definition": "成功交付数占交付尝试数的比例。"
+      },
+      "deliveryRetryRate": {
+        "label": "交付重试率",
+        "definition": "失败后又进行了下一次尝试的次数占总尝试数的比例。"
+      },
+      "proofGradingRate": {
+        "label": "终止条件已评定的验证",
+        "definition": "获得了实测结论的已构建验证。正是这一指标把本方法与“多几个步骤的发布”区分开。"
+      },
+      "collaborationRate": {
+        "label": "邀请了他人或智能体的会话",
+        "definition": "拥有第二位成员或至少一个参与贡献的智能体的会话。"
+      },
+      "agentParticipation": {
+        "label": "智能体群聊参与度",
+        "definition": "贡献过发言的不同智能体数量。仅在有智能体参与时计入。"
+      },
+      "synthesisRate": {
+        "label": "智能体成功归纳",
+        "definition": "在智能体发言之后由 Brain 明确归纳收尾的群组会话。仅有消息量不计入。"
+      },
+      "resumed7d": {
+        "label": "7 天内重新打开的会话",
+        "definition": "创建一小时之后、7 天之内被重新打开。仅统计存在时间足够长、有机会被重开的会话。"
+      },
+      "resumed30d": {
+        "label": "30 天内重新打开的会话",
+        "definition": "创建一小时之后、30 天之内被重新打开。仅统计存在时间足够长、有机会被重开的会话。"
+      },
+      "outputReuse": {
+        "label": "被再次用作输入的产出",
+        "definition": "复用事件——已创建的产出被重新作为其他工作的输入。"
+      },
+      "humanIntervention": {
+        "label": "每次交付的人工介入次数",
+        "definition": "每次成功交付中由人完成的审批、修订与重试次数。仅在质量不下降的前提下越低越好。"
+      },
+      "costPerDelivery": {
+        "label": "每项交付成果的成本",
+        "definition": "每次成功交付所归集的成本。在接入权威成本遥测之前不予度量。"
+      },
+      "latencyPerDelivery": {
+        "label": "每项交付成果的耗时",
+        "definition": "一次成功交付的平均实际耗时。在记录时长之前不予度量。"
+      },
+      "correlationCoverage": {
+        "label": "可关联到结果的操作",
+        "definition": "存在对应“开始”事件的终止事件。低于 100% 说明该功能的埋点尚不完整。"
+      }
+    }
   }
 }
