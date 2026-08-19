@@ -16,7 +16,7 @@
 
 import { Hono, type Context } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   FormError,
@@ -26,6 +26,7 @@ import {
   submitFormResponse,
   summarizeForm,
 } from '../../application/collection/formPublishing';
+import { deliverFormInvitations } from '../../application/collection/formInvitations';
 
 /** One translation of a refusal into a status, shared by every handler — so a
  *  new endpoint cannot invent a different code for the same rejection. */
@@ -45,12 +46,17 @@ export function createFormRoutes(db: Db): Hono<HonoEnv> {
   const tenant = (c: Context<HonoEnv>) => c.get('tenantId') as number;
 
   /**
-   * Publish a form and get its address back.
+   * Publish a form, SEND it, and get its address back.
    *
-   * The response carries each named recipient's plaintext token EXACTLY ONCE,
-   * because nothing stores it — only its hash is kept. A caller that drops the
-   * response has to re-publish to reissue, which is the correct cost of holding a
-   * credential.
+   * The response still carries each named recipient's plaintext token exactly
+   * once — nothing stores it, only its hash is kept — but that is now provenance
+   * rather than the delivery mechanism. Every named recipient is emailed their own
+   * link here, at publish time, because a form whose enforceable audience only
+   * works if a person relays links is not an audience, it is a list.
+   *
+   * The send is AWAITED rather than fired into `waitUntil`: the caller is told how
+   * many messages actually went out, and a publish that minted ten credentials and
+   * delivered none must not report the same thing as one that delivered ten.
    */
   router.post('/publish', (c) => handle(async () => {
     const body = await c.req.json<Record<string, unknown>>();
@@ -64,6 +70,7 @@ export function createFormRoutes(db: Db): Hono<HonoEnv> {
       closesAt: typeof body.closesAt === 'string' ? body.closesAt : null,
       confirmationMessage: typeof body.confirmationMessage === 'string' ? body.confirmationMessage : null,
       objectId: typeof body.objectId === 'string' ? body.objectId : null,
+      ...(Number.isFinite(body.remindAfterDays) ? { remindAfterDays: Number(body.remindAfterDays) } : {}),
       recipients: Array.isArray(body.recipients)
         ? body.recipients.flatMap((r) => {
             const row = r as { email?: unknown; name?: unknown };
@@ -72,7 +79,12 @@ export function createFormRoutes(db: Db): Hono<HonoEnv> {
         : undefined,
       createdBy: (c.get('userId') as string | undefined) ?? null,
     });
-    return Response.json(result);
+    const delivery = await deliverFormInvitations(c.env as Env, {
+      slug: result.slug,
+      title: String(body.title ?? ''),
+      closesAt: typeof body.closesAt === 'string' ? body.closesAt : null,
+    }, result.invitations);
+    return Response.json({ ...result, delivery });
   }));
 
   router.post('/:id/close', (c) => handle(async () => {

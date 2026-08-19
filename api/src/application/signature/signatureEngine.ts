@@ -31,8 +31,9 @@
  * migration 0410 makes for every other vendor.
  */
 
-import { and, asc, eq, gt, isNull, lt, lte, ne, or } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, lt, lte, ne, notInArray, or } from 'drizzle-orm';
 import {
+  SIGNATURE_PARTY_STATUSES,
   isAgreedPartyStatus,
   isSignatureIntent,
   isTerminalPartyStatus,
@@ -57,9 +58,22 @@ export class SignatureError extends Error {
 const REMINDER_BATCH = 100;
 
 const asPartyStatus = (value: string): SignaturePartyStatus =>
-  (['pending', 'viewed', 'signed', 'acknowledged', 'declined'] as const).includes(value as SignaturePartyStatus)
+  (SIGNATURE_PARTY_STATUSES as readonly string[]).includes(value)
     ? value as SignaturePartyStatus
     : 'pending';
+
+/**
+ * The statuses that END a party's involvement, DERIVED from the contract's own
+ * predicate rather than restated.
+ *
+ * Needed as a value (not a test) because `reissuePartyToken` expresses "still
+ * owes an answer" as a SQL predicate on the row rather than a filter in memory —
+ * the update must not be able to rotate a decided party's credential even under a
+ * concurrent decision. Deriving it means a sixth status added to the contract is
+ * classified once, in the contract, and this stays correct.
+ */
+const TERMINAL_PARTY_STATUSES: readonly string[] =
+  SIGNATURE_PARTY_STATUSES.filter((status) => isTerminalPartyStatus(status));
 
 // ---------------------------------------------------------------------------
 // Creating and sending
@@ -559,6 +573,48 @@ export async function signatureRemindersDue(db: Db, now = new Date()): Promise<R
     });
   }
   return due;
+}
+
+/**
+ * Mint a REPLACEMENT credential for one party and return the plaintext.
+ *
+ * The reminder job exists to point somebody at the thing they still owe an
+ * answer on, and it could not: only the HASH of a party's token is stored, so the
+ * only address the sweep could name was the `/sign` landing page — a message that
+ * says "use the link you were sent" to somebody who, by hypothesis, has not acted
+ * on it.
+ *
+ * Storing the plaintext so a cron job could quote it is the obvious fix and the
+ * wrong one — it turns every `signature_parties` row into a working signature on
+ * somebody else's behalf. Re-issuing keeps the one-way property exactly as it was
+ * and still produces a link that opens. The old link stops working at that
+ * moment; the cost is charged only when the message carrying the new one is about
+ * to be sent.
+ *
+ * Only a party who still owes an answer may be re-issued — the fourth call site
+ * of `isTerminalPartyStatus`, expressed as a predicate on the row. `viewed` is
+ * NOT terminal and must be re-issuable: somebody who opened the document and did
+ * not decide is precisely who a reminder is for. Rotating a token on a row that
+ * has signed, acknowledged or declined would hand out a fresh credential for a
+ * decision that is already recorded and closed.
+ */
+export async function reissuePartyToken(
+  db: Db,
+  tenantId: number,
+  partyId: number,
+): Promise<string | null> {
+  const { token, tokenHash } = await mintShareToken();
+  const [row] = await db
+    .update(signatureParties)
+    .set({ tokenHash, updatedAt: new Date() })
+    .where(scopedToTenant(
+      signatureParties,
+      tenantId,
+      eq(signatureParties.id, partyId),
+      notInArray(signatureParties.status, TERMINAL_PARTY_STATUSES),
+    ))
+    .returning({ id: signatureParties.id });
+  return row ? token : null;
 }
 
 /** Stamp a request as chased. Called by the sweep AFTER delivery, so a transport

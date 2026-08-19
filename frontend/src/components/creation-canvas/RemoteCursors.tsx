@@ -31,12 +31,15 @@ import styles from './CreationCanvas.module.css';
  * The label is counter-scaled by the zoom so a name stays readable at 20% and does
  * not become a billboard at 400%.
  *
- * ── WHAT IS STILL POLLED ─────────────────────────────────────────────────────
- * The cursor POSITION still arrives on the 8s `/presence` cycle, because that is
- * the only channel carrying it; the canvas WebSocket is a domain-free "changed"
- * ping by design (`SessionRoomDO`). Placement is now exact, but freshness is
- * bounded by that poll — see the Gap Register entry on moving presence onto a
- * client-to-client relay.
+ * ── WHERE THE POSITION COMES FROM ────────────────────────────────────────────
+ * At pointer speed, off the board's own WebSocket. `SessionRoomDO` now admits the
+ * canvas connection as a PEER: a pointer frame is relayed to the other members of
+ * the room, attributed by the SERVER, rate-limited, and narrowed to the fixed
+ * `canvas.presence` shape so the relay stays domain-free. The 8s `/presence` poll
+ * still owns identity (who is a member, what their display name is) and is still
+ * the fallback that carries the cursor when a socket cannot be established —
+ * `lib/canvas/livePresence` merges the two into the one roster drawn here, so a
+ * name and a pointer can never disagree.
  */
 
 /** The shape this layer needs from a session member. */

@@ -1,6 +1,7 @@
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import { verifyGuestToken } from '../../application/guest/guestToken';
 import { GUEST_CHAT_LIMITS, GUEST_ROOM_LIMITS } from '../../domain/tenant/PlanLimits';
+import { PeerRelay, type RelayPeer } from './peerRelay';
 
 /**
  * GuestRoomDO — a SHARED, invitable free session for LOGGED-OUT visitors.
@@ -85,13 +86,14 @@ interface Participant {
   lastSeenAt: string;
 }
 
-interface Peer {
-  ws: WebSocket;
-  id: string;
-  channel: Channel;
-  visitorId: string;
-  name: string;
-}
+/**
+ * A connected socket. The registry, roster, rate limit and channel-scoped fan-out
+ * are {@link PeerRelay}'s — shared with the ceremony and canvas rooms — so what is
+ * guest-specific is only the mapping: `ref` holds the VISITOR id (which is how the
+ * persisted participant roster is keyed) while the roster projection publishes the
+ * socket id, matching the ceremony/meeting contract `useMediaRoom` reads.
+ */
+type Peer = RelayPeer;
 
 /** Public room state handed to a participant's UI. */
 interface RoomState {
@@ -120,12 +122,24 @@ export class GuestRoomDO implements DurableObject {
   // Required brand for the DurableObjectNamespace<T> generic constraint.
   declare readonly '__DURABLE_OBJECT_BRAND': never;
 
-  private peers = new Map<WebSocket, Peer>();
+  /**
+   * Sockets, their channels and the fan-out. `ref` carries the visitorId; the
+   * roster still publishes the SOCKET id as `ref` so the shared media hook
+   * (`useMediaRoom`) attributes tiles without a guest-specific branch, and a
+   * visitor id never reaches another visitor's browser.
+   */
+  private relay = new PeerRelay({
+    idPrefix: 'g',
+    // Open frame set: guest rooms carry typing/busy hints AND the WebRTC
+    // offer/answer/ICE traffic of the camera meeting. Rate-limited, not unbounded.
+    framesPerSecond: 40,
+    burst: 80,
+    stamp: (peer) => ({ from: peer.id, name: peer.name }),
+    publicPeer: (peer) => ({ id: peer.id, name: peer.name, kind: 'human', ref: peer.id }),
+  });
   /** Monotonic message id. Seeded from the retained window's HIGHEST id, not its
    *  length — after trimming, `length` would re-issue ids that are still in use. */
   private seq = 0;
-  /** Separate counter for socket ids so connecting never consumes message ids. */
-  private peerSeq = 0;
   private meta: RoomMeta | null = null;
   private messages: RoomMessage[] = [];
   private participants: Participant[] = [];
@@ -168,16 +182,16 @@ export class GuestRoomDO implements DurableObject {
     await this.state.storage.deleteAll().catch((error) => {
       reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'wipe' });
     });
-    for (const [ws] of this.peers) {
+    for (const peer of this.relay.list()) {
       try {
-        ws.close(1000, 'room expired');
+        peer.ws.close(1000, 'room expired');
       } catch (error) {
         // The socket was already torn down by the client — the room is closing
         // either way, so this is nothing to recover from, only to record.
         reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'wipe' });
       }
     }
-    this.peers.clear();
+    this.relay.clear();
   }
 
   // ── Turn accounting (the combined allowance) ────────────────────────────────
@@ -460,28 +474,26 @@ export class GuestRoomDO implements DurableObject {
     const identity = await verifyGuestToken(token, this.env.JWT_SECRET ?? '');
     if (!identity || identity.roomCode !== meta.code) return new Response('Not a member of this room', { status: 401 });
 
-    if (this.peers.size >= GUEST_ROOM_LIMITS.maxSockets) return new Response('Room is full', { status: 409 });
+    if (this.relay.size >= GUEST_ROOM_LIMITS.maxSockets) return new Response('Room is full', { status: 409 });
     const channel: Channel = url.searchParams.get('channel') === 'media' ? 'media' : 'chat';
     const known = this.participants.find((p) => p.visitorId === identity.visitorId);
 
     const { 0: client, 1: server } = new WebSocketPair();
     server.accept();
-    const peer: Peer = {
-      ws: server,
-      id: `g${++this.peerSeq}`,
+    const peer = this.relay.add(server, {
       channel,
-      visitorId: identity.visitorId,
+      ref: identity.visitorId,
+      kind: 'human',
       name: known?.name ?? 'Guest',
-    };
-    this.peers.set(server, peer);
+    });
 
     server.addEventListener('message', (ev) => this.onMessage(peer, ev));
     server.addEventListener('close', () => this.onClose(peer));
     server.addEventListener('error', () => this.onClose(peer));
 
     this.send(peer, { type: 'hello', id: peer.id, self: { name: peer.name } });
-    this.send(peer, { type: 'roster', peers: this.rosterFor(channel) });
-    this.broadcast(channel, JSON.stringify({ type: 'presence', action: 'join', peer: this.publicPeer(peer) }), server);
+    this.send(peer, { type: 'roster', peers: this.relay.roster(channel) });
+    this.relay.announceJoin(peer);
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -498,49 +510,38 @@ export class GuestRoomDO implements DurableObject {
     if (msg.type === 'join') {
       const name = clean(msg.name, 40);
       if (name) {
-        peer.name = name;
+        this.relay.identify(peer, { name });
         // Keep the persisted roster in step so a late joiner sees real names.
-        const known = this.participants.find((p) => p.visitorId === peer.visitorId);
+        const known = this.participants.find((p) => p.visitorId === peer.ref);
         if (known && known.name !== name) {
           known.name = name;
-          void this.state.storage.put('participants', this.participants).catch(() => undefined);
+          void this.state.storage.put('participants', this.participants).catch((error) => {
+            reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'onMessage' });
+          });
         }
       }
-      this.send(peer, { type: 'roster', peers: this.rosterFor(peer.channel) });
-      this.broadcast(peer.channel, JSON.stringify({ type: 'presence', action: 'join', peer: this.publicPeer(peer) }), peer.ws);
+      this.send(peer, { type: 'roster', peers: this.relay.roster(peer.channel) });
+      this.relay.announceJoin(peer);
       return;
     }
 
     // Everything else (typing, busy, rtc-offer/answer/ice, m-state, …) relays
     // verbatim to the OTHER peers ON THE SAME CHANNEL, stamped with the sender.
-    this.broadcast(peer.channel, JSON.stringify({ ...msg, from: peer.id, name: peer.name }), peer.ws);
+    this.relay.relay(peer, ev.data);
   }
 
   private onClose(peer: Peer): void {
-    if (!this.peers.delete(peer.ws)) return;
-    this.broadcast(peer.channel, JSON.stringify({ type: 'presence', action: 'leave', peer: { id: peer.id } }), peer.ws);
-  }
-
-  private rosterFor(channel: Channel) {
-    return [...this.peers.values()].filter((p) => p.channel === channel).map((p) => this.publicPeer(p));
-  }
-
-  private publicPeer(p: Peer) {
-    // `ref` mirrors the ceremony/meeting relay contract so the SHARED media hook
-    // (useMediaRoom) can attribute tiles without a guest-specific branch.
-    return { id: p.id, name: p.name, kind: 'human', ref: p.id };
+    if (!this.relay.remove(peer.ws)) return;
+    this.relay.announceLeave(peer);
   }
 
   private send(peer: Peer, frame: unknown): void {
-    try { peer.ws.send(JSON.stringify(frame)); } catch { this.peers.delete(peer.ws); }
+    this.relay.send(peer, frame);
   }
 
-  /** Send `data` to every peer on `channel` except `except` (null = all of them). */
+  /** Send `data` to every peer on `channel` (null `except` = all of them). */
   private broadcast(channel: Channel, data: string, except: WebSocket | null): void {
-    for (const [ws, peer] of this.peers) {
-      if (ws === except || peer.channel !== channel) continue;
-      try { ws.send(data); } catch { this.peers.delete(ws); }
-    }
+    this.relay.broadcast(data, { channel, except });
   }
 
   /** Someone joined/left via HTTP — refresh both channels' participant lists. */

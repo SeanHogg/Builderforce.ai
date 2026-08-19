@@ -1156,11 +1156,23 @@ export const questionSets = pgTable('question_sets', {
   /** Shown after a successful submit. Authored, because "thanks" is rarely the
    *  useful thing to say — an applicant wants to know what happens next. */
   confirmationMessage: text('confirmation_message'),
+  /**
+   * Days of silence before a named-recipient form chases whoever has not
+   * answered. 0 opts out — and 0 is the DEFAULT, unlike `signature_requests`,
+   * because most published sets are `anyoneWithLink` surveys with nobody to
+   * chase and a chasing default would make every publish a mail campaign.
+   */
+  remindAfterDays: integer('remind_after_days').notNull().default(0),
+  /** Stamped by the sweep AFTER delivery, so a transport failure retries next
+   *  tick instead of silently skipping a cycle. */
+  lastRemindedAt: timestamp('last_reminded_at'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
   index('idx_question_sets_tenant').on(t.tenantId, t.kind, t.status),
   uniqueIndex('uq_question_sets_slug').on(t.slug),
+  // The reminder sweep's own predicate — see migration 0479.
+  index('idx_question_sets_reminders').on(t.status, t.audienceKind, t.remindAfterDays, t.lastRemindedAt),
 ]);
 
 /**

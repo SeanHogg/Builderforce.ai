@@ -10,6 +10,9 @@ export * from './qa';
 export * from './people';
 export * from './dataScience';
 export * from './triggers';
+// The live-presence frame — the ONE shape the canvas relay carries. Shared because
+// the Durable Object sanitizes WITH it and the canvas merges the result; see presence.ts.
+export * from './presence';
 export * from './operations';
 export * from './resume';
 // The deterministic résumé READER — plain text to a JSON Resume document, no model.

@@ -26,7 +26,9 @@ import {
   resolveSigner,
   signatureProgress,
 } from '../../application/signature/signatureEngine';
+import { deliverSignatureInvitations } from '../../application/signature/signatureInvitations';
 import { ArtifactNotFoundError, loadAndDecryptArtifact } from '../../application/artifacts/artifactStore';
+import { isSignatureIntent } from '@builderforce/creation-canvas-contract';
 
 const handle = async (run: () => Promise<Response>): Promise<Response> => {
   try {
@@ -45,8 +47,17 @@ export function createSignatureRoutes(db: Db): Hono<HonoEnv> {
   const tenant = (c: Context<HonoEnv>) => c.get('tenantId') as number;
 
   /**
-   * Send a request. The response carries each party's plaintext token ONCE, for
-   * the same reason a form's does: only the hash is stored.
+   * Send a request — and actually SEND it.
+   *
+   * The response still carries each party's plaintext token once, for the same
+   * reason a form's does: only the hash is stored. That is now provenance rather
+   * than the delivery mechanism. Every party is emailed the document and their own
+   * signing address here, because the engine could freeze terms, record a decision
+   * and chase a silent signer while the FIRST message — the one telling somebody a
+   * document is waiting — was sent by nothing.
+   *
+   * Awaited, not fired into `waitUntil`: a request that reached nobody must not
+   * report the same result as one that reached everybody.
    */
   router.post('/', (c) => handle(async () => {
     const body = await c.req.json<Record<string, unknown>>();
@@ -71,7 +82,17 @@ export function createSignatureRoutes(db: Db): Hono<HonoEnv> {
           })
         : [],
     });
-    return Response.json(result);
+    const delivery = await deliverSignatureInvitations(c.env as Env, {
+      subject: String(body.subject ?? ''),
+      documentTitle: String(body.documentTitle ?? ''),
+      intent: isSignatureIntent(body.intent) ? body.intent : 'sign',
+      expiresAt: typeof body.expiresAt === 'string' ? body.expiresAt : null,
+    }, result.invitations.map((invitation) => ({
+      email: invitation.email,
+      name: invitation.name,
+      token: invitation.token,
+    })));
+    return Response.json({ ...result, delivery });
   }));
 
   /** The progress meter, derived from the parties — so it cannot claim a

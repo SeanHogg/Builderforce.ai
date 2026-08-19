@@ -42,6 +42,8 @@ import { CanvasSurfaceSwitcher } from './CanvasSurfaceSwitcher';
 import { CanvasSessionActions, type CanvasSessionActionHandler } from './CanvasSessionActions';
 import { CanvasSessionPill } from './CanvasSessionPill';
 import { RemoteCursors } from './RemoteCursors';
+import { applyPresenceFrame, dropPresence, expirePresence, isPresenceFrame, mergeLivePresence, LIVE_PRESENCE_TTL_MS, PRESENCE_SEND_INTERVAL_MS, type LivePresenceMap } from '@/lib/canvas/livePresence';
+import { CANVAS_PRESENCE_FRAME, type CanvasPresenceState } from '@builderforce/creation-canvas-contract';
 import { CanvasCommandBar } from './CanvasCommandBar';
 import { TeamBar } from '@/components/team/TeamBar';
 import type { CanvasSessionActionId } from '@/lib/canvasSessionActions';
@@ -1445,6 +1447,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [loadingSession, setLoadingSession] = useState(persistence === 'server');
   const [realtimeState, setRealtimeState] = useState<'local' | 'connecting' | 'online' | 'reconnecting' | 'offline'>(persistence === 'local' ? 'local' : 'connecting');
   const [members, setMembers] = useState<CreationSessionDetail['members']>([]);
+  /**
+   * Where everyone's pointer is RIGHT NOW, off the peer relay — as opposed to
+   * `members`, which is where they were when the 8s presence poll last ran. The
+   * two are merged for rendering (`liveMembers`), never kept as rival rosters.
+   */
+  const [livePresence, setLivePresence] = useState<LivePresenceMap>({});
   const [joinedCollaborator, setJoinedCollaborator] = useState<CreationSessionDetail['members'][number] | null>(null);
   const [allMembers, setAllMembers] = useState<CreationSessionDetail['members']>([]);
   const [pendingInvitations, setPendingInvitations] = useState<CreationSessionInvitation[]>([]);
@@ -1603,6 +1611,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const pendingSave = useRef<{ serialized: string; key: string } | null>(null);
   const viewportRef = useRef({ x: 0, y: 0, zoom: 1 });
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
+  /** The live socket, when it is open — the channel pointer frames go out on. */
+  const liveSocketRef = useRef<WebSocket | null>(null);
+  /** Last outbound presence frame's timestamp + payload, for the send throttle. */
+  const presenceSentRef = useRef<{ atMs: number; pending: CanvasPresenceState | null; timer: number | null }>({ atMs: 0, pending: null, timer: null });
   const pendingViewport = useRef<{ x: number; y: number; zoom: number } | null>(null);
   const flowWrapRef = useRef<HTMLDivElement | null>(null);
   // The prompt's real height, published to the board as `--composer-space` — the
@@ -2093,7 +2105,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     let stopped = false;
     const reconcile = async () => {
       try {
-        const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedIds, typing: isComposingPrompt, followingUserId });
+        // The cursor rides the RELAY when the socket is up, and only falls back to
+        // this poll when it is not — which is what removes the per-tick
+        // `creation_session_members.cursor` write, not just the staleness. A client
+        // whose relay is down still shows up to everyone else, eight seconds behind.
+        const relayed = liveSocketRef.current?.readyState === WebSocket.OPEN;
+        const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: relayed ? null : cursorRef.current, selection: selectedIds, typing: isComposingPrompt, followingUserId });
         if (stopped) return;
         const nextActiveIds = new Set(presence.members.map((member) => member.userId));
         if (activePresenceInitialized.current) {
@@ -2102,7 +2119,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         } else activePresenceInitialized.current = true;
         activeMemberIds.current = nextActiveIds;
         setMembers(presence.members);
-        const followed = presence.members.find((member) => member.userId === followingUserId && member.viewport && typeof member.viewport.x === 'number' && typeof member.viewport.y === 'number' && typeof member.viewport.zoom === 'number');
+        // Following is driven by the relay when it is up (see the follow effect);
+        // this is the same move at poll speed for a client with no socket.
+        const followed = relayed ? undefined : presence.members.find((member) => member.userId === followingUserId && member.viewport && typeof member.viewport.x === 'number' && typeof member.viewport.y === 'number' && typeof member.viewport.zoom === 'number');
         if (followed?.viewport) void flowRef.current?.setViewport({ x: Number(followed.viewport.x), y: Number(followed.viewport.y), zoom: Number(followed.viewport.zoom) }, { duration: 350 });
         if (presence.currentUserId) setCurrentUserId(presence.currentUserId);
         if (presence.revision <= revision.current || saveInFlight.current || currentGraph.current !== lastSavedGraph.current) return;
@@ -2171,16 +2190,38 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         retryMs = Math.min(15_000, retryMs * 2);
         return;
       }
-      socket.onopen = () => { setRealtimeState('online'); retryMs = 1_000; void syncRevision(); };
+      socket.onopen = () => {
+        setRealtimeState('online');
+        retryMs = 1_000;
+        // Publishing the socket is what arms `sendPresence`; until this runs, the
+        // pointer keeps riding the presence poll.
+        liveSocketRef.current = socket;
+        void syncRevision();
+      };
       socket.onmessage = (event) => {
         try {
-          const frame = JSON.parse(String(event.data)) as { type?: string; revision?: number; lastId?: number };
+          const frame = JSON.parse(String(event.data)) as { type?: string; revision?: number; lastId?: number; action?: string; peer?: { id?: string } };
           if (frame.type === 'canvas.changed') void syncRevision(frame.revision);
           if (frame.type === 'timeline.changed') void creationSessionsApi.timeline.list(sessionId).then((result) => setTimeline(result.messages)).catch(() => undefined);
+          // A peer's pointer, at pointer speed. Relayed frames are attributed by the
+          // SERVER (`userId`), never by the sender — see `SessionRoomDO`.
+          if (isPresenceFrame(frame)) setLivePresence((current) => applyPresenceFrame(current, frame, Date.now()));
+          // A cursor must not outlive its socket. `presence`/`leave` names the socket,
+          // so the peer id is resolved back to the user through the last frame it sent.
+          if (frame.type === 'presence' && frame.action === 'leave') {
+            const gone = String(frame.peer?.id ?? '');
+            setLivePresence((current) => {
+              const owner = Object.entries(current).find(([, entry]) => entry.socketId === gone);
+              return owner ? dropPresence(current, owner[0]) : current;
+            });
+          }
         } catch { /* Ignore malformed relay frames. */ }
       };
       socket.onclose = () => {
+        if (liveSocketRef.current === socket) liveSocketRef.current = null;
         socket = null;
+        // Nobody's pointer is live while this client is deaf; the poll takes over.
+        setLivePresence({});
         if (!stopped) {
           setRealtimeState(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'reconnecting');
           retryTimer = window.setTimeout(connect, retryMs);
@@ -2192,9 +2233,57 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return () => {
       stopped = true;
       if (retryTimer != null) window.clearTimeout(retryTimer);
+      liveSocketRef.current = null;
+      const throttle = presenceSentRef.current;
+      if (throttle.timer != null) { window.clearTimeout(throttle.timer); throttle.timer = null; }
+      throttle.pending = null;
       socket?.close();
     };
   }, [persistence, sessionId, setEdges, setNodes]);
+
+  /**
+   * Composing a prompt is presence too — the cursor label says so. It changes at
+   * human speed, so it is sent on the state change rather than throttled per frame.
+   */
+  useEffect(() => {
+    if (persistence !== 'server') return;
+    sendPresence({ typing: isComposingPrompt });
+  }, [isComposingPrompt, persistence, sendPresence]);
+
+  /**
+   * Follow, driven live. The poll's copy of this only runs when the relay is down,
+   * so a follower moves WITH the person they are following rather than catching up
+   * to where they were.
+   */
+  const followedViewport = followingUserId ? livePresence[followingUserId]?.viewport : undefined;
+  useEffect(() => {
+    if (!followedViewport) return;
+    void flowRef.current?.setViewport(followedViewport, { duration: 120 });
+  }, [followedViewport]);
+
+  /**
+   * Retire pointers nobody retracted. A socket that dies without a close frame
+   * (a closed lid, a dropped network) leaves a cursor standing exactly where its
+   * owner stopped; this is what takes it down.
+   */
+  useEffect(() => {
+    if (persistence !== 'server') return;
+    const timer = window.setInterval(
+      () => setLivePresence((current) => expirePresence(current, Date.now())),
+      LIVE_PRESENCE_TTL_MS / 2,
+    );
+    return () => window.clearInterval(timer);
+  }, [persistence]);
+
+  /**
+   * One roster to draw. Identity (name, role) comes from the poll; position comes
+   * from the relay. Merging rather than keeping two lists is why a name and a
+   * pointer can never disagree — see `lib/canvas/livePresence`.
+   */
+  const liveMembers = useMemo(
+    () => mergeLivePresence(members, livePresence, currentUserId) as CreationSessionDetail['members'],
+    [currentUserId, livePresence, members],
+  );
 
   const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
   /**
@@ -2900,12 +2989,43 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedId((current) => current == null ? current : null);
     setSelectedIds((current) => current.length ? [] : current);
   }, []);
+  /**
+   * Put this client's ephemeral state on the relay.
+   *
+   * Throttled to {@link PRESENCE_SEND_INTERVAL_MS}, and the throttle COALESCES
+   * rather than drops: a move inside the window is remembered and flushed at the
+   * end of it. Dropping instead would leave the pointer stopped at wherever the
+   * last frame happened to land whenever someone moved fast and then stopped —
+   * which is exactly when a cursor is being watched.
+   *
+   * Silent when the socket is not open; the presence poll is the fallback and
+   * resumes carrying the cursor on its own (see the reconcile effect).
+   */
+  const sendPresence = useCallback((state: CanvasPresenceState) => {
+    const socket = liveSocketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    const throttle = presenceSentRef.current;
+    const flush = (payload: CanvasPresenceState) => {
+      throttle.atMs = Date.now();
+      throttle.pending = null;
+      try { socket.send(JSON.stringify({ type: CANVAS_PRESENCE_FRAME, ...payload })); } catch { /* the socket is closing; the poll takes over */ }
+    };
+    const waited = Date.now() - throttle.atMs;
+    if (waited >= PRESENCE_SEND_INTERVAL_MS && throttle.timer == null) { flush(state); return; }
+    throttle.pending = { ...throttle.pending, ...state };
+    if (throttle.timer != null) return;
+    throttle.timer = window.setTimeout(() => {
+      throttle.timer = null;
+      const pending = throttle.pending;
+      if (pending) flush(pending);
+    }, Math.max(0, PRESENCE_SEND_INTERVAL_MS - waited));
+  }, []);
   const onCanvasPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!flowRef.current) return;
     const point = flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    if (persistence === 'server') cursorRef.current = point;
+    if (persistence === 'server') { cursorRef.current = point; sendPresence({ cursor: point }); }
     if (drawingMode && drawingPoints.current.length) drawingPoints.current.push(point);
-  }, [drawingMode, persistence]);
+  }, [drawingMode, persistence, sendPresence]);
   const onCanvasPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     // A stroke may START ANYWHERE, including on top of a card — that is what
     // makes annotation possible. While a tool is held the canvas is a drawing
@@ -2993,10 +3113,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [drawing, drawingMode, nodes, setNodes, t]);
   const onViewportChange = useCallback((_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) => {
     viewportRef.current = viewport;
+    // A follower is watching this pan happen, not reading about it eight seconds later.
+    if (persistence === 'server') sendPresence({ viewport });
     if (persistence !== 'local' || !hydrated.current) return;
     const snapshot = localCreationSnapshot(sessionId, { title, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport });
     persistSnapshot(snapshot);
-  }, [edges, nodes, persistence, sessionId, storageKey, timeline, title]);
+  }, [edges, nodes, persistence, sendPresence, sessionId, storageKey, timeline, title]);
 
   /** Place a new object at the middle of the viewport. `data` lets a caller that
    *  already HAS the object's content (an editor capture) seed it in one step
@@ -10678,7 +10800,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // rather than on any single id, so a new runtime suppresses the flat viewport,
         // the palette and the remote cursors without a new rule being written for it.
         data-view={surface}
-        data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragEnter={onCanvasDragEnter} onDragLeave={onCanvasDragLeave} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
+        data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; sendPresence({ cursor: null }); }} onDragEnter={onCanvasDragEnter} onDragLeave={onCanvasDragLeave} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
         {fileDragging && <div className={styles.fileDropOverlay} role="status" aria-live="polite">
           <div>
             <span aria-hidden>⇩</span>
@@ -10757,7 +10879,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           {/* Inside the flow, so the pane's own transform moves them: a cursor
               layer that lives outside the viewport is only ever correct until the
               first pan. */}
-          <RemoteCursors members={members} currentUserId={currentUserId} />
+          <RemoteCursors members={liveMembers} currentUserId={currentUserId} />
           <CanvasCommands
             minimapOpen={minimapOpen}
             setMinimapOpen={setMinimapOpen}

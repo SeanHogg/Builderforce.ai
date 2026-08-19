@@ -29,7 +29,7 @@
  * through a path that forgot one.
  */
 
-import { and, count, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gt, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import {
   FORM_AUDIENCES,
   isFormFieldType,
@@ -130,6 +130,9 @@ export interface PublishFormInput {
   /** Named audience only. Each gets its own credential; the plaintext token is
    *  returned ONCE, here, because it is never stored. */
   recipients?: Array<{ email: string; name?: string }>;
+  /** Days of silence before the sweep chases whoever has not answered. 0 (the
+   *  default) opts out — see the column's own note. */
+  remindAfterDays?: number;
   createdBy?: string | null;
 }
 
@@ -185,6 +188,9 @@ export async function publishForm(
     confirmationMessage: input.confirmationMessage?.trim().slice(0, 1000) ?? null,
     closesAt,
     objectId: input.objectId ?? null,
+    // Same bounds as `signature_requests.remind_after_days`, and 0 still means
+    // "never chase" rather than "chase now".
+    remindAfterDays: Math.max(0, Math.min(Math.round(input.remindAfterDays ?? 0), 60)),
     updatedAt: new Date(),
   } as const;
 
@@ -229,6 +235,135 @@ export async function publishForm(
   }
 
   return { questionSetId: row.id, slug, status: 'open', invitations };
+}
+
+// ---------------------------------------------------------------------------
+// Chasing the people who have not answered
+// ---------------------------------------------------------------------------
+
+/** How many opted-in forms one sweep tick will look at. Bounded for the same
+ *  reason the signature sweep is: a daily job must not become an unbounded scan
+ *  the moment the platform gets popular. */
+const FORM_REMINDER_BATCH = 200;
+
+export interface FormReminderDue {
+  tenantId: number;
+  questionSetId: string;
+  slug: string;
+  title: string;
+  closesAt: Date | null;
+  /** Only the invited people with no `responded_at` — the sweep's own question,
+   *  answered by the column that already records it. */
+  pending: Array<{ recipientId: number; name: string | null; email: string }>;
+}
+
+/**
+ * Named-recipient forms that are open, unexpired, opted in to reminders, and have
+ * gone quiet for longer than they declared.
+ *
+ * Returns WHAT to chase and sends nothing — the same split as
+ * `signatureRemindersDue`, and for the same reason: the decision about who still
+ * owes an answer belongs in one place and must be testable without a mail server.
+ */
+export async function formRemindersDue(db: Db, now = new Date()): Promise<FormReminderDue[]> {
+  const rows = await db
+    .select({
+      id: questionSets.id,
+      tenantId: questionSets.tenantId,
+      slug: questionSets.slug,
+      name: questionSets.name,
+      closesAt: questionSets.closesAt,
+      remindAfterDays: questionSets.remindAfterDays,
+      lastRemindedAt: questionSets.lastRemindedAt,
+      createdAt: questionSets.createdAt,
+    })
+    .from(questionSets)
+    // A sweep has no caller and therefore no tenant to filter by — it is the
+    // platform acting on its own schedule over every tenant's rows. Declared
+    // rather than omitted, and it still names what it acts on.
+    .where(acrossTenants(
+      questionSets,
+      'scheduled_sweep',
+      eq(questionSets.status, 'open'),
+      eq(questionSets.audienceKind, 'namedRecipients'),
+      // 0 opts out entirely — honoured here rather than read as "immediately".
+      gt(questionSets.remindAfterDays, 0),
+      or(isNull(questionSets.closesAt), gt(questionSets.closesAt, now)),
+      isNotNull(questionSets.slug),
+    ))
+    .orderBy(asc(questionSets.updatedAt))
+    .limit(FORM_REMINDER_BATCH);
+
+  const due: FormReminderDue[] = [];
+  for (const row of rows) {
+    const since = (row.lastRemindedAt ?? row.createdAt)?.getTime();
+    if (since == null) continue;
+    if (now.getTime() - since < row.remindAfterDays * 86_400_000) continue;
+
+    const pending = await db
+      .select({ id: formRecipients.id, name: formRecipients.name, email: formRecipients.email })
+      .from(formRecipients)
+      .where(scopedToTenant(
+        formRecipients,
+        row.tenantId,
+        eq(formRecipients.questionSetId, row.id),
+        isNull(formRecipients.respondedAt),
+      ))
+      .orderBy(asc(formRecipients.id));
+    if (!pending.length) continue;
+
+    due.push({
+      tenantId: row.tenantId,
+      questionSetId: row.id,
+      slug: row.slug ?? '',
+      title: row.name,
+      closesAt: row.closesAt,
+      pending: pending.map((p) => ({ recipientId: p.id, name: p.name, email: p.email })),
+    });
+  }
+  return due;
+}
+
+/**
+ * Mint a REPLACEMENT credential for one recipient and return the plaintext.
+ *
+ * This is what lets a reminder quote a working link without the store ever
+ * holding one. The alternative — keeping the plaintext so a cron job can read it
+ * back — trades the one-way property for a convenience, and that trade is the
+ * wrong way round: a leaked row would then be a working signature on somebody
+ * else's behalf.
+ *
+ * The old token STOPS WORKING at the moment this returns, which is the cost. It
+ * is charged only when a reminder is actually about to be sent, and the message
+ * that carries the new link is composed from this same return value — so the
+ * window in which a recipient holds no valid link is the length of one send.
+ */
+export async function reissueRecipientToken(
+  db: Db,
+  tenantId: number,
+  recipientId: number,
+): Promise<string | null> {
+  const { token, tokenHash } = await mintShareToken();
+  const [row] = await db
+    .update(formRecipients)
+    .set({ tokenHash })
+    .where(scopedToTenant(formRecipients, tenantId, eq(formRecipients.id, recipientId)))
+    .returning({ id: formRecipients.id });
+  return row ? token : null;
+}
+
+/** Stamp a form as chased. Called by the sweep AFTER delivery, so a transport
+ *  failure means it is tried again rather than silently skipped for a cycle. */
+export async function markFormReminded(
+  db: Db,
+  tenantId: number,
+  questionSetId: string,
+  at = new Date(),
+): Promise<void> {
+  await db
+    .update(questionSets)
+    .set({ lastRemindedAt: at })
+    .where(scopedToTenant(questionSets, tenantId, eq(questionSets.id, questionSetId)));
 }
 
 /** Close a form. Distinct from deleting it: the responses stay, and the address

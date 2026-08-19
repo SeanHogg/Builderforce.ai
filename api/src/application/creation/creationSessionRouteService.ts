@@ -62,6 +62,7 @@ import {
   type CreationObjectKind,
 } from '@builderforce/creation-canvas-contract';
 import { broadcastRoom, creationSessionRoomName } from '../../infrastructure/relay/broadcastRoom';
+import { relayToRoom } from '../../presentation/routes/realtimeRelay';
 import { sendTransactionalEmail } from '../email/sendEmail';
 import { sendCreationSessionInviteEmail } from '../../infrastructure/email/EmailService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -1193,14 +1194,25 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ events, revision: access.session.canvasRevision, hasMore: events.length === limit });
   });
 
+  /**
+   * The board's live channel. Two things ride it: the server's `{type:"changed"}`
+   * fan-out (revision + timeline invalidation), and — because this connection is
+   * admitted as a PEER — every collaborator's pointer, at pointer speed.
+   *
+   * The identity handed to `relayToRoom` is the one `requireSession` just proved,
+   * never one the client claimed, so a socket cannot move another member's cursor.
+   * See `SessionRoomDO` for the frame contract and why only `canvas.presence`
+   * crosses the relay.
+   */
   router.get('/:id/ws', async (c) => {
     const access = await requireSession(c, 'viewer');
     if (!access) return c.json({ error: 'Session not found' }, 404);
-    if (c.req.header('Upgrade') !== 'websocket') return c.text('Expected WebSocket', 426);
-    const binding = c.env?.SESSION_ROOM;
-    if (!binding) return c.text('Realtime unavailable', 503);
-    const room = creationSessionRoomName(access.session.tenantId, access.session.id);
-    return binding.get(binding.idFromName(room)).fetch(c.req.raw);
+    return relayToRoom(
+      c,
+      c.env?.SESSION_ROOM,
+      creationSessionRoomName(access.session.tenantId, access.session.id),
+      { ref: c.get('userId') as string, kind: 'human' },
+    );
   });
 
   router.get('/:id/preview', async (c) => {

@@ -18,20 +18,38 @@
  * silently stop a contract. The investor update goes the other way, through
  * `campaignTransports`, for exactly the mirror-image reason.
  *
+ * ── THE LINK IS THE SIGNER'S OWN, NOW ────────────────────────────────────────
+ * This job used to point every party at `/sign` — the landing page — and ask them
+ * to use the link they were sent, because only the HASH of their token is stored.
+ * Telling somebody who has already ignored one email to go and find it is not a
+ * reminder. The fix is a short-lived RE-ISSUE: `reissuePartyToken` mints a fresh
+ * credential on the party row at reminder time and returns the plaintext for the
+ * length of this send. Nothing plaintext is ever stored, so the one-way property
+ * is unchanged; the previous link stops working, which is the price of a link
+ * that opens.
+ *
  * ── ORDER OF OPERATIONS ──────────────────────────────────────────────────────
  * Expire first, then chase. A request whose date passed overnight must not be
  * reminded about on the same tick — chasing somebody for a document they can no
  * longer sign is worse than silence.
  *
- * `markReminded` is called AFTER delivery, so a transport failure means the
- * request is tried again next tick rather than being silently skipped for a cycle.
+ * Re-issue, then deliver, then mark. `markReminded` is called AFTER delivery, so
+ * a transport failure means the request is tried again next tick rather than
+ * being silently skipped for a cycle. A party whose re-issue fails is skipped
+ * rather than sent a dead link: the row and the message must agree, and where
+ * they cannot, silence is the honest outcome.
  */
 
 import type { Env } from '../../env';
-import { resolveAppBaseUrl } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
-import { sendRawEmail } from '../../infrastructure/email/EmailService';
-import { expireSignatureRequests, markReminded, signatureRemindersDue } from './signatureEngine';
+import { deliverSignatureReminders } from './signatureInvitations';
+import type { ShareInvitation } from '../security/shareInvitationMailer';
+import {
+  expireSignatureRequests,
+  markReminded,
+  reissuePartyToken,
+  signatureRemindersDue,
+} from './signatureEngine';
 
 export interface SignatureSweepResult {
   expired: number;
@@ -39,50 +57,34 @@ export interface SignatureSweepResult {
   failed: number;
 }
 
-const escapeHtml = (value: string): string =>
-  value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
-
 export async function runSignatureReminderSweep(env: Env, now = new Date()): Promise<SignatureSweepResult> {
   const db = buildDatabase(env);
   const expired = await expireSignatureRequests(db, now);
   const due = await signatureRemindersDue(db, now);
-  const base = resolveAppBaseUrl(env);
 
   let reminded = 0;
   let failed = 0;
 
   for (const request of due) {
-    const verb = request.intent === 'acknowledge' ? 'acknowledge' : 'sign';
-    let sentAny = false;
+    const invitations: ShareInvitation[] = [];
     for (const party of request.pending) {
-      // The signer's own address is NOT reconstructible from here: only the hash
-      // of their token is stored, deliberately. So the reminder links to the
-      // request's landing page, which asks for the link they were sent — the
-      // alternative is storing a credential in plaintext so a reminder can quote
-      // it, which is the trade nobody should make.
-      const html = [
-        `<div style="max-width:560px;margin:0 auto;padding:24px;font:400 15px/1.6 system-ui,sans-serif;color:#111">`,
-        `<p>${escapeHtml(party.name)},</p>`,
-        `<p>You have not yet ${verb}d <strong>${escapeHtml(request.documentTitle)}</strong>.</p>`,
-        `<p>Open the link you were sent to ${verb} it, or reply to this message if you no longer have it.</p>`,
-        `<p style="color:#666;font-size:13px">${escapeHtml(request.subject)} — <a href="${base}/sign">${base}/sign</a></p>`,
-        `</div>`,
-      ].join('');
-      try {
-        await sendRawEmail(env, {
-          to: party.email,
-          subject: `Reminder: ${request.documentTitle}`,
-          html,
-        });
-        sentAny = true;
-        reminded += 1;
-      } catch {
-        // Counted, not thrown: one unreachable address must not stop the rest of
-        // the batch, and the request stays unmarked so the next tick retries it.
-        failed += 1;
-      }
+      const token = await reissuePartyToken(db, request.tenantId, party.partyId);
+      // Null means the party decided between the read and the write — the right
+      // answer is to leave them alone, not to chase a closed decision.
+      if (!token) { failed += 1; continue; }
+      invitations.push({ email: party.email, name: party.name, token });
     }
-    if (sentAny) await markReminded(db, request.tenantId, request.requestId, now);
+    if (!invitations.length) continue;
+
+    const delivery = await deliverSignatureReminders(env, {
+      subject: request.subject,
+      documentTitle: request.documentTitle,
+      intent: request.intent,
+    }, invitations);
+
+    reminded += delivery.sent;
+    failed += delivery.failed;
+    if (delivery.sent > 0) await markReminded(db, request.tenantId, request.requestId, now);
   }
 
   return { expired, reminded, failed };
