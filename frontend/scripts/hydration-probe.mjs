@@ -1,7 +1,25 @@
 /**
- * Hydrate the real dev-build page inside jsdom and print React's own hydration
- * diagnosis. The deployed bundle is minified (error #418 names nothing); the dev
- * bundle prints the element and the diff.
+ * hydration-probe — get React's UNMINIFIED hydration diagnosis for any route, with
+ * no browser involved.
+ *
+ * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────────
+ * A hydration failure in production is a number: `Minified React error #418`, with no
+ * element, no component and no diff. That is not enough to fix anything, and "load it
+ * in a dev build and look at the console" needs a person with a browser. This loads the
+ * real dev-server page inside jsdom, lets the real client bundle hydrate it, and prints
+ * what React actually says — including the component stack and the `+ client / - server`
+ * diff — plus every text node React rewrote while regenerating a mismatched tree.
+ *
+ * It found the one this was written for: the sidebar's version chip rendered
+ * `2026.8.60` from the server bundle and `2026.8.56` from the client chunk, which threw
+ * away the whole server tree on every load. See `components/legal/useLegalDocs.ts`.
+ *
+ * USAGE (from `frontend/`, with `npm run dev` already running):
+ *   node scripts/hydration-probe.mjs http://localhost:3000/create/local-probe [waitMs]
+ *
+ * The polyfills below are jsdom gaps, not app requirements: without the platform
+ * streams the Next client bundle throws before React ever hydrates, and the probe
+ * reports a clean page that never ran.
  */
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { ReadableStream, WritableStream, TransformStream } from 'node:stream/web';
