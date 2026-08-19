@@ -45,6 +45,7 @@ import { runSocialCampaignSweep } from './application/social/socialCampaignServi
 import { runMailboxAutomationSweep } from './application/mailbox/mailboxAutomationService';
 import { runCustomDomainSweep } from './application/ide/customDomain';
 import { runHostedListingSweep } from './application/marketplace/creationListings.hostedSweep';
+import { runJobAlertSweep } from './application/marketplace/jobAlerts';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
 import { reconcileGithubActionsRuns } from './application/runtime/githubActionsReconcile';
 import { runExecutionLifecycleOutboxSweep } from './application/runtime/executionLifecycleOutbox';
@@ -208,6 +209,26 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       const r = await runFormReminderSweep(env);
       return r.chased || r.reminded || r.failed
         ? `chased=${r.chased} reminded=${r.reminded}${r.failed ? ` failed=${r.failed}` : ''}`
+        : null;
+    },
+  },
+  {
+    key: 'job-alerts',
+    cadence: 'daily',
+    // DAILY, not frequent, and that is a product decision rather than a cost one: a
+    // standing job search is a digest ("here is what appeared since yesterday"), and
+    // firing it every five minutes would turn one useful notification into a stream of
+    // single-posting pings — the failure mode the batching in `jobAlertBody` exists to
+    // avoid, reintroduced at the cadence layer.
+    description:
+      'Evaluate every enabled job alert (`saved_searches`, scope=listing) against the '
+      + 'postings created since it last ran, and notify the seeker. The half that was '
+      + 'missing: the alerts were stored and managed but nothing ever ran them, so '
+      + '`last_run_at`/`result_count` were always null.',
+    run: async ({ env }) => {
+      const r = await runJobAlertSweep(env, buildDatabase(env));
+      return r.matched > 0 || r.failed > 0
+        ? `alerts=${r.evaluated} matched=${r.matched} notified=${r.notified}${r.failed ? ` failed=${r.failed}` : ''}`
         : null;
     },
   },

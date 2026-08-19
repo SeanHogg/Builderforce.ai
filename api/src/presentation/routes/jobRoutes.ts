@@ -14,7 +14,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * `mapProposal` (and therefore the wire shape) are keyed on those names.
  */
 import { Hono } from 'hono';
-import { and, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { verifyWebJwt } from '../../infrastructure/auth/JwtService';
@@ -45,6 +45,7 @@ import { parseJsonArray } from '../../domain/shared/json';
 import { resolveTenantPlan } from './llmRoutes';
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
 import { evaluateProposal, evalPercent } from '../../application/marketplace/proposalEval';
+import { jobFilterConditions, jobFilterIsEmpty, normalizeJobFilters } from '../../application/marketplace/jobFilters';
 import type { EvalJudge } from '../../application/eval/semanticEval';
 import type { Env, HonoEnv } from '../../env';
 
@@ -692,19 +693,17 @@ export function createJobRoutes(): Hono<HonoEnv> {
   // slice is cached and filtered (discipline/skill/q) in memory.
   router.get('/', async (c) => {
     const db = buildDatabase(c.env);
-    const q = c.req.query();
-    const qq = (q.q ?? '').trim();
-    const hasFilters = Boolean(q.discipline || q.skill || qq);
-    const conditions = [eq(jobPostings.status, 'open'), eq(jobPostings.visibility, 'public')];
-    if (q.discipline) conditions.push(eq(jobPostings.discipline, q.discipline));
-    if (q.skill) conditions.push(sql`EXISTS (
-      SELECT 1 FROM jsonb_array_elements_text(COALESCE(${jobPostings.skills}, '[]')::jsonb) skill
-      WHERE lower(skill) = ${q.skill.toLowerCase()}
-    )`);
-    if (qq) {
-      const pattern = `%${qq}%`;
-      conditions.push(or(ilike(jobPostings.title, pattern), ilike(jobPostings.description, pattern), ilike(jobPostings.skills, pattern))!);
-    }
+    // The criteria are normalised and lowered to SQL by `jobFilters`, which is also
+    // what the job-alert sweep matches with — one declaration of what a job search
+    // MEANS, two evaluators. Writing the predicate inline here a second time is how
+    // an alert comes to disagree with the board the seeker is looking at.
+    const spec = normalizeJobFilters(c.req.query());
+    const hasFilters = !jobFilterIsEmpty(spec);
+    const conditions = [
+      eq(jobPostings.status, 'open'),
+      eq(jobPostings.visibility, 'public'),
+      ...jobFilterConditions(spec),
+    ];
     const loadJobs = () =>
       db
         .select({

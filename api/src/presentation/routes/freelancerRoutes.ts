@@ -46,6 +46,15 @@ import { provisionForHireProfile } from '../../application/freelance/provisionFo
 import { normalizeSeeking, normalizeWorkMode } from '../../application/career/listing';
 import { parseJsonArray } from '../../domain/shared/json';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import {
+  createMilestone,
+  deleteDraftMilestone,
+  milestoneTenantForFreelancer,
+  moveMilestone,
+  readEngagementSchedule,
+  readFreelancerMilestones,
+} from '../../application/marketplace/milestones';
+import { summariseEscrow, type MilestoneAction } from '../../application/marketplace/escrow';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import {
   freelancerEngagements,
@@ -922,6 +931,11 @@ async function publicResumeFor(
  * Employer actions require the tenant JWT; a worker viewing their own
  * engagements uses the web JWT.
  */
+/** The escrow moves that belong to the CLIENT. `submit` is absent on purpose — it is
+ *  the freelancer's, and this list is what stops a tenant-authenticated caller from
+ *  reaching it through the shared action route. */
+const CLIENT_ESCROW_ACTIONS: readonly MilestoneAction[] = ['fund', 'approve', 'reject', 'release', 'cancel'];
+
 export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -1217,6 +1231,135 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
       await notify(db, c.env, { userId: eng.created_by_user_id as string, tenantId: Number(eng.tenant_id), kind: 'review', title: `A freelancer left you a ${rating}★ review`, body: b.comment ?? null, ref: id });
     }
     return c.json({ ok: true, rating });
+  });
+
+  // ---- Fixed-price milestones + escrow ---------------------------------------
+  //
+  // Hourly work is transacted through timecards; this is the fixed-bid equivalent.
+  // Every decision about WHO may do WHAT is `application/marketplace/escrow.ts` — these
+  // routes only resolve the caller's party and translate a refusal into a status code.
+  //
+  // The two halves are split by AUTHORITY, not by convenience: the client acts with the
+  // tenant JWT (`authMiddleware`) and the freelancer with the web JWT
+  // (`webAuthMiddleware`), which is what makes "only the freelancer may submit" and
+  // "only the client may approve" structural rather than a role check somebody could
+  // forget. The `/mine/...` prefix mirrors the split `GET /` and `GET /mine` above
+  // already draw, and is declared BEFORE `/:id/...` so `mine` is never read as an id.
+
+  /** An escrow refusal as an HTTP answer. 409 for a state conflict, 403 for the wrong
+   *  party — a freelancer told "404" about their own milestone would go looking for a
+   *  bug, and one told "403" knows the action belongs to the client. */
+  const refusalStatus = (reason: string): 400 | 403 | 404 | 409 =>
+    reason === 'not_found' ? 404
+    : reason === 'wrong_party' ? 403
+    : reason === 'wrong_status' || reason === 'conflict' ? 409
+    : 400;
+
+  // GET /mine/milestones — WORKER: every milestone I am engaged on, with the money
+  // rolled up. The "what am I owed" view.
+  router.get('/mine/milestones', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const milestones = await readFreelancerMilestones(db, c.get('userId') as string);
+    return c.json({ milestones, summary: summariseEscrow(milestones) });
+  });
+
+  // POST /mine/milestones/:milestoneId/submit — WORKER: deliver a funded milestone.
+  // The only escrow move a freelancer may make, and it is unavailable until the client
+  // has funded — which is the funded-before-work gate, enforced by the machine rather
+  // than by asking the surface to hide a button.
+  router.post('/mine/milestones/:milestoneId/submit', webAuthMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const userId = c.get('userId') as string;
+    const milestoneId = c.req.param('milestoneId');
+    // Scoped BY the acting user, so the tenant comes from the row rather than from the
+    // caller — see `milestoneTenantForFreelancer`.
+    const tenantId = await milestoneTenantForFreelancer(db, milestoneId, userId);
+    if (tenantId === null) return c.json({ error: 'Not found' }, 404);
+    const b = await c.req.json<{ note?: string }>().catch(() => ({ note: undefined }));
+    const result = await moveMilestone(c.env as Env, db, {
+      tenantId, milestoneId, action: 'submit', party: 'freelancer', actorUserId: userId, note: b.note ?? null,
+    });
+    return result.ok
+      ? c.json({ milestone: result.milestone })
+      : c.json({ error: result.reason }, refusalStatus(result.reason));
+  });
+
+  // GET /:id/milestones — CLIENT: one engagement's schedule, its escrow summary, and
+  // whether work is authorised.
+  router.get('/:id/milestones', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const view = await readEngagementSchedule(db, c.get('tenantId') as number, c.req.param('id'));
+    return c.json(view);
+  });
+
+  // POST /:id/milestones — CLIENT: add a deliverable. Always lands in `draft`; writing
+  // a milestone down never funds it.
+  router.post('/:id/milestones', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const tenantId = c.get('tenantId') as number;
+    const engagementId = c.req.param('id');
+    const b = await c.req.json<{ title?: string; description?: string; amountCents?: number; currency?: string; sequence?: number; dueAt?: string }>();
+    const title = String(b.title ?? '').trim();
+    if (!title) return c.json({ error: 'title is required' }, 400);
+    const amountCents = Math.floor(Number(b.amountCents ?? 0));
+    if (!Number.isFinite(amountCents) || amountCents < 0) return c.json({ error: 'amountCents must be a positive integer' }, 400);
+    // The engagement must be this tenant's — otherwise a milestone could be attached to
+    // somebody else's engagement and would be funded out of the wrong pocket.
+    const [engagement] = await db.select({
+      id: freelancerEngagements.id,
+      freelancerUserId: freelancerEngagements.freelancerUserId,
+    }).from(freelancerEngagements)
+      .where(and(eq(freelancerEngagements.id, engagementId), eq(freelancerEngagements.tenantId, tenantId)))
+      .limit(1);
+    if (!engagement) return c.json({ error: 'Engagement not found' }, 404);
+    const milestone = await createMilestone(db, {
+      tenantId,
+      engagementId,
+      freelancerUserId: engagement.freelancerUserId,
+      title,
+      description: b.description ?? null,
+      amountCents,
+      currency: b.currency,
+      sequence: Number.isFinite(Number(b.sequence)) ? Number(b.sequence) : 0,
+      dueAt: b.dueAt ? new Date(b.dueAt) : null,
+      createdByUserId: c.get('userId') as string,
+    });
+    return c.json({ milestone }, 201);
+  });
+
+  // POST /milestones/:milestoneId/:action — CLIENT: fund, approve, reject, release or
+  // cancel. ONE route rather than five, because the five differ only in a word the
+  // state machine already understands — five endpoints would be five places to forget
+  // the gate.
+  router.post('/milestones/:milestoneId/:action', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const action = c.req.param('action');
+    if (!CLIENT_ESCROW_ACTIONS.includes(action as MilestoneAction)) {
+      return c.json({ error: 'unknown_action' }, 400);
+    }
+    const b = await c.req.json<{ note?: string }>().catch(() => ({ note: undefined }));
+    const result = await moveMilestone(c.env as Env, db, {
+      tenantId: c.get('tenantId') as number,
+      milestoneId: c.req.param('milestoneId'),
+      action: action as MilestoneAction,
+      party: 'client',
+      actorUserId: c.get('userId') as string,
+      note: b.note ?? null,
+    });
+    return result.ok
+      // `payoutConfigured: false` is not an error — the ledger entry is the platform's
+      // own record and a self-hosted deployment with no payout webhook still releases.
+      // The surface reads it to say "recorded, settle manually" rather than "paid".
+      ? c.json({ milestone: result.milestone, movedMoney: result.movedMoney, payoutConfigured: result.payoutConfigured })
+      : c.json({ error: result.reason }, refusalStatus(result.reason));
+  });
+
+  // DELETE /milestones/:milestoneId — CLIENT: drop a draft. Refuses anything further
+  // along, because a milestone that has held money is a financial record.
+  router.delete('/milestones/:milestoneId', authMiddleware, async (c) => {
+    const db = buildDatabase(c.env);
+    const deleted = await deleteDraftMilestone(db, c.get('tenantId') as number, c.req.param('milestoneId'));
+    return deleted ? c.json({ ok: true }) : c.json({ error: 'wrong_status' }, 409);
   });
 
   return router;

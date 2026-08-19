@@ -1099,6 +1099,57 @@ export const freelancerEngagements = pgTable('freelancer_engagements', {
 }));
 
 
+/**
+ * One deliverable in a FIXED-PRICE payment schedule, and its escrow state.
+ *
+ * Hourly work is transacted through `timecards`; a fixed bid had no equivalent, so a
+ * freelancer could be hired on one and there was nowhere to record what the
+ * deliverables were, whether the money existed, or that a deliverable was accepted
+ * (migration 0924). This is the AGREEMENT half only — no balance lives here. Every
+ * hold, payout and refund is a `ledger_entries` row (`entry_kind` already carries
+ * `'hold'`), per PRD 20's rule that the finance domain holds no balances.
+ *
+ * `job_id` and `engagement_id` are both nullable with a CHECK that one is set: a
+ * schedule is proposed against a JOB while bidding and carried forward onto the
+ * ENGAGEMENT when the bid is accepted, so the rows the client agreed to are the same
+ * rows they later fund. The legal transitions live in `application/marketplace/escrow.ts`.
+ */
+export const engagementMilestones = pgTable('engagement_milestones', {
+  id:                varchar('id', { length: 36 }).primaryKey(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  jobId:             varchar('job_id', { length: 36 }).references(() => jobPostings.id, { onDelete: 'cascade' }),
+  engagementId:      varchar('engagement_id', { length: 36 }).references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
+  proposalId:        varchar('proposal_id', { length: 36 }).references(() => jobProposals.id, { onDelete: 'set null' }),
+  /** Denormalised from the engagement with a single writer (the accept path): a
+   *  release must pay whoever was engaged at the time, not whoever is engaged now. */
+  freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  title:             varchar('title', { length: 200 }).notNull(),
+  description:       text('description'),
+  /** Position in the schedule — part of the agreement, so not a sort on `created_at`. */
+  sequence:          integer('sequence').notNull().default(0),
+  amountCents:       integer('amount_cents').notNull().default(0),
+  currency:          varchar('currency', { length: 3 }).notNull().default('USD'),
+  /** draft|funded|submitted|approved|released|cancelled|disputed — see escrow.ts. */
+  status:            varchar('status', { length: 20 }).notNull().default('draft'),
+  dueAt:             timestamp('due_at'),
+  fundedAt:          timestamp('funded_at'),
+  submittedAt:       timestamp('submitted_at'),
+  approvedAt:        timestamp('approved_at'),
+  releasedAt:        timestamp('released_at'),
+  cancelledAt:       timestamp('cancelled_at'),
+  submissionNote:    text('submission_note'),
+  rejectionReason:   text('rejection_reason'),
+  createdByUserId:   varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byEngagement:  index('idx_engagement_milestones_engagement').on(t.engagementId, t.sequence),
+  byJob:         index('idx_engagement_milestones_job').on(t.jobId, t.sequence),
+  byTenant:      index('idx_engagement_milestones_tenant_status').on(t.tenantId, t.status),
+  byFreelancer:  index('idx_engagement_milestones_freelancer').on(t.freelancerUserId, t.status),
+}));
+
+
 /** Raw audited "click sense" + engagement stream (portal + VSIX). Append-only. */
 export const activitySignals = pgTable('activity_signals', {
   // DB is `bigserial` — declaring it as such makes the id DB-generated and OPTIONAL
