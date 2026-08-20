@@ -1,5 +1,49 @@
 ## ✅ RESOLVED 2026-08-19 — Evermind knowledge is auditable for its whole life, generation has a clock, and the tool-choice bar can finally be calibrated
 
+## ✅ RESOLVED 2026-08-19 — The HRMS / ATS category exists, and it is read-only
+
+*Closes the "HRMS / ATS connectors — the category is absent" ROADMAP section.
+`connectors/defaults/hrms.ts` (new, registered in `defaults/index.ts`),
+`connectors/defaults/payroll.ts`.*
+
+The catalog could publish a requisition outward (`defaults/hiring.ts`) and read a pay
+run back (`defaults/payroll.ts`), and had no way at all to read the customer's OWN
+people. So `employees`, `project_role_assignments`, capacity and every headcount number
+the PMO surfaces were typed in by hand, and "who actually works here" lived in a system
+this product could not reach. `hiring` was a category with one direction.
+
+Seven manifests: **Workday**, **BambooHR**, **HiBob**, **Personio**, **Greenhouse
+(ATS)**, **SAP SuccessFactors**, and a generic **SCIM 2.0 directory** reader. No HRMS
+service and no new code path — migration 0410 made a connector DATA, so these go
+through `connectorTools.ts` credentialled per tenant and audited like every other
+connector call.
+
+Three decisions worth stating, each enforced by a test in `hrms.test.ts`:
+
+- **Every action is a GET, and a test fails the build if that stops being true.** Not an
+  oversight — the same call `defaults/payroll.ts` made one domain over. An HRMS is the
+  system of record for somebody's employment, and a mistaken write into it is a person's
+  salary or their termination date. The assertion is on `mutates`, not on the HTTP
+  method, because HiBob's roster read is a POST that returns data — a method-based check
+  would need an exception there and would then miss the case it exists to catch.
+- **Rippling is deliberately NOT here.** `defaults/payroll.ts` already reached the same
+  base URL with `list_employees` on it, so a second card would have been a second
+  connection, a second credential and two answers to "who works here". Its org-chart and
+  leave reads were added to that manifest instead. The test compares BASE URLs rather
+  than keys, because two different keys on one API is exactly the shape that slips
+  through.
+- **Greenhouse appears twice on purpose.** `greenhouse-job-board` publishes a
+  requisition; `greenhouse-ats` reads the candidate pipeline. One card carrying both
+  would put those behind the same consent, and they are granted to different people —
+  a recruiter can be given the funnel without being given the roster. It is the one
+  allowed exception in the base-URL test, named explicitly rather than skipped.
+
+The SCIM reader is the one that matters most: Okta, Entra ID, OneLogin, JumpCloud and a
+long tail of HRIS products all speak it, so one manifest reaches every system not
+enumerated — the same argument `hiring.ts` makes for its `job-feed` entry, and the
+reason this file is not a race to add vendors.
+
+
 Six Evermind residuals from the ROADMAP closed in one pass. They shared a root: the coordinator kept what the model had learned in ONE Durable Object storage value, and everything downstream inherited that value's 128 KiB ceiling.
 
 ### P2 — the 24-memory audit horizon is gone
