@@ -46,11 +46,7 @@ import { resolveTenantPlan } from './llmRoutes';
 import { gatewayJudge } from '../../application/eval/gatewayJudge';
 import { evaluateProposal, evalPercent } from '../../application/marketplace/proposalEval';
 import { jobFilterConditions, jobFilterIsEmpty, normalizeJobFilters } from '../../application/marketplace/jobFilters';
-import {
-  bindScheduleToEngagement, createMilestone, readJobSchedule,
-  readProposalSchedule, readProposalSchedules, replaceProposalSchedule,
-  type ProposedMilestoneInput,
-} from '../../application/marketplace/milestones';
+import { bindScheduleToEngagement, createMilestone, readJobSchedule } from '../../application/marketplace/milestones';
 import { hireShape } from '../../application/marketplace/engagementShape';
 import { summariseEscrow } from '../../application/marketplace/escrow';
 import type { EvalJudge } from '../../application/eval/semanticEval';
@@ -156,38 +152,8 @@ const mapProposal = (r: Record<string, unknown>) => ({
   status: r.status,
   lastEvalOverall: r.last_eval_overall == null ? null : Number(r.last_eval_overall),
   declineReason: r.decline_reason ?? null,
-  /** The schedule this bidder counter-proposed, when the caller asked for one. Absent
-   *  (rather than empty) on the surfaces that do not read it, so a caller can tell
-   *  "no schedule proposed" from "schedules not loaded". */
-  milestones: r.milestones ?? undefined,
   createdAt: r.created_at ?? null,
 });
-
-/**
- * The proposed-schedule lines off a bid body, normalised.
- *
- * Validated HERE rather than in the writer because this is the trust boundary: the
- * writer is called with a tenant and a proposal it can rely on, and a bidder's JSON is
- * neither. Silently drops unusable lines rather than 400-ing the whole bid — a
- * malformed extra row must not lose somebody the proposal they wrote.
- */
-const proposedMilestones = (raw: unknown): ProposedMilestoneInput[] => {
-  if (!Array.isArray(raw)) return [];
-  return raw.slice(0, 20).flatMap((entry) => {
-    if (!entry || typeof entry !== 'object') return [];
-    const line = entry as Record<string, unknown>;
-    const title = typeof line.title === 'string' ? line.title.trim().slice(0, 200) : '';
-    if (!title) return [];
-    const amountCents = Math.floor(Number(line.amountCents ?? 0));
-    const dueAt = typeof line.dueAt === 'string' && line.dueAt ? new Date(line.dueAt) : null;
-    return [{
-      title,
-      description: typeof line.description === 'string' ? line.description.slice(0, 2000) : null,
-      amountCents: Number.isFinite(amountCents) && amountCents > 0 ? amountCents : 0,
-      dueAt: dueAt && !Number.isNaN(dueAt.getTime()) ? dueAt : null,
-    }];
-  });
-};
 
 /** Upload ceiling for a job description, matching the résumé upload. */
 const JOB_EXTRACT_MAX_BYTES = 10 * 1024 * 1024;
@@ -564,19 +530,16 @@ export function createJobRoutes(): Hono<HonoEnv> {
           engagementType: hireShape(pr.job_engagement_type),
         });
       }
-      // Carry the AGREED payment schedule onto the engagement, in the SAME transaction
-      // that created it. Naming the accepted proposal is what makes this the agreed one:
-      // a bid that counter-proposed its own deliverables binds THOSE, and the posting's
-      // published schedule binds only when the accepted bid proposed none. Accepting a
-      // proposal is agreeing to that proposal — funding the posting's terms over the top
-      // would discard the counter-offer at the moment it was accepted. A no-op for an
-      // hourly posting, which simply has no schedule at all.
+      // Carry the job's agreed payment schedule onto the engagement, in the SAME
+      // transaction that created it. Stamps rather than copies, so the milestones the
+      // client published with the posting are the very rows they later fund — a copy
+      // would be a second schedule that can differ from the one that was bid against.
+      // A no-op for an hourly posting, which simply has none.
       await bindScheduleToEngagement(tx, {
         tenantId,
         jobId: pr.job_id as string,
         engagementId,
         freelancerUserId: pr.freelancer_user_id as string,
-        proposalId: pid,
       });
       await tx.update(jobProposals).set({ status: 'accepted', updatedAt: new Date() }).where(eq(jobProposals.id, pid));
       await tx.update(jobProposals).set({ status: 'declined', updatedAt: new Date() })
@@ -715,19 +678,13 @@ export function createJobRoutes(): Hono<HonoEnv> {
       .from(jobPostings)
       .where(and(eq(jobPostings.id, id), eq(jobPostings.tenantId, tenantId)));
     if (!job) return c.json({ error: 'Not found' }, 404);
-    // Both reads together, and the schedules in ONE query grouped by proposal rather
-    // than one read per bid — an employer comparing ten offers must not cost ten
-    // round-trips. Deliberately uncached: a counter-offer the bidder revised a second
-    // ago must not be the one the employer accepts.
-    const [rows, schedules] = await Promise.all([
-      db.select({ ...proposalColumns, freelancer_name: users.displayName })
-        .from(jobProposals)
-        .innerJoin(users, eq(users.id, jobProposals.freelancerUserId))
-        .where(eq(jobProposals.jobId, id))
-        .orderBy(desc(jobProposals.createdAt)),
-      readProposalSchedules(db, tenantId, id),
-    ]);
-    return c.json(rows.map((row) => mapProposal({ ...row, milestones: schedules[String(row.id)] ?? [] })));
+    const rows = await db
+      .select({ ...proposalColumns, freelancer_name: users.displayName })
+      .from(jobProposals)
+      .innerJoin(users, eq(users.id, jobProposals.freelancerUserId))
+      .where(eq(jobProposals.jobId, id))
+      .orderBy(desc(jobProposals.createdAt));
+    return c.json(rows.map(mapProposal));
   });
 
   // POST / — EMPLOYER posts a job.
@@ -852,29 +809,15 @@ export function createJobRoutes(): Hono<HonoEnv> {
       .where(eq(jobPostings.id, id));
     if (!job) return c.json({ error: 'Not found' }, 404);
     if (job.visibility === 'private' && !viewer) return c.json({ error: 'Sign in to view this job', code: 'AUTH_REQUIRED' }, 401);
-    // The posting's published payment schedule is part of the OFFER, so it is as public
-    // as the description: a fixed-price bid made without seeing the deliverables and the
-    // money attached to them is a bid on a different job. The tenant comes off the row
-    // rather than from the caller — this route has no tenant JWT.
-    const postingSchedule = await readJobSchedule(db, Number(job.tenant_id), id);
     let myProposal: unknown = null;
     if (viewer) {
       const [mine] = await db
         .select({ id: jobProposals.id, status: jobProposals.status })
         .from(jobProposals)
         .where(and(eq(jobProposals.jobId, id), eq(jobProposals.freelancerUserId, viewer)));
-      // A bidder reads back their OWN counter-offer — scoped to their proposal, so this
-      // never exposes a rival's. Skipped for a `saved` row, which is a bookmark and has
-      // no schedule to show.
-      if (mine) {
-        myProposal = {
-          id: mine.id,
-          status: mine.status,
-          milestones: mine.status === 'saved' ? [] : await readProposalSchedule(db, Number(job.tenant_id), mine.id),
-        };
-      }
+      if (mine) myProposal = { id: mine.id, status: mine.status };
     }
-    return c.json({ ...mapJob(job), milestones: postingSchedule, myProposal });
+    return c.json({ ...mapJob(job), myProposal });
   });
 
   // POST /:id/proposals — FREELANCER bids on a job.
@@ -882,7 +825,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    const b = await c.req.json<{ coverNote?: string; rateCents?: number; milestones?: unknown }>();
+    const b = await c.req.json<{ coverNote?: string; rateCents?: number }>();
     const [job] = await db
       .select({
         id: jobPostings.id,
@@ -914,10 +857,11 @@ export function createJobRoutes(): Hono<HonoEnv> {
       .from(users)
       .where(eq(users.id, userId));
     if (!me || !me.available_for_hire) return c.json({ error: 'Enable "Available for hire" to bid on gigs' }, 403);
-    const [bid] = await db
+    const pid = crypto.randomUUID();
+    await db
       .insert(jobProposals)
       .values({
-        id: crypto.randomUUID(),
+        id: pid,
         jobId: id,
         freelancerUserId: userId,
         coverNote: typeof b.coverNote === 'string' ? b.coverNote.slice(0, 3000) : null,
@@ -931,31 +875,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
           status: 'submitted',
           updatedAt: sql`NOW()`,
         },
-      })
-      // The id must come BACK from the statement. Bidding is an upsert — a revised bid
-      // updates the row that already exists — so returning the uuid this request minted
-      // would hand the caller an id that names nothing, and every follow-up keyed on it
-      // (its schedule, its withdrawal) would 404.
-      .returning({ id: jobProposals.id });
-    // An upsert that neither inserts nor updates cannot happen here — the conflict
-    // target always resolves to a row — but the row is what every follow-up is keyed
-    // on, so a missing one is refused rather than papered over with a minted id.
-    if (!bid) return c.json({ error: 'Could not record this proposal' }, 409);
-    const pid = bid.id;
-    // The bidder's own proposed schedule — the other direction of the negotiation. A
-    // freelancer who disagrees with the published deliverables could previously only say
-    // so in prose; these are rows the accept path can bind and the escrow machine can
-    // fund. Replaces on every submit, because a revised bid is one offer, not two.
-    const lines = proposedMilestones(b.milestones);
-    if (lines.length > 0) {
-      await replaceProposalSchedule(db, {
-        tenantId: Number(job.tenant_id),
-        jobId: id,
-        proposalId: pid,
-        freelancerUserId: userId,
-        lines,
       });
-    }
     // Applying makes this person a CANDIDATE of the hiring workspace: it registers the
     // party role every consent/retention/diversity read is keyed on, and snapshots the
     // résumé they applied with into the employer's own tenant. Never throws — the bid
@@ -968,7 +888,7 @@ export function createJobRoutes(): Hono<HonoEnv> {
     if (job.created_by_user_id) {
       await notify(db, c.env, { userId: job.created_by_user_id, tenantId: Number(job.tenant_id), kind: 'proposal', title: `${me.display_name ?? 'A freelancer'} bid on "${job.title}"`, ref: id });
     }
-    return c.json({ id: pid, resumeAttached: intake.resumeProjected, proposedMilestones: lines.length }, 201);
+    return c.json({ id: pid, resumeAttached: intake.resumeProjected }, 201);
   });
 
   return router;

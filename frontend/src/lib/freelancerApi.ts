@@ -6,7 +6,6 @@
  * the api worker (see api/src/presentation/routes/freelancerRoutes.ts + activityRoutes.ts).
  */
 import { getStoredWebToken } from './auth';
-import type { MilestoneDraft, MilestoneRow } from './milestonesApi';
 import { apiRequestStream } from './apiClient';
 import { jsonOrThrow } from './apiEnvelope';
 import { getOrSetClientCached, invalidateClientCache } from '@/infrastructure/http/readThrough';
@@ -135,9 +134,7 @@ export interface JobPosting {
   visibility: 'public' | 'private';
   proposalCount?: number;
   createdAt: string | null;
-  myProposal?: { id: string; status: string; milestones?: MilestoneRow[] } | null;
-  /** The posting's PUBLISHED payment schedule — part of the offer, returned on detail. */
-  milestones?: MilestoneRow[];
+  myProposal?: { id: string; status: string } | null;
   /** Marketplace posting shape — returned by GET /api/jobs/mine and /:id. */
   postingType?: PostingType | null;
   engagementType?: EngagementType | null;
@@ -164,11 +161,6 @@ export interface JobProposal {
   lastEvalOverall?: number | null;
   /** Courteous note left when the proposal was declined. */
   declineReason?: string | null;
-  /** The payment schedule this bidder COUNTER-PROPOSED, on the surfaces that read it.
-   *  Absent (rather than empty) where schedules were not loaded, so a caller can tell
-   *  "proposed nothing" from "not asked for". Accepting the bid binds this schedule in
-   *  preference to the posting's — see `bindScheduleToEngagement`. */
-  milestones?: MilestoneRow[];
 }
 
 /** A marketplace posting attached to a work item (from /marketplace/publish). */
@@ -512,14 +504,7 @@ export async function listJobProposals(jobId: string): Promise<JobProposal[]> {
   return jsonOrThrow<JobProposal[]>(res, 'Failed to load proposals');
 }
 
-export async function bidJob(
-  jobId: string,
-  // `milestones` is the bidder's COUNTER-OFFER: deliverables and amounts they propose
-  // instead of (or in the absence of) the posting's published schedule. Sent WITH the
-  // bid rather than written afterwards, because the proposal row does not exist until
-  // this call returns and a two-step would leave a bid whose schedule never landed.
-  input: { coverNote?: string; rateCents?: number; milestones?: MilestoneDraft[] },
-): Promise<{ id: string; proposedMilestones?: number }> {
+export async function bidJob(jobId: string, input: { coverNote?: string; rateCents?: number }): Promise<{ id: string }> {
   const res = await apiRequestStream(`/api/jobs/${jobId}/proposals`, { method: 'POST', auth: 'web', body: JSON.stringify(input) });
   return jsonOrThrow(res, 'Failed to submit proposal');
 }
