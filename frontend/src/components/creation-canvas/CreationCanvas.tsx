@@ -149,7 +149,7 @@ import { canvasMediaSource, isCanvasMediaKind, resolvePublicMediaUrls } from '@/
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { analyzeDependencies, appendCanvasVideoSource, canvasGameToolRedirect, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, findingFingerprint, normalizeQaSteps, CANVAS_GAME_ACCOUNT_GATE, CANVAS_GAME_TOOL, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CANVAS_SCREENSHOT_ACCOUNT_GATE, CANVAS_SCREENSHOT_TOOL, CANVAS_SOCIAL_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, GAME_PLATFORMS, isGamePlatform, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type DependencyAnalysis, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
+import { analyzeDependencies, appendCanvasVideoSource, canvasGameToolRedirect, canvasImageToolRedirect, canvasToolRequiresAccount, canvasVideoDuration, canvasVideoSourcesFrom, canvasVideoTimelineFrom, findingFingerprint, normalizeQaSteps, CANVAS_GAME_ACCOUNT_GATE, CANVAS_GAME_TOOL, CANVAS_CORPUS_ACCOUNT_GATE, CANVAS_IMAGE_ACCOUNT_GATE, CANVAS_IMAGE_TOOL, CANVAS_QA_ACCOUNT_GATE, CANVAS_SCREENSHOT_ACCOUNT_GATE, CANVAS_SCREENSHOT_TOOL, CANVAS_SOCIAL_ACCOUNT_GATE, CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, DATA_PURPOSES, GAME_PLATFORMS, isGamePlatform, LAWFUL_BASES, QA_FINDING_TYPES, QA_SEVERITIES, QA_STEP_ACTIONS, type CanvasVideoSource, type CreationConnectionKind, type DataPurpose, type DataUsePolicy, type DependencyAnalysis, type LawfulBasis, type QaFindingSeverity, type QaFindingType } from '@builderforce/creation-canvas-contract';
 import { getStoredTenant, getStoredTenantToken } from '@/lib/auth';
 import { useCanvasCapabilities } from '@/lib/canvasCapabilitiesApi';
 import { claimLocalDraft } from '@/lib/pendingWork';
@@ -1753,15 +1753,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * prompt had been raised. The two halves are one call here precisely so the claim and
    * the prompt cannot drift apart again.
    *
-   * Reads the token per call rather than closing over `hasAccount`, so signing in
-   * mid-session is reflected on the very next tool call — same rule as the social gate.
+   * The CONDITION stays with the caller because it genuinely differs: a corpus needs
+   * CREDENTIALS (a signed-in user promotes from an unsaved board), while reading a scan
+   * needs a SAVED canvas for the bytes to have been stored at all. Folding both into one
+   * predicate would gate each tool on something it does not actually need. What must
+   * never differ is this: the prompt opens whenever the gate shape is returned.
    *
-   * Returns the gate result to hand straight back to the model, or null to proceed.
+   * Returns the gate result to hand straight back to the model.
    */
-  const accountRequiredGate = useCallback((
+  const openAccountGate = useCallback((
     tool: string, action: string, title: string, description: string, reason: string,
-  ): { requiresAccount: true; tool: string; error: string } | null => {
-    if (getStoredTenantToken()) return null;
+  ): { requiresAccount: true; tool: string; error: string } => {
     requireAccount(action, title, description);
     return accountGateResult(tool, reason);
   }, [requireAccount]);
@@ -5351,12 +5353,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { error: `Object ${source.id} kept no bytes, so there is nothing left to read. Ask for the file again.` };
       }
       if (persistence !== 'server') {
-        // Through `accountGateResult` rather than a bare `error`, which is what makes it
-        // a GATE rather than a dead end: the shape carries `requiresAccount`, the canvas
+        // Through `openAccountGate` rather than a bare `error`, which is what makes it a
+        // GATE rather than a dead end: the shape carries `requiresAccount`, the canvas
         // opens the account prompt as the model reads this, and the turn ends with a
         // one-click reason instead of a sentence the model may relay as a limitation of
         // the product. Same contract as `canvas_add_image` — see GUEST_GATED_CANVAS_TOOLS.
-        return accountGateResult('canvas_read_attachment', 'Reading a scan takes a model call billed to a workspace, which needs a free Builderforce account and a saved canvas. The account prompt is now open and the canvas is unchanged. Say that in one sentence — never claim the product cannot read scanned documents.');
+        // It called `accountGateResult` directly until 2026-08-19, which returned the
+        // shape WITHOUT raising the prompt the reason promises — so the model said "the
+        // account prompt is now open" to a visitor looking at an unchanged screen.
+        return openAccountGate('canvas_read_attachment', 'attachment', t('gateAttachmentTitle'), t('gateAttachmentBody'), 'Reading a scan takes a model call billed to a workspace, which needs a free Builderforce account and a saved canvas. The account prompt is now open and the canvas is unchanged. Say that in one sentence — never claim the product cannot read scanned documents.');
       }
 
       const fileName = typeof source.data.fileName === 'string' ? source.data.fileName : String(source.data.title || 'attachment');
@@ -7052,6 +7057,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       );
       if (!gate.allowed) return { error: gate.reason };
 
+      // BEFORE the project lookup, because a guest fails that lookup for the wrong
+      // reason: they have no project because they have no workspace, and "put the project
+      // on the canvas" is advice that cannot work and hides the one thing that would.
+      // Gated on CREDENTIALS rather than a saved board — the corpus POST carries the
+      // tenant token, so a signed-in user promotes from an unsaved canvas for real.
+      if (!getStoredTenantToken()) {
+        return openAccountGate('canvas_promote_dataset_to_corpus', 'corpus', t('gateCorpusTitle'), t('gateCorpusBody'), CANVAS_CORPUS_ACCOUNT_GATE);
+      }
       const projectNode = nodes.find((node) => node.data.kind === 'project' && canvasProjectId(node.data) != null);
       const projectId = args.projectId ?? (projectNode ? canvasProjectId(projectNode.data) : null);
       if (projectId == null) return { error: 'No project to file this corpus under. Put the project on the canvas, or name its id.' };

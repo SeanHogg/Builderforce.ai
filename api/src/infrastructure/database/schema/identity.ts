@@ -1056,46 +1056,6 @@ export const tenantModels = pgTable('tenant_models', {
 }));
 
 
-/**
- * Anonymous marketing session (migration 0279) — a logged-out visitor who runs a
- * free Diagnostics & Tools diagnostic IS a lead. Keyed by a client-generated
- * stable `visitorId`; tracks run volume + first-touch attribution and is stamped
- * `converted` when the visitor creates an account. Not tenant-scoped (pre-signup).
- */
-export const marketingSessions = pgTable('marketing_sessions', {
-  id:              uuid('id').primaryKey().defaultRandom(),
-  visitorId:       varchar('visitor_id', { length: 64 }).notNull(),
-  toolRuns:        integer('tool_runs').notNull().default(0),
-  lastToolId:      varchar('last_tool_id', { length: 64 }),
-  landingPath:     text('landing_path'),
-  referrer:        text('referrer'),
-  userAgent:       text('user_agent'),
-  utm:             jsonb('utm').notNull().default(sql`'{}'::jsonb`),
-  converted:       boolean('converted').notNull().default(false),
-  convertedUserId: varchar('converted_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  convertedAt:     timestamp('converted_at'),
-  // Guest Brain/Ideas chat metering (migration 0297) — a logged-out visitor can
-  // try the Brain before signing up; usage is counted per UTC day on this same
-  // lead row. `guestChatDay` is the UTC day the counters below apply to (reset
-  // when a new day's first message lands). Per-IP metering is KV-side.
-  guestChatDay:    date('guest_chat_day'),
-  guestChatCount:  integer('guest_chat_count').notNull().default(0),
-  guestChatTokens: integer('guest_chat_tokens').notNull().default(0),
-  guestChatTurnId: varchar('guest_chat_turn_id', { length: 128 }),
-  guestChatTurnFingerprint: varchar('guest_chat_turn_fingerprint', { length: 64 }),
-  firstSeenAt:     timestamp('first_seen_at').notNull().defaultNow(),
-  lastSeenAt:      timestamp('last_seen_at').notNull().defaultNow(),
-}, (t) => ({
-  byVisitor: uniqueIndex('uq_marketing_sessions_visitor').on(t.visitorId),
-  byLastSeen: index('idx_marketing_sessions_last_seen').on(t.lastSeenAt),
-}));
-
-// NOTE: the prompts BEHIND a `marketing_sessions` row live in `growth.ts`, not
-// here — `source-to-target.tsv` assigns marketing to the Growth & marketing
-// domain, and a new table belongs in its own domain's module even while the
-// lead row it hangs off is still parked in Identity (see the Gap Register entry
-// on that drift). The two are joined on `visitor_id`, not by a foreign key, so
-// the split costs no schema import in either direction.
 
 
 /** An ordered participant of an on-call rotation. memberRef is assignee-encoded:

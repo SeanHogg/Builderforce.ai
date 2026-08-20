@@ -12,6 +12,12 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  *
  * Kickoff: the route POSTs `https://do/start`; the DO writes the cursor and
  * arms the first alarm. No long work happens in fetch().
+ *
+ * Repair: the route POSTs `https://do/retry` with the artifact kinds to redo.
+ * That re-enters the SAME state machine at `analyzing` with a queue of just
+ * those kinds — the run's evidence rows are already on disk, so the repos are
+ * never re-fetched — and then falls through write-back and done exactly as a
+ * first run does. The (run_id, kind) upserts make a redo idempotent.
  */
 import { and, eq } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../database/connection';
@@ -42,12 +48,12 @@ import { deriveArchitectureResult } from '../../application/tools/auditScanners'
 import { linkSpecToTask } from '../../application/prd/taskPrd';
 import {
   ARTIFACT_KINDS,
-  FREE_ARTIFACT_KINDS,
   type ArtifactKind,
   type EvidenceBundle,
   type GeneratedArtifact,
   type RepoEvidence,
 } from '../../application/repoanalysis/types';
+import { analysisPlanConfig } from '../../application/repoanalysis/analysisPlan';
 import type { Env } from '../../env';
 
 interface StartBody {
@@ -62,6 +68,28 @@ interface StartBody {
   /** The board Task this run is surfaced as, and its runtime execution row. */
   taskId?: number | null;
   executionId?: number | null;
+}
+
+/** Re-run just these artifact kinds on an already-finished run. */
+interface RetryBody {
+  runId: string;
+  projectId: number;
+  tenantId: number;
+  segmentId?: string | null;
+  effectivePlan: string;
+  triggeredBy?: string | null;
+  projectName: string;
+  kinds: ArtifactKind[];
+}
+
+/**
+ * The board rows a run was surfaced as. Written at `/start` under its own key and
+ * NEVER deleted with the cursor, so a retry that arrives long after the run
+ * finished can still close the same task/execution instead of orphaning them.
+ */
+interface OriginRef {
+  taskId: number | null;
+  executionId: number | null;
 }
 
 type Stage = 'fetching' | 'analyzing' | 'writing_back' | 'done';
@@ -87,25 +115,13 @@ interface Cursor {
   anyArtifactFailed: boolean;
 }
 
-interface PlanConfig {
-  tokenBudget: number;
-  artifactKinds: ArtifactKind[];
-  maxFilesPerRepo: number;
-  evidenceTokensPerRepo: number;
-}
-
-function planConfig(plan: string): PlanConfig {
-  const paid = plan === 'pro' || plan === 'teams';
-  return {
-    tokenBudget: paid ? 120_000 : 9_000,
-    artifactKinds: paid ? [...ARTIFACT_KINDS] : [...FREE_ARTIFACT_KINDS],
-    maxFilesPerRepo: paid ? 25 : 8,
-    evidenceTokensPerRepo: paid ? 6_000 : 2_500,
-  };
-}
+/** Plan entitlement lives in the application layer — the retry path asks the
+ *  same question and must get the same answer. */
+const planConfig = analysisPlanConfig;
 
 const FILE_CONTENT_CAP = 8 * 1024; // chars per sampled file sent to the LLM
 const CURSOR_KEY = 'cursor';
+const ORIGIN_KEY = 'origin';
 
 export class AnalysisRunnerDO implements DurableObject {
   declare readonly '__DURABLE_OBJECT_BRAND': never;
@@ -121,6 +137,14 @@ export class AnalysisRunnerDO implements DurableObject {
       const body = (await request.json().catch(() => null)) as StartBody | null;
       if (!body?.runId) return new Response('bad request', { status: 400 });
       await this.start(body);
+      return new Response(JSON.stringify({ ok: true }), { status: 202, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (request.method === 'POST' && url.pathname.endsWith('/retry')) {
+      const body = (await request.json().catch(() => null)) as RetryBody | null;
+      if (!body?.runId || !Array.isArray(body.kinds) || body.kinds.length === 0) {
+        return new Response('bad request', { status: 400 });
+      }
+      await this.retry(body);
       return new Response(JSON.stringify({ ok: true }), { status: 202, headers: { 'Content-Type': 'application/json' } });
     }
     return new Response('not found', { status: 404 });
@@ -149,9 +173,53 @@ export class AnalysisRunnerDO implements DurableObject {
       anyArtifactFailed: false,
     };
     await this.state.storage.put(CURSOR_KEY, cursor);
+    await this.state.storage.put<OriginRef>(ORIGIN_KEY, {
+      taskId: body.taskId ?? null,
+      executionId: body.executionId ?? null,
+    });
     await this.db
       .update(repoAnalysisRuns)
       .set({ status: 'fetching', stage: 'fetching', progress: 1, startedAt: new Date(), updatedAt: new Date() })
+      .where(scopedToTenant(repoAnalysisRuns, cursor.tenantId, eq(repoAnalysisRuns.id, body.runId)));
+    await this.state.storage.setAlarm(Date.now());
+  }
+
+  /**
+   * Re-enter the state machine at `analyzing` for a named subset of kinds.
+   *
+   * The evidence stage is deliberately skipped: `repo_analysis_evidence` rows for
+   * this run already exist and `loadEvidenceBundle` reads them straight back, so
+   * a repair costs LLM calls only — never a second crawl of every repository.
+   * The token budget is a fresh one for the retried subset, because the original
+   * budget is already spent and re-charging it would guarantee the gate trips.
+   */
+  private async retry(body: RetryBody): Promise<void> {
+    const cfg = planConfig(body.effectivePlan);
+    const origin = (await this.state.storage.get<OriginRef>(ORIGIN_KEY)) ?? { taskId: null, executionId: null };
+    const cursor: Cursor = {
+      runId: body.runId,
+      projectId: body.projectId,
+      tenantId: body.tenantId,
+      segmentId: body.segmentId ?? null,
+      effectivePlan: body.effectivePlan,
+      triggeredBy: body.triggeredBy ?? null,
+      projectName: body.projectName,
+      taskId: origin.taskId,
+      executionId: origin.executionId,
+      stage: 'analyzing',
+      repoQueue: [],
+      repoCursor: 0,
+      repoAttempts: 0,
+      artifactQueue: body.kinds,
+      artifactCursor: 0,
+      tokenBudget: cfg.tokenBudget,
+      tokensUsed: 0,
+      anyArtifactFailed: false,
+    };
+    await this.state.storage.put(CURSOR_KEY, cursor);
+    await this.db
+      .update(repoAnalysisRuns)
+      .set({ status: 'analyzing', stage: 'analyzing', progress: 30, error: null, finishedAt: null, updatedAt: new Date() })
       .where(scopedToTenant(repoAnalysisRuns, cursor.tenantId, eq(repoAnalysisRuns.id, body.runId)));
     await this.state.storage.setAlarm(Date.now());
   }

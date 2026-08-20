@@ -154,6 +154,18 @@ export interface CoordinatorStore {
    * that don't exercise the gate may omit it.
    */
   findAwaitingWorkflowRun?(workflowId: string): Promise<TicketRunLite | null>;
+  /**
+   * The ticket's ACTIVE (non-terminal) run on this board, if any. Used by
+   * {@link SwimlaneCoordinator.enterLaneForTask} so a manual lane move re-enters the
+   * ticket's existing run instead of starting a second one. Optional — in-memory test
+   * stores that only exercise the start path may omit it (the coordinator then treats
+   * every entry as a fresh start, which is the pre-existing behaviour).
+   */
+  findActiveTicketRunByTask?(
+    boardId: string,
+    taskId: number,
+    tenantId: number,
+  ): Promise<TicketRunLite | null>;
 
   insertDispatch(data: NewDispatch): Promise<string>;
   updateDispatch(

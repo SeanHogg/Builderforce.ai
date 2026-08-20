@@ -158,6 +158,66 @@ export class SwimlaneCoordinator {
    * Respects board.maxConcurrentTickets (counts non-terminal runs).
    */
   async startTicket(boardId: string, taskId: number, tenantId: number): Promise<TicketRunLite> {
+    const lanes = await this.store.listLanes(boardId, tenantId);
+    return this.createRunAtLane(boardId, taskId, tenantId, lanes[0]);
+  }
+
+  /**
+   * A ticket LANDED in a lane by a manual move (a board drag, a status PATCH, the
+   * brain) on a board whose lane the simple runtime executor cannot express — more
+   * than one staffed agent, a success policy, a lane action, or a browser-claimed
+   * agent. Those are exactly the things this coordinator exists to drive, and the
+   * drag path used to bypass it entirely: a two-agent lane ran one agent, an `any`/
+   * `n_of_m` quorum was never evaluated, and a `move_ticket`/`run_workflow` action
+   * never fired unless the ticket happened to be started from the board API.
+   *
+   * Re-enters the ticket's EXISTING run at the named lane when there is one (never a
+   * second run for the same ticket), or creates the run there. Returns null when the
+   * lane key does not exist on this board, or the run is already executing that lane.
+   */
+  async enterLaneForTask(
+    boardId: string,
+    taskId: number,
+    tenantId: number,
+    laneKey: string,
+  ): Promise<TicketRunLite | null> {
+    const lane = await this.laneByKey(boardId, tenantId, laneKey);
+    if (!lane) return null;
+
+    const existing = (await this.store.findActiveTicketRunByTask?.(boardId, taskId, tenantId)) ?? null;
+    if (!existing) return this.createRunAtLane(boardId, taskId, tenantId, lane);
+
+    // Already running the lane it was dropped into — a re-drag onto the same lane must
+    // not relaunch the stage underneath a live dispatch.
+    if (existing.currentSwimlaneId === lane.id && existing.lifecycle === 'stage_running') return null;
+
+    const from = existing.lifecycle as TicketLifecycle;
+    // 'stage_completed' has no direct edge to 'stage_running' (a completed stage must
+    // ADVANCE first), so chain through it rather than throwing on a legal manual move.
+    const intermediate: TicketLifecycle | undefined = canTransitionTicket(from, 'stage_running')
+      ? undefined
+      : canTransitionTicket(from, 'advancing') ? 'advancing' : undefined;
+    if (intermediate === undefined && !canTransitionTicket(from, 'stage_running')) return null;
+
+    return this.applyLifecycle(existing, {
+      next: 'stage_running',
+      currentSwimlaneId: lane.id,
+      reason: 'manual',
+      workflowStatus: null,
+      historyStatus: 'stage_running',
+      toSwimlaneId: lane.id,
+      ...(intermediate ? { intermediate } : {}),
+      clearError: true,
+    });
+  }
+
+  /** Create a ticket run parked at `lane` and launch it. Shared by both entry points. */
+  private async createRunAtLane(
+    boardId: string,
+    taskId: number,
+    tenantId: number,
+    firstLane: LaneLite | undefined,
+  ): Promise<TicketRunLite> {
     const board = await this.store.getBoard(boardId, tenantId);
     if (!board) throw new TicketRunNotFoundError();
 
@@ -165,9 +225,6 @@ export class SwimlaneCoordinator {
     if (active >= board.maxConcurrentTickets) {
       throw new TicketCapacityError(board.maxConcurrentTickets);
     }
-
-    const lanes = await this.store.listLanes(boardId, tenantId);
-    const firstLane = lanes[0];
 
     const now = new Date();
     const history: StageHistoryEntry[] = [

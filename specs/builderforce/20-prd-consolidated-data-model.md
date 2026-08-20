@@ -9,16 +9,19 @@
 > the data rather than from taste. See PRD 21 §4.
 
 > **Status:** Steps 0–3, step 5's access layer, and the kernel halves of 6–7 are built and green.
-> The target schema exists — `check-model-coverage.mjs` reports **362 / 362 (100%)** — the kernel is
+> The target schema exists — `check-model-coverage.mjs` reports **363 / 363 (100%)** — the kernel is
 > exposed once at `/api/objects`, the fifteen domain route groups are live at `/api/<domain>`, and
 > the fifteen domain surfaces render from ONE component at `/seat/<domain>`.
-> **Every one of the 245 consolidated tables now has a code path**: `check-table-adoption.mjs` went
-> 237 cold → **0**, and its baseline file is empty, so the ratchet is a gate. One entity layer
+> **Every one of the 333 consolidated tables now has a code path**: `check-table-adoption.mjs` went
+> 237 cold → **0 unreachable**, which is a hard floor rather than a baseline. What it still counts is
+> the weaker tier — **198 reachable ONLY through the generic entity layer** (135 have a feature path),
+> shrink-only, and the meter for steps 6–7. One entity layer
 > (`api/src/application/domains/`) serves all of them — reflected from the Drizzle declaration,
 > tenant-scoped, redacted, cached, and rendered by ONE `EntityBrowser` on every seat.
 > What remains is the data and the product behaviour: Step 4 (converting BurnRateOS's 404 Prisma
-> models into the target shape) and Step 5 (moving LIVE rows out of the 93 legacy tables shape-lint
-> still names, and the 101 application folders / 197 route files / 134 pages onto the new boundary).
+> models into the target shape) and Step 5 (moving LIVE rows out of the 96 legacy tables shape-lint
+> still names, and the 129 application folders / 196 route files / 170 pages onto the new boundary
+> — re-measured 2026-08-19; folders and pages have grown, which is the finding, not a typo).
 > Those are behaviour moves against a running system, not schema decisions.
 > The six validation checks were written before the data moved, which is the only time a check can
 > be written honestly.
@@ -29,13 +32,17 @@
 > distinct source tables, each mapped to its target and the move that takes it there. Zero
 > unaccounted.
 >
-> ### **1,206 declarations → 1,130 distinct names → 387 tables**
+> ### **1,206 declarations → 1,130 distinct names → 388 tables**
 >
-> **25 kernel + 362 domain**, across 15 domains, one owner each. The file above is the proof:
-> 568 absorbed by a kernel primitive, 167 merged into a sibling, 24 into the canvas, 9 flattened,
-> and **362 distinct kept targets** — which is the domain count arrived at independently.
-> Of the 387, **369 are measured and reproducible**; the last 18 are the twelve named judgements
+> **25 kernel + 363 domain**, across 15 domains, one owner each. The file above is the proof:
+> 566 absorbed by a kernel primitive, 168 merged into a sibling, 24 into the canvas, 9 flattened,
+> and **363 distinct kept targets** — which is the domain count arrived at independently.
+> Of the 388, **371 are measured and reproducible**; the last 17 are the eleven named judgements
 > in §3.3, each rejectable on its own.
+>
+> *The domain figure was 362 until the `marketing_sessions` adjudication was retracted (§3.3) — a
+> pre-tenant lead row cannot become a `metric_facts` row, which is `tenant_id NOT NULL` and derived.
+> That is what a rejectable judgement looks like when it is rejected: the total moves by exactly one.*
 
 ---
 
@@ -172,7 +179,7 @@ reviewable, and what gives the next feature an obvious place to put its data.
 
 | Domain | Owner | Source | After the kernel | Last pass | **Final** |
 |---|---|---|---|---|---|
-| Growth & marketing | CMO | 142 | 65 | −7 | **58** |
+| Growth & marketing | CMO | 142 | 65 | −6 | **59** |
 | Delivery & work | Manager | 123 | 55 | −1 | **54** |
 | Agents & runtime | platform | 75 | 41 | −1 | **40** |
 | Hiring | Recruiter | 79 | 30 | −3 | **27** |
@@ -187,9 +194,9 @@ reviewable, and what gives the next feature an obvious place to put its data.
 | Support & knowledge | Support | 22 | 9 | −0 | **9** |
 | Canvas & ideas | Brain | 57 | 8 | −0 | **8** |
 | Integrations | platform | 41 | 1 | −0 | **1** |
-| **Domain total** | | **1130** | **391** | **−29** | **362** |
+| **Domain total** | | **1130** | **391** | **−28** | **363** |
 | **Kernel** | platform | | | | **25** |
-| **TOTAL** | | **1130** | | | **387** |
+| **TOTAL** | | **1130** | | | **388** |
 
 **Canvas at 8 and Integrations at 1 are the proof, not a gap.** Those two domains are almost
 entirely kernel — the canvas *is* `artifact` + `thread` + `message` + `rendition` + `share_link`;
@@ -331,7 +338,7 @@ _No flattening left: every table here is a distinct noun with its own columns._
 
 ---
 
-## 3.3 · The last pass — 391 → 362, and where the machine stops
+## 3.3 · The last pass — 391 → 363, and where the machine stops
 
 The five moves ran globally before the domains were drawn; §3.2 lists what each domain had left.
 Running them again over the 391 survivors, then re-running the duplication test, gives three
@@ -341,11 +348,11 @@ passes with very different standing. **Read the third one differently from the f
 |---|---|---|
 | **A — residual flattening** | The five moves re-applied per domain, with kind-split gated at the 0.55 shared-column rule | **−9** |
 | **B — cross-cutting noun collapse** | Same head noun, qualifier is a value of one dimension, mean column kinship ≥ 0.25 | **−2** |
-| **C — adjudicated** | Same noun, *no* column kinship — because two teams wrote the same fact in different shapes | **−18** |
+| **C — adjudicated** | Same noun, *no* column kinship — because two teams wrote the same fact in different shapes | **−17** |
 
 Passes A and B are reproducible: re-run the scripts and you get the same 11 tables.
-**Pass C is twelve named judgements**, each with the evidence that justifies it. Reject any line
-and the total moves by exactly its count.
+**Pass C is eleven named judgements**, each with the evidence that justifies it. Reject any line
+and the total moves by exactly its count — and one has since been rejected, below.
 
 | Collapses into | Tables removed | Why the machine could not see it |
 |---|---|---|
@@ -360,7 +367,16 @@ and the total moves by exactly its count.
 | kernel `work_item` | `features` | `reach`, `impact`, `confidence`, `effort`, `rice_score` — a scored idea is a work item of kind `feature` |
 | kernel `setting` | `account_features` | `account_id` + `feature_id` + `is_enabled` + consent fields is an entitlement grant |
 | kernel `relation` | `learning_path_courses` | `path_id` + `course_id` + `display_order` + `is_required` is an ordered join row |
-| kernel `metric_fact` | `marketing_sessions` | `visitor_id`, `landing_path`, `referrer`, `utm`, `converted` — an analytics visit, not an entity |
+
+**Retracted — `marketing_sessions` → kernel `metric_fact`.** This was the twelfth judgement and it
+was wrong, on two counts the columns above do not show. `metric_facts` declares `tenant_id NOT NULL`,
+and a marketing session is written **before an account exists** — there is no tenant to scope it to.
+And the row is an *entity*, not a derived number: it carries a conversion pointer to `users` and a
+per-UTC-day guest allowance counter that is authoritative rather than computed, while `metric_facts`
+is by its own docstring "a derived number that was given its own DDL". What legitimately becomes a
+`metric_facts` row is the **daily aggregate over** these rows, not the rows. The map now files it
+`keep`, which is why the domain total reads 363 rather than 362. The same argument covers
+`marketing_session_prompts` (migration 0434), which hangs off the same pre-tenant `visitor_id`.
 
 **The three tables the machine kept, and should have.** `promo_projects` is a client creative
 *order*, not a project. `modules` is a permission module, `course_modules` a chapter.
@@ -386,7 +402,7 @@ The four are `marketing_leads` ~ `sales_leads` (already merged in pass B),
 that returned zero pairs above 0.55 also found **56 head nouns living in two or more domains**.
 The signature test finds tables that *look* alike; it is blind to tables that *mean* alike —
 `boards` and `kanban_boards` share not one payload column. That is the ceiling stated in §9,
-measured: the machine gets to 405 and the last 18 need a person who knows the domain.
+measured: the machine gets to 405 and the last 17 need a person who knows the domain.
 
 ---
 
@@ -397,7 +413,7 @@ against the target schema, plus one coverage proof.
 
 | Check | Invariant | Fails when |
 |---|---|---|
-| **Coverage** | Every one of the 1,130 source tables maps to a target | A capability was dropped silently. Current state: 1,130 mapped, **0 unaccounted**, and the 362 distinct `keep` targets reconcile with the domain roster row-for-row. |
+| **Coverage** | Every one of the 1,130 source tables maps to a target | A capability was dropped silently. Current state: 1,130 mapped, **0 unaccounted**, and the 363 distinct `keep` targets reconcile with the domain roster row-for-row. |
 | **Tenancy** | Every table carries `tenant_id NOT NULL` | 162 BurnRateOS models carry `company_id` and no tenant column; every gate in the platform runs on tenant. |
 | **Referential integrity** | Every polymorphic `(kind, id)` references `object` | A generic table can orphan rows the old per-entity table could not. |
 | **Shape lint** | No table outside the kernel implements a kernel shape | Someone adds `X_comments`. This is the rule from §0 as a test. |
@@ -434,7 +450,7 @@ stale-entry reporting — extracted from the pattern `check-tenant-scope.mjs` an
 | `check-tenant-column.mjs` | **72** tables with no tenant-scoping column |
 | `check-polymorphic-fk.mjs` | **3** `(kind, id)` pairs with no `objects` registry |
 | `check-domain-boundary.mjs` | **82** cross-module schema imports, including cycles |
-| `check-model-coverage.mjs` | 1,130 mapped · 0 unaccounted · 362 keeps + 25 kernel = 387 |
+| `check-model-coverage.mjs` | 1,130 mapped · 0 unaccounted · 363 keeps + 25 kernel = 388 |
 
 **The eight duplicate clusters inside this repo today, before any merge:**
 
@@ -451,7 +467,7 @@ being written at all.** That is the argument for landing it before the merge rat
 
 `check-model-coverage.mjs` is deliberately more than a parse check: it independently recounts the
 number the whole PRD rests on, and fails if the map and §3 stop agreeing. It also reports how much
-of the target schema exists (**140 / 362 today**) and becomes a hard gate at 100%.
+of the target schema exists (**140 / 363 today**) and becomes a hard gate at 100%.
 
 **Exit criteria:** met — `cd api && npm test` green with all six wired.
 
@@ -462,12 +478,12 @@ of the target schema exists (**140 / 362 today**) and becomes a hard gate at 100
 | 1 | Which kernel primitives are accepted | **All, minus one.** `rendition` was written and then folded into `artifact`: `check-signature-duplication.mjs` scored the pair at **0.60**, over §2.2's own 0.55 gate, on its first run. A rendition is an artifact with a `derived_from_id`. The kernel is **25** because the guard said so, not because the number was chosen. |
 | 2 | Which product wins each contested area | Per [PRD 19 §2](./19-prd-burnrateos-consolidation.md), unchanged. |
 | 3 | `account_*` or `tenant_*` | **`tenant_*`** — settled by precedent, not preference: every gate in the platform already runs on tenant, and `check-tenant-column.mjs` scopes on `tenant_id`. |
-| 4 | Database tier | Not a schema decision. The 387 land as ~250 additive new tables. |
+| 4 | Database tier | Not a schema decision. The 388 land as ~250 additive new tables. |
 | 5 | The twelve adjudications in §3.3 | **Accepted**, and each is visible in the schema it produced — the `kind` column on `email_campaigns`, `deals`, `break_even_scenarios` and `follow_up_enrollments`. |
 
 ### Step 2 · Write the target schema, kernel first, then domains ascending — ✅ **DONE 2026-08-08**
 
-**`check-model-coverage.mjs`: 140 / 362 → 362 / 362 (100%).**
+**`check-model-coverage.mjs`: 140 / 363 → 363 / 363 (100%).**
 
 The DDL is **generated, not transcribed**. `scripts/gen-consolidation-migration.mjs` derives each
 migration from its Drizzle module via `scripts/lib/ddlFromDrizzle.mjs`, because hand-typing 248
@@ -497,14 +513,14 @@ four new files, not a greenfield:
 | `common.ts` | → `kernel.ts` |
 | — | **new:** `hiring.ts`, `people.ts`, `investor.ts`, `revenue.ts`, `support.ts` |
 
-**Exit criteria:** met — `npx tsgo --noEmit` clean, `check-model-coverage.mjs` reports 362 / 362,
+**Exit criteria:** met — `npx tsgo --noEmit` clean, `check-model-coverage.mjs` reports 363 / 363,
 and `npm test` green across all 17 guards.
 
 ### Step 3 · Turn the ratchets into gates — ✅ **MOVED 2026-08-08**
 
 | Guard | Was | Now |
 |---|---|---|
-| `check-model-coverage.mjs` | 140 / 362 | **362 / 362 — the gate is met** |
+| `check-model-coverage.mjs` | 140 / 363 | **363 / 363 — the gate is met** |
 | `check-domain-boundary.mjs` | 82 edges | **38.** Every merge deleted its own cycles, and the two categories that were never violations — a read of the kernel, a foreign key to `tenants` — are exempt *by rule* now rather than by baseline |
 | `check-signature-duplication.mjs` | 8 clusters | 8, and **three genuine duplicates caught and fixed while the target schema was being written** |
 | `check-shape-lint.mjs` | 93 names | 93 + **five adjudications** carrying their reason in code, where `--update` cannot drop it |
@@ -653,7 +669,7 @@ the schema is paid for in every feature built on it — and, per §7.1, in every
 |---|---|---|
 | 0 · checks as ratchets | — | ✅ **done 2026-08-08** |
 | 1 · settle the model | operator (§8) | ✅ **settled 2026-08-08** |
-| 2 · target schema | step 1 | ✅ **done 2026-08-08** — coverage 362 / 362 |
+| 2 · target schema | step 1 | ✅ **done 2026-08-08** — coverage 363 / 363 |
 | 3 · gates | step 2 | ✅ **moved 2026-08-08** — coverage at its gate; boundary 82 → 38 |
 | 4 · convert | step 3 | **unblocked** — there is now a target shape to emit into |
 | 5 · migrate families | step 4 | ✅ **access layer landed 2026-08-08** — adoption 237 cold → 0, gate armed; the ROW MOVE is still ahead |
@@ -689,7 +705,7 @@ reviewable on its own, each traceable to one seat on the roster.
 
 | Layer | Owns | Must not know |
 |---|---|---|
-| **Infrastructure** | The 387 tables (§2, §3), migrations, the `getOrSetCached` L1+L2 read-through, R2/KV access | HTTP. What a route is. What a user sees. |
+| **Infrastructure** | The 388 tables (§2, §3), migrations, the `getOrSetCached` L1+L2 read-through, R2/KV access | HTTP. What a route is. What a user sees. |
 | **Domain** | Invariants, value types, the `kind` taxonomies, state machines | Drizzle. Hono. Any vendor. |
 | **Application** | Use cases, ports, tenancy enforcement, cache keys and invalidation | Request and response shapes. |
 | **Presentation** | HTTP: parse, authorise, call one application service, serialise | SQL. Table names. |
@@ -819,7 +835,7 @@ skipped:
    the decision exists.
 3. **`account_*` or `tenant_*`.** BurnRateOS's 11 and Builderforce's 17 are the same axis under
    two words. Renaming is free now; not renaming means every future reader learns both.
-4. **The database tier.** 387 tables is a different bill from 78.
+4. **The database tier.** 388 tables is a different bill from 78.
 5. **The twelve adjudications in §3.3.** They are the last 18 tables and the only part of the
    count that is judgement rather than measurement. Each is independently rejectable.
 
@@ -837,9 +853,9 @@ skipped:
 - **Judgement:** the domain assignment (prefix rules, then a token vocabulary, then eight placed by
   hand) and the residual dedupe. ~5% noise — `admin_impersonation_sessions` landed in Growth,
   `geocoder_cache` in Agents. It does not move the totals.
-- **Judgement, isolated and countable:** the twelve adjudications in §3.3 — **18 of the 387**.
+- **Judgement, isolated and countable:** the eleven adjudications in §3.3 — **17 of the 388**.
   They are quarantined in their own pass precisely so the headline can be read two ways: the
-  machine floor is **405**, the model as proposed is **387**. Nothing else in this document
+  machine floor is **405**, the model as proposed is **388**. Nothing else in this document
   depends on accepting them.
 - **Not done:** this reads no row counts, no index usage, no query plans. Two tables can look
   identical and diverge for a good reason nobody wrote down. **Every primitive needs one engineer

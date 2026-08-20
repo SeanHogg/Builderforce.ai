@@ -26,8 +26,11 @@ describe('PromptUseCasePicker', () => {
   it('maps every legacy C-suite contract into the Creation Canvas menu exactly once', () => {
     const ids = C_SUITE_CANVAS_USE_CASES.map((item) => item.id);
 
-    expect(ids).toHaveLength(48);
-    expect(new Set(ids).size).toBe(48);
+    // No magic count: the property here is that every legacy contract maps in
+    // exactly ONCE. Pinning the total meant every use case added to the
+    // catalogue failed this test for a duplication it had not introduced.
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.length).toBeGreaterThanOrEqual(48);
     expect(ids).toContain('agile.sprint.current');
     expect(ids).toContain('finance.runway.snapshot');
     expect(ids).toContain('governance.snapshot');

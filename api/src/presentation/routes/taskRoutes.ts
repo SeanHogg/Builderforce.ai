@@ -30,6 +30,7 @@ import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
 import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
+import { resolveLaneAgentHostId } from '../../application/swimlane/laneAgentHost';
 import { maybeAutoRunOnLaneEntry } from '../../application/swimlane/laneEntryTrigger';
 import { findCanonicalBoard } from '../../application/swimlane/canonicalBoard';
 import { coordinateTicket } from '../../application/manager/coordinateTicket';
@@ -468,12 +469,19 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       const reason: AutoRunReason = evaln.reason === 'will_run' ? 'no_agent' : evaln.reason;
       return c.json({ error: 'No agent is configured to run this ticket. Assign a cloud agent (or staff this lane), then try again.', reason }, 400);
     }
-    const payloadObj: { cloudAgentRef: string; model?: string; laneKey: string; chatId?: number } = {
+    const payloadObj: { cloudAgentRef: string; model?: string; laneKey: string; chatId?: number; runtime?: string } = {
       cloudAgentRef: evaln.candidate.agentRef,
       laneKey:       row.status,
     };
     if (evaln.candidate.model) payloadObj.model = evaln.candidate.model;
+    if (evaln.candidate.runtime) payloadObj.runtime = evaln.candidate.runtime;
     if (chatId != null) payloadObj.chatId = chatId;
+    // Run-now lands on the SAME backplane autonomy would have used. Resolved through the
+    // one shared resolver so a human click cannot relocate the work off the machine the
+    // lane was staffed to. Null = cloud, the behaviour before lane runtime was read.
+    const runNowHostId = await resolveLaneAgentHostId(
+      db, c.get('tenantId'), evaln.candidate.runtime, evaln.candidate.target,
+    ).catch(() => null);
     const executionId = await dispatchCloudRunForTask(
       c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p),
       {
@@ -481,6 +489,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         tenantId: c.get('tenantId'),
         payload: JSON.stringify(payloadObj),
         submittedBy: (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:run-now',
+        ...(runNowHostId != null ? { agentHostId: runNowHostId } : {}),
         // THE human override. Run-now has always ignored the lane gate and the failure
         // breaker — an explicit click is the approval — so it says so explicitly now
         // that the breaker is enforced in the dispatcher rather than only in the

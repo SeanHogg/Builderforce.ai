@@ -40,6 +40,7 @@ import {
 import { evaluateExecutionApprovalGate } from '../runtime/executionApprovalGate';
 import { evaluateTaskAutoRun, type TenantTokenVerdict } from './evaluateAutoRun';
 import { enforceLaneRequirements } from './laneRequirementGate';
+import { resolveLaneAgentHostId } from './laneAgentHost';
 import { TicketAuditService } from '../audit/ticketAuditService';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { buildRoleRunPayload, requestRoleRun, type RoleRunRequest } from '../kanban/requestRoleRun';
@@ -268,9 +269,20 @@ export async function maybeAutoRunOnLaneEntry(
     // ref the dispatcher resolves + attributes the run to). `laneKey` records which
     // lane this run serves so a completion that re-enters the SAME lane (a loop) is
     // suppressed by the same-lane guard above on the next hop.
-    const payloadObj: { cloudAgentRef?: string; model?: string; laneKey?: string } = { laneKey: lane };
+    const payloadObj: { cloudAgentRef?: string; model?: string; laneKey?: string; runtime?: string } = { laneKey: lane };
     if (evaln.decision.agentRef) payloadObj.cloudAgentRef = evaln.decision.agentRef;
     if (evaln.decision.model) payloadObj.model = evaln.decision.model;
+    if (evaln.decision.runtime) payloadObj.runtime = evaln.decision.runtime;
+
+    // ── THE BACKPLANE THE LANE WAS STAFFED ON ───────────────────────────────────
+    // `swimlane_agent_assignments.runtime`/`target` were never read on this path, so a
+    // lane pinned to an on-prem machine (or a specific remote host) was dispatched to
+    // the cloud anyway — the operator's runtime choice discarded on every drag. Resolve
+    // it to the `agentHostId` the dispatcher already accepts. Null = cloud, which is
+    // exactly what every lane resolved to before.
+    const laneAgentHostId = await resolveLaneAgentHostId(
+      db, args.tenantId, evaln.decision.runtime, evaln.decision.target,
+    ).catch(() => null);
 
     // ── ROLE ATTRIBUTION ON A LIFECYCLE-MANAGED BOARD ────────────────────────────
     // A managed board refuses any dispatch whose payload carries no role
@@ -363,6 +375,9 @@ export async function maybeAutoRunOnLaneEntry(
         tenantId: args.tenantId,
         payload,
         submittedBy: args.submittedBy,
+        // Honour the lane's staffed backplane. Undefined (cloud) leaves the dispatcher's
+        // own host-pin resolution untouched, so a cloud lane behaves exactly as before.
+        ...(laneAgentHostId != null ? { agentHostId: laneAgentHostId } : {}),
         // The rows the evaluation above already loaded. The dispatcher still runs
         // the breaker on them itself — this only spares it the second query.
         execMemo,
@@ -387,6 +402,9 @@ export async function maybeAutoRunOnLaneEntry(
       detail:        {
         taskId: args.taskId, lane, reason: 'will_run',
         agentRef: evaln.decision.agentRef ?? null, submittedBy: args.submittedBy,
+        // Which backplane actually took the run — without it the ledger cannot tell an
+        // on-prem lane dispatch from a cloud one.
+        runtime: evaln.decision.runtime ?? 'cloud', agentHostId: laneAgentHostId,
         // The ROLE the run was attributed to, on a managed board. Without it the ledger
         // cannot tell a Coordinator-issued stage run from a generic lane dispatch.
         ...(evaln.managedRole ? { roleKey: evaln.managedRole.roleKey, roleSource: evaln.managedRole.source } : {}),

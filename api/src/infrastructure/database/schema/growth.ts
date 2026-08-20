@@ -42,7 +42,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { catalogItems, objects } from './kernel';
 import { creationSessions } from './canvas';
-import { tenants } from './identity';
+import { tenants, users } from './identity';
 import { mailboxConnections } from './integrations';
 import { connectorConnections } from './platform';
 import { projects, projectSites } from './delivery';
@@ -652,8 +652,12 @@ export const socialCampaignPosts = pgTable('social_campaign_posts', {
 //   · `marketing_brand_kits` merged into `brand_kits`. One stored colour and font
 //     as columns, the other as a `colors` JSON — the same fact in two shapes, so
 //     the column overlap read as 0.11 and the machine could not see it.
-//   · `marketing_sessions` became `metric_facts`. `visitor_id`, `landing_path`,
-//     `referrer`, `utm`, `converted` is an analytics visit, not an entity.
+//   · `marketing_sessions` was adjudicated into `metric_facts` and that
+//     judgement has since been RETRACTED (PRD 20 §3.3): `metric_facts` is
+//     `tenant_id NOT NULL` and a session predates any tenant, and the row is an
+//     entity with an authoritative allowance counter, not a derived number. It
+//     is a `keep`, it lives in this module, and the daily aggregate over it is
+//     the `metric_facts` row.
 //   · `nurture_flow_enrollments` and `follow_up_enrollments` joined the one
 //     shared sequence enrolment — person + sequence + status + `current_step` +
 //     `next_send_at`, four times over.
@@ -1268,6 +1272,67 @@ export const employerBrandingPages = pgTable('employer_branding_pages', {
 }, (t) => [
   uniqueIndex('uq_employer_branding_pages_slug').on(t.tenantId, t.slug),
 ]);
+
+/**
+ * Anonymous marketing session (migration 0279) — a logged-out visitor who runs a
+ * free Diagnostics & Tools diagnostic, or types into the landing composer, IS a
+ * lead. Keyed by a client-generated stable `visitorId`; tracks run volume,
+ * first-touch attribution and the per-UTC-day guest allowance, and is stamped
+ * `converted` when the visitor creates an account. Not tenant-scoped (pre-signup).
+ *
+ * THIS TABLE LIVES IN GROWTH, and the move is deliberate (PRD 20 §5 step 2). It
+ * sat in `identity.ts` until 2026-08-19 because of its `users` reference, which
+ * split one concept across two modules: the lead row in Identity and the prompts
+ * behind it (`marketing_session_prompts`, 0434) here. "One table, one domain"
+ * beat "no new edge" — `source-to-target.tsv` files it under Growth & marketing,
+ * the CMO owns the funnel it measures, and every service that writes it
+ * (`MarketingService`, `GuestPromptService`, `GuestChatService`) is marketing.
+ *
+ * THE COST, NAMED: `convertedUserId` references `users`, so this move creates a
+ * counted `growth -> identity` edge in `check-domain-boundary.mjs`. It is
+ * ACCEPTED rather than routed, because the alternative is worse in both
+ * directions. Routing it through the kernel `objects` registry would replace a
+ * real foreign key with a polymorphic pointer at the exact moment conversion is
+ * recorded — the one write in the funnel that must not dangle — and would add a
+ * fourth entry to `check-polymorphic-fk.mjs`'s list of references with nothing
+ * to point at. Dropping the FK to a bare uuid would lose the ON DELETE SET NULL
+ * that keeps a deleted account from orphaning its own attribution. One counted
+ * edge, argued here, is the cheaper price.
+ *
+ * NOT a `metric_facts` row, and `source-to-target.tsv` now says `keep` rather
+ * than `primitive -> metric_fact`: `metric_facts` is `tenant_id NOT NULL` and a
+ * session is written before any tenant exists, and this row is an entity — an
+ * opaque visitor identity with an authoritative allowance counter — not a
+ * derived number. The daily aggregate OVER these rows is the `metric_facts`
+ * row. See PRD 20 §3.3, "Retracted".
+ */
+export const marketingSessions = pgTable('marketing_sessions', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  visitorId:       varchar('visitor_id', { length: 64 }).notNull(),
+  toolRuns:        integer('tool_runs').notNull().default(0),
+  lastToolId:      varchar('last_tool_id', { length: 64 }),
+  landingPath:     text('landing_path'),
+  referrer:        text('referrer'),
+  userAgent:       text('user_agent'),
+  utm:             jsonb('utm').notNull().default(sql`'{}'::jsonb`),
+  converted:       boolean('converted').notNull().default(false),
+  convertedUserId: varchar('converted_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  convertedAt:     timestamp('converted_at'),
+  // Guest Brain/Ideas chat metering (migration 0297) — a logged-out visitor can
+  // try the Brain before signing up; usage is counted per UTC day on this same
+  // lead row. `guestChatDay` is the UTC day the counters below apply to (reset
+  // when a new day's first message lands). Per-IP metering is KV-side.
+  guestChatDay:    date('guest_chat_day'),
+  guestChatCount:  integer('guest_chat_count').notNull().default(0),
+  guestChatTokens: integer('guest_chat_tokens').notNull().default(0),
+  guestChatTurnId: varchar('guest_chat_turn_id', { length: 128 }),
+  guestChatTurnFingerprint: varchar('guest_chat_turn_fingerprint', { length: 64 }),
+  firstSeenAt:     timestamp('first_seen_at').notNull().defaultNow(),
+  lastSeenAt:      timestamp('last_seen_at').notNull().defaultNow(),
+}, (t) => ({
+  byVisitor: uniqueIndex('uq_marketing_sessions_visitor').on(t.visitorId),
+  byLastSeen: index('idx_marketing_sessions_last_seen').on(t.lastSeenAt),
+}));
 
 /**
  * Every prompt an anonymous visitor submitted (migration 0434).

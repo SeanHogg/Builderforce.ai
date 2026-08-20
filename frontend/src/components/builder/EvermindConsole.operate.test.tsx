@@ -232,7 +232,7 @@ describe('EvermindConsole — knowledge analyzer', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Fix 1 selected/i }));
 
     await waitFor(() => expect(applyFindings).toHaveBeenCalledWith([expect.objectContaining({ id: 11 })]));
-    expect(await screen.findByText(/1 corrected, 1 forgotten/i)).toBeInTheDocument();
+    expect(await screen.findByText(/1 corrected.*1 removed from recall/i)).toBeInTheDocument();
   });
 
   it('survives a tab switch with its selection intact — an audit costs frontier tokens', async () => {

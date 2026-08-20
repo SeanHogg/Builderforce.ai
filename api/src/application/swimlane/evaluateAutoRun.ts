@@ -22,7 +22,7 @@ import { classifyRunFailure, isPlatformFailure } from '../runtime/runFailureReas
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { isAgentRefRoleCapable } from '../kanban/roleCapability';
 import { resolveManagedProducer } from '../kanban/managedLaneRoles';
-import { decideLaneAutoRun, withOwnerAgentFallback, type LaneAgentLike, type LaneAutoRunDecision } from './laneAutoRun';
+import { decideLaneAutoRun, withOwnerAgentFallback, type LaneAgentLike, type LaneAgentRuntime, type LaneAutoRunDecision } from './laneAutoRun';
 import { findCanonicalBoard } from './canonicalBoard';
 import { isUnapprovedFeedbackTask } from '../feedback/feedbackSpec';
 import { isReviewLane } from '../task/taskLifecycle';
@@ -396,7 +396,7 @@ export interface AutoRunEvaluation {
    * lane gate (an explicit human click overrides a 'human' gate). Null when no
    * agent at all can run the ticket.
    */
-  candidate: { agentRef: string; model?: string } | null;
+  candidate: { agentRef: string; model?: string; runtime?: LaneAgentRuntime; target?: string } | null;
   /** A live (pending/submitted/running/paused) execution already on the ticket. */
   liveExecution: { id: number; status: string } | null;
   /** True when autonomy would dispatch right now with no further input. */
@@ -473,6 +473,15 @@ export interface TenantTokenVerdict {
   usageMonth: number;
   monthlyLimit: number;
   effectivePlan: 'free' | 'pro' | 'teams';
+}
+
+/**
+ * Coerce the raw `swimlane_agent_assignments.runtime` varchar to the closed union the
+ * decision carries. An unknown value is treated as unset (not as 'cloud'): the dispatcher
+ * then applies its ordinary host-pin/cloud resolution rather than acting on a typo.
+ */
+function normalizeLaneAgentRuntime(raw: string | null | undefined): LaneAgentRuntime | null {
+  return raw === 'local' || raw === 'cloud' || raw === 'remote' || raw === 'browser' ? raw : null;
 }
 
 /**
@@ -648,6 +657,10 @@ export async function evaluateTaskAutoRun(
       agentRef: swimlaneAgentAssignments.agentRef,
       model: swimlaneAgentAssignments.model,
       requiredCapabilities: swimlaneAgentAssignments.requiredCapabilities,
+      // The BACKPLANE the operator staffed. Not reading these two columns is what made
+      // every lane agent a cloud agent on the drag path, however it was configured.
+      runtime: swimlaneAgentAssignments.runtime,
+      target: swimlaneAgentAssignments.target,
     })
     .from(swimlaneAgentAssignments)
     .where(eq(swimlaneAgentAssignments.swimlaneId, lane.id));
@@ -661,7 +674,14 @@ export async function evaluateTaskAutoRun(
           .catch(() => ({ skills: [], personas: [], content: [] }));
         capabilities = [...resolved.skills, ...resolved.personas];
       }
-      return { agentRef: r.agentRef, model: r.model, requiredCapabilities, capabilities };
+      return {
+        agentRef: r.agentRef,
+        model: r.model,
+        requiredCapabilities,
+        capabilities,
+        runtime: normalizeLaneAgentRuntime(r.runtime),
+        target: r.target,
+      };
     }),
   );
   const staffedAgentRefs = laneAgents.map((a) => a.agentRef).filter((r): r is string => !!r);
@@ -827,7 +847,14 @@ async function finishEvaluation(input: {
   // gate-block, so it surfaces the first capability-qualified candidate or none.
   const forced = decideLaneAutoRun(agents, 'auto');
   const candidate = forced.autoRun && forced.agentRef
-    ? { agentRef: forced.agentRef, ...(forced.model ? { model: forced.model } : {}) }
+    ? {
+      agentRef: forced.agentRef,
+      ...(forced.model ? { model: forced.model } : {}),
+      // Run-now must land on the SAME backplane autonomy would have used, or a human
+      // click quietly relocates the work off the machine the lane was staffed to.
+      ...(forced.runtime ? { runtime: forced.runtime } : {}),
+      ...(forced.target ? { target: forced.target } : {}),
+    }
     : null;
 
   // Newest-first (findByTask orders createdAt DESC) — reused for the live-run check
