@@ -1,14 +1,14 @@
 import type { Metadata } from 'next';
-import {
-  siWhatsapp, siTelegram, siDiscord, siSignal, siApple, siMatrix, siNextcloud, siZalo,
-  siAnthropic, siGoogle, siOllama, siMistralai, siPerplexity, siHuggingface,
-  siNotion, siObsidian, siTrello, siGithub,
-  siSpotify, siSonos, siShazam,
-  siPhilipshue, siHomeassistant,
-  siGooglechrome, siGmail, si1password,
-  siX, siVercel,
-  siLinux, siAndroid, siMacos, siIos,
-} from 'simple-icons';
+/*
+ * Brand paths come from a GENERATED subset, not from `simple-icons` itself.
+ *
+ * That package is one 4.98 MiB module with no per-icon entry points. This page is a
+ * server component, so Next resolves its CommonJS build, which cannot be tree-shaken —
+ * importing 31 icons pulled all ~3,300 into a shared edge chunk (6.71 MiB, the largest
+ * single thing in the Worker) and put the bundle over Cloudflare's 10 MiB limit.
+ * `scripts/gen-brand-paths.mjs` regenerates the subset; only `.path` was ever read.
+ */
+import { BRAND_PATHS } from '../brandPaths';
 import { type IntegrationItem } from './IntegrationGrid';
 import IntegrationsView, { type IntegrationSection } from './IntegrationsView';
 import type { CustomSvg, IconSpec } from '../BrandIcon';
@@ -21,9 +21,9 @@ export const metadata: Metadata = {
   alternates: { canonical: '/agents/integrations' },
 };
 
-type SimpleIcon = { path: string };
 
-const si = (icon: SimpleIcon): IconSpec => ({ kind: 'simple', path: icon.path });
+
+const si = (name: keyof typeof BRAND_PATHS): IconSpec => ({ kind: 'simple', path: BRAND_PATHS[name] });
 const lc = (name: keyof typeof LUCIDE | string): IconSpec => ({ kind: 'lucide', svg: LUCIDE[name] ?? LUCIDE.bot });
 const cs = (svg: CustomSvg): IconSpec => ({ kind: 'custom', svg });
 
@@ -43,66 +43,66 @@ const minimaxIcon: CustomSvg = {
 };
 
 const chatProviders: IntegrationItem[] = [
-  { name: 'WhatsApp', icon: si(siWhatsapp), color: '#25D366', desc: 'QR pairing via Baileys', docs: '/agents/skills' },
-  { name: 'Telegram', icon: si(siTelegram), color: '#26A5E4', desc: 'Bot API via grammY', docs: '/docs/telegram' },
-  { name: 'Discord', icon: si(siDiscord), color: '#5865F2', desc: 'Servers, channels & DMs', docs: '/agents/skills/discord' },
+  { name: 'WhatsApp', icon: si('siWhatsapp'), color: '#25D366', desc: 'QR pairing via Baileys', docs: '/agents/skills' },
+  { name: 'Telegram', icon: si('siTelegram'), color: '#26A5E4', desc: 'Bot API via grammY', docs: '/docs/telegram' },
+  { name: 'Discord', icon: si('siDiscord'), color: '#5865F2', desc: 'Servers, channels & DMs', docs: '/agents/skills/discord' },
   { name: 'Slack', icon: lc('hash'), color: '#E01E5A', desc: 'Workspace apps via Bolt', docs: '/agents/skills/slack' },
-  { name: 'Signal', icon: si(siSignal), color: '#3A76F0', desc: 'Privacy-focused via signal-cli', docs: '/docs/channels/signal' },
-  { name: 'iMessage', icon: si(siApple), color: '#007AFF', desc: 'iMessage via imsg (AppleScript bridge)', docs: 'https://github.com/steipete/imsg' },
+  { name: 'Signal', icon: si('siSignal'), color: '#3A76F0', desc: 'Privacy-focused via signal-cli', docs: '/docs/channels/signal' },
+  { name: 'iMessage', icon: si('siApple'), color: '#007AFF', desc: 'iMessage via imsg (AppleScript bridge)', docs: 'https://github.com/steipete/imsg' },
   { name: 'Microsoft Teams', icon: lc('users'), color: '#6264A7', desc: 'Enterprise support', docs: '/docs/channels/msteams' },
-  { name: 'Nextcloud Talk', icon: si(siNextcloud), color: '#0082C9', desc: 'Self-hosted Nextcloud chat', docs: '/docs/channels/nextcloud-talk' },
-  { name: 'Matrix', icon: si(siMatrix), color: '#000000', desc: 'Matrix protocol', docs: '/docs/channels/matrix' },
+  { name: 'Nextcloud Talk', icon: si('siNextcloud'), color: '#0082C9', desc: 'Self-hosted Nextcloud chat', docs: '/docs/channels/nextcloud-talk' },
+  { name: 'Matrix', icon: si('siMatrix'), color: '#000000', desc: 'Matrix protocol', docs: '/docs/channels/matrix' },
   { name: 'Nostr', icon: lc('message-circle'), color: '#8F2CFF', desc: 'Decentralized DMs via NIP-04', docs: '/docs/channels/nostr' },
-  { name: 'Zalo', icon: si(siZalo), color: '#0068FF', desc: 'Zalo Bot API', docs: '/docs/channels/zalo' },
+  { name: 'Zalo', icon: si('siZalo'), color: '#0068FF', desc: 'Zalo Bot API', docs: '/docs/channels/zalo' },
   { name: 'WebChat', icon: lc('globe'), color: 'var(--cyan-bright)', desc: 'Browser-based UI', docs: '/docs/webchat' },
 ];
 
 const modelProviders: IntegrationItem[] = [
-  { name: 'Anthropic', icon: si(siAnthropic), color: '#D4A574', desc: 'Claude Pro/Max + Opus 4.5', docs: '/docs/models' },
+  { name: 'Anthropic', icon: si('siAnthropic'), color: '#D4A574', desc: 'Claude Pro/Max + Opus 4.5', docs: '/docs/models' },
   { name: 'OpenAI', icon: lc('bot'), color: '#00A67E', desc: 'GPT-4, GPT-5, o1', docs: '/docs/models' },
-  { name: 'Google', icon: si(siGoogle), color: '#4285F4', desc: 'Gemini 2.5 Pro/Flash', docs: '/docs/models' },
+  { name: 'Google', icon: si('siGoogle'), color: '#4285F4', desc: 'Gemini 2.5 Pro/Flash', docs: '/docs/models' },
   { name: 'MiniMax', icon: cs(minimaxIcon), color: '#E91E63', desc: 'MiniMax-M2.1', docs: '/docs/providers/minimax' },
-  { name: 'xAI', icon: si(siX), color: 'var(--text-on-accent)', desc: 'Grok 3 & 4', docs: '/docs/models' },
-  { name: 'Vercel AI Gateway', icon: si(siVercel), color: 'var(--text-on-accent)', desc: 'Hundreds of models, 1 API key', docs: '/docs/providers/vercel-ai-gateway' },
+  { name: 'xAI', icon: si('siX'), color: 'var(--text-on-accent)', desc: 'Grok 3 & 4', docs: '/docs/models' },
+  { name: 'Vercel AI Gateway', icon: si('siVercel'), color: 'var(--text-on-accent)', desc: 'Hundreds of models, 1 API key', docs: '/docs/providers/vercel-ai-gateway' },
   { name: 'OpenRouter', icon: lc('zap'), color: '#6366F1', desc: 'Unified API gateway', docs: '/docs/models' },
-  { name: 'Mistral', icon: si(siMistralai), color: '#FF7000', desc: 'Mistral Large & Codestral', docs: '/docs/models' },
+  { name: 'Mistral', icon: si('siMistralai'), color: '#FF7000', desc: 'Mistral Large & Codestral', docs: '/docs/models' },
   { name: 'DeepSeek', icon: lc('brain'), color: '#4D6BFE', desc: 'DeepSeek V3 & R1', docs: '/docs/models' },
-  { name: 'Perplexity', icon: si(siPerplexity), color: '#20B8CD', desc: 'Search-augmented AI', docs: '/docs/models' },
-  { name: 'Hugging Face', icon: si(siHuggingface), color: '#FFD21E', desc: 'Open-source models', docs: '/docs/models' },
-  { name: 'Local Models', icon: si(siOllama), color: 'var(--text-on-accent)', desc: 'Ollama, LM Studio', docs: '/docs/models' },
+  { name: 'Perplexity', icon: si('siPerplexity'), color: '#20B8CD', desc: 'Search-augmented AI', docs: '/docs/models' },
+  { name: 'Hugging Face', icon: si('siHuggingface'), color: '#FFD21E', desc: 'Open-source models', docs: '/docs/models' },
+  { name: 'Local Models', icon: si('siOllama'), color: 'var(--text-on-accent)', desc: 'Ollama, LM Studio', docs: '/docs/models' },
 ];
 
 const productivityApps: IntegrationItem[] = [
   { name: 'Apple Notes', icon: lc('sticky-note'), color: '#FFCC00', desc: 'Native macOS/iOS notes', docs: '/agents/skills' },
   { name: 'Apple Reminders', icon: lc('check-square'), color: '#FF9500', desc: 'Task management', docs: '/agents/skills' },
   { name: 'Things 3', icon: lc('list-todo'), color: '#4A90D9', desc: 'GTD task manager', docs: '/agents/skills' },
-  { name: 'Notion', icon: si(siNotion), color: 'var(--text-on-accent)', desc: 'Workspace & databases', docs: '/agents/skills' },
-  { name: 'Obsidian', icon: si(siObsidian), color: '#7C3AED', desc: 'Knowledge graph notes', docs: '/agents/skills/obsidian' },
+  { name: 'Notion', icon: si('siNotion'), color: 'var(--text-on-accent)', desc: 'Workspace & databases', docs: '/agents/skills' },
+  { name: 'Obsidian', icon: si('siObsidian'), color: '#7C3AED', desc: 'Knowledge graph notes', docs: '/agents/skills/obsidian' },
   { name: 'Bear Notes', icon: lc('pen-tool'), color: '#DD4C4F', desc: 'Markdown notes', docs: '/agents/skills' },
-  { name: 'Trello', icon: si(siTrello), color: '#0079BF', desc: 'Kanban boards', docs: '/agents/skills/trello' },
-  { name: 'GitHub', icon: si(siGithub), color: 'var(--text-on-accent)', desc: 'Code, issues, PRs', docs: '/agents/skills' },
+  { name: 'Trello', icon: si('siTrello'), color: '#0079BF', desc: 'Kanban boards', docs: '/agents/skills/trello' },
+  { name: 'GitHub', icon: si('siGithub'), color: 'var(--text-on-accent)', desc: 'Code, issues, PRs', docs: '/agents/skills' },
 ];
 
 const musicAudio: IntegrationItem[] = [
-  { name: 'Spotify', icon: si(siSpotify), color: '#1DB954', desc: 'Music playback control', docs: '/agents/skills/spotify-player' },
-  { name: 'Sonos', icon: si(siSonos), color: 'var(--text-on-accent)', desc: 'Multi-room audio', docs: '/agents/skills' },
-  { name: 'Shazam', icon: si(siShazam), color: '#0088FF', desc: 'Song recognition', docs: '/agents/skills' },
+  { name: 'Spotify', icon: si('siSpotify'), color: '#1DB954', desc: 'Music playback control', docs: '/agents/skills/spotify-player' },
+  { name: 'Sonos', icon: si('siSonos'), color: 'var(--text-on-accent)', desc: 'Multi-room audio', docs: '/agents/skills' },
+  { name: 'Shazam', icon: si('siShazam'), color: '#0088FF', desc: 'Song recognition', docs: '/agents/skills' },
 ];
 
 const smartHome: IntegrationItem[] = [
-  { name: 'Philips Hue', icon: si(siPhilipshue), color: '#0065D3', desc: 'Smart lighting', docs: '/agents/skills/openhue' },
+  { name: 'Philips Hue', icon: si('siPhilipshue'), color: '#0065D3', desc: 'Smart lighting', docs: '/agents/skills/openhue' },
   { name: '8Sleep', icon: lc('bed'), color: '#00B4D8', desc: 'Smart mattress', docs: '/agents/skills' },
-  { name: 'Home Assistant', icon: si(siHomeassistant), color: '#41BDF5', desc: 'Home automation hub', docs: '/agents/skills' },
+  { name: 'Home Assistant', icon: si('siHomeassistant'), color: '#41BDF5', desc: 'Home automation hub', docs: '/agents/skills' },
 ];
 
 const tools: IntegrationItem[] = [
-  { name: 'Browser', icon: si(siGooglechrome), color: '#4285F4', desc: 'Chrome/Chromium control', docs: '/agents/skills' },
+  { name: 'Browser', icon: si('siGooglechrome'), color: '#4285F4', desc: 'Chrome/Chromium control', docs: '/agents/skills' },
   { name: 'Canvas', icon: lc('monitor-smartphone'), color: '#FF4500', desc: 'Visual workspace + A2UI', docs: '/docs/mac/canvas' },
   { name: 'Voice', icon: lc('mic'), color: '#9B59B6', desc: 'Voice Wake + Talk Mode', docs: '/agents/skills/voice-call' },
-  { name: 'Gmail', icon: si(siGmail), color: '#EA4335', desc: 'Pub/Sub email triggers', docs: '/docs/gmail-pubsub' },
+  { name: 'Gmail', icon: si('siGmail'), color: '#EA4335', desc: 'Pub/Sub email triggers', docs: '/docs/gmail-pubsub' },
   { name: 'Cron', icon: lc('clock'), color: '#F39C12', desc: 'Scheduled tasks', docs: '/docs/cron' },
   { name: 'Webhooks', icon: lc('webhook'), color: '#1ABC9C', desc: 'External triggers', docs: '/docs/webhook' },
-  { name: '1Password', icon: si(si1password), color: '#0572EC', desc: 'Secure credentials', docs: '/agents/skills/1password' },
+  { name: '1Password', icon: si('si1password'), color: '#0572EC', desc: 'Secure credentials', docs: '/agents/skills/1password' },
   { name: 'Weather', icon: lc('cloud-sun'), color: '#FFB300', desc: 'Forecasts & conditions', docs: '/agents/skills/weather' },
 ];
 
@@ -114,16 +114,16 @@ const mediaCreative: IntegrationItem[] = [
 ];
 
 const socialComms: IntegrationItem[] = [
-  { name: 'Twitter/X', icon: si(siX), color: 'var(--text-on-accent)', desc: 'Tweet, reply, search', docs: '/agents/skills' },
+  { name: 'Twitter/X', icon: si('siX'), color: 'var(--text-on-accent)', desc: 'Tweet, reply, search', docs: '/agents/skills' },
   { name: 'Email', icon: lc('mail'), color: '#D44638', desc: 'Send & read emails', docs: '/agents/skills' },
 ];
 
 const companionApps: IntegrationItem[] = [
-  { name: 'macOS', icon: si(siMacos), color: 'var(--text-on-accent)', desc: 'Menu bar app + Voice Wake', docs: '/docs/macos' },
-  { name: 'iOS', icon: si(siIos), color: '#007AFF', desc: 'Canvas, camera, Voice Wake', docs: '/docs/ios' },
-  { name: 'Android', icon: si(siAndroid), color: '#34A853', desc: 'Canvas, camera, screen', docs: '/docs/android' },
+  { name: 'macOS', icon: si('siMacos'), color: 'var(--text-on-accent)', desc: 'Menu bar app + Voice Wake', docs: '/docs/macos' },
+  { name: 'iOS', icon: si('siIos'), color: '#007AFF', desc: 'Canvas, camera, Voice Wake', docs: '/docs/ios' },
+  { name: 'Android', icon: si('siAndroid'), color: '#34A853', desc: 'Canvas, camera, screen', docs: '/docs/android' },
   { name: 'Windows', icon: lc('monitor'), color: '#0078D4', desc: 'WSL2 recommended', docs: '/docs/windows' },
-  { name: 'Linux', icon: si(siLinux), color: '#FCC624', desc: 'Native support', docs: '/docs/linux' },
+  { name: 'Linux', icon: si('siLinux'), color: '#FCC624', desc: 'Native support', docs: '/docs/linux' },
 ];
 
 const showcaseItems: IntegrationItem[] = [

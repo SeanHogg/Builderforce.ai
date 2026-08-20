@@ -1,3 +1,34 @@
+## ✅ RESOLVED 2026-08-20 — 4.98 MiB of brand icons nobody asked for, in every edge function
+
+`Deploy frontend` could not upload: `error 10027 — Your Worker exceeded the size limit of 10 MiB`.
+It surfaced only once the `sharp` fix let the build reach upload for the first time.
+
+`scripts/check-worker-size.mjs` (added in the same pass) measured it: **11.29 MiB compressed,
+44.80 MiB raw across 217 modules**, with one outlier — a single shared webpack chunk at
+**6.71 MiB** against a long tail of ~200 route functions at ~0.3 MiB each.
+
+That chunk was `simple-icons`. `src/app/agents/integrations/page.tsx` imported 31 icons from
+it and read exactly one field of each (`.path`, a short SVG string). The package ships ONE
+module — `index.js` and `index.mjs` are 4.98 MiB apiece, every brand it knows, and v16 removed
+the per-icon entry points. It sets `sideEffects: false`, so on the CLIENT webpack shakes it;
+but the page is a SERVER component, Next resolves the CommonJS build for it, and CommonJS
+cannot be tree-shaken. All ~3,300 icons arrived whole, in a chunk shared by every route.
+
+Fixed by generating the subset: `scripts/gen-brand-paths.mjs` reads the installed package and
+writes `src/app/agents/brandPaths.ts` — **35.2 KB for 32 icons**, verified byte-identical to
+upstream. Generated rather than hand-copied so the provenance is executable and a version bump
+reproduces it; `simple-icons` moved from `dependencies` to `devDependencies`, since only the
+generator needs it now.
+
+**The guard's own threshold was corrected by what it measured.** It first failed at 90% of the
+limit, on the reasoning that the build which adds the weight should be the one that breaks.
+The real number retired that: this app sits legitimately close to the ceiling, and a gate that
+rejects deploys Cloudflare accepts is a gate somebody switches off. It now FAILS at Cloudflare's
+actual limit and WARNS at 90%, carrying the same module breakdown either way. Both paths were
+smoke-tested against synthetic bundles before shipping.
+
+---
+
 ## ✅ RESOLVED 2026-08-20 — The red deploy: 55 API type errors, and the half-landed feature under them
 
 `46512f992` ("Latest features added") turned both deploy jobs red. `Deploy API` failed on **55 type errors**

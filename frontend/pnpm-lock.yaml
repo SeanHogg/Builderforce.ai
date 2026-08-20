@@ -140,9 +140,6 @@ importers:
       remark-math:
         specifier: ^6.0.0
         version: 6.0.0
-      simple-icons:
-        specifier: ^16.18.1
-        version: 16.18.1
       three:
         specifier: ^0.185.1
         version: 0.185.1
@@ -213,6 +210,9 @@ importers:
       sharp:
         specifier: 0.35.3
         version: 0.35.3(@types/node@20.19.39)
+      simple-icons:
+        specifier: ^16.18.1
+        version: 16.18.1
       tailwindcss:
         specifier: ^3.4.1
         version: 3.4.19

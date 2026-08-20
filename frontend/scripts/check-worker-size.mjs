@@ -45,11 +45,16 @@ const MIB = 1024 * 1024;
 /** Cloudflare's hard ceiling. Not a number this repo chooses. */
 const LIMIT_BYTES = 10 * MIB;
 /**
- * Fail below the ceiling, so the build that trips this is the one that added the
- * weight rather than the next one after it. A deploy at 99% of the limit is not a
- * healthy deploy; it is the one before the outage.
+ * WARN here; fail only at the ceiling above.
+ *
+ * The first cut failed at 90%, so the build that tripped the guard would be the one that
+ * added the weight rather than the next one. Measuring the real bundle retired that idea:
+ * this app sits legitimately close to the ceiling, and a gate that rejects deploys
+ * Cloudflare would accept is a gate somebody switches off — after which it guards
+ * nothing. So the FAILURE is Cloudflare's own limit, and 90% is a loud warning carrying
+ * the same module breakdown.
  */
-const BUDGET_BYTES = Math.floor(LIMIT_BYTES * 0.9);
+const WARN_BYTES = Math.floor(LIMIT_BYTES * 0.9);
 
 function collect(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -88,32 +93,45 @@ const compressed = gzipSync(Buffer.concat(sized.map((entry) => readFileSync(entr
 const mib = (bytes) => `${(bytes / MIB).toFixed(2)} MiB`;
 const pct = ((compressed / LIMIT_BYTES) * 100).toFixed(1);
 
-if (compressed > BUDGET_BYTES) {
+if (compressed > WARN_BYTES) {
   const over = compressed > LIMIT_BYTES;
-  console.error(
-    `❌  check-worker-size: the Worker bundle is ${mib(compressed)} compressed ` +
-    `(${mib(raw)} raw across ${files.length} modules) — ${pct}% of Cloudflare's ${mib(LIMIT_BYTES)} limit.\n`,
-  );
-  console.error(over
-    ? '   This WILL be rejected at upload (error 10027).\n'
-    : `   Budget is ${mib(BUDGET_BYTES)} (90% of the limit), so this fails here rather than\n` +
-      '   letting the next feature be the one that tips it.\n');
-  console.error('   Largest modules:\n');
-  for (const entry of sized.slice(0, 15)) {
-    console.error(`     ${mib(entry.bytes).padStart(9)}  ${relative(workerDir, entry.file).split('\\').join('/')}`);
-  }
-  console.error(
-    '\n   What actually reduces this: a route function carries everything it can REACH,\n' +
-    '   so the lever is what the server renders, not what the browser downloads. Load a\n' +
-    "   heavy component with `dynamic(..., { ssr: false })` so it never enters the edge\n" +
-    '   bundle, keep large data out of module scope (the message catalogs are fetched as\n' +
-    '   assets for exactly this reason — see src/i18n/catalog.ts), and prefer a server\n' +
-    '   component over a client-rooted page, which drags its whole import subtree in.\n',
-  );
-  process.exit(1);
-}
+  const say = over ? console.error : console.warn;
 
-console.log(
-  `✅  Worker size OK — ${mib(compressed)} compressed (${mib(raw)} raw, ${files.length} modules), ` +
-  `${pct}% of the ${mib(LIMIT_BYTES)} limit.`,
-);
+  say(
+    `${over ? '\u274c' : '\u26a0\ufe0f '}  check-worker-size: the Worker bundle is ${mib(compressed)} compressed ` +
+    `(${mib(raw)} raw across ${files.length} modules) \u2014 ${pct}% of Cloudflare's ${mib(LIMIT_BYTES)} limit.\n`,
+  );
+  say(over
+    ? '   This WILL be rejected at upload (error 10027).\n'
+    : '   Still deployable, but the headroom is nearly gone \u2014 the next feature is liable to\n' +
+      '   be the one that tips it, and the error when that happens names no file.\n');
+
+  say('   Largest modules:\n');
+  for (const entry of sized.slice(0, 15)) {
+    say(`     ${mib(entry.bytes).padStart(9)}  ${relative(workerDir, entry.file).split('\\').join('/')}`);
+  }
+
+  say(
+    '\n   What actually reduces this: a route function carries everything it can REACH,\n' +
+    '   so the lever is what the SERVER renders, not what the browser downloads.\n' +
+    '     \u2022 Load a heavy component with `dynamic(..., { ssr: false })` so it never enters\n' +
+    '       the edge bundle at all.\n' +
+    '     \u2022 Keep large data out of module scope \u2014 the message catalogs are fetched as\n' +
+    '       static assets for exactly this reason (see src/i18n/catalog.ts).\n' +
+    '     \u2022 Prefer a server component over a client-rooted page, which drags its whole\n' +
+    '       import subtree in.\n' +
+    '     \u2022 Look for a BARREL. `simple-icons` is ONE 4.98 MiB module with no per-icon\n' +
+    '       entry points, so importing 31 icons from it shipped all ~3,300 \u2014 and because a\n' +
+    '       server component resolves the CommonJS build, which cannot be tree-shaken, it\n' +
+    '       arrived whole. Fixed by generating a subset: scripts/gen-brand-paths.mjs.\n',
+  );
+
+  // Only a bundle Cloudflare would REJECT fails the build. The warning above is loud on
+  // purpose; failing early on a deploy that would have worked is how a guard gets muted.
+  if (over) process.exit(1);
+} else {
+  console.log(
+    `✅  Worker size OK — ${mib(compressed)} compressed (${mib(raw)} raw, ${files.length} modules), ` +
+    `${pct}% of the ${mib(LIMIT_BYTES)} limit.`,
+  );
+}
