@@ -4,7 +4,7 @@ import { DEFAULT_SWIMLANES } from './defaultSwimlanes';
 import { boards, projects, swimlanes } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 
-type TableRef = typeof boards | typeof swimlanes;
+type TableRef = typeof boards | typeof swimlanes | typeof projects;
 
 /**
  * Minimal chainable fake of the Drizzle Db surface used by findOrCreateBoard.
