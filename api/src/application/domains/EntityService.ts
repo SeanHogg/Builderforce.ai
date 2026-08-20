@@ -147,6 +147,17 @@ function coerce(column: PgColumn, value: unknown, field: string): unknown {
       // `numeric` columns arrive as Drizzle strings; so does everything textual.
       if (typeof value === 'object') throw new EntityError(400, `${field} must be a scalar`);
       const s = String(value);
+      /*
+       * A NUMERIC column is a string to Drizzle — it refuses to round-trip a decimal
+       * through a float — but it is still a number to Postgres. Without this check the
+       * `number` branch above never sees it, `'abc'` travels all the way to the driver,
+       * and the caller gets a 500 with a Postgres syntax error instead of the 400 this
+       * layer exists to give them. Checked here rather than by widening the `number`
+       * branch, because the VALUE must stay a string all the way to the wire.
+       */
+      if (column.columnType === 'PgNumeric' && !Number.isFinite(Number(s))) {
+        throw new EntityError(400, `${field} must be a number`);
+      }
       if (column.enumValues && column.enumValues.length > 0 && !column.enumValues.includes(s)) {
         throw new EntityError(400, `${field} must be one of: ${column.enumValues.join(', ')}`);
       }

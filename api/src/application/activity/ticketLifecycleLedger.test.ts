@@ -136,10 +136,30 @@ describe('classifyTicketAutonomy', () => {
   });
 
   it('keeps a recorded reason the live gate does NOT model, even when it answers will_run', () => {
-    // `evaluateTaskAutoRun` never looks at the lane REQUIREMENT gate, so its `will_run`
-    // means "nothing I model blocks this" — not "nothing blocks this". Task 173 is held
-    // in `in_review` awaiting a code-reviewer sign-off; letting a live will_run erase
+    // A live `will_run` means "nothing I MODEL blocks this" — not "nothing blocks this".
+    // The tenant cloud-run allowance is applied at DISPATCH, so the evaluator is blind to
+    // it (it is absent from `EVALUATED_AUTO_RUN_REASONS`); letting a live will_run erase
     // that recorded reason would delete the only evidence of the actual holder.
+    const v = classifyTicketAutonomy({
+      ...autonomousToDone,
+      currentStatus: 'in_review',
+      isTerminal: false,
+      lastSkipReason: 'cloud_run_limit',
+      liveReason: 'will_run',
+    });
+    expect(v.stallReason).toBe('cloud_run_limit');
+    expect(v.stallText).toContain('monthly cloud-run allowance');
+  });
+
+  /**
+   * The counterpart, and the reason the set above is not just "every reason".
+   *
+   * Since 2026-08-19 the evaluator PROBES the lane requirement gate read-only, so
+   * `lane_requirement_gate` is a reason a live verdict genuinely resolves. A recorded
+   * one that the live gate now contradicts is STALE — the sign-off has since landed —
+   * and keeping it would report a holder that has already let go.
+   */
+  it('supersedes a recorded reason the live gate DOES model', () => {
     const v = classifyTicketAutonomy({
       ...autonomousToDone,
       currentStatus: 'in_review',
@@ -147,8 +167,7 @@ describe('classifyTicketAutonomy', () => {
       lastSkipReason: 'lane_requirement_gate',
       liveReason: 'will_run',
     });
-    expect(v.stallReason).toBe('lane_requirement_gate');
-    expect(v.stallText).toContain('role sign-off');
+    expect(v.stallReason).toBe('will_run');
   });
 
   it('lets a live BLOCKING reason override even an unmodelled recorded one', () => {

@@ -33,7 +33,11 @@ function makeDb(opts: {
     insert: () => ({
       values: (v: any) => {
         inserts.push(v);
-        return { returning: async () => [{ id: `deliv-${inserts.length}` }] };
+        // The delivery insert is idempotent on (subscription, event) so a redelivery of
+        // the same event cannot fan out twice — the fake has to offer the same chain, or
+        // it tests a shape the service no longer uses.
+        const result = { returning: async () => [{ id: `deliv-${inserts.length}` }] };
+        return { ...result, onConflictDoNothing: () => result };
       },
     }),
     update: () => ({ set: () => ({ where: async () => undefined }) }),

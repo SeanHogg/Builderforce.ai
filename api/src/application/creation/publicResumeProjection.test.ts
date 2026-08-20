@@ -20,7 +20,11 @@ describe('projectPublicResumeFamily', () => {
       ],
     });
     expect(projected?.revisions).toEqual([
-      { id: 'master', kind: 'original', title: 'Resume', markdown: 'published', sourceRevisionId: null },
+      // `templateId` is how the published page RENDERS — a public viewer needs it, and it
+      // is normalized onto every revision by `resumeFamilyFromValue`. What must not
+      // survive is the tenant-only storage pointer: `sourceFile` is gone entirely and
+      // `sourceRevisionId` is nulled, which is what this case is really guarding.
+      { id: 'master', kind: 'original', title: 'Resume', markdown: 'published', sourceRevisionId: null, templateId: 'standard' },
     ]);
     expect(projected).toMatchObject({ originalRevisionId: 'master', activeRevisionId: 'master', masterRevisionId: 'master', archivedAt: null, watched: false });
   });

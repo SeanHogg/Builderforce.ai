@@ -134,7 +134,38 @@ describe('write refusals', () => {
       () =>
         createRow(noDb, env, TENANT, requireEntity('hiring', 'job_applications'), {
           candidate_ref: 'c1',
-          job_posting_id: 'not-a-number',
+          /*
+           * A DATE column, because this entity no longer has a writable numeric one.
+           *
+           * The case used to probe `job_posting_id`, which migration 0983 deliberately
+           * WIDENED from integer to varchar(36) so an application could finally name the
+           * posting it was an application to — after which 'not-a-number' was a perfectly
+           * legal value and this was asserting a refusal the column no longer owes.
+           * `score` is not the replacement either: drizzle surfaces `numeric` as a STRING
+           * (it refuses to lose precision through a float), so it never reaches the
+           * number branch. `applied_at` exercises the same `coerce` switch on a column
+           * whose type genuinely rejects the value.
+           */
+          applied_at: 'not-a-date',
+        }),
+      400,
+      /must be a date/,
+    );
+  });
+
+  /**
+   * A `numeric` column is a STRING to Drizzle (it will not round-trip a decimal through
+   * a float) so it never reaches the `number` branch of `coerce`. It is still a number to
+   * Postgres, and without an explicit check `'not-a-number'` travelled to the driver and
+   * came back as a 500 with a syntax error — from the one layer whose whole promise is
+   * to refuse before it touches the database.
+   */
+  it('refuses a non-numeric value for a numeric (decimal) column', async () => {
+    await expectReject(
+      () =>
+        createRow(noDb, env, TENANT, requireEntity('hiring', 'job_applications'), {
+          candidate_ref: 'c1',
+          score: 'not-a-number',
         }),
       400,
       /must be a number/,

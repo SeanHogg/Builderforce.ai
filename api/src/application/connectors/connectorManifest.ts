@@ -187,6 +187,20 @@ export interface ConnectorAction {
    * reason to add a transport, not a reason to have no Microsoft Ads.
    */
   soap?: ConnectorSoap;
+  /**
+   * How to read the RESPONSE.
+   *
+   * `json` (default) parses the body as JSON — or as a SOAP envelope when `soap` is set,
+   * or falls back to `{ text }`. `binary` hands back an `ArrayBuffer` untouched, for the
+   * actions whose answer is a file rather than a document: Microsoft Advertising returns
+   * a report as a zipped CSV, and reading that with `res.text()` destroys it silently —
+   * the bytes survive as replacement characters and the failure looks like an empty
+   * report rather than a decoding mistake.
+   *
+   * It changes only how the body is DECODED. The same SSRF guard, the same size cap, the
+   * same audit-log row, and `resultPath` simply does not apply.
+   */
+  responseFormat?: 'json' | 'binary';
   /** Dot path into the JSON response to return instead of the whole body. */
   resultPath?: string;
 }
@@ -370,6 +384,16 @@ function validateAction(raw: unknown, index: number, errors: string[]): Connecto
     errors.push(`${where}.baseUrl: must be a non-empty URL when present`);
   }
 
+  const responseFormat = raw.responseFormat == null ? null : String(raw.responseFormat);
+  if (responseFormat && responseFormat !== 'json' && responseFormat !== 'binary') {
+    errors.push(`${where}.responseFormat: must be "json" or "binary"`);
+  }
+  if (responseFormat === 'binary' && raw.resultPath) {
+    // A dot path into bytes is meaningless, and letting it be declared would leave a
+    // manifest that reads as if it selects something.
+    errors.push(`${where}.resultPath: cannot be used with responseFormat "binary"`);
+  }
+
   const soap = validateSoap(raw.soap, where, errors);
   // A SOAP operation is a POST of a document. Declaring it on a GET would produce a
   // request with an envelope no service ever sees, which fails as an unhelpful 404.
@@ -390,6 +414,7 @@ function validateAction(raw: unknown, index: number, errors: string[]): Connecto
       : {}),
     ...(raw.bodyFormat === 'form' ? { bodyFormat: 'form' as const } : {}),
     ...(actionBaseUrl ? { baseUrl: actionBaseUrl } : {}),
+    ...(responseFormat === 'binary' ? { responseFormat } : {}),
     ...(soap ? { soap } : {}),
     ...(typeof raw.resultPath === 'string' ? { resultPath: raw.resultPath } : {}),
   };

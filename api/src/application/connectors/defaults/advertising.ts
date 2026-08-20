@@ -496,6 +496,8 @@ const microsoftAds: ConnectorManifest = {
       // and declared empty rather than left implying a join that never happens.
       path: '',
       mutates: false,
+      // A zipped CSV, not a document — decoding it as text would destroy it.
+      responseFormat: 'binary',
       params: { report_url: { type: 'string', in: 'url', description: 'The absolute ReportDownloadUrl from PollGenerateReport' } },
     },
   ],

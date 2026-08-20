@@ -501,6 +501,17 @@ export async function executeConnectorAction(args: {
     if (status >= 300 && status < 400) {
       ok = false;
       errorText = `Upstream redirected (${status}); connector calls do not follow redirects`;
+    } else if (action.responseFormat === 'binary') {
+      /*
+       * The body is a FILE. It is size-capped like every other response, but never
+       * decoded — see ConnectorAction.responseFormat. `ok` still comes from the status
+       * code, because there is no envelope here to disagree with it.
+       */
+      const buffer = await res.arrayBuffer();
+      truncated = buffer.byteLength > MAX_RESPONSE_BYTES;
+      data = truncated ? buffer.slice(0, MAX_RESPONSE_BYTES) : buffer;
+      ok = res.ok;
+      if (!ok) errorText = `Upstream returned ${status}`;
     } else {
       const raw = await res.text();
       if (raw.length > MAX_RESPONSE_BYTES) truncated = true;

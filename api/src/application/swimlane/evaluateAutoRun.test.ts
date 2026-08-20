@@ -119,7 +119,10 @@ describe('AUTO_RUN_REASON_TEXT / EVALUATED_AUTO_RUN_REASONS — the reason vocab
   it('claims only the gates the evaluator itself resolves', () => {
     expect(EVALUATED_AUTO_RUN_REASONS.has('tenant_token_limit')).toBe(true);
     expect(EVALUATED_AUTO_RUN_REASONS.has('same_lane_reentry')).toBe(true);
-    expect(EVALUATED_AUTO_RUN_REASONS.has('lane_requirement_gate')).toBe(false);
+    // MODELLED SINCE 2026-08-19: the evaluator now probes the requirement gate read-only,
+    // so a live `will_run` genuinely refutes a recorded `lane_requirement_gate` instead of
+    // being blind to it. `cloud_run_limit` is still applied at dispatch, not here.
+    expect(EVALUATED_AUTO_RUN_REASONS.has('lane_requirement_gate')).toBe(true);
     expect(EVALUATED_AUTO_RUN_REASONS.has('cloud_run_limit')).toBe(false);
   });
 });
@@ -335,9 +338,17 @@ describe('evaluateTaskAutoRun — the lane comes from the ROW, not the caller', 
 
   const noRuns = { listByTask: async () => [] } as unknown as RuntimeService;
 
-  /** Query order inside the evaluator: task row → board → lane → lane staffing → lane requirements. */
+  /**
+   * Query order inside the evaluator: task row → PINNED board → board → lane → lane
+   * staffing → lane requirements.
+   *
+   * The empty slot is `findCanonicalBoard` asking `projects.primary_board_id` first
+   * (migration 1081). These projects have no pointer, so it falls through to the derived
+   * board below — which is the path this suite is about.
+   */
   const rows = (taskStatus: string, gate: 'auto' | 'human') => [
     [{ assignedAgentRef: 'owner-1', source: null, status: taskStatus }],
+    [],
     [{ id: 1, projectId: 7, tenantId: 3, lifecycleManaged: false }],
     [{ id: 10, gate, isTerminal: false }],
     [{ agentRef: 'lane-agent', model: null, requiredCapabilities: null }],
@@ -418,10 +429,12 @@ describe('evaluateTaskAutoRun — a lifecycle-managed board', () => {
 
   const noRuns = { listByTask: async () => [] } as unknown as RuntimeService;
 
-  /** Query order: task row → board → lane → lane staffing. (The managed branch resolves
-   *  its producer through the mocked `resolveManagedProducer`, not through this db.) */
+  /** Query order: task row → PINNED board (empty; see the note above) → board → lane →
+   *  lane staffing. (The managed branch resolves its producer through the mocked
+   *  `resolveManagedProducer`, not through this db.) */
   const rows = (status: string) => [
     [{ assignedAgentRef: 'coordinator-1', source: null, status, taskType: 'task', actionType: null }],
+    [],
     [{ id: 'b1', projectId: 11, tenantId: 1, lifecycleManaged: true }],
     [{ id: 'lane-1', gate: 'auto', isTerminal: false }],
     [{ agentRef: 'lane-agent', model: null, requiredCapabilities: null }],

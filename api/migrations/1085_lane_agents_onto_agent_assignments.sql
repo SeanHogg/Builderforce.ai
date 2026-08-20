@@ -73,7 +73,12 @@ BEGIN
       s.model,
       s.position,
       s.created_at,
-      s.updated_at
+      -- `swimlane_agent_assignments` never had an `updated_at` (0064 created it without
+      -- one and 0084 added only the agent columns), so selecting it made this migration
+      -- fail outright on any database that had not already run it. The row's creation
+      -- time is the honest value for a source that never recorded a change: NOW() would
+      -- claim every folded assignment was edited at migration time.
+      s.created_at
     FROM swimlane_agent_assignments s
     WHERE s.agent_ref IS NOT NULL
     ORDER BY s.swimlane_id, s.position, s.created_at

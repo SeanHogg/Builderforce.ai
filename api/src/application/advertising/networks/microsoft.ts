@@ -26,7 +26,8 @@
 import { unzipSync, strFromU8 } from 'fflate';
 
 import {
-  AdsProviderError, ask, count, fromCents, list, mapObjective, rec, requireField, text, toCents, toDay, toISO, unmapObjective,
+  AdsProviderError, ask, count, fromCents, isRetryableAdStatus, list, mapObjective, rec, requireField,
+  text, toCents, toDay, toISO, unmapObjective,
 } from '../adsNormalize';
 import {
   ageFromBuckets, bucketedAgeKeys, mapTargetingValues, readNativeValues, requireTargetingSupport,
@@ -34,7 +35,7 @@ import {
   type AgeBucket,
 } from '../adTargeting';
 import {
-  type AdCall, type AdCreativeRemote, type AdInsightRow, type AdObjective, type AdSetRemote,
+  type AdCall, type AdCallResult, type AdCreativeRemote, type AdInsightRow, type AdObjective, type AdSetRemote,
   type AdStatus, type AdsProvider,
 } from '../adsProviders';
 
@@ -79,28 +80,23 @@ const DEVICES: Readonly<Record<AdDevice, string | undefined>> = {
 };
 
 /**
- * Placements → the network a campaign runs on.
+ * What Microsoft can place AT THIS LEVEL.
  *
- * Microsoft has search results and its audience network, and nothing else this
- * vocabulary names — no feed, no stories, no video placement to buy — so those three are
- * REFUSED by name rather than folded into "all of it".
+ * `interests` is absent because its audience targeting is an account-scoped audience id
+ * (in-market lists, custom audiences) and the manifest carries no lookup — a phrase would
+ * have nothing behind it. `geo` is absent for the same reason and a sharper one:
+ * `LocationCriterion` takes a numeric geographical-location id, not a country code, and
+ * no code-to-id action is declared here.
+ *
+ * `placements` is absent for a different reason worth stating, because Microsoft LOOKS
+ * like it should support it: search results versus the audience network is not an ad
+ * group criterion on Microsoft at all — it is decided by the CAMPAIGN's type, one level
+ * above the ad set, and it is already carried there by the objective mapping (`Search`
+ * versus `Audience`). Declaring the dimension here would mean accepting a placement on an
+ * ad set that has no field to put it in, which is precisely the accepted-then-dropped
+ * failure `adTargeting` exists to prevent. Choosing the objective chooses the surface.
  */
-const PLACEMENTS: Readonly<Record<AdPlacement, string | undefined>> = {
-  search: 'OwnedAndOperatedAndSyndicatedSearch',
-  audience_network: 'AudienceAdsOnly',
-  feed: undefined,
-  stories: undefined,
-  video: undefined,
-};
-
-/**
- * Interests are absent: Microsoft's audience targeting is an account-scoped audience id
- * (in-market lists, custom audiences), and the manifest carries no lookup — a phrase
- * would have nothing behind it. Geography is absent for the same reason and a sharper
- * one: `LocationCriterion` takes a numeric geographical-location id, not a country code,
- * and the Campaign Management service has no code→id action declared here.
- */
-const TARGETING_DIMENSIONS: readonly AdTargetingDimension[] = ['age', 'gender', 'devices', 'placements'];
+const TARGETING_DIMENSIONS: readonly AdTargetingDimension[] = ['age', 'gender', 'devices'];
 
 /** A SOAP typed array in: `[a, b]` → `{Campaign: [a, b]}`. */
 const wrap = <T>(element: string, values: readonly T[]): Record<string, readonly T[]> => ({ [element]: values });
@@ -253,6 +249,39 @@ function parseReportCsv(csv: string, currency: string): AdInsightRow[] {
     });
   }
   return rows;
+}
+
+/**
+ * Fetch the report archive, following Microsoft's storage redirects BY HAND.
+ *
+ * The connector runtime sets `redirect: 'manual'` on purpose: following a redirect
+ * automatically would take the request to a host that was never SSRF-checked, which is
+ * the whole hole the guard exists to close. Report URLs redirect to blob storage, so the
+ * hops are walked here instead — and because each hop goes back through `call`, every one
+ * of them is guarded, hostname-resolved and audit-logged exactly like the first.
+ *
+ * Bounded, because a redirect loop is otherwise an infinite one.
+ */
+const DOWNLOAD_HOPS = 3;
+
+async function downloadReport(call: AdCall, url: string): Promise<AdCallResult> {
+  let target = url;
+  for (let hop = 0; hop <= DOWNLOAD_HOPS; hop += 1) {
+    const result = await call('download_report', { report_url: target }, { captureHeaders: ['location'] });
+    if (result.ok) return result;
+    const location = result.headers?.location;
+    if (result.status >= 300 && result.status < 400 && location) {
+      // A relative Location is legal; resolved against the hop it came from.
+      target = new URL(location, target).toString();
+      continue;
+    }
+    throw new AdsProviderError(
+      result.error?.slice(0, 400) || `Microsoft Advertising returned ${result.status} for the report download.`,
+      result.status || 502,
+      isRetryableAdStatus(result.status),
+    );
+  }
+  throw new AdsProviderError('The Microsoft Advertising report download redirected too many times.', 502, true);
 }
 
 export const microsoftAdsProvider: AdsProvider = {
@@ -682,7 +711,7 @@ export const microsoftAdsProvider: AdsProvider = {
     // ── 3. DOWNLOAD ────────────────────────────────────────────────────────
     // Through the connector runtime (`in: 'url'`), so the vendor-supplied URL still gets
     // the SSRF guard and the audit row every other call gets.
-    const archive = await ask(call, 'download_report', { report_url: downloadUrl });
+    const archive = await downloadReport(call, downloadUrl);
     const body = archive.data;
     const bytes = body instanceof ArrayBuffer
       ? new Uint8Array(body)
