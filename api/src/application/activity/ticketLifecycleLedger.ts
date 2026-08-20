@@ -47,6 +47,7 @@ import type { Env } from '../../env';
 import {
   activityLog, executions, taskStatusTransitions, tasks, toolAuditEvents,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { ExecutionStatus } from '../../domain/shared/types';
 import { liveExecution } from '../rehearsal/executionMode';
@@ -660,7 +661,7 @@ export async function buildTicketLifecycle(
       completedAt: tasks.completedAt,
     })
     .from(tasks)
-    .where(eq(tasks.id, args.taskId))
+    .where(scopedToTenant(tasks, args.tenantId, eq(tasks.id, args.taskId)))
     .limit(1);
   if (!task) return null;
 
@@ -691,7 +692,7 @@ export async function buildTicketLifecycle(
         occurredAt: taskStatusTransitions.occurredAt,
       })
       .from(taskStatusTransitions)
-      .where(eq(taskStatusTransitions.taskId, args.taskId)),
+      .where(scopedToTenant(taskStatusTransitions, args.tenantId, eq(taskStatusTransitions.taskId, args.taskId))),
     db
       .select({
         id: executions.id,
@@ -705,7 +706,7 @@ export async function buildTicketLifecycle(
         completedAt: executions.completedAt,
       })
       .from(executions)
-      .where(and(eq(executions.taskId, args.taskId), liveExecution())),
+      .where(scopedToTenant(executions, args.tenantId, eq(executions.taskId, args.taskId), liveExecution())),
     db
       .select({
         toolName: toolAuditEvents.toolName,
@@ -1046,7 +1047,7 @@ export async function summarizeAutonomy(
         n: sql<number>`count(*)::int`,
       })
       .from(taskStatusTransitions)
-      .where(inArray(taskStatusTransitions.taskId, ids))
+      .where(scopedToTenant(taskStatusTransitions, args.tenantId, inArray(taskStatusTransitions.taskId, ids)))
       .groupBy(taskStatusTransitions.taskId, taskStatusTransitions.actorKind, taskStatusTransitions.isBackward),
     db
       .select({
@@ -1055,7 +1056,7 @@ export async function summarizeAutonomy(
         n: sql<number>`count(*)::int`,
       })
       .from(executions)
-      .where(and(inArray(executions.taskId, ids), liveExecution()))
+      .where(scopedToTenant(executions, args.tenantId, inArray(executions.taskId, ids), liveExecution()))
       .groupBy(executions.taskId, executions.status),
     // Latest auto-run refusal per ticket → the gate holding it.
     db.execute(sql`

@@ -38,6 +38,7 @@ import {
   projects,
   tasks,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   computePortfolioRollup,
   loadPmoTree,
@@ -259,7 +260,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
       if (!Number.isFinite(id)) return c.json({ error: 'invalid task id' }, 400);
       const rows = await db.update(tasks)
         .set({ costClass, costClassSource: src, costClassVerified: src === 'manual', updatedAt: new Date() })
-        .where(and(eq(tasks.id, id), eq(tasks.segmentId, segmentId)))
+        .where(scopedToTenant(tasks, tenantId, eq(tasks.id, id), eq(tasks.segmentId, segmentId)))
         .returning({ id: tasks.id });
       if (!rows[0]) return c.json({ error: 'not found' }, 404);
     } else {
@@ -282,7 +283,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
     const apply = body.apply !== false;
     const taskRows = await db
       .select({ id: tasks.id, title: tasks.title, description: tasks.description, taskType: tasks.taskType, actionType: tasks.actionType, source: tasks.source, allocationCategory: tasks.allocationCategory, costClass: tasks.costClass, costClassSource: tasks.costClassSource, costClassVerified: tasks.costClassVerified })
-      .from(tasks).where(and(eq(tasks.segmentId, segmentId), notSystemTask));
+      .from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.segmentId, segmentId), notSystemTask));
     const targets = taskRows.filter((t) => !t.costClassVerified && t.costClassSource !== 'manual');
     const suggestions = targets.map((t) => ({ id: t.id, title: t.title, suggestion: classifyCostClass(t) }));
     if (apply && suggestions.length) {
@@ -292,7 +293,7 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
         if (ids.length) {
           await db.update(tasks)
             .set({ costClass: cls, costClassSource: 'agent', updatedAt: new Date() })
-            .where(and(inArray(tasks.id, ids), eq(tasks.segmentId, segmentId)));
+            .where(scopedToTenant(tasks, tenantId, inArray(tasks.id, ids), eq(tasks.segmentId, segmentId)));
         }
       }
       await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId));

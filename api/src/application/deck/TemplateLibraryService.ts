@@ -11,6 +11,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { deckTemplates } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { unzipSync, strFromU8 } from 'fflate';
 import type { DeckTemplateRecord, TokenManifest, DeckArchetype } from './types';
 
@@ -135,7 +136,7 @@ export async function createTemplateFromUpload(
     httpMetadata: { contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
     customMetadata: { tenantId: String(tenantId), templateId: rec.id },
   });
-  await db.update(deckTemplates).set({ r2Key: destKey }).where(eq(deckTemplates.id, rec.id));
+  await db.update(deckTemplates).set({ r2Key: destKey }).where(scopedToTenant(deckTemplates, tenantId, eq(deckTemplates.id, rec.id)));
 
   await invalidateCached(env, cacheKey(tenantId));
   return { ...rec, r2Key: destKey };

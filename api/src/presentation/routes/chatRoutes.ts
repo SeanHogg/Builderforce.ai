@@ -14,6 +14,7 @@ import {
   chatSessions,
   chatMessages,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -176,7 +177,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
         createdAt: chatMessages.createdAt,
       })
       .from(chatMessages)
-      .where(eq(chatMessages.sessionId, sessionId))
+      .where(scopedToTenant(chatMessages, tenantId, eq(chatMessages.sessionId, sessionId)))
       .orderBy(chatMessages.seq)
       .limit(limit);
 
@@ -218,7 +219,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
         createdAt: chatMessages.createdAt,
       })
       .from(chatMessages)
-      .where(eq(chatMessages.sessionId, session.id))
+      .where(scopedToTenant(chatMessages, tenantId, eq(chatMessages.sessionId, session.id)))
       .orderBy(chatMessages.seq)
       .limit(limit);
 

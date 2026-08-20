@@ -15,6 +15,7 @@
  */
 import { and, eq } from 'drizzle-orm';
 import { boards, swimlanes, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 
 /** Minimal shape of a surviving lane needed to pick a reassignment target. */
@@ -80,7 +81,7 @@ export async function reassignTasksFromLane(
   const orphaned = await db
     .update(tasks)
     .set({ status: target, updatedAt: new Date() })
-    .where(and(eq(tasks.projectId, board.projectId), eq(tasks.status, args.deletedLaneKey)))
+    .where(scopedToTenant(tasks, args.tenantId, eq(tasks.projectId, board.projectId), eq(tasks.status, args.deletedLaneKey)))
     .returning({ id: tasks.id });
 
   return { movedTo: target, movedCount: orphaned.length };

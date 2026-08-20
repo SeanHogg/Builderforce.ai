@@ -29,6 +29,7 @@ import {
   promptLibraryVersions,
   promptLibraryStars,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { recordCatalogAdoption } from '../../application/insights/catalogAnalytics';
 import type { Env, HonoEnv } from '../../env';
@@ -363,7 +364,7 @@ export function createPromptLibraryRoutes(db: Db): Hono<HonoEnv> {
     const [updated] = await db
       .update(promptLibraryEntries)
       .set({ currentVersion: nextVersion, updatedAt: new Date() })
-      .where(eq(promptLibraryEntries.id, id))
+      .where(scopedToTenant(promptLibraryEntries, tenantId, eq(promptLibraryEntries.id, id)))
       .returning();
     if (!updated) return c.json({ error: 'Version bump failed' }, 500);
 

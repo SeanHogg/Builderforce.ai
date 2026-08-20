@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { authMiddleware, isManager } from '../middleware/authMiddleware';
 import { projects, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { JobRoleService } from '../../application/kanban/jobRoleService';
@@ -187,7 +188,7 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     const projectId = Number(c.req.param('projectId'));
     const { templateId } = await c.req.json<{ templateId: string }>();
     if (!templateId) return c.json({ error: 'templateId is required' }, 400);
-    const [project] = await db.select({ id: projects.id, name: projects.name }).from(projects).where(eq(projects.id, projectId)).limit(1);
+    const [project] = await db.select({ id: projects.id, name: projects.name }).from(projects).where(scopedToTenant(projects, tenantId, eq(projects.id, projectId))).limit(1);
     if (!project) return c.json({ error: 'project not found' }, 404);
     try {
       const result = await templateService.applyToProject(env(c), tenantId, projectId, templateId, project.name);
@@ -243,7 +244,7 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
       const memberKind = body.memberKind === 'agent' || body.memberKind === 'human' ? body.memberKind : 'human';
       const userId = (c.get('userId') as string) || null;
       const memberRef = body.memberRef?.trim() || userId;
-      const [taskScope] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      const [taskScope] = await db.select({ projectId: tasks.projectId }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId))).limit(1);
       if (!taskScope) return c.json({ error: 'task not found' }, 404);
 
       // RBAC (default-deny, AC-6): only a member ROLE-CAPABLE of roleKey may sign off as
@@ -326,7 +327,7 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
       roleKey: body.roleKey, responsibility: body.responsibility, stageKey: body.stageKey, note: body.note,
     });
     if (participant) {
-      const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId))).limit(1);
       await recordActivity(env(c), db, {
         tenantId, projectId: proj?.projectId ?? null, actor: await resolveHumanActor(env(c), db, tenantId, (c.get('userId') as string) ?? ''),
         verb: 'ticket.resource.assessed', targetType: 'task', targetId: String(taskId), targetLabel: `#${taskId}`,
@@ -350,7 +351,7 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
         assigneeRef: body.assigneeRef ?? '',
         assigneeKind: body.assigneeKind as 'agent' | 'user',
       });
-      const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId))).limit(1);
       await recordActivity(env(c), db, {
         tenantId, projectId: proj?.projectId ?? null,
         actor: await resolveHumanActor(env(c), db, tenantId, (c.get('userId') as string) ?? ''),
@@ -383,7 +384,7 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     if (!createChild) return c.json({ error: 'child-task creation unavailable' }, 503);
     const tenantId = c.get('tenantId') as number;
     const taskId = Number(c.req.param('taskId'));
-    const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId))).limit(1);
     if (!proj) return c.json({ error: 'task not found' }, 404);
     const created = await participantsService.materializeChildTasks(env(c), tenantId, taskId, (input) =>
       createChild({ projectId: proj.projectId, tenantId, title: input.title, parentTaskId: input.parentTaskId, assignedAgentRef: input.assignedAgentRef, assignedUserId: input.assignedUserId }));

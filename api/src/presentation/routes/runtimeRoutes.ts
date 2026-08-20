@@ -44,6 +44,7 @@ import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, tenants, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { approvals, chatTicketLinks, projectManagerConfigs } from '../../infrastructure/database/schema';
 import { agentPurchases, ideAgents, llmUsageLog, taskFileChanges } from '../../infrastructure/database/schema';
 import { readDispatchFileChanges } from '../../application/task/taskFileChangeFeed';
@@ -1415,7 +1416,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       const hostRows = await db
         .select({ id: agentHosts.id, name: agentHosts.name })
         .from(agentHosts)
-        .where(inArray(agentHosts.id, agentHostIds));
+        .where(scopedToTenant(agentHosts, tenantId, inArray(agentHosts.id, agentHostIds)));
       hostRows.forEach((agentHost) => agentHostNames.set(agentHost.id, agentHost.name));
     }
 

@@ -38,6 +38,7 @@ import {
   tasks, boards, swimlanes, swimlaneAgentAssignments, pullRequests,
   projectManagerConfigs, managerActions, managerStallWatch, projects, featureScores, taskFileChanges,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus, TaskPriority, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
 import { notSystemTask } from '../task/taskScope';
 import { nextProjectKeySeqBase } from '../task/taskKeys';
@@ -491,14 +492,9 @@ export async function reapStaleManagerRunTasks(
       description: 'Closed before a newer backlog management pass started; the prior background run did not report completion.',
       lastWorkedAt: now,
       updatedAt: now,
-    }).where(and(
-      eq(tasks.projectId, args.projectId),
-      eq(tasks.source, 'manager'),
-      inArray(tasks.status, OPEN_RUN_TASK_STATUSES),
-      ...(args.olderThanMs > 0
+    }).where(and(eq(tasks.projectId, args.projectId), eq(tasks.source, 'manager'), inArray(tasks.status, OPEN_RUN_TASK_STATUSES), ...(args.olderThanMs > 0
         ? [sql`${tasks.updatedAt} < ${new Date(now.getTime() - args.olderThanMs)}`]
-        : []),
-    )).returning({ id: tasks.id });
+        : []))).returning({ id: tasks.id });
     return rows.length;
   } catch {
     return 0; // reconciling a visibility card must never fail a pass
@@ -863,11 +859,8 @@ export function managedTasksQuery(db: Db, projectId: number) {
       managerRank: tasks.managerRank,
     })
     .from(tasks)
-    .where(and(
-      eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES),
-      // The manager never grooms/ranks/audits its OWN run tasks (source = 'manager').
-      notSystemTask,
-    ))
+    .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES), // The manager never grooms/ranks/audits its OWN run tasks (source = 'manager').
+      notSystemTask))
     .orderBy(
       sql`case when exists (
         select 1 from ${managerStallWatch}
@@ -933,13 +926,9 @@ async function laneTicketCountsByStatus(db: Db, projectId: number): Promise<Map<
   const rows = await db
     .select({ status: tasks.status, n: sql<number>`count(*)::int` })
     .from(tasks)
-    .where(and(
-      eq(tasks.projectId, projectId),
-      eq(tasks.archived, false),
-      // The same set `loadManagedTasks` windows over, so the count answers the same
+    .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), // The same set `loadManagedTasks` windows over, so the count answers the same
       // question the window samples rather than a slightly different one.
-      inArray(tasks.status, NON_TERMINAL_TASK_STATUSES),
-    ))
+      inArray(tasks.status, NON_TERMINAL_TASK_STATUSES)))
     .groupBy(tasks.status)
     .catch((error) => {
       reportCaughtError(error, { source: 'application/manager/ManagerService.ts', operation: 'laneTicketCountsByStatus' });
@@ -1192,7 +1181,7 @@ export async function runManagerForProject(
         writeOps.push(
           db.update(tasks)
             .set({ businessValue: value.score, businessValueRationale: value.rationale, businessValueSource: value.source, updatedAt: stampedAt })
-            .where(eq(tasks.id, t.id)),
+            .where(scopedToTenant(tasks, tenantId, eq(tasks.id, t.id))),
         );
         writeOps.push(
           db.insert(managerActions).values({
@@ -1239,7 +1228,7 @@ export async function runManagerForProject(
     const previousRank = new Map(managed.map((t) => [t.id, t.managerRank]));
     const moved = ranked.filter((r) => previousRank.get(r.taskId) !== r.rank);
     if (moved.length) {
-      await flushBatched(db, moved.map((r) => db.update(tasks).set({ managerRank: r.rank }).where(eq(tasks.id, r.taskId))));
+      await flushBatched(db, moved.map((r) => db.update(tasks).set({ managerRank: r.rank }).where(scopedToTenant(tasks, tenantId, eq(tasks.id, r.taskId)))));
     }
     summary.ranked = moved.length;
     if (moved.length) {
@@ -1300,7 +1289,7 @@ export async function runManagerForProject(
           writes.push(
             db.update(tasks)
               .set({ startDate: window.startDate, dueDate: window.endDate, updatedAt: stampedAt })
-              .where(eq(tasks.id, t.id)),
+              .where(scopedToTenant(tasks, tenantId, eq(tasks.id, t.id))),
           );
           // Reflect locally so later steps in THIS pass see the fresh window.
           t.startDate = window.startDate;
@@ -1429,7 +1418,7 @@ export async function runManagerForProject(
             assignedAgentRef: tasks.assignedAgentRef,
             assignedAgentHostId: tasks.assignedAgentHostId,
             completedAt: tasks.completedAt,
-          }).from(tasks).where(and(eq(tasks.id, taskId), eq(tasks.projectId, projectId))).limit(1);
+          }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId), eq(tasks.projectId, projectId))).limit(1);
           if (!current) return false;
 
           // The implementation ticket reaching Done is not proof that production is
@@ -1444,7 +1433,7 @@ export async function runManagerForProject(
             status = TaskStatus.TODO;
             await db.update(tasks).set({
               status, completedAt: null, updatedAt: new Date(),
-            }).where(eq(tasks.id, taskId));
+            }).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId)));
           }
 
           if (!current.assignedAgentRef && current.assignedAgentHostId == null) {
@@ -1506,10 +1495,8 @@ export async function runManagerForProject(
   const runnable = await db
     .select({ id: tasks.id, status: tasks.status, managerRank: tasks.managerRank })
     .from(tasks)
-    .where(and(
-      eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, RUNNABLE),
-      or(sql`${tasks.assignedAgentRef} is not null`, sql`${tasks.assignedAgentHostId} is not null`),
-    ))
+    .where(scopedToTenant(tasks, tenantId, eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, RUNNABLE),
+      or(sql`${tasks.assignedAgentRef} is not null`, sql`${tasks.assignedAgentHostId} is not null`)))
     .orderBy(sql`${tasks.managerRank} asc nulls last`, asc(tasks.updatedAt))
     .limit(MAX_DISPATCHES_PER_RUN);
   for (const t of runnable) {
@@ -2003,7 +1990,7 @@ async function coordinatePullRequests(
         if (readiness.action === 'return_to_implementation' || readiness.action === 'return_build_failed') {
           await db.update(tasks)
             .set({ status: TaskStatus.IN_PROGRESS, completedAt: null, updatedAt: new Date() })
-            .where(and(eq(tasks.id, t.id), eq(tasks.status, TaskStatus.IN_REVIEW)));
+            .where(scopedToTenant(tasks, tenantId, eq(tasks.id, t.id), eq(tasks.status, TaskStatus.IN_REVIEW)));
           // The RETURN is a state change and always happens; the restart is billable, so
           // it reserves first. A ticket returned but not restarted is picked up by the
           // executor's next tick — strictly better than silently outspending the ceiling.
@@ -2333,7 +2320,7 @@ async function coordinatePullRequests(
           ? task.description
           : `${task.description ?? ''}${recoveryNote}`.trim(),
         updatedAt: new Date(),
-      }).where(eq(tasks.id, task.id));
+      }).where(scopedToTenant(tasks, tenantId, eq(tasks.id, task.id)));
       recoveryStarted = (await runs.spend(
         () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
           tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,

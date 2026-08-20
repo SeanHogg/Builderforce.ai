@@ -26,6 +26,7 @@ import {
   taskStatusTransitions,
   users,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { clampScore as clamp } from '../../domain/shared/numbers';
 import { notSystemTask } from '../task/taskScope';
 
@@ -285,7 +286,7 @@ export async function computeMemberMetrics(db: Db, tenantId: number, days: numbe
     const moves = await db
       .select({ taskId: taskStatusTransitions.taskId, occurredAt: taskStatusTransitions.occurredAt })
       .from(taskStatusTransitions)
-      .where(and(inArray(taskStatusTransitions.taskId, taskIds), isNotNull(taskStatusTransitions.fromStatus)));
+      .where(scopedToTenant(taskStatusTransitions, tenantId, inArray(taskStatusTransitions.taskId, taskIds), isNotNull(taskStatusTransitions.fromStatus)));
     for (const m of moves) {
       const prev = firstMove.get(m.taskId);
       if (!prev || m.occurredAt.getTime() < prev.getTime()) firstMove.set(m.taskId, m.occurredAt);

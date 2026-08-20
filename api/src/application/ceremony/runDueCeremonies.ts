@@ -58,6 +58,7 @@ import {
   boards,
   projects,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { nextCronTime } from '../../domain/workflowSchedule';
 import {
   computeMemberMetrics,
@@ -280,7 +281,7 @@ async function openScheduledCeremony(
     const [project] = await db
       .select({ name: projects.name })
       .from(projects)
-      .where(eq(projects.id, s.projectId))
+      .where(scopedToTenant(projects, s.tenantId, eq(projects.id, s.projectId)))
       .limit(1);
     await notifyCeremonyOpened(env, db, {
       tenantId: s.tenantId,
@@ -351,7 +352,7 @@ export async function runDueCeremonies(env: Env): Promise<CeremonySweepResult> {
           nextRunAt: computeNextCeremonyRun(s.cron, s.timezone, now),
           updatedAt: now,
         })
-        .where(eq(ceremonySchedules.id, s.id));
+        .where(scopedToTenant(ceremonySchedules, s.tenantId, eq(ceremonySchedules.id, s.id)));
     } catch (err) {
       reportCaughtError(err, { source: "application/ceremony/runDueCeremonies.ts", operation: "runDueCeremonies", context: { logMessage: `[cron:ceremonies] watermark update failed ${s.id}`, details: err } });
     }

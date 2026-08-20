@@ -23,6 +23,7 @@ import {
   agentHosts,
   marketplaceSkills,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -116,7 +117,7 @@ export function createSkillAssignmentRoutes(db: Db): Hono<HonoEnv> {
       })
       .from(agentHostSkillAssignments)
       .leftJoin(marketplaceSkills, eq(agentHostSkillAssignments.skillSlug, marketplaceSkills.slug))
-      .where(eq(agentHostSkillAssignments.agentHostId, agentHostId));
+      .where(scopedToTenant(agentHostSkillAssignments, tenantId, eq(agentHostSkillAssignments.agentHostId, agentHostId)));
     return c.json({ agentHostId, assignments: rows });
   });
 

@@ -13,6 +13,7 @@ import {
   projectAgents,
   tasks,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   ArtifactType,
   AssignmentScope,
@@ -72,7 +73,7 @@ export async function resolveArtifacts(
     const [taskRow] = await db
       .select({ projectId: tasks.projectId })
       .from(tasks)
-      .where(eq(tasks.id, ctx.taskId))
+      .where(scopedToTenant(tasks, ctx.tenantId, eq(tasks.id, ctx.taskId)))
       .limit(1);
     projectId = taskRow?.projectId;
   }

@@ -13,6 +13,7 @@
  */
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { escalationPolicies, escalationLevels, prodIncidents, incidentEvents } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { OnCallService } from './OnCallService';
 import { notifyIncident, type IncidentSummary } from './incidentNotifier';
 import type { Db } from '../../infrastructure/database/connection';
@@ -41,7 +42,7 @@ export class EscalationService {
     const out = [];
     for (const p of policies) {
       const levels = await this.db.select().from(escalationLevels)
-        .where(eq(escalationLevels.policyId, p.id)).orderBy(asc(escalationLevels.level));
+        .where(scopedToTenant(escalationLevels, tenantId, eq(escalationLevels.policyId, p.id))).orderBy(asc(escalationLevels.level));
       out.push({ ...p, levels });
     }
     return out;
@@ -55,7 +56,7 @@ export class EscalationService {
 
   async addLevel(tenantId: number, policyId: string, input: { level?: number; afterMinutes: number; targetKind?: string; targetRef?: string | null; notifyTeams?: boolean; notifySlack?: boolean; notifyEmail?: boolean }) {
     if (!(await this.ownedPolicy(tenantId, policyId))) throw new Error('Policy not found in workspace');
-    const existing = await this.db.select({ level: escalationLevels.level }).from(escalationLevels).where(eq(escalationLevels.policyId, policyId));
+    const existing = await this.db.select({ level: escalationLevels.level }).from(escalationLevels).where(scopedToTenant(escalationLevels, tenantId, eq(escalationLevels.policyId, policyId)));
     const [row] = await this.db.insert(escalationLevels).values({
       tenantId, policyId,
       level: input.level ?? existing.length + 1,
@@ -96,7 +97,7 @@ export class EscalationService {
     }
     if (!policyId) return null;
     const levels = await this.db.select().from(escalationLevels)
-      .where(eq(escalationLevels.policyId, policyId)).orderBy(asc(escalationLevels.level));
+      .where(scopedToTenant(escalationLevels, tenantId, eq(escalationLevels.policyId, policyId))).orderBy(asc(escalationLevels.level));
     return { policyId, levels };
   }
 
@@ -149,7 +150,7 @@ export class EscalationService {
       escalationPolicyId: incident.escalationPolicyId ?? undefined,
       lastEscalatedAt: new Date(),
       updatedAt: new Date(),
-    }).where(eq(prodIncidents.id, incident.id));
+    }).where(scopedToTenant(prodIncidents, tenantId, eq(prodIncidents.id, incident.id)));
     await this.db.insert(incidentEvents).values({
       tenantId, incidentId: incident.id, kind: 'escalated', actorRef: 'system', level: level.level,
       message: `Escalated to L${level.level} (${level.targetKind})`,
@@ -173,7 +174,7 @@ export class EscalationService {
     } else {
       // No policy — hit the global channels + managers so the page is never dropped.
       await notifyIncident(env, this.db, { tenantId, incident: summary, memberRefs: [], level: 0, note: 'Initial page (no escalation policy configured)' });
-      await this.db.update(prodIncidents).set({ escalationLevel: 1, lastEscalatedAt: new Date(), updatedAt: new Date() }).where(eq(prodIncidents.id, incidentId));
+      await this.db.update(prodIncidents).set({ escalationLevel: 1, lastEscalatedAt: new Date(), updatedAt: new Date() }).where(scopedToTenant(prodIncidents, tenantId, eq(prodIncidents.id, incidentId)));
     }
   }
 

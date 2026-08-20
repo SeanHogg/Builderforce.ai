@@ -215,7 +215,7 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
     patch.redoCount = sql`${tasks.redoCount} + 1`;
   }
 
-  await db.update(tasks).set(patch).where(and(eq(tasks.id, taskId), eq(tasks.projectId, projectId)));
+  await db.update(tasks).set(patch).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId), eq(tasks.projectId, projectId)));
 
   // Invalidate the workforce scorecard / DORA caches for this tenant.
   await bumpWorkforceMetricsVersion(env, tenantId).catch((error) => {
@@ -386,7 +386,7 @@ export async function resolveCompletionActor(
  * approximation because a failed run leaves the lane unchanged.
  */
 export async function stampLastWorked(env: Env, db: Db, tenantId: number, taskId: number): Promise<void> {
-  await db.update(tasks).set({ lastWorkedAt: new Date() }).where(eq(tasks.id, taskId));
+  await db.update(tasks).set({ lastWorkedAt: new Date() }).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId)));
   await bumpWorkforceMetricsVersion(env, tenantId).catch((error) => {
     reportCaughtError(error, { source: "application/task/taskLifecycle.ts", operation: "stampLastWorked" });
   });

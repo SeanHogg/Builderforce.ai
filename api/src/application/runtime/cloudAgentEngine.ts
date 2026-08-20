@@ -2802,7 +2802,7 @@ export async function finalizeCloudRun(
   // (which finalizes via openTaskPullRequest, taking the same claim). Lost claim =>
   // another path is opening the PR; skip the create here and treat it as "PR exists".
   const claimedInlinePr = repoCtx && writtenPaths.size > 0 && !cancelled
-    ? await claimTaskPrOpen(db, taskRow.id).catch(() => false)
+    ? await claimTaskPrOpen(db, tenantId, taskRow.id).catch(() => false)
     : false;
   if (repoCtx && writtenPaths.size > 0 && !cancelled && claimedInlinePr) {
     const pr = await createPullRequest({
@@ -2815,7 +2815,7 @@ export async function finalizeCloudRun(
     // Release the claim on a failed create so a later finalize can re-attempt.
     if (!pr.ok) {
       noPrReason = pr.reason;
-      await releaseTaskPrClaim(db, taskRow.id).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] failed PR-claim release failed', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
+      await releaseTaskPrClaim(db, tenantId, taskRow.id).catch((error) => reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "finalizeCloudRun", context: { logMessage: '[cloud-finalize] failed PR-claim release failed', details: { tenantId, executionId, taskId: taskRow.id, error } } }));
     }
 
     const autoMerge = cloudAutoMergeEnabled(env);

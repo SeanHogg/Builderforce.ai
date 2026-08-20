@@ -25,6 +25,7 @@ import {
   tenantMembers,
   users,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TenantRole } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -388,7 +389,7 @@ export function createAnalyticsRoutes(db: Db): Hono<HonoEnv> {
         await db
           .update(contributors)
           .set({ displayName: agentHost.name, isActive: agentHost.status === 'active', updatedAt: new Date() })
-          .where(eq(contributors.id, existing.id));
+          .where(scopedToTenant(contributors, tenantId, eq(contributors.id, existing.id)));
         updated++;
       } else {
         // onConflictDoUpdate against the partial unique index (migration 0124)

@@ -21,6 +21,7 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
 import { pulseSurveys, pulseResponses } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { computePulseAggregate, computePulseTrend } from '../../application/insights/pulseSurvey';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -50,7 +51,7 @@ export function createPulseRoutes(db: Db): Hono<HonoEnv> {
       const existing = await db
         .select({ id: pulseResponses.id })
         .from(pulseResponses)
-        .where(and(eq(pulseResponses.surveyId, survey.id), eq(pulseResponses.userId, userId)))
+        .where(scopedToTenant(pulseResponses, tenantId, eq(pulseResponses.surveyId, survey.id), eq(pulseResponses.userId, userId)))
         .limit(1);
       hasResponded = existing.length > 0;
     }

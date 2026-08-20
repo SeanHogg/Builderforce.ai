@@ -373,7 +373,7 @@ export async function raiseSystemicFindings(
         if (repair && existing.createdTaskId != null) {
           await db.update(tasks)
             .set({ description: buildFindingDirective(repair, projectId), updatedAt: now })
-            .where(eq(tasks.id, existing.createdTaskId))
+            .where(scopedToTenant(tasks, tenantId, eq(tasks.id, existing.createdTaskId)))
             .catch(() => undefined);
         }
         let recoveryTaskId = existing.createdTaskId;

@@ -26,6 +26,7 @@ import {
   ideAgents,
   projectAgents,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
@@ -590,7 +591,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const [purchase] = await db
       .select({ one: sql<number>`1` })
       .from(agentPurchases)
-      .where(and(eq(agentPurchases.agentId, id), isNull(agentPurchases.unhiredAt)))
+      .where(scopedToTenant(agentPurchases, tenantId, eq(agentPurchases.agentId, id), isNull(agentPurchases.unhiredAt)))
       .limit(1);
     if (purchase) {
       return c.json({ error: 'This agent is currently hired by another workspace and cannot be deleted.' }, 409);
@@ -760,11 +761,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     const [row] = await db
       .select(agentRowColumns)
       .from(ideAgents)
-      .where(and(
-        eq(ideAgents.id, c.req.param('id')),
-        eq(ideAgents.status, 'active'),
-        eq(ideAgents.published, true),
-      ));
+      .where(and(eq(ideAgents.id, c.req.param('id')), eq(ideAgents.status, 'active'), eq(ideAgents.published, true)));
     if (!row) return c.json({ error: 'Agent not found' }, 404);
     return c.json(mapPublicAgentRow(row));
   });

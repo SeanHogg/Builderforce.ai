@@ -28,6 +28,7 @@ import {
   brainChats,
   projects,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TicketParticipantsService, type AccountabilityReport } from '../kanban/ticketParticipants';
 import { TaskService } from '../task/TaskService';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
@@ -286,7 +287,7 @@ export class IncidentService {
         incidentId,
         updatedAt: new Date(),
       }).where(eq(tasksTable.id, boardTaskId));
-      await this.db.update(prodIncidents).set({ boardTaskId, updatedAt: new Date() }).where(eq(prodIncidents.id, incidentId));
+      await this.db.update(prodIncidents).set({ boardTaskId, updatedAt: new Date() }).where(scopedToTenant(prodIncidents, tenantId, eq(prodIncidents.id, incidentId)));
     }
 
     await this.addEvent(tenantId, incidentId, { kind: 'created', actorRef: input.actorRef ?? source, message: `Incident opened: ${title}` });
@@ -329,7 +330,7 @@ export class IncidentService {
       visibility: 'shared',
     }).returning({ id: brainChats.id });
     const chatId = chat!.id;
-    await this.db.update(prodIncidents).set({ warRoomChatId: chatId, updatedAt: new Date() }).where(eq(prodIncidents.id, incidentId));
+    await this.db.update(prodIncidents).set({ warRoomChatId: chatId, updatedAt: new Date() }).where(scopedToTenant(prodIncidents, tenantId, eq(prodIncidents.id, incidentId)));
     await this.addEvent(tenantId, incidentId, { kind: 'note', actorRef: 'system', message: 'On-call war room opened' });
     return chatId;
   }
@@ -494,7 +495,7 @@ export class IncidentService {
       postmortemUrl: url,
       rootCause: rootCause ?? undefined,
       updatedAt: new Date(),
-    }).where(eq(prodIncidents.id, incidentId));
+    }).where(scopedToTenant(prodIncidents, tenantId, eq(prodIncidents.id, incidentId)));
 
     await this.addEvent(tenantId, incidentId, {
       kind: 'note', actorRef: input.actorRef ?? 'agent',
@@ -581,7 +582,7 @@ export class IncidentService {
       .where(and(eq(prodIncidents.id, incidentId), eq(prodIncidents.tenantId, tenantId))).limit(1);
     if (!incident) return null;
     const timeline = await this.db.select().from(incidentEvents)
-      .where(eq(incidentEvents.incidentId, incidentId))
+      .where(scopedToTenant(incidentEvents, tenantId, eq(incidentEvents.incidentId, incidentId)))
       .orderBy(desc(incidentEvents.createdAt))
       .limit(200);
     // The war room is a PLACE, not only a feed: `warRoomChatId` is the persisted

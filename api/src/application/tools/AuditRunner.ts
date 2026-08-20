@@ -24,6 +24,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { TaskType, TaskStatus } from '../../domain/shared/types';
 import { projectRepositories, socControls, objectives, keyResults, projects, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
 import { listRepoFiles, readRepoFile } from '../repos/readRepoContents';
 import { notify } from '../notifications/notify';
@@ -265,7 +266,7 @@ export class AuditRunner {
       .where(and(eq(objectives.tenantId, tenantId), eq(objectives.projectId, projectId)));
     const objIds = objRows.map((o) => o.id);
     const krRows = objIds.length
-      ? await this.db.select({ id: keyResults.id }).from(keyResults).where(inArray(keyResults.objectiveId, objIds))
+      ? await this.db.select({ id: keyResults.id }).from(keyResults).where(scopedToTenant(keyResults, tenantId, inArray(keyResults.objectiveId, objIds)))
       : [];
     return {
       objectives: objRows.length,
@@ -373,11 +374,7 @@ export class AuditRunner {
       const rows = await this.db
         .select({ title: tasks.title })
         .from(tasks)
-        .where(and(
-          eq(tasks.projectId, projectId),
-          eq(tasks.archived, false),
-          ne(tasks.status, TaskStatus.DONE),
-        ));
+        .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), ne(tasks.status, TaskStatus.DONE)));
       return new Set(rows.map((r) => r.title.trim().toLowerCase()));
     } catch {
       return new Set();

@@ -3,6 +3,7 @@ import { IAgentHostRepository } from '../../domain/agentHost/IAgentHostRepositor
 import { AgentHost, AgentHostStatus } from '../../domain/agentHost/AgentHost';
 import { asAgentHostId, asTenantId, AgentHostId, TenantId } from '../../domain/shared/types';
 import { agentHosts } from '../database/schema';
+import { scopedToTenant } from '../database/tenantScope';
 import type { Db } from '../database/connection';
 import type { Env } from '../../env';
 import { verifySecret } from '../auth/HashService';
@@ -24,7 +25,7 @@ export class AgentHostRepository implements IAgentHostRepository {
     const [row] = await (this.db
       .select()
       .from(agentHosts) as any)
-      .where(and(eq(agentHosts.id, id), eq(agentHosts.tenantId, tenantId)))
+      .where(scopedToTenant(agentHosts, tenantId, eq(agentHosts.id, id), eq(agentHosts.tenantId, tenantId)))
       .limit(1);
     return row ? this.toDomain(row) : null;
   }
@@ -33,7 +34,7 @@ export class AgentHostRepository implements IAgentHostRepository {
     const rows = await (this.db
       .select()
       .from(agentHosts) as any)
-      .where(eq(agentHosts.tenantId, tenantId));
+      .where(scopedToTenant(agentHosts, tenantId, eq(agentHosts.tenantId, tenantId)));
     return rows.map((r: unknown) => this.toDomain(r));
   }
 

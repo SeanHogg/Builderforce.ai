@@ -17,6 +17,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { workflowDefinitions, workflowTriggers } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseDefinition } from '../../domain/workflowGraph';
 import { instantiateWorkflowRun, type RunTarget } from '../../application/workflow/instantiateRun';
 import { verifyHmacSignature } from '../../application/workflow/verifySignature';
@@ -66,7 +67,7 @@ export async function fireAddressedTrigger(
       lastStatus: (result.ok ? `ok: ${result.workflowId}` : `error: ${result.error}`).slice(0, 32),
       updatedAt: new Date(),
     })
-    .where(eq(workflowTriggers.id, row.id));
+    .where(scopedToTenant(workflowTriggers, row.tenantId, eq(workflowTriggers.id, row.id)));
 
   return result.ok ? { ok: true, workflowId: result.workflowId } : { ok: false, error: result.error };
 }

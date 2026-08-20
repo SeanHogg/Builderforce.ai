@@ -14,6 +14,7 @@
  */
 import { and, desc, eq } from 'drizzle-orm';
 import { tenantModels, marketplacePersonas } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   getOrSetCached,
@@ -228,7 +229,7 @@ export async function resolveTenantModel(
         const [p] = await db
           .select({ persona: marketplacePersonas.persona })
           .from(marketplacePersonas)
-          .where(eq(marketplacePersonas.id, row.personaId));
+          .where(scopedToTenant(marketplacePersonas, tenantId, eq(marketplacePersonas.id, row.personaId)));
         if (p) personaBlock = compilePersonaBlock(p.persona);
       }
 

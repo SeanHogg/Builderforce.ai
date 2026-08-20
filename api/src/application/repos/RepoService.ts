@@ -20,6 +20,7 @@ import {
   tasks,
   projects,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveRepoForTask } from './resolveRepo';
 import { buildPrDispatchMessage, type CreatePrMessage } from './prDispatch';
@@ -291,7 +292,7 @@ export class RepoService {
           ...(result.number != null ? { githubPrNumber: result.number } : {}),
           updatedAt: new Date(),
         })
-        .where(and(eq(tasks.id, row.taskId), eq(tasks.projectId, row.projectId)));
+        .where(scopedToTenant(tasks, tenantId, eq(tasks.id, row.taskId), eq(tasks.projectId, row.projectId)));
     }
 
     return row;

@@ -366,10 +366,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const realCardId = card.id;
 
     // Replace auto entries for this card (idempotent re-resolve).
-    await db.delete(timecardEntries).where(and(
-      eq(timecardEntries.timecardId, realCardId),
-      eq(timecardEntries.source, 'auto'),
-    ));
+    await db.delete(timecardEntries).where(and(eq(timecardEntries.timecardId, realCardId), eq(timecardEntries.source, 'auto')));
     for (const [day, daySignals] of byDay) {
       const resolved = resolveActiveMinutes(daySignals.map((s): ResolvableSignal => ({ id: s.id, occurredAt: s.occurredAt, durationSeconds: s.durationSeconds, weight: s.weight, kind: s.kind })));
       if (resolved.minutes <= 0) continue;
@@ -450,7 +447,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
     const rows = await db
       .select(entryColumns)
       .from(timecardEntries)
-      .where(eq(timecardEntries.timecardId, id))
+      .where(scopedToTenant(timecardEntries, tenantId, eq(timecardEntries.timecardId, id)))
       .orderBy(asc(timecardEntries.workDate));
     return c.json({ card: mapCard(cardRow), entries: rows.map(mapEntry) });
   });
@@ -524,10 +521,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
       .from(timecards)
       .where(and(eq(timecards.id, id), eq(timecards.userId, userId), eq(timecards.status, 'draft')));
     if (!card) return c.json({ error: 'Not found or not draft' }, 404);
-    await db.delete(timecardEntries).where(and(
-      eq(timecardEntries.id, entryId),
-      eq(timecardEntries.timecardId, id),
-    ));
+    await db.delete(timecardEntries).where(and(eq(timecardEntries.id, entryId), eq(timecardEntries.timecardId, id)));
     const totals = await recomputeTimecard(db, id);
     return c.json({ ok: true, ...totals });
   });

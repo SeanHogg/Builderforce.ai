@@ -19,6 +19,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { ideProjects, projects, workflowDefinitions } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ProjectService } from '../../application/project/ProjectService';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
 import { applyEvermindRecipe, toEvermindRecipeId } from '../../application/llm/evermindRecipes';
@@ -67,7 +68,7 @@ export function createIdeProjectRoutes(projectService: ProjectService, db: Db): 
     const cond = UUID_RE.test(idOrUuid)
       ? eq(ideProjects.publicId, idOrUuid)
       : eq(ideProjects.id, Number(idOrUuid));
-    const [row] = await viewSelect().where(and(eq(ideProjects.tenantId, tenantId), cond)).limit(1);
+    const [row] = await viewSelect().where(scopedToTenant(ideProjects, tenantId, eq(ideProjects.tenantId, tenantId), cond)).limit(1);
     return row ?? null;
   };
 

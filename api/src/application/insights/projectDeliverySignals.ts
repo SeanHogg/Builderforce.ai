@@ -25,6 +25,7 @@
 import { and, desc, eq, gte, inArray, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { deploymentEvents, projects, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { notSystemTask } from '../task/taskScope';
 import {
   avg, buildStageDurations, summarizeRework, summarizeAgingWip,
@@ -135,7 +136,7 @@ export async function computeProjectDeliverySignals(
         occurredAt: taskStatusTransitions.occurredAt,
       })
       .from(taskStatusTransitions)
-      .where(inArray(taskStatusTransitions.taskId, taskIds))) as TransitionRow[];
+      .where(scopedToTenant(taskStatusTransitions, tenantId, inArray(taskStatusTransitions.taskId, taskIds)))) as TransitionRow[];
     for (const tr of transitions) {
       const projectId = projectByTaskId.get(tr.taskId);
       if (projectId == null) continue;

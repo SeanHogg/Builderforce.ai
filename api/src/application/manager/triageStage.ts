@@ -37,6 +37,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { executions, pullRequests, tasks, taskFileChanges, taskStatusTransitions } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus, isTerminalTaskStatus } from '../../domain/shared/types';
 import { evaluateTaskAutoRun } from '../swimlane/evaluateAutoRun';
 import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
@@ -456,12 +457,12 @@ export async function loadBulkSignals(
   const [moves, ran, prs, fileRows, live] = await Promise.all([
     db.select({ taskId: taskStatusTransitions.taskId, at: sql<Date>`max(${taskStatusTransitions.occurredAt})` })
       .from(taskStatusTransitions)
-      .where(inArray(taskStatusTransitions.taskId, args.taskIds))
+      .where(scopedToTenant(taskStatusTransitions, args.tenantId, inArray(taskStatusTransitions.taskId, args.taskIds)))
       .groupBy(taskStatusTransitions.taskId)
       .catch(() => []),
     db.selectDistinct({ taskId: executions.taskId })
       .from(executions)
-      .where(and(inArray(executions.taskId, args.taskIds), liveExecution()))
+      .where(scopedToTenant(executions, args.tenantId, inArray(executions.taskId, args.taskIds), liveExecution()))
       .catch(() => []),
     db.select({
       taskId: pullRequests.taskId, id: pullRequests.id, number: pullRequests.number,
@@ -1081,7 +1082,7 @@ export async function applyRemedy(
     case 'return_to_implementation': {
       await db.update(tasks)
         .set({ status: TaskStatus.IN_PROGRESS, completedAt: null, updatedAt: new Date() })
-        .where(and(eq(tasks.id, task.id), eq(tasks.status, task.status)));
+        .where(scopedToTenant(tasks, args.tenantId, eq(tasks.id, task.id), eq(tasks.status, task.status)));
       const restarted = args.mayRaceExecutor
         ? await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
           tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS, submittedBy: by,
@@ -1137,7 +1138,7 @@ export async function applyRemedy(
             ? task.description
             : `${task.description ?? ''}${note}`.trim(),
           updatedAt: new Date(),
-        }).where(eq(tasks.id, task.id));
+        }).where(scopedToTenant(tasks, args.tenantId, eq(tasks.id, task.id)));
       }
       const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
         tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,

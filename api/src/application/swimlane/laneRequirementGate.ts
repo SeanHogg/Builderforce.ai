@@ -33,6 +33,7 @@ import {
   tasks,
   ticketRoleSignoffs,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { requirementApplies } from '../kanban/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -72,7 +73,7 @@ async function resolveRoleAgent(env: Env, db: Db, tenantId: number, projectId: n
     .select({ agentRef: swimlaneAgentAssignments.agentRef, role: swimlaneAgentAssignments.role })
     .from(swimlaneAgentAssignments)
     .innerJoin(swimlanes, eq(swimlaneAgentAssignments.swimlaneId, swimlanes.id))
-    .where(eq(swimlanes.boardId, boardId));
+    .where(scopedToTenant(swimlaneAgentAssignments, tenantId, eq(swimlanes.boardId, boardId)));
   for (const s of staffed) if (s.agentRef && normalizeRoleText(s.role) === nk) return s.agentRef;
 
   const [capable] = await resolveRoleCapableAgents(env, db, tenantId, projectId, roleKey);

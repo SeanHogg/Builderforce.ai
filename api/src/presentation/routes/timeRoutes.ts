@@ -12,6 +12,7 @@ import { and, eq } from 'drizzle-orm';
 import { authMiddleware, isManager } from '../middleware/authMiddleware';
 import { scope } from './segmentTrackerRoutes';
 import { tasks, timeEntries } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { bumpWorkforceMetricsVersion } from '../../application/metrics/workforceMetrics';
 import { computeMemberDailyHours, isoDay } from '../../application/timeTracking/timeTracking';
@@ -57,7 +58,7 @@ export function createTimeRoutes(db: Db): Hono<HonoEnv> {
     if (loggingForOther && !isManager(c)) return c.json({ error: 'only a manager can log time for another member' }, 403);
 
     // Task must belong to this segment.
-    const [task] = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.id, taskId), eq(tasks.segmentId, segmentId)));
+    const [task] = await db.select({ id: tasks.id }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId), eq(tasks.segmentId, segmentId)));
     if (!task) return c.json({ error: 'task not found' }, 404);
 
     const entryDate = body.entryDate && /^\d{4}-\d{2}-\d{2}$/.test(body.entryDate) ? body.entryDate : isoDay(new Date());

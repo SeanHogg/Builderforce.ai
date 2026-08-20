@@ -37,6 +37,7 @@ import {
   customerFeedback,
   portfolios,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { notSystemTask } from '../../application/task/taskScope';
 import { computePortfolioRollup } from '../../application/pmo/portfolioRollup';
 import { buildExecutiveSummary } from '../../application/reports/executiveSummary';
@@ -882,7 +883,7 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
       const [task] = await db
         .select({ id: tasks.id })
         .from(tasks)
-        .where(and(eq(tasks.id, body.taskId), eq(tasks.segmentId, segmentId)))
+        .where(scopedToTenant(tasks, tenantId, eq(tasks.id, body.taskId), eq(tasks.segmentId, segmentId)))
         .limit(1);
       if (!task) return c.json({ error: 'taskId not found in this segment' }, 400);
       triagedTaskId = task.id;

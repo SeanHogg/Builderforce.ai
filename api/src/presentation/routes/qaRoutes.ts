@@ -54,6 +54,7 @@ import {
   qaTargets,
   qaTests,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isValidCron, nextCronTime } from '../../domain/workflowSchedule';
 import { QaFlowService } from '../../application/qa/QaFlowService';
 import { QaGeneratorService } from '../../application/qa/QaGeneratorService';
@@ -850,7 +851,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
       .where(and(eq(qaExplorations.id, c.req.param('id')), eq(qaExplorations.tenantId, tenantId))).limit(1);
     if (!exploration) return c.json({ error: 'Exploration not found' }, 404);
     const findings = await db.select().from(qaFindings)
-      .where(eq(qaFindings.explorationId, exploration.id))
+      .where(scopedToTenant(qaFindings, tenantId, eq(qaFindings.explorationId, exploration.id)))
       .orderBy(desc(qaFindings.heat), desc(qaFindings.createdAt));
     return c.json({
       exploration: { ...exploration, plan: parsePlan(exploration.plan), heatZones: parseZones(exploration.heatZones) },
@@ -974,9 +975,9 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     }
 
     // Refresh the rolled-up count from the source of truth.
-    const all = await db.select({ id: qaFindings.id }).from(qaFindings).where(eq(qaFindings.explorationId, exploration.id));
+    const all = await db.select({ id: qaFindings.id }).from(qaFindings).where(scopedToTenant(qaFindings, tenantId, eq(qaFindings.explorationId, exploration.id)));
     await db.update(qaExplorations).set({ findingsCount: all.length, updatedAt: new Date() })
-      .where(eq(qaExplorations.id, exploration.id));
+      .where(scopedToTenant(qaExplorations, tenantId, eq(qaExplorations.id, exploration.id)));
 
     // Opt-in autonomous remediation: route qualifying findings to a fix agent off
     // the harness response path (best-effort; no-op unless the project enabled it).

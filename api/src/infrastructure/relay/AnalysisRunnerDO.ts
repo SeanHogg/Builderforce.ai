@@ -28,6 +28,7 @@ import {
   tasks,
   executions,
 } from '../database/schema';
+import { scopedToTenant } from '../database/tenantScope';
 import { decryptCredentials } from '../../application/boardsync/drizzleStore';
 import { WorkerSubrequestExhaustedError } from '../../application/llm/vendors/types';
 import {
@@ -151,7 +152,7 @@ export class AnalysisRunnerDO implements DurableObject {
     await this.db
       .update(repoAnalysisRuns)
       .set({ status: 'fetching', stage: 'fetching', progress: 1, startedAt: new Date(), updatedAt: new Date() })
-      .where(eq(repoAnalysisRuns.id, body.runId));
+      .where(scopedToTenant(repoAnalysisRuns, cursor.tenantId, eq(repoAnalysisRuns.id, body.runId)));
     await this.state.storage.setAlarm(Date.now());
   }
 
@@ -483,7 +484,7 @@ export class AnalysisRunnerDO implements DurableObject {
     let specId: string;
     if (existing) {
       specId = existing.id;
-      await this.db.update(specs).set({ goal, prd, status: 'ready', updatedAt: now }).where(eq(specs.id, specId));
+      await this.db.update(specs).set({ goal, prd, status: 'ready', updatedAt: now }).where(scopedToTenant(specs, cursor.tenantId, eq(specs.id, specId)));
     } else {
       specId = crypto.randomUUID();
       await this.db.insert(specs).values({
@@ -666,7 +667,7 @@ export class AnalysisRunnerDO implements DurableObject {
     const [repo] = await this.db
       .select({ provider: projectRepositories.provider })
       .from(projectRepositories)
-      .where(eq(projectRepositories.id, repoId));
+      .where(scopedToTenant(projectRepositories, cursor.tenantId, eq(projectRepositories.id, repoId)));
     await this.upsertEvidence(cursor, repoId, {
       provider: repo?.provider ?? 'github',
       defaultBranch: '',

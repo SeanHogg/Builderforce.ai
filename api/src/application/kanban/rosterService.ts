@@ -16,6 +16,7 @@ import {
   swimlaneAgentAssignments,
   swimlanes,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -84,7 +85,7 @@ export class RosterService {
     const [project] = await this.db
       .select({ kanbanTemplateId: projects.kanbanTemplateId })
       .from(projects)
-      .where(eq(projects.id, projectId))
+      .where(scopedToTenant(projects, tenantId, eq(projects.id, projectId)))
       .limit(1);
     const templateId = project?.kanbanTemplateId || DEFAULT_TEMPLATE_ID;
     const template = (await this.templates.get(env, tenantId, templateId))

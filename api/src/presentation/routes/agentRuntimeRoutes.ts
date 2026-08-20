@@ -27,6 +27,7 @@ import { Hono } from 'hono';
 import { and, asc, eq } from 'drizzle-orm';
 import { hostOrTenantAuth, requestAgentHostId } from '../middleware/hostOrTenantAuth';
 import { agentDispatches } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { SwimlaneCoordinator } from '../../application/swimlane/SwimlaneCoordinator';
 import { DrizzleCoordinatorStore } from '../../application/swimlane/DrizzleCoordinatorStore';
 import { DrizzlePrdEnsurer } from '../../application/swimlane/DrizzlePrdEnsurer';
@@ -87,7 +88,7 @@ export function createAgentRuntimeRoutes(db: Db): Hono<HonoEnv> {
     const [claimed] = await db
       .update(agentDispatches)
       .set({ status: 'claimed', externalRef: claimToken, claimedAt: new Date(), updatedAt: new Date() })
-      .where(and(eq(agentDispatches.id, candidate.id), eq(agentDispatches.status, 'pending')))
+      .where(scopedToTenant(agentDispatches, tenantId, eq(agentDispatches.id, candidate.id), eq(agentDispatches.status, 'pending')))
       .returning();
 
     if (!claimed) return c.json({ dispatch: null }); // lost the race

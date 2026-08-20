@@ -2586,7 +2586,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const workflowSegment = access.session.segmentId == null ? isNull(workflows.segmentId) : eq(workflows.segmentId, access.session.segmentId);
     const [taskRows, definitionRows, workflowRows, agentRows] = includeDelivery ? await Promise.all([
       db.select({ id: tasks.id, title: tasks.title, description: tasks.description, status: tasks.status })
-        .from(tasks).where(and(eq(tasks.projectId, projectId), taskSegment)).orderBy(desc(tasks.updatedAt)).limit(100),
+        .from(tasks).where(scopedToTenant(tasks, access.session.tenantId, eq(tasks.projectId, projectId), taskSegment)).orderBy(desc(tasks.updatedAt)).limit(100),
       db.select({ id: workflowDefinitions.id, name: workflowDefinitions.name, description: workflowDefinitions.description })
         .from(workflowDefinitions).where(and(eq(workflowDefinitions.projectId, projectId), eq(workflowDefinitions.tenantId, access.session.tenantId), definitionSegment)).orderBy(desc(workflowDefinitions.updatedAt)).limit(50),
       db.select({ id: workflows.id, description: workflows.description, status: workflows.status, workflowType: workflows.workflowType })
@@ -2630,7 +2630,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const taskSegment = access.session.segmentId == null ? isNull(tasks.segmentId) : eq(tasks.segmentId, access.session.segmentId);
     const [taskRows, projectSpecs, links] = await Promise.all([
       db.select({ id: tasks.id, key: tasks.key, title: tasks.title, description: tasks.description, status: tasks.status, updatedAt: tasks.updatedAt })
-        .from(tasks).where(and(eq(tasks.projectId, projectId), taskSegment)).orderBy(asc(tasks.id)),
+        .from(tasks).where(scopedToTenant(tasks, access.session.tenantId, eq(tasks.projectId, projectId), taskSegment)).orderBy(asc(tasks.id)),
       db.select({ id: specs.id, goal: specs.goal, status: specs.status, kind: specs.kind, prd: specs.prd, archSpec: specs.archSpec, taskList: specs.taskList, createdAt: specs.createdAt, updatedAt: specs.updatedAt })
         .from(specs).where(and(eq(specs.projectId, projectId), eq(specs.tenantId, access.session.tenantId))).orderBy(asc(specs.createdAt)),
       db.select({ taskId: taskSpecs.taskId, specId: taskSpecs.specId, isPrimary: taskSpecs.isPrimary })

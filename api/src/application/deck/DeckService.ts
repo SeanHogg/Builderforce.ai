@@ -10,6 +10,7 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { generatedDecks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { assembleDeckData, currentQuarter } from './dataSources';
 import { resolveBindings } from './bindingResolver';
 import { renderGenerativeDeck } from './render/GenerativeRenderer';
@@ -95,7 +96,7 @@ export async function generateDeck(db: Db, env: Env, input: GenerateDeckInput): 
 
 /** Fetch a previously-generated deck's bytes from R2 (for the /:id/download route). */
 export async function loadGeneratedDeck(db: Db, env: Env, tenantId: number, deckId: string): Promise<{ bytes: Uint8Array; filename: string } | null> {
-  const rows = await db.select().from(generatedDecks).where(eq(generatedDecks.id, deckId)).limit(1);
+  const rows = await db.select().from(generatedDecks).where(scopedToTenant(generatedDecks, tenantId, eq(generatedDecks.id, deckId))).limit(1);
   const row = rows[0] as Record<string, unknown> | undefined;
   if (!row || Number(row.tenantId) !== tenantId || !row.r2Key || !env.UPLOADS) return null;
   const obj = await env.UPLOADS.get(String(row.r2Key));

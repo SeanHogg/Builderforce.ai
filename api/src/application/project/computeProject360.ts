@@ -1,6 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, executions, ideAgents, memberProfiles, tasks, users } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { clampScore } from '../../domain/shared/numbers';
 import { liveExecution } from '../rehearsal/executionMode';
 import { notSystemTask } from '../task/taskScope';
@@ -454,7 +455,7 @@ export async function computeProject360(
         assignedAgentRef: tasks.assignedAgentRef,
       })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), notSystemTask)),
+      .where(scopedToTenant(tasks, tenantId, eq(tasks.projectId, projectId), eq(tasks.archived, false), notSystemTask)),
     // `liveExecution()`: an in-flight REHEARSAL is not in-flight work (0372) — counting
     // it would show a project as busy because someone is testing an agent config.
     db
@@ -490,10 +491,10 @@ export async function computeProject360(
       ? db.select({ id: users.id, displayName: users.displayName, username: users.username, email: users.email }).from(users).where(inArray(users.id, [...userIds]))
       : Promise.resolve([] as { id: string; displayName: string | null; username: string | null; email: string }[]),
     hostIds.size
-      ? db.select({ id: agentHosts.id, name: agentHosts.name }).from(agentHosts).where(inArray(agentHosts.id, [...hostIds]))
+      ? db.select({ id: agentHosts.id, name: agentHosts.name }).from(agentHosts).where(scopedToTenant(agentHosts, tenantId, inArray(agentHosts.id, [...hostIds])))
       : Promise.resolve([] as { id: number; name: string }[]),
     cloudRefs.size
-      ? db.select({ id: ideAgents.id, name: ideAgents.name }).from(ideAgents).where(inArray(ideAgents.id, [...cloudRefs]))
+      ? db.select({ id: ideAgents.id, name: ideAgents.name }).from(ideAgents).where(scopedToTenant(ideAgents, tenantId, inArray(ideAgents.id, [...cloudRefs])))
       : Promise.resolve([] as { id: string; name: string }[]),
     allRefs.length
       ? db.select({ memberKind: memberProfiles.memberKind, memberRef: memberProfiles.memberRef, availabilityStatus: memberProfiles.availabilityStatus, availabilityUntil: memberProfiles.availabilityUntil }).from(memberProfiles).where(and(eq(memberProfiles.tenantId, tenantId), inArray(memberProfiles.memberRef, allRefs)))

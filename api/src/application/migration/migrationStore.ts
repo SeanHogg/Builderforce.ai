@@ -25,6 +25,7 @@ import {
   tenantMembers,
   users,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { hasPendingInvite, invite } from '../kernel/InvitationService';
@@ -103,7 +104,7 @@ export function createMigrationStore(db: Db, env?: Env): MigrationStore {
     },
 
     async replaceStagedProjects(runId, tenantId, rows): Promise<void> {
-      await db.delete(importStagedProjects).where(eq(importStagedProjects.runId, runId));
+      await db.delete(importStagedProjects).where(scopedToTenant(importStagedProjects, tenantId, eq(importStagedProjects.runId, runId)));
       if (!rows.length) return;
       await db.insert(importStagedProjects).values(rows.map((r) => ({
         runId, tenantId,
@@ -114,7 +115,7 @@ export function createMigrationStore(db: Db, env?: Env): MigrationStore {
     },
 
     async replaceTypeMappings(runId, tenantId, rows): Promise<void> {
-      await db.delete(importTypeMappings).where(eq(importTypeMappings.runId, runId));
+      await db.delete(importTypeMappings).where(scopedToTenant(importTypeMappings, tenantId, eq(importTypeMappings.runId, runId)));
       if (!rows.length) return;
       await db.insert(importTypeMappings).values(rows.map((r) => ({
         runId, tenantId, externalType: r.externalType, targetTaskType: r.targetTaskType, targetStatus: r.targetStatus,
@@ -122,7 +123,7 @@ export function createMigrationStore(db: Db, env?: Env): MigrationStore {
     },
 
     async replaceStagedUsers(runId, tenantId, rows): Promise<void> {
-      await db.delete(importStagedUsers).where(eq(importStagedUsers.runId, runId));
+      await db.delete(importStagedUsers).where(scopedToTenant(importStagedUsers, tenantId, eq(importStagedUsers.runId, runId)));
       if (!rows.length) return;
       await db.insert(importStagedUsers).values(rows.map((r) => ({
         runId, tenantId, externalId: r.externalId, displayName: r.displayName, email: r.email,
@@ -131,7 +132,7 @@ export function createMigrationStore(db: Db, env?: Env): MigrationStore {
     },
 
     async replaceStagedItems(runId, tenantId, rows): Promise<void> {
-      await db.delete(importStagedItems).where(eq(importStagedItems.runId, runId));
+      await db.delete(importStagedItems).where(scopedToTenant(importStagedItems, tenantId, eq(importStagedItems.runId, runId)));
       // Chunk inserts so a large board doesn't exceed bind-parameter limits.
       const CHUNK = 200;
       for (let i = 0; i < rows.length; i += CHUNK) {
@@ -308,7 +309,7 @@ export function createMigrationStore(db: Db, env?: Env): MigrationStore {
     async rollbackImport(runId, tenantId) {
       return db.transaction(async (tx) => {
         const removedTasks = await tx.delete(tasks)
-          .where(eq(tasks.importRunId, runId))
+          .where(scopedToTenant(tasks, tenantId, eq(tasks.importRunId, runId)))
           .returning({ id: tasks.id });
         const removedConnections = await tx.delete(boardConnections)
           .where(and(eq(boardConnections.importRunId, runId), eq(boardConnections.tenantId, tenantId)))
@@ -319,7 +320,7 @@ export function createMigrationStore(db: Db, env?: Env): MigrationStore {
             eq(projects.tenantId, tenantId),
             // An imported project can receive ordinary work immediately after
             // commit. Preserve that project (and the later work) on rollback.
-            notExists(tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.projectId, projects.id))),
+            notExists(tx.select({ id: tasks.id }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.projectId, projects.id)))),
           ))
           .returning({ id: projects.id });
         const removed = { tasksRemoved: removedTasks.length, connectionsRemoved: removedConnections.length, projectsRemoved: removedProjects.length };

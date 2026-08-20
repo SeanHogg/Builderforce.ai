@@ -26,6 +26,7 @@ import {
   computeDevexInsights, computeDevexBenchmark, type BenchmarkPercentile,
 } from '../../application/insights/devexInsights';
 import { devexSurveyTemplates, devexCampaigns, devexResponses, projects } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   normalizeQuestions, validateAnswers, respondentHash, normalizeSegments,
 } from '../../domain/devex/surveys';
@@ -274,12 +275,12 @@ export function createDevexRoutes(db: Db): Hono<HonoEnv> {
     // One submission per respondent: if a row with this (campaign, hash) exists,
     // overwrite its answers rather than inserting a duplicate.
     const [existing] = await db.select({ id: devexResponses.id }).from(devexResponses)
-      .where(and(eq(devexResponses.campaignId, id), eq(devexResponses.respondentHash, hash)))
+      .where(scopedToTenant(devexResponses, tenantId, eq(devexResponses.campaignId, id), eq(devexResponses.respondentHash, hash)))
       .limit(1);
     if (existing) {
       const [row] = await db.update(devexResponses)
         .set({ answers: clean, segments, userId: values.userId, submittedAt: new Date() })
-        .where(eq(devexResponses.id, existing.id))
+        .where(scopedToTenant(devexResponses, tenantId, eq(devexResponses.id, existing.id)))
         .returning();
       await invalidate();
       return c.json(row);

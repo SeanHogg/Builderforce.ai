@@ -349,7 +349,7 @@ export async function computeDailyDigest(
       // `tasks` carries no tenant_id; the caller has already proven the project belongs
       // to this tenant (the route's ownProject check), which is how every other manager
       // read scopes it.
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), notSystemTask))
+      .where(scopedToTenant(tasks, tenantId, eq(tasks.projectId, projectId), eq(tasks.archived, false), notSystemTask))
       .catch(() => []),
 
     // 2. The concrete items, newest first. Bounded — the count above is the total.
@@ -387,10 +387,8 @@ export async function computeDailyDigest(
         )`,
       })
       .from(tasks)
-      .where(and(
-        eq(tasks.projectId, projectId), eq(tasks.archived, false), notSystemTask,
-        gte(tasks.completedAt, w.start), lt(tasks.completedAt, w.end),
-      ))
+      .where(scopedToTenant(tasks, tenantId, eq(tasks.projectId, projectId), eq(tasks.archived, false), notSystemTask,
+        gte(tasks.completedAt, w.start), lt(tasks.completedAt, w.end)))
       .orderBy(desc(tasks.completedAt))
       .limit(SHIPPED_SAMPLE)
       .catch(() => []),
@@ -507,10 +505,8 @@ export async function computeDailyDigest(
     db
       .select({ passes: sql<number>`count(*)::int` })
       .from(tasks)
-      .where(and(
-        eq(tasks.projectId, projectId), eq(tasks.source, SYSTEM_TASK_SOURCE_MANAGER),
-        gte(tasks.completedAt, w.start), lt(tasks.completedAt, w.end),
-      ))
+      .where(scopedToTenant(tasks, tenantId, eq(tasks.projectId, projectId), eq(tasks.source, SYSTEM_TASK_SOURCE_MANAGER),
+        gte(tasks.completedAt, w.start), lt(tasks.completedAt, w.end)))
       .catch(() => []),
 
     // 8. WHO FINISHED IT — the `shipped` column of the contributor table.

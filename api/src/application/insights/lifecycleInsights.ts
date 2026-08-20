@@ -18,6 +18,7 @@
 import { and, desc, eq, gte, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { projects, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { notSystemTask } from '../task/taskScope';
 import {
   avg, median, buildStageDurations,
@@ -165,7 +166,7 @@ export async function computeLifecycleInsights(db: Db, tenantId: number, days: n
         occurredAt: taskStatusTransitions.occurredAt,
       })
       .from(taskStatusTransitions)
-      .where(inArray(taskStatusTransitions.taskId, taskIds))) as TransitionRow[];
+      .where(scopedToTenant(taskStatusTransitions, tenantId, inArray(taskStatusTransitions.taskId, taskIds)))) as TransitionRow[];
   }
 
   const durations = buildStageDurations(transitions, taskRows, now);

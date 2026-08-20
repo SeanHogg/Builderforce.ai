@@ -1,3 +1,146 @@
+## ✅ RESOLVED 2026-08-19 — 253 unscoped tenant queries converted, and the reason the other 271 cannot be
+
+The tenant-scope baseline is **524 → 271 statements, 168 → 107 files.** More useful than the
+number is what the pass established about the remainder.
+
+### The transformation was done as a codemod, on purpose
+
+`scopedToTenant(table, tenantId, ...conds)` only ANDs `table.tenant_id = :tenantId` onto the
+conditions already there. For a statement that was already correct — its rows reached through an
+owner-checked parent — that predicate is a semantic **no-op**: those rows already belong to that
+tenant. It changes behaviour only where the statement really was reading across tenants, which is
+either the bug being closed or a deliberate cross-tenant read. The deliberate ones
+(`retentionPurge`'s platform-wide sweep, the global marketplace personas) were excluded by hand,
+never by script.
+
+Doing that 489 times by hand is where mistakes come from, not where safety comes from. The safety
+came from the type checker: `scopedToTenant` takes a `TenantOwnedTable` and a `number`, so a wrong
+table or a wrong expression is a **compile error, not a silent data bug**. Every run was followed by
+`tsgo --noEmit` and the full suite (7019 passing).
+
+### What the compiler said, and why it is the real finding
+
+The first pass resolved each tenant expression from "the nearest `eq(x.tenantId, …)` anywhere in the
+file" — right in a single-function module, wrong in a service with ten methods, where it reached into
+a sibling and produced `conn.tenantId` with no `conn` in scope. **228 compile errors.** Exactly what
+the net is for.
+
+Reverting those and keeping the rest left **253 conversions the compiler accepted**. And the 219 it
+rejected all mean the same thing: *that function does not know its tenant.* They are the "MOST are
+safe (a parent row was verified first)" population the register always described — and making them
+self-scoping is **not an edit, it is threading a tenant id down a call chain**, changing signatures
+across a slice of the codebase per chain. That is a design decision per chain, so they stay in the
+baseline with the reason recorded rather than being forced through by a script.
+
+The original entry said "walk the baseline file by file and convert the genuinely-scoped ones". That
+is now done for every statement where it was possible. What is left needs a different kind of work,
+and the roadmap entry says so instead of implying another sweep would clear it.
+
+### Two real breaks caught on the way
+
+- **`claimTaskPrOpen` / `releaseTaskPrClaim` had callers I missed** when I added `tenantId` to their
+  signatures earlier today. `cloudAgentEngine.finalizeCloudRun` calls both, and my pre-change grep
+  did not surface them — the file was being edited concurrently. That was a genuine break, pushed and
+  now fixed; the type checker found it. A signature change is only as safe as the caller search that
+  precedes it.
+- **The revert script mangled a spread.** `.where(and(...conds))` came back as `.where(...conds)` in
+  `promptLibraryRoutes` because the inverse transform rebuilt a single-condition call without its
+  `and()`. Two sites, both compile errors, both fixed.
+
+The triage/codemod/fixup/revert scripts were throwaway and are deleted — they were a means to a
+verified diff, not tooling anyone should run again. The method is written down here instead.
+
+---
+
+## ✅ RESOLVED 2026-08-19 — The last 88 formatting calls, and the three answers they needed
+
+**Roadmap item closed (§14 · i18n / localization):** *Locale-correct formatting is done for components; 88
+calls remain in hook-free module scope* — the narrowed remainder of *Date/number formatting bypasses
+next-intl at 180 call sites*. **333 → 6.**
+
+The six that remain are the six that should: four functions that take an explicit `locale` **parameter**
+(`calendarDate.formatCalendarDate`, `canvasMoney.formatMoney`/`formatCents`, `salary.money` — the correct
+seam, and every caller now feeds it), one test assertion, and one developer log line in
+`lib/webgpu-trainer.ts` that is printed to a training console rather than shown to anyone. Pulling an i18n
+import into a WebGPU compute module for a debug string would be worse than the sentence it fixes.
+
+### 1 · A hook cannot run at module scope — so three different things had to happen
+
+The previous pass moved every call that sat inside a component. What was left was the hard half: 88 calls
+in helpers that run at module scope, where `useFormat()` is not available. They were not one problem, and
+treating them as one is what would have produced a bad answer. Each needed a different question answered
+first — *who is this string for?*
+
+**(a) The reader — bind the locale, keep the call sites.** `adminShared.fmtDate`/`fmtDateTime`/`fmtNum` had
+**107 call sites** across the admin panels; `insights/format.ts`'s `usd`/`int`/`compactTokens` had ~220
+across every lens; `canvasMoney`'s `formatCents`/`formatMoney` had 42, of which **25 passed no locale at
+all** even though the parameter was right there. Threading an argument through 370 call sites would have
+been a very large diff that made every one of them worse to read.
+
+Instead the binding moved and the names stayed. `useAdminFormat()`, `useInsightFormat()` and
+`useMoneyFormat()` hand back the same functions with the locale already applied, so a consumer changes one
+import into one destructure and **not a single call site changed**:
+
+```ts
+const { fmtDate, fmtNum } = useAdminFormat();
+<td>{fmtDate(row.createdAt)}</td>          // unchanged
+```
+
+The pure functions stay exported for tests, tools and server code — they simply have to name a locale,
+which is the honest requirement for a pure function that formats.
+
+**(b) The record — pin the locale.** Five modules do NOT want the reader's locale, and following it would
+have been the bug rather than the fix. `lifecycleDiagnostics` builds a report someone pastes into a tracker
+and diffs against another one. `canvasApprovalGate.describeValue` is documented as "a value as it will read
+in a ledger a year from now". `canvasEquityTools`, `canvasFounderOpsTools` and `canvasSocial` write
+**persisted** canvas object data that the next turn reads back. In all five, a number that groups one way
+for a German reader and another for an English one makes the stored value depend on who happened to be
+looking at the board. They now hold `const fmt = formatterFor(DEFAULT_LOCALE)` with that reason written
+down, which is also the first time any of them was deterministic — `toLocaleString()` with no argument was
+already varying by machine, silently.
+
+**(c) The catalog — let the message own its own formatting.** Fifteen calls were pre-formatting a number
+*before handing it to `t()`*, which is next-intl's job and does it in the wrong language. ICU already has
+the type: the message declares `{rows, number}` and the raw number goes through.
+`creationCanvas.import.*` (8 keys) and `chatInput.effort*` (5 keys) were converted in all five catalogs,
+and `canvasFileImport` lost its `.toLocaleString()` entirely. Two sites there had been *concatenating* a
+catalog string with hardcoded punctuation and a hardcoded `KB`; they are now one `fileMeta` message.
+
+### 2 · What the compiler could not have told us
+
+Three defects only surfaced because the migration forced a reading of each call site:
+
+- **`BarChart`, `DonutChart`, `StackedBar` and `TrendChart` defaulted `formatValue` in a PARAMETER.** A
+  default parameter is evaluated outside the function body, so it can never see a hook result. All four
+  now resolve the default inside the body.
+- **`AssignedWorkPanel` sorted lanes alphabetically**, so the panel read "Backlog, Blocked, Done, In
+  progress". Now kanban order, custom lanes trailing.
+- **`canvasTabularData.formatAggregateValue` had no callers at all** — deleted.
+
+### 3 · Localization picked up on the way through
+
+The standing rule applies to anything touched, so: `TrackerSurface` printed a literal `Yes`/`No` in every
+locale (now `common.yes`/`common.no`, five catalogs); `CreationCanvas`'s materialize summaries were English
+template literals (now `materializeRowsFrom` / `materializeReadFrom` / `materializeRows`, with ICU numbers);
+`BriefcaseBadge` and `AssignedWorkPanel` had hardcoded strings. `MeetingsCalendar` keeps its literal
+`'en-US'` and now says why in a comment: those weekday parts are **keys** into a lookup map, not text
+anyone reads, and localizing them would make every lookup miss. That comment is the point — the next audit
+of `'en-US'` would otherwise "fix" a parser into a renderer.
+
+Also fixed in passing: `WorkspaceAllowanceBanner` used a raw `<a href="/pricing">` for an internal route,
+which was the repo's only ESLint **error**. It is a `next/link` now, and `eslint src` is clean.
+
+### 4 · How it was verified
+
+`tsgo --noEmit` is clean apart from two errors belonging to another session's in-flight `AllocationLens`
+change. `eslint src` reports **zero `react-hooks/rules-of-hooks` violations** across the ~200 bindings the
+tooling inserted — the check that actually matters, since a conditional hook typechecks perfectly. The
+binder is syntax-only and deliberately refuses to guess: it inserts at the top of a component or hook body
+or it reports the site, which is how every one of the module-scope helpers above got found rather than
+silently mis-bound. `metricFormat.test.ts` now asserts the binding itself — the same value formatted for
+two readers (`1,240` vs `1.240`, and `1.240 $` for a German reader).
+
+
 ## ✅ RESOLVED 2026-08-19 — `tasks` gets a tenant column, and the permission registry stops being mostly decorative
 
 Two of the four "Architecture pass — residuals" entries are closed. The other two are burn-down

@@ -64,6 +64,7 @@ import {
   tenants,
   users,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 
@@ -1025,7 +1026,7 @@ export function createEngagementRoutes(_db: Db): Hono<HonoEnv> {
         status,
         updatedAt: sql`NOW()`,
         hiredAt: sql`CASE WHEN ${status} = 'active' AND ${freelancerEngagements.hiredAt} IS NULL THEN NOW() ELSE ${freelancerEngagements.hiredAt} END`,
-      }).where(eq(freelancerEngagements.id, existing.id));
+      }).where(scopedToTenant(freelancerEngagements, tenantId, eq(freelancerEngagements.id, existing.id)));
       await notify(db, c.env, { userId: b.freelancerUserId, tenantId, kind: notifyKind, title: `${tenantName} updated your engagement`, body: b.note ?? null, ref: existing.id as string });
       await invalidateCached(c.env as Env, freelancerStatsCacheKey(b.freelancerUserId));
       return c.json({ id: existing.id, status, reused: true });

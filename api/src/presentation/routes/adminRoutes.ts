@@ -71,6 +71,7 @@ import {
   discountCodes,
   emailDeliveryFailures,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { normalizeDiscountCode } from '../../application/tenant/discountCodeService';
 import { signJwt, signEmulationJwt } from '../../infrastructure/auth/JwtService';
 import {
@@ -1186,7 +1187,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), eq(authTokens.sessionId, sessionId), isNull(authTokens.revokedAt)));
+      .where(scopedToTenant(authTokens, tenantId, eq(authTokens.userId, userId), eq(authTokens.sessionId, sessionId), isNull(authTokens.revokedAt)));
 
     return c.json({ ok: true });
   });
@@ -1212,7 +1213,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), isNull(authTokens.revokedAt)));
+      .where(scopedToTenant(authTokens, tenantId, eq(authTokens.userId, userId), isNull(authTokens.revokedAt)));
 
     return c.json({ ok: true });
   });
@@ -1234,7 +1235,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), eq(authTokens.jti, jti), isNull(authTokens.revokedAt)));
+      .where(scopedToTenant(authTokens, tenantId, eq(authTokens.userId, userId), eq(authTokens.jti, jti), isNull(authTokens.revokedAt)));
 
     return c.json({ ok: true });
   });
@@ -2844,10 +2845,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const [existingSession] = await db
       .select({ id: adminImpersonationSessions.id })
       .from(adminImpersonationSessions)
-      .where(and(
-        eq(adminImpersonationSessions.adminUserId, adminId),
-        isNull(adminImpersonationSessions.endedAt),
-      ))
+      .where(scopedToTenant(adminImpersonationSessions, body.tenantId, eq(adminImpersonationSessions.adminUserId, adminId),
+        isNull(adminImpersonationSessions.endedAt)))
       .limit(1);
 
     if (existingSession) {
@@ -2908,7 +2907,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         await db
           .update(adminImpersonationSessions)
           .set({ tokenJti: tokenPayload.jti })
-          .where(eq(adminImpersonationSessions.id, session.id));
+          .where(scopedToTenant(adminImpersonationSessions, body.tenantId, eq(adminImpersonationSessions.id, session.id)));
       }
     }
 
@@ -2948,10 +2947,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const [session] = await db
       .select()
       .from(adminImpersonationSessions)
-      .where(and(
-        eq(adminImpersonationSessions.id, sessionId),
-        eq(adminImpersonationSessions.adminUserId, adminId),
-      ))
+      .where(and(eq(adminImpersonationSessions.id, sessionId), eq(adminImpersonationSessions.adminUserId, adminId)))
       .limit(1);
 
     if (!session) return c.json({ error: 'Session not found' }, 404);
@@ -2998,11 +2994,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const [session] = await db
       .select()
       .from(adminImpersonationSessions)
-      .where(and(
-        eq(adminImpersonationSessions.id, sessionId),
-        eq(adminImpersonationSessions.adminUserId, adminId),
-        isNull(adminImpersonationSessions.endedAt),
-      ))
+      .where(and(eq(adminImpersonationSessions.id, sessionId), eq(adminImpersonationSessions.adminUserId, adminId), isNull(adminImpersonationSessions.endedAt)))
       .limit(1);
 
     if (!session) return c.json({ error: 'Active session not found' }, 404);
@@ -3062,11 +3054,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const [session] = await db
       .select()
       .from(adminImpersonationSessions)
-      .where(and(
-        eq(adminImpersonationSessions.adminUserId, adminId),
-        isNull(adminImpersonationSessions.endedAt),
-        gt(adminImpersonationSessions.expiresAt, new Date()),
-      ))
+      .where(and(eq(adminImpersonationSessions.adminUserId, adminId), isNull(adminImpersonationSessions.endedAt), gt(adminImpersonationSessions.expiresAt, new Date())))
       .limit(1);
 
     if (!session) return c.json({ session: null });
@@ -3554,7 +3542,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!validRoles.includes(body.role)) return c.json({ error: 'Invalid role' }, 400);
     const [row] = await db.select({ id: tenantMembers.id }).from(tenantMembers).where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId))).limit(1);
     if (!row) return c.json({ error: 'Member not found in tenant' }, 404);
-    await db.update(tenantMembers).set({ role: body.role as 'viewer' | 'developer' | 'manager' | 'owner' }).where(eq(tenantMembers.id, row.id));
+    await db.update(tenantMembers).set({ role: body.role as 'viewer' | 'developer' | 'manager' | 'owner' }).where(scopedToTenant(tenantMembers, tenantId, eq(tenantMembers.id, row.id)));
     // The role is the label the footer roster renders beside the person (PRD 21
     // §4.1) AND the claim the gateway caches, so one announcement clears both —
     // this handler used to name each cache itself, which is precisely the drift

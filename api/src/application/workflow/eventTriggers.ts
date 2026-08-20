@@ -29,6 +29,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 import { and, eq } from 'drizzle-orm';
 import { workflowDefinitions, workflowTriggers } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { parseDefinition } from '../../domain/workflowGraph';
 import { instantiateWorkflowRun, type RunTarget } from './instantiateRun';
 import { EVENT_TRIGGER_TYPES, TRIGGER_FILTER_KEYS, type EventTriggerType, type TriggerFilterKey, type TriggerMatchContext } from '../../domain/workflowTriggers';
@@ -189,7 +190,7 @@ export async function fireEventTriggers(db: Db, params: FireEventTriggersParams)
     try {
       await db.update(workflowTriggers)
         .set({ lastRunAt: now, lastStatus: status.slice(0, 32), updatedAt: now })
-        .where(eq(workflowTriggers.id, row.id));
+        .where(scopedToTenant(workflowTriggers, params.tenantId, eq(workflowTriggers.id, row.id)));
     } catch (error) { /* best-effort bookkeeping */ 
       reportCaughtError(error, { source: "application/workflow/eventTriggers.ts", operation: "fireEventTriggers" });
     }

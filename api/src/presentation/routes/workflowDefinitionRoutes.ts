@@ -18,6 +18,7 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { workflowDefinitions, workflowTriggers, agentHosts, projects, workflows, telemetrySpans } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import {
   definitionToYaml,
@@ -489,7 +490,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     // Re-sync the trigger registry whenever the graph or run target changed —
     // both feed the materialized workflow_triggers rows.
     if (body.definition !== undefined || runTargetTouched) {
-      const [updated] = await db.select().from(workflowDefinitions).where(eq(workflowDefinitions.id, id));
+      const [updated] = await db.select().from(workflowDefinitions).where(scopedToTenant(workflowDefinitions, tenantId, eq(workflowDefinitions.id, id)));
       if (updated) {
         await syncDefinitionTriggers(db, {
           definitionId: id,
@@ -503,7 +504,7 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     }
 
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
-    const [row] = await db.select().from(workflowDefinitions).where(eq(workflowDefinitions.id, id));
+    const [row] = await db.select().from(workflowDefinitions).where(scopedToTenant(workflowDefinitions, tenantId, eq(workflowDefinitions.id, id)));
     if (!row) return c.json({ error: 'Workflow definition not found' }, 404);
     return c.json({ ...row, definition: parseDefinition(row.definition) });
   });

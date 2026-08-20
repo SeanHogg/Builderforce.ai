@@ -18,6 +18,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 import { and, desc, eq } from 'drizzle-orm';
 import { executions, tasks, projects, toolAuditEvents } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
@@ -448,7 +449,7 @@ async function ingestPostMergeEvent(db: Db, env: Env, secret: string, evt: RepoC
   const tenantId = pr.tenantId;
   const [task] = await db
     .select({ assignedAgentRef: tasks.assignedAgentRef })
-    .from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    .from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId))).limit(1);
 
   const execId = await latestExecutionId(db, taskId, tenantId);
 

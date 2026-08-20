@@ -19,6 +19,7 @@ import { and, count, desc, eq, gte, sql } from 'drizzle-orm';
 import {
   feedbackCollectors, feedbackSubmissions, projects, tasks,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -80,10 +81,7 @@ export async function submitFeedback(
     const [row] = await db
       .select({ n: count() })
       .from(feedbackSubmissions)
-      .where(and(
-        eq(feedbackSubmissions.collectorId, target.collectorId),
-        gte(feedbackSubmissions.createdAt, since),
-      ));
+      .where(and(eq(feedbackSubmissions.collectorId, target.collectorId), gte(feedbackSubmissions.createdAt, since)));
     if (Number(row?.n ?? 0) >= target.dailyLimit) return { rateLimited: true };
   }
 
@@ -94,11 +92,7 @@ export async function submitFeedback(
   const [existing] = await db
     .select({ id: feedbackSubmissions.id, taskId: feedbackSubmissions.taskId })
     .from(feedbackSubmissions)
-    .where(and(
-      eq(feedbackSubmissions.projectId, target.projectId),
-      eq(feedbackSubmissions.fingerprint, fingerprint),
-      sql`${feedbackSubmissions.status} <> 'declined'`,
-    ))
+    .where(and(eq(feedbackSubmissions.projectId, target.projectId), eq(feedbackSubmissions.fingerprint, fingerprint), sql`${feedbackSubmissions.status} <> 'declined'`))
     .orderBy(desc(feedbackSubmissions.createdAt))
     .limit(1);
   if (existing) {
@@ -219,14 +213,14 @@ export async function reviewFeedbackSubmission(
   const now = new Date();
   await db.update(feedbackSubmissions)
     .set({ status: args.decision, reviewedBy: args.reviewerUserId ?? null, reviewedAt: now, updatedAt: now })
-    .where(eq(feedbackSubmissions.id, submission.id));
+    .where(scopedToTenant(feedbackSubmissions, args.tenantId, eq(feedbackSubmissions.id, submission.id)));
 
   if (submission.taskId != null) {
     await db.update(tasks)
       .set(args.decision === 'approved'
         ? { source: FEEDBACK_APPROVED_TASK_SOURCE, updatedAt: now }
         : { archived: true, updatedAt: now })
-      .where(eq(tasks.id, submission.taskId));
+      .where(scopedToTenant(tasks, args.tenantId, eq(tasks.id, submission.taskId)));
   }
 
   await bumpFeedbackCaches(env, args.tenantId, submission.projectId);

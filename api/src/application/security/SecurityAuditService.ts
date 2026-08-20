@@ -20,6 +20,7 @@
  */
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { securityAudits, tasks as tasksTable, projects } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskService } from '../task/TaskService';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
@@ -173,7 +174,7 @@ export class SecurityAuditService {
     if (auditId != null) {
       await this.db.update(securityAudits).set({
         findingsCount: sql`${securityAudits.findingsCount} + 1`,
-      }).where(eq(securityAudits.id, auditId));
+      }).where(scopedToTenant(securityAudits, tenantId, eq(securityAudits.id, auditId)));
     }
 
     return { taskId, auditId, severity, tsc };
@@ -212,7 +213,7 @@ export class SecurityAuditService {
       countsBySeverity: bySeverity,
       countsByTsc: byTsc,
       finishedAt: new Date(),
-    }).where(eq(securityAudits.id, auditId));
+    }).where(scopedToTenant(securityAudits, tenantId, eq(securityAudits.id, auditId)));
   }
 
   /**

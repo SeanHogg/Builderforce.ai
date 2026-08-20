@@ -33,6 +33,7 @@ import type { Env } from '../../env';
 import {
   ceremonyParticipants, ceremonySchedules, ceremonySessions, projects, tasks,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskStatus } from '../../domain/shared/types';
 import { getEffectiveManagerPolicy } from '../manager/ManagerService';
 import type { EffectiveManagerPolicy } from '../manager/managerPolicy';
@@ -184,11 +185,7 @@ async function loadReassignableTasks(db: Db, projectId: number, ownerIds: string
       updatedAt: tasks.updatedAt,
     })
     .from(tasks)
-    .where(and(
-      eq(tasks.projectId, projectId),
-      inArray(tasks.status, REASSIGNABLE_STATUSES),
-      inArray(tasks.assignedUserId, ownerIds),
-    ))
+    .where(and(eq(tasks.projectId, projectId), inArray(tasks.status, REASSIGNABLE_STATUSES), inArray(tasks.assignedUserId, ownerIds)))
     .limit(500);
 }
 
@@ -220,7 +217,7 @@ export async function concludeCeremonySession(
   const roster = await db
     .select()
     .from(ceremonyParticipants)
-    .where(eq(ceremonyParticipants.sessionId, session.id));
+    .where(scopedToTenant(ceremonyParticipants, session.tenantId, eq(ceremonyParticipants.sessionId, session.id)));
 
   // 1. Accrue the final speaking turn (behaviour preserved from the old route handler).
   if (session.currentTurn != null && session.turnStartedAt) {
@@ -230,7 +227,7 @@ export async function concludeCeremonySession(
       await db
         .update(ceremonyParticipants)
         .set({ durationMs: speaking.durationMs + elapsed, updatedAt: now })
-        .where(eq(ceremonyParticipants.id, speaking.id));
+        .where(scopedToTenant(ceremonyParticipants, session.tenantId, eq(ceremonyParticipants.id, speaking.id)));
       speaking.durationMs += elapsed; // keep the in-memory copy honest for step 2
     }
   }
@@ -269,7 +266,7 @@ export async function concludeCeremonySession(
     await db
       .update(ceremonyParticipants)
       .set({ attendance: resolved.verdict, attendanceSource: resolved.source, updatedAt: now })
-      .where(eq(ceremonyParticipants.id, p.id));
+      .where(scopedToTenant(ceremonyParticipants, session.tenantId, eq(ceremonyParticipants.id, p.id)));
   }
 
   // 3. THE GATE. A human in the room means the ceremony happened, full stop. An empty
@@ -347,7 +344,7 @@ export async function concludeCeremonySession(
       dispatchedCount: dispatched,
       updatedAt: now,
     })
-    .where(eq(ceremonySessions.id, session.id));
+    .where(scopedToTenant(ceremonySessions, session.tenantId, eq(ceremonySessions.id, session.id)));
 
   // Close the companion meeting (0366). Without this the shell sits status='live'
   // forever and every "upcoming meetings" list — which filters on exactly that status —
@@ -360,7 +357,7 @@ export async function concludeCeremonySession(
   const [project] = await db
     .select({ name: projects.name })
     .from(projects)
-    .where(eq(projects.id, session.projectId))
+    .where(scopedToTenant(projects, session.tenantId, eq(projects.id, session.projectId)))
     .limit(1);
 
   await recordActivity(env, db, {
@@ -422,11 +419,7 @@ export async function recordCeremonyPresence(
   const [existing] = await db
     .select({ id: ceremonyParticipants.id, joinedAt: ceremonyParticipants.joinedAt })
     .from(ceremonyParticipants)
-    .where(and(
-      eq(ceremonyParticipants.sessionId, args.sessionId),
-      eq(ceremonyParticipants.memberKind, args.memberKind),
-      eq(ceremonyParticipants.memberRef, args.memberRef),
-    ))
+    .where(and(eq(ceremonyParticipants.sessionId, args.sessionId), eq(ceremonyParticipants.memberKind, args.memberKind), eq(ceremonyParticipants.memberRef, args.memberRef)))
     .limit(1);
 
   if (existing) {

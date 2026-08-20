@@ -23,6 +23,7 @@ import { and, eq, sql, asc, desc, inArray } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole, TaskStatus, NON_TERMINAL_TASK_STATUSES } from '../../domain/shared/types';
 import { projects, tasks, pullRequests } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
@@ -248,7 +249,7 @@ export function createManagerRoutes(
         flagged: sql<number>`count(*) filter (where ${tasks.auditStatus} = 'flagged')::int`,
       })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES), notSystemTask));
+      .where(scopedToTenant(tasks, tenantId, eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES), notSystemTask));
 
     const [prCount] = await db
       .select({ open: sql<number>`count(*)::int` })
@@ -349,7 +350,7 @@ export function createManagerRoutes(
         assignedUserId: tasks.assignedUserId, assignedAgentRef: tasks.assignedAgentRef, assignedAgentHostId: tasks.assignedAgentHostId,
       })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES), notSystemTask))
+      .where(scopedToTenant(tasks, tenantId, eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL_TASK_STATUSES), notSystemTask))
       .orderBy(sql`${tasks.managerRank} asc nulls last`, asc(tasks.updatedAt))
       .limit(30);
 
@@ -401,7 +402,7 @@ export function createManagerRoutes(
         createdAt: tasks.createdAt, completedAt: tasks.completedAt,
       })
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), eq(tasks.source, SYSTEM_TASK_SOURCE_MANAGER)))
+      .where(scopedToTenant(tasks, tenantId, eq(tasks.projectId, projectId), eq(tasks.archived, false), eq(tasks.source, SYSTEM_TASK_SOURCE_MANAGER)))
       .orderBy(desc(tasks.createdAt))
       .limit(20);
 

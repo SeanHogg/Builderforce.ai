@@ -31,6 +31,7 @@ import {
   taskDependencies,
   tasks,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { notSystemTask } from '../task/taskScope';
 import { loggedMinutesByTask } from '../timeTracking/timeTracking';
 import {
@@ -495,7 +496,7 @@ export async function loadPlanningSpine(db: Db, tenantId: number, segmentId: str
       startDate: tasks.startDate, dueDate: tasks.dueDate, createdAt: tasks.createdAt, completedAt: tasks.completedAt,
       assignedUserId: tasks.assignedUserId, costClass: tasks.costClass, costClassSource: tasks.costClassSource, costClassVerified: tasks.costClassVerified,
       actionType: tasks.actionType, source: tasks.source, allocationCategory: tasks.allocationCategory,
-    }).from(tasks).where(opts.projectId != null ? and(eq(tasks.segmentId, segmentId), eq(tasks.projectId, opts.projectId), notSystemTask) : and(eq(tasks.segmentId, segmentId), notSystemTask)),
+    }).from(tasks).where(scopedToTenant(tasks, tenantId, opts.projectId != null ? and(eq(tasks.segmentId, segmentId), eq(tasks.projectId, opts.projectId), notSystemTask) : and(eq(tasks.segmentId, segmentId), notSystemTask))),
     db.select({ objectiveId: objectiveLinks.objectiveId, linkKind: objectiveLinks.linkKind, initiativeId: objectiveLinks.initiativeId, taskId: objectiveLinks.taskId })
       .from(objectiveLinks).where(and(eq(objectiveLinks.tenantId, tenantId), eq(objectiveLinks.segmentId, segmentId))),
     db.select({ id: roadmapItems.id, title: roadmapItems.title, status: roadmapItems.status, targetDate: roadmapItems.targetDate, projectId: roadmapItems.projectId })

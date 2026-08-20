@@ -36,6 +36,7 @@ import {
   userLegalAcceptances,
   users,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { provisionBuiltinAgents } from '../agent/provisionBuiltinAgents';
 import { membershipChanged } from '../tenant/membershipChanged';
 import { getActiveTermsVersion } from '../legal/termsAcceptance';
@@ -251,7 +252,7 @@ async function wipeTenantContent(db: Db, tenantId: number, keepProjectKeys: stri
   await db.delete(projects).where(and(eq(projects.tenantId, tenantId), notInArray(projects.key, keepProjectKeys)));
   const remaining = await db.select({ id: projects.id }).from(projects).where(eq(projects.tenantId, tenantId));
   const ids = remaining.map((p) => p.id);
-  if (ids.length > 0) await db.delete(tasks).where(inArray(tasks.projectId, ids));
+  if (ids.length > 0) await db.delete(tasks).where(scopedToTenant(tasks, tenantId, inArray(tasks.projectId, ids)));
 }
 
 async function seedPersona(env: Env, db: Db, bp: DemoBlueprint): Promise<DemoPersonaSeedResult> {

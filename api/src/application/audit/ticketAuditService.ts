@@ -19,6 +19,7 @@ import {
   ticketRoleSignoffs,
   toolRuns,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
@@ -127,7 +128,7 @@ export class TicketAuditService {
     const [task] = await this.db
       .select({ id: tasks.id, projectId: tasks.projectId, status: tasks.status, taskType: tasks.taskType, actionType: tasks.actionType })
       .from(tasks)
-      .where(eq(tasks.id, taskId))
+      .where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId)))
       .limit(1);
     if (!task) throw new Error('task not found');
 
@@ -149,7 +150,7 @@ export class TicketAuditService {
         const reqRows = await this.db
           .select()
           .from(swimlaneRequirements)
-          .where(inArray(swimlaneRequirements.swimlaneId, applicable.map((l) => l.id)));
+          .where(scopedToTenant(swimlaneRequirements, tenantId, inArray(swimlaneRequirements.swimlaneId, applicable.map((l) => l.id))));
         reqs = reqRows
           .filter((r) => laneById.has(r.swimlaneId))
           // Ticket-type / condition scoping: a requirement only counts for the ticket
@@ -212,7 +213,7 @@ export class TicketAuditService {
     await this.db
       .update(tasks)
       .set({ auditStatus: coverage.status, auditFlagCount: coverage.missing.length })
-      .where(eq(tasks.id, taskId));
+      .where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId)));
 
     // Journal the flag only when the verdict actually changed (newly flagged, or the
     // set of unmet checks moved). An unchanged verdict is already visible on the

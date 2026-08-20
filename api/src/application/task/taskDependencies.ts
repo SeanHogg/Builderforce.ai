@@ -12,6 +12,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { taskDependencies, tasks, projects } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 export interface DependencyEdge {
   id: number;
@@ -146,7 +147,7 @@ export async function addDependency(
   // positive result means a genuine concurrent reverse path exists.)
   const after = await listProjectDependencies(db, projectId);
   if (hasPathReachingTarget(after, successorTaskId, predecessorTaskId)) {
-    await db.delete(taskDependencies).where(eq(taskDependencies.id, edge.id));
+    await db.delete(taskDependencies).where(scopedToTenant(taskDependencies, tenantId, eq(taskDependencies.id, edge.id)));
     return { ok: false, status: 400, error: 'would create a dependency cycle' };
   }
   return { ok: true, edge };

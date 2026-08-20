@@ -5,6 +5,7 @@ import type { HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import { projects, tasks, vscodeConnections } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { notSystemTask } from '../../application/task/taskScope';
 import type { TenantService } from '../../application/tenant/TenantService';
 import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
@@ -100,7 +101,7 @@ export function createVscodeRoutes(db: Db, tenantService: TenantService): Hono<H
       await db
         .update(vscodeConnections)
         .set({ status: 'active', extensionVersion, lastSeenAt: sql`now()` })
-        .where(eq(vscodeConnections.id, existing.id));
+        .where(scopedToTenant(vscodeConnections, tenantId, eq(vscodeConnections.id, existing.id)));
     } else {
       await db.insert(vscodeConnections).values({ tenantId, userId, machineName, extensionVersion });
     }

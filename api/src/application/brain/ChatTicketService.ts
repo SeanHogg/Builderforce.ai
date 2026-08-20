@@ -34,6 +34,7 @@ import {
   retrospectives,
   retroItems,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { isCeremonySessionDone } from '../../domain/agile/ceremonySession';
 import { notSystemTask } from '../task/taskScope';
@@ -396,7 +397,7 @@ export class ChatTicketService {
             done: sql<number>`count(${tasks.completedAt})`,
           })
           .from(tasks)
-          .where(inArray(tasks.parentTaskId, [...epicIds]))
+          .where(scopedToTenant(tasks, tenantId, inArray(tasks.parentTaskId, [...epicIds])))
           .groupBy(tasks.parentTaskId);
         const childByParent = new Map(childRows.map((r) => [Number(r.parentId), { total: Number(r.total), done: Number(r.done) }]));
         for (const id of epicIds) {
@@ -419,7 +420,7 @@ export class ChatTicketService {
         objectiveId: keyResults.objectiveId, metricType: keyResults.metricType,
         startValue: keyResults.startValue, targetValue: keyResults.targetValue,
         currentValue: keyResults.currentValue, status: keyResults.status,
-      }).from(keyResults).where(inArray(keyResults.objectiveId, [...objIds]));
+      }).from(keyResults).where(scopedToTenant(keyResults, tenantId, inArray(keyResults.objectiveId, [...objIds])));
       const krByObj = new Map<string, typeof krRows>();
       for (const kr of krRows) { const arr = krByObj.get(kr.objectiveId) ?? []; arr.push(kr); krByObj.set(kr.objectiveId, arr); }
       const objById = new Map(objRows.map((r) => [r.id, r]));
@@ -442,7 +443,7 @@ export class ChatTicketService {
         initiativeId: tasks.initiativeId,
         total: sql<number>`count(*)`,
         done: sql<number>`count(${tasks.completedAt})`,
-      }).from(tasks).where(inArray(tasks.initiativeId, [...initIds])).groupBy(tasks.initiativeId);
+      }).from(tasks).where(scopedToTenant(tasks, tenantId, inArray(tasks.initiativeId, [...initIds]))).groupBy(tasks.initiativeId);
       const byInit = new Map(rollup.map((r) => [String(r.initiativeId), { total: Number(r.total), done: Number(r.done) }]));
       const initById = new Map(initRows.map((r) => [r.id, r]));
       for (const id of initIds) {
@@ -464,7 +465,7 @@ export class ChatTicketService {
         done: sql<number>`count(${tasks.completedAt})`,
       }).from(tasks)
         .innerJoin(initiatives, eq(initiatives.id, tasks.initiativeId))
-        .where(inArray(initiatives.portfolioId, [...pfIds]))
+        .where(scopedToTenant(tasks, tenantId, inArray(initiatives.portfolioId, [...pfIds])))
         .groupBy(initiatives.portfolioId);
       const byPf = new Map(rollup.map((r) => [String(r.portfolioId), { total: Number(r.total), done: Number(r.done) }]));
       const pfById = new Map(pfRows.map((r) => [r.id, r]));
@@ -623,7 +624,7 @@ export class ChatTicketService {
     const seg = await resolveSegment(this.db, tenantId);
     const linkType: LinkType = input.linkType === 'created' ? 'created' : 'linked';
     const [existing] = await this.db.select({ id: chatTicketLinks.id, linkType: chatTicketLinks.linkType }).from(chatTicketLinks)
-      .where(and(eq(chatTicketLinks.chatId, chatId), eq(chatTicketLinks.ticketKind, input.kind), eq(chatTicketLinks.ticketRef, input.ref))).limit(1);
+      .where(scopedToTenant(chatTicketLinks, tenantId, eq(chatTicketLinks.chatId, chatId), eq(chatTicketLinks.ticketKind, input.kind), eq(chatTicketLinks.ticketRef, input.ref))).limit(1);
 
     let row;
     if (existing) {
@@ -642,7 +643,7 @@ export class ChatTicketService {
     // — the assignment-time trigger fires only for chats linked at assignment time).
     if (input.kind === 'task' || input.kind === 'epic' || input.kind === 'gap') {
       try {
-        const [t] = await this.db.select({ agentRef: tasks.assignedAgentRef }).from(tasks).where(eq(tasks.id, Number(input.ref))).limit(1);
+        const [t] = await this.db.select({ agentRef: tasks.assignedAgentRef }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, Number(input.ref)))).limit(1);
         if (t?.agentRef) await this.onTicketAgentAssigned(tenantId, input.kind, input.ref, t.agentRef, { chatId });
       } catch (error) { /* best-effort: a handoff failure must never break linking */ 
         reportCaughtError(error, { source: "application/brain/ChatTicketService.ts", operation: "linkTicket" });
@@ -732,7 +733,7 @@ export class ChatTicketService {
     // Move ticket links to the target (skip ones already present on the target).
     const srcLinks = await this.db.select().from(chatTicketLinks)
       .where(and(eq(chatTicketLinks.tenantId, tenantId), inArray(chatTicketLinks.chatId, sources)));
-    const [targetLinksRows] = [await this.db.select({ kind: chatTicketLinks.ticketKind, ref: chatTicketLinks.ticketRef }).from(chatTicketLinks).where(eq(chatTicketLinks.chatId, input.targetChatId))];
+    const [targetLinksRows] = [await this.db.select({ kind: chatTicketLinks.ticketKind, ref: chatTicketLinks.ticketRef }).from(chatTicketLinks).where(scopedToTenant(chatTicketLinks, tenantId, eq(chatTicketLinks.chatId, input.targetChatId)))];
     const targetHas = new Set(targetLinksRows.map((l) => `${l.kind}:${l.ref}`));
     const seg = await resolveSegment(this.db, tenantId);
     let linksMoved = 0;
@@ -761,7 +762,7 @@ export class ChatTicketService {
     await this.db.update(brainChats)
       .set({ isArchived: true, mergedIntoChatId: input.targetChatId, updatedAt: new Date() })
       .where(and(eq(brainChats.tenantId, tenantId), inArray(brainChats.id, sources)));
-    await this.db.update(brainChats).set({ updatedAt: new Date() }).where(eq(brainChats.id, input.targetChatId));
+    await this.db.update(brainChats).set({ updatedAt: new Date() }).where(scopedToTenant(brainChats, tenantId, eq(brainChats.id, input.targetChatId)));
 
     return { targetChatId: input.targetChatId, mergedChats: sources.length, messagesMoved, linksMoved };
   }

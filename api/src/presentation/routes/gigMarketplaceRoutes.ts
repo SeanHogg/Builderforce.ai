@@ -39,6 +39,7 @@ import {
   tenants,
   users,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hireShape } from '../../application/marketplace/engagementShape';
 import type { EvalJudge } from '../../application/eval/semanticEval';
 import type { Db } from '../../infrastructure/database/connection';
@@ -149,7 +150,7 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
         closedAt: null,
         updatedAt: new Date(),
       }).where(and(eq(jobPostings.id, prior.id), eq(jobPostings.tenantId, tenantId))).returning();
-      await db.update(tasks).set({ hireable: true, jobPostingId: prior.id }).where(eq(tasks.id, ticketId));
+      await db.update(tasks).set({ hireable: true, jobPostingId: prior.id }).where(scopedToTenant(tasks, tenantId, eq(tasks.id, ticketId)));
       await Promise.all([
         invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY),
         invalidateCached(c.env as Env, ticketPostingKey(tenantId, ticketId)),
@@ -175,7 +176,7 @@ export function createGigMarketplaceRoutes(): Hono<HonoEnv> {
       sourceTicketId: ticketId,
       createdByUserId: actor,
     });
-    await db.update(tasks).set({ hireable: true, jobPostingId: id }).where(eq(tasks.id, ticketId));
+    await db.update(tasks).set({ hireable: true, jobPostingId: id }).where(scopedToTenant(tasks, tenantId, eq(tasks.id, ticketId)));
     await Promise.all([
       invalidateCached(c.env as Env, JOBS_PUBLIC_CACHE_KEY),
       invalidateCached(c.env as Env, ticketPostingKey(tenantId, ticketId)),
@@ -313,7 +314,7 @@ export function createEngagementBoardRoutes(accessDb: Db): Hono<HonoEnv> {
     const rows = await db
       .select(engagementTaskColumns)
       .from(tasks)
-      .where(and(eq(tasks.projectId, grant.projectId), eq(tasks.archived, false)))
+      .where(scopedToTenant(tasks, grant.tenantId, eq(tasks.projectId, grant.projectId), eq(tasks.archived, false)))
       .orderBy(desc(tasks.updatedAt))
       .limit(200);
     return c.json({ tasks: rows.map(mapTask) });
@@ -328,7 +329,7 @@ export function createEngagementBoardRoutes(accessDb: Db): Hono<HonoEnv> {
     const [row] = await db
       .select(engagementTaskColumns)
       .from(tasks)
-      .where(and(eq(tasks.id, Number(c.req.param('taskId'))), eq(tasks.projectId, grant.projectId)));
+      .where(scopedToTenant(tasks, grant.tenantId, eq(tasks.id, Number(c.req.param('taskId'))), eq(tasks.projectId, grant.projectId)));
     if (!row) return c.json({ error: 'Not found' }, 404);
     return c.json({ task: mapTask(row) });
   });
@@ -345,7 +346,7 @@ export function createEngagementBoardRoutes(accessDb: Db): Hono<HonoEnv> {
     const rows = await db
       .update(tasks)
       .set({ status: 'in_review', updatedAt: sql`NOW()` })
-      .where(and(eq(tasks.id, taskId), eq(tasks.projectId, grant.projectId)))
+      .where(scopedToTenant(tasks, grant.tenantId, eq(tasks.id, taskId), eq(tasks.projectId, grant.projectId)))
       .returning({ id: tasks.id, title: tasks.title });
     const updated = rows[0];
     if (!updated) return c.json({ error: 'Not found' }, 404);
@@ -556,7 +557,7 @@ export function createDeliverableRoutes(accessDb: Db): Hono<HonoEnv> {
     // Requirements: prefer the linked posting; else the linked ticket's description.
     let requirements = d.requirements || d.jobDescription || '';
     if (!requirements && d.ticketId != null) {
-      const [t] = await db.select({ description: tasks.description }).from(tasks).where(eq(tasks.id, d.ticketId));
+      const [t] = await db.select({ description: tasks.description }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, d.ticketId)));
       requirements = t?.description || '';
     }
     let judge: EvalJudge | undefined;

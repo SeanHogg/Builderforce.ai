@@ -18,6 +18,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { brainChats, brainChatMessages } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveEvermindTargets, isLiveLearnTarget, dispatchProjectEvermindLearnText } from '../llm/projectEvermind';
 
 /** A one-line assistant turn is not a teaching signal; require some substance. */
@@ -110,7 +111,7 @@ export async function evaluateBrainLearnGate(
   const [chat] = await db
     .select({ projectId: brainChats.projectId })
     .from(brainChats)
-    .where(eq(brainChats.id, chatId))
+    .where(scopedToTenant(brainChats, tenantId, eq(brainChats.id, chatId)))
     .limit(1);
   const projectId = chat?.projectId ?? null;
   // Only a project chat feeds a project Evermind. This is the most common real reason a

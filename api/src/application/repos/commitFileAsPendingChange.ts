@@ -12,6 +12,7 @@
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveDefaultRepoForTask } from './resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from './resolveRepoCredential';
 import { commitFileToRepo, deleteFileFromRepo, type CommitFileResult, type DeleteFileResult } from './commitFileToRepo';
@@ -81,7 +82,7 @@ export async function resolveTicketRepoContext(
   const [taskRow] = await db
     .select({ gitBranch: tasks.gitBranch })
     .from(tasks)
-    .where(eq(tasks.id, taskId))
+    .where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId)))
     .limit(1);
   const branch = taskRow?.gitBranch?.trim() || ticketBranchName(taskId);
 

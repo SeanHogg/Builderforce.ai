@@ -18,6 +18,7 @@ import { Hono } from 'hono';
 import { eq, and } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { specs, workflows, projects, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { hostOrTenantAuth, requestAgentHostId } from '../middleware/hostOrTenantAuth';
 import { linkSpecToTask } from '../../application/prd/taskPrd';
 import { bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
@@ -106,7 +107,7 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
     // A spec is a link-picker ticket kind — orphan the chat↔ticket typeahead cache.
     await bumpTicketSearchVersion(c.env as Env, tenantId);
 
-    const [row] = await db.select().from(specs).where(eq(specs.id, specId));
+    const [row] = await db.select().from(specs).where(scopedToTenant(specs, tenantId, eq(specs.id, specId)));
     return c.json(row, 201);
   });
 

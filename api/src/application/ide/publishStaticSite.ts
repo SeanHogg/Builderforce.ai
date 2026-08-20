@@ -19,6 +19,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { projectSites, qaTargets } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   SITES_PREFIX,
   HOSTING_APEX,
@@ -93,7 +94,7 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
   const [current] = await db
     .select({ subdomain: projectSites.subdomain, landingObjectId: projectSites.landingObjectId })
     .from(projectSites)
-    .where(eq(projectSites.projectId, projectId))
+    .where(scopedToTenant(projectSites, tenantId, eq(projectSites.projectId, projectId)))
     .limit(1);
   const oldSub = current?.subdomain;
 
@@ -270,7 +271,7 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
     await db
       .update(qaTargets)
       .set({ baseUrl: url, status: 'active', updatedAt: sql`NOW()` })
-      .where(and(eq(qaTargets.projectId, projectId), eq(qaTargets.isDefault, true)));
+      .where(scopedToTenant(qaTargets, tenantId, eq(qaTargets.projectId, projectId), eq(qaTargets.isDefault, true)));
     // INSERT ... SELECT ... WHERE NOT EXISTS stays raw: it creates the default
     // target only if none exists, in ONE statement. Splitting it into a read then
     // an insert would open a race that could produce two defaults for a project.

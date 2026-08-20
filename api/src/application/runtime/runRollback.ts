@@ -30,6 +30,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { executionRollbacks, executions, pullRequests, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   closePullRequest, deleteBranch, listBranchCommits,
   type ListBranchCommitsResult,
@@ -526,7 +527,7 @@ export async function revertRun(
       refusalCode: null,
       refusalReason: null,
     })
-    .where(eq(executionRollbacks.id, snapshot.id));
+    .where(scopedToTenant(executionRollbacks, args.tenantId, eq(executionRollbacks.id, snapshot.id)));
 
   await db.update(tasks)
     .set({ gitBranch: null, githubPrUrl: null, githubPrNumber: null, updatedAt: new Date() })

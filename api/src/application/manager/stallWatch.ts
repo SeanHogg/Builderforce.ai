@@ -31,6 +31,7 @@ import { and, asc, desc, eq, isNull, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { managerStallWatch, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import {
   escalateIfIneffective, isManagerActionable, MAX_REMEDY_ATTEMPTS,
@@ -252,11 +253,9 @@ export async function resolveStalls(
     await db
       .update(managerStallWatch)
       .set({ resolvedAt: now, updatedAt: now })
-      .where(and(
-        eq(managerStallWatch.projectId, args.projectId),
+      .where(scopedToTenant(managerStallWatch, args.tenantId, eq(managerStallWatch.projectId, args.projectId),
         isNull(managerStallWatch.resolvedAt),
-        inArray(managerStallWatch.taskId, args.taskIds),
-      ));
+        inArray(managerStallWatch.taskId, args.taskIds)));
     await invalidateCached(env, registerKey(args.tenantId, args.projectId));
     await invalidateCached(env, registerKey(args.tenantId, null));
     return args.taskIds.length;

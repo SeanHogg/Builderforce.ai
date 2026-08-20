@@ -17,6 +17,7 @@
  */
 import { and, desc, eq, gt, ilike, isNull, ne, or, type SQL } from 'drizzle-orm';
 import { projectFacts } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -192,7 +193,7 @@ export async function recallProjectFacts(
         const rows = await db
           .select({ key: projectFacts.key, content: projectFacts.content, expiresAt: projectFacts.expiresAt })
           .from(projectFacts)
-          .where(where)
+          .where(scopedToTenant(projectFacts, tenantId, where))
           .orderBy(desc(projectFacts.importance), desc(projectFacts.updatedAt))
           .limit(limit);
         return rows.map((row) => ({

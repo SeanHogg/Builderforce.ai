@@ -15,6 +15,7 @@ import { Hono } from 'hono';
 import { and, desc, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { managedAgentHostRequests } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { TenantRole } from '../../domain/shared/types';
@@ -101,7 +102,7 @@ export function createManagedAgentHostRoutes(db: Db): Hono<HonoEnv> {
     await db
       .update(managedAgentHostRequests)
       .set({ status: 'cancelled', updatedAt: new Date() })
-      .where(eq(managedAgentHostRequests.id, id));
+      .where(scopedToTenant(managedAgentHostRequests, tenantId, eq(managedAgentHostRequests.id, id)));
 
     return c.json({ ok: true });
   });

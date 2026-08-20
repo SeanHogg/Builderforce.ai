@@ -11,6 +11,7 @@
  */
 import { and, eq, isNull } from 'drizzle-orm';
 import { agentAssignments } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -86,7 +87,7 @@ export class AgentAssignmentService {
       [row] = await this.db
         .update(agentAssignments)
         .set({ executionScope, role, updatedAt: now })
-        .where(eq(agentAssignments.id, existing.id))
+        .where(scopedToTenant(agentAssignments, tenantId, eq(agentAssignments.id, existing.id)))
         .returning();
     } else {
       [row] = await this.db

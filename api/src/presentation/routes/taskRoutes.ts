@@ -10,6 +10,7 @@ import { requirePermission } from '../middleware/requirePermission';
 import { PERMISSIONS } from '../../domain/permissions/permissionRegistry';
 import { TenantRole } from '../../domain/shared/types';
 import { projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
 import { invalidateCompletedByAssignee } from './reportRoutes';
@@ -935,7 +936,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       })
       .from(taskSpecs)
       .innerJoin(specs, eq(specs.id, taskSpecs.specId))
-      .where(eq(taskSpecs.taskId, taskId))
+      .where(scopedToTenant(taskSpecs, tenantId, eq(taskSpecs.taskId, taskId)))
       .orderBy(desc(taskSpecs.isPrimary), desc(specs.updatedAt));
     return c.json({ specs: rows });
   });
@@ -983,7 +984,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const specId = c.req.param('specId');
     const tenantId = c.get('tenantId');
     if (!(await loadTenantTask(taskId, tenantId))) return c.json({ error: 'Task not found' }, 404);
-    await db.delete(taskSpecs).where(and(eq(taskSpecs.taskId, taskId), eq(taskSpecs.specId, specId)));
+    await db.delete(taskSpecs).where(scopedToTenant(taskSpecs, tenantId, eq(taskSpecs.taskId, taskId), eq(taskSpecs.specId, specId)));
     return c.body(null, 204);
   });
 

@@ -50,6 +50,7 @@ import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/
 import { parseJsonObject } from '../../domain/shared/json';
 import { signJwt } from '../../infrastructure/auth/JwtService';
 import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, taskFileChanges, tasks, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
@@ -279,7 +280,7 @@ async function loadTaskProgress(ctx: BuiltinCtx, rows: Record<string, unknown>[]
   if (!ids.length) return new Map();
   const [children, prs, codeRows] = await Promise.all([
     ctx.db.select({ parentTaskId: tasks.parentTaskId, status: tasks.status })
-      .from(tasks).where(inArray(tasks.parentTaskId, ids)),
+      .from(tasks).where(scopedToTenant(tasks, ctx.tenantId, inArray(tasks.parentTaskId, ids))),
     ctx.db.select({ taskId: pullRequests.taskId, status: pullRequests.status, buildStatus: pullRequests.buildStatus })
       .from(pullRequests)
       .where(and(eq(pullRequests.tenantId, ctx.tenantId), inArray(pullRequests.taskId, ids)))

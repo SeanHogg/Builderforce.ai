@@ -26,6 +26,7 @@ import {
   tenantMembers,
   users,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   getOrSetCached,
   getCacheVersion,
@@ -385,11 +386,11 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       db
         .select()
         .from(knowledgeAcknowledgements)
-        .where(and(eq(knowledgeAcknowledgements.documentId, id), eq(knowledgeAcknowledgements.userId, userId))),
+        .where(scopedToTenant(knowledgeAcknowledgements, tenantId, eq(knowledgeAcknowledgements.documentId, id), eq(knowledgeAcknowledgements.userId, userId))),
       db
         .select({ n: sql<number>`count(*)::int` })
         .from(knowledgeDocumentVersions)
-        .where(eq(knowledgeDocumentVersions.documentId, id)),
+        .where(scopedToTenant(knowledgeDocumentVersions, tenantId, eq(knowledgeDocumentVersions.documentId, id))),
     ]);
 
     const acknowledgedCurrent =
@@ -577,7 +578,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     const versions = await db
       .select()
       .from(knowledgeDocumentVersions)
-      .where(eq(knowledgeDocumentVersions.documentId, id))
+      .where(scopedToTenant(knowledgeDocumentVersions, tenantId, eq(knowledgeDocumentVersions.documentId, id)))
       .orderBy(desc(knowledgeDocumentVersions.versionNumber));
     return c.json({ versions });
   });
@@ -616,7 +617,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     if (!canEditAccess(await accessFor(c, doc))) return c.json({ error: 'You do not have edit access to this document' }, 403);
 
     const tags = normaliseTags(body.tags);
-    await db.delete(knowledgeDocumentTags).where(eq(knowledgeDocumentTags.documentId, id));
+    await db.delete(knowledgeDocumentTags).where(scopedToTenant(knowledgeDocumentTags, tenantId, eq(knowledgeDocumentTags.documentId, id)));
     if (tags.length) {
       await db.insert(knowledgeDocumentTags).values(tags.map((tag) => ({ tenantId, documentId: id, tag })));
     }
@@ -739,7 +740,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
         })
         .from(knowledgeDocumentCollaborators)
         .innerJoin(users, eq(users.id, knowledgeDocumentCollaborators.userId))
-        .where(eq(knowledgeDocumentCollaborators.documentId, id)),
+        .where(scopedToTenant(knowledgeDocumentCollaborators, tenantId, eq(knowledgeDocumentCollaborators.documentId, id))),
       doc.createdBy
         ? db
             .select({ id: users.id, displayName: users.displayName, email: users.email })
@@ -1113,9 +1114,9 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       updatedAt: new Date(),
     };
 
-    const [existing] = await db.select().from(marketplaceKnowledge).where(eq(marketplaceKnowledge.sourceDocumentId, id));
+    const [existing] = await db.select().from(marketplaceKnowledge).where(scopedToTenant(marketplaceKnowledge, tenantId, eq(marketplaceKnowledge.sourceDocumentId, id)));
     const [listing] = existing
-      ? await db.update(marketplaceKnowledge).set(values).where(eq(marketplaceKnowledge.id, existing.id)).returning()
+      ? await db.update(marketplaceKnowledge).set(values).where(scopedToTenant(marketplaceKnowledge, tenantId, eq(marketplaceKnowledge.id, existing.id))).returning()
       : await db.insert(marketplaceKnowledge).values(values).returning();
     await bumpCacheVersion(c.env as Env, MARKET_VERSION_KEY);
     return c.json({ listing: { ...listing, tags } });
@@ -1136,10 +1137,10 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   router.delete('/listings/:listingId', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const listingId = c.req.param('listingId');
-    const [listing] = await db.select().from(marketplaceKnowledge).where(eq(marketplaceKnowledge.id, listingId));
+    const [listing] = await db.select().from(marketplaceKnowledge).where(scopedToTenant(marketplaceKnowledge, tenantId, eq(marketplaceKnowledge.id, listingId)));
     if (!listing) return c.json({ error: 'Listing not found' }, 404);
     if (listing.tenantId !== tenantId) return c.json({ error: 'Forbidden' }, 403);
-    await db.delete(marketplaceKnowledge).where(eq(marketplaceKnowledge.id, listingId));
+    await db.delete(marketplaceKnowledge).where(scopedToTenant(marketplaceKnowledge, tenantId, eq(marketplaceKnowledge.id, listingId)));
     await bumpCacheVersion(c.env as Env, MARKET_VERSION_KEY);
     return c.body(null, 204);
   });
@@ -1161,7 +1162,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   router.post('/listings/:listingId/checkout', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const listingId = c.req.param('listingId');
-    const [listing] = await db.select().from(marketplaceKnowledge).where(eq(marketplaceKnowledge.id, listingId));
+    const [listing] = await db.select().from(marketplaceKnowledge).where(scopedToTenant(marketplaceKnowledge, tenantId, eq(marketplaceKnowledge.id, listingId)));
     if (!listing) return c.json({ error: 'Listing not found' }, 404);
     if (listing.priceCents <= 0) return c.json({ free: true });
     if (await holdsKnowledgePurchase(db, tenantId, listingId)) return c.json({ purchased: true });
@@ -1213,7 +1214,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const segmentId = (c.get('segmentId') as string | undefined) ?? null;
     const listingId = c.req.param('listingId');
-    const [listing] = await db.select().from(marketplaceKnowledge).where(eq(marketplaceKnowledge.id, listingId));
+    const [listing] = await db.select().from(marketplaceKnowledge).where(scopedToTenant(marketplaceKnowledge, tenantId, eq(marketplaceKnowledge.id, listingId)));
     if (!listing) return c.json({ error: 'Listing not found' }, 404);
     // Public listings install anywhere; non-public only within the owning tenant.
     if (listing.visibility !== 'public' && listing.tenantId !== tenantId) {
@@ -1251,7 +1252,7 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     await db
       .update(marketplaceKnowledge)
       .set({ installCount: listing.installCount + 1 })
-      .where(eq(marketplaceKnowledge.id, listingId));
+      .where(scopedToTenant(marketplaceKnowledge, tenantId, eq(marketplaceKnowledge.id, listingId)));
 
     await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
     await bumpCacheVersion(c.env as Env, MARKET_VERSION_KEY);

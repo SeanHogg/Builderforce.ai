@@ -14,6 +14,7 @@ import { readProxyChoice } from '../llm/LlmProxyService';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { specs, taskSpecs } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 const PRD_SYSTEM_PROMPT =
   'You are a senior product architect drafting the WIP Product Requirements Document (PRD) that every ' +
@@ -126,7 +127,7 @@ export async function linkSpecToTask(
       const demote = db
         .update(taskSpecs)
         .set({ isPrimary: false })
-        .where(and(eq(taskSpecs.taskId, taskId), eq(taskSpecs.isPrimary, true)));
+        .where(scopedToTenant(taskSpecs, tenantId, eq(taskSpecs.taskId, taskId), eq(taskSpecs.isPrimary, true)));
       await db.batch([demote, upsert]);
     } else {
       await upsert;

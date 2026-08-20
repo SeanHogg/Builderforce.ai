@@ -22,6 +22,7 @@ import {
   studioVoiceClones,
   studioVoiceovers,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   bumpCacheVersion,
   getCacheVersion,
@@ -187,7 +188,7 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
           );
         const licensedIds = licenseRows.map((r) => r.cloneId);
         const licensed = licensedIds.length
-          ? await db.select().from(studioVoiceClones).where(inArray(studioVoiceClones.id, licensedIds))
+          ? await db.select().from(studioVoiceClones).where(scopedToTenant(studioVoiceClones, tenantId, inArray(studioVoiceClones.id, licensedIds)))
           : [];
 
         return [...owned, ...licensed].map(toPublicClone);
@@ -276,7 +277,7 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
     const [vo] = await db
       .select({ audioKey: studioVoiceovers.audioKey, cloneId: studioVoiceovers.cloneId })
       .from(studioVoiceovers)
-      .where(eq(studioVoiceovers.id, voiceoverId))
+      .where(scopedToTenant(studioVoiceovers, tenantId, eq(studioVoiceovers.id, voiceoverId)))
       .limit(1);
     if (!vo || vo.cloneId !== cloneId) return c.json({ error: 'Not found' }, 404);
     if (!env.UPLOADS) return c.json({ error: 'File storage not configured' }, 503);
@@ -298,7 +299,7 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
     const [clone] = await db
       .select()
       .from(studioVoiceClones)
-      .where(eq(studioVoiceClones.id, cloneId))
+      .where(scopedToTenant(studioVoiceClones, tenantId, eq(studioVoiceClones.id, cloneId)))
       .limit(1);
     if (!clone) return c.json({ error: 'Not found' }, 404);
     if (clone.tenantId !== tenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -324,13 +325,13 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
       const voiceovers = await db
         .select({ audioKey: studioVoiceovers.audioKey })
         .from(studioVoiceovers)
-        .where(eq(studioVoiceovers.cloneId, cloneId));
+        .where(scopedToTenant(studioVoiceovers, tenantId, eq(studioVoiceovers.cloneId, cloneId)));
       await Promise.all(voiceovers.map((v) => env.UPLOADS!.delete(v.audioKey).catch((error) => {
         reportCaughtError(error, { source: "presentation/routes/studioVoiceCloneRoutes.ts", operation: "createStudioVoiceCloneRoutes" });
       })));
     }
 
-    await db.delete(studioVoiceClones).where(eq(studioVoiceClones.id, cloneId));
+    await db.delete(studioVoiceClones).where(scopedToTenant(studioVoiceClones, tenantId, eq(studioVoiceClones.id, cloneId)));
     await bumpCacheVersion(env, `voiceclones:${tenantId}`);
     if (clone.visibility === 'marketplace') await bumpCacheVersion(env, 'voiceclones:marketplace');
     // Invalidate every licensee's list cache so the deletion is immediate for them too.

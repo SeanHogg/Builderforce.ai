@@ -30,6 +30,7 @@ import {
   activityEvents,
   devTeamMembers,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 import { bumpTenantActivityVersion } from '../analytics/tenantActivity';
 
@@ -247,12 +248,12 @@ export async function mergeContributors(
     ops.push(db.delete(devTeamMembers).where(inArray(devTeamMembers.id, dedupeTeams.map((t) => t.id))));
   }
   if (appliedUserId) {
-    ops.push(db.update(contributors).set({ userId: appliedUserId, updatedAt: new Date() }).where(eq(contributors.id, targetId)));
+    ops.push(db.update(contributors).set({ userId: appliedUserId, updatedAt: new Date() }).where(scopedToTenant(contributors, tenantId, eq(contributors.id, targetId))));
   }
   ops.push(
     db.update(contributors)
       .set({ isActive: false, mergedIntoId: targetId, updatedAt: new Date() })
-      .where(eq(contributors.id, sourceId)),
+      .where(scopedToTenant(contributors, tenantId, eq(contributors.id, sourceId))),
   );
   ops.push(
     db.insert(contributorMerges).values({
@@ -353,19 +354,19 @@ export async function unmergeContributors(
   }
   // 6. Roll back the inherited user link if the merge applied one.
   if (undo.appliedUserId) {
-    ops.push(db.update(contributors).set({ userId: undo.priorTargetUserId, updatedAt: new Date() }).where(eq(contributors.id, targetId)));
+    ops.push(db.update(contributors).set({ userId: undo.priorTargetUserId, updatedAt: new Date() }).where(scopedToTenant(contributors, tenantId, eq(contributors.id, targetId))));
   }
   // 7. Reactivate the source (restore its prior is_active; drop the tombstone).
   ops.push(
     db.update(contributors)
       .set({ isActive: undo.source.isActive, mergedIntoId: null, updatedAt: new Date() })
-      .where(eq(contributors.id, sourceId)),
+      .where(scopedToTenant(contributors, tenantId, eq(contributors.id, sourceId))),
   );
   // 8. Mark the merge reverted.
   ops.push(
     db.update(contributorMerges)
       .set({ status: 'reverted', revertedAt: new Date() })
-      .where(eq(contributorMerges.id, mergeId)),
+      .where(scopedToTenant(contributorMerges, tenantId, eq(contributorMerges.id, mergeId))),
   );
 
   await db.batch(ops as unknown as Parameters<typeof db.batch>[0]);

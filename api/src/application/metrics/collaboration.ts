@@ -22,6 +22,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import {
   activityEvents, agentHosts, contributors, taskStatusTransitions, users,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { MemberKind } from './workforceMetrics';
 
 const HOUR_MS = 3_600_000;
@@ -187,7 +188,7 @@ export async function computeCollaborationMetrics(db: Db, tenantId: number, days
     for (const r of rows) nameByKey.set(key('human', r.id), r.name || r.id);
   }
   if (hostIds.length) {
-    const rows = await db.select({ id: agentHosts.id, name: agentHosts.name }).from(agentHosts).where(inArray(agentHosts.id, hostIds));
+    const rows = await db.select({ id: agentHosts.id, name: agentHosts.name }).from(agentHosts).where(scopedToTenant(agentHosts, tenantId, inArray(agentHosts.id, hostIds)));
     for (const r of rows) nameByKey.set(key('host_agent', String(r.id)), r.name || `Agent host #${r.id}`);
   }
   for (const [k, count] of handoffCount) {

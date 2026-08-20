@@ -13,6 +13,7 @@
  */
 import { and, asc, eq } from 'drizzle-orm';
 import { onCallRotations, onCallMembers } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 
 export type RotationKind = 'manual' | 'daily' | 'weekly';
@@ -85,7 +86,7 @@ export class OnCallService {
 
   async removeMember(tenantId: number, rotationId: string, memberId: string): Promise<void> {
     if (!(await this.ownedRotation(tenantId, rotationId))) throw new Error('Rotation not found in workspace');
-    await this.db.delete(onCallMembers).where(and(eq(onCallMembers.id, memberId), eq(onCallMembers.rotationId, rotationId)));
+    await this.db.delete(onCallMembers).where(scopedToTenant(onCallMembers, tenantId, eq(onCallMembers.id, memberId), eq(onCallMembers.rotationId, rotationId)));
   }
 
   async updateRotation(tenantId: number, rotationId: string, patch: { name?: string; description?: string | null; rotationKind?: RotationKind; active?: boolean; currentIndex?: number }): Promise<void> {

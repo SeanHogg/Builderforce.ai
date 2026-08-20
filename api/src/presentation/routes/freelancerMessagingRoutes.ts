@@ -39,6 +39,7 @@ import {
   tenants,
   users,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv } from '../../env';
 
@@ -442,7 +443,7 @@ export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
     const { id: msgId } = await appendMessage(db, c.env, conv, actor, payload.body, payload.attach);
     await db.update(freelancerConversations)
       .set({ employerLastReadAt: readThrough })
-      .where(eq(freelancerConversations.id, id));
+      .where(scopedToTenant(freelancerConversations, tenantId, eq(freelancerConversations.id, id)));
     return c.json({ id: msgId }, 201);
   });
 

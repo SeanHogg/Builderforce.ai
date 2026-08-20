@@ -35,6 +35,7 @@ import { requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
 import { ceremonySessions, ceremonyParticipants, ceremonySchedules, boards, meetings } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { computeCeremonyRollup } from '../../application/insights/ceremonyRollup';
 import {
@@ -99,13 +100,13 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(ceremonySessions.id, sessionId), eq(ceremonySessions.tenantId, tenantId), eq(ceremonySessions.segmentId, segmentId)));
     if (!session) return null;
     const participants = await db.select().from(ceremonyParticipants)
-      .where(eq(ceremonyParticipants.sessionId, sessionId));
+      .where(scopedToTenant(ceremonyParticipants, tenantId, eq(ceremonyParticipants.sessionId, sessionId)));
     participants.sort((a, b) => a.turnOrder - b.turnOrder);
 
     let meetingRoomKey: string | null = null;
     if (session.meetingId) {
       const [m] = await db.select({ roomKey: meetings.roomKey })
-        .from(meetings).where(eq(meetings.id, session.meetingId)).limit(1);
+        .from(meetings).where(scopedToTenant(meetings, tenantId, eq(meetings.id, session.meetingId))).limit(1);
       meetingRoomKey = m?.roomKey ?? null;
     }
     return { session: { ...session, meetingRoomKey }, participants };
@@ -218,7 +219,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
     }
     await db.update(ceremonySessions)
       .set({ currentTurn: body.currentTurn, turnStartedAt: now, updatedAt: now })
-      .where(eq(ceremonySessions.id, id));
+      .where(scopedToTenant(ceremonySessions, tenantId, eq(ceremonySessions.id, id)));
     return c.json(await hydrate(tenantId, segmentId, id));
   });
 
@@ -284,9 +285,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
 
     // Scoped by sessionId as well as id: a participant row id from another tenant's
     // session must not be addressable just because the session in the path is ours.
-    const [participant] = await db.select().from(ceremonyParticipants).where(and(
-      eq(ceremonyParticipants.id, participantId), eq(ceremonyParticipants.sessionId, id),
-    ));
+    const [participant] = await db.select().from(ceremonyParticipants).where(scopedToTenant(ceremonyParticipants, tenantId, eq(ceremonyParticipants.id, participantId), eq(ceremonyParticipants.sessionId, id)));
     if (!participant) return c.json({ error: 'Not found' }, 404);
 
     const now = new Date();
@@ -298,7 +297,7 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       attendanceSetBy: userId,
       attendanceSetAt: now,
       updatedAt: now,
-    }).where(eq(ceremonyParticipants.id, participantId));
+    }).where(scopedToTenant(ceremonyParticipants, tenantId, eq(ceremonyParticipants.id, participantId)));
 
     // Re-derive the session's denormalised counters from the corrected roster. The
     // history LIST renders from these alone, so a correction that did not update them
@@ -307,13 +306,13 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
       memberKind: ceremonyParticipants.memberKind,
       required: ceremonyParticipants.required,
       attendance: ceremonyParticipants.attendance,
-    }).from(ceremonyParticipants).where(eq(ceremonyParticipants.sessionId, id));
+    }).from(ceremonyParticipants).where(scopedToTenant(ceremonyParticipants, tenantId, eq(ceremonyParticipants.sessionId, id)));
     const humans = roster.filter((p) => p.memberKind === 'human');
     await db.update(ceremonySessions).set({
       humansExpected: humans.filter((p) => p.required).length,
       humansPresent: humans.filter((p) => p.attendance === 'present').length,
       updatedAt: now,
-    }).where(eq(ceremonySessions.id, id));
+    }).where(scopedToTenant(ceremonySessions, tenantId, eq(ceremonySessions.id, id)));
 
     await recordActivity(c.env as Env, db, {
       tenantId,

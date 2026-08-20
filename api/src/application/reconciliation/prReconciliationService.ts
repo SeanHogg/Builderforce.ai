@@ -273,12 +273,12 @@ export async function ensureDependencyReviewTask(
   const [existing] = await db.select({
     id: tasks.id, status: tasks.status, completedAt: tasks.completedAt, description: tasks.description,
   })
-    .from(tasks).where(and(eq(tasks.projectId, args.projectId), eq(tasks.githubPrNumber, args.prNumber))).limit(1);
+    .from(tasks).where(scopedToTenant(tasks, args.tenantId, eq(tasks.projectId, args.projectId), eq(tasks.githubPrNumber, args.prNumber))).limit(1);
   if (existing) {
     if (existing.status.toLowerCase() === TaskStatus.DONE) {
       const [reopened] = await db.update(tasks).set({
         status: TaskStatus.READY, completedAt: null, updatedAt: new Date(),
-      }).where(eq(tasks.id, existing.id)).returning({
+      }).where(scopedToTenant(tasks, args.tenantId, eq(tasks.id, existing.id))).returning({
         id: tasks.id, status: tasks.status, completedAt: tasks.completedAt, description: tasks.description,
       });
       return reopened ?? existing;
@@ -390,7 +390,7 @@ export async function runPrTicketReconciliation(
     const taskRows = taskIds.length === 0 ? [] : await db.select({
       id: tasks.id, status: tasks.status, completedAt: tasks.completedAt, description: tasks.description,
     })
-      .from(tasks).where(and(eq(tasks.projectId, repo.projectId), inArray(tasks.id, taskIds)));
+      .from(tasks).where(scopedToTenant(tasks, args.tenantId, eq(tasks.projectId, repo.projectId), inArray(tasks.id, taskIds)));
     const taskById = new Map(taskRows.map((t) => [t.id, t]));
     const taskRefByPr = new Map<number, number | null>();
     for (const pr of githubPrs) {
@@ -552,7 +552,7 @@ export async function runPrTicketReconciliation(
           status: TaskStatus.IN_REVIEW,
           completedAt: null,
           updatedAt: new Date(),
-        }).where(and(eq(tasks.projectId, repo.projectId), inArray(tasks.id, reviewTaskIds))).returning({ id: tasks.id });
+        }).where(scopedToTenant(tasks, args.tenantId, eq(tasks.projectId, repo.projectId), inArray(tasks.id, reviewTaskIds))).returning({ id: tasks.id });
         reviewTicketsQueued = moved.length;
       }
 
@@ -575,7 +575,7 @@ export async function runPrTicketReconciliation(
           completedAt: null,
           description: description.includes(marker) ? description : `${description}\n\n${repairNote}`.trim(),
           updatedAt: new Date(),
-        }).where(eq(tasks.id, repairHead.taskId)).returning({ id: tasks.id });
+        }).where(scopedToTenant(tasks, args.tenantId, eq(tasks.id, repairHead.taskId))).returning({ id: tasks.id });
         repairTicketsReopened = activated ? 1 : 0;
       }
 

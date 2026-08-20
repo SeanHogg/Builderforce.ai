@@ -18,6 +18,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import {
   monitoringBoards, monitors, monitorEvents, prodIncidents, incidentEvents,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { IncidentService } from '../incident/IncidentService';
 import { EscalationService } from '../incident/EscalationService';
 import { findTenantIncidentManagerRef, dispatchIncidentTriage } from '../incident/incidentDispatch';
@@ -113,7 +114,7 @@ export class MonitoringService {
       .where(and(eq(monitoringBoards.id, boardId), eq(monitoringBoards.tenantId, tenantId))).limit(1);
     if (!board) return null;
     const mons = await this.db.select().from(monitors)
-      .where(eq(monitors.boardId, boardId)).orderBy(desc(monitors.createdAt));
+      .where(scopedToTenant(monitors, tenantId, eq(monitors.boardId, boardId))).orderBy(desc(monitors.createdAt));
     return { board, monitors: mons.map(toPublicMonitor) };
   }
 
@@ -144,7 +145,7 @@ export class MonitoringService {
     severity?: string; escalationPolicyId?: string | null; projectId?: number | null;
   }) {
     if (!(await this.ownedBoard(tenantId, boardId))) throw new Error('Board not found in workspace');
-    const [board] = await this.db.select({ projectId: monitoringBoards.projectId }).from(monitoringBoards).where(eq(monitoringBoards.id, boardId)).limit(1);
+    const [board] = await this.db.select({ projectId: monitoringBoards.projectId }).from(monitoringBoards).where(scopedToTenant(monitoringBoards, tenantId, eq(monitoringBoards.id, boardId))).limit(1);
     const [row] = await this.db.insert(monitors).values({
       tenantId, boardId,
       projectId: input.projectId ?? board?.projectId ?? null,
@@ -294,7 +295,7 @@ export class MonitoringService {
       .where(and(eq(monitors.id, monitorId), eq(monitors.tenantId, tenantId))).limit(1);
     if (!monitor) return null;
     const events = await this.db.select().from(monitorEvents)
-      .where(eq(monitorEvents.monitorId, monitorId)).orderBy(desc(monitorEvents.createdAt)).limit(100);
+      .where(scopedToTenant(monitorEvents, tenantId, eq(monitorEvents.monitorId, monitorId))).orderBy(desc(monitorEvents.createdAt)).limit(100);
     return { monitor: toPublicMonitor(monitor), events };
   }
 
@@ -352,7 +353,7 @@ export class MonitoringService {
     await this.db.update(monitors).set({
       lastCheckedAt: now,
       consecutiveFailures: result === 'breach' ? monitor.consecutiveFailures + 1 : 0,
-    }).where(eq(monitors.id, monitor.id));
+    }).where(scopedToTenant(monitors, tenantId, eq(monitors.id, monitor.id)));
 
     if (result === 'breach' && monitor.status !== 'breached') {
       await this.breach(tenantId, monitor, env, message ?? `Monitor "${monitor.label}" breached`);
@@ -391,7 +392,7 @@ export class MonitoringService {
 
     await this.db.update(monitors).set({
       status: 'breached', currentIncidentId: opened.incidentId, lastStatusChangeAt: new Date(), updatedAt: new Date(),
-    }).where(eq(monitors.id, monitor.id));
+    }).where(scopedToTenant(monitors, tenantId, eq(monitors.id, monitor.id)));
     await this.addEvent(tenantId, monitor.id, { kind: 'breach', status: 'breached', message, incidentId: opened.incidentId });
 
     // Fire any custom workflows listening for a monitor breach (best-effort — the
@@ -443,7 +444,7 @@ export class MonitoringService {
     }
     await this.db.update(monitors).set({
       status: 'ok', currentIncidentId: null, lastStatusChangeAt: new Date(), consecutiveFailures: 0, updatedAt: new Date(),
-    }).where(eq(monitors.id, monitor.id));
+    }).where(scopedToTenant(monitors, tenantId, eq(monitors.id, monitor.id)));
     await this.addEvent(tenantId, monitor.id, { kind: 'recovery', status: 'ok', message });
   }
 
@@ -458,7 +459,7 @@ export class MonitoringService {
     if (!monitor) throw new Error('Monitor not found in workspace');
 
     const now = new Date();
-    await this.db.update(monitors).set({ lastSignalAt: now, updatedAt: now }).where(eq(monitors.id, monitorId));
+    await this.db.update(monitors).set({ lastSignalAt: now, updatedAt: now }).where(scopedToTenant(monitors, tenantId, eq(monitors.id, monitorId)));
     await this.addEvent(tenantId, monitorId, { kind: 'signal', status: signal.status ?? null, message: signal.message ?? null });
 
     let result: EvalResult;
@@ -471,7 +472,7 @@ export class MonitoringService {
       result = 'ok'; // a bare heartbeat ping = healthy
     }
     await this.applyResult(tenantId, { ...monitor, lastSignalAt: now }, result, env, signal.message ?? undefined);
-    const [after] = await this.db.select({ status: monitors.status }).from(monitors).where(eq(monitors.id, monitorId)).limit(1);
+    const [after] = await this.db.select({ status: monitors.status }).from(monitors).where(scopedToTenant(monitors, tenantId, eq(monitors.id, monitorId))).limit(1);
     return { status: (after?.status ?? 'unknown') as MonitorStatus };
   }
 

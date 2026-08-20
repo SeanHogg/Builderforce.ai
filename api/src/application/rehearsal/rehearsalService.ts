@@ -382,7 +382,7 @@ export async function listRehearsals(
     const titleRows = await db
       .select({ id: tasks.id, title: tasks.title })
       .from(tasks)
-      .where(inArray(tasks.id, taskIds));
+      .where(scopedToTenant(tasks, tenantId, inArray(tasks.id, taskIds)));
     for (const t of titleRows) titles.set(t.id, t.title);
   }
 
@@ -428,7 +428,7 @@ export async function getRehearsal(
       .where(and(eq(rehearsalSteps.tenantId, tenantId), eq(rehearsalSteps.rehearsalId, id)))
       .orderBy(rehearsalSteps.seq),
     r.taskId != null
-      ? db.select({ title: tasks.title }).from(tasks).where(eq(tasks.id, r.taskId)).limit(1)
+      ? db.select({ title: tasks.title }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, r.taskId))).limit(1)
       : Promise.resolve([] as Array<{ title: string }>),
   ]);
 

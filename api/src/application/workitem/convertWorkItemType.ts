@@ -26,6 +26,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { keyResults, objectiveLinks, objectives, projects, tasks } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TaskType } from '../../domain/shared/types';
 import type { TaskService } from '../task/TaskService';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -125,7 +126,7 @@ export async function convertWorkItemType(
     if (!Number.isFinite(id)) throw new ConvertError('invalid task id');
     const item = await loadBoardItem(db, tenantId, id);
     if (item.taskType === target) return { kind: target, id: String(id), projectId: item.projectId, migrated: noMigration, warnings };
-    await db.update(tasks).set({ taskType: target as TaskType, updatedAt: new Date() }).where(eq(tasks.id, id));
+    await db.update(tasks).set({ taskType: target as TaskType, updatedAt: new Date() }).where(scopedToTenant(tasks, tenantId, eq(tasks.id, id)));
     await invalidateCaches(env, tenantId, item.projectId);
     return { kind: target, id: String(id), projectId: item.projectId, migrated: noMigration, warnings };
   }
@@ -157,7 +158,7 @@ export async function convertWorkItemType(
     const children = await db
       .select({ id: tasks.id, taskType: tasks.taskType })
       .from(tasks)
-      .where(eq(tasks.parentTaskId, id));
+      .where(scopedToTenant(tasks, tenantId, eq(tasks.parentTaskId, id)));
     if (children.length) {
       await db.insert(objectiveLinks).values(
         children.map((ch) => ({
@@ -213,10 +214,10 @@ export async function convertWorkItemType(
     if (taskLinks.length > 0) {
       await db.update(tasks)
         .set({ parentTaskId: newTaskId, updatedAt: new Date() })
-        .where(inArray(tasks.id, taskLinks.map((l) => l.taskId as number)));
+        .where(scopedToTenant(tasks, tenantId, inArray(tasks.id, taskLinks.map((l) => l.taskId as number))));
     }
 
-    const krRows = await db.select({ id: keyResults.id }).from(keyResults).where(eq(keyResults.objectiveId, obj.id));
+    const krRows = await db.select({ id: keyResults.id }).from(keyResults).where(scopedToTenant(keyResults, tenantId, eq(keyResults.objectiveId, obj.id)));
     if (krRows.length) warnings.push(`${krRows.length} key result(s) were dropped — board items have no key results`);
     if (initiativeLinks > 0) warnings.push(`${initiativeLinks} initiative link(s) were dropped`);
     if (target === 'task' && taskLinks.length > 0) warnings.push(`${taskLinks.length} child item(s) were re-parented under a task; consider using epic`);

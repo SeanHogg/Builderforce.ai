@@ -138,7 +138,7 @@ export async function notifySiteRecordTicketDone(env: Env, db: Db, tenantId: num
     const [task] = await db
       .select({ originSiteRecordId: tasks.originSiteRecordId, title: tasks.title })
       .from(tasks)
-      .where(eq(tasks.id, taskId))
+      .where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId)))
       .limit(1);
     if (!task?.originSiteRecordId) return;
 

@@ -294,7 +294,7 @@ export class TicketParticipantsService {
     if (!ctx) return { blocked: false, outstanding: [] };
     const board = await findCanonicalBoard(this.db, ctx.projectId);
     if (!board || !board.lifecycleManaged) return { blocked: false, outstanding: [] };
-    const [lane] = await this.db.select({ isTerminal: swimlanes.isTerminal }).from(swimlanes).where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.key, targetStatus))).limit(1);
+    const [lane] = await this.db.select({ isTerminal: swimlanes.isTerminal }).from(swimlanes).where(scopedToTenant(swimlanes, tenantId, eq(swimlanes.boardId, board.id), eq(swimlanes.key, targetStatus))).limit(1);
     const terminal = lane?.isTerminal ?? targetStatus === TaskStatus.DONE;
     if (!terminal) return { blocked: false, outstanding: [] };
     const report = await this.getAccountability(env, tenantId, taskId);
@@ -338,7 +338,7 @@ export class TicketParticipantsService {
         ...(opts.executionId != null ? { executionId: opts.executionId } : {}),
         ...(opts.prUrl ? { prUrl: opts.prUrl } : {}),
       };
-      await this.db.update(ticketParticipants).set({ state, evidence, updatedAt: new Date() }).where(eq(ticketParticipants.id, r.id));
+      await this.db.update(ticketParticipants).set({ state, evidence, updatedAt: new Date() }).where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, r.id)));
     }
     await this.bump(env, taskId);
   }
@@ -541,7 +541,7 @@ export class TicketParticipantsService {
    * so the parent ticket's %-complete rolls up from real board tasks.
    */
   async materializeChildTasks(env: Env, tenantId: number, taskId: number, createChild: CreateChildTask): Promise<number> {
-    const [parent] = await this.db.select({ title: tasks.title }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    const [parent] = await this.db.select({ title: tasks.title }).from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, taskId))).limit(1);
     const rows = await this.db
       .select()
       .from(ticketParticipants)
@@ -557,7 +557,7 @@ export class TicketParticipantsService {
         assignedUserId: r.assigneeKind === 'human' ? r.assigneeRef : null,
       }).catch(() => null);
       if (!child) continue;
-      await this.db.update(ticketParticipants).set({ childTaskId: child.id, updatedAt: new Date() }).where(eq(ticketParticipants.id, r.id));
+      await this.db.update(ticketParticipants).set({ childTaskId: child.id, updatedAt: new Date() }).where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, r.id)));
       created += 1;
     }
     if (created) { await this.syncStates(env, tenantId, taskId); await this.bump(env, taskId); }
@@ -577,7 +577,7 @@ export class TicketParticipantsService {
     const signoffs = await this.db
       .select({ id: ticketRoleSignoffs.id, laneKey: ticketRoleSignoffs.laneKey, roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict, createdAt: ticketRoleSignoffs.createdAt })
       .from(ticketRoleSignoffs)
-      .where(eq(ticketRoleSignoffs.taskId, taskId))
+      .where(scopedToTenant(ticketRoleSignoffs, tenantId, eq(ticketRoleSignoffs.taskId, taskId)))
       .orderBy(asc(ticketRoleSignoffs.createdAt));
     const latestBySlot = new Map<string, { id: string; verdict: string }>();
     // A verdict recorded WITHOUT a laneKey, indexed by role alone. `laneKey` is optional
@@ -596,7 +596,7 @@ export class TicketParticipantsService {
     const childIds = rows.map((r) => r.childTaskId).filter((n): n is number => n != null);
     const childStatus = new Map<number, string>();
     if (childIds.length) {
-      const kids = await this.db.select({ id: tasks.id, status: tasks.status }).from(tasks).where(inArray(tasks.id, childIds));
+      const kids = await this.db.select({ id: tasks.id, status: tasks.status }).from(tasks).where(scopedToTenant(tasks, tenantId, inArray(tasks.id, childIds)));
       for (const k of kids) childStatus.set(k.id, k.status);
     }
 
@@ -630,7 +630,7 @@ export class TicketParticipantsService {
         else if (so.verdict === 'delegated') state = 'assigned';
       }
       if (state !== r.state || signoffId !== r.signoffId) {
-        await this.db.update(ticketParticipants).set({ state, signoffId, updatedAt: new Date() }).where(eq(ticketParticipants.id, r.id));
+        await this.db.update(ticketParticipants).set({ state, signoffId, updatedAt: new Date() }).where(scopedToTenant(ticketParticipants, tenantId, eq(ticketParticipants.id, r.id)));
       }
     }
   }
@@ -759,7 +759,7 @@ export class TicketParticipantsService {
       const soRows = await this.db
         .select()
         .from(ticketRoleSignoffs)
-        .where(eq(ticketRoleSignoffs.taskId, taskId))
+        .where(scopedToTenant(ticketRoleSignoffs, tenantId, eq(ticketRoleSignoffs.taskId, taskId)))
         .orderBy(asc(ticketRoleSignoffs.createdAt));
       const signoffs: AccountabilitySignoff[] = soRows.map((s) => ({
         laneKey: s.laneKey,

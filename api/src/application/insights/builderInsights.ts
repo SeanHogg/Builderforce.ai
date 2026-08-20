@@ -12,6 +12,7 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { llmUsageLog } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { utcDayStart } from '../llm/tokenUsage';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { resolveTokenLimits } from '../../domain/tenant/PlanLimits';
@@ -109,7 +110,7 @@ export async function buildBuilderInsightsSnapshot(
       costMc: sql<string>`coalesce(sum(${llmUsageLog.costUsdMillicents}), 0)`,
     })
     .from(llmUsageLog)
-    .where(where);
+    .where(scopedToTenant(llmUsageLog, scope.tenantId, where));
 
   const [topModelRow] = await db
     .select({
@@ -117,7 +118,7 @@ export async function buildBuilderInsightsSnapshot(
       tokens: sql<string>`coalesce(sum(${llmUsageLog.totalTokens}), 0)`,
     })
     .from(llmUsageLog)
-    .where(where)
+    .where(scopedToTenant(llmUsageLog, scope.tenantId, where))
     .groupBy(llmUsageLog.model)
     .orderBy(desc(sql`sum(${llmUsageLog.totalTokens})`))
     .limit(1);

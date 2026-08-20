@@ -17,6 +17,7 @@ import { Hono } from 'hono';
 import { eq, and, asc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { workflows, workflowTasks, telemetrySpans, projects, agentHosts } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import { hostOrTenantAuth, requestAgentHostId } from '../middleware/hostOrTenantAuth';
@@ -88,7 +89,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
         },
       });
 
-    const [row] = await db.select().from(workflows).where(eq(workflows.id, workflowId));
+    const [row] = await db.select().from(workflows).where(scopedToTenant(workflows, tenantId, eq(workflows.id, workflowId)));
     return c.json(row, 201);
   });
 

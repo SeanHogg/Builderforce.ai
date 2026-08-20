@@ -20,6 +20,7 @@ import {
   swimlaneRequirements,
   swimlanes,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
@@ -156,7 +157,7 @@ export class KanbanTemplateService {
     const [pub] = await this.db
       .select()
       .from(kanbanTemplates)
-      .where(and(eq(kanbanTemplates.id, id), eq(kanbanTemplates.published, true), eq(kanbanTemplates.visibility, 'public')))
+      .where(scopedToTenant(kanbanTemplates, tenantId, eq(kanbanTemplates.id, id), eq(kanbanTemplates.published, true), eq(kanbanTemplates.visibility, 'public')))
       .limit(1);
     return pub ? this.assembleDbTemplate(pub) : null;
   }
@@ -299,7 +300,7 @@ export class KanbanTemplateService {
       await this.db
         .update(kanbanTemplates)
         .set({ installCount: (src.installCount ?? 0) + 1 })
-        .where(eq(kanbanTemplates.id, sourceId));
+        .where(scopedToTenant(kanbanTemplates, tenantId, eq(kanbanTemplates.id, sourceId)));
       await invalidateCached(env, publicKey());
     }
     return copy;
@@ -330,7 +331,7 @@ export class KanbanTemplateService {
     const existingLanes = await this.db
       .select({ id: swimlanes.id, key: swimlanes.key })
       .from(swimlanes)
-      .where(eq(swimlanes.boardId, boardId));
+      .where(scopedToTenant(swimlanes, tenantId, eq(swimlanes.boardId, boardId)));
     const laneByKey = new Map(existingLanes.map((l) => [l.key, l.id]));
 
     let requirementsApplied = 0;
@@ -348,7 +349,7 @@ export class KanbanTemplateService {
             gate: lane.gate, gateSource: 'operator',
             requirementGate: lane.requirementGate, updatedAt: now,
           })
-          .where(eq(swimlanes.id, laneId));
+          .where(scopedToTenant(swimlanes, tenantId, eq(swimlanes.id, laneId)));
       } else {
         laneId = crypto.randomUUID();
         await this.db.insert(swimlanes).values({
@@ -361,7 +362,7 @@ export class KanbanTemplateService {
         laneByKey.set(lane.key, laneId);
       }
       // Replace this lane's live requirements with the template's.
-      await this.db.delete(swimlaneRequirements).where(eq(swimlaneRequirements.swimlaneId, laneId));
+      await this.db.delete(swimlaneRequirements).where(scopedToTenant(swimlaneRequirements, tenantId, eq(swimlaneRequirements.swimlaneId, laneId)));
       if (lane.requirements.length) {
         await this.db.insert(swimlaneRequirements).values(
           lane.requirements.map((r) => ({
@@ -379,8 +380,8 @@ export class KanbanTemplateService {
     // A lifecycle-managed template (PRD §5.5) flips the board into Coordinator mode
     // (assignee = Coordinator, never the default executor); re-applying a legacy
     // template turns it back off, so the flag always tracks the applied template.
-    await this.db.update(boards).set({ templateId, lifecycleManaged: template.lifecycleManaged === true, updatedAt: now }).where(eq(boards.id, boardId));
-    await this.db.update(projects).set({ kanbanTemplateId: templateId, updatedAt: now }).where(eq(projects.id, projectId));
+    await this.db.update(boards).set({ templateId, lifecycleManaged: template.lifecycleManaged === true, updatedAt: now }).where(scopedToTenant(boards, tenantId, eq(boards.id, boardId)));
+    await this.db.update(projects).set({ kanbanTemplateId: templateId, updatedAt: now }).where(scopedToTenant(projects, tenantId, eq(projects.id, projectId)));
 
     return { boardId, lanesApplied: template.lanes.length, requirementsApplied };
   }

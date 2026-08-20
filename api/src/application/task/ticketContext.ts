@@ -28,6 +28,7 @@ import type { Env } from '../../env';
 import {
   initiatives, keyResults, objectiveLinks, objectives, projects, tasks,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { isDoneLane, isDoneStatus } from '../../domain/shared/doneClass';
 import { keyResultProgress, objectiveProgress } from '../pmo/portfolioRollup';
 import { loadLaneOrdinals, type OrdinalMap } from './taskLifecycle';
@@ -248,15 +249,15 @@ export async function buildTicketContext(
     task.parentTaskId == null
       ? Promise.resolve([])
       : db.select({ id: tasks.id, key: tasks.key, title: tasks.title, status: tasks.status })
-          .from(tasks).where(eq(tasks.id, task.parentTaskId)).limit(1),
+          .from(tasks).where(scopedToTenant(tasks, tenantId, eq(tasks.id, task.parentTaskId))).limit(1),
     isEpic
       ? db.select({ status: tasks.status }).from(tasks)
-          .where(and(eq(tasks.parentTaskId, taskId), eq(tasks.archived, false)))
+          .where(scopedToTenant(tasks, tenantId, eq(tasks.parentTaskId, taskId), eq(tasks.archived, false)))
       : Promise.resolve([] as { status: string }[]),
     task.parentTaskId == null
       ? Promise.resolve([] as { status: string }[])
       : db.select({ status: tasks.status }).from(tasks)
-          .where(and(eq(tasks.parentTaskId, task.parentTaskId), eq(tasks.archived, false))),
+          .where(scopedToTenant(tasks, tenantId, eq(tasks.parentTaskId, task.parentTaskId), eq(tasks.archived, false))),
   ]);
 
   const ownChildren = rollupChildren(childRows.map((r) => r.status), ordinals);
@@ -357,7 +358,7 @@ async function loadObjectiveLineage(
       )),
     o.initiativeId == null
       ? Promise.resolve([] as { name: string }[])
-      : db.select({ name: initiatives.name }).from(initiatives).where(eq(initiatives.id, o.initiativeId)).limit(1),
+      : db.select({ name: initiatives.name }).from(initiatives).where(scopedToTenant(initiatives, o.tenantId, eq(initiatives.id, o.initiativeId))).limit(1),
   ]);
 
   const seeds: LineageSeed[] = [];

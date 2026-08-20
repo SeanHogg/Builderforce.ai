@@ -36,6 +36,7 @@ import {
   runModelOutcomes,
   tasks,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { notSystemTask } from '../task/taskScope';
 import { rollupDora, type DeployRow, type DoraRollup } from '../metrics/workforceMetrics';
 import { MILLICENTS_PER_USD } from '../../domain/shared/money';
@@ -392,17 +393,17 @@ async function loadOkrs(
   const linkRows = await db
     .select({ id: objectiveLinks.id, objectiveId: objectiveLinks.objectiveId, linkKind: objectiveLinks.linkKind, initiativeId: objectiveLinks.initiativeId, taskId: objectiveLinks.taskId })
     .from(objectiveLinks)
-    .where(inArray(objectiveLinks.objectiveId, objIds));
+    .where(scopedToTenant(objectiveLinks, tenantId, inArray(objectiveLinks.objectiveId, objIds)));
   const linkInitIds = [...new Set(linkRows.map((l) => l.initiativeId).filter((x): x is string => !!x))];
   const linkTaskIds = [...new Set(linkRows.map((l) => l.taskId).filter((x): x is number => x != null))];
   const initNameById = new Map<string, string>(
     linkInitIds.length
-      ? (await db.select({ id: initiatives.id, name: initiatives.name }).from(initiatives).where(inArray(initiatives.id, linkInitIds))).map((r) => [r.id, r.name])
+      ? (await db.select({ id: initiatives.id, name: initiatives.name }).from(initiatives).where(scopedToTenant(initiatives, tenantId, inArray(initiatives.id, linkInitIds)))).map((r) => [r.id, r.name])
       : [],
   );
   const taskTitleById = new Map<number, string>(
     linkTaskIds.length
-      ? (await db.select({ id: tasks.id, title: tasks.title }).from(tasks).where(inArray(tasks.id, linkTaskIds))).map((r) => [r.id, r.title])
+      ? (await db.select({ id: tasks.id, title: tasks.title }).from(tasks).where(scopedToTenant(tasks, tenantId, inArray(tasks.id, linkTaskIds)))).map((r) => [r.id, r.title])
       : [],
   );
   const linksByObjective = new Map<string, ObjectiveLinkRef[]>();
@@ -415,7 +416,7 @@ async function loadOkrs(
     linksByObjective.set(l.objectiveId, list);
   }
 
-  const krRows = await db.select().from(keyResults).where(inArray(keyResults.objectiveId, objIds));
+  const krRows = await db.select().from(keyResults).where(scopedToTenant(keyResults, tenantId, inArray(keyResults.objectiveId, objIds)));
   const krByObjective = new Map<string, KeyResultProgress[]>();
   for (const kr of krRows) {
     const progress = keyResultProgress({
@@ -483,7 +484,7 @@ export async function computePortfolioRollup(
     ? await db
         .select({ projectId: tasks.projectId, createdAt: tasks.createdAt, completedAt: tasks.completedAt })
         .from(tasks)
-        .where(and(inArray(tasks.projectId, projectIds), notSystemTask))
+        .where(scopedToTenant(tasks, tenantId, inArray(tasks.projectId, projectIds), notSystemTask))
     : [];
   const completed = taskRows.filter((t) => t.completedAt != null);
   const cycleHrs = completed

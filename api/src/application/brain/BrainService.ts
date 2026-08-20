@@ -15,6 +15,7 @@ import {
   users,
   tenantMembers,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { ideProxy, explicitModelPreemptsByo, readProxyChoice, codingModelsForPlan, byoAutoSeedModels, type LlmProxyService } from '../llm/LlmProxyService';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { classifyReplyAccount, buildReplyProvenance, vendorAccountLabel } from '../llm/replyProvenance';
@@ -369,7 +370,7 @@ export class BrainService {
       const [existing] = await this.db
         .select({ id: chatMembers.id })
         .from(chatMembers)
-        .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, userId)))
+        .where(scopedToTenant(chatMembers, tenantId, eq(chatMembers.chatId, chatId), eq(chatMembers.userId, userId)))
         .limit(1);
       if (existing) return;
       await this.db.insert(chatMembers)
@@ -795,7 +796,7 @@ export class BrainService {
     const [updated] = await this.db
       .update(brainChats)
       .set(updates)
-      .where(eq(brainChats.id, chatId))
+      .where(scopedToTenant(brainChats, tenantId, eq(brainChats.id, chatId)))
       .returning(chatColumns);
 
     // `modeChangedTo` is transient provenance for the CALLER (the route writes the audit
@@ -813,7 +814,7 @@ export class BrainService {
     await this.db
       .update(brainChats)
       .set({ isArchived: true, updatedAt: new Date() })
-      .where(eq(brainChats.id, chatId));
+      .where(scopedToTenant(brainChats, tenantId, eq(brainChats.id, chatId)));
 
     return { ok: true };
   }
@@ -1768,7 +1769,7 @@ export class BrainService {
       if (existingUser.id === userId) return { error: 'You already own this chat' };
       const [dup] = await this.db.select({ id: chatMembers.id })
         .from(chatMembers)
-        .where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, existingUser.id)))
+        .where(scopedToTenant(chatMembers, tenantId, eq(chatMembers.chatId, chatId), eq(chatMembers.userId, existingUser.id)))
         .limit(1);
       if (!dup) {
         await this.db.insert(chatMembers).values({
@@ -1781,7 +1782,7 @@ export class BrainService {
     // Cold invite — pending row keyed on the email, converts on first access.
     const [dup] = await this.db.select({ id: chatMembers.id })
       .from(chatMembers)
-      .where(and(eq(chatMembers.chatId, chatId), sql`lower(${chatMembers.invitedEmail}) = ${email}`))
+      .where(scopedToTenant(chatMembers, tenantId, eq(chatMembers.chatId, chatId), sql`lower(${chatMembers.invitedEmail}) = ${email}`))
       .limit(1);
     if (!dup) {
       await this.db.insert(chatMembers).values({
@@ -1868,7 +1869,7 @@ export class BrainService {
     await this.db
       .update(brainChats)
       .set({ summary, updatedAt: new Date() })
-      .where(eq(brainChats.id, chatId));
+      .where(scopedToTenant(brainChats, tenantId, eq(brainChats.id, chatId)));
 
     return { summary };
   }
@@ -2003,7 +2004,7 @@ export class BrainService {
     const msgs = await this.db
       .select({ role: chatMessages.role, content: chatMessages.content })
       .from(chatMessages)
-      .where(eq(chatMessages.sessionId, sessionId))
+      .where(scopedToTenant(chatMessages, tenantId, eq(chatMessages.sessionId, sessionId)))
       .orderBy(chatMessages.seq)
       .limit(500);
 

@@ -16,6 +16,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { activityEvents, contributors, ideAgents, projects } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { computeInteractionActivity } from './interactionActivity';
 
 const HOUR_MS = 3_600_000;
@@ -161,7 +162,7 @@ export async function computeTenantActivityRollup(db: Db, tenantId: number, days
   const missingProjectIds = [...interaction.byProject.keys()].filter((id) => !projMap.has(id));
   const projectNameById = new Map<number, string>();
   if (missingProjectIds.length > 0) {
-    const rows = await db.select({ id: projects.id, name: projects.name }).from(projects).where(inArray(projects.id, missingProjectIds));
+    const rows = await db.select({ id: projects.id, name: projects.name }).from(projects).where(scopedToTenant(projects, tenantId, inArray(projects.id, missingProjectIds)));
     for (const r of rows) projectNameById.set(r.id, r.name);
   }
   for (const [id, n] of interaction.byProject) {

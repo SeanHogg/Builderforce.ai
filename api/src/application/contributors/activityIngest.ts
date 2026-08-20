@@ -37,6 +37,7 @@ import {
   projectRepositories,
   projects,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 import { bumpTenantActivityVersion } from '../analytics/tenantActivity';
 
@@ -215,7 +216,7 @@ export async function resolveOrCreateContributor(
   // Lost the race: another writer created this identity. Adopt theirs and clean up
   // the contributor we just made so we don't leave a duplicate empty profile.
   const winner = await find();
-  await db.delete(contributors).where(eq(contributors.id, created.id));
+  await db.delete(contributors).where(scopedToTenant(contributors, tenantId, eq(contributors.id, created.id)));
   return winner ?? created.id;
 }
 

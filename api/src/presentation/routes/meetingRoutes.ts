@@ -21,6 +21,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware, isManager } from '../middleware/authMiddleware';
 import { scope } from './segmentTrackerRoutes';
 import { meetings, meetingAttendees, userAvailability } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { relayToRoom } from './realtimeRelay';
 import {
   runAgentTurn, summarizeMeeting, appendTranscriptLine, loadTranscript,
@@ -67,7 +68,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const [m] = await db.select().from(meetings)
       .where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)));
     if (!m) return null;
-    const attendees = await db.select().from(meetingAttendees).where(eq(meetingAttendees.meetingId, id));
+    const attendees = await db.select().from(meetingAttendees).where(scopedToTenant(meetingAttendees, tenantId, eq(meetingAttendees.meetingId, id)));
     return { meeting: m, attendees };
   }
 
@@ -134,7 +135,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
 
     // Attach attendees in one round-trip.
     const ids = rows.map((m) => m.id);
-    const atts = ids.length ? await db.select().from(meetingAttendees).where(inArray(meetingAttendees.meetingId, ids)) : [];
+    const atts = ids.length ? await db.select().from(meetingAttendees).where(scopedToTenant(meetingAttendees, tenantId, inArray(meetingAttendees.meetingId, ids))) : [];
     const byMeeting = new Map<string, typeof atts>();
     for (const a of atts) { const list = byMeeting.get(a.meetingId) ?? []; list.push(a); byMeeting.set(a.meetingId, list); }
     return c.json({ meetings: rows.map((m) => ({ meeting: m, attendees: byMeeting.get(m.id) ?? [] })) });
@@ -200,7 +201,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
           { projectId: body.projectId ?? null, teamId: body.teamId ?? null },
         );
         if (!('error' in resolved)) {
-          await db.update(meetings).set({ chatId: resolved.id as number, updatedAt: new Date() }).where(eq(meetings.id, meeting.id));
+          await db.update(meetings).set({ chatId: resolved.id as number, updatedAt: new Date() }).where(scopedToTenant(meetings, tenantId, eq(meetings.id, meeting.id)));
         }
       } catch (error) { /* team chat is a nice-to-have on a meeting; never block creation */ 
         reportCaughtError(error, { source: "presentation/routes/meetingRoutes.ts", operation: "createMeetingRoutes" });
@@ -237,7 +238,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
       if (synced) {
         await db.update(meetings).set({
           calendarProvider: synced.provider, calendarEventId: synced.eventId, calendarHtmlLink: synced.htmlLink ?? null, updatedAt: new Date(),
-        }).where(eq(meetings.id, meeting.id));
+        }).where(scopedToTenant(meetings, tenantId, eq(meetings.id, meeting.id)));
       }
     }
     return c.json(await hydrate(tenantId, meeting.id), 201);
@@ -264,19 +265,19 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
 
     // Only an authorized member (organizer / attendee / manager / project member)
     // may join — the "meeting link" alone is not enough.
-    const existingAttendees = await db.select().from(meetingAttendees).where(eq(meetingAttendees.meetingId, id));
+    const existingAttendees = await db.select().from(meetingAttendees).where(scopedToTenant(meetingAttendees, tenantId, eq(meetingAttendees.meetingId, id)));
     if (!(await canAccess(c, m, existingAttendees))) return c.json({ error: 'Not authorized for this meeting' }, 403);
 
     const now = new Date();
     // First join flips a scheduled meeting live.
     if (m.status === 'scheduled') {
-      await db.update(meetings).set({ status: 'live', startedAt: m.startedAt ?? now, updatedAt: now }).where(eq(meetings.id, id));
+      await db.update(meetings).set({ status: 'live', startedAt: m.startedAt ?? now, updatedAt: now }).where(scopedToTenant(meetings, tenantId, eq(meetings.id, id)));
     }
     // Upsert my attendee row (walk-ins allowed) + stamp joinedAt.
     const [mine] = await db.select().from(meetingAttendees)
-      .where(and(eq(meetingAttendees.meetingId, id), eq(meetingAttendees.memberRef, userId)));
+      .where(scopedToTenant(meetingAttendees, tenantId, eq(meetingAttendees.meetingId, id), eq(meetingAttendees.memberRef, userId)));
     if (mine) {
-      await db.update(meetingAttendees).set({ joinedAt: now, leftAt: null, response: 'accepted' }).where(eq(meetingAttendees.id, mine.id));
+      await db.update(meetingAttendees).set({ joinedAt: now, leftAt: null, response: 'accepted' }).where(scopedToTenant(meetingAttendees, tenantId, eq(meetingAttendees.id, mine.id)));
     } else {
       await db.insert(meetingAttendees).values({
         tenantId, meetingId: id, memberKind: 'human', memberRef: userId,
@@ -329,7 +330,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const { tenantId } = scope(c);
     const [m] = await db.select().from(meetings).where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)));
     if (!m) return { error: 'Not found' as const, code: 404 as const };
-    const attendees = await db.select().from(meetingAttendees).where(eq(meetingAttendees.meetingId, id));
+    const attendees = await db.select().from(meetingAttendees).where(scopedToTenant(meetingAttendees, tenantId, eq(meetingAttendees.meetingId, id)));
     if (!(await canAccess(c, m, attendees))) return { error: 'Not authorized for this meeting' as const, code: 403 as const };
     return { meeting: m, attendees };
   }
@@ -408,7 +409,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const res = await loadForMutation(c, c.req.param('id'));
     if ('error' in res) return c.json({ error: res.error }, res.code);
     const now = new Date();
-    await db.update(meetings).set({ status: 'live', startedAt: res.meeting.startedAt ?? now, updatedAt: now }).where(eq(meetings.id, res.meeting.id));
+    await db.update(meetings).set({ status: 'live', startedAt: res.meeting.startedAt ?? now, updatedAt: now }).where(scopedToTenant(meetings, tenantId, eq(meetings.id, res.meeting.id)));
     return c.json(await hydrate(tenantId, res.meeting.id));
   });
 
@@ -417,7 +418,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const res = await loadForMutation(c, c.req.param('id'));
     if ('error' in res) return c.json({ error: res.error }, res.code);
     const now = new Date();
-    await db.update(meetings).set({ status: 'ended', endedAt: now, updatedAt: now }).where(eq(meetings.id, res.meeting.id));
+    await db.update(meetings).set({ status: 'ended', endedAt: now, updatedAt: now }).where(scopedToTenant(meetings, tenantId, eq(meetings.id, res.meeting.id)));
     // Auto-generate minutes from the transcript (best-effort: never block ending).
     if (!res.meeting.summary) {
       try { await summarizeMeeting(db, c.env as Env, { ...res.meeting, status: 'ended', endedAt: now }); } catch (error) { /* honest no-op */ 
@@ -433,7 +434,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     const res = await loadForMutation(c, c.req.param('id'));
     if ('error' in res) return c.json({ error: res.error }, res.code);
     const m = res.meeting;
-    await db.update(meetings).set({ status: 'cancelled', updatedAt: new Date() }).where(eq(meetings.id, m.id));
+    await db.update(meetings).set({ status: 'cancelled', updatedAt: new Date() }).where(scopedToTenant(meetings, tenantId, eq(meetings.id, m.id)));
     // Remove the mirrored calendar event.
     if (m.calendarProvider && m.calendarEventId && m.createdBy) {
       await deleteMeetingEvent(db, env, tenantId, m.createdBy, m.calendarProvider as CalendarProviderName, m.calendarEventId);
@@ -452,7 +453,7 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     if (body.scheduledAt !== undefined) patch.scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
     if (body.durationMinutes != null) patch.durationMinutes = Math.min(480, Math.max(5, body.durationMinutes));
     if (body.videoEnabled != null) patch.videoEnabled = body.videoEnabled;
-    await db.update(meetings).set(patch).where(eq(meetings.id, res.meeting.id));
+    await db.update(meetings).set(patch).where(scopedToTenant(meetings, tenantId, eq(meetings.id, res.meeting.id)));
     return c.json(await hydrate(tenantId, res.meeting.id));
   });
 

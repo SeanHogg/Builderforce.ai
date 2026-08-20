@@ -19,6 +19,7 @@ import { Hono } from 'hono';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { integrationCredentials, integrationSyncLogs, projects } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -306,7 +307,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     await db
       .update(integrationCredentials)
       .set({ lastTestedAt: new Date(), lastTestOk: result.ok, updatedAt: new Date() })
-      .where(eq(integrationCredentials.id, id));
+      .where(scopedToTenant(integrationCredentials, tenantId, eq(integrationCredentials.id, id)));
 
     return c.json(result);
   });
@@ -326,7 +327,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     const logs = await db
       .select()
       .from(integrationSyncLogs)
-      .where(eq(integrationSyncLogs.credentialId, id))
+      .where(scopedToTenant(integrationSyncLogs, tenantId, eq(integrationSyncLogs.credentialId, id)))
       .orderBy(desc(integrationSyncLogs.startedAt))
       .limit(limit);
 

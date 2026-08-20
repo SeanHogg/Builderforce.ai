@@ -18,6 +18,7 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import {
   errorCollectors, errorCollectorIntegrations, errorMappingRules, errorGroups, errorEvents, projects,
 } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { generateApiKey, hashSecret } from '../../infrastructure/auth/HashService';
 import { encryptCredentials, decryptCredentials } from '../../application/integrations/credentialCrypto';
 import { pullSentryIssues } from '../../application/quality/sentryPull';
@@ -486,7 +487,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
         matchValue: errorMappingRules.matchValue, projectId: errorMappingRules.projectId, priority: errorMappingRules.priority,
       })
       .from(errorMappingRules)
-      .where(eq(errorMappingRules.collectorId, id))
+      .where(scopedToTenant(errorMappingRules, tenantId, eq(errorMappingRules.collectorId, id)))
       .orderBy(asc(errorMappingRules.priority));
     return c.json({ rules: rows });
   });
@@ -665,9 +666,9 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
     const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
     const [recent, trend] = await Promise.all([
       db.select({ ts: errorEvents.ts, userKey: errorEvents.userKey, release: errorEvents.release, environment: errorEvents.environment, payload: errorEvents.payload })
-        .from(errorEvents).where(eq(errorEvents.groupId, id)).orderBy(desc(errorEvents.ts)).limit(20),
+        .from(errorEvents).where(scopedToTenant(errorEvents, tenantId, eq(errorEvents.groupId, id))).orderBy(desc(errorEvents.ts)).limit(20),
       db.select({ day: sql<string>`date_trunc('day', ${errorEvents.ts})`, count: sql<number>`count(*)` })
-        .from(errorEvents).where(and(eq(errorEvents.groupId, id), gte(errorEvents.ts, since)))
+        .from(errorEvents).where(scopedToTenant(errorEvents, tenantId, eq(errorEvents.groupId, id), gte(errorEvents.ts, since)))
         .groupBy(sql`date_trunc('day', ${errorEvents.ts})`).orderBy(sql`date_trunc('day', ${errorEvents.ts})`),
     ]);
 
@@ -723,7 +724,7 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
     await db
       .update(errorGroups)
       .set({ status: 'fixing', taskId: task.id as unknown as number, updatedAt: new Date() })
-      .where(eq(errorGroups.id, id));
+      .where(scopedToTenant(errorGroups, tenantId, eq(errorGroups.id, id)));
     await bumpCacheVersion(c.env as Env, qualityGroupsVersionKey(group.projectId));
     await bumpCacheVersion(c.env as Env, qualityGroupsTenantVersionKey(tenantId));
 
