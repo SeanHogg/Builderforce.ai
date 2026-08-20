@@ -9688,7 +9688,8 @@
       "saved": "Guardado",
       "unsave": "Quitar",
       "emptySaved": "Aún no hay empleos guardados. Guarda uno desde Buscar trabajo.",
-      "savedOn": "Guardado el {date}"
+      "savedOn": "Guardado el {date}",
+      "reviseBid": "Revisar propuesta"
     },
     "proposals": {
       "empty": "Aún no has enviado propuestas.",
@@ -11861,11 +11862,14 @@
       "paidEarnings": "Ingresos cobrados",
       "invoicesPaid": "{count} facturas pagadas",
       "pendingEarnings": "Ingresos pendientes",
-      "invoicesPending": "{count} pendientes"
+      "invoicesPending": "{count} pendientes",
+      "escrowHeld": "En depósito",
+      "escrowMilestones": "{count} hitos"
     },
     "tabs": {
       "work": "Mi trabajo",
-      "timecards": "Mis partes de horas"
+      "timecards": "Mis partes de horas",
+      "milestones": "Hitos"
     },
     "work": {
       "empty": "Aún no hay contratos.",
@@ -23222,5 +23226,79 @@
     "confirming": "Confirmando tu pago…",
     "payByTransfer": "Esta factura se paga por transferencia bancaria. Responde al mensaje que te envió este enlace si necesitas los datos de la cuenta.",
     "settled": "Esta factura está saldada. Gracias."
+  },
+  "milestones": {
+    "heading": "Calendario de pagos",
+    "loading": "Cargando el calendario…",
+    "loadFailed": "No se pudo cargar el calendario de pagos.",
+    "actionFailed": "Esa acción fue rechazada.",
+    "working": "Procesando…",
+    "remove": "Quitar",
+    "cancelNote": "Cancelar",
+    "dueBy": "Vence el {date}",
+    "rejectedBecause": "Cambios solicitados: {reason}",
+    "submittedWith": "Entregado con: {note}",
+    "status": {
+      "draft": "Sin fondos",
+      "funded": "En depósito",
+      "submitted": "Entregado",
+      "approved": "Aceptado",
+      "released": "Pagado",
+      "cancelled": "Cancelado",
+      "disputed": "Cambios solicitados"
+    },
+    "action": {
+      "fund": "Depositar",
+      "submit": "Entregar",
+      "approve": "Aceptar",
+      "reject": "Solicitar cambios",
+      "release": "Liberar el pago",
+      "cancel": "Cancelar"
+    },
+    "confirm": {
+      "fund": "¿Depositar {amount} en garantía para este hito? El freelance queda autorizado a empezar en cuanto lo hagas.",
+      "release": "¿Liberar {amount} al freelance? Esto no se puede deshacer.",
+      "cancel": "¿Cancelar este hito? Los fondos retenidos se te devuelven.",
+      "remove": "¿Quitar este hito del calendario?"
+    },
+    "notePlaceholder": {
+      "reject": "¿Qué hay que cambiar?",
+      "submit": "¿Qué has entregado? (opcional)"
+    },
+    "summary": {
+      "agreedCents": "Acordado",
+      "heldCents": "En depósito",
+      "owedCents": "Debido ahora",
+      "releasedCents": "Pagado",
+      "unfundedCents": "Sin fondos"
+    },
+    "gate": {
+      "funded": "Con fondos: el trabajo está autorizado.",
+      "nothing_funded": "Todavía no hay fondos depositados. El trabajo no debería empezar hasta que al menos un hito esté en garantía.",
+      "no_milestones": "Esta contratación a precio fijo aún no tiene calendario. Añade los entregables antes de empezar."
+    },
+    "empty": {
+      "client": "Todavía no hay hitos. Añade los entregables y cuánto vale cada uno.",
+      "worker": "Todavía no hay hitos a precio fijo.",
+      "posting": "Esta oferta aún no publica un calendario de pagos."
+    },
+    "editor": {
+      "titlePlaceholder": "Entregable",
+      "amountPlaceholder": "Importe",
+      "addLine": "Añadir un hito",
+      "removeLine": "Quitar esta línea",
+      "add": "Añadir",
+      "total": "Total {amount}",
+      "totalLabel": "Total"
+    },
+    "posting": {
+      "explainer": "Por qué pagará este trabajo, antes de que nadie puje. Al aceptar una propuesta, esto pasa a ser el calendario de la contratación.",
+      "published": "Calendario publicado"
+    },
+    "proposed": {
+      "heading": "Calendario propuesto",
+      "yours": "Tu calendario propuesto",
+      "explainer": "¿No estás de acuerdo con los entregables publicados? Propón los tuyos. Si aceptan tu propuesta, este es el calendario que se financia."
+    }
   }
 }

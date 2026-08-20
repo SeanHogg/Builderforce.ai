@@ -9688,7 +9688,8 @@
       "saved": "Gemerkt",
       "unsave": "Entfernen",
       "emptySaved": "Noch keine gemerkten Jobs. Merken Sie sich einen unter „Arbeit finden“.",
-      "savedOn": "Gemerkt am {date}"
+      "savedOn": "Gemerkt am {date}",
+      "reviseBid": "Angebot überarbeiten"
     },
     "proposals": {
       "empty": "Sie haben noch keine Angebote abgegeben.",
@@ -11861,11 +11862,14 @@
       "paidEarnings": "Bezahlte Einnahmen",
       "invoicesPaid": "{count} bezahlte Rechnungen",
       "pendingEarnings": "Ausstehende Einnahmen",
-      "invoicesPending": "{count} ausstehend"
+      "invoicesPending": "{count} ausstehend",
+      "escrowHeld": "In Treuhand",
+      "escrowMilestones": "{count} Meilensteine"
     },
     "tabs": {
       "work": "Meine Arbeit",
-      "timecards": "Meine Stundenzettel"
+      "timecards": "Meine Stundenzettel",
+      "milestones": "Meilensteine"
     },
     "work": {
       "empty": "Noch keine Engagements.",
@@ -23222,5 +23226,79 @@
     "confirming": "Ihre Zahlung wird bestätigt …",
     "payByTransfer": "Diese Rechnung wird per Banküberweisung bezahlt. Antworten Sie auf die Nachricht mit diesem Link, wenn Sie die Kontodaten benötigen.",
     "settled": "Diese Rechnung ist beglichen. Vielen Dank."
+  },
+  "milestones": {
+    "heading": "Zahlungsplan",
+    "loading": "Zahlungsplan wird geladen…",
+    "loadFailed": "Der Zahlungsplan konnte nicht geladen werden.",
+    "actionFailed": "Diese Aktion wurde abgelehnt.",
+    "working": "Wird ausgeführt…",
+    "remove": "Entfernen",
+    "cancelNote": "Abbrechen",
+    "dueBy": "Fällig am {date}",
+    "rejectedBecause": "Änderungen angefordert: {reason}",
+    "submittedWith": "Geliefert mit: {note}",
+    "status": {
+      "draft": "Nicht finanziert",
+      "funded": "Treuhand",
+      "submitted": "Geliefert",
+      "approved": "Abgenommen",
+      "released": "Bezahlt",
+      "cancelled": "Storniert",
+      "disputed": "Änderungen angefordert"
+    },
+    "action": {
+      "fund": "Treuhand einzahlen",
+      "submit": "Liefern",
+      "approve": "Abnehmen",
+      "reject": "Änderungen anfordern",
+      "release": "Zahlung freigeben",
+      "cancel": "Stornieren"
+    },
+    "confirm": {
+      "fund": "{amount} für diesen Meilenstein treuhänderisch hinterlegen? Danach darf die freiberufliche Person beginnen.",
+      "release": "{amount} an die freiberufliche Person freigeben? Das lässt sich nicht rückgängig machen.",
+      "cancel": "Diesen Meilenstein stornieren? Hinterlegte Beträge werden dir zurückerstattet.",
+      "remove": "Diesen Meilenstein aus dem Plan entfernen?"
+    },
+    "notePlaceholder": {
+      "reject": "Was muss geändert werden?",
+      "submit": "Was wurde geliefert? (optional)"
+    },
+    "summary": {
+      "agreedCents": "Vereinbart",
+      "heldCents": "In Treuhand",
+      "owedCents": "Jetzt fällig",
+      "releasedCents": "Bezahlt",
+      "unfundedCents": "Nicht finanziert"
+    },
+    "gate": {
+      "funded": "Finanziert – die Arbeit ist freigegeben.",
+      "nothing_funded": "Es ist noch nichts finanziert. Die Arbeit sollte erst beginnen, wenn mindestens ein Meilenstein in Treuhand liegt.",
+      "no_milestones": "Dieses Festpreis-Engagement hat noch keinen Zahlungsplan. Lege die Liefergegenstände fest, bevor die Arbeit beginnt."
+    },
+    "empty": {
+      "client": "Noch keine Meilensteine. Lege die Liefergegenstände und ihren jeweiligen Wert fest.",
+      "worker": "Noch keine Festpreis-Meilensteine.",
+      "posting": "Für diese Ausschreibung ist noch kein Zahlungsplan veröffentlicht."
+    },
+    "editor": {
+      "titlePlaceholder": "Liefergegenstand",
+      "amountPlaceholder": "Betrag",
+      "addLine": "Meilenstein hinzufügen",
+      "removeLine": "Diese Zeile entfernen",
+      "add": "Hinzufügen",
+      "total": "Gesamt {amount}",
+      "totalLabel": "Gesamt"
+    },
+    "posting": {
+      "explainer": "Wofür dieser Auftrag zahlt, bevor jemand bietet. Wird ein Angebot angenommen, ist dies der Zahlungsplan des Engagements.",
+      "published": "Veröffentlichter Plan"
+    },
+    "proposed": {
+      "heading": "Vorgeschlagener Plan",
+      "yours": "Dein vorgeschlagener Zahlungsplan",
+      "explainer": "Du bist mit den veröffentlichten Liefergegenständen nicht einverstanden? Schlage eigene vor. Wird dein Angebot angenommen, wird dieser Plan finanziert."
+    }
   }
 }

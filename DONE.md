@@ -1,3 +1,77 @@
+## ✅ RESOLVED 2026-08-19 — Fixed-price escrow has a surface, and a bid can carry its own schedule
+
+Two Consolidated Gap Register entries under §10 (Marketplace, talent, freelance), plus the
+(a) and (b) clauses of the Upwork-parity audit's P0 item and the "proposed milestones"
+clause of its P1 item.
+
+**The escrow slice now has a UI on both sides.** `frontend/src/components/freelance/MilestoneSchedulePanel.tsx`
+is ONE component serving three surfaces — the client's engagement panel (Workforce → Talent →
+team), the employer's posting panel (Workforce → Talent → jobs), and the freelancer's own
+Milestones tab on `/freelancer/dashboard`. The client funds, accepts, requests changes,
+releases and cancels; the freelancer delivers. Escrow money, the five rolled-up numbers and
+the funded-before-work gate are all rendered from what the API already returned.
+
+**The buttons are the server's decision, not the surface's.** `readEngagementSchedule` and
+`readFreelancerMilestones` now project `actions: MilestoneAction[]` onto every row with
+`availableEscrowActions(status, party)` — the same machine that will judge the request. A
+second copy of that machine in the browser (and a third in the VS Code webview) would be
+places for the rule to drift, so there is none: the panel renders the moves it is handed and
+literally cannot offer one the machine would refuse. Adding a state is a server change with
+no frontend edit.
+
+**A bidder can now counter-propose a payment schedule.** `engagement_milestones.proposal_id`
+existed for exactly this and had no writer; `replaceProposalSchedule` is that writer.
+`POST /api/jobs/:id/proposals` accepts `milestones[]` and replaces (never appends) the bid's
+lines, because a revised bid is one offer and not two. The bid form seeds itself from the
+posting's published schedule — or, on a revision, from what this bidder already proposed — so
+a schedule is edited rather than retyped from memory, and "Revise proposal" reopens the same
+upsert that created it.
+
+**Accepting a bid binds the schedule that was actually agreed.** `bindScheduleToEngagement`
+now prefers the ACCEPTED proposal's own rows and falls back to the posting's only when the
+bid proposed none; when the bid wins, the posting's superseded drafts are `cancelled` so an
+engagement never carries two answers to "what did we agree". Rival bids' rows are untouched
+and stay scoped to their own declined proposal. `readJobSchedule` was narrowed to
+`proposal_id IS NULL` in the same pass — without it, an employer's own published schedule
+would have started including every rival's private counter-offer.
+
+**Reads that would have been N+1 are not.** `readProposalSchedules` returns every bidder's
+schedule for one posting grouped in ONE query, so an employer comparing ten offers costs one
+round-trip rather than ten. `readFreelancerMilestones` joins the engagement title and the
+client name in its own statement rather than resolving them per row, and excludes
+proposal-scoped rows so an open bid cannot inflate "what am I owed". Nothing here is cached,
+deliberately and in writing: an escrow balance served stale tells a freelancer to start work
+against a hold that was already refunded.
+
+**Bugs found and fixed in the same pass.**
+- `POST /api/jobs/:id/proposals` returned a freshly minted UUID rather than the row's real
+  id. Bidding is an upsert, so a revised bid returned an id that named nothing and every
+  follow-up keyed on it would have 404'd. Now `.returning({ id })`.
+- `api/src/application/llm/tenantApiKeyService.ts` had an `import` statement spliced into the
+  middle of another one — a syntax error at HEAD that made the whole api typecheck fail and
+  masked four further errors behind it.
+- Four `jsonb` columns were still being written with `JSON.stringify`, storing a JSON string
+  *inside* the jsonb: `platform_modules.permissions` (both writers, `adminRoutes.ts`) and
+  `llm_usage_log.metadata` (`voiceCloneService.ts`). The matching readers
+  (`tenantApiKeyService.parseMetadata`, `llmRoutes.loadTenantApiKeyByHash`) were still
+  private `JSON.parse` calls that only handled the legacy shape; both now route through the
+  ONE shared coercer in `domain/shared/jsonColumn.ts`, the same fix `deserializeOrigins` had
+  already received.
+
+Localized in all five catalogs (`milestones.*`, `freelancer.jobs.reviseBid`,
+`freelancerDashboard.tabs.milestones`, `freelancerDashboard.metric.escrow*`), theme-token
+driven in both themes, and fluid down to a narrow viewport. 20 new tests (245 passing across
+`application/marketplace`), api + frontend typecheck clean, tenant-scope ratchet green.
+
+Files: `api/src/application/marketplace/milestones.ts`,
+`api/src/presentation/routes/jobRoutes.ts`,
+`frontend/src/lib/milestonesApi.ts`,
+`frontend/src/components/freelance/MilestoneSchedulePanel.tsx`,
+`frontend/src/components/talent/TalentView.tsx`,
+`frontend/src/app/freelancer/dashboard/page.tsx`,
+`frontend/src/app/marketplace/MarketplaceGigsSection.tsx`.
+
+
 ## ✅ RESOLVED 2026-08-19 — Second roadmap validation pass: every cited path checked, and the two red frontend ratchets actually fixed
 
 **What this pass added over the first one.** The first pass validated claims. This one validated

@@ -9688,7 +9688,8 @@
       "saved": "已收藏",
       "unsave": "移除",
       "emptySaved": "尚未收藏任何职位。可在“寻找工作”中收藏。",
-      "savedOn": "收藏于 {date}"
+      "savedOn": "收藏于 {date}",
+      "reviseBid": "修改提案"
     },
     "proposals": {
       "empty": "您尚未提交任何提案。",
@@ -11861,11 +11862,14 @@
       "paidEarnings": "已付收入",
       "invoicesPaid": "{count} 张已付账单",
       "pendingEarnings": "待付收入",
-      "invoicesPending": "{count} 张待付"
+      "invoicesPending": "{count} 张待付",
+      "escrowHeld": "托管中",
+      "escrowMilestones": "{count} 个里程碑"
     },
     "tabs": {
       "work": "我的工作",
-      "timecards": "我的工时单"
+      "timecards": "我的工时单",
+      "milestones": "里程碑"
     },
     "work": {
       "empty": "还没有合作。",
@@ -23222,5 +23226,79 @@
     "confirming": "正在确认您的付款……",
     "payByTransfer": "此发票通过银行转账支付。如需账户信息，请回复发送此链接的邮件。",
     "settled": "此发票已结清，谢谢。"
+  },
+  "milestones": {
+    "heading": "付款计划",
+    "loading": "正在加载计划…",
+    "loadFailed": "无法加载付款计划。",
+    "actionFailed": "该操作已被拒绝。",
+    "working": "处理中…",
+    "remove": "移除",
+    "cancelNote": "取消",
+    "dueBy": "截止 {date}",
+    "rejectedBecause": "要求修改：{reason}",
+    "submittedWith": "交付说明：{note}",
+    "status": {
+      "draft": "未托管",
+      "funded": "已托管",
+      "submitted": "已交付",
+      "approved": "已验收",
+      "released": "已支付",
+      "cancelled": "已取消",
+      "disputed": "要求修改"
+    },
+    "action": {
+      "fund": "托管资金",
+      "submit": "提交交付",
+      "approve": "验收",
+      "reject": "要求修改",
+      "release": "放款",
+      "cancel": "取消"
+    },
+    "confirm": {
+      "fund": "为该里程碑托管 {amount}？托管后自由职业者即可开始工作。",
+      "release": "向自由职业者放款 {amount}？此操作不可撤销。",
+      "cancel": "取消该里程碑？已托管的资金将退还给你。",
+      "remove": "从计划中移除该里程碑？"
+    },
+    "notePlaceholder": {
+      "reject": "需要修改什么？",
+      "submit": "你交付了什么？（可选）"
+    },
+    "summary": {
+      "agreedCents": "已约定",
+      "heldCents": "托管中",
+      "owedCents": "当前应付",
+      "releasedCents": "已支付",
+      "unfundedCents": "未托管"
+    },
+    "gate": {
+      "funded": "已托管——可以开始工作。",
+      "nothing_funded": "尚未托管任何资金。至少有一个里程碑进入托管后才应开始工作。",
+      "no_milestones": "该固定价合作尚无付款计划。请在开始工作前添加交付物。"
+    },
+    "empty": {
+      "client": "还没有里程碑。添加交付物及各自的金额。",
+      "worker": "暂无固定价里程碑。",
+      "posting": "该职位尚未发布付款计划。"
+    },
+    "editor": {
+      "titlePlaceholder": "交付物",
+      "amountPlaceholder": "金额",
+      "addLine": "添加里程碑",
+      "removeLine": "删除该行",
+      "add": "添加",
+      "total": "合计 {amount}",
+      "totalLabel": "合计"
+    },
+    "posting": {
+      "explainer": "在有人投标之前，说明这份工作将为什么付款。接受提案后，它将成为该合作的付款计划。",
+      "published": "已发布的计划"
+    },
+    "proposed": {
+      "heading": "提议的计划",
+      "yours": "你提议的付款计划",
+      "explainer": "不认同已发布的交付物？提出你自己的方案。若你的投标被接受，将按此计划托管付款。"
+    }
   }
 }

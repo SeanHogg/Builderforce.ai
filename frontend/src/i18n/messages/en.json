@@ -9688,7 +9688,8 @@
       "saved": "Saved",
       "unsave": "Remove",
       "emptySaved": "No saved jobs yet. Save one from Find work to shortlist it.",
-      "savedOn": "Saved {date}"
+      "savedOn": "Saved {date}",
+      "reviseBid": "Revise proposal"
     },
     "proposals": {
       "empty": "You haven’t submitted any proposals yet.",
@@ -11861,11 +11862,14 @@
       "paidEarnings": "Paid earnings",
       "invoicesPaid": "{count} invoices paid",
       "pendingEarnings": "Pending earnings",
-      "invoicesPending": "{count} pending"
+      "invoicesPending": "{count} pending",
+      "escrowHeld": "In escrow",
+      "escrowMilestones": "{count} milestones"
     },
     "tabs": {
       "work": "My Work",
-      "timecards": "My Timecards"
+      "timecards": "My Timecards",
+      "milestones": "Milestones"
     },
     "work": {
       "empty": "No engagements yet.",
@@ -23222,5 +23226,79 @@
     "confirming": "Confirming your payment…",
     "payByTransfer": "This invoice is paid by bank transfer. Reply to the message that sent you this link if you need the account details.",
     "settled": "This invoice is settled. Thank you."
+  },
+  "milestones": {
+    "heading": "Payment schedule",
+    "loading": "Loading the schedule…",
+    "loadFailed": "Could not load the payment schedule.",
+    "actionFailed": "That move was refused.",
+    "working": "Working…",
+    "remove": "Remove",
+    "cancelNote": "Cancel",
+    "dueBy": "Due by {date}",
+    "rejectedBecause": "Changes requested: {reason}",
+    "submittedWith": "Delivered with: {note}",
+    "status": {
+      "draft": "Not funded",
+      "funded": "Funded",
+      "submitted": "Delivered",
+      "approved": "Accepted",
+      "released": "Paid",
+      "cancelled": "Cancelled",
+      "disputed": "Changes requested"
+    },
+    "action": {
+      "fund": "Fund",
+      "submit": "Deliver",
+      "approve": "Accept",
+      "reject": "Request changes",
+      "release": "Release payment",
+      "cancel": "Cancel"
+    },
+    "confirm": {
+      "fund": "Put {amount} into escrow for this milestone? The freelancer is cleared to start once you do.",
+      "release": "Release {amount} to the freelancer? This cannot be undone.",
+      "cancel": "Cancel this milestone? Any funds held for it are refunded to you.",
+      "remove": "Remove this milestone from the schedule?"
+    },
+    "notePlaceholder": {
+      "reject": "What needs to change?",
+      "submit": "What did you deliver? (optional)"
+    },
+    "summary": {
+      "agreedCents": "Agreed",
+      "heldCents": "In escrow",
+      "owedCents": "Owed now",
+      "releasedCents": "Paid",
+      "unfundedCents": "Not funded"
+    },
+    "gate": {
+      "funded": "Funded — work is authorised.",
+      "nothing_funded": "Nothing is funded yet. Work should not start until at least one milestone is in escrow.",
+      "no_milestones": "This fixed-price engagement has no schedule yet. Add the deliverables before work starts."
+    },
+    "empty": {
+      "client": "No milestones yet. Add the deliverables and what each is worth.",
+      "worker": "No fixed-price milestones yet.",
+      "posting": "No payment schedule published on this posting yet."
+    },
+    "editor": {
+      "titlePlaceholder": "Deliverable",
+      "amountPlaceholder": "Amount",
+      "addLine": "Add a milestone",
+      "removeLine": "Remove this line",
+      "add": "Add",
+      "total": "Total {amount}",
+      "totalLabel": "Total"
+    },
+    "posting": {
+      "explainer": "What this job will pay for, before anybody bids. Accepting a proposal turns this into the engagement’s schedule.",
+      "published": "Published schedule"
+    },
+    "proposed": {
+      "heading": "Proposed schedule",
+      "yours": "Your proposed schedule",
+      "explainer": "Disagree with the published deliverables? Propose your own. If your bid is accepted, this is the schedule that gets funded."
+    }
   }
 }

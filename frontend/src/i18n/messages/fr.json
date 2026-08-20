@@ -9688,7 +9688,8 @@
       "saved": "Enregistré",
       "unsave": "Retirer",
       "emptySaved": "Aucune offre enregistrée. Enregistrez-en une depuis Trouver du travail.",
-      "savedOn": "Enregistré le {date}"
+      "savedOn": "Enregistré le {date}",
+      "reviseBid": "Modifier la proposition"
     },
     "proposals": {
       "empty": "Vous n’avez encore envoyé aucune proposition.",
@@ -11861,11 +11862,14 @@
       "paidEarnings": "Revenus perçus",
       "invoicesPaid": "{count} factures payées",
       "pendingEarnings": "Revenus en attente",
-      "invoicesPending": "{count} en attente"
+      "invoicesPending": "{count} en attente",
+      "escrowHeld": "Sous séquestre",
+      "escrowMilestones": "{count} jalons"
     },
     "tabs": {
       "work": "Mon travail",
-      "timecards": "Mes feuilles de temps"
+      "timecards": "Mes feuilles de temps",
+      "milestones": "Jalons"
     },
     "work": {
       "empty": "Aucune mission pour l’instant.",
@@ -23222,5 +23226,79 @@
     "confirming": "Confirmation de votre paiement…",
     "payByTransfer": "Cette facture se règle par virement bancaire. Répondez au message qui vous a envoyé ce lien si vous avez besoin des coordonnées bancaires.",
     "settled": "Cette facture est réglée. Merci."
+  },
+  "milestones": {
+    "heading": "Échéancier de paiement",
+    "loading": "Chargement de l’échéancier…",
+    "loadFailed": "Impossible de charger l’échéancier de paiement.",
+    "actionFailed": "Cette action a été refusée.",
+    "working": "En cours…",
+    "remove": "Retirer",
+    "cancelNote": "Annuler",
+    "dueBy": "Échéance le {date}",
+    "rejectedBecause": "Modifications demandées : {reason}",
+    "submittedWith": "Livré avec : {note}",
+    "status": {
+      "draft": "Non financé",
+      "funded": "Sous séquestre",
+      "submitted": "Livré",
+      "approved": "Accepté",
+      "released": "Payé",
+      "cancelled": "Annulé",
+      "disputed": "Modifications demandées"
+    },
+    "action": {
+      "fund": "Financer",
+      "submit": "Livrer",
+      "approve": "Accepter",
+      "reject": "Demander des modifications",
+      "release": "Libérer le paiement",
+      "cancel": "Annuler"
+    },
+    "confirm": {
+      "fund": "Placer {amount} sous séquestre pour ce jalon ? Le freelance sera autorisé à commencer dès que ce sera fait.",
+      "release": "Libérer {amount} au freelance ? Cette action est irréversible.",
+      "cancel": "Annuler ce jalon ? Les fonds retenus vous sont remboursés.",
+      "remove": "Retirer ce jalon de l’échéancier ?"
+    },
+    "notePlaceholder": {
+      "reject": "Qu’est-ce qui doit changer ?",
+      "submit": "Qu’avez-vous livré ? (facultatif)"
+    },
+    "summary": {
+      "agreedCents": "Convenu",
+      "heldCents": "Sous séquestre",
+      "owedCents": "Dû maintenant",
+      "releasedCents": "Payé",
+      "unfundedCents": "Non financé"
+    },
+    "gate": {
+      "funded": "Financé — le travail est autorisé.",
+      "nothing_funded": "Rien n’est encore financé. Le travail ne devrait pas commencer avant qu’au moins un jalon soit sous séquestre.",
+      "no_milestones": "Cette mission au forfait n’a pas encore d’échéancier. Ajoutez les livrables avant de commencer."
+    },
+    "empty": {
+      "client": "Aucun jalon pour l’instant. Ajoutez les livrables et le montant de chacun.",
+      "worker": "Aucun jalon au forfait pour l’instant.",
+      "posting": "Cette offre ne publie pas encore d’échéancier de paiement."
+    },
+    "editor": {
+      "titlePlaceholder": "Livrable",
+      "amountPlaceholder": "Montant",
+      "addLine": "Ajouter un jalon",
+      "removeLine": "Supprimer cette ligne",
+      "add": "Ajouter",
+      "total": "Total {amount}",
+      "totalLabel": "Total"
+    },
+    "posting": {
+      "explainer": "Ce que cette mission paiera, avant toute candidature. Accepter une proposition en fait l’échéancier de la mission.",
+      "published": "Échéancier publié"
+    },
+    "proposed": {
+      "heading": "Échéancier proposé",
+      "yours": "Votre échéancier proposé",
+      "explainer": "Pas d’accord avec les livrables publiés ? Proposez les vôtres. Si votre offre est retenue, c’est cet échéancier qui sera financé."
+    }
   }
 }

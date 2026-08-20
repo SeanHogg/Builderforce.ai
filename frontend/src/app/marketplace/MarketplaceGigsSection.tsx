@@ -8,11 +8,13 @@ import { GuestSignupCta } from '@/components/GuestSignupCta';
 import { useAuth } from '@/lib/AuthContext';
 import {
   listMyEngagements, respondEngagement,
-  listJobs, bidJob, listMyProposals, withdrawProposal,
+  listJobs, getJob, bidJob, listMyProposals, withdrawProposal,
   listSavedJobs, saveJob, unsaveJob,
   type Engagement, type JobPosting, type JobProposal,
 } from '@/lib/freelancerApi';
 import { JobAlertsPanel } from '@/components/freelance/JobAlertsPanel';
+import { MilestoneLinesEditor, MilestoneLinesPreview } from '@/components/freelance/MilestoneSchedulePanel';
+import type { MilestoneDraft, MilestoneRow } from '@/lib/milestonesApi';
 import { formatCents } from '@/lib/canvasMoney';
 
 // The "Find work" surface (open jobs to bid on, my proposals, my engagements) is now
@@ -49,6 +51,7 @@ type Tab = 'work' | 'saved' | 'proposals' | 'engagements' | 'alerts';
 
 export default function MarketplaceGigsSection({ search }: { search: string }) {
   const t = useTranslations('freelancer');
+  const tm = useTranslations('milestones');
   const { isAuthenticated } = useAuth();
   const [tab, setTab] = useState<Tab>('work');
   const [jobs, setJobs] = useState<JobPosting[]>([]);
@@ -60,6 +63,12 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [bidFor, setBidFor] = useState<string | null>(null);
   const [bid, setBid] = useState<{ note: string; rate: string }>({ note: '', rate: '' });
+  // The bidder's COUNTER-PROPOSED schedule. Held here and sent with the bid, because
+  // the proposal row does not exist until the bid lands — writing the lines first
+  // would have nothing to attach them to.
+  const [bidLines, setBidLines] = useState<MilestoneDraft[]>([]);
+  // The posting's own published schedule, for the one job whose bid form is open.
+  const [published, setPublished] = useState<MilestoneRow[] | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -90,11 +99,43 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
     finally { setBusy(null); }
   };
 
+  /**
+   * Open the bid form for one posting.
+   *
+   * The browse list is a cached public projection and deliberately carries no schedules
+   * — widening it would mean invalidating that cache on every milestone edit for a panel
+   * most visitors never open. So the terms are read for the ONE job being bid on, and
+   * the editor is SEEDED from them: a counter-offer starts as the published schedule,
+   * because most bidders agree with most of it and retyping it from memory is how the
+   * two sides end up describing different work.
+   */
+  const openBid = async (job: JobPosting) => {
+    setBidFor(job.id); setBid({ note: '', rate: '' }); setBidLines([]); setPublished(null);
+    if (job.engagementType !== 'fixed_bid') return;
+    try {
+      const detail = await getJob(job.id);
+      const posting = detail.milestones ?? [];
+      setPublished(posting);
+      // A revision starts from what THIS bidder already proposed; a first bid starts from
+      // the posting's published terms. Either way the editor opens on something real, so a
+      // schedule is edited rather than retyped from memory.
+      const mine = detail.myProposal?.milestones ?? [];
+      const seed = mine.length > 0 ? mine : posting;
+      setBidLines(seed.map((line) => ({ title: line.title, description: line.description, amountCents: line.amountCents, dueAt: line.dueAt })));
+    } catch { /* a schedule we could not read is one the bidder simply authors themselves */ }
+  };
+
   const submitBid = async (jobId: string) => {
     setBusy(`bid:${jobId}`); setError(null);
     try {
-      await bidJob(jobId, { coverNote: bid.note || undefined, rateCents: bid.rate ? Math.round(parseFloat(bid.rate) * 100) : undefined });
-      setBidFor(null); setBid({ note: '', rate: '' });
+      await bidJob(jobId, {
+        coverNote: bid.note || undefined,
+        rateCents: bid.rate ? Math.round(parseFloat(bid.rate) * 100) : undefined,
+        // Blank lines are dropped rather than refused: a half-typed extra row must not
+        // lose somebody the proposal they wrote.
+        milestones: bidLines.filter((line) => line.title.trim() && line.amountCents > 0),
+      });
+      setBidFor(null); setBid({ note: '', rate: '' }); setBidLines([]); setPublished(null);
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed'); }
     finally { setBusy(null); }
@@ -195,6 +236,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                   )}
                 </div>
                 {j.description && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', marginTop: 8, maxHeight: 60, overflow: 'hidden' }}>{j.description}</p>}
+
                 {j.skills.length > 0 && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
                     {j.skills.slice(0, 5).map((s) => <span key={s} style={{ fontSize: 'var(--font-size-eyebrow)', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{s}</span>)}
@@ -216,12 +258,39 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                       {savedIds.has(j.id) ? t('jobs.saved') : t('jobs.save')}
                     </button>
                   )}
-                  {j.myProposal ? (
-                    <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('jobs.alreadyBid')}</span>
+                  {j.myProposal && bidFor !== j.id ? (
+                    <>
+                      <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{t('jobs.alreadyBid')}</span>
+                      {/* Revising is the SAME upsert that made the bid, so the form is the
+                          same form — seeded from what was already proposed rather than
+                          blank, because a revision is an edit and not a re-application. */}
+                      {(j.myProposal.status === 'submitted' || j.myProposal.status === 'shortlisted') && (
+                        <button type="button" onClick={() => void openBid(j)}
+                          style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 'var(--font-size-small)', fontWeight: 600, cursor: 'pointer' }}>
+                          {t('jobs.reviseBid')}
+                        </button>
+                      )}
+                    </>
                   ) : bidFor === j.id ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <input style={input} placeholder={t('jobs.yourRate')} type="number" min={0} value={bid.rate} onChange={(e) => setBid((b) => ({ ...b, rate: e.target.value }))} />
                       <textarea style={{ ...input, minHeight: 60, resize: 'vertical' }} placeholder={t('jobs.coverNote')} value={bid.note} onChange={(e) => setBid((b) => ({ ...b, note: e.target.value }))} />
+                      {/* Counter-propose the deliverables. Only offered on fixed-price
+                          work: an hourly engagement is transacted through timecards and
+                          has no schedule to disagree with. */}
+                      {j.engagementType === 'fixed_bid' && (
+                        <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 10 }}>
+                          {(published?.length ?? 0) > 0 && (
+                            <div style={{ marginBottom: 10 }}>
+                              <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 4 }}>{tm('posting.published')}</div>
+                              <MilestoneLinesPreview milestones={published ?? []} />
+                            </div>
+                          )}
+                          <div style={{ fontSize: 'var(--font-size-eyebrow)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 6 }}>{tm('proposed.yours')}</div>
+                          <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 8px' }}>{tm('proposed.explainer')}</p>
+                          <MilestoneLinesEditor lines={bidLines} onChange={setBidLines} currency={j.currency} />
+                        </div>
+                      )}
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button type="button" onClick={() => submitBid(j.id)} disabled={busy === `bid:${j.id}`}
                           style={{ padding: '7px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: 'var(--text-on-accent)', fontSize: 'var(--font-size-small)', fontWeight: 700, cursor: 'pointer' }}>{t('jobs.submitBid')}</button>
@@ -229,7 +298,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                       </div>
                     </div>
                   ) : (
-                    <button type="button" onClick={() => { setBidFor(j.id); setBid({ note: '', rate: '' }); }}
+                    <button type="button" onClick={() => void openBid(j)}
                       style={{ padding: '7px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--coral-bright)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)', fontWeight: 700, cursor: 'pointer' }}>{t('jobs.bid')}</button>
                   )}
                 </div>
