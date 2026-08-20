@@ -36,9 +36,26 @@ import { TaskType, TaskPriority, TaskStatus } from '../../domain/shared/types';
 import { publishKnowledgeDoc } from '../knowledge/publishKnowledgeDoc';
 import { recordIncidentLearning } from './incidentLearning';
 import { fireEventTriggers } from '../workflow/eventTriggers';
+import { enqueueBoardPush } from '../boardsync/outbound';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { advertisedName } from '../llm/toolNaming';
+
+/**
+ * The live-room key for an incident's war room.
+ *
+ * ONE definition, because three parties have to agree on it or the room is
+ * empty: the WebSocket route that relays into `CEREMONY_ROOM`, the incident
+ * payload the UI reads to know where to connect, and anything that later joins
+ * an agent to the same room. A string built independently in each place is a
+ * war room where the humans and the agents are in two different rooms and both
+ * think nobody came.
+ *
+ * `incident:` and not `ceremony:` on purpose — the DO is shared, and two
+ * namespaces colliding on a numeric id would put a standup and an incident in
+ * the same room.
+ */
+export const incidentRoomKey = (incidentId: string): string => `incident:${incidentId}`;
 
 /** sev1 (most severe) … sev4. */
 export type IncidentSeverity = 'sev1' | 'sev2' | 'sev3' | 'sev4';
@@ -362,6 +379,27 @@ export class IncidentService {
         tset.status = INCIDENT_STATUS_TO_LANE[patch.status];
       }
       await this.db.update(tasksTable).set(tset).where(eq(tasksTable.id, inc.boardTaskId));
+
+      // …and out to the help desk that raised it. The incident status and severity
+      // were mirrored onto the board task and stopped there, so a Freshdesk ticket
+      // stayed Open while the incident it became had been resolved days earlier.
+      // Best-effort by design: the drain owns delivery and its failures, and an
+      // unreachable help desk must not fail the status change.
+      try {
+        await enqueueBoardPush(this.db, {
+          tenantId,
+          taskId: inc.boardTaskId,
+          changeSet: {
+            ...(patch.status ? { state: patch.status } : {}),
+            // OUR vocabulary — each provider maps `sev1`…`sev4` onto its own
+            // priority scale, because "urgent" is a different integer on every
+            // help desk and this layer must not know which.
+            ...(patch.severity ? { severity: patch.severity } : {}),
+          },
+        });
+      } catch (error) {
+        reportCaughtError(error, { source: "application/incident/IncidentService.ts", operation: "updateIncident.enqueueBoardPush" });
+      }
     }
 
     if (patch.status) {
@@ -463,8 +501,10 @@ export class IncidentService {
       message: `Post-mortem published (${url})${actionItemTaskIds.length ? ` — ${actionItemTaskIds.length} remediation action item(s) filed` : ''}`,
     });
 
-    // Feed the lesson into the project's Evermind so the workforce stops repeating the
-    // cause (best-effort, project-scoped, never fails the post-mortem).
+    // Feed the lesson into Evermind so the workforce stops repeating the cause.
+    // `this.db` is passed so a TENANT-WIDE incident (no project) falls back to the
+    // workspace's anchor project rather than contributing nothing — the case that
+    // used to learn least while usually mattering most.
     const learned = await recordIncidentLearning(env, tenantId, {
       projectId: inc.projectId ?? null,
       title: inc.title,
@@ -473,7 +513,7 @@ export class IncidentService {
       rootCause,
       whatWentWrong: input.whatWentWrong ?? null,
       resolution: input.resolution ?? null,
-    });
+    }, this.db);
     if (learned) await this.addEvent(tenantId, incidentId, { kind: 'note', actorRef: 'system', message: 'Lesson contributed to Evermind — the workforce will avoid repeating this cause' });
 
     return { docId, url, actionItemTaskIds, incidentTitle: inc.title, affectedSystem: inc.affectedSystem ?? null };
@@ -544,7 +584,10 @@ export class IncidentService {
       .where(eq(incidentEvents.incidentId, incidentId))
       .orderBy(desc(incidentEvents.createdAt))
       .limit(200);
-    return { incident, timeline };
+    // The war room is a PLACE, not only a feed: `warRoomChatId` is the persisted
+    // transcript and `roomKey` is the live channel beside it. Returned together
+    // so a client never has to construct either.
+    return { incident, timeline, roomKey: incidentRoomKey(incidentId) };
   }
 
   /** Link a DELIVERY ticket implicated in this incident (PRD §5.10) — the change whose

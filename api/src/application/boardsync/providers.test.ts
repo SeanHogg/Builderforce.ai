@@ -7,6 +7,7 @@ import {
   SentryBoardProvider,
   PagerDutyBoardProvider,
   FreshserviceBoardProvider,
+  FreshdeskBoardProvider,
   ServiceNowBoardProvider,
   MondayBoardProvider,
   AsanaBoardProvider,
@@ -260,6 +261,79 @@ describe('FreshserviceBoardProvider', () => {
     expect(page.tickets[0]!.externalId).toBe('42');
     expect(page.tickets[0]!.state).toBe('resolved');
     expect(page.tickets[0]!.externalUrl).toBe('https://acme.freshservice.com/a/tickets/42');
+  });
+
+  it('asks for stats and carries the help desk own first-reply clock', async () => {
+    // `support.first_response_min` can only be computed from the provider's
+    // timestamp — our poll time measures how often we ask, not how fast they
+    // answered.
+    const fetchFn: FetchLike = async (url: string) => {
+      expect(url).toContain('include=stats');
+      return jsonResponse({ tickets: [{ id: 42, subject: 'Printer', status: 2, updated_at: '2024-02-02T00:00:00Z', stats: { first_responded_at: '2024-02-01T10:05:00Z' } }] });
+    };
+    const p = new FreshserviceBoardProvider({ credentials: { apiKey: 'k' }, baseUrl: 'https://acme.freshservice.com' }, fetchFn);
+    const page = await p.fetchTicketsSince(null);
+    expect(page.tickets[0]!.fields.firstRespondedAt).toBe('2024-02-01T10:05:00Z');
+  });
+
+  it('pushes status and severity back, not just the subject', async () => {
+    // The gap this closes: an incident resolved on our side left the help-desk
+    // ticket Open forever, because push-back carried title/description only.
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ status: 4, priority: 4 });
+      return jsonResponse({});
+    });
+    const p = new FreshserviceBoardProvider({ credentials: { apiKey: 'k' }, baseUrl: 'https://acme.freshservice.com' }, fetchFn);
+    await p.pushUpdate('42', { state: 'resolved', severity: 'sev1' });
+    expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it('never closes a help-desk ticket on our behalf', async () => {
+    // `resolved` maps to their Resolved (4) and NOTHING maps to Closed. A
+    // resolved incident means the fire is out, not that the customer
+    // conversation is over — that is theirs to end.
+    const bodies: unknown[] = [];
+    const fetchFn: FetchLike = async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return jsonResponse({});
+    };
+    const p = new FreshserviceBoardProvider({ credentials: { apiKey: 'k' }, baseUrl: 'https://acme.freshservice.com' }, fetchFn);
+    await p.pushUpdate('42', { state: 'resolved' });
+    await p.pushUpdate('42', { state: 'closed' });
+    expect(bodies).toEqual([{ status: 4 }]);
+  });
+});
+
+describe('FreshdeskBoardProvider', () => {
+  it('shares the Freshworks push-back mapping rather than its own', async () => {
+    // Two adapters against the same REST shape drifted once already; an incident
+    // whose severity reaches one product and not the other is the failure the
+    // shared mapper exists to prevent.
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({ subject: 'Outage', status: 3, priority: 3 });
+      return jsonResponse({});
+    });
+    const p = new FreshdeskBoardProvider({ credentials: { apiKey: 'k' }, baseUrl: 'https://acme.freshdesk.com' }, fetchFn);
+    await p.pushUpdate('9', { title: 'Outage', state: 'mitigated', severity: 'sev2' });
+    expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
+  it('reads first_responded_at out of the stats block', async () => {
+    const fetchFn: FetchLike = async (url: string) => {
+      expect(url).toContain('include=stats');
+      return jsonResponse([{ id: 9, subject: 'Outage', status: 2, updated_at: '2024-02-02T00:00:00Z', stats: { first_responded_at: '2024-02-01T09:00:00Z' } }]);
+    };
+    const p = new FreshdeskBoardProvider({ credentials: { apiKey: 'k' }, baseUrl: 'https://acme.freshdesk.com' }, fetchFn);
+    const page = await p.fetchTicketsSince(null);
+    expect(page.tickets[0]!.fields.firstRespondedAt).toBe('2024-02-01T09:00:00Z');
+  });
+
+  it('sends nothing at all when the change set touches no mapped field', async () => {
+    // An empty PUT is a request that costs a rate-limit token and changes nothing.
+    const fetchFn = vi.fn(async () => jsonResponse({}));
+    const p = new FreshdeskBoardProvider({ credentials: { apiKey: 'k' }, baseUrl: 'https://acme.freshdesk.com' }, fetchFn);
+    await p.pushUpdate('9', { state: 'some-state-we-do-not-map' });
+    expect(fetchFn).not.toHaveBeenCalled();
   });
 });
 

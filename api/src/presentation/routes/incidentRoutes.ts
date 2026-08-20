@@ -33,7 +33,9 @@ import { TenantRole } from '../../domain/shared/types';
 import { businessContacts, workflows, workflowDefinitions } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { incidentVersionKey } from '../../application/insights/versionKeys';
-import { IncidentService, type IncidentSeverity, type IncidentStatus } from '../../application/incident/IncidentService';
+import { IncidentService, incidentRoomKey, type IncidentSeverity, type IncidentStatus } from '../../application/incident/IncidentService';
+import { relayToRoom } from './realtimeRelay';
+import { prodIncidents } from '../../infrastructure/database/schema';
 import { OnCallService, type RotationKind } from '../../application/incident/OnCallService';
 import { EscalationService } from '../../application/incident/EscalationService';
 import { dispatchIncidentTriage } from '../../application/incident/incidentDispatch';
@@ -249,9 +251,37 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
   });
   router.post('/:id/war-room', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const chatId = await new IncidentService(db).ensureWarRoom(tenantId, c.req.param('id'));
+    const incidentId = c.req.param('id');
+    const chatId = await new IncidentService(db).ensureWarRoom(tenantId, incidentId);
     await invalidate(c, tenantId);
-    return c.json({ chatId });
+    // Both halves: the persisted Brain chat the transcript lives in, and the live
+    // room to connect to. A war room that is only a feed is a place people post
+    // into after the fact rather than one they are IN while it is happening.
+    return c.json({ chatId, roomKey: incidentRoomKey(incidentId) });
+  });
+
+  /**
+   * The live war room — presence and relayed frames over `CEREMONY_ROOM`, the same
+   * transport standups and meetings use.
+   *
+   * Tenant-checked before the upgrade rather than trusting the id: an incident id
+   * is a UUID, but "unguessable" is not an authorisation model, and the room key
+   * is derived from it. A member of another workspace who learned an id would
+   * otherwise be relayed straight into somebody else's outage call.
+   */
+  router.get('/:id/room/ws', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const incidentId = c.req.param('id');
+    const [incident] = await db
+      .select({ id: prodIncidents.id })
+      .from(prodIncidents)
+      .where(and(eq(prodIncidents.id, incidentId), eq(prodIncidents.tenantId, tenantId)))
+      .limit(1);
+    if (!incident) return c.json({ error: 'Incident not found' }, 404);
+    return relayToRoom(c, (c.env as Env).CEREMONY_ROOM, incidentRoomKey(incidentId), {
+      ref: `u:${(c.get('userId') as string | undefined) ?? 'anon'}`,
+      kind: 'human',
+    });
   });
   router.post('/:id/postmortem', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
